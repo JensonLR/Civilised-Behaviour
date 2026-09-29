@@ -19,7 +19,8 @@ import { CAMP, PALETTE, classifyObstacle, hash3, type CollisionWorld, type Obsta
 import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
 import { crateParts } from "./objects.ts";
 import type { Lod } from "./flora.ts";
-import { FLAG_UV, boardUv } from "./atlas.ts";
+import { FLAG_UV, MAP_UV, boardUv } from "./atlas.ts";
+import { gramophone, hammock, lanternFrames, mapTable, post, telescope, washLine } from "./camplife.ts";
 
 /**
  * The expedition camp and the ruined wall, dressed from the tagged obstacles of `createArena`. Everything solid is merged into
@@ -373,6 +374,10 @@ export function buildLandmarks(world: CollisionWorld, lod: Lod): BufferGeometry 
           k.setBase(o.x, y, o.z, o.yaw);
           ruinedWall(k, lod, o.hx, o.hz, o.y1 - y);
           break;
+        case "table":
+          k.setBase(o.x, y, o.z, o.yaw);
+          mapTable(k, lod);
+          break;
         default:
           break;
       }
@@ -390,11 +395,27 @@ export function buildLandmarks(world: CollisionWorld, lod: Lod): BufferGeometry 
           k.setBase(o.x, y, o.z);
           signpost(k, lod);
           break;
+        case "table":
+          k.setBase(o.x, y, o.z);
+          gramophone(k, lod);
+          break;
+        case "scope":
+          k.setBase(o.x, y, o.z, CAMP.scope.yaw);
+          telescope(k, lod);
+          break;
+        case "pole":
+          k.setBase(o.x, y, o.z);
+          post(k, o.r, o.y1 - y);
+          break;
         default:
           break;
       }
     }
   }
+  k.clearBase();
+  washLine(k, world, lod);
+  hammock(k, world, lod);
+  lanternFrames(k, world, lod);
   k.clearBase();
   return k.build();
 }
@@ -473,6 +494,23 @@ export function buildBanners(world: CollisionWorld): BufferGeometry | undefined 
         }
       }
     });
+  }
+  // the survey pinned flat on the map table
+  for (const o of world.obstacles) {
+    if (o.kind !== "box" || o.tag !== "table") continue;
+    const g = world.terrainHeight(o.x, o.z);
+    const [u0, v0, u1, v1] = MAP_UV;
+    const c = Math.cos(o.yaw);
+    const sn = Math.sin(o.yaw);
+    const hw = o.hx * 0.72;
+    const hd = o.hz * 0.78;
+    const y = g + CAMP.mapTable.height + 0.016;
+    const P = (lx: number, lz: number): number[] => [o.x + lx * c - lz * sn, y, o.z + lx * sn + lz * c];
+    // local +x runs along the table; the map's top edge is at local -z, so a player facing the table from +z reads it upright
+    const q = [P(-hw, -hd), P(hw, -hd), P(hw, hd), P(-hw, hd)];
+    const uvs: [number, number][] = [[u0, v1], [u1, v1], [u1, v0], [u0, v0]];
+    tri(q[0]!, q[2]!, q[1]!, [0, 1, 0], uvs[0]!, uvs[2]!, uvs[1]!, 0, 0, 0);
+    tri(q[0]!, q[3]!, q[2]!, [0, 1, 0], uvs[0]!, uvs[3]!, uvs[2]!, 0, 0, 0);
   }
   if (pos.length === 0) return undefined;
   const g = new BufferGeometry();

@@ -1,4 +1,4 @@
-import { Box3, Mesh, Vector3 } from "three";
+import { Box3, Mesh, Vector3, type Object3D } from "three";
 import { afterAll, describe, expect, it } from "vitest";
 import { FLAG, ZONE, ZONE_COUNT, setWound } from "@cb/shared";
 import { generateCharacter } from "../spec.ts";
@@ -6,10 +6,14 @@ import { MAX_HALF_WIDTH } from "../proportions.ts";
 import { buildCharacter, clearCharacterCaches, type CharacterRig } from "./rig.ts";
 import { CharacterAnimator, type ExpressionId } from "./animator.ts";
 
+const shown = (o: Object3D): boolean => {
+  for (let n: Object3D | null = o; n; n = n.parent) if (!n.visible) return false;
+  return true;
+};
 const triangles = (rig: CharacterRig): number => {
   let t = 0;
   rig.root.traverse((o) => {
-    if (o instanceof Mesh && o.visible) t += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position!.count) / 3;
+    if (o instanceof Mesh && shown(o)) t += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position!.count) / 3;
   });
   return t;
 };
@@ -36,9 +40,9 @@ describe("buildCharacter", () => {
       rig.dispose();
     }
     // Budgets: recorded in docs/PERFORMANCE.md; tighten when LOD lands (M4/M12).
-    expect(maxMeshes).toBeLessThanOrEqual(20); // measured 18 without outlines
-    expect(maxTris).toBeLessThan(12500); // measured 2026-09-29 after gear, fingers and full-resolution shells: avg 9.2k, max 11.3k (crowds need the LOD in PERFORMANCE.md) // measured 2026-09-29 after the face sculpt: avg 7.5k, max 8.6k (body rebuild was 5.6k / 7.1k; the head is 3.3k of it)
-    expect(sumTris / N).toBeLessThan(9800); // measured 2026-09-29 after cosmetics rebuild (shell beards, eyewear sweeps, surface sash): avg 7.8k, max 9.5k
+    expect(maxMeshes).toBeLessThanOrEqual(34); // measured below (12 bones + eyes, lids, brows, mouth)
+    expect(maxTris).toBeLessThan(15000); // budget: LOD0 max <= ~15k tris without the outline hulls (docs/PERFORMANCE.md) // measured 2026-09-29 after gear, fingers and full-resolution shells: avg 9.2k, max 11.3k (crowds need the LOD in PERFORMANCE.md) // measured 2026-09-29 after the face sculpt: avg 7.5k, max 8.6k (body rebuild was 5.6k / 7.1k; the head is 3.3k of it)
+    expect(sumTris / N).toBeLessThan(12000); // ... and avg <= ~12k // measured 2026-09-29 after cosmetics rebuild (shell beards, eyewear sweeps, surface sash): avg 7.8k, max 9.5k
   });
 
   it("bone geometry carries vertex colours and normals, and no UVs", () => {
@@ -352,7 +356,7 @@ describe("CharacterAnimator", () => {
     expect(hi - lo).toBeGreaterThan(0.01);
     expect(hi - lo).toBeLessThan(0.15);
     for (let i = 0; i < 60; i++) anim.update(1 / 30, { speed: 4.4, flags: FLAG.GROUNDED, vy: 0 });
-    expect(rig.joints.pelvis.position.x).toBe(0);
+    expect(Math.abs(rig.joints.pelvis.position.x)).toBeLessThan(0.05); // the stride sways the hips a little, but the idle shift is gone
   });
 
   it("a flinch pushes the torso away from the blow and settles back to rest", () => {
@@ -385,6 +389,16 @@ describe("CharacterAnimator", () => {
     expect(Number.isFinite(rig.joints.head.rotation.x)).toBe(true);
   });
 
+  it("the flinch spring stays stable on slow frames (a 10 fps machine must not blow the torso up)", () => {
+    const rig = buildCharacter(generateCharacter(2), { outline: false });
+    const anim = new CharacterAnimator(rig);
+    anim.autoBlink = false;
+    anim.flinch(0, 1, 1);
+    for (let i = 0; i < 60; i++) anim.update(0.1, { speed: 0, flags: FLAG.GROUNDED, vy: 0 }); // the game caps dt at 0.1
+    expect(Math.abs(rig.joints.torso.rotation.x)).toBeLessThan(1);
+    expect(Math.abs(rig.joints.torso.rotation.z)).toBeLessThan(1);
+  });
+
   it("downed lays the figure on its back, carrying raises the arms", () => {
     const rig = buildCharacter(generateCharacter(2));
     const anim = new CharacterAnimator(rig);
@@ -398,7 +412,12 @@ describe("CharacterAnimator", () => {
     const rig2 = buildCharacter(generateCharacter(2));
     const anim2 = new CharacterAnimator(rig2);
     for (let i = 0; i < 90; i++) anim2.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED | FLAG.CARRYING, vy: 0 });
-    expect(rig2.joints.shoulderL.rotation.x).toBeLessThan(-0.9);
+    // carrying raises both hands IN FRONT of the body (-Z is forward): the elbow ends up ahead of the shoulder, the hand ahead of the elbow
+    rig2.root.updateMatrixWorld(true);
+    const shoulder = rig2.joints.shoulderL.getWorldPosition(new Vector3());
+    const hand = new Vector3(0, -rig2.proportions.armLower, 0);
+    rig2.joints.elbowL.localToWorld(hand);
+    expect(hand.z).toBeLessThan(shoulder.z - 0.1);
   });
 
   it("expressions move the face: fear raises brows, pain closes eyes, triumph smiles", () => {

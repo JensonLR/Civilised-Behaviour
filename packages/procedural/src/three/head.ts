@@ -1,13 +1,18 @@
-import { SphereGeometry, type BufferGeometry } from "three";
+import { Color, SphereGeometry, type BufferGeometry } from "three";
 import { PALETTE } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
-import { buildBeard, buildEars, buildMoustache, buildNose, buildSideburns, onSkin, skinDir, type FaceCtx } from "./faceParts.ts";
+import { buildBeard, buildEarrings, buildEars, buildMoustache, buildNose, buildSideburns, onSkin, skinDir, type FaceCtx } from "./faceParts.ts";
 import type { V3 } from "./parts.ts";
 import { curve } from "./sweep.ts";
 import { buildHair } from "./hair.ts";
-import { buildSkull, faceSurfaceZ, headShape } from "./headShape.ts";
+import { HAT_SEAT, buildHat } from "./hatsGeo.ts";
+import { buildFaceDecor } from "./faceDecor.ts";
+import { greyed } from "./look.ts";
+import { addFaceMorphs } from "./faceMorph.ts";
+import { buildSkull, faceSurfaceZ, gridLevel, headShape, type BrushTag } from "./headShape.ts";
 import { LEATHER, PartBuilder, singe } from "./parts.ts";
+import { tone } from "./bodyKit.ts";
 
 export { faceSurfaceZ };
 
@@ -17,6 +22,8 @@ export interface HeadColors {
   hatC: number;
   accent: number;
   burnt: number;
+  /** Add the face morph targets (jaw, smile, ...) to the geometry: LOD0 only. */
+  morph?: boolean;
 }
 
 /** Where the animated mouth sits (relative to head centre): in the sculpted groove between the lips. */
@@ -34,23 +41,56 @@ export function eyePlacement(P: Proportions): { x: number; y: number; z: number;
   return { x, y, z: headShape(P).front(x, y)[2] + radius * 0.55, radius };
 }
 
+/** Stubble and ruddy cheeks, baked into the skull's vertex colours (stubble is a shadow on the jaw: it needs no geometry). */
+function skinPaint(spec: CharacterSpec, skin: number, hairC: number): ((dx: number, dy: number, dz: number, c: Color, w: Record<BrushTag, number>) => void) | undefined {
+  const level = [0, 0.24, 0.38, 0.52][spec.stubble] ?? 0;
+  const ruddy = spec.complexion === 3;
+  if (level === 0 && !ruddy) return undefined;
+  const shadow = new Color(skin).lerp(new Color(hairC), 0.62).multiplyScalar(0.8);
+  const hot = new Color(PALETTE.trim.blushHot).lerp(new Color(skin), 0.25);
+  return (dx, dy, dz, c, w) => {
+    if (ruddy) c.lerp(hot, Math.min(1, w.cheek) * 0.5);
+    if (level > 0) {
+      const az = Math.abs(Math.atan2(dx, -dz));
+      // below the cheekbone, in front of the ears, thinning toward the lower lip and along the jaw and under the chin
+      const zone = smoothStep(-0.05, -0.4, dy) * (1 - smoothStep(1.35, 1.7, az)) * (1 - Math.min(1, w.lip) * 0.7) * (1 - Math.min(1, w.socket));
+      const speck = 0.78 + 0.44 * hashUnit(Math.round(dx * 60) * 977 + Math.round(dy * 60) * 131 + Math.round(dz * 60) * 17);
+      c.lerp(shadow, Math.min(1, zone * level * speck));
+    }
+  };
+}
+const smoothStep = (a: number, b: number, x: number): number => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const hashUnit = (n: number): number => {
+  let x = (n | 0) ^ 0x9e3779b9;
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+};
+
 export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): BufferGeometry | undefined {
   const R = P.headRadius;
   const b = new PartBuilder();
+  b.trackMorph = c.morph === true;
   const { skin, hairC, hatC, accent, burnt } = c;
   const cy = R; // head centre above the neck joint
   const shape = headShape(P);
   const hatOn = spec.hat !== 0;
   // Where each hat's band sits on the head (x R above the head centre) - forehead height, above the brow ridge. The crown is then exactly as wide
   // as the skull is there plus a margin for hair, so the hat wraps the head instead of hovering over it.
-  const HAT_SEAT = [0, 0.55, 0.5, 0.42, 0.55, 0.55, 0.5, 0.45, 0.5, 0.45, 0.52];
   const seatY = hatOn ? (HAT_SEAT[spec.hat] ?? 0.5) : 0;
   const hatCrown = hatOn ? shape.widthAt(seatY * R) / R + 0.085 : 0;
-  const coarse = PartBuilder.hullMode;
-  const fc: FaceCtx = { spec, P, shape, b, cy, skin, hairC, accent };
+  const hull = PartBuilder.hullMode;
+  const coarse = gridLevel(PartBuilder.lod, hull);
+  const lod = PartBuilder.lod;
+  const fc: FaceCtx = { spec, P, shape, b, cy, skin, hairC, facialC: greyed(hairC, spec), accent };
 
   // ---- the head itself: one sculpted skin, a neck, ears and a nose that grows out of it -----------------------------------------
-  b.add(buildSkull(shape, { skin, coarse }), skin, [0, cy, 0]);
+  b.morphable = true;
+  b.add(buildSkull(shape, { skin, coarse, paint: skinPaint(spec, skin, hairC) }), skin, [0, cy, 0]);
+  b.morphable = false; // the neck, the ears and the nose stay put when the face moves
   b.loft(
     [
       { y: -(P.neck + 0.03), rx: R * 0.46, rz: R * 0.44, color: singe(skin, 1) },
@@ -58,12 +98,17 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
     ],
     skin,
   );
-  buildEars(fc);
-  buildNose(fc);
-  buildSideburns(fc);
+  if (lod < 2) buildEars(fc);
+  if (lod < 2) buildNose(fc);
+  else b.sphere(R * 0.16, skin, [0, cy - R * 0.05, shape.front(0, -R * 0.1)[2] - R * 0.06]);
+  b.morphable = true; // hair, sideburns, beard and moustache ride the skin they grow from
+  if (lod < 2) buildSideburns(fc);
   buildHair(fc, hatOn, coarse, seatY);
   buildBeard(fc);
-  buildMoustache(fc);
+  if (lod < 2) buildMoustache(fc);
+  if (!hull && lod === 0) buildFaceDecor(fc);
+  b.morphable = false;
+  if (lod < 2) buildEarrings(fc);
 
   // ---- eyewear and eyepatch: every frame, arm and strap is a sweep that FOLLOWS the skin (or hangs from it), so nothing pokes out --------------------
   const eye = eyePlacement(P);
@@ -118,6 +163,70 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
       b.sweep(curve([[-R * 0.08, ey - R * 0.02, bridgeZ], [0, ey + R * 0.005, bridgeZ - R * 0.01], [R * 0.08, ey - R * 0.02, bridgeZ]], 6), () => ({ rx: R * 0.012, rz: R * 0.012, pow: 2 }), accent, { side: [0, 1, 0], segments: 5 });
       break;
     }
+    case 5: { // smoked glasses: round black lenses in heavy rims, arms hugging the temples
+      const r = eye.radius * 1.42;
+      const dark = PALETTE.material.smoke;
+      for (const sx of [-1, 1]) {
+        b.cylinder(r, r, R * 0.03, dark, [sx * ex, ey, glassZ - R * 0.01], [Math.PI / 2, 0, 0]);
+        lens(sx, r, PALETTE.trim.frame, 0.034);
+        strap(PALETTE.trim.frame, 0.62, 1.42, 0.12, 0.12, sx < 0 ? -1 : 1, 0.016, 0.02, [[sx * (ex + r), ey, glassZ]]);
+      }
+      b.sweep(curve([[-(ex - r), ey + R * 0.01, glassZ], [-R * 0.05, ey + R * 0.035, bridgeZ], [R * 0.05, ey + R * 0.035, bridgeZ], [ex - r, ey + R * 0.01, glassZ]], 8), () => ({ rx: R * 0.02, rz: R * 0.02, pow: 2 }), PALETTE.trim.frame, { side: [0, 1, 0], segments: 5 });
+      break;
+    }
+    case 6: { // snow goggles: a carved wood band across the eyes with two narrow slits and a strap round the head
+      const wood = singe(PALETTE.material.wood, burnt);
+      const pts: V3[] = [];
+      for (let k = 0; k <= 10; k++) {
+        const az = -1.05 + (2.1 * k) / 10;
+        pts.push(skinDir(fc, Math.sin(az) * 0.95, eye.y / R + 0.02, -Math.cos(az) * 0.95, R * 0.05));
+      }
+      b.sweep(curve(pts, 14), () => ({ rx: R * 0.15, rz: R * 0.05, pow: 2.6 }), wood, { side: [0, 1, 0], segments: 6, round: "both" });
+      for (const sx of [-1, 1]) b.box(eye.radius * 1.7, R * 0.03, R * 0.06, PALETTE.material.soot, [sx * ex, ey, glassZ - R * 0.06]);
+      strap(LEATHER, 1.05, 3.14, 0.12, 0.12, 1, 0.02, 0.05);
+      strap(LEATHER, 1.05, 3.14, 0.12, 0.12, -1, 0.02, 0.05);
+      break;
+    }
+    case 7: { // jeweller's loupe: a brass tube screwed into the right eye, a strap round the head
+      const r = eye.radius * 1.15;
+      b.cylinder(r, r * 1.15, R * 0.28, accent, [ex, ey, glassZ - R * 0.12], [Math.PI / 2, 0, 0]);
+      b.torus(r * 1.16, R * 0.03, tone(accent, 0.8), [ex, ey, glassZ - R * 0.26], [0, 0, 0]);
+      b.cylinder(r * 0.78, r * 0.78, R * 0.02, PALETTE.trim.goggleGlass, [ex, ey, glassZ - R * 0.27], [Math.PI / 2, 0, 0]);
+      strap(LEATHER, 0.62, 3.14, 0.12, 0.2, 1, 0.02, 0.04, [[ex + r * 0.4, ey, glassZ - R * 0.02]]);
+      break;
+    }
+    case 8: { // half-moons: small reading glasses low on the nose, only the lower half of each lens ringed
+      const r = eye.radius * 1.15;
+      for (const sx of [-1, 1]) {
+        b.torus(r, R * 0.016, accent, [sx * ex, ey - eye.radius * 0.7, glassZ], [0, 0, 0], [1, 0.8, 1], Math.PI);
+        b.box(r * 2, R * 0.016, R * 0.016, accent, [sx * ex, ey - eye.radius * 0.7, glassZ]);
+        strap(accent, 0.62, 1.42, 0.06, 0.1, sx < 0 ? -1 : 1, 0.01, 0.012, [[sx * (ex + r), ey - eye.radius * 0.7, glassZ]]);
+      }
+      b.sweep(curve([[-(ex - r), ey - eye.radius * 0.6, glassZ], [-R * 0.05, ey - eye.radius * 0.5, bridgeZ], [R * 0.05, ey - eye.radius * 0.5, bridgeZ], [ex - r, ey - eye.radius * 0.6, glassZ]], 8), () => ({ rx: R * 0.012, rz: R * 0.012, pow: 2 }), accent, { side: [0, 1, 0], segments: 5 });
+      break;
+    }
+    case 9: { // left monocle: on the other eye, the chain falling on the other side
+      lens(-1, eye.radius * 1.5, accent);
+      const ring: V3 = [-ex - eye.radius * 0.35, ey - eye.radius * 1.5, glassZ];
+      const chain = [ring, onSkin(fc, -ex - R * 0.1, -R * 0.3, R * 0.09), onSkin(fc, -ex - R * 0.16, -R * 0.75, R * 0.15), onSkin(fc, -ex - R * 0.2, -R * 1.05, R * 0.17)];
+      b.sweep(curve(chain, 10), () => ({ rx: R * 0.01, rz: R * 0.01, pow: 2 }), accent, { side: [0, 0, 1], segments: 5, round: "end" });
+      b.sphere(R * 0.035, accent, chain[3]!);
+      break;
+    }
+    case 10: { // pushed-up goggles: aviator goggles resting on the forehead, brass rims, glass, a strap round the head at the hairline
+      const r = eye.radius * 1.5;
+      const gy = ey + R * 0.62;
+      for (const sx of [-1, 1]) {
+        const p = onSkin(fc, sx * ex * 0.85, gy - cy, R * 0.09);
+        b.cylinder(r, r, R * 0.12, PALETTE.trim.goggleGlass, [p[0], p[1], p[2]], [Math.PI / 2 - 0.35, 0, 0]);
+        b.torus(r, R * 0.035, accent, [p[0], p[1], p[2] - R * 0.05], [-0.35, 0, 0]);
+      }
+      const mid = onSkin(fc, 0, gy - cy, R * 0.1);
+      b.box(R * 0.14, R * 0.04, R * 0.05, LEATHER, [mid[0], mid[1], mid[2] - R * 0.02]);
+      strap(LEATHER, 0.8, 3.14, 0.6, 0.6, 1, 0.02, 0.05, [[ex * 0.85 + r, gy, mid[2] + R * 0.02]]);
+      strap(LEATHER, 0.8, 3.14, 0.6, 0.6, -1, 0.02, 0.05, [[-ex * 0.85 - r, gy, mid[2] + R * 0.02]]);
+      break;
+    }
     default: break;
   }
   if (spec.eyepatch > 0) {
@@ -143,80 +252,17 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   if (sc & 4) welt([[-0.2, -0.8], [-0.05, -0.86], [0.12, -0.9]]);
   if (sc & 8) b.sweep(curve([[-R * 0.22, -R * 0.02, -R * 0.4], [0, R * 0.03, -R * 0.43], [R * 0.22, -R * 0.02, -R * 0.4]], 5), () => ({ rx: R * 0.02, rz: R * 0.014 }), scarC, { side: [0, 1, 0], segments: 5 });
   if (sc & 16) welt([[0.05, 0.72], [0.22, 0.7], [0.4, 0.63]]);
+  if (sc & 32) welt([[0.02, 0.08], [0.06, -0.06], [0.03, -0.2]]); // across the bridge of the nose
+  if (sc & 64) for (let k = 0; k < 3; k++) welt([[-0.42 - k * 0.08, 0.05 - k * 0.02], [-0.5 - k * 0.09, -0.12 - k * 0.02], [-0.55 - k * 0.09, -0.32 - k * 0.02]]); // claw marks: three parallel slashes
 
-  // ---- hats: fitted to the skull. Each hat has a crown half-width at its band; it sits where the head is exactly that wide (plus a
+  // ---- hats: fitted to the skull (see hatsGeo.ts). Each hat has a crown half-width at its band; it sits where the head is exactly that wide (plus a
   // margin for hair), so the crown wraps the head instead of floating over it.
-  const rb = hatCrown * R;
-  const hy = cy + seatY * R;
-  const band = (radius: number, y: number, color: number = accent): void => void b.torus(radius, R * 0.04, color, [0, y, 0], [Math.PI / 2, 0, 0]);
-  const dome = (r: number, sy: number, y: number, color: number, sx = 1, sz = 1): void => void b.add(new SphereGeometry(r, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), color, [0, y, 0], [0, 0, 0], [sx, sy, sz]);
-  // Every crown must clear the top of the sculpted skull with a margin, whatever height the hat's own design says.
-  const topH = Math.max(R * 0.3, shape.radius(0, 1, 0) + R * 0.1 - seatY * R);
-  const domeH = (rx: number, minSy: number): number => Math.max(minSy, topH / rx);
-  switch (spec.hat) {
-    case 1: // top hat: tapered crown, flat brim with a rolled edge, band
-      b.cylinder(rb * 0.9, rb * 1.03, R * 1.15, hatC, [0, hy + R * 0.575, 0]);
-      b.cylinder(rb * 0.92, rb * 0.92, R * 0.03, hatC, [0, hy + R * 1.15, 0]);
-      b.cylinder(rb * 1.5, rb * 1.5, R * 0.05, hatC, [0, hy, 0]);
-      b.torus(rb * 1.5, R * 0.03, hatC, [0, hy, 0], [Math.PI / 2, 0, 0]);
-      band(rb * 1.03, hy + R * 0.16, singe(PALETTE.trim.hatBand, burnt));
-      break;
-    case 2: // bowler: dome, rolled brim, band
-      dome(rb * 1.02, domeH(rb * 1.02, 0.9), hy, hatC);
-      b.cylinder(rb * 1.24, rb * 1.22, R * 0.05, hatC, [0, hy, 0]);
-      b.torus(rb * 1.23, R * 0.035, hatC, [0, hy, 0], [Math.PI / 2, 0, 0]);
-      band(rb * 1.02, hy + R * 0.05, singe(PALETTE.trim.hatBand, burnt));
-      break;
-    case 3: // pith helmet: broad dome, ridged brim all round, band, knob
-      const pithSy = domeH(rb * 1.1, 0.6);
-      dome(rb * 1.1, pithSy, hy, hatC);
-      b.cylinder(rb * 1.42, rb * 1.4, R * 0.05, hatC, [0, hy, 0]);
-      b.torus(rb * 1.4, R * 0.04, hatC, [0, hy, 0], [Math.PI / 2, 0, 0]);
-      band(rb * 1.08, hy + R * 0.06, singe(PALETTE.trim.ivory, burnt));
-      b.sphere(R * 0.1, accent, [0, hy + rb * 1.1 * pithSy, 0]);
-      break;
-    case 4: // shako: tall, flared crown, peak, cord and spike
-      b.cylinder(rb * 1.12, rb * 1.0, R * 1.15, hatC, [0, hy + R * 0.575, 0]);
-      b.box(rb * 1.2, R * 0.05, R * 0.55, hatC, [0, hy, -rb * 1.05]);
-      b.torus(rb * 1.03, R * 0.035, accent, [0, hy + R * 0.2, 0], [Math.PI / 2, 0, 0]);
-      b.cone(R * 0.16, R * 0.7, singe(PALETTE.trim.ivory, burnt), [0, hy + R * 1.5, 0]);
-      break;
-    case 5: // bicorne: wide crescent worn sideways with a cockade
-      dome(rb, domeH(rb, 0.6), hy, hatC, 2.0, 0.95);
-      b.torus(rb, R * 0.05, accent, [0, hy, 0], [Math.PI / 2, 0, 0], [2.0, 0.95, 1]);
-      b.sphere(R * 0.14, accent, [rb * 1.9, hy + R * 0.12, 0]);
-      break;
-    case 6: // slouch hat: soft dome, wide drooping brim, band
-      dome(rb * 1.02, domeH(rb * 1.02, 0.62), hy, hatC);
-      b.cylinder(rb * 1.75, rb * 1.75, R * 0.04, hatC, [0, hy - R * 0.02, 0], [0.1, 0, 0.05]);
-      band(rb * 1.02, hy + R * 0.06, singe(PALETTE.trim.hatBandBrown, burnt));
-      break;
-    case 7: // peaked cap: low crown, visor, badge
-      b.cylinder(rb * 1.0, rb * 1.07, topH, hatC, [0, hy + topH / 2, 0]);
-      b.cylinder(rb * 0.98, rb * 0.98, R * 0.03, hatC, [0, hy + topH, 0]);
-      b.box(rb * 1.05, R * 0.04, R * 0.5, LEATHER, [0, hy, -rb * 1.02]);
-      b.sphere(R * 0.1, accent, [0, hy + R * 0.14, -rb * 1.06]);
-      band(rb * 1.05, hy + R * 0.06, singe(PALETTE.trim.hatBand, burnt));
-      break;
-    case 8: // flat cap: squashed dome with a short peak
-      const capSy = domeH(rb * 1.06, 0.42);
-      dome(rb * 1.06, capSy, hy, hatC, 1.05, 1.1);
-      b.box(rb * 0.85, R * 0.05, R * 0.4, hatC, [0, hy, -rb * 1.12], [0.15, 0, 0]);
-      b.sphere(R * 0.07, accent, [0, hy + rb * 1.06 * capSy, 0]);
-      break;
-    case 9: // plumed helmet: polished dome, crest ridge, swept plume
-      const helmSy = domeH(rb * 1.04, 0.9);
-      dome(rb * 1.04, helmSy, hy, accent);
-      b.cylinder(rb * 1.1, rb * 1.1, R * 0.05, accent, [0, hy, 0]);
-      b.box(R * 0.09, R * 0.14, rb * 1.7, singe(PALETTE.trim.plumeQuill, burnt), [0, hy + rb * 1.04 * helmSy, R * 0.05]);
-      for (let i = 0; i < 4; i++) b.cone(R * 0.16, R * 0.75, singe(PALETTE.trim.plume, burnt), [0, hy + rb * 1.04 * helmSy + R * 0.05 - i * R * 0.05, R * (0.4 + i * 0.32)], [Math.PI / 2 + 0.25 * i, 0, 0]);
-      break;
-    case 10: // boater: flat-topped straw crown, stiff flat brim, striped band
-      b.cylinder(rb * 0.96, rb * 1.0, topH, singe(PALETTE.trim.straw, burnt), [0, hy + topH / 2, 0]);
-      b.cylinder(rb * 1.5, rb * 1.5, R * 0.04, singe(PALETTE.trim.straw, burnt), [0, hy, 0]);
-      b.cylinder(rb * 1.005, rb * 1.005, R * 0.14, singe(PALETTE.cloth[0], burnt), [0, hy + R * 0.12, 0]);
-      break;
-    default: break;
+  if (hatOn) {
+    const rb = hatCrown * R;
+    const hy = cy + seatY * R;
+    // Every crown must clear the top of the sculpted skull with a margin, whatever height the hat's own design says.
+    const topH = Math.max(R * 0.3, shape.radius(0, 1, 0) + R * 0.1 - seatY * R);
+    buildHat({ b, spec, shape, R, cy, hatC, accent, burnt, seatY, rb, hy, topH });
   }
-  return b.build();
+  return b.build((geo, mw) => addFaceMorphs(geo, mw, P, cy));
 }

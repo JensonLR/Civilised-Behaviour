@@ -1,12 +1,13 @@
 import { Vector3 } from "three";
-import { CASUALTY, FLAG, PROP_DEFS, ZONE, findDownedTarget, findInteractTarget, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { CASUALTY, FLAG, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
 import { CharacterActor } from "../render/CharacterActor.ts";
+import { newEyeSample } from "../render/firstPerson.ts";
 import { HitFx } from "../render/HitFx.ts";
 import { RagdollWorld } from "../render/Ragdoll.ts";
-import { getGore, getShowLimbs } from "../settings.ts";
+import { getGore, getHeadBob, getShowLimbs, getView, setView } from "../settings.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
@@ -19,6 +20,17 @@ interface Actor {
 }
 
 const tmp = new Vector3();
+const eyeSample = newEyeSample();
+/** Up to four walkers the grass bends away from (reused every frame). */
+const walkers = [0, 1, 2, 3].map(() => ({ x: 0, z: 0 }));
+
+const injuries = createInjuryMods();
+
+/** Prompt for dressing a standing comrade's worst dressable wound. */
+function dressPrompt(use: string, patient: PlayerStateType | undefined): string {
+  const zone = patient ? dressableZone(patient.wounds, patient.missing) : -1;
+  return `Hold ${use}  Dress ${patient?.name ?? "comrade"}'s ${zone >= 0 ? ZONE_NAMES[zone] : "wound"}`;
+}
 
 /** Frame orchestration: fixed-step input, prediction, remote interpolation, camera, render. */
 export class Game {
@@ -45,7 +57,8 @@ export class Game {
     hud: HTMLElement,
     debugEl: HTMLElement,
   ) {
-    this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1 });
+    this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1, headBob: getHeadBob() ? 1 : 0 });
+    this.rig.setView(getView(), true);
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.tagLayer = hud;
     this.props = new PropViews(stage.scene, stage.outlines);
@@ -62,6 +75,7 @@ export class Game {
       },
     });
     controls.onToggleDebug = () => this.overlay.toggle();
+    controls.onToggleView = () => setView(this.rig.toggleView());
     stage.buildWorld(session.world);
 
     RagdollWorld.create(session.world).then(
@@ -99,6 +113,7 @@ export class Game {
     for (const a of this.actors.values()) this.removeActor(a);
     this.actors.clear();
     this.props.dispose();
+    this.controls.onToggleView = undefined;
     this.hud.dispose();
     this.hitFx.dispose();
     this.debris.dispose();
@@ -139,7 +154,8 @@ export class Game {
 
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
-      this.rig.update(tmp, dt, this.controls.aiming);
+      const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
+      this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample));
       this.stage.followShadow(tmp);
     }
     this.stage.render();
@@ -160,6 +176,8 @@ export class Game {
     let byMe = -1;
     let patientName = "";
     let reviverName = "";
+    let dressing = false;
+    let patientId: string | undefined;
 
     if (mine.reviver) reviverName = players.get(mine.reviver)?.name ?? "";
     if ((flags & FLAG.REVIVING) !== 0) {
@@ -168,9 +186,11 @@ export class Game {
         if (o.reviver === this.session.sessionId) {
           byMe = o.reviveProgress;
           patientName = players.get(id)?.name ?? "";
+          patientId = id;
         }
       });
       prompt = `Hold ${use}...`;
+      dressing = patientId !== undefined && (players.get(patientId)!.flags & FLAG.DOWNED) === 0;
     } else if ((flags & FLAG.DRAGGING) !== 0) {
       prompt = `${grab}  Let go`;
     } else if ((flags & FLAG.CARRYING) !== 0) {
@@ -183,9 +203,17 @@ export class Game {
         prompt = `Hold ${use}  Revive ${players.get(downedId)?.name ?? "comrade"}      ${grab}  Drag`;
       } else {
         const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
+        const woundedId = findWoundedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
+          players.forEach((o, pid) => pid !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(pid, o)),
+        );
         if (id !== undefined) {
           const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
-          prompt = `${use}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
+          // Same shared rule the server enforces on the pickup (injury.ts), so the prompt never promises what the server will refuse.
+          injuryMods(mine.wounds, mine.missing, (flags & FLAG.PEG_LEG) !== 0, injuries);
+          if (kind !== undefined && !canCarry(injuries, PROP_DEFS[kind].mass)) prompt = woundedId === undefined ? carryRefusal(injuries) : dressPrompt(use, players.get(woundedId));
+          else prompt = `${use}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
+        } else if (woundedId !== undefined) {
+          prompt = dressPrompt(use, players.get(woundedId));
         }
       }
     }
@@ -198,7 +226,9 @@ export class Game {
       prompt,
       reviverName,
       patientName,
+      dressing,
       usingGamepad: pad,
+      firstPerson: this.rig.headHidden,
       wounds: mine.wounds,
       missing: showLimbs ? mine.missing : 0,
     });
@@ -207,6 +237,7 @@ export class Game {
   private syncActors(dt: number): void {
     const players = this.session.room.state.players;
     const seen = new Set<string>();
+    let walkerCount = 0;
     players.forEach((p: PlayerStateType, id: string) => {
       seen.add(id);
       let a = this.actors.get(id);
@@ -219,7 +250,12 @@ export class Game {
       const x = this.session.value(p, "x");
       const y = this.session.value(p, "y");
       const z = this.session.value(p, "z");
+      if (walkerCount < walkers.length && (p.flags & FLAG.DOWNED) === 0) {
+        walkers[walkerCount]!.x = x;
+        walkers[walkerCount++]!.z = z;
+      }
       a.body.setLook(p.look);
+      if (isMe) a.body.setFirstPerson(this.rig.headHidden, this.rig.yaw); // own head, never the others'
       a.body.update(
         dt,
         { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing },
@@ -235,6 +271,7 @@ export class Game {
         a.tag.style.transform = `translate(-50%, -100%) translate(${((tmp.x + 1) / 2) * window.innerWidth}px, ${((1 - tmp.y) / 2) * window.innerHeight}px)`;
       }
     });
+    this.stage.setPushers(walkers, walkerCount);
     for (const [id, a] of this.actors) {
       if (!seen.has(id)) {
         this.removeActor(a);
@@ -248,11 +285,10 @@ export class Game {
     const a = this.actors.get(e.id);
     const p = this.session.room.state.players.get(e.id);
     if (!a || !p) return;
-    const facing = this.session.value(p, "facing");
     const h = a.body.height;
     const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;
     this.hitFx.burst(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power, getGore());
-    a.body.hit(e, facing);
+    a.body.hit(e, a.body.facing); // the heading as drawn: in first person the local body turns with the camera
     if (e.id === this.session.sessionId) this.rig.addShake(0.25 + e.power * 0.5);
   }
 

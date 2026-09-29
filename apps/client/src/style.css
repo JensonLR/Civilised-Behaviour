@@ -204,3 +204,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 .wounds .chart [data-sev="2"] { fill: color-mix(in srgb, var(--ink) 60%, transparent); stroke-width: 2.2; }
 .wounds .chart [data-sev="3"] { fill: var(--stamp); stroke: var(--ink); stroke-width: 3; }
 .wounds .chart [data-sev="4"] { fill: transparent; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 2.5 2; }
+
+/* ---- first-person camera: aiming dot (ink with a paper outline so it reads on grass, sky and shadow alike) ---- */
+.crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--paper); pointer-events: none; }
+.crosshair[hidden] { display: none; }

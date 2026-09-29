@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color } from "three";
 import { orientOutward } from "./sweep.ts";
 import type { V3 } from "./parts.ts";
-import { skullGrid, type HeadShape } from "./headShape.ts";
+import { skullGrid, type GridLevel, type HeadShape } from "./headShape.ts";
 
 export const smooth = (a: number, b: number, x: number): number => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -27,9 +27,12 @@ export interface ShellSpec {
   /** Extra displacement (units of R) added on top of the radial offset, e.g. a pompadour swept up and back. */
   lift?(d: Dir): V3;
   color: number;
+  /** Turns the shell's colour toward `tintColor` by this much (0..1) at a place: greying hair, dyed streaks. */
+  tint?(d: Dir): number;
+  tintColor?: number;
   /** Multiplies colour by height for a soft highlight on top. */
   shine?: number;
-  coarse?: boolean;
+  coarse?: GridLevel;
 }
 
 /**
@@ -45,6 +48,7 @@ export function buildShell(shape: HeadShape, spec: ShellSpec): BufferGeometry | 
   const R = shape.R;
   const base = new Color(spec.color);
   const c = new Color();
+  const tintCol = new Color();
   const dirAt = (x: number, y: number, z: number): Dir => {
     const l = Math.hypot(x, y, z) || 1;
     const dx = x / l;
@@ -86,7 +90,9 @@ export function buildShell(shape: HeadShape, spec: ShellSpec): BufferGeometry | 
     const id = pos.length / 3;
     welded.set(key, id);
     pos.push(x, y, z);
-    c.copy(base).multiplyScalar(0.9 + (spec.shine ?? 0.16) * smooth(-0.4, 0.9, d.y) + 0.1 * smooth(0, 0.36 * R, t));
+    c.copy(base);
+    if (spec.tint && spec.tintColor !== undefined) c.lerp(tintCol.setHex(spec.tintColor), spec.tint(d));
+    c.multiplyScalar(0.9 + (spec.shine ?? 0.16) * smooth(-0.4, 0.9, d.y) + 0.1 * smooth(0, 0.36 * R, t));
     col.push(c.r, c.g, c.b);
     return id;
   };

@@ -57,7 +57,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     hud.prepend(bar);
     const help = document.createElement("div");
     help.className = "help";
-    help.textContent = "WASD move · Shift sprint · Space jump · C crouch · mouse look (click to capture) · F3 stats";
+    help.textContent = "WASD move · Shift sprint · Space jump · C crouch · X view · mouse look (click to capture) · F3 stats";
     hud.append(help);
   }
 

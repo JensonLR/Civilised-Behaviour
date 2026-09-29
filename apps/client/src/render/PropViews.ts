@@ -1,6 +1,6 @@
 import { InstancedMesh, Matrix4, MeshToonMaterial, Quaternion, Vector3, type Scene } from "three";
 import { INTERACT, PROP_DEFS, PropKind, type PropKindId, type PropStateType } from "@cb/shared";
-import { instancedOutline, syncInstancedOutline } from "@cb/procedural/three";
+import { WORLD_INK, instancedWorldOutline, syncInstancedOutline } from "@cb/procedural/three";
 import { propGeometry } from "./world/objects.ts";
 import { toonMaterial } from "./world/toon.ts";
 
@@ -41,7 +41,7 @@ export class PropViews {
       scene.add(mesh);
       const set: KindSet = { mesh };
       if (outlines) {
-        const hull = instancedOutline(mesh);
+        const hull = instancedWorldOutline(mesh, { thickness: WORLD_INK.medium });
         hull.geometry = propGeometry(kind, 0);
         hull.frustumCulled = false;
         scene.add(hull);

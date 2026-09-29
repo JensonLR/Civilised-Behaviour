@@ -3,7 +3,7 @@ import { CollisionWorld, FLAG, ZONE_COUNT, setWound } from "@cb/shared";
 import { ARCHETYPES, FIELDS, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId } from "@cb/procedural/three";
 import { RagdollWorld } from "../render/Ragdoll.ts";
-import { Stage } from "../render/Stage.ts";
+import { LabStage } from "./LabStage.ts";
 
 /**
  * Character lineup / marketing showcase scene (`?showcase=lineup`). Deterministic: same URL -> same picture.
@@ -26,15 +26,32 @@ import { Stage } from "../render/Stage.ts";
  *   heads=1       portrait row: every head at eye level filling the canvas (review faces side by side)
  *   aim=0.5       height (m) the camera looks at in the non-close views (0.5 = legs and boots)
  *   zoom=0.4      pull the camera in (multiplier on distance) and aim at head height; for reviewing faces and headwear
+ *   frame=F       auto-frame the whole row: body|upper|torso|head|face|legs|feet|hands (fits the row's width AND the band's height; sp=1.3 sets the spacing)
+ *   same=K        every figure is a copy of character K (combine with turns= and set=/vary= to review one look from all sides)
+ *   turns=0,1.57,3.14,-1.57   per-figure yaw in radians (cycled): front, side, back, other side
+ *   expr=pain|fear|angry      one expression per figure (cycled)
+ *   bg=world      use the real Stage (terrain, sky, camp) instead of the plain lab stage
+ *   hide=pelvis,upperLegL   hide bone meshes (debugging: see what lies under a garment)
+ *   voff=N        start `vary` at option N (so ?vary=hat&voff=11&n=10 shows hats 11..20)
+ *   lod=0|1|2     build the rigs at that crowd level of detail (lod=mix cycles 0,1,2 across the row)
  */
 export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): void {
-  const stage = new Stage(canvas, (params.get("gfx") as "low" | "medium" | "high" | null) ?? "high");
+  void start(canvas, params);
+}
+
+async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promise<void> {
+  // By default the lab stage (same lights and shadows as the game, no world) keeps character review independent of the environment; bg=world uses the real one.
   const flat = new CollisionWorld({ height: () => 0 }, [], 100);
+  let stage: LabStage | import("../render/Stage.ts").Stage;
+  if (params.get("bg") === "world") {
+    const { Stage } = await import("../render/Stage.ts");
+    stage = new Stage(canvas, (params.get("gfx") as "low" | "medium" | "high" | null) ?? "high");
+  } else stage = new LabStage(canvas);
   stage.buildWorld(flat);
 
   const seed = Number(params.get("seed") ?? 1);
   const pose = params.get("pose") ?? "idle";
-  const expr = (params.get("expr") ?? "neutral") as ExpressionId;
+  const exprs = (params.get("expr") ?? "neutral").split("|") as ExpressionId[];
   const close = params.get("close");
   const single = params.get("look");
 
@@ -44,6 +61,11 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
   else {
     const n = Number(params.get("n") ?? ARCHETYPES.length);
     for (let i = 0; i < n; i++) specs.push(generateCharacter(seed + i * 7919, i % ARCHETYPES.length));
+  }
+  const same = params.get("same");
+  if (same !== null && specs[Number(same)]) {
+    const base = specs[Number(same)]!;
+    for (let i = 0; i < specs.length; i++) specs[i] = { ...base };
   }
   if (params.get("marks") === "1") {
     specs.forEach((s, i) => {
@@ -63,14 +85,18 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
   specs.forEach((spec, i) => {
     const o = spec as unknown as Record<string, number>;
     for (const [k, v] of overrides) o[k] = Number(v);
-    if (varyDef) o[varyDef.key] = i % (varyDef.max + 1);
+    if (varyDef) o[varyDef.key] = (i + Number(params.get("voff") ?? 0)) % (varyDef.max + 1);
     Object.assign(spec, sanitizeSpec(spec));
   });
 
-  const spacing = params.get("heads") === "1" ? 1.1 : 1.9;
+  const frame = params.get("frame");
+  const spacing = Number(params.get("sp") ?? (params.get("heads") === "1" ? 1.1 : frame === "head" || frame === "face" ? 0.9 : frame === "hands" ? 0.9 : frame === "feet" ? 1.1 : 1.9));
+  const turns = (params.get("turns") ?? "").split(",").filter(Boolean).map(Number);
+  const lodParam = params.get("lod") ?? "0";
   const rigs: { rig: CharacterRig; anim: CharacterAnimator }[] = [];
   specs.forEach((spec, i) => {
-    const rig = buildCharacter(spec, { outline: params.get("outline") !== "0" });
+    const lod = (lodParam === "mix" ? i % 3 : Math.max(0, Math.min(2, Number(lodParam) || 0))) as 0 | 1 | 2;
+    const rig = buildCharacter(spec, { outline: params.get("outline") !== "0", lod });
     rig.root.position.set((i - (specs.length - 1) / 2) * spacing, 0, 0);
     let mask = 0;
     const w = params.get("wounds");
@@ -85,10 +111,12 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
     const missingBits = params.get("missingVary") === "1" ? [0, 1, 4, 6, 15][i % 5]! : Number(params.get("missing") ?? 0);
     rig.setMissing(missingBits, goreLevel);
     // The rig faces -Z; the camera sits at +Z, so turn each figure around (plus a little three-quarter variety).
-    rig.root.rotation.y = Math.PI + (params.get("turn") ? Number(params.get("turn")) : -0.3 + (i % 2) * 0.6);
+    rig.root.rotation.y = Math.PI + (turns.length ? turns[i % turns.length]! : params.get("turn") ? Number(params.get("turn")) : -0.3 + (i % 2) * 0.6);
+    // hide=pelvis,upperLegL: switch bone meshes (and their outlines) off to see what lies underneath
+    for (const name of (params.get("hide") ?? "").split(",").filter(Boolean)) rig.root.traverse((o) => (o.name === `mesh_${name}` || o.name === `outline_${name}`) && (o.visible = false));
     stage.scene.add(rig.root);
     const anim = new CharacterAnimator(rig);
-    anim.setExpression(expr);
+    anim.setExpression(exprs[i % exprs.length]!);
     rigs.push({ rig, anim });
   });
 
@@ -115,6 +143,19 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
     const dist = width / (2 * Math.tan((camera.fov * Math.PI) / 360) * aspect);
     target.set(0, headY, 0);
     camera.position.set(0, headY + 0.05, dist);
+  }
+  if (frame) {
+    const bands: Record<string, [number, number]> = { body: [0.92, 2.05], upper: [1.2, 1.15], torso: [1.15, 0.85], head: [1.56, 0.62], face: [1.56, 0.5], legs: [0.5, 1.05], feet: [0.14, 0.5], hands: [0.72, 0.5] };
+    const [cy, h] = bands[frame] ?? bands.body!;
+    camera.fov = 26;
+    camera.updateProjectionMatrix();
+    const aspect = window.innerWidth / window.innerHeight;
+    const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
+    const dist = Math.max(h / 2 / tanHalf, (spacing * specs.length * 0.5 + 0.1) / (tanHalf * aspect));
+    const heightAvg = rigs.reduce((sum, r) => sum + r.rig.proportions.totalHeight, 0) / rigs.length;
+    const yc = frame === "head" ? heightAvg - 0.18 : frame === "face" ? heightAvg - 0.2 : cy;
+    target.set(0, yc, 0);
+    camera.position.set(0, yc + 0.03, dist);
   }
   camera.lookAt(target);
 

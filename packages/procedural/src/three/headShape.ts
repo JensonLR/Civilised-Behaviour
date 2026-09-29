@@ -189,8 +189,10 @@ export function faceSurfaceZ(P: Proportions, y: number, x = 0): number {
 export interface SkullOptions {
   /** Skin colour (sRGB hex). */
   skin: number;
-  /** A coarse grid for the outline hull. */
-  coarse?: boolean;
+  /** Grid density: `true` = the outline hull's grid, "mid" = a mid-distance crowd figure's, "low" = a far one's (see `skullGrid`). */
+  coarse?: GridLevel;
+  /** Bakes extra colour into a vertex (stubble, ruddy cheeks ...): direction on the unit head, the vertex colour to edit, and the brush weights there. */
+  paint?(dx: number, dy: number, dz: number, c: Color, w: Record<BrushTag, number>): void;
 }
 
 /**
@@ -219,11 +221,18 @@ function gridAngles(n: number, k: number, dense: number): number[] {
 }
 
 /** The direction grid shared by the skull and every shell that follows it (hair, beard) so their vertices line up. */
-export function skullGrid(coarse = false, shell = false): { cols: number; rows: number; phis: number[]; thetas: number[] } {
+export type GridLevel = boolean | "mid" | "low";
+
+/** The grid for a level of detail: full 32x24, mid 22x16, low 14x10, hull (`true`) 18x12. */
+export function gridLevel(lod: 0 | 1 | 2, hull: boolean): GridLevel {
+  return hull ? true : lod === 1 ? "mid" : lod === 2 ? "low" : false;
+}
+
+export function skullGrid(coarse: GridLevel = false, shell = false): { cols: number; rows: number; phis: number[]; thetas: number[] } {
   // Shells (hair, beards) use the SAME grid as the skull: their vertices line up with it (no chord gaps for skin to poke through) and beard/hair
   // edges are clipped on a grid fine enough that the staircase disappears.
-  const cols = coarse ? 18 : 32;
-  const rows = coarse ? 12 : 24;
+  const cols = coarse === "mid" ? 22 : coarse === "low" ? 14 : coarse ? 18 : 32;
+  const rows = coarse === "mid" ? 16 : coarse === "low" ? 10 : coarse ? 12 : 24;
   return { cols, rows, phis: gridAngles(cols, Math.PI, 0.35), thetas: gridAngles(rows, Math.PI / 2, 0.5) };
 }
 
@@ -250,6 +259,7 @@ export function buildSkull(shape: HeadShape, opts: SkullOptions): BufferGeometry
       c.lerp(ramp.lip, Math.max(0, w.lip - w.groove * 0.5) * 0.9);
       c.lerp(ramp.shade, w.groove * 0.55);
       c.multiplyScalar(1 + 0.05 * w.forehead + 0.03 * w.brow);
+      opts.paint?.(dx, dy, dz, c, w);
       if (dy < -0.72) c.multiplyScalar(1 - 0.16 * smooth(-0.72, -1, dy)); // under the jaw falls into shadow
       col.push(c.r, c.g, c.b);
     }

@@ -68,7 +68,7 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
   switch (zone) {
     case ZONE.TORSO: {
       const h = P.torsoHeight;
-      const rings = torsoRings(P, 0xffffff);
+      const rings = torsoRings(P, 0xffffff, spec.jacket);
       const sec = (y: number) => ringAt(rings, y);
       if (sev === 1) {
         const y = h * 0.66;
@@ -135,7 +135,7 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
     case ZONE.ARM_R: {
       const sx = zone === ZONE.ARM_L ? -1 : 1;
       const len = P.armUpper;
-      const armRings = upperArmRings(P, 0xffffff);
+      const armRings = upperArmRings(P, 0xffffff, spec.jacket);
       const rad = (f: number): number => {
         const s = ringAt(armRings, -len * f);
         return (s.rx + s.rz) / 2;
@@ -158,7 +158,7 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
     case ZONE.LEG_R: {
       const sx = zone === ZONE.LEG_L ? -1 : 1;
       const len = P.legUpper;
-      const ctx = { spec, P, skin: 0, jacketC: 0, trouserC: 0, shirtC: 0, armC: 0, accent: 0, burnt: 0, footH: 0 } satisfies BodyCtx;
+      const ctx = { spec, P, skin: 0, jacketC: 0, trouserC: 0, shirtC: 0, armC: 0, accent: 0, burnt: 0, footH: 0, leather: 0 } satisfies BodyCtx;
       const legRings = upperLegRings(ctx);
       const rad = (f: number): number => {
         const s = ringAt(legRings, -len * f);

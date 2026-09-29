@@ -4,6 +4,7 @@ import { smoothstep } from "./math.ts";
 import { PALETTE } from "./palette.ts";
 import { hashFloat } from "./rng.ts";
 import { valueNoise } from "./terrain.ts";
+import { HILL, waterEdgeDistance, waterField, riverHalfWidth, RIVER, trailSample, type TrailSample, type WaterField } from "./landscape.ts";
 
 /**
  * Pure, deterministic world-dressing decisions shared by the renderer and its tests: what an obstacle is, which tree species
@@ -52,6 +53,15 @@ const G = {
   rockDark: rgb(W.rockDark),
   ash: rgb(PALETTE.camp.ash),
   ember: rgb(PALETTE.camp.ember),
+  worn: rgb(W.trailWorn),
+  dust: rgb(W.dust),
+  rut: rgb(W.rut),
+  trampled: rgb(W.trampled),
+  mud: rgb(W.mud),
+  sand: rgb(W.sand),
+  pebble: rgb(W.pebble),
+  pave: rgb(W.ruinPale),
+  paveShade: rgb(W.ruinShadow),
 };
 
 function mix(out: Rgb, c: Triple, t: number): void {
@@ -62,42 +72,41 @@ function mix(out: Rgb, c: Triple, t: number): void {
   out.b += (c[2] - out.b) * k;
 }
 
-/** The worn track that leaves the camp past the signpost and wanders into the interior. */
-const TRACK: readonly (readonly [number, number])[] = [
-  [11, 0.6],
-  [22, -3],
-  [32, -12],
-  [40, -26],
-  [46, -44],
-  [54, -60],
-  [60, -80],
-];
-
-function trackDistance(x: number, z: number): number {
-  let best = Infinity;
-  for (let i = 0; i + 1 < TRACK.length; i++) {
-    const [ax, az] = TRACK[i]!;
-    const [bx, bz] = TRACK[i + 1]!;
-    const dx = bx - ax;
-    const dz = bz - az;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
-    const d = Math.hypot(x - (ax + dx * t), z - (az + dz * t));
-    if (d < best) best = d;
-  }
-  return best;
-}
+const tsScratch: TrailSample = { wear: 0, shoulder: 0, rut: 0 };
+const wfScratch: WaterField = { q: 0, s: 0, pond: false };
 
 /**
- * How much ground cover (grass tufts, flowers) grows at a spot, 0..1: none on the trampled clearing, the track, the hearth or rocky
- * slopes; full in open meadow. Mirrors the painted ground so tufts never sit on bare earth.
+ * How much ground cover (grass tufts, flowers) grows at a spot, 0..1: none on the paths, the hearth, in the water or on rocky
+ * slopes, thin on trampled shoulders and round the camp, full in open meadow. Mirrors the painted ground so tufts never sit on bare earth.
  */
 export function coverDensity(x: number, z: number, slope: number): number {
   const n2 = valueNoise(23, x / 3.3, z / 3.3);
-  const clearing = 1 - smoothstep(5.5, 13.8, Math.hypot(x, z) + (n2 - 0.5) * 4);
-  const track = 1 - smoothstep(0.6, 1.9, trackDistance(x, z));
+  const camp = 1 - smoothstep(5, 12.5, Math.hypot(x, z) + (n2 - 0.5) * 4);
+  const t = trailSample(x, z, tsScratch);
   const hearth = 1 - smoothstep(0.9, 2.2, Math.hypot(x - CAMP.fire.x, z - CAMP.fire.z));
-  const d = 1 - clearing * 0.95 - track - hearth - smoothstep(0.4, 0.8, slope);
+  const water = 1 - smoothstep(-0.2, 0.9, waterEdgeDistance(x, z) + (n2 - 0.5) * 0.8);
+  const d = 1 - t.wear * 1.25 - t.shoulder * 0.35 - camp * 0.35 - hearth - water - smoothstep(0.4, 0.8, slope);
   return d < 0 ? 0 : d > 1 ? 1 : d;
+}
+
+/**
+ * Flower meadows: noise-driven clusters. `density` is 0..1 (patches of a few metres, separated by bare grass) and `hue` is the index of
+ * the patch's dominant bloom colour (0..4); the renderer strews a few strays of other colours through each patch.
+ */
+export function flowerPatch(x: number, z: number, out: { density: number; hue: number }): { density: number; hue: number } {
+  const big = valueNoise(71, x / 16, z / 16);
+  const small = valueNoise(73, x / 5.2, z / 5.2);
+  const field = big * 0.65 + small * 0.55;
+  out.density = smoothstep(0.62, 0.86, field) * (inMeadow(x, z) ? 1 : 0.45);
+  out.hue = Math.floor(valueNoise(79, x / 21, z / 21) * 4.999);
+  return out;
+}
+
+/** Reeds and cattails crowd the stream's banks; 0..1, peaking just outside the wet channel. */
+export function reedDensity(x: number, z: number): number {
+  const e = waterEdgeDistance(x, z);
+  const n = valueNoise(89, x / 2.4, z / 2.4);
+  return (smoothstep(-0.5, 0.2, e) * (1 - smoothstep(0.9, 2.6, e))) * (0.35 + n * 0.85);
 }
 
 /** True where the painted ground is a sunny meadow patch (flowers gather there). Same noise field as `groundColour`. */
@@ -130,15 +139,37 @@ export function groundColour(x: number, z: number, h: number, slope: number, out
   mix(out, G.moss, smoothstep(0.24, 0.2, n2) * 0.4);
   mix(out, G.dry, smoothstep(0.84, 0.88, n3) * 0.3);
 
-  // Trampled clearing round the camp, with a ragged edge.
+  // Worn ground: a soft trampled halo round the camp, then footpaths radiating to its features, the ford, the Observatory and the map edge
+  // (shoulders of trampled dry grass, bare beaten earth, wheel ruts), and a worn meeting place at the spawn.
   const d = Math.hypot(x, z);
-  const clearing = 1 - smoothstep(5.5, 13.8, d + (n2 - 0.5) * 4);
-  mix(out, G.dirt, clearing * 0.92);
-  mix(out, G.dirtDark, clearing * (smoothstep(0.62, 0.7, n3) * 0.45 + smoothstep(0.52, 0.56, n1) * 0.35));
-  mix(out, G.dry, clearing * smoothstep(0.34, 0.3, n1) * 0.4 * (1 - hollow));
-  // A track that leaves the camp and fades into the grass.
-  const tk = 1 - smoothstep(0.6, 1.9, trackDistance(x, z) + (n3 - 0.5) * 1.0);
-  mix(out, G.dirt, tk * 0.85 * (1 - hollow * 0.4));
+  const camp = 1 - smoothstep(4.5, 13.5, d + (n2 - 0.5) * 4);
+  mix(out, G.trampled, camp * 0.42 * (1 - hollow * 0.5));
+  mix(out, G.dry, camp * smoothstep(0.34, 0.3, n1) * 0.22 * (1 - hollow));
+  const ts = trailSample(x, z, tsScratch);
+  mix(out, G.trampled, ts.shoulder * 0.55);
+  mix(out, G.dirt, ts.wear * 0.85 * (1 - hollow * 0.4));
+  mix(out, G.worn, ts.wear * (smoothstep(0.62, 0.7, n3) * 0.4 + smoothstep(0.52, 0.56, n1) * 0.25));
+  mix(out, G.dust, ts.wear * smoothstep(0.35, 0.75, n2) * 0.32);
+  mix(out, G.rut, ts.rut * 0.85);
+  // River banks: wet mud at the water's edge, a sandy pebble apron beyond it, the meadow returns further out.
+  const wf = waterField(x, z, wfScratch);
+  if (wf.q < 2.7) {
+    const w = wf.pond ? RIVER.pondRadius : riverHalfWidth(wf.s);
+    const e = (wf.q - 1) * w; // metres from the channel edge (negative in the channel)
+    mix(out, G.sand, (1 - smoothstep(0.2, 2.0, e + (n3 - 0.5) * 1.2)) * 0.8);
+    mix(out, G.pebble, (1 - smoothstep(0.1, 0.9, e + (n2 - 0.5) * 0.9)) * smoothstep(0.55, 0.75, n3) * 0.7);
+    mix(out, G.mud, (1 - smoothstep(-0.4, 0.5, e + (n3 - 0.5) * 0.5)) * 0.85);
+  }
+  // The Observatory's plateau: worn flagstones (a chequer of two tones with mossy joints) that give way to turf at a ragged edge.
+  const dh = Math.hypot(x - HILL.x, z - HILL.z);
+  if (dh < 13) {
+    const pave = 1 - smoothstep(8.4, 10.4, dh + (n2 - 0.5) * 2.6);
+    const chequer = (Math.floor((x + 40) / 1.35) + Math.floor((z + 40) / 1.35)) & 1;
+    mix(out, G.pave, pave * 0.82);
+    mix(out, G.paveShade, pave * (chequer ? 0.34 : 0.08));
+    mix(out, G.moss, pave * smoothstep(0.55, 0.78, n3) * 0.55);
+    mix(out, G.dirt, pave * smoothstep(0.7, 0.9, n2) * 0.3);
+  }
   // The hearth: scorched ash, with a warm ember-lit tint on the earth around it.
   const df = Math.hypot(x - CAMP.fire.x, z - CAMP.fire.z);
   mix(out, G.ember, (1 - smoothstep(0.5, 3.6, df)) * 0.16);

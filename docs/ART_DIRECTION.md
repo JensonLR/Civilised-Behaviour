@@ -44,39 +44,54 @@ node scripts/shot.mjs "?showcase=lineup&n=4&close=1&cd=1.25&expr=triumph|pain|fe
 Checklist for a new feature: reads at distance? sits on the sculpt (no float/sink)? uses only palette colours? survives Gore Off? fits the triangle
 budget in `docs/PERFORMANCE.md`?
 
-## World (D-025): an expedition into territory not yet improved by the Society
+## World (D-025, upgraded): an expedition into territory not yet improved by the Society
 The environment is drawn with the same tools as the people in it: **`MeshToonMaterial` with the shared 4-step ramp** (`sharedToonRamp()` in `outline.ts`;
-`rig.ts` holds an identical private copy, keep them equal), **vertex colours from the palette**, and the **inverted-hull ink outline** (now instanced) on everything solid.
-Nothing in the world is a plain PBR material or a texture, except the two runtime canvases below.
-- **Palette.** `PALETTE.world` (terrain, rocks, trees, blooms, three hill rings, the sky's cloud/glow/sun colours), `PALETTE.props` (crate/barrel/bottle/chair detail) and
-  `PALETTE.camp` (canvas, rope, the pennant, cart, luggage, fire). Flames, embers and the glow are the only world colours allowed to be properly saturated (`camp.flame*/ember/glow`,
-  chroma cap 0.7, everything else 0.4). `palette.test.ts` covers all of it.
-- **Ground** (`packages/shared/src/worldgen.ts`, `groundColour`): a soft two-tone grass base, deep green in hollows, dry gold on rises, *hard-edged* painted patches (sunny meadow, shaded
-  clump, moss dapple) from three noise scales, a ragged worn-earth clearing round the camp with a scorched hearth, a track that leaves past the signpost, bare rock on slopes.
-  Pure and tested (finite, in gamut, chroma <= 0.4 everywhere). Smooth normals, so the toon ramp bands the swells.
-- **Beyond the map:** the visible ground eases to a flat plain 22 m past the playable radius, a ground skirt carries the meadow out to the fog, three low-poly hill rings (radius 150 / 236 / 332,
-  paler and hazier with distance; aerial perspective is painted into their vertex colours; wooded shoulders) and a few unreachable groves. Fog, the sky's lowest band, the skirt and
-  the hills all use `fogColour()` (horizon nudged 14% toward the sky's mid blue): one colour of distance.
-- **Sky** (`world/sky.ts`): banded gradient, an azimuth-aware warm glow pooled on the horizon behind the sun, a sun disc with a thin ring and two halo bands, and toon clouds (flat shapes,
-  a lit and a shaded tone, lit on the side facing the sun). Three octaves of noise, no textures.
-- **Vegetation** (`world/flora.ts`): *broadleaf* (leaning tapered trunk, two limbs, six faceted crown lobes in deep green underneath and sunlit green on top), *acacia* (thin forked trunk, two flat
-  dish canopies with a lighter sunlit skin), *snag* (bleached cracked trunk with bare limbs, standing near rock outcrops), shrubs, faceted mossy-footed rocks with pale weathered tops and pebble
-  litter, wind-swept grass tufts and wildflowers. Species follow a low-frequency noise field (`treeSpecies`) so groves are of one kind with 14% strays. Every kind is one merged geometry
-  instanced with per-instance colour and size variation; the ink hull uses a coarser geometry (`lod` 0, fattened 6%).
-- **The camp** (`camp.ts` is the single source for collision, visuals and prop/spawn keep-out): two elliptical bell tents (sixteen flat canvas panels alternating in tone, red hem and crown, dark
-  doorway, finial, guy ropes), a campfire ring with tripod, pot and charred logs under an unlit flame (seven curling tongues, flicker driven from `update`) plus a soft additive glow sprite and
-  ground pool (no lights), a flagpole with the Society's pennant (compass rose and motto drawn on a runtime canvas, rippling in the vertex shader), a signpost whose four arrowed boards carry
-  lettering, a steamer-trunk stack, a covered supply cart, the two step-up crates, and the ruined dry-stone wall (irregular courses, broken crown, mossy foot, fallen blocks; the collision box is the
-  full-height footprint so breaks are limited to the top 0.5 m). Solid landmarks are ONE merged geometry; the pennant and lettering share one textured mesh.
-- **Props** (`world/objects.ts`): slatted crates with corner posts, braces and nails; staved barrels with iron hoops; glass bottles with neck, cork, paper label and a glint; bentwood cane-seat chairs.
-  Each stays within ~5% of its physics box (a test enforces it).
+`rig.ts` holds an identical private copy, keep them equal), **vertex colours from the palette**, and the **inverted-hull ink outline** (instanced).
+Nothing in the world is a plain PBR material or a texture, except the runtime canvases (pennant, signboards, the survey map) and the 1024^2 footpath mask.
+- **Ink weight.** Scenery is drawn with `worldOutlineMaterial` (`WORLD_INK` small 1.05 / medium 1.45 / large 1.8 px, all thinner than a character's 2.2, and it never
+  grows up close): trees, ruin and camp are "large"/"medium", rocks "medium", stumps and logs "small". The line eases to 42% of its width beyond ~12 m, so a far tower
+  is a hairline. Hulls of solid things are the SAME mesh (rocks, slabs) or a coarse one fattened <= 3.5% (trees); a bigger fat shows as thick black slabs at arm's length
+  (`geometry.test.ts` enforces <= 6%). Shrubs carry no hull and are double-sided: you can walk into them and a hull seen from inside is a black screen. Low: no ink.
+- **Palette.** `PALETTE.world` (terrain, rocks, trees, blooms, hill rings, sky, water, the ruin, ambient life, and the **day-cycle keyframes** `morning*`, `dusk*`,
+  `night*`), `PALETTE.props` and `PALETTE.camp` (canvas, rope, pennant, cart, luggage, fire, map table, lantern glass). Flames, embers and glows are the only
+  saturated world colours. `palette.test.ts` covers all of it; `daycycle.test.ts` proves every keyframe mix stays inside the palette's chroma.
+- **Time of day** (`shared/daycycle.ts`, applied by `Stage`): a pure `dayState(hours)` gives sun/moon colour and direction, three sky bands, horizon glow, the
+  colour of distance (fog, skirt, far hills), hemisphere bounce, fog density, how strongly the fire and lanterns read, stars and moon. `?time=13|dusk|night|17.5|6:30`
+  fixes the hour (`&drift=1` keeps it running); without it the day drifts from 09:00, ~80 s per game hour, three times faster through the dark. The clock is cosmetic
+  and per client. The directional light IS the sun by day and the moon by night (blended through twilight), so `Stage.followShadow` casts correct shadows at every hour;
+  shadows are drawn at 72% strength (a toon ramp's darkest lit step is far brighter than raw hemisphere light, so full-strength shadows read as holes).
+- **Sky** (`world/sky.ts`): banded gradient, azimuth-aware horizon glow, sun disc with ring and halo, **two parallax toon cloud layers** (a low puffy deck lit on the
+  side facing the sun, a high thin deck of streaks, different speeds), a gibbous moon with halo, ~150 twinkling stars. Clouds dim with the sky's exposure squared.
+- **Ground** (`worldgen.ts` `groundColour` + `landscape.ts`): two-tone grass, hard-edged meadow/shade/moss patches, hollows and rises, **footpaths** (`TRAILS`, Chaikin-smoothed:
+  the Observatory way, the coast road with two continuous wheel ruts, a west hunters' track fading to the edge, and short paths between camp features), worn patches at the
+  spawn, hearth, cart and doorways, sandy/muddy stream banks, the Observatory's paved plateau. Painted per vertex (soft, always) AND baked into a 1024^2 R/G/B mask
+  (bare earth / ruts / trampled shoulder) that a shader patch sharpens with the SAME wear function (`trailProfile`), plus a hashed scatter of stones on the path (medium/high).
+- **Water** (`world/water.ts`): the stream is carved into the shared terrain (`withLandscape`, a shallow ford, nothing to drown in, no obstacle) and drawn as one ribbon + pond
+  at the shared channel level: three flat depth tones, crisp ripple highlights and streaks that travel downstream, sun glitter, foam hugging the banks; the source is a
+  waterfall off the broken aqueduct (banded streaks running down, foam boil). Low draws flat bands.
+- **The Observatory** (`world/ruins.ts`, one plan `shared/ruins.ts` for collision and looks): a hill 69 m north-east of the camp crowned by a drum tower with the ribs of its dome,
+  a colonnade of standing and snapped columns under architraves, a kerbed plateau, and a broken aqueduct marching down the slope. A winding trail climbs to it.
+- **Hills:** three rings (150 / 236 / 332 m) with **tree-line silhouettes** (instanced conifers and broadleaf on the wooded shoulders, hazed with distance) lit by the current sun.
+- **Wind and walkers** (`world/toon.ts`): a gust field; tree crowns sway (trunks stiff, leaves flutter, the ink hull and the shadow sway with them); grass, flowers, ferns and reeds
+  sway from the root and bend away from up to four walkers (`Stage.setPushers`, a uniform array, no allocation).
+- **Vegetation** (`world/flora.ts`, placed by `world/scatter.ts`): broadleaf, acacia, snag, shrubs, berry bushes, stratified mossy boulders and leaning slabs (strata bands, dark seams,
+  moss and lichen), pebbles, **stumps and fallen logs (collidable: step on a stump, jump a log)**, wind-swept grass, **flower meadows** (noise patches with a dominant hue, daisies with eight
+  petals and cups with five, stems and leaves, five hues), ferns, toadstool rings under the broadleaf groves, cattail reeds at the water.
+- **The camp** (`camp.ts` is the single source for collision, visuals and prop keep-out): two bell tents, campfire with pot and steam, flagpole with pennant, signpost, trunks, cart, crates,
+  ruined wall, and now the **survey table** (the map is drawn from the real trails, stream and hill), a **telescope** trained on the Observatory, a **gramophone** on a tea table,
+  a **washing line** with laundry, a **hammock**, and six **hanging lanterns** whose glass glows from dusk. Solid pieces merge into one geometry; lantern glass is a tiny unlit mesh.
+- **Props** (`world/objects.ts`): slatted crates with corner posts, braces and nails; staved barrels with iron hoops; glass bottles with neck, cork, paper label and a glint; bentwood cane-seat
+  chairs. Each stays within ~5% of its physics box (a test enforces it). One instanced set per kind, with the medium scenery ink.
+- **Ambient life** (`world/ambient.ts`, all GPU-driven from the clock, one draw each, pooled by construction, capped by preset): pollen by day and fireflies at dusk, ~12 butterflies
+  circling the flower patches, distant birds, campfire smoke and pot steam, lantern glow points. Low builds none of it except the lantern glow.
 - **Review commands** (`?showcase=world`, real arena, deterministic):
 ```
-node scripts/shot.mjs "?showcase=world&view=game" out.png 1280x720 5000     # the view a player has at spawn
-node scripts/shot.mjs "?showcase=world&view=camp|tents|fire|flag|sign|wall|cart|luggage|crates|edge|hills|sky" out.png
-node scripts/shot.mjs "?showcase=world&view=tree&i=3" out.png                # also rock, snag; i picks which one
-node scripts/shot.mjs "?showcase=world&propline=1&figures=0&cam=0,0.9,-1.4&at=0,0.25,-3&fov=45" out.png 1200x500
-node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png   # low preset (no ink), world-only counts
+node scripts/shot.mjs "?showcase=world&view=game&time=13" out.png 1280x720 6000      # the view a player has at spawn, at noon
+node scripts/shot.mjs "?showcase=world&view=camp|tents|fire|flag|sign|wall|cart|luggage|crates|edge|hills|sky&time=dusk" out.png
+node scripts/shot.mjs "?showcase=world&view=table|scope|gramophone|wash|hammock|lanterns|ruin|tower|colonnade|aqueduct|ford|pond|source|meadow|trail|stump|log&figures=0&props=0" out.png 1000x600
+node scripts/shot.mjs "?showcase=world&view=tree&i=3" out.png                          # also rock, snag; i picks which one
+node scripts/shot.mjs "?showcase=world&cam=13,0.8,22&at=14,0.25,20&push=14,20&figures=0" out.png   # a walker bending the grass
+node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png    # low preset (no ink, no ambient life, vertex-painted paths)
 ```
 
 ## Interface (D-024)

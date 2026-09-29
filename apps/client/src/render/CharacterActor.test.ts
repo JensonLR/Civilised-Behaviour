@@ -1,0 +1,114 @@
+import { Object3D, Scene } from "three";
+import { describe, expect, it } from "vitest";
+import { encodeSpec, generateCharacter } from "@cb/procedural";
+import { FLAG } from "@cb/shared";
+import { CharacterActor, type ActorPose } from "./CharacterActor.ts";
+import { newEyeSample } from "./firstPerson.ts";
+
+const look = (seed: number): string => encodeSpec(generateCharacter(seed));
+const pose = (flags: number = FLAG.GROUNDED, over: Partial<ActorPose> = {}): ActorPose => ({ x: 2, y: 0, z: -3, facing: 0.4, vx: 0, vz: 0, flags, ...over });
+const settle = (a: CharacterActor, p: ActorPose, frames = 40): void => {
+  for (let i = 0; i < frames; i++) a.update(1 / 60, p);
+};
+const visibleInHierarchy = (o: Object3D): boolean => {
+  for (let n: Object3D | null = o; n; n = n.parent) if (!n.visible) return false;
+  return true;
+};
+
+describe("CharacterActor first person", () => {
+  it("hides the head and everything on it, keeps torso, arms and legs, and restores on leaving", () => {
+    const scene = new Scene();
+    const a = new CharacterActor(scene, look(3), 1, true);
+    const j = a.animator ? (a as unknown as { rig: { joints: Record<string, Object3D> } }).rig.joints : undefined;
+    expect(j).toBeDefined();
+    settle(a, pose());
+    a.setFirstPerson(true, 1);
+    settle(a, pose());
+    const head = j!.head!;
+    expect(head.visible).toBe(false);
+    let headMeshes = 0;
+    head.traverse((o) => {
+      if ((o as { isMesh?: boolean }).isMesh) {
+        headMeshes++;
+        expect(visibleInHierarchy(o)).toBe(false); // hair, hat, eyes, brows, outline hull
+      }
+    });
+    expect(headMeshes).toBeGreaterThan(3);
+    for (const name of ["torso", "shoulderL", "shoulderR", "hipL", "hipR", "kneeL", "elbowR"]) expect(visibleInHierarchy(j![name]!)).toBe(true);
+    a.setFirstPerson(false);
+    expect(head.visible).toBe(true);
+  });
+
+  it("keeps casting a head-sized shadow while the head is hidden, and draws nothing for it", () => {
+    const scene = new Scene();
+    const a = new CharacterActor(scene, look(4), 1, true);
+    a.setFirstPerson(true);
+    let proxy: Object3D | undefined;
+    scene.traverse((o) => {
+      if (o.name === "head_shadow") proxy = o;
+    });
+    expect(proxy).toBeDefined();
+    expect((proxy as unknown as { castShadow: boolean }).castShadow).toBe(true);
+    expect((proxy as unknown as { material: { colorWrite: boolean } }).material.colorWrite).toBe(false);
+    expect(proxy!.visible).toBe(true);
+    a.setFirstPerson(false);
+    expect(proxy!.visible).toBe(false);
+  });
+
+  it("stays hidden when the look changes (rig rebuild) and never throws mid-carry, revive, downed or ragdoll", () => {
+    const scene = new Scene();
+    const a = new CharacterActor(scene, look(5), 1, true);
+    a.setFirstPerson(true, 0.5);
+    a.setLook(look(6)); // rebuilds the rig
+    const rig = () => (a as unknown as { rig: { joints: { head: Object3D } } }).rig;
+    expect(rig().joints.head.visible).toBe(false);
+    const eye = newEyeSample();
+    for (const flags of [FLAG.GROUNDED | FLAG.CARRYING, FLAG.GROUNDED | FLAG.REVIVING, FLAG.GROUNDED | FLAG.DOWNED, FLAG.DRAGGING, FLAG.CROUCHING | FLAG.GROUNDED, 0]) {
+      expect(() => {
+        settle(a, pose(flags, { vx: 1, vz: 1 }), 10);
+        a.setFirstPerson(false);
+        a.setFirstPerson(true, 1);
+        a.sampleEye(eye);
+      }).not.toThrow();
+      expect(rig().joints.head.visible).toBe(false);
+      for (const v of [eye.neck.x, eye.neck.y, eye.neck.z, eye.eyeUp, eye.eyeReach]) expect(Number.isFinite(v)).toBe(true);
+    }
+    a.setLook(look(7));
+    expect(rig().joints.head.visible).toBe(false);
+  });
+
+  it("the body turns with the camera in first person and eases back to the server heading after", () => {
+    const a = new CharacterActor(new Scene(), look(8), 1, false);
+    settle(a, pose(FLAG.GROUNDED, { facing: 0.4 }), 5);
+    expect(a.facing).toBeCloseTo(0.4);
+    a.setFirstPerson(true, -2.5);
+    settle(a, pose(FLAG.GROUNDED, { facing: 0.4 }), 60);
+    expect(a.facing).toBeCloseTo(-2.5, 2);
+    a.setFirstPerson(false);
+    settle(a, pose(FLAG.GROUNDED, { facing: 0.4 }), 400);
+    expect(a.facing).toBeCloseTo(0.4, 3);
+  });
+
+  it("a remote body (never put in first person) is drawn exactly as before", () => {
+    const a = new CharacterActor(new Scene(), look(9), 1, false);
+    settle(a, pose(FLAG.GROUNDED, { facing: 1.1 }), 10);
+    expect(a.facing).toBe(1.1);
+    const rig = (a as unknown as { rig: { joints: { head: Object3D; shoulderL: Object3D } } }).rig;
+    expect(rig.joints.head.visible).toBe(true);
+  });
+
+  it("carrying puts the hands out in front (toward -Z) in first person, and the eye sample tells when the body is lying", () => {
+    const a = new CharacterActor(new Scene(), look(10), 1, false);
+    a.setFirstPerson(true, 0.4);
+    settle(a, pose(FLAG.GROUNDED | FLAG.CARRYING, { facing: 0.4 }), 60);
+    const j = (a as unknown as { rig: { joints: { shoulderL: Object3D; shoulderR: Object3D } } }).rig.joints;
+    // A hanging arm swings forward (-Z) with positive X rotation.
+    expect(j.shoulderL.rotation.x).toBeGreaterThan(0.5);
+    expect(j.shoulderR.rotation.x).toBeGreaterThan(0.5);
+    const eye = newEyeSample();
+    expect(a.sampleEye(eye).lying).toBe(false);
+    settle(a, pose(FLAG.GROUNDED | FLAG.DOWNED), 5);
+    expect(a.sampleEye(eye).lying).toBe(true);
+    expect(eye.grounded).toBe(true);
+  });
+});

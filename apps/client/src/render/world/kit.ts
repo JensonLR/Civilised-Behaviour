@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Euler, Matrix4, Quaternion, Vector3, type Material, type Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { hash3 } from "@cb/shared";
-import { addOutlineNormals, outlineMaterial } from "@cb/procedural/three";
+import { addOutlineNormals, isSharedInk } from "@cb/procedural/three";
 
 export type V3 = readonly [number, number, number];
 
@@ -17,6 +17,8 @@ export interface AddOptions {
   colour: number | ColourFn;
   /** Faceted: every triangle gets its own normal (chunky rocks, foliage lobes, canvas panels). */
   flat?: boolean;
+  /** Colour each triangle once, from its centroid and face normal (crisp masonry courses and panels instead of vertex gradients). Implies `flat`. */
+  perFace?: boolean;
   /** Displace vertices by up to this many local units, hashed from position so coincident vertices move together. */
   jitter?: number;
   seed?: number;
@@ -78,7 +80,7 @@ export class Kit {
         );
       }
     }
-    if (o.flat || o.jitter) g.computeVertexNormals(); // non-indexed: one normal per face
+    if (o.flat || o.jitter || o.perFace) g.computeVertexNormals(); // non-indexed: one normal per face
     const nrm = g.attributes.normal as BufferAttribute;
     // Colour first, in local space with the normal turned by the piece's own rotation (so "facing up" means up in the world).
     const rot = o.rot ?? [0, 0, 0];
@@ -87,15 +89,28 @@ export class Kit {
     const colours = new Float32Array(p.count * 3);
     const fn = typeof o.colour === "number" ? undefined : o.colour;
     if (!fn) tmpC.set(o.colour as number);
-    for (let i = 0; i < p.count; i++) {
-      if (fn) {
-        tmpP.set(p.getX(i), p.getY(i), p.getZ(i));
+    if (fn && o.perFace) {
+      for (let i = 0; i + 2 < p.count; i += 3) {
+        tmpP.set((p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3, (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3, (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3);
         tmpN.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i)).applyQuaternion(q);
         fn(tmpP, tmpN, tmpC);
+        for (let k = 0; k < 3; k++) {
+          colours[(i + k) * 3] = tmpC.r;
+          colours[(i + k) * 3 + 1] = tmpC.g;
+          colours[(i + k) * 3 + 2] = tmpC.b;
+        }
       }
-      colours[i * 3] = tmpC.r;
-      colours[i * 3 + 1] = tmpC.g;
-      colours[i * 3 + 2] = tmpC.b;
+    } else {
+      for (let i = 0; i < p.count; i++) {
+        if (fn) {
+          tmpP.set(p.getX(i), p.getY(i), p.getZ(i));
+          tmpN.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i)).applyQuaternion(q);
+          fn(tmpP, tmpN, tmpC);
+        }
+        colours[i * 3] = tmpC.r;
+        colours[i * 3 + 1] = tmpC.g;
+        colours[i * 3 + 2] = tmpC.b;
+      }
     }
     g.setAttribute("color", new BufferAttribute(colours, 3));
     const at = o.at ?? [0, 0, 0];
@@ -179,8 +194,8 @@ export function disposeTree(o: Object3D): void {
   o.traverse((c) => {
     const m = c as { geometry?: BufferGeometry; material?: Material | Material[] };
     m.geometry?.dispose();
-    const shared = outlineMaterial(); // the ink material belongs to every mesh in the game
-    if (Array.isArray(m.material)) for (const x of m.material) x !== shared && x.dispose();
-    else if (m.material && m.material !== shared) m.material.dispose();
+    // the ink materials (the characters' and every scenery weight) belong to every mesh in the game
+    if (Array.isArray(m.material)) for (const x of m.material) !isSharedInk(x) && x.dispose();
+    else if (m.material && !isSharedInk(m.material)) m.material.dispose();
   });
 }

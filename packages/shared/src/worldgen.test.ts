@@ -121,7 +121,7 @@ describe("the arena and the camp", () => {
         const sp = spawnPoint(slot, MAX_PLAYERS);
         for (const o of w.obstacles) expect(insideObstacle(o, sp.x, sp.z, 0.6), `seed ${seed} slot ${slot} vs ${o.tag}`).toBe(false);
       }
-      const camp = w.obstacles.filter((o) => ["tent", "fire", "flag", "sign", "luggage", "cart", "crate", "wall"].includes(o.tag!));
+      const camp = w.obstacles.filter((o) => ["tent", "fire", "flag", "sign", "luggage", "cart", "crate", "wall", "table", "scope", "pole", "hammock"].includes(o.tag!));
       for (let i = 0; i < camp.length; i++) {
         for (let j = i + 1; j < camp.length; j++) {
           const a = camp[i]!;

@@ -58,6 +58,72 @@ export const PALETTE = {
     skyGlow: 0xf2cc92,
     sunDisc: 0xfff0c8,
     sunRing: 0xf6d79a,
+    // more blooms (petals are white in the geometry; the instance colour paints them), reeds, ferns, fungi, berries
+    bloomViolet: 0x9a78a8,
+    bloomPink: 0xc98a94,
+    fern: 0x3f7a3a,
+    reed: 0x8a9a4a,
+    cattail: 0x6a4a30,
+    capRed: 0xa4503f,
+    capSpot: 0xeee3c8,
+    stemPale: 0xd8cfb4,
+    berry: 0x8a2f3f,
+    berryBlue: 0x4a4f8a,
+    // cut wood, rock strata and lichen
+    logCut: 0xc4a574,
+    ringDark: 0x9a7c50,
+    rockStrata: 0x9c8f78,
+    lichen: 0xa6a35a,
+    // paths, ruts, river banks
+    dust: 0xc4a06c,
+    trailWorn: 0xa8865a,
+    rut: 0x5e4630,
+    trampled: 0x9b9a52,
+    mud: 0x6b5a43,
+    sand: 0xc2b088,
+    // toon water
+    waterDeep: 0x4f7a94,
+    waterShallow: 0x7fb0b2,
+    waterFoam: 0xe9efe0,
+    waterGlint: 0xcfe3dc,
+    // distant wood on the hill rings
+    hillTree: 0x3d5c3a,
+    hillTreeLight: 0x5d7a3f,
+    hillTreeDry: 0x9a7a3a,
+    // the Society's abandoned Observatory of Improvement (a ruin on the hill)
+    ruinPale: 0xc9bb9a,
+    ruinShadow: 0x7a6c56,
+    // ambient life
+    pollen: 0xf1e3a0,
+    firefly: 0xd6e07a,
+    smoke: 0xcfc6b6,
+    smokeShade: 0xa89e90,
+    bird: 0x4a423a,
+    moon: 0xe8ecd8,
+    star: 0xf3ecd0,
+    // the day cycle: morning gold, dusk plum, moonlit night (noon/afternoon is the sky/light block above). Each stop is the sun (or
+    // moon) colour, sky top/mid/horizon, the horizon glow and the hemisphere's sky/ground bounce; exposure is applied in code.
+    morningSun: 0xffd49a,
+    morningTop: 0x5d80b8,
+    morningMid: 0xd6b98f,
+    morningHorizon: 0xf1ca90,
+    morningGlow: 0xf0be8a,
+    morningSky: 0xd8cfb8,
+    morningBounce: 0x7a5a58,
+    duskSun: 0xf2b98c,
+    duskTop: 0x3f4380,
+    duskMid: 0x9a6f96,
+    duskHorizon: 0xdd9c7c,
+    duskGlow: 0xdc9a76,
+    duskSky: 0x9a8fb8,
+    duskBounce: 0x5a4058,
+    nightSun: 0xa9b8e0,
+    nightTop: 0x2c3d6b,
+    nightMid: 0x41558a,
+    nightHorizon: 0x6b7fa8,
+    nightGlow: 0x6a78a8,
+    nightSky: 0x4f6294,
+    nightBounce: 0x3a3f66,
   },
 
   props: {
@@ -101,6 +167,14 @@ export const PALETTE = {
     cartCanvas: 0xcfc19a,
     iron: 0x4c4c50,
     sack: 0xb59a6a,
+    // camp life: the map table, telescope, gramophone, lanterns and washing
+    mapPaper: 0xe4d6b0,
+    mapWash: 0xb9c8a0,
+    mapSea: 0x9fb8bc,
+    tableCloth: 0x6a3a3a,
+    horn: 0xc0a25a,
+    glass: 0x8fb0b0,
+    glowLantern: 0xf2c46a,
     flameOuter: 0xd9782f,
     flameMid: 0xeaa23c,
     flameCore: 0xf6d685,
@@ -109,7 +183,26 @@ export const PALETTE = {
   },
 
   /** Everyday materials shared by clothing, props and hats. */
-  material: { wood: 0x7a5230, leather: 0x5a3a24, cream: 0xe8dcc0, soot: 0x241c16, iron: 0x5c5e62, bandage: 0xe6dbbd, bandageDirty: 0xc9bb96 },
+  material: {
+    wood: 0x7a5230,
+    leather: 0x5a3a24,
+    cream: 0xe8dcc0,
+    soot: 0x241c16,
+    iron: 0x5c5e62,
+    bandage: 0xe6dbbd,
+    bandageDirty: 0xc9bb96,
+    // leathers for boots and straps (the boot colour field picks among these), plus fur, rope and rubber
+    leatherBlack: 0x33291f,
+    leatherTan: 0x957a58,
+    leatherOx: 0x5f2c26,
+    leatherGrey: 0x6c675e,
+    rubber: 0x454a3c,
+    fur: 0xb8a88c,
+    furDark: 0x6e5c48,
+    rope: 0xa8946a,
+    linen: 0xd8ccb0,
+    smoke: 0x3a3430,
+  },
 
   /** Clothing trim and accessories: hat bands, plumes, sashes, medal ribbons, spectacle frames. */
   trim: {
@@ -130,6 +223,18 @@ export const PALETTE = {
     hobnail: 0x8a8a8a,
     teeth: 0xeee6cc,
     blushHot: 0xc4574a,
+    // face paint, ribbons, feathers and gems
+    zinc: 0xe4e0d2,
+    rouge: 0xb4645c,
+    featherGreen: 0x4f7a5a,
+    featherBlue: 0x3f6a86,
+    ribbonGreen: 0x3f6a4a,
+    ribbonPurple: 0x5a3f6a,
+    gemGreen: 0x2f7a5a,
+    gemRed: 0xa03444,
+    pearl: 0xe6e0d0,
+    // stockings and puttees
+    puttee: 0x7a7448,
   },
 
   /** Metalwork colours (the spec's "accent" field). */
@@ -146,7 +251,7 @@ export const PALETTE = {
   iris: [0x4f7a9a, 0x5f8a4a, 0x7a5030, 0x8a6a30, 0x3a4a6a],
 
   /** Face-part constants. */
-  face: { white: 0xf4efe2, pupil: 0x15100c, mouth: 0x5a1f1a, cavity: 0x2a0c0c, tongue: 0xc4646a, scar: 0x9a4a4a, nostril: 0x2a1418 },
+  face: { white: 0xf4efe2, pupil: 0x15100c, mouth: 0x5a1f1a, cavity: 0x2a0c0c, tongue: 0xc4646a, scar: 0x9a4a4a, nostril: 0x2a1418, tattoo: 0x46566f, gum: 0xa85a5a, lash: 0x2a1c14 },
 
   /** Wound stains per gore setting. `off` deliberately contains no red at all (iodine and grime). */
   gore: {

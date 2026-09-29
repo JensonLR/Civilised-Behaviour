@@ -3,33 +3,34 @@ import {
   Group,
   Mesh,
   MeshToonMaterial,
-  MeshBasicMaterial,
-  Color,
   DataTexture,
   NearestFilter,
   RedFormat,
-  SphereGeometry,
-  TorusGeometry,
-  BoxGeometry,
   Matrix4,
+  type Material,
 } from "three";
 import { LIMB, PALETTE, ZONE, ZONE_COUNT, woundLevel, zoneLimb, type LimbId, type ZoneId } from "@cb/shared";
 import * as K from "../catalog.ts";
 import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
-import { buildHead, eyePlacement, mouthPlacement } from "./head.ts";
-import { headShape, skinRamp } from "./headShape.ts";
-import { sweepGeometry, curve } from "./sweep.ts";
+import { buildHead } from "./head.ts";
+import { morphOutlineMaterial } from "./faceMorph.ts";
+import { buildFace, irisColour, type FaceParts } from "./faceRig.ts";
 import { outlineMaterial } from "./outline.ts";
-import { CREAM, PartBuilder, singe } from "./parts.ts";
+import { PartBuilder, singe, type Lod } from "./parts.ts";
+import { buildProsthesis } from "./prosthetics.ts";
 import { buildStump, buildForeArm, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
 import { buildWoundGeometry, type GoreLevel } from "./wounds.ts";
+
+export type { FaceParts } from "./faceRig.ts";
+export type { Lod } from "./parts.ts";
 
 /** Named bones of the rigid articulated hierarchy. Every visual part hangs off exactly one of these. */
 export interface Joints {
   root: Group;
   pelvis: Group;
   torso: Group;
+  /** One Group that holds ALL head geometry (skull, hair, hat, eyewear, face parts): hide it and the whole head is gone. */
   head: Group;
   shoulderL: Group;
   shoulderR: Group;
@@ -41,39 +42,22 @@ export interface Joints {
   kneeR: Group;
 }
 
-export interface FaceParts {
-  eyeL: Group;
-  eyeR: Group;
-  pupilL: Mesh;
-  pupilR: Mesh;
-  browL: Mesh;
-  browR: Mesh;
-  mouth: Mesh;
-  /** Dark cavity + teeth + tongue, revealed as the mouth opens. */
-  mouthInterior: Group;
-  /** The cavity mesh (its Y scale is the mouth opening). */
-  mouthCavity: Mesh;
-  /** Rest position of the mouth on the face surface (head-centre relative). */
-  mouthY: number;
-  mouthZ: number;
-  lidL: Mesh;
-  lidR: Mesh;
-  /** Resting geometry constants the animator needs. */
-  eyeRadius: number;
-  mouthWidth: number;
-  /** Resting height of the brows (head-centre relative); the animator raises/lowers from here. */
-  browY: number;
-}
-
 export interface CharacterRig {
   root: Group;
   joints: Joints;
   face: FaceParts;
   proportions: Proportions;
   spec: CharacterSpec;
+  /** The level of detail the meshes are currently at (0 full, 1 mid distance, 2 far silhouette). */
+  readonly lod: Lod;
   /** Number of draw-call-producing meshes right now (excludes shadow-pass doubling; includes visible outlines). */
   readonly meshCount: number;
-  /** Silhouette outline on/off (extra draw per bone). Cheap to toggle. */
+  /**
+   * Switches the geometry to another crowd level of detail without touching the hierarchy: the joints, the face object and every reference the
+   * animator, the ragdoll or the actor hold stay valid; only the bone meshes swap (from the geometry cache, built once per spec and level).
+   */
+  setLod(lod: Lod): void;
+  /** Silhouette outline on/off (extra draw per bone). Cheap to toggle; the hulls are built the first time they are switched on. */
   setOutline(on: boolean): void;
   /**
    * Shows the wounds in a packed mask (see @cb/shared wounds.ts): plasters, dressings and stains on the bone each zone
@@ -82,7 +66,8 @@ export interface CharacterRig {
   setWounds(mask: number, gore?: GoreLevel): void;
   /**
    * Removes lost limbs (LIMB bit mask from @cb/shared): the limb's meshes (and outlines) are hidden and a capped stump appears at the
-   * joint. Cheap to call every frame with an unchanged mask. `gore` recolours the wound cap.
+   * joint. Cheap to call every frame with an unchanged mask. `gore` recolours the wound cap. A lost leg whose side matches `spec.woodenLeg`
+   * (or a lost arm matching `spec.hook`) is fitted with a prosthesis instead: a peg leg, or an iron arm ending in a hook.
    */
   setMissing(mask: number, gore?: GoreLevel): void;
   /**
@@ -94,9 +79,9 @@ export interface CharacterRig {
   dispose(): void;
 }
 
-// Bone geometry is cached by (bone, canonical spec) so identical characters (crowds, clones) share GPU memory.
+// Bone geometry is cached by (bone, canonical spec, level of detail) so identical characters (crowds, clones) share GPU memory.
 const geometryCache = new Map<string, BufferGeometry | null>();
-const MAX_CACHE = 256; // 2 entries per bone (main + outline hull) x ~12 bones x a handful of live specs
+const MAX_CACHE = 512; // main + outline hull per bone per live spec per level
 let sharedMaterial: MeshToonMaterial | undefined;
 
 /** A 4-step lighting ramp: banded light and shadow give forms a graphic, illustrated read that flat PBR shading smears out. */
@@ -130,19 +115,41 @@ export function clearCharacterCaches(): void {
   geometryCache.clear();
 }
 
-const face = { white: PALETTE.face.white, pupil: PALETTE.face.pupil };
-/** Iris colours (chosen per character from the spec so it stays stable). */
-const IRIS_COLORS = PALETTE.iris;
+/** Runs a builder in a given level of detail / hull mode (the PartBuilder statics are restored afterwards, whatever happens). */
+function withMode<T>(lod: Lod, hull: boolean, make: () => T): T {
+  const prevLod = PartBuilder.lod;
+  const prevHull = PartBuilder.hullMode;
+  PartBuilder.lod = lod;
+  PartBuilder.hullMode = hull;
+  try {
+    return make();
+  } finally {
+    PartBuilder.lod = prevLod;
+    PartBuilder.hullMode = prevHull;
+  }
+}
+
+export interface BuildOptions {
+  /** Draw a silhouette outline (default true). Crowds should pass false. */
+  outline?: boolean;
+  /** Level of detail (default 0): 1 drops fine detail and small accessories, 2 is a cheap far-crowd silhouette. See `CharacterRig.setLod`. */
+  lod?: Lod;
+}
+
+interface Attachment {
+  bone: string;
+  parent: Group;
+  make: () => BufferGeometry | undefined;
+  mesh?: Mesh;
+  hull?: Mesh;
+  /** Bone 'head' carries the face morph targets at LOD0. */
+  morphs: boolean;
+}
 
 /**
  * Builds the full articulated caricature for a spec. The hierarchy is rigid (no skinning) so limbs can
  * detach cleanly for dismemberment and pose replication stays cheap. Rest pose: standing, facing -Z.
  */
-export interface BuildOptions {
-  /** Draw a silhouette outline (default true). Crowds should pass false. */
-  outline?: boolean;
-}
-
 export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}): CharacterRig {
   const P = computeProportions(spec);
   const key = encodeSpec(spec);
@@ -153,8 +160,9 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const hatC = singe(K.CLOTH_COLORS[spec.hatColor] ?? PALETTE.cloth[5], burnt);
   const accent = K.ACCENT_COLORS[spec.accentColor] ?? K.ACCENT_COLORS[0];
   const hairC = K.HAIR_COLORS[spec.hairColor] ?? K.HAIR_COLORS[0];
-  const shirtC = singe(CREAM, burnt);
-  const sleeved = spec.jacket !== 0; // 0 = shirt sleeves
+  const shirtC = singe(K.SHIRT_COLORS[spec.shirtColor] ?? PALETTE.material.cream, burnt);
+  const leatherC = singe(K.LEATHER_COLORS[spec.bootColor] ?? PALETTE.material.leather, burnt);
+  const sleeved = spec.jacket !== 0 && spec.jacket !== 3; // shirt sleeves and waistcoats show the shirt's arms
   const armC = sleeved ? jacketC : shirtC;
 
   const footH = 0.05 * P.scale;
@@ -186,158 +194,85 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const kneeR = mk("kneeR", hipR, 0, -P.legUpper, 0);
   torso.rotation.x = -P.lean;
 
+  let lod: Lod = options.lod ?? 0;
+  let outlineOn = options.outline ?? true;
+  const attachments: Attachment[] = [];
   const meshes: Mesh[] = [];
   const outlines: Mesh[] = [];
-  let outlineOn = options.outline ?? true;
   const hiddenBones = new Set<string>();
-  const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined): void => {
-    const geo = cached(`${bone}|${key}`, make);
+
+  const meshGeometry = (a: Attachment): BufferGeometry | undefined =>
+    cached(`${a.bone}|${key}|L${lod}`, () => {
+      PartBuilder.auditTag = a.bone;
+      return withMode(lod, false, a.make);
+    });
+  const hullGeometry = (a: Attachment): BufferGeometry | undefined => cached(`${a.bone}|${key}|L${lod}|hull`, () => withMode(lod, true, a.make));
+  const ensureHull = (a: Attachment): void => {
+    if (a.hull || !a.mesh) return;
+    const hg = hullGeometry(a);
+    if (!hg) return;
+    const o = new Mesh(hg, a.morphs && hg.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial());
+    o.name = `outline_${a.bone}`;
+    o.visible = !hiddenBones.has(a.bone);
+    o.castShadow = false;
+    a.parent.add(o);
+    a.hull = o;
+    outlines.push(o);
+    if (a.morphs) a.mesh.userData.hull = o;
+  };
+  const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined, morphs = false): void => {
+    const a: Attachment = { bone, parent, make, morphs };
+    attachments.push(a);
+    const geo = meshGeometry(a);
     if (!geo) return;
     const m = new Mesh(geo, material);
     m.name = `mesh_${bone}`;
     m.castShadow = true;
     m.receiveShadow = false;
     parent.add(m);
+    a.mesh = m;
     meshes.push(m);
-    // Outline hull: the same bone rebuilt coarsely, without tiny details (cached separately, shared like the main geometry).
-    const hull = cached(`${bone}|${key}|hull`, () => {
-      PartBuilder.hullMode = true;
-      try {
-        return make();
-      } finally {
-        PartBuilder.hullMode = false;
-      }
-    });
-    if (hull) {
-      const o = new Mesh(hull, outlineMaterial());
-      o.name = `outline_${bone}`;
-      o.visible = outlineOn;
-      o.castShadow = false;
-      parent.add(o);
-      outlines.push(o);
-    }
+    if (outlineOn) ensureHull(a);
   };
 
-  const body: BodyCtx = { spec, P, skin, jacketC, trouserC, shirtC, armC, accent, burnt, footH };
+  const body: BodyCtx = { spec, P, skin, jacketC, trouserC, shirtC, armC, accent, burnt, footH, leather: leatherC };
   // ---- pelvis, torso ---------------------------------------------------------------------------------------------
   attach("pelvis", pelvis, () => buildPelvis(body));
   attach("torso", torso, () => buildTorso(body));
 
   // ---- head ------------------------------------------------------------------------------------------------
   const R = P.headRadius;
-  attach("head", head, () => buildHead(spec, P, { skin, hairC, hatC, accent, burnt }));
+  attach("head", head, () => buildHead(spec, P, { skin, hairC, hatC, accent, burnt, morph: PartBuilder.lod === 0 }), true);
 
   // ---- arms ------------------------------------------------------------------------------------------------------
   for (const [side, shoulder, elbow] of [["L", shoulderL, elbowL], ["R", shoulderR, elbowR]] as const) {
-    attach(`upperArm${side}`, shoulder, () => buildUpperArm(body));
-    attach(`foreArm${side}`, elbow, () => buildForeArm(body));
+    attach(`upperArm${side}`, shoulder, () => buildUpperArm(body, side));
+    attach(`foreArm${side}`, elbow, () => buildForeArm(body, side));
   }
 
   // ---- legs ---------------------------------------------------------------------------------------------------------
   for (const [side, hip, knee, woodId] of [["L", hipL, kneeL, 1], ["R", hipR, kneeR, 2]] as const) {
-    attach(`upperLeg${side}`, hip, () => buildUpperLeg(body));
-    attach(`lowerLeg${side}`, knee, () => buildLowerLeg(body, spec.woodenLeg === woodId));
+    attach(`upperLeg${side}`, hip, () => buildUpperLeg(body, side));
+    attach(`lowerLeg${side}`, knee, () => buildLowerLeg(body, spec.woodenLeg === woodId, side));
   }
 
-  // ---- face (animated parts, separate small meshes) ---------------------------------------------------------------------
-  // The merged head geometry is built around the skull centre, R above the neck joint: face parts share that origin.
-  const faceRoot = new Group();
-  faceRoot.name = "faceRoot";
-  faceRoot.position.y = R;
-  head.add(faceRoot);
-  const ownedGeosLate: BufferGeometry[] = [];
-  const eye = eyePlacement(P);
-  const eyeR = eye.radius;
-  const eyeX = eye.x;
-  const eyeY = eye.y;
-  const eyeZ = eye.z;
-  const shape = headShape(P);
-  const irisC = IRIS_COLORS[(spec.hairColor + spec.skin * 3) % IRIS_COLORS.length]!;
-  const whiteMat = new MeshToonMaterial({ color: face.white, gradientMap: toonRamp() });
-  const irisMat = new MeshToonMaterial({ color: irisC, gradientMap: toonRamp() });
-  const pupilMat = new MeshToonMaterial({ color: face.pupil, gradientMap: toonRamp() });
-  const glintMat = new MeshBasicMaterial({ color: 0xffffff });
-  const browMat = new MeshToonMaterial({ color: hairC, gradientMap: toonRamp() });
-  // The lid is a cap of the same skin tone the socket is baked with, so a blink closes into the face instead of onto it.
-  const skinMat = new MeshToonMaterial({ color: new Color(skin).lerp(skinRamp(skin).shade, 0.35), gradientMap: toonRamp() });
-  const mouthMat = new MeshToonMaterial({ color: PALETTE.face.mouth, gradientMap: toonRamp() });
-  const mkEye = (x: number): { g: Group; pupil: Mesh; lid: Mesh } => {
-    const g = new Group();
-    g.position.set(x, eyeY, eyeZ);
-    const white = new Mesh(new SphereGeometry(eyeR, 12, 8), whiteMat);
-    // Iris (the mesh the animator wanders), with the pupil and a catch-light riding on it: the catch-light is what makes an eye look alive.
-    const pupil = new Mesh(new SphereGeometry(eyeR * 0.54, 10, 6), irisMat);
-    pupil.scale.set(1, 1, 0.5);
-    pupil.position.set(0, 0, -eyeR * 0.74);
-    const dark = new Mesh(new SphereGeometry(eyeR * 0.3, 8, 5), pupilMat);
-    dark.position.set(0, 0, -eyeR * 0.3);
-    const glint = new Mesh(new SphereGeometry(eyeR * 0.13, 6, 4), glintMat);
-    glint.position.set(-eyeR * 0.2 * Math.sign(x || 1), eyeR * 0.22, -eyeR * 0.5);
-    pupil.add(dark, glint);
-    // A shallow skin-coloured cap over the eyeball. Axis +Y at rest; the animator tilts it: 0.5 rad = retracted
-    // up-and-back (eye open), -PI/2 = axis pointing forward over the pupil (eye closed / blink).
-    const lid = new Mesh(new SphereGeometry(eyeR * 1.07, 10, 4, 0, Math.PI * 2, 0, 1.15), skinMat);
-    lid.rotation.x = 0.5;
-    g.add(white, pupil, lid);
-    faceRoot.add(g);
-    return { g, pupil, lid };
+  // ---- face (animated parts, separate small meshes; a far-crowd rig gets a placeholder that costs nothing) ----------------------
+  const headAttachment = attachments.find((a) => a.bone === "head")!;
+  const irisC = irisColour(spec);
+  const faceCtx = { spec, P, skin, hairC, accent, irisC, ramp: toonRamp(), toonMaterial: material, headMesh: () => headAttachment.mesh };
+  PartBuilder.auditTag = "face";
+  let faceBuild = buildFace(faceCtx, head);
+  const faceParts: FaceParts = faceBuild.face;
+  const ownedGeos: BufferGeometry[] = [...faceBuild.geometries];
+  const ownedMats: Material[] = [...faceBuild.materials];
+  const applyFaceLod = (): void => {
+    faceBuild.root.visible = lod < 2;
+    faceParts.active = lod < 2;
+    // mid distance: drop the catch-lights, pupils and lower lids (a pixel or two), keep eyes, lids and brows
+    for (const iris of [faceParts.pupilL, faceParts.pupilR]) for (const c of iris.children) c.visible = lod === 0;
+    faceParts.lowerLidL.visible = faceParts.lowerLidR.visible = lod === 0;
   };
-  const eL = mkEye(-eyeX);
-  const eRr = mkEye(eyeX);
-  // Brows: a tapered, arched tube (thick at the inner end) sitting on the brow ridge. Its origin is its centre so the animator can tilt it.
-  const browY = R * 0.37;
-  const browZ = shape.front(eyeX, browY)[2] - R * 0.012;
-  const browSpine = curve([[-R * 0.2, -R * 0.005, 0], [-R * 0.08, R * 0.035, 0], [R * 0.06, R * 0.035, 0], [R * 0.2, -R * 0.01, R * 0.01]], 9);
-  const browGeo = sweepGeometry(browSpine, (t) => ({ rx: R * (0.04 + 0.03 * Math.sin(Math.PI * Math.min(1, t * 1.1)) ), rz: R * 0.05, pow: 2.2 }), { color: hairC, segments: 6, side: [0, 1, 0] });
-  const browL = new Mesh(browGeo, browMat);
-  const browR = new Mesh(browGeo, browMat);
-  // Inner ends toward the nose: the left brow is mirrored so the thick end is always inner.
-  browL.scale.x = -1;
-  browL.position.set(-eyeX, browY, browZ);
-  browR.position.set(eyeX, browY, browZ);
-  faceRoot.add(browL, browR);
-  const mouthWidth = R * 0.56;
-  const mp = mouthPlacement(P);
-  // Lip line: a shallow, tapered arc swept along the sculpted groove. Built as a frown (arch); the animator flips it for a smile.
-  const lipSpine = curve([[-mouthWidth / 2, 0, 0], [-mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 2, 0, 0]], 9);
-  const mouth = new Mesh(
-    sweepGeometry(lipSpine, (t) => ({ rx: R * 0.026 * (0.5 + 0.5 * Math.sin(Math.PI * t)), rz: R * 0.024, pow: 2 }), { color: PALETTE.face.mouth, segments: 5, side: [0, 1, 0] }),
-    mouthMat,
-  );
-  mouth.position.set(0, mp.y, mp.z);
-  faceRoot.add(mouth);
-  // Open mouth: a D-shaped cavity hanging from the upper lip line, upper teeth along its top edge and a tongue at the bottom.
-  const mouthInterior = new Group();
-  mouthInterior.position.set(0, mp.y, mp.z - R * 0.004);
-  mouthInterior.visible = false;
-  const cavityMat = new MeshToonMaterial({ color: PALETTE.face.cavity, gradientMap: toonRamp() });
-  const cavity = new Mesh(new SphereGeometry(1, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), cavityMat);
-  cavity.scale.set(mouthWidth * 0.5, R * 0.01, R * 0.03);
-  const tongueMat = new MeshToonMaterial({ color: PALETTE.face.tongue, gradientMap: toonRamp() });
-  const tongue = new Mesh(new SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), tongueMat);
-  tongue.scale.set(0.5, 0.38, 0.9);
-  tongue.position.set(0, -0.98, 0.15);
-  cavity.add(tongue);
-  mouthInterior.add(cavity);
-  const teethGeo = buildTeeth(spec, mouthWidth, R, accent);
-  if (teethGeo) {
-    const teeth = new Mesh(teethGeo, material);
-    teeth.position.set(0, -R * 0.043, -R * 0.005);
-    mouthInterior.add(teeth);
-    ownedGeosLate.push(teethGeo);
-  }
-  ownedGeosLate.push(cavity.geometry, tongue.geometry);
-  faceRoot.add(mouthInterior);
-  for (const m of [browL, browR, mouth, eL.pupil, eRr.pupil, eL.lid, eRr.lid]) m.castShadow = false;
-
-  const faceParts: FaceParts = {
-    eyeL: eL.g, eyeR: eRr.g, pupilL: eL.pupil, pupilR: eRr.pupil, browL, browR, mouth, lidL: eL.lid, lidR: eRr.lid,
-    eyeRadius: eyeR, mouthWidth, browY, mouthInterior, mouthCavity: cavity, mouthY: mp.y, mouthZ: mp.z,
-  };
-  const ownedGeos: BufferGeometry[] = [browGeo, mouth.geometry, eL.lid.geometry, eRr.lid.geometry, ...ownedGeosLate];
-  const ownedMats = [whiteMat, irisMat, pupilMat, glintMat, browMat, skinMat, mouthMat, cavityMat, tongueMat];
-  eL.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
-  eRr.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
+  applyFaceLod();
 
   // ---- wounds: one lazily created mesh per zone on its bone, geometry swapped by (severity, gore) ------------------------
   const zoneBones: Record<number, Group> = {
@@ -383,14 +318,15 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     }
   }
 
-  // ---- lost limbs: hide the limb's bone meshes, show a stump at the joint ---------------------------------------------------------------
-  const LIMB_BONES: Record<number, { bones: string[]; joint: Group; kind: "arm" | "leg" }> = {
-    [LIMB.ARM_L]: { bones: ["upperArmL", "foreArmL"], joint: shoulderL, kind: "arm" },
-    [LIMB.ARM_R]: { bones: ["upperArmR", "foreArmR"], joint: shoulderR, kind: "arm" },
-    [LIMB.LEG_L]: { bones: ["upperLegL", "lowerLegL"], joint: hipL, kind: "leg" },
-    [LIMB.LEG_R]: { bones: ["upperLegR", "lowerLegR"], joint: hipR, kind: "leg" },
+  // ---- lost limbs: hide the limb's bone meshes, show a stump at the joint (and a prosthesis if the look says so) --------------------------
+  const LIMB_BONES: Record<number, { bones: string[]; joint: Group; lower: Group; kind: "arm" | "leg"; side: "L" | "R"; prosthetic: boolean }> = {
+    [LIMB.ARM_L]: { bones: ["upperArmL", "foreArmL"], joint: shoulderL, lower: elbowL, kind: "arm", side: "L", prosthetic: spec.hook === 1 },
+    [LIMB.ARM_R]: { bones: ["upperArmR", "foreArmR"], joint: shoulderR, lower: elbowR, kind: "arm", side: "R", prosthetic: spec.hook === 2 },
+    [LIMB.LEG_L]: { bones: ["upperLegL", "lowerLegL"], joint: hipL, lower: kneeL, kind: "leg", side: "L", prosthetic: spec.woodenLeg === 1 },
+    [LIMB.LEG_R]: { bones: ["upperLegR", "lowerLegR"], joint: hipR, lower: kneeR, kind: "leg", side: "R", prosthetic: spec.woodenLeg === 2 },
   };
   const stumpMeshes = new Map<number, Mesh>();
+  const prosthesisMeshes = new Map<number, Mesh>();
   let shownMissing = 0;
   let shownMissingGore: GoreLevel = "full";
   const setMissing = (mask: number, gore: GoreLevel = "full"): void => {
@@ -407,21 +343,40 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       for (const m of meshes) if (info.bones.includes(m.name.slice(5))) m.visible = !gone;
       for (const o of outlines) if (info.bones.includes(o.name.slice(8))) o.visible = outlineOn && !gone;
       let stump = stumpMeshes.get(limb);
+      let prosthesis = prosthesisMeshes.get(limb);
       if (!gone) {
         if (stump) stump.visible = false;
+        if (prosthesis) prosthesis.visible = false;
         continue;
       }
-      const geo = cached(`stump|${info.kind}|${gore}|${key}`, () => buildStump(body, info.kind, gore));
-      if (!geo) continue;
-      if (!stump) {
-        stump = new Mesh(geo, material);
-        stump.name = `stump_${limb}`;
-        stump.castShadow = true;
-        info.joint.add(stump);
-        stumpMeshes.set(limb, stump);
+      const fitted = info.prosthetic;
+      const geo = cached(`stump|${info.kind}|${info.side}|${fitted ? "p" : "b"}|${gore}|${key}`, () => withMode(lod, false, () => buildStump(body, info.kind, gore, fitted)));
+      if (geo) {
+        if (!stump) {
+          stump = new Mesh(geo, material);
+          stump.name = `stump_${limb}`;
+          stump.castShadow = true;
+          info.joint.add(stump);
+          stumpMeshes.set(limb, stump);
+        }
+        stump.geometry = geo;
+        stump.visible = true;
       }
-      stump.geometry = geo;
-      stump.visible = true;
+      if (fitted) {
+        // the lower half of the prosthesis hangs from the elbow or knee, so it swings and bends with the animation
+        const pg = cached(`prosthesis|${info.kind}|${info.side}|${key}`, () => withMode(lod, false, () => buildProsthesis(body, info.kind, info.side)));
+        if (pg) {
+          if (!prosthesis) {
+            prosthesis = new Mesh(pg, material);
+            prosthesis.name = `prosthesis_${limb}`;
+            prosthesis.castShadow = true;
+            info.lower.add(prosthesis);
+            prosthesisMeshes.set(limb, prosthesis);
+          }
+          prosthesis.geometry = pg;
+          prosthesis.visible = true;
+        }
+      } else if (prosthesis) prosthesis.visible = false;
     }
     applyWounds();
   };
@@ -448,21 +403,60 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     return pivot;
   };
 
+  const setOutline = (on: boolean): void => {
+    outlineOn = on;
+    if (on) for (const a of attachments) ensureHull(a);
+    for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8));
+  };
+
+  const setLod = (next: Lod): void => {
+    if (next === lod) return;
+    lod = next;
+    for (const a of attachments) {
+      if (a.mesh) {
+        const g = meshGeometry(a);
+        if (g) {
+          a.mesh.geometry = g;
+          a.mesh.updateMorphTargets();
+        }
+      }
+      if (a.hull) {
+        const g = hullGeometry(a);
+        if (g) {
+          a.hull.geometry = g;
+          a.hull.material = a.morphs && g.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial();
+          a.hull.updateMorphTargets();
+        }
+      }
+    }
+    applyFaceLod();
+  };
+
+  const isShown = (o: Mesh): boolean => {
+    for (let n: Group | Mesh | null = o; n; n = n.parent as Group | null) if (!n.visible) return false;
+    return true;
+  };
+
   return {
     root,
     joints: { root, pelvis, torso, head, shoulderL, shoulderR, elbowL, elbowR, hipL, hipR, kneeL, kneeR },
     face: faceParts,
     proportions: P,
     spec,
+    get lod() {
+      return lod;
+    },
     get meshCount() {
-      return meshes.filter((m) => m.visible).length + 7 + (outlineOn ? outlines.filter((o) => o.visible).length : 0) + woundMeshes.filter((m) => m?.visible).length + [...stumpMeshes.values()].filter((m) => m.visible).length;
+      let n = 0;
+      root.traverse((o) => {
+        if (o instanceof Mesh && isShown(o)) n++;
+      });
+      return n;
     },
     setWounds,
-    setOutline(on: boolean) {
-      outlineOn = on;
-      for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8));
-    },
+    setOutline,
     setMissing,
+    setLod,
     detachLimb,
     dispose() {
       // Bone geometry belongs to the shared cache; only per-instance face parts are freed here.
@@ -471,21 +465,4 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       root.removeFromParent();
     },
   };
-}
-
-/** A row of six teeth. Bits (TEETH_BITS): 1 missing front, 2 gold front, 4 missing side, 8 gold side. Returns undefined if none remain. */
-function buildTeeth(spec: CharacterSpec, mouthWidth: number, R: number, gold: number): BufferGeometry | undefined {
-  const b = new PartBuilder();
-  const w = (mouthWidth * 0.86) / 6;
-  const ivory: number = PALETTE.trim.teeth;
-  for (let i = 0; i < 6; i++) {
-    const front = i === 2 || i === 3;
-    const side = i === 0 || i === 5;
-    const goldSide = i === 1 || i === 4;
-    if (front && (spec.teeth & 1)) continue; // missing front teeth
-    if (side && (spec.teeth & 4)) continue; // missing side teeth
-    const isGold = (front && (spec.teeth & 2) !== 0) || (goldSide && (spec.teeth & 8) !== 0);
-    b.box(w * 0.92, R * 0.065, R * 0.03, isGold ? gold : ivory, [(i - 2.5) * w, 0, 0]);
-  }
-  return b.build();
 }

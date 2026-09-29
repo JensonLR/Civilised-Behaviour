@@ -1,7 +1,26 @@
 import { Box3, BufferGeometry, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { CAMP, PROP_DEFS, PropKind, createArena, type PropKindId } from "@cb/shared";
-import { acaciaGeometry, boulderGeometry, broadleafGeometry, bushGeometry, flowerGeometry, grassTuftGeometry, pebbleGeometry, snagGeometry, TREE_BASE_RADIUS } from "./flora.ts";
+import {
+  acaciaGeometry,
+  berryBushGeometry,
+  boulderGeometry,
+  broadleafGeometry,
+  bushGeometry,
+  cupGeometry,
+  daisyGeometry,
+  fernGeometry,
+  grassTuftGeometry,
+  logGeometry,
+  mushroomGeometry,
+  pebbleGeometry,
+  reedGeometry,
+  slabGeometry,
+  snagGeometry,
+  stumpGeometry,
+  TREE_BASE_RADIUS,
+} from "./flora.ts";
+import { buildRuins } from "./ruins.ts";
 import { Kit } from "./kit.ts";
 import { buildBanners, buildFlame, buildLandmarks, cart, luggage, tent } from "./landmarks.ts";
 import { crateParts, propGeometry } from "./objects.ts";
@@ -13,7 +32,11 @@ const builders: Record<string, (lod: 0 | 1) => BufferGeometry> = {
   acacia: acaciaGeometry,
   snag: snagGeometry,
   bush: bushGeometry,
+  berryBush: berryBushGeometry,
   boulder: boulderGeometry,
+  slab: slabGeometry,
+  stump: stumpGeometry,
+  log: logGeometry,
   crate: (l) => propGeometry(PropKind.CRATE, l),
   barrel: (l) => propGeometry(PropKind.BARREL, l),
   bottle: (l) => propGeometry(PropKind.BOTTLE, l),
@@ -88,8 +111,15 @@ describe("scenery geometry", () => {
         expect(windingAgreement(g), name).toBeGreaterThan(0.99);
       });
     }
-    it(`${name}'s outline hull is cheaper than the mesh it outlines`, () => {
+    it(`${name}'s outline hull is no dearer than the mesh it outlines, and never bulges past it by more than 6% of its size`, () => {
       expect(tris(build(0))).toBeLessThanOrEqual(tris(build(1)));
+      const a = build(1);
+      const h = build(0);
+      a.computeBoundingBox();
+      h.computeBoundingBox();
+      const size = a.boundingBox!.getSize(new Vector3()).length();
+      const over = Math.max(h.boundingBox!.max.x - a.boundingBox!.max.x, a.boundingBox!.min.x - h.boundingBox!.min.x, h.boundingBox!.max.y - a.boundingBox!.max.y, h.boundingBox!.max.z - a.boundingBox!.max.z, a.boundingBox!.min.z - h.boundingBox!.min.z);
+      expect(over / size, name).toBeLessThan(0.06);
     });
   }
 
@@ -109,13 +139,40 @@ describe("scenery geometry", () => {
   });
 
   it("ground cover is small, cheap and pointing up-ish (lit like the ground)", () => {
-    for (const g of [grassTuftGeometry(), flowerGeometry()]) {
+    for (const [name, g, maxTris] of [["grass", grassTuftGeometry(), 8], ["daisy", daisyGeometry(), 34], ["cup", cupGeometry(), 26], ["fern", fernGeometry(), 46]] as const) {
       g.computeBoundingBox();
-      expect(g.boundingBox!.max.y).toBeLessThan(0.75);
-      expect(tris(g)).toBeLessThanOrEqual(16);
+      expect(g.boundingBox!.max.y, name).toBeLessThan(0.75);
+      expect(tris(g), name).toBeLessThanOrEqual(maxTris);
       const n = g.attributes.normal!;
-      for (let i = 0; i < n.count; i++) expect(n.getY(i)).toBeGreaterThan(0.6);
+      for (let i = 0; i < n.count; i++) expect(n.getY(i), name).toBeGreaterThan(0.6);
     }
+  });
+
+  it("blooms carry a tint weight (petals take the instance colour, stems and leaves keep their green), and every soup vertex is finite", () => {
+    for (const [name, g] of [["daisy", daisyGeometry()], ["cup", cupGeometry()], ["grass", grassTuftGeometry()], ["reed", reedGeometry()], ["toadstool", mushroomGeometry()], ["fern", fernGeometry()]] as const) {
+      const tint = g.getAttribute("aTint");
+      expect(tint, name).toBeDefined();
+      for (const a of ["position", "normal", "color"]) for (let i = 0; i < g.getAttribute(a).count; i++) for (const v of [g.getAttribute(a).getX(i), g.getAttribute(a).getY(i), g.getAttribute(a).getZ(i)]) expect(Number.isFinite(v), `${name} ${a}`).toBe(true);
+    }
+    const petals = (g: BufferGeometry): number => Array.from({ length: g.getAttribute("aTint").count }, (_, i) => g.getAttribute("aTint").getX(i)).filter((v) => v === 1).length;
+    expect(petals(daisyGeometry())).toBeGreaterThanOrEqual(8 * 3 * 2);
+    expect(petals(cupGeometry())).toBeGreaterThanOrEqual(5 * 3 * 2);
+    expect(petals(grassTuftGeometry())).toBe(0);
+  });
+
+  it("stumps and logs match their collision footprints and toadstools stay small", () => {
+    const st = stumpGeometry(1);
+    st.computeBoundingBox();
+    expect(st.boundingBox!.max.y).toBeGreaterThan(0.95);
+    expect(st.boundingBox!.max.y).toBeLessThan(1.05);
+    const lg = logGeometry(1);
+    lg.computeBoundingBox();
+    expect(lg.boundingBox!.max.x).toBeCloseTo(1, 1); // hx scale = collision half-length
+    expect(lg.boundingBox!.max.y).toBeLessThan(1.25); // the body is 1.0 tall; a broken branch stub rises above it
+    const m = mushroomGeometry();
+    m.computeBoundingBox();
+    expect(m.boundingBox!.max.y).toBeLessThan(1);
+    expect(tris(m)).toBeLessThan(60);
   });
 
   it("the jitter moves shared vertices together: a jittered rock has no cracks", () => {
@@ -195,6 +252,32 @@ describe("camp landmarks", () => {
     expect(tris(hull)).toBeLessThan(tris(camp));
     expect(tris(camp)).toBeLessThan(20000);
     expect(buildFlame().getAttribute("normal")).toBeDefined();
+  });
+
+  it("the Observatory ruin is one finite geometry that stands on its plateau, and its hull is cheaper", () => {
+    const w = createArena(7);
+    const geo = buildRuins(w.terrain, 1)!;
+    const hull = buildRuins(w.terrain, 0)!;
+    expect(geo).toBeDefined();
+    geo.computeBoundingBox();
+    expect(geo.boundingBox!.max.y - geo.boundingBox!.min.y).toBeGreaterThan(9);
+    expect(tris(hull)).toBeLessThan(tris(geo));
+    expect(tris(geo)).toBeLessThan(24000);
+    for (const a of ["position", "normal", "color", "onormal"]) for (let i = 0; i < geo.getAttribute(a).count; i += 3) expect(Number.isFinite(geo.getAttribute(a).getX(i))).toBe(true);
+    expect(windingAgreement(geo)).toBeGreaterThan(0.97);
+  });
+
+  it("the camp keeps every new piece inside its collision footprint", () => {
+    const w = createArena(7);
+    const geo = buildLandmarks(w, 1)!;
+    geo.computeBoundingBox();
+    // the map table, gramophone and telescope are drawn where their obstacles are: the merged bounds must reach them
+    for (const o of w.obstacles.filter((q) => ["table", "scope", "pole", "hammock"].includes(q.tag!))) {
+      const p = geo.attributes.position!;
+      let near = false;
+      for (let i = 0; i < p.count && !near; i += 3) near = Math.hypot(p.getX(i) - o.x, p.getZ(i) - o.z) < 1.2;
+      expect(near, `${o.tag} at ${o.x},${o.z} has geometry`).toBe(true);
+    }
   });
 
   it("banners: the pennant and the board lettering have in-range UVs and waves, and only the pennant waves", () => {

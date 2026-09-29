@@ -62,8 +62,8 @@ export const FIELDS = [
   colour("trousersColor", "Trouser colour", C.CLOTH_COLORS.length),
   colour("hatColor", "Hat colour", C.CLOTH_COLORS.length),
   colour("accentColor", "Metalwork", C.ACCENT_COLORS.length),
-  { key: "scars", max: 31, label: "Scars", group: "history", kind: "flags" } as const,
-  { key: "teeth", max: 15, label: "Teeth", group: "history", kind: "flags" } as const,
+  { key: "scars", max: 255, label: "Scars", group: "history", kind: "flags" } as const,
+  { key: "teeth", max: 63, label: "Teeth", group: "history", kind: "flags" } as const,
   choice("eyepatch", "Eyepatch", C.EYEPATCH, "history"),
   { key: "burnt", max: 3, label: "Singed clothing", group: "history", kind: "choice", options: ["None", "Scorched", "Charred", "Ruined"] } as const,
   choice("woodenLeg", "Wooden leg", C.WOODEN_LEG, "history"),
@@ -72,10 +72,58 @@ export const FIELDS = [
   choice("pack", "Pack", C.PACKS, "clothes"),
   choice("hipGear", "Hip gear", C.HIP_GEAR, "clothes"),
   choice("gloves", "Gloves", C.GLOVES, "clothes"),
+  // ---- batch 2 (starts at index 43): faces, complexion, jewellery, decorations, trims, prosthetics ----
+  choice("brows", "Eyebrows", C.BROWS, "face"),
+  choice("eyeShape", "Eye shape", C.EYE_SHAPES, "face"),
+  choice("eyeColor", "Eye colour", C.EYE_COLORS, "face"),
+  choice("earShape", "Ear shape", C.EAR_SHAPES, "face"),
+  choice("stubble", "Stubble", C.STUBBLE, "face"),
+  choice("greying", "Greying", C.GREYING, "face"),
+  slider("age", "Age lines", "face"),
+  choice("complexion", "Complexion", C.COMPLEXION, "face"),
+  choice("mark", "Skin mark", C.MARKS, "face"),
+  choice("facePaint", "Face paint", C.FACE_PAINT, "face"),
+  choice("tattoo", "Tattoo", C.TATTOOS, "face"),
+  choice("earring", "Earring", C.EARRINGS, "face"),
+  choice("ring", "Ring", C.RINGS, "clothes"),
+  choice("epaulettes", "Epaulettes", C.EPAULETTES, "clothes"),
+  choice("decoration", "Decoration", C.DECORATIONS, "clothes"),
+  choice("coatTrim", "Coat trim", C.COAT_TRIMS, "clothes"),
+  choice("trouserTrim", "Trouser detail", C.TROUSER_TRIMS, "clothes"),
+  colour("shirtColor", "Shirt colour", C.SHIRT_COLORS.length),
+  colour("bootColor", "Leather", C.LEATHER_COLORS.length),
+  choice("hatTrim", "Hat trim", C.HAT_TRIMS, "clothes"),
+  choice("hook", "Hook hand", C.HOOKS, "history"),
 ] as const;
 
 /** How many fields the wire format had before the append-only additions; shorter strings from older saves still decode. */
 export const LEGACY_FIELD_COUNT = 39;
+
+/**
+ * Append batches. Each batch draws its random values from its OWN stream, so adding a batch never changes who an existing seed is.
+ * Fields before `LEGACY_FIELD_COUNT` use the main stream; batch 1 (neckwear ... gloves) has its stream since it was added first, batch 2 got its own.
+ * To add fields: append to FIELDS, append a batch here with a new random salt (never reuse or reorder), and give the new fields odds in EXTRA_ODDS.
+ */
+export const FIELD_BATCHES: readonly { start: number; salt: number }[] = [
+  { start: LEGACY_FIELD_COUNT, salt: 0x51ed270b },
+  { start: 43, salt: 0x7f4a7c15 },
+];
+
+/**
+ * How many options each choice field had before later releases appended more. Generation draws from THIS range (so the random stream and the
+ * result for old seeds are unchanged) and the newer options reach generated characters through the novelty stream below.
+ */
+const FROZEN_OPTIONS: Readonly<Record<string, number>> = {
+  noseStyle: 6, hair: 10, moustache: 10, beard: 8, sideburns: 4, hat: 11, jacket: 6, shirt: 4, trousers: 4, boots: 4, belt: 3, eyewear: 5, sash: 3,
+  neckwear: 4, pack: 5, hipGear: 5, gloves: 3,
+};
+/** Chance that a generated character picks one of the options appended later, per field. */
+const NOVELTY_ODDS: Readonly<Record<string, number>> = { hat: 0.34, hair: 0.34, jacket: 0.3, moustache: 0.25, beard: 0.25, boots: 0.3, eyewear: 0.3, trousers: 0.25 };
+/** Chance that a batch field is set at all (default 0.4). Rare vanity (tattoos, face paint) stays rare so a crowd reads as a crowd. */
+const EXTRA_ODDS: Readonly<Record<string, number>> = {
+  eyeColor: 0.5, earShape: 0.25, stubble: 0.5, greying: 0.3, complexion: 0.5, mark: 0.14, facePaint: 0.06, tattoo: 0.1, earring: 0.13, ring: 0.16,
+  epaulettes: 0.18, decoration: 0.22, coatTrim: 0.3, trouserTrim: 0.3, shirtColor: 0.45, bootColor: 0.6, hatTrim: 0.28, hook: 0, brows: 0.6, eyeShape: 0.6,
+};
 
 /** Colour palettes for the colour fields (UI swatches). */
 export const PALETTES: Partial<Record<string, readonly number[]>> = {
@@ -85,6 +133,8 @@ export const PALETTES: Partial<Record<string, readonly number[]>> = {
   trousersColor: C.CLOTH_COLORS,
   hatColor: C.CLOTH_COLORS,
   accentColor: C.ACCENT_COLORS,
+  shirtColor: C.SHIRT_COLORS,
+  bootColor: C.LEATHER_COLORS,
 };
 
 export type FieldKey = (typeof FIELDS)[number]["key"];
@@ -204,17 +254,25 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
   const rng = new Rng(seed ^ 0x6d2b79f5);
   const a = ARCHETYPES[archetype ?? rng.int(0, ARCHETYPES.length - 1)] as Archetype;
   const spec = {} as Record<string, number>;
-  const extra = new Rng(seed ^ 0x51ed270b); // fields added later draw from their own stream so old seeds keep their people
+  // Fields added later draw from their own streams (one per batch) so old seeds keep their people.
+  const streams = FIELD_BATCHES.map((b) => new Rng(seed ^ b.salt));
   FIELDS.forEach((f, i) => {
     if (i >= LEGACY_FIELD_COUNT) {
-      spec[f.key] = extra.chance(0.55) ? 0 : extra.int(1, f.max);
+      let batch = 0;
+      FIELD_BATCHES.forEach((b, k) => i >= b.start && (batch = k));
+      const st = streams[batch] as Rng;
+      const frozen = FROZEN_OPTIONS[f.key];
+      const max = frozen !== undefined ? frozen - 1 : f.max;
+      if (batch === 0) spec[f.key] = st.chance(0.55) ? 0 : st.int(1, max); // batch 1 keeps its original odds
+      else if (f.key === "age") spec[f.key] = st.chance(EXTRA_ODDS[f.key] ?? 0.6) ? st.int(40, 230) : st.int(0, 60);
+      else spec[f.key] = st.chance(EXTRA_ODDS[f.key] ?? 0.4) ? st.int(1, max) : 0;
       return;
     }
     if (f.kind === "slider") {
       const base = a.body[f.key as FieldKey];
       spec[f.key] = base === undefined ? rng.int(40, 215) : clampInt(base + rng.range(-28, 28), 255);
     } else {
-      spec[f.key] = rng.int(0, f.max);
+      spec[f.key] = rng.int(0, FROZEN_OPTIONS[f.key] !== undefined ? FROZEN_OPTIONS[f.key]! - 1 : f.max);
     }
   });
   spec.hat = rng.pick(a.hats);
@@ -226,11 +284,19 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
   spec.eyepatch = 0;
   spec.burnt = 0;
   spec.woodenLeg = 0;
+  spec.hook = 0;
   spec.medals = rng.chance(0.5) ? rng.int(0, 3) : 0;
   spec.posture = clampInt(rng.range(70, 200), 255);
   // Avoid clashing hat/jacket colours by construction: hat and jacket palette indices differ.
   if (spec.hatColor === spec.jacketColor) spec.hatColor = ((spec.hatColor as number) + 5) % C.CLOTH_COLORS.length;
   if (spec.trousersColor === spec.jacketColor) spec.trousersColor = ((spec.trousersColor as number) + 3) % C.CLOTH_COLORS.length;
+  // Options appended after the first release reach generated people through their own stream (a fraction of characters get one).
+  const novelty = new Rng(seed ^ 0x2545f491);
+  for (const f of FIELDS) {
+    const frozen = FROZEN_OPTIONS[f.key];
+    if (frozen === undefined || f.max < frozen) continue;
+    if (novelty.chance(NOVELTY_ODDS[f.key] ?? 0.2)) spec[f.key] = novelty.int(frozen, f.max);
+  }
   return sanitizeSpec(spec);
 }
 
@@ -238,7 +304,7 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
  * Fields the CAMPAIGN owns (they record what happened to the character). Clients may never set them:
  * otherwise anyone could claim a veteran's scars or a wooden leg. The server keeps its own copy.
  */
-export const HISTORY_KEYS = ["scars", "teeth", "eyepatch", "burnt", "woodenLeg"] as const satisfies readonly FieldKey[];
+export const HISTORY_KEYS = ["scars", "teeth", "eyepatch", "burnt", "woodenLeg", "hook"] as const satisfies readonly FieldKey[];
 
 /** Applies a client-submitted look on top of the server's record: appearance from the client, history from the server. */
 export function applyClientAppearance(current: CharacterSpec, incoming: CharacterSpec): CharacterSpec {
@@ -250,5 +316,5 @@ export function applyClientAppearance(current: CharacterSpec, incoming: Characte
 /** Randomise while keeping campaign history (scars, teeth...) intact: used by the creator's dice button. */
 export function rerollAppearance(spec: CharacterSpec, seed: number): CharacterSpec {
   const fresh = generateCharacter(seed);
-  return { ...fresh, scars: spec.scars, teeth: spec.teeth, eyepatch: spec.eyepatch, burnt: spec.burnt, woodenLeg: spec.woodenLeg };
+  return { ...fresh, scars: spec.scars, teeth: spec.teeth, eyepatch: spec.eyepatch, burnt: spec.burnt, woodenLeg: spec.woodenLeg, hook: spec.hook };
 }

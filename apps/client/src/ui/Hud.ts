@@ -39,12 +39,19 @@ export interface HudView {
   /** Names for messages. */
   reviverName: string;
   patientName: string;
+  /** The local player is dressing a standing comrade's wound (not reviving a downed one): changes the progress label only. */
+  dressing?: boolean;
   usingGamepad: boolean;
+  /** First-person view is fully active: show the aiming dot. */
+  firstPerson?: boolean;
   /** Packed wound mask of the local player (see @cb/shared wounds.ts). */
   wounds: number;
   /** Lost-limb mask (0 when the player has chosen not to see severed limbs: the injury then reads as its dressing). */
   missing?: number;
 }
+
+/** The aiming dot shows in first person while the player can act; a downed player sees the mourning card and a sky, not a reticle. */
+export const crosshairVisible = (firstPerson: boolean | undefined, flags: number): boolean => firstPerson === true && (flags & FLAG.DOWNED) === 0;
 
 /**
  * Minimal, clean gameplay HUD. Rules from the brief: no colour-only signals (state is always also text/shape),
@@ -60,6 +67,7 @@ export class Hud {
   private readonly progressLabel: HTMLElement;
   private readonly downed: HTMLElement;
   private readonly notice: HTMLElement;
+  private readonly crosshair: HTMLElement;
   private readonly wounds: HTMLElement;
   private readonly woundParts: SVGElement[];
   private readonly woundText: HTMLElement;
@@ -86,6 +94,10 @@ export class Hud {
       <rect data-z="4" x="11" y="50" width="8" height="34" rx="3"/><rect data-z="5" x="21" y="50" width="8" height="34" rx="3"/></svg><span class="text"></span>`;
     this.woundParts = [...this.wounds.querySelectorAll<SVGElement>("[data-z]")].sort((a, b) => Number(a.dataset.z) - Number(b.dataset.z));
     this.woundText = this.wounds.querySelector<HTMLElement>(".text")!;
+
+    this.crosshair = el(root, "div", "crosshair");
+    this.crosshair.hidden = true;
+    this.crosshair.setAttribute("aria-hidden", "true");
 
     this.prompt = el(root, "div", "prompt");
     this.prompt.hidden = true;
@@ -124,6 +136,7 @@ export class Hud {
     this.updateWounds(v.wounds, v.missing ?? 0);
 
     const down = (v.flags & FLAG.DOWNED) !== 0;
+    this.crosshair.hidden = !crosshairVisible(v.firstPerson, v.flags);
     this.downed.hidden = !down;
     if (down) {
       const dragged = (v.flags & FLAG.DRAGGED) !== 0;
@@ -138,7 +151,7 @@ export class Hud {
       label = "Being revived";
       value = v.reviveProgressOnMe;
     } else if (v.reviveProgressByMe >= 0) {
-      label = `Reviving ${v.patientName || "comrade"}`;
+      label = `${v.dressing ? "Dressing" : "Reviving"} ${v.patientName || "comrade"}`;
       value = v.reviveProgressByMe;
     }
     this.progress.hidden = value < 0;
@@ -172,7 +185,7 @@ export class Hud {
   }
 
   dispose(): void {
-    for (const e of [this.health, this.wounds, this.prompt, this.progress, this.downed, this.notice]) e.remove();
+    for (const e of [this.health, this.wounds, this.crosshair, this.prompt, this.progress, this.downed, this.notice]) e.remove();
     window.clearTimeout(this.noticeTimer);
   }
 }

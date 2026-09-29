@@ -9,6 +9,11 @@ export interface Intent {
 
 const DEADZONE = 0.18;
 
+/** Keyboard key that toggles first/third person (V is melee). */
+export const VIEW_KEY = "KeyX";
+/** Standard-mapping gamepad button that toggles it: R3, the right stick click (Y is melee, and the face buttons and bumpers are all bound). */
+export const VIEW_PAD_BUTTON = 11;
+
 /** Keys whose press must never be lost between two fixed input samples. */
 const TAP_BUTTONS: Record<string, number> = {
   Space: BUTTON.JUMP,
@@ -18,6 +23,8 @@ const TAP_BUTTONS: Record<string, number> = {
   KeyG: BUTTON.THROW,
   KeyF: BUTTON.GRAB,
 };
+
+const isTextEntry = (t: EventTarget | null): boolean => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
 /** Radial deadzone with rescale, so slow sticks stay precise and never drift. */
 function stick(x: number, y: number): [number, number] {
@@ -48,6 +55,9 @@ export class Controls {
   /** Set true whenever the last meaningful input came from a pad (drives UI glyphs). */
   usingGamepad = false;
   onToggleDebug: (() => void) | undefined;
+  /** Switch between first and third person. V is taken (melee), so the keyboard key is VIEW_KEY; on a pad it is a click of the right stick. */
+  onToggleView: (() => void) | undefined;
+  private viewPadWas = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -62,6 +72,7 @@ export class Controls {
         e.preventDefault();
         this.onToggleDebug?.();
       }
+      if (e.code === VIEW_KEY && !isTextEntry(e.target)) this.onToggleView?.();
       if (e.code === "ShiftLeft" && !this.settings.holdToSprint) this.sprintToggled = !this.sprintToggled;
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
@@ -96,6 +107,13 @@ export class Controls {
     this.lookX = 0;
     this.lookY = 0;
     const p = this.pad();
+    // Edge-triggered so holding the stick down toggles once.
+    const viewNow = p?.buttons[VIEW_PAD_BUTTON]?.pressed ?? false;
+    if (viewNow && !this.viewPadWas) {
+      this.usingGamepad = true;
+      this.onToggleView?.();
+    }
+    this.viewPadWas = viewNow;
     if (p) {
       const [rx, ry] = stick(p.axes[2] ?? 0, p.axes[3] ?? 0);
       if (rx || ry) this.usingGamepad = true;

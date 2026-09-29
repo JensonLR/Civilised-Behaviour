@@ -2,6 +2,8 @@ import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { campObstacles } from "./camp.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain } from "./terrain.ts";
+import { HILL, nearTrail, waterEdgeDistance, withLandscape } from "./landscape.ts";
+import { ruinObstacles } from "./ruins.ts";
 
 export const ARENA_RADIUS = 90;
 
@@ -11,13 +13,19 @@ export const ARENA_RADIUS = 90;
  * stays the same.
  */
 export function createArena(seed: number): CollisionWorld {
-  const terrain = createTerrain(seed);
+  // Base noise + the Observatory hill + the stream and its pond (landscape.ts): the SAME terrain on the server and every client.
+  const terrain = withLandscape(createTerrain(seed));
   const rng = new Rng(seed ^ 0xa5a5a5a5);
-  // The authored expedition camp (ruined wall, step-up crates, tents, fire, flag, signpost, luggage, cart): camp.ts.
-  const obstacles: Obstacle[] = campObstacles(terrain);
+  // The authored expedition camp (ruined wall, step-up crates, tents, fire, flag, signpost, luggage, cart, map table, washing...): camp.ts.
+  // The Observatory ruin and its aqueduct: ruins.ts.
+  const obstacles: Obstacle[] = [...campObstacles(terrain), ...ruinObstacles(terrain)];
 
   const MAX_D = ARENA_RADIUS - 4;
   const tooClose = (x: number, z: number, gap: number): boolean => {
+    // Nothing tall stands on a footpath or in the stream (rocks may sit close to the bank; trees keep further back).
+    if (nearTrail(x, z, 0.6 + gap * 0.5) || waterEdgeDistance(x, z) < 0.5 + gap * 0.8) return true;
+    // The Observatory's plateau is paved and colonnaded: no timber or boulders up there.
+    if ((x - HILL.x) ** 2 + (z - HILL.z) ** 2 < 13 * 13) return true;
     for (const o of obstacles) {
       const dx = o.x - x;
       const dz = o.z - z;
@@ -64,7 +72,7 @@ export function createArena(seed: number): CollisionWorld {
     const d = rng.range(30, 80);
     const cx = Math.cos(a) * d;
     const cz = Math.sin(a) * d;
-    if (!inside(cx, cz)) continue;
+    if (!inside(cx, cz) || tooClose(cx, cz, 1.4)) continue; // an outcrop never sits on a path, in the stream or on the Observatory's plateau
     rock(cx, cz, rng.range(1.4, 2.2));
     for (let i = 0, n = rng.int(2, 4), tries = 0; i < n && tries < 20; tries++) {
       const [x, z] = polar(cx, cz, 4.2);
@@ -85,6 +93,26 @@ export function createArena(seed: number): CollisionWorld {
     if (tooClose(x, z, 1.2)) continue;
     if (rng.chance(0.55)) tree(x, z);
     else rock(x, z, rng.range(0.5, 1.6));
+  }
+  // Felled timber beside the groves, appended last with its own stream so it never moves a tree or a rock: stumps (low enough to
+  // step onto) and fallen logs (jump them). Collidable, tagged, and identical on the server and every client.
+  const wood = new Rng(seed ^ 0x51fe7a3);
+  const trees = obstacles.filter((o) => o.tag === "tree");
+  for (let i = 0, made = 0, tries = 0; made < 16 && tries < 160 && trees.length > 0; tries++) {
+    const t = trees[Math.floor(wood.next() * trees.length)]!;
+    const a = wood.range(0, Math.PI * 2);
+    const d = wood.range(2.4, 5.4);
+    const x = t.x + Math.cos(a) * d;
+    const z = t.z + Math.sin(a) * d;
+    const stump = i++ % 2 === 0;
+    if (!inside(x, z) || tooClose(x, z, stump ? 0.9 : 1.7)) continue;
+    const y = terrain.height(x, z);
+    if (stump) obstacles.push({ kind: "circle", tag: "stump", x, z, r: wood.range(0.34, 0.55), y0: y - 1, y1: y + wood.range(0.34, 0.5) });
+    else {
+      const s = wood.range(0.75, 1.1);
+      obstacles.push({ kind: "box", tag: "log", x, z, hx: wood.range(0.85, 1.25) * s, hz: 0.46 * s, yaw: wood.range(0, Math.PI), y0: y - 1, y1: y + 0.92 * s });
+    }
+    made++;
   }
   return new CollisionWorld(terrain, obstacles, ARENA_RADIUS);
 }

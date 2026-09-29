@@ -1,6 +1,6 @@
 import { BoxGeometry, InstancedMesh, Matrix4, MeshBasicMaterial } from "three";
 import { describe, expect, it } from "vitest";
-import { instancedOutline, outlineMaterial, sharedToonRamp, syncInstancedOutline } from "./outline.ts";
+import { WORLD_INK, instancedOutline, instancedWorldOutline, isSharedInk, outlineMaterial, outlineSettings, sharedToonRamp, syncInstancedOutline, worldOutlineMaterial } from "./outline.ts";
 import { addOutlineNormals } from "./parts.ts";
 
 describe("outline on instanced meshes", () => {
@@ -45,5 +45,40 @@ describe("outline on instanced meshes", () => {
     const ramp = sharedToonRamp();
     expect(Array.from(ramp.image.data as Uint8Array)).toEqual([120, 175, 225, 255]);
     expect(sharedToonRamp()).toBe(ramp);
+  });
+
+  it("scenery ink is thinner than a character's, heavier for bigger things, and eases thinner with distance", () => {
+    expect(WORLD_INK.small).toBeLessThan(WORLD_INK.medium);
+    expect(WORLD_INK.medium).toBeLessThan(WORLD_INK.large);
+    expect(WORLD_INK.large).toBeLessThan(outlineSettings.thickness);
+    const m = worldOutlineMaterial({ thickness: WORLD_INK.medium });
+    expect(m.uniforms.thickness!.value).toBe(WORLD_INK.medium);
+    expect(m.vertexShader).toContain("clamp(near / max(-mvPosition.z, 0.1), far, 1.0)");
+    // the thickness never grows up close (a character's does): the clamp tops out at 1
+    expect(m.vertexShader).not.toContain("1.6");
+    // one shared material per variant, and the same instancing path as the characters'
+    expect(worldOutlineMaterial({ thickness: WORLD_INK.medium })).toBe(m);
+    expect(worldOutlineMaterial({ thickness: WORLD_INK.small })).not.toBe(m);
+    expect(m.vertexShader).toContain("instanceMatrix * local");
+    expect(isSharedInk(m)).toBe(true);
+    expect(isSharedInk(outlineMaterial())).toBe(true);
+    expect(isSharedInk(new MeshBasicMaterial())).toBe(false);
+  });
+
+  it("a scenery hull shares the source's instance buffer like the character hull does", () => {
+    const geo = new BoxGeometry(1, 1, 1);
+    addOutlineNormals(geo);
+    const src = new InstancedMesh(geo, new MeshBasicMaterial(), 4);
+    const hull = instancedWorldOutline(src, { thickness: WORLD_INK.small });
+    expect(hull.instanceMatrix).toBe(src.instanceMatrix);
+    expect(hull.material).toBe(worldOutlineMaterial({ thickness: WORLD_INK.small }));
+  });
+
+  it("a displaced hull (trees swaying) gets its own cached variant carrying the wind uniforms", () => {
+    const uniforms = { uTime: { value: 0 } };
+    const a = worldOutlineMaterial({ thickness: 1.8, displace: { key: "tree", uniforms, header: "uniform float uTime;", apply: "local.x += sin(uTime);" } });
+    expect(a).not.toBe(worldOutlineMaterial({ thickness: 1.8 }));
+    expect(a.vertexShader).toContain("local.x += sin(uTime);");
+    expect(a.uniforms.uTime).toBe(uniforms.uTime);
   });
 });
