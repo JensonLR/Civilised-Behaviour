@@ -4,6 +4,7 @@ import {
   ARCHETYPES,
   FIELDS,
   SPEC_BYTES,
+  LEGACY_FIELD_COUNT,
   decodeSpec,
   encodeSpec,
   generateCharacter,
@@ -24,9 +25,29 @@ describe("codec", () => {
   });
   it("is compact and URL-safe", () => {
     const s = encodeSpec(generateCharacter(1));
-    expect(s.length).toBeLessThanOrEqual(60);
+    expect(s.length).toBeLessThanOrEqual(64);
     expect(s).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(SPEC_BYTES).toBe(1 + FIELDS.length);
+  });
+  it("still decodes looks saved before the append-only fields existed (missing trailing fields read as None)", () => {
+    const full = generateCharacter(9);
+    const legacy = encodeSpec({ ...full, neckwear: 0, pack: 0, hipGear: 0, gloves: 0 });
+    // Drop the trailing bytes exactly as an older client would have written them.
+    const bytes = [...Buffer.from(legacy.replace(/-/g, "+").replace(/_/g, "/") + "==", "base64")].slice(0, 1 + LEGACY_FIELD_COUNT);
+    const old = Buffer.from(bytes).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    const spec = decodeSpec(old)!;
+    expect(spec).toBeDefined();
+    expect(spec.neckwear).toBe(0);
+    expect(spec.gloves).toBe(0);
+    expect(spec.hat).toBe(full.hat);
+    expect(spec.noseStyle).toBe(full.noseStyle);
+  });
+  it("adding fields did not change who an old seed is (new fields use their own random stream)", () => {
+    const a = generateCharacter(123);
+    const legacyKeys = FIELDS.slice(0, LEGACY_FIELD_COUNT).map((f) => f.key);
+    expect(legacyKeys).toHaveLength(LEGACY_FIELD_COUNT);
+    expect(FIELDS[LEGACY_FIELD_COUNT]!.key).toBe("neckwear");
+    expect(generateCharacter(123)).toEqual(a);
   });
   it("rejects malformed input instead of guessing", () => {
     expect(decodeSpec(undefined)).toBeUndefined();

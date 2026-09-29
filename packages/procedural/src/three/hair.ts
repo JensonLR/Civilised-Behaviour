@@ -7,8 +7,8 @@ import type { V3 } from "./parts.ts";
 // ---- hairstyles -----------------------------------------------------------------------------------------------------------
 
 /** Hairline height (y on the unit sphere) by azimuth: high on the forehead, above the ears at the sides, low at the nape. */
-const hairline = (az: number, front = 0.42, side = 0.1, back = -0.25): number =>
-  front + (side - front) * smooth(0.5, 1.7, az) + (back - side) * smooth(1.7, 3.0, az);
+const hairline = (az: number, front = 0.42, side = 0.02, back = -0.62): number =>
+  front + (side - front) * smooth(0.5, 1.5, az) + (back - side) * smooth(1.3, 2.9, az);
 
 export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat = 0.6): void {
   const { spec, P, b, shape, hairC, cy } = c;
@@ -19,7 +19,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat =
   };
   // Under a hat the crown is cut away so nothing pokes through it.
   const hatCut = (y: number): number => (hatOn ? 1 - smooth(hatSeat - 0.14, hatSeat + 0.02, y) : 1);
-  const cap = (front = 0.42, side = 0.1, back = -0.25): ((d: Dir) => number) => (d) => smooth(hairline(d.az, front, side, back) - 0.05, hairline(d.az, front, side, back) + 0.05, d.y) * hatCut(d.y);
+  const cap = (front = 0.42, side = 0.02, back = -0.62): ((d: Dir) => number) => (d) => smooth(hairline(d.az, front, side, back) - 0.05, hairline(d.az, front, side, back) + 0.05, d.y) * hatCut(d.y);
 
   switch (spec.hair) {
     case 1: { // side part: a swept-over mass with a parting line
@@ -35,7 +35,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat =
       break;
     }
     case 2: { // wild tufts: a thin cap with a ring of spikes
-      shell({ mask: cap(0.5, 0.15, -0.1), thick: () => 0.06 });
+      shell({ mask: cap(0.5, 0.1, -0.3), thick: () => 0.06 });
       if (!hatOn) {
         for (let i = 0; i < 9; i++) {
           const a = (i / 9) * Math.PI * 2 + 0.3;
@@ -50,7 +50,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat =
       break;
     }
     case 3: { // curls: a cap studded with round curls (never a row across the brow)
-      shell({ mask: cap(0.5, 0.2, -0.2), thick: () => 0.05 });
+      shell({ mask: cap(0.5, 0.1, -0.4), thick: () => 0.05 });
       const curl = (p: V3, r: number): void => void b.add(new SphereGeometry(r, 8, 5), hairC, p, [0, 0, 0], [1, 0.9, 1]);
       for (let i = 0; i < 10; i++) {
         const az = 0.85 + (i / 9) * 4.55; // from the temple round the back to the other temple
@@ -61,16 +61,16 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat =
       break;
     }
     case 4: // slicked back: a thin, high-gloss cap
-      shell({ mask: cap(0.5, 0.15, -0.3), thick: (d) => 0.045 + 0.02 * d.y, shine: 0.3 });
+      shell({ mask: cap(0.5, 0.1, -0.55), thick: (d) => 0.045 + 0.02 * d.y, shine: 0.3 });
       break;
     case 5: // receding: a wreath round the sides and back, bare on top
       shell({
-        mask: (d) => cap(0.3, 0.05, -0.3)(d) * smooth(0.6, 1.5, d.az) * (1 - smooth(0.7, 0.95, d.y) * 0.9),
+        mask: (d) => cap(0.3, 0.0, -0.6)(d) * smooth(0.6, 1.5, d.az) * (1 - smooth(0.7, 0.95, d.y) * 0.9),
         thick: () => 0.08,
       });
       break;
     case 6: { // top knot
-      shell({ mask: cap(0.5, 0.1, -0.2), thick: () => 0.05 });
+      shell({ mask: cap(0.5, 0.05, -0.5), thick: () => 0.05 });
       if (!hatOn) {
         const top = skinDir(c, 0, 1, 0.02, 0);
         b.loft(
@@ -98,7 +98,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat =
       });
       break;
     case 8: { // long lank: a cap plus long flat curtains to the shoulders
-      shell({ mask: cap(0.42, 0.05, -0.2), thick: () => 0.07 });
+      shell({ mask: cap(0.42, 0.0, -0.45), thick: () => 0.07 });
       for (const s of [-1, 1]) {
         const top = skinDir(c, s * 0.95, 0.15, 0.12, R * 0.02);
         const pts: V3[] = [top, [top[0] + s * R * 0.06, top[1] - R * 0.7, top[2] + R * 0.06], [top[0] + s * R * 0.05, top[1] - R * 1.5, top[2] + R * 0.05], [top[0] + s * R * 0.0, top[1] - R * 2.1, top[2] + R * 0.02]];
@@ -115,7 +115,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat =
     }
     case 9: // pompadour: a cap with a great swept-up quiff above the forehead
       shell({
-        mask: cap(0.5, 0.1, -0.25),
+        mask: cap(0.5, 0.05, -0.5),
         thick: (d) => 0.05 + 0.3 * Math.exp(-(((d.phi / 0.55) ** 2) + (((d.y - 0.78) / 0.28) ** 2))) * (d.z < 0 ? 1 : 0.2),
         lift: (d) => [0, 0.14 * Math.exp(-(((d.phi / 0.55) ** 2) + (((d.y - 0.78) / 0.28) ** 2))), -0.08 * Math.exp(-(((d.phi / 0.55) ** 2) + (((d.y - 0.78) / 0.28) ** 2)))],
         shine: 0.28,

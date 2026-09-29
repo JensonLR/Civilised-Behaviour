@@ -67,7 +67,15 @@ export const FIELDS = [
   choice("eyepatch", "Eyepatch", C.EYEPATCH, "history"),
   { key: "burnt", max: 3, label: "Singed clothing", group: "history", kind: "choice", options: ["None", "Scorched", "Charred", "Ruined"] } as const,
   choice("woodenLeg", "Wooden leg", C.WOODEN_LEG, "history"),
+  // Added after the first release of the wire format: old looks decode with these at 0 ("None").
+  choice("neckwear", "Neckwear", C.NECKWEAR, "clothes"),
+  choice("pack", "Pack", C.PACKS, "clothes"),
+  choice("hipGear", "Hip gear", C.HIP_GEAR, "clothes"),
+  choice("gloves", "Gloves", C.GLOVES, "clothes"),
 ] as const;
+
+/** How many fields the wire format had before the append-only additions; shorter strings from older saves still decode. */
+export const LEGACY_FIELD_COUNT = 39;
 
 /** Colour palettes for the colour fields (UI swatches). */
 export const PALETTES: Partial<Record<string, readonly number[]>> = {
@@ -156,9 +164,9 @@ export function encodeSpec(spec: CharacterSpec): string {
 export function decodeSpec(s: unknown): CharacterSpec | undefined {
   if (typeof s !== "string" || s.length > 128) return undefined;
   const bytes = b64ToBytes(s);
-  if (!bytes || bytes.length < SPEC_BYTES || bytes[0] !== SPEC_VERSION) return undefined;
+  if (!bytes || bytes.length < 1 + LEGACY_FIELD_COUNT || bytes[0] !== SPEC_VERSION) return undefined;
   const out = {} as Record<string, number>;
-  FIELDS.forEach((f, i) => (out[f.key] = clampInt(bytes[i + 1], f.max)));
+  FIELDS.forEach((f, i) => (out[f.key] = clampInt(bytes[i + 1], f.max))); // (missing trailing bytes clamp to 0)
   return out as CharacterSpec;
 }
 
@@ -196,14 +204,19 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
   const rng = new Rng(seed ^ 0x6d2b79f5);
   const a = ARCHETYPES[archetype ?? rng.int(0, ARCHETYPES.length - 1)] as Archetype;
   const spec = {} as Record<string, number>;
-  for (const f of FIELDS) {
+  const extra = new Rng(seed ^ 0x51ed270b); // fields added later draw from their own stream so old seeds keep their people
+  FIELDS.forEach((f, i) => {
+    if (i >= LEGACY_FIELD_COUNT) {
+      spec[f.key] = extra.chance(0.55) ? 0 : extra.int(1, f.max);
+      return;
+    }
     if (f.kind === "slider") {
       const base = a.body[f.key as FieldKey];
       spec[f.key] = base === undefined ? rng.int(40, 215) : clampInt(base + rng.range(-28, 28), 255);
     } else {
       spec[f.key] = rng.int(0, f.max);
     }
-  }
+  });
   spec.hat = rng.pick(a.hats);
   spec.moustache = rng.pick(a.moustaches);
   spec.jacket = rng.pick(a.jackets);

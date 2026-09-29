@@ -16,6 +16,10 @@ export const BOOTS = ["Tall Riding", "Ankle", "Spats", "Hobnailed"] as const;
 export const BELTS = ["None", "Leather", "Cummerbund"] as const;
 export const EYEWEAR = ["None", "Monocle", "Spectacles", "Goggles", "Pince-nez"] as const;
 export const SASHES = ["None", "Diagonal", "Waist"] as const;
+export const NECKWEAR = ["None", "Cravat", "Bow Tie", "Scarf"] as const;
+export const PACKS = ["None", "Rucksack", "Bedroll", "Satchel", "Specimen Case"] as const;
+export const HIP_GEAR = ["None", "Canteen", "Holster", "Watch Chain", "Field Glasses"] as const;
+export const GLOVES = ["None", "White Cotton", "Leather"] as const;
 export const WOODEN_LEG = ["None", "Left", "Right"] as const;
 export const EYEPATCH = ["None", "Left", "Right"] as const;
 

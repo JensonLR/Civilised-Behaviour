@@ -220,9 +220,10 @@ function gridAngles(n: number, k: number, dense: number): number[] {
 
 /** The direction grid shared by the skull and every shell that follows it (hair, beard) so their vertices line up. */
 export function skullGrid(coarse = false, shell = false): { cols: number; rows: number; phis: number[]; thetas: number[] } {
-  // The skull carries the face detail; shells (hair, beards) only need enough grid to follow it smoothly and to clip a clean edge.
-  const cols = coarse ? (shell ? 14 : 18) : shell ? 24 : 32;
-  const rows = coarse ? (shell ? 10 : 12) : shell ? 17 : 24;
+  // Shells (hair, beards) use the SAME grid as the skull: their vertices line up with it (no chord gaps for skin to poke through) and beard/hair
+  // edges are clipped on a grid fine enough that the staircase disappears.
+  const cols = coarse ? 18 : 32;
+  const rows = coarse ? 12 : 24;
   return { cols, rows, phis: gridAngles(cols, Math.PI, 0.35), thetas: gridAngles(rows, Math.PI / 2, 0.5) };
 }
 
