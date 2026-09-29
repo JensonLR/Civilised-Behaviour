@@ -47,3 +47,12 @@ a paid Render plan later is a config change. `DATABASE_URL` is no longer require
 allowed. Patches Colyseus's shared `matchMaker.controller` (`invokeMethod`, `getCorsHeaders`) because the router exposes no per-request
 hook; the patch is installed per server and restored on shutdown. Revisit if Colyseus adds a supported request guard.
 Testing note: `@colyseus/testing` `boot(server, port)` ignores `port` for Server instances - listen manually for a non-default port.
+
+**D-013 Empty ticks skip the player; no idle synthesis (2026-09-29).** With `defineInput({ idle: true })` a server tick that found a
+player's input buffer empty stepped them with zero input. The client never predicted that step, so under normal timer jitter the
+server drifted from prediction (measured: reconciler drift EMA up to 0.05, single corrections up to 1.26 m, varying run to run).
+Server state must be a pure function of the input sequence, so `WorldRoom` now steps a player exactly once per received input and
+skips empty ticks; only after `IDLE_AFTER_TICKS` (6 ticks = 200 ms) of silence does it apply zero-input steps so a stalled or
+disconnected player lands and stops. Result: drift exactly 0 at 0/100/150 ms RTT incl. wall collisions and 150 ms client hitches.
+Consequence: a stall > 200 ms does desync briefly; the reconciler corrects it on resume. Revisit if playtests show stall corrections.
+Gotcha: Colyseus reconciler drift telemetry is OFF unless `warnOnDivergence` is set (or debug bundle loaded) - zeros mean "not measuring".

@@ -24,6 +24,18 @@ Server-authoritative, Colyseus 0.18 over WebSocket (TCP, ordered - so `mode: "re
 Input sanitised in `defineInput`; `maxMessagesPerSecond = 120` (client is disconnected above it); names sanitised; codes validated
 before any lookup. Tested in `apps/server/src/rooms/WorldRoom.test.ts`.
 
+## Verified prediction quality (2026-09-29)
+`apps/server/src/bots/netcode.test.ts` drives a headless `Bot` (same SDK prediction wiring as the browser) against a real server
+with `simulateLatency`. Metric: the reconciler's own drift (`drift.ema`, `lastCorrectionMag`) after a 2 s spawn-snap warm-up.
+| Scenario | RTT | drift EMA | worst correction |
+|----------|-----|-----------|------------------|
+| circle walk (flat) | 0 / 100 / 150 ms | 0 | 0 |
+| wall bump + slide + sprint (collision) | 0 / 100 / 150 ms | 0 | 0 |
+| 6x client hitch (150 ms stall + input burst) | 60 ms | 0 | 0 |
+Tests are mutation-checked: a 15% wrong client timestep gives EMA 0.05-0.06 and fails all of them; reverting D-013 fails the hitch test.
+**Limits:** fixed-delay latency only (Colyseus `simulateLatency` has no jitter or loss; WebSocket is TCP so loss shows up as stalls),
+localhost, one player, no player-vs-player interaction yet. Not a substitute for real-internet playtests.
+
 ## Origin policy (`apps/server/src/origins.ts`)
 `ALLOWED_ORIGINS` (comma-separated, exact scheme+host+port, required in production, empty = open in dev/test) is enforced on:
 matchmaking POSTs (`invokeMethod` wrapper), the WebSocket upgrade (`beforeUpgrade` -> 403), and `/campaign/:code` (403).

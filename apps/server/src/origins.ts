@@ -1,4 +1,4 @@
-import { ErrorCode, ServerError, matchMaker, type BeforeUpgradeHandler } from "@colyseus/core";
+import { ServerError, matchMaker, type BeforeUpgradeHandler } from "@colyseus/core";
 
 /**
  * Browser-origin policy. Protects against cross-site pages (cross-site WebSocket hijacking, blind
@@ -52,7 +52,7 @@ export function installMatchmakingOriginPolicy(policy: OriginPolicy): () => void
 
   c.invokeMethod = function (this: typeof c, method, roomName, clientOptions, authContext) {
     const origin = authContext?.headers?.get?.("origin");
-    if (!policy.allows(origin)) throw new ServerError(ErrorCode.AUTH_FAILED, "origin not allowed");
+    if (!policy.allows(origin)) throw new ServerError(403, "origin not allowed"); // Colyseus uses the code as the HTTP status
     return original.invokeMethod.call(this, method, roomName, clientOptions, authContext);
   };
   c.getCorsHeaders = (headers: Headers) => ({

@@ -59,7 +59,7 @@ describe("origin enforcement (integration)", () => {
   it("matchmaking: allowed origin and no-origin succeed; foreign origin is refused", async () => {
     expect((await create(GOOD)).data).toHaveProperty("roomId");
     expect((await create()).data).toHaveProperty("roomId");
-    await expect(create(EVIL)).rejects.toMatchObject({ statusCode: expect.any(Number) });
+    await expect(create(EVIL)).rejects.toMatchObject({ statusCode: 403 });
   });
 
   it("matchmaking: a text/plain cross-site POST (no CORS preflight) cannot create a room", async () => {
