@@ -35,10 +35,9 @@ Done + verified (tests in parens):
 - Browser e2e with two real Chromium contexts: create, join by code, prediction, remote sync, bad-code error (2 Playwright cases).
 - Client: Stage (instanced obstacles, terrain vertex colours, sky shader, texel-snapped shadow follow), CameraRig, Controls (KBM+pad),
   Menu (with basic pad focus), DebugOverlay (F3).
-Also done (2026-09-29): origin enforcement (D-012); bot client (`apps/server/src/bots`); prediction verified at 0/100/150 ms RTT with 0 drift, and
+Also done (2026-09-29): server-authoritative props + pick up/carry/drop/throw (Rapier, D-014) verified in a real browser; QA debug command; origin enforcement (D-012); bot client (`apps/server/src/bots`); prediction verified at 0/100/150 ms RTT with 0 drift, and
 fixed a real desync (D-013: idle-tick synthesis). See NETWORKING.md.
 Not done in M1:
-- Contextual interaction system (server-validated pick up/drop). Not started.
 - Jitter/packet-loss simulation (Colyseus only supports fixed delay); bandwidth measurement; drift shown in the browser overlay.
 - Player-vs-player collision (deliberately deferred: needs prediction-aware design).
 - Pad remapping, settings UI, UI scale (M11).
@@ -56,7 +55,7 @@ ALLOWED_ORIGINS now enforced (D-012). Open: set health-check path in Render dash
 - Steam wrapper choice open (D-010).
 
 ## Test results (last full run 2026-09-29)
-`pnpm typecheck` clean; shared 14/14; server 23/23 (origin policy + netcode bots); Playwright 2/2; client production build OK (213 kB gzip JS).
+`pnpm typecheck` clean; shared 23/23; server 33/33 (origin, netcode bots, physics, interaction); Playwright 3/3 (incl. carry+throw);  client production build OK (213 kB gzip JS).
 
 ## Conventions reminder
 See CLAUDE.md. Keep this file current: completed / in progress / next / blockers / test results.

@@ -46,6 +46,10 @@ a paid Render plan later is a config change. `DATABASE_URL` is no longer require
 **D-012 Origin enforcement (2026-09-29).** Exact-match allow-list applied to matchmaking, WS upgrade and code lookup; absent Origin
 allowed. Patches Colyseus's shared `matchMaker.controller` (`invokeMethod`, `getCorsHeaders`) because the router exposes no per-request
 hook; the patch is installed per server and restored on shutdown. Revisit if Colyseus adds a supported request guard.
+**Correction (same day):** the first version also deleted `Access-Control-Allow-Credentials`, which broke every real browser (the SDK fetches with
+`credentials:'include'`, and browsers then require `Allow-Credentials: true` with a non-wildcard origin). Node-based tests cannot see CORS; only the
+Playwright e2e caught it, after it had already been deployed. Rule: any change to CORS/origin/headers needs a real-browser check
+(`tests/e2e`, and `scripts/cors-check.mjs` against a deployment).
 Testing note: `@colyseus/testing` `boot(server, port)` ignores `port` for Server instances - listen manually for a non-default port.
 
 **D-013 Empty ticks skip the player; no idle synthesis (2026-09-29).** With `defineInput({ idle: true })` a server tick that found a
@@ -56,3 +60,10 @@ skips empty ticks; only after `IDLE_AFTER_TICKS` (6 ticks = 200 ms) of silence d
 disconnected player lands and stops. Result: drift exactly 0 at 0/100/150 ms RTT incl. wall collisions and 150 ms client hitches.
 Consequence: a stall > 200 ms does desync briefly; the reconciler corrects it on resume. Revisit if playtests show stall corrections.
 Gotcha: Colyseus reconciler drift telemetry is OFF unless `warnOnDivergence` is set (or debug bundle loaded) - zeros mean "not measuring".
+
+**D-014 Props and interaction (2026-09-29).** Props are server-side Rapier bodies (capped at 48/room, sleeping when at rest, static world = heightfield +
+obstacle colliders mirroring the analytic controller world). Replicated as `PropState` (pose + holder) only while awake or held, with sub-2 mm changes
+suppressed; clients interpolate. Interaction is evaluated server-side per input frame on rising button edges using the shared `findInteractTarget`
+rule (so the client prompt cannot disagree with the authority). Carrying is a server-owned `FLAG.CARRYING` bit in the predicted `flags` field; the
+first few predicted steps after pickup are corrected by the reconciler. Held props ignore player capsules but collide with the world.
+Gotcha: Colyseus schema strings default to `undefined`, not `""` - treat falsy as empty.

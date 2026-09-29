@@ -45,6 +45,17 @@ Requests without an `Origin` header (curl, native/Electron main-process, bots) p
 Tests: `origins.test.ts` (mutation-checked: fail when enforcement is off). `/health` and `/metrics` are still readable by
 non-browser clients; `/metrics` exposes counts only.
 
+## Props and interaction
+Physics props live in a server-only Rapier world (`apps/server/src/physics.ts`, layers from `LAYER`). Only awake/held props are written to
+`state.props` (pose changes < 2 mm are skipped); clients interpolate with `Predict.attachAll("props")`. Pick up / drop / throw arrive as
+INTERACT / THROW bits in the normal input stream; the server acts on **rising edges** per frame after stepping the player, validates reach and
+ownership with the shared `findInteractTarget`, and never trusts client-reported positions. Leaving drops the load. A held prop is kinematic
+in front of the holder and ignores player capsules. Client keyboard taps are latched between 30 Hz samples so a quick tap is never lost.
+
+## QA debug commands
+`DEBUG_COMMANDS` (default on outside production; config validation rejects it in production) registers a `debug` message on rooms. Currently
+`{cmd:"nearProp"}` teleports the caller next to the nearest free prop (used by the browser e2e). Never ship these enabled.
+
 ## Dev controls
 - `SIMULATED_LATENCY_MS` (server env, RTT ms) - forbidden in production by config validation.
 - `/metrics` JSON: rooms, players, tick avg/p99/max, overruns, reconnects, heap/RSS.
