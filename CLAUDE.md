@@ -29,7 +29,8 @@ Read first: `docs/BUILD_STATE.md` (where we are), `docs/DECISIONS.md` (why), `do
 apps/client   Vite + Three.js game (browser + Electron renderer)
 apps/server   Colyseus 0.18 game server (Node 22)
 packages/shared   protocol schemas, constants, deterministic sim (movement, collision, terrain, rng)
-(planned) apps/desktop, apps/website, packages/game-data, packages/procedural, infra/ - create only when first used
+packages/procedural   caricature character system: pure spec/codec/generator (server-safe) + ./three rig & animator (client only)
+(planned) apps/desktop, apps/website, packages/game-data, infra/ - create only when first used
 tests/e2e     Playwright (real Chromium, multi-client)
 scripts/      dev tooling (perf capture, ...)
 ```
@@ -41,6 +42,7 @@ pnpm dev                     # server :2567 + client :5173
 pnpm typecheck && pnpm test  # tsc + vitest in every package
 pnpm e2e                     # Playwright (starts dev servers if not running)
 node scripts/perf-capture.mjs 1280x720 medium
+node scripts/shot.mjs "?showcase=lineup&n=6" out.png   # look at the art; ALWAYS view renders when changing visuals
 ```
 
 ## Working rules

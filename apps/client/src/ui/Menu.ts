@@ -5,12 +5,16 @@ export interface MenuHandlers {
   onJoin(code: string, name: string): Promise<void>;
 }
 
+import { startPadNav } from "./PadNav.ts";
+
 /** Front door: name + create/join. Plain DOM so it works identically with mouse, keyboard and pad focus. */
 export class Menu {
   private readonly nameInput: HTMLInputElement;
   private readonly codeInput: HTMLInputElement;
   private readonly status: HTMLElement;
   private readonly buttons: HTMLButtonElement[];
+  /** Container the character creator renders into (right-hand side, next to the 3D preview). */
+  readonly creatorHost: HTMLElement;
 
   constructor(
     private readonly root: HTMLElement,
@@ -24,7 +28,7 @@ export class Menu {
       /* storage unavailable; fine */
     }
     root.innerHTML = `
-      <div class="panel" role="dialog" aria-labelledby="title">
+      <div class="panel main" role="dialog" aria-labelledby="title">
         <h1 id="title">Civilised Behaviour</h1>
         <p class="tag">An expedition of the Imperial Cartographic &amp; Improvement Society</p>
         <label>Name on the manifest
@@ -40,17 +44,19 @@ export class Menu {
         </div>
         <p id="status" role="status" aria-live="polite"></p>
         <p class="fine">Mature content: strong violence, coarse language and dark satire.</p>
-      </div>`;
+      </div>
+      <div class="panel" id="creator-host" aria-label="Character creator"></div>`;
+    this.creatorHost = root.querySelector<HTMLElement>("#creator-host")!;
     this.nameInput = root.querySelector<HTMLInputElement>("#name")!;
     this.codeInput = root.querySelector<HTMLInputElement>("#code")!;
     this.status = root.querySelector<HTMLElement>("#status")!;
-    this.buttons = [...root.querySelectorAll<HTMLButtonElement>("button")];
+    this.buttons = [...root.querySelectorAll<HTMLButtonElement>(".main button")];
     root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name())));
     root.querySelector("#join")!.addEventListener("click", () => void this.join());
     this.codeInput.addEventListener("input", () => (this.codeInput.value = this.codeInput.value.toUpperCase()));
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
     this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name())));
-    this.pollGamepadFocus();
+    startPadNav(root, () => !this.root.hidden);
   }
 
   private name(): string {
@@ -100,29 +106,5 @@ export class Menu {
 
   hide(): void {
     this.root.hidden = true;
-  }
-
-  /** Minimal pad navigation: d-pad/stick up-down moves focus, A activates. Full focus system arrives with M11 UI. */
-  private pollGamepadFocus(): void {
-    let cooldown = 0;
-    let wasA = false;
-    const tick = () => {
-      requestAnimationFrame(tick);
-      if (this.root.hidden) return;
-      const pad = [...(navigator.getGamepads?.() ?? [])].find((p) => p?.connected);
-      if (!pad) return;
-      const now = performance.now();
-      const dy = (pad.axes[1] ?? 0) > 0.6 || pad.buttons[13]?.pressed ? 1 : (pad.axes[1] ?? 0) < -0.6 || pad.buttons[12]?.pressed ? -1 : 0;
-      if (dy && now > cooldown) {
-        cooldown = now + 220;
-        const items = [this.nameInput, ...this.buttons.slice(0, 1), this.codeInput, ...this.buttons.slice(1)];
-        const i = items.indexOf(document.activeElement as never);
-        items[(i + dy + items.length) % items.length]?.focus();
-      }
-      const a = pad.buttons[0]?.pressed ?? false;
-      if (a && !wasA && document.activeElement instanceof HTMLButtonElement) document.activeElement.click();
-      wasA = a;
-    };
-    requestAnimationFrame(tick);
   }
 }

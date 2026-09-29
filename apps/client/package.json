@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@cb/procedural": "workspace:*",
     "@cb/shared": "workspace:*",
     "@colyseus/sdk": "^0.18.4",
     "three": "^0.186.1"

@@ -25,6 +25,10 @@ export const PlayerState = schema({
   flags: t.uint8(),
   stumble: t.float32(),
   // --- server-owned, not predicted ---
+  /** Encoded CharacterSpec (see @cb/procedural). Validated and re-encoded by the server; ~54 chars. */
+  look: t.string(),
+  /** Campaign nickname/title shown with the name (server-owned; empty until earned). */
+  title: t.string(),
   slot: t.uint8(),
   connected: t.boolean(),
 });

@@ -41,7 +41,7 @@ test("two players share a campaign, move with prediction, see each other", async
   const b = await (await browser.newContext()).newPage();
   b.on("pageerror", (e) => errors.push(e.message));
   await start(b, "Bertram", code);
-  await expect.poll(async () => (await hook(a)).players).toBe(2);
+  await expect.poll(async () => (await hook(a)).players, { timeout: 30_000 }).toBe(2);
 
   // Player A holds W until they have travelled 3 m. Polling the displacement (not the clock)
   // keeps this valid on software-rendered CI where frames take ~100 ms.
@@ -102,5 +102,64 @@ test("a player walks up to a prop, picks it up, and throws it (real browser, ser
 
   await page.keyboard.press("KeyG");
   await expect.poll(propsHeld, { timeout: 20_000 }).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test("character creator: customise, join, and each player sees the other's look", async ({ browser }) => {
+  const errors: string[] = [];
+  const pageWith = async (name: string, code?: string) => {
+    const page = await (await browser.newContext()).newPage();
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto(code ? `/?join=${code}` : "/");
+    await page.waitForSelector(".creator .fields"); // the game boots via dynamic import after `load`
+    return page;
+  };
+  const storedLook = (p: Page) => p.evaluate(() => localStorage.getItem("cb.look"));
+
+  const a = await pageWith("Ada");
+  const initialLook = await storedLook(a);
+  expect(initialLook).toMatch(/^[A-Za-z0-9_-]{40,60}$/);
+
+  // Controls change the stored (and previewed) look.
+  await a.click('[data-act="dice"]');
+  const dicedLook = await storedLook(a);
+  expect(dicedLook).not.toBe(initialLook);
+  await a.click('.tabs button[data-tab="face"]');
+  const noseSelect = a.locator('.creator select').first();
+  const before = await storedLook(a);
+  const optionCount = await noseSelect.locator("option").count();
+  await noseSelect.selectOption(String((Number(await noseSelect.inputValue()) + 1) % optionCount));
+  expect(await storedLook(a)).not.toBe(before);
+  await a.click('.tabs button[data-tab="colour"]');
+  await a.locator(".swatch").nth(2).click();
+  const finalLookA = (await storedLook(a))!;
+  await a.screenshot({ path: "test-results/creator.png" });
+
+  await a.fill("#name", "Ada");
+  await a.click("#create");
+  await a.waitForFunction(() => Boolean((window as unknown as { __cb?: { session?: { predicted?: unknown } } }).__cb?.session?.predicted));
+  const code = await a.locator(".codebar b").textContent();
+
+  const b = await pageWith("Bertram", code!);
+  await b.click('[data-act="dice"]');
+  const finalLookB = (await storedLook(b))!;
+  expect(finalLookB).not.toBe(finalLookA);
+  await b.fill("#name", "Bertram");
+  await b.click("#join");
+  await b.waitForFunction(() => Boolean((window as unknown as { __cb?: { session?: { predicted?: unknown } } }).__cb?.session?.predicted));
+
+  const looksSeenBy = (p: Page) =>
+    p.evaluate(() => {
+      const h = (window as unknown as { __cb: { session: { room: { state: { players: Map<string, { name: string; look: string }> } } } } }).__cb;
+      return Object.fromEntries([...h.session.room.state.players.values()].map((pl) => [pl.name, pl.look]));
+    });
+  await expect.poll(async () => Object.keys(await looksSeenBy(a)).length, { timeout: 30_000 }).toBe(2);
+  await expect.poll(async () => Object.keys(await looksSeenBy(b)).length, { timeout: 30_000 }).toBe(2);
+  for (const seen of [await looksSeenBy(a), await looksSeenBy(b)]) {
+    expect(seen["Ada"]).toBe(finalLookA); // server canonicalised form equals what was submitted (no history to strip)
+    expect(seen["Bertram"]).toBe(finalLookB);
+  }
+  await b.locator("#stage").focus();
+  await b.screenshot({ path: "test-results/two-characters.png" });
   expect(errors).toEqual([]);
 });

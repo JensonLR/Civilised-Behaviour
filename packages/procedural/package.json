@@ -1,0 +1,26 @@
+{
+  "name": "@cb/procedural",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./three": "./src/three/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cb/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0",
+    "three": "0.186.1"
+  }
+}

@@ -14,7 +14,7 @@ Last updated: 2026-09-29. Branch: `claude/civilised-behaviour-architecture-jtce2
 |---|-----------|--------|-------|
 | M0 | Foundation | DONE | monorepo, CI, docs, client/server boot, basic Three scene, room connection |
 | M1 | Multiplayer movement | IN PROGRESS | see below |
-| M2 | Character sandbox | TODO | procedural caricature (packages/procedural), customisation, animation, props, carry/drag, ragdoll, wounds |
+| M2 | Character sandbox | IN PROGRESS | see M2 detail |
 | M3 | Combat | TODO | firearms, melee, cannon, damage zones, gore, friendly fire, downed/revive, Rewind lag comp |
 | M4 | First region | TODO | terrain streaming, vegetation, village, HQ, weather, faction NPCs |
 | M5 | Expedition | TODO | loadout, followers + command wheel, horse, wagon, boat, region travel |
@@ -48,6 +48,22 @@ Render free-tier test deploy is live: client https://cb-client-42gz.onrender.com
 Server-side WebSocket joins verified; end-to-end browser session against it NOT yet verified (sandbox Chromium gets 404 on wss upgrade).
 ALLOWED_ORIGINS now enforced (D-012). Open: set health-check path in Render dashboard.
 
+## M2 detail (started 2026-09-29)
+Done + verified:
+- `packages/procedural`: character spec (41 fields), catalogs, compact codec, sanitiser, archetype-driven seeded generator, proportions fitted to the gameplay
+  envelope (24 tests incl. 2000-seed envelope sweep, hostile-input clamping, server-owned history).
+- Three.js rig (rigid hierarchy, merged vertex-coloured bone meshes, cached by spec), procedural animator (distance-locked gait, crouch, carry, air, downed,
+  blink, 6 expressions), adaptive tessellation (avg 5.9k tris/character).
+- Server: `look` validated/canonicalised on join, `setLook` rate-limited, history stripped (5 integration tests, mutation-checked).
+- Client: `CharacterActor` replaces the stand-in puppet; creator UI generated from field metadata with live 3D turntable preview, gamepad navigation (`PadNav`),
+  look persisted per browser; lineup/close-up showcase scene; 4 Playwright tests incl. creator + cross-player look replication.
+Not done in M2 (next):
+- Art polish pass: outlines/silhouette pass, clay material response, dirt/blood accumulation, more hat/hair/moustache variety, hands with fingers.
+- Wounds/damage zones, dismemberment (detachable limbs + wound caps), ragdoll (Rapier), drag body / revive - the rest of the M2/M3 board.
+- Character LOD for crowds (see PERFORMANCE.md risk); NPC use of the generator.
+- Expression triggers beyond downed=pain; head-look; drunkenness from gameplay.
+- Creator: colour-blind-safe review, UI scale, keyboard shortcuts; title/nickname editing.
+
 ## Open / blockers (human-only)
 - Steam App ID, Steamworks account, Steam Direct fee, signing certificates, domain(s), Cloudflare + Railway accounts: none exist yet.
   All isolated behind config; see DEPLOYMENT.md / STEAM_RELEASE.md (drafts, not verified).
@@ -55,7 +71,7 @@ ALLOWED_ORIGINS now enforced (D-012). Open: set health-check path in Render dash
 - Steam wrapper choice open (D-010).
 
 ## Test results (last full run 2026-09-29)
-`pnpm typecheck` clean; shared 23/23; server 33/33 (origin, netcode bots, physics, interaction); Playwright 3/3 (incl. carry+throw);  client production build OK (213 kB gzip JS).
+`pnpm typecheck` clean; shared 23/23; procedural 24/24; server 38/38 (origin, netcode bots, physics, interaction, look); Playwright 4/4 (incl. carry+throw, creator);  client production build OK (213 kB gzip JS).
 
 ## Conventions reminder
 See CLAUDE.md. Keep this file current: completed / in progress / next / blockers / test results.

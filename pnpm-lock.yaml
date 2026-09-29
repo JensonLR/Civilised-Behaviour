@@ -26,6 +26,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@cb/procedural':
+        specifier: workspace:*
+        version: link:../../packages/procedural
       '@cb/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -45,6 +48,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@cb/procedural':
+        specifier: workspace:*
+        version: link:../../packages/procedural
       '@cb/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -76,6 +82,19 @@ importers:
       ws:
         specifier: ^8.22.0
         version: 8.22.0
+
+  packages/procedural:
+    dependencies:
+      '@cb/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/three':
+        specifier: 0.186.0
+        version: 0.186.0
+      three:
+        specifier: 0.186.1
+        version: 0.186.1
 
   packages/shared:
     dependencies:

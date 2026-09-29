@@ -3,13 +3,13 @@ import { FLAG, PROP_DEFS, findInteractTarget, yawToWire, type PlayerStateType, t
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
-import { Puppet } from "../render/Puppet.ts";
+import { CharacterActor } from "../render/CharacterActor.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 
 interface Actor {
-  puppet: Puppet;
+  body: CharacterActor;
   tag: HTMLDivElement;
 }
 
@@ -153,9 +153,10 @@ export class Game {
       const y = this.session.value(p, "y");
       const z = this.session.value(p, "z");
       const speed = Math.hypot(this.session.value(p, "vx"), this.session.value(p, "vz"));
-      a.puppet.update(dt, x, y, z, this.session.value(p, "facing"), speed, flags);
+      a.body.setLook(p.look);
+      a.body.update(dt, x, y, z, this.session.value(p, "facing"), speed, flags);
       a.tag.textContent = p.connected ? p.name : `${p.name} (reconnecting)`;
-      tmp.set(x, y + 2.35, z).project(this.stage.camera);
+      tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
       const visible = tmp.z < 1 && Math.abs(tmp.x) < 1.2 && Math.abs(tmp.y) < 1.2 && !isMe;
       a.tag.style.display = visible ? "block" : "none";
       if (visible) {
@@ -171,16 +172,15 @@ export class Game {
   }
 
   private addActor(p: PlayerStateType): Actor {
-    const puppet = new Puppet(p.slot);
-    this.stage.scene.add(puppet.root);
+    const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1);
     const tag = document.createElement("div");
     tag.className = "nametag";
     this.tagLayer.appendChild(tag);
-    return { puppet, tag };
+    return { body, tag };
   }
 
   private removeActor(a: Actor): void {
-    a.puppet.dispose();
+    a.body.dispose();
     a.tag.remove();
   }
 }

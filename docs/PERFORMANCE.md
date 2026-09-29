@@ -11,6 +11,11 @@ no per-frame garbage in hot loops; bounded physics bodies/ragdolls; bounded memo
 |------|-------|-------------|--------|
 | 2026-09-29 | M1 arena (dev server), 1 player | Headless Chromium, **SwiftShader software GL**, sandbox VM | 1280x720 medium: 10 fps (frame-cap 100 ms), 34 draw calls, 79k tris, 36 MB JS heap. 1280x720 low: 10 fps, 34 calls, 47k tris. 640x360 low: 15 fps. **Software rasteriser - GPU cost is not representative; draw-call/triangle/heap numbers are valid.** |
 
+| 2026-09-29 | M2: 1 player + 13 props + new caricature rig, dev server | Same headless SwiftShader | 1280x720 medium: 61 draw calls, 91k tris (terrain ~51k of that), 35 MB heap, 10 fps (software). Reconciler drift 0.000/0.000 in a real browser. |
+| 2026-09-29 | Character geometry only (150 seeds, `rig.test.ts`) | Node, no GPU | Triangles per character: **avg 5.9k, max 7.6k** after adaptive tessellation (was avg 16.6k, max 22.5k). 16-18 meshes per character (11-12 merged bone meshes + 5 face meshes). Shadow pass doubles both. |
+
+**Known character-cost risk:** 30 NPCs x ~17 meshes x 2 (shadow) is ~1000 draw calls, over the 400-600 budget. Planned mitigations (M4/M12): a merged single-mesh LOD1 for mid distance (~1.5k tris, 1-2 calls), impostor/instanced LOD2 beyond, shadow casting only for near characters, and `InstancedMesh` per bone for identical-archetype crowds. Do not add NPC crowds before LOD lands.
+
 Client production bundle (2026-09-29): 780 kB JS raw / 213 kB gzip (three + colyseus SDK + game), 2.9 kB CSS.
 
 ## TODO measurements (M12 unless noted)

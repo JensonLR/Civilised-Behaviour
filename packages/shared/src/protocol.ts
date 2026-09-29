@@ -10,13 +10,20 @@ export interface JoinOptions {
   token?: string;
   /** Desired world seed when creating a campaign. Server may clamp/replace. */
   seed?: number;
+  /** Encoded character look (untrusted; the server validates, clamps and strips server-owned history). */
+  look?: string;
 }
 
 /** Client -> server messages other than the input stream. */
 export interface ClientMessages {
   ping: { t: number };
   setName: { name: string };
+  /** Change appearance (HQ/creator). Rate limited; history fields are ignored. */
+  setLook: { look: string };
 }
+
+/** Minimum gap between accepted setLook messages per client. */
+export const SET_LOOK_MIN_INTERVAL_MS = 1500;
 
 /** Server -> client messages. */
 export interface ServerMessages {

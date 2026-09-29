@@ -15,7 +15,8 @@
     "@colyseus/core": "^0.18.17",
     "@colyseus/schema": "^5.0.34",
     "@colyseus/ws-transport": "^0.18.4",
-    "@dimforge/rapier3d-compat": "^0.21.0"
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@cb/procedural": "workspace:*"
   },
   "devDependencies": {
     "@colyseus/sdk": "^0.18.4",

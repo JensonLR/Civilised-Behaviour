@@ -67,3 +67,12 @@ suppressed; clients interpolate. Interaction is evaluated server-side per input 
 rule (so the client prompt cannot disagree with the authority). Carrying is a server-owned `FLAG.CARRYING` bit in the predicted `flags` field; the
 first few predicted steps after pickup are corrected by the reconciler. Held props ignore player capsules but collide with the world.
 Gotcha: Colyseus schema strings default to `undefined`, not `""` - treat falsy as empty.
+
+**D-015 Character system (2026-09-29).** `packages/procedural` holds a *pure* layer (spec, catalog, codec, sanitiser, seeded generator, proportions; safe for the
+server) and a `./three` layer (rig, animator) that only the client imports. A character is a flat record of small integers (`FIELDS`, ~41 bytes, ~56-char
+base64url string); order is the wire/save format, append-only. Untrusted input is decoded, clamped, and re-encoded by the server; **campaign history
+fields (scars, teeth, eyepatch, burns, wooden leg) are server-owned** (`HISTORY_KEYS`, `applyClientAppearance`) so clients cannot fake battle damage.
+Visuals are a rigid hierarchy (no skinning): one merged, vertex-coloured mesh per bone (cheap, cacheable by spec, dismember-ready) plus small
+animated face meshes. Body is fitted into the fixed gameplay envelope by `computeProportions`, so customisation never changes collision or gameplay.
+Tessellation is size-adaptive (see PERFORMANCE.md). Lesson: the first render exposed a real bug (face parts parented at the wrong height) that no unit test
+would have caught; visual checks via `?showcase=lineup` + `scripts/shot.mjs` are part of the workflow.

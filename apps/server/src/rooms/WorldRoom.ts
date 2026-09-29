@@ -14,6 +14,8 @@ import {
   JOIN_CODE_LENGTH,
   MAX_MESSAGES_PER_SECOND,
   MAX_PLAYERS,
+  SET_LOOK_MIN_INTERVAL_MS,
+  seedFromString,
   MoveInput,
   PATCH_RATE_MS,
   PlayerState,
@@ -30,6 +32,7 @@ import {
   type PlayerStateType,
   type WorldStateType,
 } from "@cb/shared";
+import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { getRoomConfig } from "../roomConfig.ts";
@@ -79,6 +82,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private readonly hold = { x: 0, y: 0, z: 0 };
   private usedSlots = new Set<number>();
   private emptyTicks = new Map<string, number>();
+  private lastSetLook = new Map<string, number>();
 
   override async onCreate(options: JoinOptions): Promise<void> {
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
@@ -140,6 +144,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       this.onMessage("debug", (client, msg: { cmd?: string }) => this.debugCommand(client, msg?.cmd));
     }
 
+    this.onMessage("setLook", (client, msg: { look?: unknown }) => this.handleSetLook(client, msg?.look));
+
     this.onMessage("ping", (client, msg: { t?: number }) => {
       client.send("pong", { t: typeof msg?.t === "number" ? msg.t : 0, serverTime: Date.now() });
     });
@@ -152,6 +158,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.name = sanitizeDisplayName(options?.name);
     player.slot = slot;
     player.connected = true;
+    // Untrusted look -> valid canonical spec; a fresh join never carries history (that is campaign-owned).
+    const incoming = specFromUntrusted(options?.look, seedFromString(client.sessionId));
+    const blank = { ...incoming };
+    for (const k of HISTORY_KEYS) blank[k] = 0;
+    player.look = encodeSpec(blank);
+    player.title = "";
     const sp = spawnPoint(slot, MAX_PLAYERS);
     const c = createCharState(sp.x, sp.z, this.world);
     Object.assign(player, c);
@@ -184,6 +196,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.prevButtons.delete(client.sessionId);
     this.usedSlots.delete(player.slot);
     this.emptyTicks.delete(client.sessionId);
+    this.lastSetLook.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     metrics.players--;
     log.info("room.leave", { roomId: this.roomId, sessionId: client.sessionId, consented });
@@ -232,6 +245,19 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const ps = this.state.props.get(target);
       if (ps) ps.holder = sessionId;
     }
+  }
+
+  /** Rate-limited appearance change. Appearance comes from the client; campaign history never does. */
+  private handleSetLook(client: Client, look: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const now = Date.now();
+    if (now - (this.lastSetLook.get(client.sessionId) ?? 0) < SET_LOOK_MIN_INTERVAL_MS) return;
+    const incoming = decodeSpec(look);
+    const current = decodeSpec(player.look);
+    if (!incoming || !current) return;
+    this.lastSetLook.set(client.sessionId, now);
+    player.look = encodeSpec(applyClientAppearance(current, incoming));
   }
 
   /** QA-only commands (see docs/NETWORKING.md). Registered only when config.debugCommands is true. */
