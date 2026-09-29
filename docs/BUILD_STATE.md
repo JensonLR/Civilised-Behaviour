@@ -84,11 +84,19 @@ Done + verified (character rebuild, 2026-09-29): lofted bodies and coats/boots (
 Judged by eye on software GL (`docs/ART_DIRECTION.md` lists the review commands); 63 procedural + 55 shared + 19 client tests; full Playwright suite green.
 Known rough edges: hair shells and beards are flat-shaded masses (no strand detail), ears are simple cups, expressions do not yet move the jaw, the low-poly
 lower face shows toon band contours on close-ups (a 5-step ramp would soften them), and crowds still need character LOD (head has a coarse mode ready).
+Done + verified (cosmetics, dismemberment, interface, 2026-09-29):
+- Cosmetics that clipped the body were rebuilt on the sculpt: eyewear (skin-hugging temple arms, nose-bridge arch, goggles with a back strap, pince-nez, eyepatch with strap),
+  hats seated on the skull at designed heights using the skull width there, flush nostril tubes, jaw beards, and a diagonal sash swept along the torso's own sections
+  (`sweep` gained rounded ends and a per-point side axis, both tested). Judged by renders (`docs/ART_DIRECTION.md`); triangle budget re-measured: avg 7.8k, max 9.5k.
+- Dismemberment (D-023): server-owned `missing` mask + campaign rule + seeded `severChance`, stumps on the rig, flying limb debris (`LimbDebris`, 5 tests), injury chart
+  "lost" state, personal "Severed limbs" setting, menu options; 8 server integration tests and a two-browser Playwright scenario (stump + debris for the victim, dressing only
+  for a witness who hid limbs). Not done: prosthetics, movement effects, sound.
+- Interface (D-024): charter/ledger/gauge/luggage-tag/telegram redesign, period fonts bundled. Judged by screenshots at 1440x800 and 800x450 only; gamepad focus rings,
+  UI scale and colour-blind review of the creator swatches still to do.
 Not done in M2 (next):
 - Wounds have no gameplay effect yet (limp is animation only; a real slow-down needs `wounds` as a predicted input of the shared step). No bleed-out or
   medical supplies (M5). Dirt/mud accumulation and blood on clothing beyond the dressings. Outline rollout to NPC crowds (LOD).
-- Dismemberment (detachable limbs + wound caps; the rig is rigid per bone for this reason; needs a Dismemberment On/Off setting), ragdolls for living
-  characters (explosion knock-back) and NPCs, persistent limp bodies while dragged. Shoulder-carry a body (reuse prop-carry), wagon transport (M5).
+- Ragdolls for living characters (explosion knock-back) and NPCs, persistent limp bodies while dragged. Shoulder-carry a body (reuse prop-carry), wagon transport (M5).
 - Character LOD for crowds (see PERFORMANCE.md risk); NPC use of the generator.
 - Expression triggers beyond downed=pain; head-look; drunkenness from gameplay.
 - Creator: colour-blind-safe review, UI scale, keyboard shortcuts; title/nickname editing.

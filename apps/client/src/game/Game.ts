@@ -1,12 +1,13 @@
 import { Vector3 } from "three";
-import { CASUALTY, FLAG, PROP_DEFS, ZONE, findDownedTarget, findInteractTarget, yawToWire, type HitEvent, type PlayerStateType, type PropKindId } from "@cb/shared";
+import { CASUALTY, FLAG, PROP_DEFS, ZONE, findDownedTarget, findInteractTarget, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
 import { CharacterActor } from "../render/CharacterActor.ts";
 import { HitFx } from "../render/HitFx.ts";
 import { RagdollWorld } from "../render/Ragdoll.ts";
-import { getGore } from "../settings.ts";
+import { getGore, getShowLimbs } from "../settings.ts";
+import { LimbDebris } from "../render/LimbDebris.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
@@ -28,6 +29,7 @@ export class Game {
   private readonly props: PropViews;
   private readonly hud: Hud;
   private readonly hitFx: HitFx;
+  private readonly debris: LimbDebris;
   /** Loaded lazily (Rapier's WASM only ships once we are in a game); until then knock-downs use the plain fall animation. */
   private ragdolls: RagdollWorld | undefined;
   private last = performance.now();
@@ -49,6 +51,7 @@ export class Game {
     this.props = new PropViews(stage.scene);
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
+    this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
@@ -69,6 +72,7 @@ export class Game {
       (err) => console.warn("ragdoll physics unavailable; knock-downs will use the plain fall animation", err),
     );
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
+    session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
 
     session.room.onMessage("notice", (m: { text: string }) => this.hud.showNotice(m.text));
     session.room.onMessage("pong", (m: { t: number }) => {
@@ -97,6 +101,7 @@ export class Game {
     this.props.dispose();
     this.hud.dispose();
     this.hitFx.dispose();
+    this.debris.dispose();
     this.disposed = true;
     this.ragdolls?.dispose();
     this.ragdolls = undefined;
@@ -128,6 +133,7 @@ export class Game {
     this.ragdolls?.step(dt);
     this.syncActors(dt);
     this.hitFx.update(dt);
+    this.debris.update(dt);
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
 
@@ -183,6 +189,7 @@ export class Game {
         }
       }
     }
+    const showLimbs = getShowLimbs();
     this.hud.update({
       flags,
       health: mine.health,
@@ -193,6 +200,7 @@ export class Game {
       patientName,
       usingGamepad: pad,
       wounds: mine.wounds,
+      missing: showLimbs ? mine.missing : 0,
     });
   }
 
@@ -214,8 +222,9 @@ export class Game {
       a.body.setLook(p.look);
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing },
         getGore(),
+        getShowLimbs(),
       );
       const status = (p.flags & FLAG.DOWNED) !== 0 ? " ✚ DOWN" : "";
       a.tag.textContent = (p.connected ? p.name : `${p.name} (reconnecting)`) + status;
@@ -245,6 +254,22 @@ export class Game {
     this.hitFx.burst(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power, getGore());
     a.body.hit(e, facing);
     if (e.id === this.session.sessionId) this.rig.addShake(0.25 + e.power * 0.5);
+  }
+
+  /**
+   * A limb came off. The authoritative fact is the victim's `missing` bit (rendered as a stump by the actor); this is the cosmetic
+   * half: a copy of the limb flies off as debris, blood sprays from the joint, and the camera jolts if it was yours.
+   * With the personal "severed limbs" setting hidden, nothing gory is shown - only the jolt.
+   */
+  private onSever(e: SeverEvent): void {
+    const a = this.actors.get(e.id);
+    if (e.id === this.session.sessionId) this.rig.addShake(0.6 + e.power * 0.4);
+    if (!a || !getShowLimbs()) return;
+    const piece = a.body.detachLimb(e.limb as LimbId);
+    if (!piece) return;
+    const gore = getGore();
+    this.hitFx.burst(piece.position.x, piece.position.y, piece.position.z, e.dx, e.dz, 1, gore);
+    this.debris.spawn(piece, e.dx, e.dz, e.power, gore);
   }
 
   private addActor(p: PlayerStateType): Actor {

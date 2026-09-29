@@ -1,4 +1,4 @@
-import { CASUALTY, FLAG, ZONE_COUNT, ZONE_NAMES, woundLevel } from "@cb/shared";
+import { CASUALTY, FLAG, LIMB_LIST, ZONE_COUNT, ZONE_NAMES, limbZone, woundLevel } from "@cb/shared";
 
 const SEVERITY_WORDS = ["", "scratch", "gash", "grievous wound", "lost"] as const;
 
@@ -42,6 +42,8 @@ export interface HudView {
   usingGamepad: boolean;
   /** Packed wound mask of the local player (see @cb/shared wounds.ts). */
   wounds: number;
+  /** Lost-limb mask (0 when the player has chosen not to see severed limbs: the injury then reads as its dressing). */
+  missing?: number;
 }
 
 /**
@@ -119,7 +121,7 @@ export class Hud {
     this.health.setAttribute("aria-valuenow", String(pct));
     this.health.dataset.state = state;
 
-    this.updateWounds(v.wounds);
+    this.updateWounds(v.wounds, v.missing ?? 0);
 
     const down = (v.flags & FLAG.DOWNED) !== 0;
     this.downed.hidden = !down;
@@ -151,12 +153,14 @@ export class Hud {
     if (this.prompt.textContent !== text) this.prompt.textContent = text;
   }
 
-  private updateWounds(mask: number): void {
-    if (mask === this.shownWounds) return;
-    this.shownWounds = mask;
+  private updateWounds(mask: number, missing: number): void {
+    const key = mask | (missing << 12);
+    if (key === this.shownWounds) return;
+    this.shownWounds = key;
+    const lostZones = new Set(LIMB_LIST.filter((l) => (missing & l) !== 0).map(limbZone));
     const found: { name: string; sev: number }[] = [];
     for (let z = 0; z < ZONE_COUNT; z++) {
-      const sev = woundLevel(mask, z);
+      const sev = lostZones.has(z as never) ? 4 : woundLevel(mask, z);
       this.woundParts[z]?.setAttribute("data-sev", String(sev));
       if (sev > 0) found.push({ name: ZONE_NAMES[z]!, sev });
     }

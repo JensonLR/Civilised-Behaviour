@@ -77,7 +77,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   }
 
   const menu = new Menu(menuEl, {
-    onCreate: async (name) => enter(await Session.create(name, look)),
+    onCreate: async (name, rules) => enter(await Session.create(name, look, rules)),
     onJoin: async (code, name) => enter(await Session.join(code, name, look)),
   });
   const initial = decodeSpec(look)!;

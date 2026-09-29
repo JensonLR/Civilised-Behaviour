@@ -43,3 +43,9 @@ node scripts/shot.mjs "?showcase=lineup&n=4&close=1&cd=1.25&expr=triumph|pain|fe
 ```
 Checklist for a new feature: reads at distance? sits on the sculpt (no float/sink)? uses only palette colours? survives Gore Off? fits the triangle
 budget in `docs/PERFORMANCE.md`?
+
+## Interface (D-024)
+The interface is the Society's stationery, not a game HUD skin: paper, brass, ink, rubber stamps, luggage tags, telegrams. Rules: colours only from the `--ink/--paper/--brass/--stamp...`
+variables (which come from `PALETTE.ui`); meaning is never colour alone (gauge = needle + number + "!", injuries = fill + outline weight + hatching + words); type is IM Fell
+English (text), IM Fell English SC (labels, buttons), Special Elite (codes and telegrams); ornament is CSS/inline SVG only; nothing animates with `prefers-reduced-motion`.
+Review with `node scripts/shot.mjs "?x=1" out.png 1440x800 4000` (menu) and a scratch Playwright session for the in-game HUD (enter a campaign, send `debug` `hit:0:50`, `down`, `sever:4`).

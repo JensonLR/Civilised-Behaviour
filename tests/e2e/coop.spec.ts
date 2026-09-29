@@ -16,8 +16,8 @@ const hook = (page: Page) => page.evaluate(() => {
   return { code: h.session.code, id: h.session.sessionId, players: h.session.room.state.players.size, pos: p ? { x: p.x, y: p.y, z: p.z } : null };
 });
 
-async function start(page: Page, name: string, code?: string) {
-  await page.goto(code ? `/?join=${code}&gfx=low` : "/?gfx=low"); // low preset: fewer pixels/shadows for the software rasteriser
+async function start(page: Page, name: string, code?: string, extra = "") {
+  await page.goto(code ? `/?join=${code}&gfx=low${extra}` : `/?gfx=low${extra}`); // low preset: fewer pixels/shadows for the software rasteriser
   await page.waitForSelector("#name", { timeout: 60_000 }); // the game boots via dynamic import after `load`
   await page.fill("#name", name);
   await page.click(code ? "#join" : "#create");
@@ -299,5 +299,53 @@ test("wounds are server-owned and visible to everyone; a knock-down plays a ragd
   }
   await b.screenshot({ path: "test-results/ragdoll-settled.png" });
   // Revived: wounds are patched (grievous head -> dressing) but not gone.
+  expect(errors.filter((e) => !/favicon|Failed to load resource/.test(e))).toEqual([]);
+});
+
+test("a severed limb is server-owned: everyone sees the stump and a flying limb, unless they chose not to (two real browsers)", async ({ browser }) => {
+  const errors: string[] = [];
+  const mk = async () => {
+    const p = await (await browser.newContext()).newPage();
+    p.on("pageerror", (e) => errors.push(e.message));
+    return p;
+  };
+  const send = (p: Page, cmd: string) =>
+    p.evaluate((c) => (window as unknown as { __cb: { session: { room: { send(t: string, m: unknown): void } } } }).__cb.session.room.send("debug", { cmd: c }), cmd);
+  type Actor = { body: { root: { traverse(cb: (o: { name: string; visible: boolean }) => void): void } } };
+  type GameHook = { __cb: { game: { actors: Map<string, Actor>; debris: { count: number } } } };
+  const missingOf = (p: Page, sessionId: string) =>
+    p.evaluate((id) => (window as unknown as { __cb: { session: { room: { state: { players: Map<string, { missing: number }> } } } } }).__cb.session.room.state.players.get(id)?.missing ?? -1, sessionId);
+  const visible = (p: Page, sessionId: string, prefix: string) =>
+    p.evaluate(
+      ({ id, prefix: pre }) => {
+        const a = (window as unknown as GameHook).__cb.game.actors.get(id);
+        const out: string[] = [];
+        a?.body.root.traverse((o) => o.name.startsWith(pre) && o.visible && out.push(o.name));
+        return out.sort();
+      },
+      { id: sessionId, prefix },
+    );
+  const debris = (p: Page) => p.evaluate(() => (window as unknown as GameHook).__cb.game.debris.count);
+
+  const a = await mk();
+  await start(a, "Maimed");
+  const { code, id: aId } = await hook(a);
+  const b = await mk();
+  await start(b, "Squeamish", code, "&limbs=0"); // personal setting: do not show severed limbs
+  await expect.poll(async () => (await hook(a)).players, { timeout: 30_000 }).toBe(2);
+
+  await send(a, "sever:4"); // LIMB.LEG_L
+  // The fact is server-owned and identical for everyone.
+  await expect.poll(() => missingOf(b, aId), { timeout: 20_000 }).toBe(4);
+  await expect.poll(() => missingOf(a, aId), { timeout: 20_000 }).toBe(4);
+  // The victim (limbs shown) sees a stump, a flying limb and the words on the injury chart.
+  await expect.poll(() => visible(a, aId, "stump_"), { timeout: 20_000 }).toEqual(["stump_4"]);
+  await expect.poll(() => debris(a), { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+  await expect(a.locator(".wounds .text")).toContainText("left leg: lost");
+  // The squeamish witness sees the same injury as an ordinary grievous-wound dressing: no stump, no debris.
+  await expect.poll(() => visible(b, aId, "wound_"), { timeout: 20_000 }).toContain("wound_4");
+  expect(await visible(b, aId, "stump_")).toEqual([]);
+  expect(await debris(b)).toBe(0);
+  await a.screenshot({ path: "test-results/severed-victim.png" });
   expect(errors.filter((e) => !/favicon|Failed to load resource/.test(e))).toEqual([]);
 });

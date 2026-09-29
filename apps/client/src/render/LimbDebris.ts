@@ -1,0 +1,144 @@
+import { Group, Mesh, MeshBasicMaterial, Quaternion, SphereGeometry, Vector3, type Object3D } from "three";
+import type { GoreLevel } from "@cb/procedural/three";
+import { PALETTE } from "@cb/shared";
+
+export const DEBRIS = {
+  /** Severed limbs alive at once; the oldest is dropped first. Four players can only lose four limbs each, and most are gone within seconds. */
+  max: 8,
+  /** Seconds a limb lies about before it shrinks away. */
+  life: 25,
+  fade: 1.5,
+  gravity: 13,
+  restitution: 0.32,
+  /** Height of the limb's centre above the ground once it lies flat (its own thickness). */
+  restHeight: 0.06,
+} as const;
+
+interface Piece {
+  group: Group;
+  vx: number;
+  vy: number;
+  vz: number;
+  /** Angular velocity, rad/s (world axes). */
+  wx: number;
+  wy: number;
+  wz: number;
+  age: number;
+  landed: boolean;
+  /** Orientation it settles into once it lands: the limb's length horizontal. */
+  lying: Quaternion;
+}
+
+const capGeo = new SphereGeometry(1, 8, 5);
+const capMats = new Map<GoreLevel, MeshBasicMaterial>();
+const capMat = (gore: GoreLevel): MeshBasicMaterial => {
+  let m = capMats.get(gore);
+  if (!m) capMats.set(gore, (m = new MeshBasicMaterial({ color: PALETTE.gore[gore].fresh })));
+  return m;
+};
+
+const spin = new Quaternion();
+const axis = new Vector3();
+const down = new Vector3(0, -1, 0);
+const along = new Vector3();
+
+/**
+ * Severed limbs as cosmetic debris: a pooled handful of frozen-pose limb copies (see CharacterRig.detachLimb) that fly off, bounce,
+ * settle flat and eventually shrink away. Purely presentational (Math.random is fine here; nothing feeds the simulation), so it
+ * needs neither Rapier nor the server: the authoritative fact is the victim's `missing` bit.
+ */
+export class LimbDebris {
+  private readonly pieces: Piece[] = [];
+
+  constructor(
+    private readonly scene: { add(o: Object3D): unknown },
+    private readonly groundAt: (x: number, z: number) => number,
+  ) {}
+
+  get count(): number {
+    return this.pieces.length;
+  }
+
+  /** Takes ownership of `pivot` (origin at the cut end). `dx`/`dz` is the unit direction of the blow, `power` 0..1. */
+  spawn(pivot: Group, dx: number, dz: number, power: number, gore: GoreLevel): void {
+    const cap = new Mesh(capGeo, capMat(gore));
+    cap.scale.set(0.055, 0.03, 0.055);
+    cap.rotation.x = 0;
+    pivot.add(cap);
+    this.scene.add(pivot);
+    if (this.pieces.length >= DEBRIS.max) this.remove(0);
+    const len = Math.hypot(dx, dz);
+    const ux = len > 1e-6 ? dx / len : 0;
+    const uz = len > 1e-6 ? dz / len : 1;
+    const p = Math.max(0.2, Math.min(1, power));
+    const speed = 2.2 + p * 3.6;
+    const yaw = Math.random() * Math.PI * 2;
+    along.set(Math.cos(yaw), 0, Math.sin(yaw));
+    const lying = new Quaternion().setFromUnitVectors(down, along);
+    this.pieces.push({
+      group: pivot,
+      vx: ux * speed + (Math.random() - 0.5) * 1.4,
+      vy: 3.2 + p * 2.6 + Math.random(),
+      vz: uz * speed + (Math.random() - 0.5) * 1.4,
+      wx: (Math.random() - 0.5) * 16,
+      wy: (Math.random() - 0.5) * 8,
+      wz: (Math.random() - 0.5) * 16,
+      age: 0,
+      landed: false,
+      lying,
+    });
+  }
+
+  update(dt: number): void {
+    for (let i = this.pieces.length - 1; i >= 0; i--) {
+      const s = this.pieces[i]!;
+      s.age += dt;
+      if (s.age >= DEBRIS.life) {
+        this.remove(i);
+        continue;
+      }
+      const g = s.group;
+      const ground = this.groundAt(g.position.x, g.position.z) + DEBRIS.restHeight;
+      if (!s.landed || g.position.y > ground + 1e-3 || s.vy > 0) {
+        s.vy -= DEBRIS.gravity * dt;
+        g.position.x += s.vx * dt;
+        g.position.y += s.vy * dt;
+        g.position.z += s.vz * dt;
+      }
+      if (g.position.y <= ground) {
+        g.position.y = ground;
+        if (s.vy < -1.2) s.vy = -s.vy * DEBRIS.restitution;
+        else s.vy = 0;
+        const drag = Math.exp(-4 * dt);
+        s.vx *= drag;
+        s.vz *= drag;
+        s.landed = true;
+        s.wx *= 0.5;
+        s.wy *= 0.5;
+        s.wz *= 0.5;
+      }
+      if (s.landed && s.vy === 0) {
+        // Rolled to a stop: settle flat.
+        g.quaternion.slerp(s.lying, 1 - Math.exp(-7 * dt));
+      } else {
+        const w = Math.hypot(s.wx, s.wy, s.wz);
+        if (w > 1e-6) {
+          axis.set(s.wx / w, s.wy / w, s.wz / w);
+          spin.setFromAxisAngle(axis, w * dt);
+          g.quaternion.premultiply(spin);
+        }
+      }
+      const left = DEBRIS.life - s.age;
+      g.scale.setScalar(left < DEBRIS.fade ? Math.max(0.001, left / DEBRIS.fade) : 1);
+    }
+  }
+
+  private remove(i: number): void {
+    const [s] = this.pieces.splice(i, 1);
+    s?.group.removeFromParent();
+  }
+
+  dispose(): void {
+    while (this.pieces.length) this.remove(0);
+  }
+}

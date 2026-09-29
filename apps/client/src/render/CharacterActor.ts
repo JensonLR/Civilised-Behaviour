@@ -1,7 +1,7 @@
-import type { Scene } from "three";
+import type { Group, Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel } from "@cb/procedural/three";
-import { FLAG, type HitEvent } from "@cb/shared";
+import { FLAG, type HitEvent, type LimbId } from "@cb/shared";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
 
 /** Everything that places and poses one figure this frame, taken from replicated + predicted state. */
@@ -18,6 +18,8 @@ export interface ActorPose {
   flags: number;
   /** Packed wound mask (server-owned). */
   wounds?: number;
+  /** Lost-limb mask (LIMB bits, server-owned). */
+  missing?: number;
 }
 
 /**
@@ -100,7 +102,8 @@ export class CharacterActor {
     this.ragdoll = world.spawn(this.rig, { vx: this.lastVx, vy: this.lastVy, vz: this.lastVz, dx: e.dx, dz: e.dz, power: e.power, zone: e.zone });
   }
 
-  update(dt: number, pose: ActorPose, gore: GoreLevel = "full"): void {
+  /** `showLimbs` false (a personal comfort setting) renders lost limbs as ordinary grievous wounds instead of stumps. */
+  update(dt: number, pose: ActorPose, gore: GoreLevel = "full", showLimbs = true): void {
     const downed = (pose.flags & FLAG.DOWNED) !== 0;
     this.rig.root.position.x = pose.x;
     this.rig.root.position.z = pose.z;
@@ -115,6 +118,7 @@ export class CharacterActor {
     // the ground height is added afterwards.
     this.rig.root.position.y += pose.y;
     this.rig.setWounds(pose.wounds ?? 0, gore);
+    this.rig.setMissing(showLimbs ? (pose.missing ?? 0) : 0, gore);
 
     const rd = this.ragdoll;
     if (rd) {
@@ -125,6 +129,11 @@ export class CharacterActor {
       rd.applyPose(dt);
       if (rd.phase === "done") this.ragdoll = undefined;
     }
+  }
+
+  /** A free-standing copy of a limb in its current pose, to fly off as debris (see CharacterRig.detachLimb). */
+  detachLimb(limb: LimbId): Group | undefined {
+    return this.rig.detachLimb(limb);
   }
 
   setExpression(id: ExpressionId): void {

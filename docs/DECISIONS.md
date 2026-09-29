@@ -146,3 +146,21 @@ with derived blush, twelve distinguishable dyes, gore Off contains no red, UI co
 rendering code, so drift is caught in CI. The retune that came with it: less orange skin, sun 0xffe0b8 at 3.0, plum "bounce" for warm coloured shadows, boot
 leather lightened so it reads against the ink outline.
 
+
+**D-023 Dismemberment (2026-09-29).** Two separate switches, because the two things they control are different. The *campaign rule* (`WorldState.dismemberment`,
+default on, chosen by whoever founds the expedition, server default from `DISMEMBERMENT`) decides whether limbs can come off at all: authoritative, identical for
+everyone. The *personal setting* ("Severed limbs: Shown/Hidden") decides only what you see: hidden, the same injury renders as the ordinary grievous-wound dressing
+and no limb flies, so a squeamish player is never playing a different game. The server owns a 4-bit `missing` mask (arms and legs only; heads and torsos are never
+severed, characters are downed not dead), rolls a seeded chance from the damage and the limb's existing wounds (`severChance`, pure and tested), stamps a grievous
+wound, and broadcasts a cosmetic `sever` event. Clients hide the limb's bone meshes and cap a stump at the joint (`buildStump`); the flying limb is a frozen-pose copy of
+the same geometry (`rig.detachLimb`) driven by a tiny pooled ballistic sim (`LimbDebris`, cap 8, 25 s life) rather than Rapier, since nothing depends on where it lands.
+Rejected: skinned meshes with cut planes (the rig is rigid per bone precisely so a limb is a mesh you can hide and copy), and making the visuals part of the campaign
+rule (it would let one player's taste change another's screen). Not done: prosthetics (a lost leg does not yet link to `spec.woodenLeg`) and any movement effect of
+limb loss (same predicted-input constraint as wounds).
+
+**D-024 Interface as expedition ephemera (2026-09-29).** The first interface was beige rounded boxes: correct, and interchangeable with any web form. It now looks like
+the printed matter of the Society the game is about: the menu is a leather-bound charter (brass corners, double-ruled page, compass-rose letterhead, ruled form fields,
+a rubber-stamp call to action), the creator is a ledger with index tabs and brass-knob sliders, vitality is a brass gauge with a needle (number and "!" as well, never
+colour alone), the injury chart is a surgeon's luggage tag, nametags are luggage tags, notices are telegrams, prompts are tickets, being down is a mourning card. All of it
+is CSS plus a few inline SVGs (no image assets), every colour is a palette variable, and type is IM Fell English / English SC (period printing) with Special Elite for the
+telegraph, bundled via `@fontsource` (SIL OFL, listed in ASSET_REGISTER) so the game works offline on Steam. Contrast stays with the palette tests' ratios.

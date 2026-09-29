@@ -94,9 +94,9 @@ export class Session {
     });
   }
 
-  static async create(name: string, look?: string): Promise<Session> {
+  static async create(name: string, look?: string, rules: { dismemberment?: boolean } = {}): Promise<Session> {
     const client = new Client(serverUrl());
-    const options: JoinOptions = { name, token: identityToken(), ...(look ? { look } : {}) };
+    const options: JoinOptions = { name, token: identityToken(), ...(look ? { look } : {}), ...(rules.dismemberment === undefined ? {} : { dismemberment: rules.dismemberment }) };
     const room = await client.create<WorldStateType>(ROOM_WORLD, options, WorldState as never);
     await Session.stateReady(room);
     return new Session(room);

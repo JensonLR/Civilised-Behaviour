@@ -115,6 +115,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 #status { min-height: 1.4rem; margin: 0.8rem 0 0; font-style: italic; }
 #status.error { color: var(--stamp); font-weight: 700; font-style: normal; }
 .fine { margin: 0.5rem 0 0; font-size: 0.82rem; opacity: 0.68; line-height: 1.3; }
+.panel label.check { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.7rem; font-family: var(--serif); font-size: 0.98rem; letter-spacing: 0.02em; cursor: pointer; }
+.panel input[type="checkbox"] { width: 1.15rem; height: 1.15rem; padding: 0; accent-color: var(--stamp); border: 0; }
 .opt { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.9rem; }
 
 /* ---- character creator: the bearer's particulars ---- */
@@ -152,7 +154,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 .codebar b { font-family: var(--type); letter-spacing: 0.3em; font-size: 1.15rem; color: var(--stamp); font-weight: 400; }
 .codebar button { min-height: 2.1rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; }
 .help { position: absolute; right: 0.9rem; bottom: 0.9rem; padding: 0.25rem 0.9rem; font-family: var(--display); letter-spacing: 0.08em; font-size: 0.85rem; color: var(--text); background: color-mix(in srgb, var(--scrim) 62%, transparent); border-top: 1px solid var(--brass); border-bottom: 1px solid var(--brass); white-space: nowrap; }
-@media (max-width: 40rem) { .help { display: none; } }
+@media (max-width: 62rem) { .help { display: none; } }
 
 /* Luggage tags over heads. */
 .nametag { position: absolute; left: 0; top: 0; padding: 0.05rem 0.55rem 0.05rem 1.05rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; white-space: nowrap; will-change: transform; border-radius: 2px 5px 5px 2px; border: 1px solid var(--brass-dark); clip-path: polygon(0 50%, 0.5rem 0, 100% 0, 100% 100%, 0.5rem 100%); filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--scrim) 50%, transparent)); }

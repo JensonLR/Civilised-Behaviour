@@ -79,3 +79,9 @@ in front of the holder and ignores player capsules. Client keyboard taps are lat
 - `SIMULATED_LATENCY_MS` (server env, RTT ms) - forbidden in production by config validation.
 - `/metrics` JSON: rooms, players, tick avg/p99/max, overruns, reconnects, heap/RSS.
 - Client overlay (F3): RTT (application ping every 2 s), draw calls, etc. Bandwidth counters: TODO M12 (needs transport hook).
+
+## Dismemberment and `sever` events (D-023)
+`PlayerState.missing` (uint8, 4 bits: left arm 1, right arm 2, left leg 4, right leg 8) is server-owned and delta-encoded like `wounds`. `WorldState.dismemberment` is the
+campaign rule (creator's `JoinOptions.dismemberment`, ignored when joining; server default from `DISMEMBERMENT`). `Casualties.damage` rolls `severChance(amount, zoneLevel)`
+from the seeded room RNG for limb-zone blows, sets the bit, stamps a grievous wound on the zone and broadcasts `sever {id, limb, dx, dz, power}` after the `hit` event. The
+event is cosmetic (debris, spray, camera shake); a client that misses it still renders the stump from `missing`. Debug commands: `sever:<bit>`, `restore`.

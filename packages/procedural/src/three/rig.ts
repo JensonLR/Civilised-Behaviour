@@ -11,6 +11,7 @@ import {
   SphereGeometry,
   TorusGeometry,
   BoxGeometry,
+  Matrix4,
 } from "three";
 import { LIMB, PALETTE, ZONE, ZONE_COUNT, woundLevel, zoneLimb, type LimbId, type ZoneId } from "@cb/shared";
 import * as K from "../catalog.ts";
@@ -84,6 +85,12 @@ export interface CharacterRig {
    * joint. Cheap to call every frame with an unchanged mask. `gore` recolours the wound cap.
    */
   setMissing(mask: number, gore?: GoreLevel): void;
+  /**
+   * A free-standing copy of a limb, frozen in its current pose, for flying off as debris: a Group whose origin is the joint (the cut end)
+   * with the limb hanging down its -Y. Geometry and materials are shared with the rig (dispose nothing but the group's own children);
+   * add it to the scene yourself. Works whether or not the limb is currently hidden.
+   */
+  detachLimb(limb: LimbId): Group | undefined;
   dispose(): void;
 }
 
@@ -419,6 +426,28 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     applyWounds();
   };
 
+  const inv = new Matrix4();
+  const detachLimb = (limb: LimbId): Group | undefined => {
+    const info = LIMB_BONES[limb];
+    if (!info) return undefined;
+    root.updateWorldMatrix(true, true);
+    const pivot = new Group();
+    info.joint.matrixWorld.decompose(pivot.position, pivot.quaternion, pivot.scale);
+    pivot.scale.set(1, 1, 1);
+    pivot.updateMatrix();
+    inv.copy(pivot.matrix).invert();
+    const copy = (m: Mesh): void => {
+      const c = new Mesh(m.geometry, m.material);
+      c.matrixAutoUpdate = false;
+      c.matrix.multiplyMatrices(inv, m.matrixWorld);
+      c.castShadow = m.castShadow;
+      pivot.add(c);
+    };
+    for (const m of meshes) if (info.bones.includes(m.name.slice(5))) copy(m);
+    if (outlineOn) for (const o of outlines) if (info.bones.includes(o.name.slice(8))) copy(o);
+    return pivot;
+  };
+
   return {
     root,
     joints: { root, pelvis, torso, head, shoulderL, shoulderR, elbowL, elbowR, hipL, hipR, kneeL, kneeR },
@@ -434,6 +463,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8));
     },
     setMissing,
+    detachLimb,
     dispose() {
       // Bone geometry belongs to the shared cache; only per-instance face parts are freed here.
       for (const g of new Set(ownedGeos)) g.dispose();
