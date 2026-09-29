@@ -47,8 +47,12 @@ export const PlayerState = schema({
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 
-/** The subset of PlayerState the reconciler predicts. */
-export const PREDICTED_FIELDS = ["x", "y", "z", "vx", "vy", "vz", "facing", "flags", "stumble"] as const;
+/**
+ * The subset of PlayerState the reconciler mirrors. `wounds` and `missing` are server-owned INPUTS to the shared step (injury.ts): the
+ * step never writes them, but the reconciler must snapshot them with the position they produced, or a replay after a correction
+ * would step with stale injuries. They change rarely, so they do not defeat the reconciler's "prediction matches" skip.
+ */
+export const PREDICTED_FIELDS = ["x", "y", "z", "vx", "vy", "vz", "facing", "flags", "stumble", "wounds", "missing"] as const;
 
 export const PropState = schema({
   kind: t.uint8(),

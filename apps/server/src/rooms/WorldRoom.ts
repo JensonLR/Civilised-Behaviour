@@ -6,9 +6,15 @@ import {
   CollisionWorld,
   FLAG,
   INTERACT,
+  PROP_DEFS,
   PropState,
+  canCarry,
+  carryRefusal,
+  createInjuryMods,
   findInteractTarget,
   holdPosition,
+  injuryMods,
+  prosthesisFor,
   scatterProps,
   type MoveCommand,
   JOIN_CODE_ALPHABET,
@@ -31,6 +37,7 @@ import {
   type JoinOptions,
   type MoveInputType,
   type PlayerStateType,
+  type PropKindId,
   type WorldStateType,
   type LimbId,
   type ZoneId,
@@ -62,6 +69,9 @@ const IDLE_COMMAND = { moveF: 0, moveR: 0, yaw: 0, buttons: 0 } as const;
  */
 const INPUT_BUDGET_REFILL = 1.05;
 const INPUT_BUDGET_MAX = HITCH_TOLERANCE_TICKS;
+
+/** Minimum gap between "you can't do that" notices to one player (a held key must not become a message flood). */
+const REFUSAL_NOTICE_MS = 2000;
 
 /** How long a dropped player's slot is held for reconnection. */
 const RECONNECT_WINDOW_S = 45;
@@ -102,6 +112,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private emptyTicks = new Map<string, number>();
   private lastSetLook = new Map<string, number>();
   private frameBudget = new Map<string, number>();
+  /** Server-only copy of each player's `look.woodenLeg` (campaign history: 0 none, 1 left, 2 right), for the peg-leg flag. */
+  private woodenLeg = new Map<string, number>();
+  private lastRefusal = new Map<string, number>();
+  private readonly mods = createInjuryMods();
 
   override async onCreate(options: JoinOptions): Promise<void> {
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
@@ -136,6 +150,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         emitHit: (e) => this.broadcast("hit", e),
         emitSever: (e) => this.broadcast("sever", e),
         dismemberment: () => this.state.dismemberment,
+        limbsChanged: (sid) => this.refreshProsthetic(sid),
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -170,8 +185,16 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.physics.syncPlayer(sessionId, player.x, player.y, player.z, (player.flags & (FLAG.CROUCHING | FLAG.DOWNED)) !== 0);
         const held = this.carrying.get(sessionId);
         if (held) {
-          holdPosition(player, this.hold);
-          this.physics.moveHeld(held, this.hold.x, this.hold.y, this.hold.z, player.facing);
+          // Injuries can change under a carrier's hands (an arm lost or gashed to grievous): whatever they can no longer lift falls.
+          const kind = this.state.props.get(held)?.kind as PropKindId | undefined;
+          injuryMods(player.wounds, player.missing, (player.flags & FLAG.PEG_LEG) !== 0, this.mods);
+          if (kind !== undefined && !canCarry(this.mods, PROP_DEFS[kind]?.mass ?? 0)) {
+            this.dropHeld(sessionId, player);
+            this.refuse(sessionId, `It slips from your grasp. ${carryRefusal(this.mods)}`);
+          } else {
+            holdPosition(player, this.hold);
+            this.physics.moveHeld(held, this.hold.x, this.hold.y, this.hold.z, player.facing);
+          }
         }
       });
       this.casualties.tick(ctx.dt);
@@ -209,6 +232,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const blank = { ...incoming };
     for (const k of HISTORY_KEYS) blank[k] = 0;
     player.look = encodeSpec(blank);
+    this.woodenLeg.set(client.sessionId, blank.woodenLeg);
     player.title = "";
     player.health = CASUALTY.maxHealth;
     player.wounds = 0; // numeric schema fields decode as undefined until first assigned
@@ -251,6 +275,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.emptyTicks.delete(client.sessionId);
     this.lastSetLook.delete(client.sessionId);
     this.frameBudget.delete(client.sessionId);
+    this.woodenLeg.delete(client.sessionId);
+    this.lastRefusal.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     metrics.players--;
     log.info("room.leave", { roomId: this.roomId, sessionId: client.sessionId, consented });
@@ -280,14 +306,16 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
     if (held) {
       if (pressed & (BUTTON.INTERACT | BUTTON.THROW)) {
-        const throwing = (pressed & BUTTON.THROW) !== 0;
+        // Throw strength comes from the arms (injury.ts): a maimed thrower lobs weakly; with no throw strength it is just a drop.
+        injuryMods(player.wounds, player.missing, (player.flags & FLAG.PEG_LEG) !== 0, this.mods);
+        const throwing = (pressed & BUTTON.THROW) !== 0 && this.mods.throwMul > 0;
         const dirX = -Math.sin(player.facing);
         const dirZ = -Math.cos(player.facing);
         this.physics.release(
           held,
-          player.vx + (throwing ? dirX * INTERACT.throwSpeed : 0),
-          throwing ? INTERACT.throwLift : 0,
-          player.vz + (throwing ? dirZ * INTERACT.throwSpeed : 0),
+          player.vx + (throwing ? dirX * INTERACT.throwSpeed * this.mods.throwMul : 0),
+          throwing ? INTERACT.throwLift * this.mods.throwMul : 0,
+          player.vz + (throwing ? dirZ * INTERACT.throwSpeed * this.mods.throwMul : 0),
         );
         this.finishHold(sessionId, held, player);
       }
@@ -295,12 +323,40 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     }
     if (pressed & BUTTON.INTERACT) {
       const target = findInteractTarget<string>(player, (cb) => this.state.props.forEach((p, id) => cb(id, p)));
-      if (target === undefined || !this.physics.hold(target, sessionId)) return;
+      if (target === undefined) {
+        this.casualties.tryDress(sessionId, player); // nothing to lift: a wounded comrade in reach may be dressed instead
+        return;
+      }
+      // The server decides what these arms can lift; a crafted INTERACT from a maimed body gets a refusal, never the prop.
+      injuryMods(player.wounds, player.missing, (player.flags & FLAG.PEG_LEG) !== 0, this.mods);
+      const def = PROP_DEFS[(this.state.props.get(target)?.kind ?? -1) as PropKindId];
+      if (!def || !canCarry(this.mods, def.mass)) {
+        if (!this.casualties.tryDress(sessionId, player)) this.refuse(sessionId, carryRefusal(this.mods));
+        return;
+      }
+      if (!this.physics.hold(target, sessionId)) return;
       this.carrying.set(sessionId, target);
       player.flags |= FLAG.CARRYING;
       const ps = this.state.props.get(target);
       if (ps) ps.holder = sessionId;
     }
+  }
+
+  /** Tells one player why the server said no. Rate limited: it is a courtesy, not a channel. */
+  private refuse(sessionId: string, text: string): void {
+    const now = Date.now();
+    if (now - (this.lastRefusal.get(sessionId) ?? 0) < REFUSAL_NOTICE_MS) return;
+    this.lastRefusal.set(sessionId, now);
+    this.clients.getById(sessionId)?.send("notice", { text });
+  }
+
+  /** Raises/lowers FLAG.PEG_LEG: a wooden leg only counts where a leg is actually missing. Flags are predicted, so this rides the normal state path. */
+  private refreshProsthetic(sessionId: string): void {
+    const p = this.state.players.get(sessionId);
+    if (!p) return;
+    const peg = prosthesisFor(this.woodenLeg.get(sessionId) ?? 0, p.missing);
+    const next = peg ? p.flags | FLAG.PEG_LEG : p.flags & ~FLAG.PEG_LEG;
+    if (next !== p.flags) p.flags = next;
   }
 
   /** Rate-limited appearance change. Appearance comes from the client; campaign history never does. */
@@ -313,7 +369,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const current = decodeSpec(player.look);
     if (!incoming || !current) return;
     this.lastSetLook.set(client.sessionId, now);
-    player.look = encodeSpec(applyClientAppearance(current, incoming));
+    const next = applyClientAppearance(current, incoming);
+    player.look = encodeSpec(next);
+    this.woodenLeg.set(client.sessionId, next.woodenLeg); // history is server-owned, so this never changes here; kept in step anyway
+    this.refreshProsthetic(client.sessionId);
   }
 
   /** The single entry point for harm (weapons, explosions, friendly fire, debug). Health 0 puts a player down, never out. */
@@ -329,6 +388,16 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     else if (cmd === "down") this.damagePlayer(client.sessionId, 1000, { zone: ZONE.TORSO }); // (a random zone at 1000 damage would take a limb)
     else if (cmd?.startsWith("sever:")) this.casualties.sever(client.sessionId, Number(cmd.slice(6)) as LimbId, -Math.sin(player.facing), -Math.cos(player.facing));
     else if (cmd === "restore") this.casualties.restoreLimbs(client.sessionId);
+    else if (cmd?.startsWith("peg:")) {
+      // peg:<0|1|2> fits a wooden leg (campaign history is server-owned; this stands in for the future campaign layer)
+      const spec = decodeSpec(player.look);
+      const side = Number(cmd.slice(4));
+      if (!spec || !(side === 0 || side === 1 || side === 2)) return;
+      spec.woodenLeg = side;
+      player.look = encodeSpec(spec);
+      this.woodenLeg.set(client.sessionId, side);
+      this.refreshProsthetic(client.sessionId);
+    }
     else if (cmd?.startsWith("hit:")) {
       // hit:<zone>:<amount>, pushed from behind the player's facing (QA + e2e: reproducible wounds and knock direction)
       const [, z, a] = cmd.split(":");

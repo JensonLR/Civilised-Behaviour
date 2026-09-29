@@ -61,8 +61,52 @@ Prediction while dragged (bot-measured, `casualtyNet.test.ts`): mean positional 
 wound costs two bytes once, not per tick. `Casualties.damage(id, amount, {zone?, dirX?, dirZ?})` picks a seeded-random zone when unaimed, adds severity
 by damage tier, and broadcasts one small `hit` message `{id, zone, dx, dz, power, down}` (about 40 bytes). The message is cosmetic: it drives flinch,
 spray and the ragdoll impulse, and losing it changes no authoritative state. Revive/rout patch wounds down to severity 2 (a dressing), never to zero.
-Wounds have **no movement effect yet**: a gameplay slow-down would need `wounds` as a predicted input of the shared step (client and server must agree),
-so the limp is animation only. Ragdolls are client-side and cosmetic (see ARCHITECTURE/D-019); the server keeps a plain capsule.
+Wounds and lost limbs change movement and carrying through the shared injury rules (next section); ragdolls are client-side and cosmetic
+(see ARCHITECTURE/D-019), the server keeps a plain capsule.
+
+## Injury modifiers (predicted input of the shared step)
+`packages/shared/src/injury.ts` holds the ONE mapping `injuryMods(wounds, missing, prosthetic, out) -> {speedMul, sprintOk, jumpOk, carryMaxMass, throwMul}`
+(fills a passed-in struct, allocation-free, table-tested). `stepCharacter` calls it once per step with `s.wounds`, `s.missing` and `FLAG.PEG_LEG`; the server
+also uses it for pickup/throw. `wounds` and `missing` are on `CharState` and in `PREDICTED_FIELDS`: the step only READS them, but the reconciler mirrors them
+with the position they produced, so a replay after a correction steps with the injuries the server had at that ack. `FLAG.PEG_LEG` (512) is raised by the
+server (`refreshProsthetic`) when the look-history `woodenLeg` (0 none, 1 left, 2 right) sits where a leg is missing; it is an ordinary predicted flag.
+| Injury | Effect |
+|--------|--------|
+| leg gash (2) | speed x0.9 |
+| leg grievous (3) | speed x0.6, no sprint, no jump |
+| leg lost | speed x0.45, no sprint, no jump (the stump's own wound is ignored) |
+| leg lost + wooden leg | speed x0.7, no sprint, jump allowed; never as good as a leg |
+| two legs | factors multiply (two lost = x0.2, about the crawl speed) |
+| head or torso grievous | no sprint (dizzy / winded); nothing else |
+| arms: two sound (present, at most a gash) | carry anything |
+| arms: one sound | light props only (`lightPropMass` 8 kg: bottle, chair; not crate 12, barrel 20) |
+| arms: none sound but one present | light props only |
+| arms: both lost | cannot carry or throw |
+| throw speed and lift | x mean of both arms (lost 0, grievous 0.4, gash 0.85, else 1) |
+A downed body ignores all of it (crawl speed). Revive/rout patch wounds but never regrow a limb; `restoreLimbs` stays debug-only.
+**Server enforcement:** the step ignores SPRINT/JUMP the body cannot use (a crafted frame gains nothing); a pickup is refused at the gate with a rate-limited
+`notice` to that client only ("Your arm is in no state to carry that."); every tick a carrier is re-checked and drops what they can no longer lift (arm lost or
+gashed to grievous mid-carry); throws scale by `throwMul`. The client prompt uses the same functions, so it never promises what the server will refuse.
+**Why no snap:** `wounds`/`missing`/flags are adopted from the same snapshot as the position and ack, so inputs after the ack replay with the injuries the server
+applies to them; only inputs the server processed before the wound landed used the old values, and those are exactly the ones the snapshot already covers.
+Measured (`apps/server/src/bots/injuryNet.test.ts`, bot sprinting on an arc, injury lands at ~2.6 s; mean / worst single POSITION correction):
+| Scenario | RTT 0 | RTT 120 ms |
+|----------|-------|------------|
+| no injury | 0 / 0 | 0 / 0 |
+| grievous leg | 0.0 / 0.0 mm | 0.01 / 0.3 mm |
+| leg torn off | 0.0 / 0.0 mm | 0.07 / 2.4 mm |
+| leg torn off, wooden leg fitted | 0.0 / 0.0 mm | 0.04 / 1.5 mm |
+| three hits within a second (leg, leg, head) | 0.19 / 7.9 mm | 1.0 / 45 mm |
+Mutation: with `wounds`/`missing` removed from `PREDICTED_FIELDS` the same runs give mean 70-217 mm and worst 0.25-0.49 m (rubber-banding on every injury), and
+the tests fail. Caveat: `driftEma` now also counts the numeric jump of the wounds/missing/flags fields themselves (unit-less, like the DRAGGED flag flip in D-017), so the
+bot metrics to trust here are the positional `correction*` ones. Limits: localhost, fixed-delay latency, one player.
+
+## Field dressing (treatment, not healing)
+A standing player can be dressed by a comrade: same INTERACT hold as a revive (no new input bit), `CASUALTY.dressSeconds` (2 s, server ticks), in `reviveRange`, both
+standing. It lowers the worst dressable wound ONE level (ties: legs, arms, torso, head) and the action ends; press again for the next. Floors make total healing finite:
+a wound never drops below severity 1 (a scratch stays) and a stump never below 2. It does not restore health and cannot be done to yourself. Priority on an INTERACT press:
+revive a downed comrade > lift a prop in reach (if the body can lift it) > dress a wounded comrade. A player who cannot lift the prop beside them dresses instead.
+The patient sees the progress through the existing `reviver` / `reviveProgress` fields; the HUD labels it "Dressing" when the patient is not downed.
 
 ## Props and interaction
 Physics props live in a server-only Rapier world (`apps/server/src/physics.ts`, layers from `LAYER`). Only awake/held props are written to
@@ -73,7 +117,7 @@ in front of the holder and ignores player capsules. Client keyboard taps are lat
 
 ## QA debug commands
 `DEBUG_COMMANDS` (default on outside production; config validation rejects it in production) registers a `debug` message on rooms. Currently
-`nearProp` / `nearDowned` teleport the caller next to the nearest free prop / downed teammate; `hurt` (-40 health), `down` (health 0) and `hit:<zone>:<damage>` (aimed, pushed from behind the caller) harm the caller (all used by the browser e2e). Never ship these enabled.
+`peg:<0|1|2>` fits a wooden leg (look history is server-owned) and `nearProp` / `nearDowned` teleport the caller next to the nearest free prop / downed teammate; `hurt` (-40 health), `down` (health 0) and `hit:<zone>:<damage>` (aimed, pushed from behind the caller) harm the caller (all used by the browser e2e). Never ship these enabled.
 
 ## Dev controls
 - `SIMULATED_LATENCY_MS` (server env, RTT ms) - forbidden in production by config validation.

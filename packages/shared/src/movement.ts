@@ -1,6 +1,7 @@
 import { BUTTON, CHARACTER, FLAG, MOVEMENT } from "./constants.ts";
 import type { CollisionWorld, Vec2 } from "./collision.ts";
 import { TAU, approach, approachAngle, clamp } from "./math.ts";
+import { createInjuryMods, injuryMods } from "./injury.ts";
 
 /**
  * The authoritative-and-predicted character state. Every field is a scalar so it maps 1:1 to
@@ -19,6 +20,12 @@ export interface CharState {
   flags: number;
   /** Seconds of remaining stumble (reduced control). Set by the server on knockback. */
   stumble: number;
+  /**
+   * Server-owned INPUTS to the step (read, never written by it): packed wound severities and the lost-limb mask. They are mirrored
+   * by the client reconciler together with the position they produced, so injuries slow client and server identically (injury.ts).
+   */
+  wounds: number;
+  missing: number;
 }
 
 /** Wire-level input frame (MoveInput schema). Quantised: stick axes are int8, yaw is uint16. */
@@ -40,6 +47,7 @@ export const yawToWire = (rad: number): number => {
 export const axisToWire = (v: number): number => Math.round(clamp(v, -1, 1) * 127);
 
 const scratch: Vec2 = { x: 0, z: 0 };
+const mods = createInjuryMods();
 
 /**
  * One fixed step of the character controller. Pure with respect to (state, cmd, dt, world):
@@ -72,12 +80,15 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const carrying = (s.flags & FLAG.CARRYING) !== 0;
   const dragging = (s.flags & FLAG.DRAGGING) !== 0;
   const reviving = (s.flags & FLAG.REVIVING) !== 0;
+  // Injuries (server-owned wounds/missing, read as predicted inputs). A downed body only crawls, so they are moot there.
+  injuryMods(s.wounds, s.missing, (s.flags & FLAG.PEG_LEG) !== 0, mods);
   const crouching = !downed && (buttons & BUTTON.CROUCH) !== 0;
-  const sprinting = !downed && !crouching && !carrying && !dragging && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
+  const sprinting = !downed && !crouching && !carrying && !dragging && mods.sprintOk && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
   let topSpeed: number = MOVEMENT.runSpeed;
   if (downed) topSpeed = MOVEMENT.crawlSpeed;
   else if (crouching) topSpeed = MOVEMENT.crouchSpeed;
   else if (sprinting) topSpeed = MOVEMENT.sprintSpeed;
+  if (!downed) topSpeed *= mods.speedMul;
   if (carrying) topSpeed *= MOVEMENT.carryFactor;
   if (dragging) topSpeed *= MOVEMENT.dragFactor;
   if (reviving) topSpeed = 0; // kneeling over a teammate: hold position (turning still allowed)
@@ -108,7 +119,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const jumpHeld = (buttons & BUTTON.JUMP) !== 0;
   let flags = s.flags;
   if (!jumpHeld) flags &= ~FLAG.JUMP_LATCH;
-  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && !dragging && !reviving && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
+  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && !dragging && !reviving && mods.jumpOk && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
     s.vy = MOVEMENT.jumpSpeed;
     flags |= FLAG.JUMP_LATCH;
     flags &= ~FLAG.GROUNDED;
@@ -235,6 +246,8 @@ export function createCharState(x: number, z: number, world: CollisionWorld): Ch
     facing: 0,
     flags: FLAG.GROUNDED,
     stumble: 0,
+    wounds: 0,
+    missing: 0,
   };
 }
 

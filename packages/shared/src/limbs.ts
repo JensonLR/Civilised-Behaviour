@@ -46,3 +46,11 @@ export function severChance(amount: number, zoneLevel: number): number {
   const base = ((amount - SEVER.minDamage) / (SEVER.certainDamage - SEVER.minDamage)) * 0.7;
   return Math.max(0, Math.min(1, base + Math.max(0, zoneLevel) * SEVER.perWoundLevel));
 }
+
+/**
+ * True when the wooden leg (look history: 0 none, 1 left, 2 right) sits where a leg is actually missing. A peg on a healthy leg
+ * changes nothing and a peg on the wrong side is just decoration. The server raises `FLAG.PEG_LEG` from this.
+ */
+export function prosthesisFor(woodenLeg: number, missing: number): boolean {
+  return (woodenLeg === 1 && (missing & LIMB.LEG_L) !== 0) || (woodenLeg === 2 && (missing & LIMB.LEG_R) !== 0);
+}

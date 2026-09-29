@@ -1,3 +1,4 @@
+import { dressableZone } from "./injury.ts";
 import { angleDelta } from "./math.ts";
 
 /** Health, downing, revive and drag tuning. Shared so client prompts and server authority agree. */
@@ -6,6 +7,8 @@ export const CASUALTY = {
   /** Seconds of uninterrupted hold to revive a teammate (measured in SERVER ticks, never client frames). */
   reviveSeconds: 2.5,
   reviveHealth: 35,
+  /** Seconds of uninterrupted hold for a comrade to dress a wound on a standing player (one severity level per dressing). */
+  dressSeconds: 2,
   /** Horizontal reach to start/keep reviving. */
   reviveRange: 1.8,
   /** Horizontal reach to start dragging; dragging auto-releases beyond `dragBreakRange`. */
@@ -25,23 +28,27 @@ export interface CasualtyView {
   z: number;
   facing: number;
   flags: number;
+  /** Only needed by `findWoundedTarget`. */
+  wounds?: number;
+  missing?: number;
 }
 
 const DOWNED = 16; // FLAG.DOWNED (avoid a circular import; asserted equal in casualty.test.ts)
 
 /**
- * The downed teammate a player would help: nearest within `range`, preferring one in front but accepting any
- * that is very close. Pure and shared (prompt on the client, authority on the server).
+ * The teammate a player would help: nearest within `range`, preferring one in front but accepting any
+ * that is very close. `accept` filters who counts. Pure and shared (prompt on the client, authority on the server).
  */
-export function findDownedTarget<K>(
+function findHelpTarget<K>(
   self: CasualtyView,
   range: number,
   each: (cb: (key: K, other: CasualtyView) => void) => void,
+  accept: (o: CasualtyView) => boolean,
 ): K | undefined {
   let best: K | undefined;
   let bestScore = Infinity;
   each((key, o) => {
-    if ((o.flags & DOWNED) === 0) return;
+    if (!accept(o)) return;
     const dx = o.x - self.x;
     const dz = o.z - self.z;
     const dist = Math.hypot(dx, dz);
@@ -55,4 +62,16 @@ export function findDownedTarget<K>(
     }
   });
   return best;
+}
+
+const isDowned = (o: CasualtyView): boolean => (o.flags & DOWNED) !== 0;
+
+/** The downed teammate a player would revive or drag. */
+export function findDownedTarget<K>(self: CasualtyView, range: number, each: (cb: (key: K, other: CasualtyView) => void) => void): K | undefined {
+  return findHelpTarget(self, range, each, isDowned);
+}
+
+/** The standing (not downed) teammate whose wounds a field dressing could still help. */
+export function findWoundedTarget<K>(self: CasualtyView, range: number, each: (cb: (key: K, other: CasualtyView) => void) => void): K | undefined {
+  return findHelpTarget(self, range, each, (o) => !isDowned(o) && dressableZone(o.wounds ?? 0, o.missing ?? 0) >= 0);
 }

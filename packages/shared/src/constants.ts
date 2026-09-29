@@ -38,7 +38,7 @@ export const MOVEMENT = {
   crawlSpeed: 0.9,
 } as const;
 
-/** Bit flags packed into PlayerState.flags (uint8). */
+/** Bit flags packed into PlayerState.flags (uint16). */
 export const FLAG = {
   GROUNDED: 1,
   JUMP_LATCH: 2,
@@ -53,6 +53,8 @@ export const FLAG = {
   DRAGGING: 128,
   /** Server-set: this (downed) player is being dragged; the server steers their velocity, input is ignored. */
   DRAGGED: 256,
+  /** Server-set: a wooden leg is fitted where a leg is missing (softens the hobble, see injury.ts). Predicted like every flag. */
+  PEG_LEG: 512,
 } as const;
 
 /** Bit flags packed into MoveInput.buttons (uint16). */

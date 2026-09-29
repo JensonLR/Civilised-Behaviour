@@ -14,3 +14,4 @@ export * from "./casualty.ts";
 export * from "./wounds.ts";
 export * from "./palette.ts";
 export * from "./limbs.ts";
+export * from "./injury.ts";

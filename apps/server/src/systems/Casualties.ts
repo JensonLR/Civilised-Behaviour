@@ -7,7 +7,10 @@ import {
   WOUNDS,
   addWound,
   capWounds,
+  dressWound,
+  dressableZone,
   findDownedTarget,
+  findWoundedTarget,
   ZONE,
   isLimb,
   isZone,
@@ -45,6 +48,8 @@ export interface CasualtyHost {
   emitSever(e: SeverEvent): void;
   /** Whether this campaign allows limbs to be severed. */
   dismemberment(): boolean;
+  /** The lost-limb mask of a player changed: refresh anything derived from it (the peg-leg flag). */
+  limbsChanged(sessionId: string): void;
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -56,6 +61,8 @@ export interface HitInfo {
 }
 
 interface Revive {
+  /** "revive" a downed comrade, or "dress" a wound on a standing one (same hold, different target rules and reward). */
+  kind: "revive" | "dress";
   target: string;
   /** 0..1 */
   progress: number;
@@ -126,15 +133,21 @@ export class Casualties {
     if (!p || !isLimb(limb) || (p.missing & limb) !== 0) return false;
     p.missing |= limb;
     p.wounds = setWound(p.wounds, limbZone(limb), 3); // the stump stays grievously wounded
+    this.host.limbsChanged(sessionId);
     this.host.emitSever({ id: sessionId, limb, dx: dirX, dz: dirZ, power });
     log.info("casualty.sever", { sessionId, limb });
     return true;
   }
 
-  /** Restores every lost limb (debug, and later: prosthetics and medical care in the campaign layer). */
+  /**
+   * Restores every lost limb. DEBUG ONLY: nothing in play calls this (revive and rout patch wounds but never regrow a limb; a
+   * later campaign layer may offer prosthetics, never regrowth).
+   */
   restoreLimbs(sessionId: string): void {
     const p = this.host.players.get(sessionId);
-    if (p) p.missing = 0;
+    if (!p) return;
+    p.missing = 0;
+    this.host.limbsChanged(sessionId);
   }
 
   down(sessionId: string, p: PlayerStateType): void {
@@ -187,7 +200,25 @@ export class Casualties {
       this.host.players.forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
     );
     if (targetId === undefined) return false;
-    this.revives.set(reviverId, { target: targetId, progress: 0 });
+    this.revives.set(reviverId, { kind: "revive", target: targetId, progress: 0 });
+    reviver.flags |= FLAG.REVIVING;
+    const target = this.host.players.get(targetId)!;
+    target.reviver = reviverId;
+    target.reviveProgress = 0;
+    return true;
+  }
+
+  /**
+   * Field dressing: the same hold as a revive, on a standing comrade with a wound above its dressing floor. Called by the room
+   * when an INTERACT press found nothing else to do (a downed comrade or a prop in reach wins). Returns whether a dressing began.
+   */
+  tryDress(reviverId: string, reviver: PlayerStateType): boolean {
+    if ((reviver.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED)) !== 0 || this.revives.has(reviverId)) return false;
+    const targetId = findWoundedTarget<string>(reviver, CASUALTY.reviveRange, (cb) =>
+      this.host.players.forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+    );
+    if (targetId === undefined) return false;
+    this.revives.set(reviverId, { kind: "dress", target: targetId, progress: 0 });
     reviver.flags |= FLAG.REVIVING;
     const target = this.host.players.get(targetId)!;
     target.reviver = reviverId;
@@ -257,23 +288,35 @@ export class Casualties {
       const target = this.host.players.get(r.target);
       const held = this.buttons.get(reviverId);
       const holding = held !== undefined && (held.bits & BUTTON.INTERACT) !== 0 && Date.now() - held.at < HOLD_STALE_MS;
+      // A revive needs a downed (not dragged) patient; a dressing needs a standing one who still has a wound worth dressing.
+      const patientOk =
+        target !== undefined &&
+        (r.kind === "revive"
+          ? (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED
+          : (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === 0 && dressableZone(target.wounds, target.missing) >= 0);
       const valid =
         reviver !== undefined &&
         target !== undefined &&
         (reviver.flags & FLAG.DOWNED) === 0 &&
-        (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED &&
+        patientOk &&
         holding &&
         horizontal(reviver, target) <= CASUALTY.reviveRange + 0.4;
       if (!valid) {
         this.cancelRevive(reviverId);
         continue;
       }
-      r.progress += dt / CASUALTY.reviveSeconds;
+      r.progress += dt / (r.kind === "revive" ? CASUALTY.reviveSeconds : CASUALTY.dressSeconds);
       target.reviveProgress = Math.min(100, Math.floor(r.progress * 100));
       if (r.progress >= 1) {
+        const kind = r.kind;
         this.cancelRevive(reviverId);
-        this.standUp(r.target, target, CASUALTY.reviveHealth);
-        log.info("casualty.revived", { target: r.target, by: reviverId });
+        if (kind === "revive") {
+          this.standUp(r.target, target, CASUALTY.reviveHealth);
+          log.info("casualty.revived", { target: r.target, by: reviverId });
+        } else {
+          target.wounds = dressWound(target.wounds, target.missing); // one level, bounded by the floors (injury.ts)
+          log.info("casualty.dressed", { target: r.target, by: reviverId });
+        }
       }
     }
 
