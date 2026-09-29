@@ -1,0 +1,31 @@
+# Render Blueprint (reference). Services were created via the Render API/MCP on the free plan;
+# keep this file in sync if settings change. Free web services spin down after ~15 min idle
+# (WebSocket sessions drop; first connection cold-starts) - acceptable for testing only.
+services:
+  - type: web
+    name: cb-server
+    runtime: node
+    region: frankfurt
+    plan: free
+    branch: claude/civilised-behaviour-architecture-jtce2l
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cb/server build
+    startCommand: node apps/server/dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: LOG_LEVEL
+        value: info
+      - key: ALLOWED_ORIGINS
+        sync: false
+  - type: web
+    name: cb-client
+    runtime: static
+    branch: claude/civilised-behaviour-architecture-jtce2l
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cb/client build
+    staticPublishPath: apps/client/dist
+    envVars:
+      - key: VITE_SERVER_URL
+        sync: false

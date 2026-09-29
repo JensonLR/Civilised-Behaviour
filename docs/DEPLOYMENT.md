@@ -1,6 +1,9 @@
 # Deployment
 
-Status: DRAFT design - nothing deployed yet. No Dockerfile / Railway config / Cloudflare config exists in the repo yet (M13).
+Status: interim test deployment on Render (free plan, see D-011). Railway/Cloudflare/R2 plan below is the intended production target and is not built yet; no Dockerfile exists.
+
+## Interim: Render (D-011)
+Services `cb-server` (Node web service) and `cb-client` (static site), Frankfurt, free plan, branch `claude/civilised-behaviour-architecture-jtce2l`, config mirrored in `render.yaml`. Free instances sleep after ~15 min idle: WebSockets drop and the next connection cold-starts (~30-60 s). Test use only; move to an always-on plan before any real playtest.
 
 ## Target
 - Web + demo: Cloudflare Workers Static Assets; large assets on R2 behind a custom asset domain (not r2.dev), immutable hashed filenames.
@@ -8,7 +11,7 @@ Status: DRAFT design - nothing deployed yet. No Dockerfile / Railway config / Cl
 - Staging + production environments; health endpoint `/health` (exists); graceful shutdown (Colyseus `gracefullyShutdown` enabled).
 
 ## Server env (validated in `apps/server/src/config.ts`)
-`NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (required in production),
+`NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (optional until M10),
 `SIMULATED_LATENCY_MS` (must be 0 in production).
 
 ## Production build plan

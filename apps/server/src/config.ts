@@ -29,8 +29,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const allowedOrigins = (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   if (nodeEnv === "production" && allowedOrigins.length === 0) errors.push("ALLOWED_ORIGINS required in production");
 
+  // Optional until persistence lands (M10); the server then runs campaigns in memory only.
   const databaseUrl = env.DATABASE_URL || undefined;
-  if (nodeEnv === "production" && !databaseUrl) errors.push("DATABASE_URL required in production");
 
   if (errors.length) throw new Error(`Invalid server configuration:\n - ${errors.join("\n - ")}`);
   return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, simulatedLatencyMs };
