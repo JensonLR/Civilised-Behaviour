@@ -9,7 +9,7 @@ import { CharacterAnimator, type ExpressionId } from "./animator.ts";
 const triangles = (rig: CharacterRig): number => {
   let t = 0;
   rig.root.traverse((o) => {
-    if (o instanceof Mesh) t += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position!.count) / 3;
+    if (o instanceof Mesh && o.visible) t += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position!.count) / 3;
   });
   return t;
 };
@@ -28,7 +28,7 @@ describe("buildCharacter", () => {
     let sumTris = 0;
     const N = 150;
     for (let seed = 0; seed < N; seed++) {
-      const rig = buildCharacter(generateCharacter(seed));
+      const rig = buildCharacter(generateCharacter(seed), { outline: false });
       const t = triangles(rig);
       maxTris = Math.max(maxTris, t);
       sumTris += t;
@@ -36,9 +36,9 @@ describe("buildCharacter", () => {
       rig.dispose();
     }
     // Budgets: recorded in docs/PERFORMANCE.md; tighten when LOD lands (M4/M12).
-    expect(maxMeshes).toBeLessThanOrEqual(20);
-    expect(maxTris).toBeLessThan(9000); // measured 2026-09-29: avg 5.9k, max 7.6k
-    expect(sumTris / N).toBeLessThan(7000);
+    expect(maxMeshes).toBeLessThanOrEqual(20); // measured 18 without outlines
+    expect(maxTris).toBeLessThan(10000); // measured 2026-09-29 after the art pass: avg 6.6k, max 8.4k (was 5.9k / 7.6k)
+    expect(sumTris / N).toBeLessThan(7500);
   });
 
   it("bone geometry carries vertex colours and normals, and no UVs", () => {
@@ -95,6 +95,41 @@ describe("buildCharacter", () => {
     const plain = triangles(buildCharacter(base));
     const marked = triangles(buildCharacter({ ...base, scars: 31, eyepatch: 1, woodenLeg: 2, teeth: 3, burnt: 3, medals: 5 }));
     expect(marked).not.toBe(plain);
+  });
+});
+
+describe("outline", () => {
+  it("every bone has a closed, cheaper hull with smoothed outline normals (a missing outline once shipped silently)", () => {
+    const rig = buildCharacter(generateCharacter(3), { outline: true });
+    const mains = new Map<string, Mesh>();
+    const hulls = new Map<string, Mesh>();
+    rig.root.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      if (o.name.startsWith("mesh_")) mains.set(o.name.slice(5), o);
+      if (o.name.startsWith("outline_")) hulls.set(o.name.slice(8), o);
+    });
+    expect(hulls.size).toBeGreaterThanOrEqual(9);
+    for (const [bone, hull] of hulls) {
+      const g = hull.geometry;
+      expect(g.getAttribute("onormal"), `${bone} hull needs onormal`).toBeDefined();
+      expect(g.getAttribute("color"), `${bone} hull is flat-coloured`).toBeUndefined();
+      const on = g.getAttribute("onormal")!;
+      for (let i = 0; i < on.count; i += Math.max(1, Math.floor(on.count / 20))) {
+        expect(Math.hypot(on.getX(i), on.getY(i), on.getZ(i))).toBeCloseTo(1, 3);
+      }
+      const tris = (geo: typeof g) => (geo.index ? geo.index.count : geo.attributes.position!.count) / 3;
+      expect(tris(g), `${bone} hull must be cheaper than the mesh it outlines`).toBeLessThan(tris(mains.get(bone)!.geometry));
+    }
+  });
+
+  it("can be switched off, restoring the cheaper draw count", () => {
+    const rig = buildCharacter(generateCharacter(4), { outline: true });
+    const on = rig.meshCount;
+    rig.setOutline(false);
+    expect(rig.meshCount).toBeLessThan(on);
+    rig.setOutline(true);
+    expect(rig.meshCount).toBe(on);
+    expect(buildCharacter(generateCharacter(4), { outline: false }).meshCount).toBeLessThan(on);
   });
 });
 

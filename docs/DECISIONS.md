@@ -96,3 +96,12 @@ token bucket: refill 1.05 frames per server tick (5% clock-drift tolerance), cap
 applied in full; excess frames are dropped and counted in `/metrics` `inputFramesDropped`. Steady-state flooding now yields ~1.03x. Tests are mutation-checked
 (no budget -> ratio 3.0). Note the burst allowance is deliberate: a cheater can bank ~400 ms of extra movement after idling; bounded and not worth more complexity.
 Also: `correctionMax` metrics must ignore server-owned flag changes (flags are numeric fields, so a DRAGGED flip reads as a 256 "correction").
+
+**D-018 Character art pass (2026-09-29).** Silhouette identity comes from an inverted-hull outline rather than post-process edge detection: it works with
+MSAA, costs nothing per pixel elsewhere, and is per-character switchable (post-process outlines are all-or-nothing and cost fill-rate at 4K). The hull uses a
+smoothed `onormal` attribute (flat-shaded meshes have split normals that would tear the outline open) and offsets in clip space so line weight is stable, with a
+distance clamp so far characters do not turn to ink. Hulls are built in a coarse `hullMode` and cached apart from the visible mesh, because a full-detail duplicate
+cost +91% triangles versus +37%. Shading is baked into vertex colours (normal-y ramp plus per-primitive clay tint), so no extra lights or textures per bone.
+Face features are placed from the real skull/jaw surface (`faceSurfaceZ`) rather than hand-tuned offsets, after noses, moustaches and beards kept clipping or
+floating as proportions varied. Catalog options remain append-only so stored looks decode unchanged. Lesson repeated: two regressions (lost outline normals,
+hair through hats) were only visible in renders, so the outline now has unit regressions and the lineup showcase is the review tool.

@@ -187,7 +187,13 @@ export class CharacterAnimator {
     const curve = this.face.mouthCurve;
     face.mouth.rotation.z = curve >= 0 ? Math.PI : 0;
     face.mouth.scale.set(1, 0.35 + Math.abs(curve) * 0.65 + this.face.mouthOpen * 0.8, 1 + this.face.mouthOpen * 0.25);
-    face.mouth.position.y = -R * 0.38 - (curve >= 0 ? 0 : -R * 0.06) - this.face.mouthOpen * R * 0.05;
+    const my = face.mouthY - (curve >= 0 ? 0 : -R * 0.06) - this.face.mouthOpen * R * 0.05;
+    face.mouth.position.y = my;
+    // Interior appears as the mouth opens: cavity grows downward, teeth stay on the upper lip line.
+    const open = this.face.mouthOpen;
+    face.mouthInterior.visible = open > 0.12;
+    face.mouthInterior.position.y = my - open * R * 0.05;
+    face.mouthInterior.scale.set(1, 0.4 + open * 1.2, 1);
 
     // Pupils wander when drunk.
     const wobble = this.drunkness * Math.sin(this.time * 2.1) * face.eyeRadius * 0.3;

@@ -10,6 +10,8 @@ import {
 import * as K from "../catalog.ts";
 import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
+import { buildHead, mouthPlacement } from "./head.ts";
+import { outlineMaterial } from "./outline.ts";
 import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe } from "./parts.ts";
 
 /** Named bones of the rigid articulated hierarchy. Every visual part hangs off exactly one of these. */
@@ -36,6 +38,11 @@ export interface FaceParts {
   browL: Mesh;
   browR: Mesh;
   mouth: Mesh;
+  /** Dark cavity + teeth, revealed as the mouth opens. */
+  mouthInterior: Group;
+  /** Rest position of the mouth on the face surface (head-centre relative). */
+  mouthY: number;
+  mouthZ: number;
   lidL: Mesh;
   lidR: Mesh;
   /** Resting geometry constants the animator needs. */
@@ -49,14 +56,16 @@ export interface CharacterRig {
   face: FaceParts;
   proportions: Proportions;
   spec: CharacterSpec;
-  /** Number of draw-call-producing meshes (excludes shadow-pass doubling). */
-  meshCount: number;
+  /** Number of draw-call-producing meshes right now (excludes shadow-pass doubling; includes visible outlines). */
+  readonly meshCount: number;
+  /** Silhouette outline on/off (extra draw per bone). Cheap to toggle. */
+  setOutline(on: boolean): void;
   dispose(): void;
 }
 
 // Bone geometry is cached by (bone, canonical spec) so identical characters (crowds, clones) share GPU memory.
 const geometryCache = new Map<string, BufferGeometry | null>();
-const MAX_CACHE = 96;
+const MAX_CACHE = 256; // 2 entries per bone (main + outline hull) x ~12 bones x a handful of live specs
 let sharedMaterial: MeshStandardMaterial | undefined;
 
 const clothMaterial = (): MeshStandardMaterial => (sharedMaterial ??= new MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0.02 }));
@@ -85,7 +94,12 @@ const face = { white: 0xf4efe2, pupil: 0x15100c, brow: 0x2a1c12 };
  * Builds the full articulated caricature for a spec. The hierarchy is rigid (no skinning) so limbs can
  * detach cleanly for dismemberment and pose replication stays cheap. Rest pose: standing, facing -Z.
  */
-export function buildCharacter(spec: CharacterSpec): CharacterRig {
+export interface BuildOptions {
+  /** Draw a silhouette outline (default true). Crowds should pass false. */
+  outline?: boolean;
+}
+
+export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}): CharacterRig {
   const P = computeProportions(spec);
   const key = encodeSpec(spec);
   const skin = K.SKIN_TONES[spec.skin] ?? K.SKIN_TONES[0];
@@ -129,6 +143,8 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
   torso.rotation.x = -P.lean;
 
   const meshes: Mesh[] = [];
+  const outlines: Mesh[] = [];
+  let outlineOn = options.outline ?? true;
   const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined): void => {
     const geo = cached(`${bone}|${key}`, make);
     if (!geo) return;
@@ -138,6 +154,23 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
     m.receiveShadow = false;
     parent.add(m);
     meshes.push(m);
+    // Outline hull: the same bone rebuilt coarsely, without tiny details (cached separately, shared like the main geometry).
+    const hull = cached(`${bone}|${key}|hull`, () => {
+      PartBuilder.hullMode = true;
+      try {
+        return make();
+      } finally {
+        PartBuilder.hullMode = false;
+      }
+    });
+    if (hull) {
+      const o = new Mesh(hull, outlineMaterial());
+      o.name = `outline_${bone}`;
+      o.visible = outlineOn;
+      o.castShadow = false;
+      parent.add(o);
+      outlines.push(o);
+    }
   };
 
   // ---- pelvis: hips, belt, coat tails ------------------------------------------------------------------
@@ -228,8 +261,12 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
       b.limb(P.armRadius, P.armRadius * 0.85, P.armLower, armC);
       // cuff + hand
       b.torus(P.armRadius * 0.9, 0.022, singe(CREAM, burnt), [0, -P.armLower + 0.02, 0], [Math.PI / 2, 0, 0]);
-      b.sphere(P.handRadius, skin, [0, -P.armLower - P.handRadius * 0.7, 0], [1, 1.15, 0.8]);
-      b.sphere(P.handRadius * 0.4, skin, [side === "L" ? P.handRadius * 0.7 : -P.handRadius * 0.7, -P.armLower - P.handRadius * 0.4, -P.handRadius * 0.4], [1, 1.4, 0.8]);
+      // Fist: palm, four knuckles across the front, thumb wrapped forward. Reads as a hand at any distance and holds a prop convincingly.
+      const hr = P.handRadius;
+      const hy = -P.armLower - hr * 0.75;
+      b.sphere(hr, skin, [0, hy, 0], [1, 1.1, 0.85]);
+      for (let k = 0; k < 4; k++) b.sphere(hr * 0.3, skin, [(k - 1.5) * hr * 0.44, hy - hr * 0.52, -hr * 0.3], [1, 1.25, 1]);
+      b.sphere(hr * 0.32, skin, [0, hy + hr * 0.05, -hr * 0.62], [0.9, 1.3, 0.9]);
       return b.build();
     });
   }
@@ -258,6 +295,7 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
   faceRoot.name = "faceRoot";
   faceRoot.position.y = R;
   head.add(faceRoot);
+  const ownedGeosLate: BufferGeometry[] = [];
   const eyeR = R * 0.17;
   const eyeX = R * 0.4;
   const eyeY = R * 0.1;
@@ -291,17 +329,34 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
   faceRoot.add(browL, browR);
   const mouthWidth = R * 0.5;
   const mouth = new Mesh(new TorusGeometry(mouthWidth * 0.5, R * 0.03, 4, 10, Math.PI), mouthMat);
-  mouth.position.set(0, -R * 0.38, -R * 0.82);
+  const mp = mouthPlacement(P);
+  mouth.position.set(0, mp.y, mp.z);
   mouth.rotation.z = Math.PI; // smile arc opens upward by default
   faceRoot.add(mouth);
+  // Mouth interior: a dark cavity with a row of teeth (ivory, gold, or missing per the campaign-owned `teeth` flags).
+  const mouthInterior = new Group();
+  mouthInterior.position.set(0, mp.y, mp.z + R * 0.012);
+  mouthInterior.visible = false;
+  const cavity = new Mesh(new SphereGeometry(1, 8, 5), new MeshStandardMaterial({ color: 0x2a0c0c, roughness: 0.7 }));
+  cavity.scale.set(mouthWidth * 0.5, R * 0.15, R * 0.03);
+  mouthInterior.add(cavity);
+  const teethGeo = buildTeeth(spec, mouthWidth, R, accent);
+  if (teethGeo) {
+    const teeth = new Mesh(teethGeo, material);
+    teeth.position.y = R * 0.03;
+    mouthInterior.add(teeth);
+    ownedGeosLate.push(teethGeo);
+  }
+  ownedGeosLate.push(cavity.geometry);
+  faceRoot.add(mouthInterior);
   for (const m of [browL, browR, mouth, eL.pupil, eRr.pupil, eL.lid, eRr.lid]) m.castShadow = false;
 
   const faceParts: FaceParts = {
     eyeL: eL.g, eyeR: eRr.g, pupilL: eL.pupil, pupilR: eRr.pupil, browL, browR, mouth, lidL: eL.lid, lidR: eRr.lid,
-    eyeRadius: eyeR, mouthWidth,
+    eyeRadius: eyeR, mouthWidth, mouthInterior, mouthY: mp.y, mouthZ: mp.z,
   };
-  const ownedGeos: BufferGeometry[] = [browGeo, mouth.geometry, eL.lid.geometry, eRr.lid.geometry];
-  const ownedMats = [whiteMat, pupilMat, browMat, skinMat, mouthMat];
+  const ownedGeos: BufferGeometry[] = [browGeo, mouth.geometry, eL.lid.geometry, eRr.lid.geometry, ...ownedGeosLate];
+  const ownedMats = [whiteMat, pupilMat, browMat, skinMat, mouthMat, cavity.material as MeshStandardMaterial];
   eL.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
   eRr.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
 
@@ -311,7 +366,13 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
     face: faceParts,
     proportions: P,
     spec,
-    meshCount: meshes.length + 7,
+    get meshCount() {
+      return meshes.length + 7 + (outlineOn ? outlines.length : 0);
+    },
+    setOutline(on: boolean) {
+      outlineOn = on;
+      for (const o of outlines) o.visible = on;
+    },
     dispose() {
       // Bone geometry belongs to the shared cache; only per-instance face parts are freed here.
       for (const g of new Set(ownedGeos)) g.dispose();
@@ -319,119 +380,6 @@ export function buildCharacter(spec: CharacterSpec): CharacterRig {
       root.removeFromParent();
     },
   };
-}
-
-interface HeadColors {
-  skin: number;
-  hairC: number;
-  hatC: number;
-  accent: number;
-  burnt: number;
-}
-
-function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): BufferGeometry | undefined {
-  const R = P.headRadius;
-  const b = new PartBuilder();
-  const { skin, hairC, hatC, accent, burnt } = c;
-  const cy = R; // head centre above the neck joint
-  const nose = P.noseLength;
-  // skull, jaw, cheeks, neck
-  b.sphere(R, skin, [0, cy, 0], [1, 1.02, 1.0]);
-  b.sphere(R * 0.78 * P.jawSize ** 0.5, skin, [0, cy - R * 0.55, -R * 0.28], [1.0 * P.jawSize ** 0.4, 0.75, 0.95]);
-  b.sphere(R * 0.28, skin, [-R * 0.55, cy - R * 0.25, -R * 0.55]);
-  b.sphere(R * 0.28, skin, [R * 0.55, cy - R * 0.25, -R * 0.55]);
-  b.cylinder(R * 0.42, R * 0.5, P.neck * 2 + 0.06, skin, [0, 0.0, 0]);
-  // ears
-  const es = P.earSize;
-  b.sphere(es, skin, [-R * 0.98, cy, 0], [0.45, 1.25, 0.9]);
-  b.sphere(es, skin, [R * 0.98, cy, 0], [0.45, 1.25, 0.9]);
-  // nose
-  const nz = -R * 0.95;
-  const ny = cy - R * 0.24; // below the eye line so the nose never swallows the eyes
-  switch (spec.noseStyle) {
-    case 0: b.sphere(nose * 0.45, skin, [0, ny, nz], [1, 1, 0.9]); break; // button
-    case 1: b.cone(nose * 0.32, nose * 1.4, skin, [0, ny + nose * 0.05, nz - nose * 0.4], [-Math.PI / 2 - 0.35, 0, 0]); b.sphere(nose * 0.2, skin, [0, ny - nose * 0.3, nz - nose * 0.9]); break; // hooked
-    case 2: b.sphere(nose * 0.62, skin, [0, ny - nose * 0.1, nz - nose * 0.2], [1.1, 1, 1]); break; // bulb
-    case 3: b.cylinder(nose * 0.2, nose * 0.32, nose * 1.8, skin, [0, ny - nose * 0.3, nz - nose * 0.4], [-Math.PI / 2 + 0.15, 0, 0]); b.sphere(nose * 0.3, skin, [0, ny - nose * 0.35, nz - nose * 1.3]); break; // long
-    case 4: b.sphere(nose * 0.5, skin, [0, ny, nz + nose * 0.05], [1.5, 0.8, 0.7]); break; // flat
-    default: b.sphere(nose * 0.55, singe(skin, 0), [0, ny - nose * 0.05, nz - nose * 0.15]); b.sphere(nose * 0.28, 0xc4574a, [0, ny - nose * 0.12, nz - nose * 0.55]); break; // ruddy lump
-  }
-  // hair (styles hug the skull)
-  const hairY = cy + R * 0.1;
-  switch (spec.hair) {
-    case 1: b.sphere(R * 1.05, hairC, [0, hairY + R * 0.08, R * 0.05], [1, 0.72, 1.02]); b.box(R * 0.9, R * 0.08, R * 0.3, hairC, [-R * 0.25, cy + R * 0.82, -R * 0.55], [0.1, 0, 0.25]); break;
-    case 2: for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2; b.cone(R * 0.16, R * 0.5, hairC, [Math.cos(a) * R * 0.75, cy + R * 0.7 + (i % 2) * R * 0.1, Math.sin(a) * R * 0.75], [Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9]); } b.sphere(R * 1.02, hairC, [0, cy + R * 0.18, R * 0.05], [1, 0.6, 1.02]); break;
-    case 3: for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; b.sphere(R * 0.28, hairC, [Math.cos(a) * R * 0.78, cy + R * 0.58, Math.sin(a) * R * 0.78]); } b.sphere(R * 0.36, hairC, [0, cy + R * 0.95, 0]); b.sphere(R * 1.0, hairC, [0, cy + R * 0.2, R * 0.08], [1, 0.62, 1.0]); break;
-    case 4: b.sphere(R * 1.03, hairC, [0, hairY + R * 0.05, R * 0.06], [1, 0.66, 1.04]); break;
-    case 5: b.sphere(R * 1.0, hairC, [-R * 0.62, cy + R * 0.15, R * 0.2], [0.35, 0.55, 0.8]); b.sphere(R * 1.0, hairC, [R * 0.62, cy + R * 0.15, R * 0.2], [0.35, 0.55, 0.8]); b.sphere(R * 1.0, hairC, [0, cy + R * 0.1, R * 0.6], [0.9, 0.55, 0.4]); break;
-    case 6: b.sphere(R * 1.02, hairC, [0, hairY + R * 0.05, R * 0.05], [1, 0.62, 1.0]); b.sphere(R * 0.3, hairC, [0, cy + R * 1.05, 0]); break;
-    default: break; // bald
-  }
-  // sideburns
-  const sb = [0, 0.16, 0.26, 0.32][spec.sideburns] ?? 0;
-  if (sb > 0) for (const sx of [-1, 1]) b.sphere(R * sb, hairC, [sx * R * 0.9, cy - R * 0.15, -R * 0.2], [0.55, 1.6 + sb * 2, 0.8]);
-  // beard
-  const bz = -R * 0.55;
-  switch (spec.beard) {
-    case 1: b.sphere(R * 0.85, hairC, [0, cy - R * 0.7, -R * 0.35], [1.0, 0.9, 0.9]); break;
-    case 2: b.sphere(R * 0.28, hairC, [0, cy - R * 0.95, bz - R * 0.25]); break;
-    case 3: b.cone(R * 0.22, R * 0.55, hairC, [0, cy - R * 1.05, bz - R * 0.2], [Math.PI, 0, 0]); break;
-    case 4: b.sphere(R * 0.5, hairC, [-R * 0.62, cy - R * 0.45, -R * 0.25], [0.7, 1.1, 0.9]); b.sphere(R * 0.5, hairC, [R * 0.62, cy - R * 0.45, -R * 0.25], [0.7, 1.1, 0.9]); b.sphere(R * 0.4, hairC, [0, cy - R * 0.95, -R * 0.4]); break;
-    case 5: b.cone(R * 0.55, R * 0.95, hairC, [0, cy - R * 1.05, bz - R * 0.1], [Math.PI, 0, 0], [1.1, 1, 0.8]); break;
-    default: break;
-  }
-  // moustache (sits just above the mouth)
-  const my = cy - R * 0.4;
-  const mz = -R * 0.9 - nose * 0.12;
-  const mHair = hairC;
-  switch (spec.moustache) {
-    case 1: for (const sx of [-1, 1]) { b.cylinder(R * 0.06, R * 0.04, R * 0.55, mHair, [sx * R * 0.3, my, mz], [0, 0, Math.PI / 2]); b.torus(R * 0.12, R * 0.035, mHair, [sx * R * 0.62, my + R * 0.1, mz], [0, 0, sx > 0 ? 0 : Math.PI], [1, 1, 1], Math.PI * 1.4); } break;
-    case 2: for (const sx of [-1, 1]) b.sphere(R * 0.3, mHair, [sx * R * 0.24, my - R * 0.05, mz], [1.15, 0.9, 0.6]), b.sphere(R * 0.16, mHair, [sx * R * 0.44, my - R * 0.24, mz + 0.01], [0.7, 1.4, 0.6]); break;
-    case 3: b.box(R * 0.6, R * 0.05, R * 0.06, mHair, [0, my + R * 0.03, mz]); break;
-    case 4: b.box(R * 0.24, R * 0.09, R * 0.07, mHair, [0, my + R * 0.02, mz]); break;
-    case 5: for (const sx of [-1, 1]) { b.sphere(R * 0.16, mHair, [sx * R * 0.18, my, mz], [1.2, 0.7, 0.6]); b.cone(R * 0.05, R * 0.4, mHair, [sx * R * 0.55, my + R * 0.1, mz], [0, 0, -sx * (Math.PI / 2 - 0.5)]); } break;
-    case 6: b.box(R * 0.55, R * 0.08, R * 0.07, mHair, [0, my, mz]); for (const sx of [-1, 1]) b.box(R * 0.07, R * 0.45, R * 0.07, mHair, [sx * R * 0.3, my - R * 0.24, mz]); break;
-    case 7: for (let i = -3; i <= 3; i++) b.sphere(R * 0.11, mHair, [i * R * 0.13, my - Math.abs(i) * R * 0.01, mz], [0.8, 1.6, 0.6]); break;
-    default: break;
-  }
-  // eyewear
-  const ey = cy + R * 0.1;
-  const ex = R * 0.4;
-  const ez = -R * 0.98;
-  switch (spec.eyewear) {
-    case 1: b.torus(R * 0.24, R * 0.02, accent, [ex, ey, ez], [0, 0, 0]); b.cylinder(0.004, 0.004, R * 0.9, accent, [ex + R * 0.14, ey - R * 0.5, ez + 0.02], [0, 0, 0.2]); break;
-    case 2: for (const sx of [-1, 1]) b.torus(R * 0.22, R * 0.02, 0x2a2018, [sx * ex, ey, ez]); b.box(R * 0.2, R * 0.03, R * 0.03, 0x2a2018, [0, ey, ez]); for (const sx of [-1, 1]) b.box(R * 0.03, R * 0.03, R * 0.95, 0x2a2018, [sx * R * 0.83, ey, ez + R * 0.5]); break;
-    case 3: for (const sx of [-1, 1]) b.cylinder(R * 0.26, R * 0.26, R * 0.16, 0x4a3a2a, [sx * ex, ey, ez - 0.005], [Math.PI / 2, 0, 0]); b.torus(R * 1.0, R * 0.05, LEATHER, [0, ey, 0], [Math.PI / 2, 0, 0]); break;
-    case 4: for (const sx of [-1, 1]) b.torus(R * 0.14, R * 0.015, accent, [sx * R * 0.2, ey - R * 0.14, ez - R * 0.02]); b.box(R * 0.14, R * 0.02, R * 0.02, accent, [0, ey - R * 0.1, ez - R * 0.02]); break;
-    default: break;
-  }
-  // eyepatch (over the socket, with a band around the head)
-  if (spec.eyepatch > 0) {
-    const sx = spec.eyepatch === 1 ? -1 : 1;
-    b.sphere(R * 0.27, 0x14100c, [sx * ex, ey, ez + R * 0.02], [1, 1, 0.35]);
-    b.torus(R * 1.0, R * 0.025, 0x14100c, [0, ey + R * 0.08, 0], [Math.PI / 2 + 0.25 * sx, 0.1 * sx, 0]);
-  }
-  // scars (thin raised welts)
-  const sc = spec.scars;
-  const scarC = 0x9a4a4a;
-  if (sc & 1) b.box(R * 0.35, R * 0.03, R * 0.03, scarC, [R * 0.62, cy - R * 0.28, -R * 0.72], [0, 0.6, -0.5]);
-  if (sc & 2) b.box(R * 0.03, R * 0.3, R * 0.03, scarC, [-R * 0.38, cy + R * 0.42, -R * 0.9], [0, 0, 0.2]);
-  if (sc & 4) b.box(R * 0.25, R * 0.03, R * 0.03, scarC, [-R * 0.1, cy - R * 0.88, -R * 0.6], [0.5, 0, 0.3]);
-  if (sc & 8) b.box(R * 0.4, R * 0.03, R * 0.03, scarC, [0, -R * 0.1, -R * 0.4], [0, 0, 0.5]);
-  if (sc & 16) b.box(R * 0.4, R * 0.03, R * 0.03, scarC, [R * 0.1, cy + R * 0.7, -R * 0.68], [0.3, 0, -0.2]);
-  // hats
-  const hy = cy + R * 0.78;
-  switch (spec.hat) {
-    case 1: b.cylinder(R * 0.62, R * 0.66, R * 1.05, hatC, [0, hy + R * 0.5, 0]); b.cylinder(R * 1.05, R * 1.05, R * 0.06, hatC, [0, hy - R * 0.02, 0]); b.torus(R * 0.64, R * 0.035, accent, [0, hy + R * 0.12, 0], [Math.PI / 2, 0, 0]); break;
-    case 2: b.sphere(R * 0.78, hatC, [0, hy + R * 0.05, 0], [1, 0.85, 1], [0, 0, 0]); b.cylinder(R * 1.0, R * 1.0, R * 0.05, hatC, [0, hy - R * 0.08, 0]); break;
-    case 3: b.sphere(R * 1.12, hatC, [0, hy + R * 0.02, 0], [1, 0.62, 1.05]); b.cylinder(R * 1.28, R * 1.28, R * 0.05, hatC, [0, hy - R * 0.14, 0]); b.sphere(R * 0.1, accent, [0, hy + R * 0.66, 0]); break;
-    case 4: b.cylinder(R * 0.7, R * 0.85, R * 1.15, hatC, [0, hy + R * 0.5, 0]); b.box(R * 1.0, R * 0.05, R * 0.6, hatC, [0, hy - R * 0.02, -R * 0.75]); b.cone(R * 0.16, R * 0.7, singe(0xd9d0b8, burnt), [0, hy + R * 1.3, 0]); break;
-    case 5: b.sphere(R * 1.0, hatC, [0, hy + R * 0.2, 0], [1.8, 0.5, 0.8], [0, 0, 0.06]); b.sphere(R * 0.14, accent, [R * 1.2, hy + R * 0.25, 0]); break;
-    case 6: b.sphere(R * 0.88, hatC, [0, hy + R * 0.18, 0], [1, 0.62, 1]); b.cylinder(R * 1.55, R * 1.55, R * 0.04, hatC, [0, hy - R * 0.06, 0], [0.12, 0, 0.06]); break;
-    case 7: b.cylinder(R * 0.95, R * 1.0, R * 0.36, hatC, [0, hy + R * 0.05, 0]); b.box(R * 1.0, R * 0.04, R * 0.45, LEATHER, [0, hy - R * 0.1, -R * 0.95]); b.sphere(R * 0.1, accent, [0, hy + R * 0.02, -R * 0.98]); break;
-    default: break;
-  }
-  return b.build();
 }
 
 interface LegOpts {
@@ -471,5 +419,22 @@ function buildLowerLeg(spec: CharacterSpec, P: Proportions, o: LegOpts): BufferG
   if (spec.boots === 2) b.sphere(1, singe(0xd9d0b8, o.burnt), [0, -len + 0.03, -fl * 0.12], [fw * 0.9, 0.09, fl * 0.42]); // spats
   if (spec.boots === 3) for (let i = 0; i < 4; i++) b.sphere(0.012, 0x777777, [((i % 2) - 0.5) * fw, -len - o.footH * 1.15, -fl * (0.1 + (i >> 1) * 0.35)]); // hobnails
   if (spec.boots === 1) b.cylinder(r * 0.9, r * 0.9, 0.08, bootC, [0, -len + 0.02, 0]);
+  return b.build();
+}
+
+/** A row of six teeth. Bits (TEETH_BITS): 1 missing front, 2 gold front, 4 missing side, 8 gold side. Returns undefined if none remain. */
+function buildTeeth(spec: CharacterSpec, mouthWidth: number, R: number, gold: number): BufferGeometry | undefined {
+  const b = new PartBuilder();
+  const w = (mouthWidth * 0.86) / 6;
+  const ivory = 0xeee6cc;
+  for (let i = 0; i < 6; i++) {
+    const front = i === 2 || i === 3;
+    const side = i === 0 || i === 5;
+    const goldSide = i === 1 || i === 4;
+    if (front && (spec.teeth & 1)) continue; // missing front teeth
+    if (side && (spec.teeth & 4)) continue; // missing side teeth
+    const isGold = (front && (spec.teeth & 2) !== 0) || (goldSide && (spec.teeth & 8) !== 0);
+    b.box(w * 0.92, R * 0.085, R * 0.03, isGold ? gold : ivory, [(i - 2.5) * w, 0, 0]);
+  }
   return b.build();
 }

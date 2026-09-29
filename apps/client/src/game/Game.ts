@@ -208,7 +208,7 @@ export class Game {
   }
 
   private addActor(p: PlayerStateType): Actor {
-    const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1);
+    const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines);
     const tag = document.createElement("div");
     tag.className = "nametag";
     this.tagLayer.appendChild(tag);

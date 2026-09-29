@@ -17,6 +17,8 @@ no per-frame garbage in hot loops; bounded physics bodies/ragdolls; bounded memo
 | 2026-09-29 | Server tick, 1 room, 4 idle players, 17 Rapier bodies (`/metrics`) | Local Node 22, sandbox VM | avg **0.66 ms**, p99 1.5 ms, worst 80 ms (first-tick WASM warm-up). Budget is 33 ms. |
 | 2026-09-29 | Server tick, 1 empty room, 14 Rapier bodies | Render **free** web service (throttled CPU), live | avg **4.5 ms**, p99 99 ms, worst 767 ms, 13 overruns in the first 30 s. ~7x slower than local: consistent with the free tier's CPU limits and cold start. **Not** a code regression, but confirms the free tier is unsuitable for real co-op sessions; re-measure on a paid instance before any playtest. |
 
+| 2026-09-29 | Character geometry after art polish pass (150 seeds, `rig.test.ts`) | Node, no GPU | Without outline: **avg 6.6k, max 8.4k** tris, <=20 meshes. With outline hull: **avg 9.1k, max 11.9k** tris, 29 meshes (the hull is built coarse: +37%; the first naive hull was +91%). Outlines are therefore off on the low preset and must be off for crowds. |
+
 **Known character-cost risk:** 30 NPCs x ~17 meshes x 2 (shadow) is ~1000 draw calls, over the 400-600 budget. Planned mitigations (M4/M12): a merged single-mesh LOD1 for mid distance (~1.5k tris, 1-2 calls), impostor/instanced LOD2 beyond, shadow casting only for near characters, and `InstancedMesh` per bone for identical-archetype crowds. Do not add NPC crowds before LOD lands.
 
 Client production bundle (2026-09-29): 780 kB JS raw / 213 kB gzip (three + colyseus SDK + game), 2.9 kB CSS.

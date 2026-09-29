@@ -16,6 +16,7 @@ export class CharacterActor {
     private readonly scene: Scene,
     look: string | undefined,
     private readonly fallbackSeed: number,
+    private readonly outline = true,
   ) {
     this.build(look);
   }
@@ -38,7 +39,7 @@ export class CharacterActor {
     const prevPos = prev?.position.clone();
     const prevYaw = prev?.rotation.y ?? 0;
     this.rig?.dispose();
-    this.rig = buildCharacter(spec);
+    this.rig = buildCharacter(spec, { outline: this.outline });
     this.anim = new CharacterAnimator(this.rig);
     if (prevPos) {
       this.rig.root.position.copy(prevPos);

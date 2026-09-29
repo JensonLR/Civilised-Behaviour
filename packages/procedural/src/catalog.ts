@@ -3,11 +3,11 @@
  * options at the END of a list only (existing saved characters store indices). Names are UI strings.
  */
 export const NOSE_STYLES = ["Button", "Hooked", "Bulb", "Long", "Flat", "Ruddy Lump"] as const;
-export const HAIR_STYLES = ["Bald", "Side Part", "Wild Tufts", "Curls", "Slicked", "Receding", "Top Knot"] as const;
-export const MOUSTACHES = ["None", "Handlebar", "Walrus", "Pencil", "Toothbrush", "Imperial", "Horseshoe", "Magnificent Fringe"] as const;
-export const BEARDS = ["None", "Full", "Chin Puff", "Goatee", "Mutton Beard", "Spade"] as const;
+export const HAIR_STYLES = ["Bald", "Side Part", "Wild Tufts", "Curls", "Slicked", "Receding", "Top Knot", "Bowl Cut", "Long Lank", "Pompadour"] as const;
+export const MOUSTACHES = ["None", "Handlebar", "Walrus", "Pencil", "Toothbrush", "Imperial", "Horseshoe", "Magnificent Fringe", "Waxed Tips", "Soup Strainer"] as const;
+export const BEARDS = ["None", "Full", "Chin Puff", "Goatee", "Mutton Beard", "Spade", "Wizard", "Neck Fringe"] as const;
 export const SIDEBURNS = ["None", "Short", "Mutton Chops", "Flourishing"] as const;
-export const HATS = ["None", "Top Hat", "Bowler", "Pith Helmet", "Shako", "Bicorne", "Slouch Hat", "Peaked Cap"] as const;
+export const HATS = ["None", "Top Hat", "Bowler", "Pith Helmet", "Shako", "Bicorne", "Slouch Hat", "Peaked Cap", "Flat Cap", "Plumed Helmet", "Boater"] as const;
 export const JACKETS = ["Shirt Sleeves", "Frock Coat", "Tunic", "Waistcoat", "Greatcoat", "Hunting Jacket"] as const;
 export const SHIRTS = ["Plain", "Striped", "Checked", "Collarless"] as const;
 export const TROUSERS = ["Plain", "Striped", "Breeches", "Baggy"] as const;
@@ -19,7 +19,7 @@ export const WOODEN_LEG = ["None", "Left", "Right"] as const;
 export const EYEPATCH = ["None", "Left", "Right"] as const;
 
 /** Skin tones (sRGB hex). Deliberately varied; these are caricature bodies, not ethnic types. */
-export const SKIN_TONES = [0xf2c7a5, 0xe0a67e, 0xc98a5e, 0xa66a43, 0x7d4b2e, 0x5a3520, 0xe8b59a, 0xd39a76] as const;
+export const SKIN_TONES = [0xf2c7a5, 0xe0a67e, 0xc98a5e, 0xa66a43, 0x8a5634, 0x6b4229, 0xe8b59a, 0xd39a76] as const;
 export const HAIR_COLORS = [0x1c1410, 0x3b2616, 0x6a4423, 0x9a6a2f, 0xc79a4a, 0xa64a24, 0x8a8a8a, 0xe6e2d6, 0x2a2a3a, 0x7a2a1a] as const;
 /** Cloth palette: muted Victorian dyes. */
 export const CLOTH_COLORS = [

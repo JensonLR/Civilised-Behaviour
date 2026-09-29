@@ -62,8 +62,14 @@ Done + verified (downed/drag/revive, 2026-09-29):
   revive progress, "you are down" banner, nametag markers, prompts; Grab control (F / RB). 16 casualty integration tests + 4 prediction/flood bot tests
   (mutation-checked) + 12 shared tests + a two-browser Playwright scenario (revive, then drag).
 - Security finding + fix: input-frame flooding gave 3.0x speed; now bounded to ~1.03x by a server-side input budget (D-017).
+Done + verified (character art polish pass, 2026-09-29):
+- Inverted-hull silhouette outline (smoothed-normal, clip-space thickness, distance-scaled, fog-aware), coarse hull geometry cached separately; on for medium/high
+  presets, off on low (`GraphicsPreset.outlines`, `CharacterActor` param). Baked per-vertex shading + per-primitive clay tint; head rebuilt (`head.ts`): brow
+  ridges, nose that cannot swallow the mouth, face features placed on the real face surface, 10 hair styles, 8 beards, 10 moustaches, 11 hats; fist hands with
+  thumb and knuckles; teeth (gold/missing) and a mouth interior. New catalog entries are append-only so old looks still decode. Verified by renders
+  (`?showcase=lineup`), 26 procedural tests incl. outline regressions, and the full Playwright suite. Judged by eye on software GL only: needs a look on a real GPU.
 Not done in M2 (next):
-- Art polish pass: outlines/silhouette pass, clay material response, dirt/blood accumulation, more hat/hair/moustache variety, hands with fingers.
+- Art polish, remaining: dirt/blood accumulation (needs the wounds system), outline rollout to NPC crowds (LOD), a proper toon/clay ramp if the baked shading proves too flat under different lighting.
 - Damage zones/wounds visuals, dismemberment (detachable limbs + wound caps), ragdoll (Rapier). Shoulder-carry a body (reuse prop-carry), wagon transport (M5).
 - Character LOD for crowds (see PERFORMANCE.md risk); NPC use of the generator.
 - Expression triggers beyond downed=pain; head-look; drunkenness from gameplay.

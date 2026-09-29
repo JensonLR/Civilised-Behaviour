@@ -20,22 +20,26 @@ import {
   ShaderMaterial,
   SphereGeometry,
   SRGBColorSpace,
+  Vector2,
   Vector3,
   WebGLRenderer,
   BackSide,
 } from "three";
 import { ARENA_RADIUS, Rng, clamp, type CollisionWorld, type Obstacle } from "@cb/shared";
+import { setOutlineViewport } from "@cb/procedural/three";
 
 export interface GraphicsPreset {
   shadowMapSize: number;
   pixelRatioCap: number;
   terrainSegments: number;
+  /** Silhouette outlines on characters: ~+37% triangles and one extra draw per bone, so the low preset drops them. */
+  outlines: boolean;
 }
 
 export const PRESETS: Record<"low" | "medium" | "high", GraphicsPreset> = {
-  low: { shadowMapSize: 1024, pixelRatioCap: 1, terrainSegments: 96 },
-  medium: { shadowMapSize: 2048, pixelRatioCap: 1.5, terrainSegments: 160 },
-  high: { shadowMapSize: 4096, pixelRatioCap: 2, terrainSegments: 200 },
+  low: { shadowMapSize: 1024, pixelRatioCap: 1, terrainSegments: 96, outlines: false },
+  medium: { shadowMapSize: 2048, pixelRatioCap: 1.5, terrainSegments: 160, outlines: true },
+  high: { shadowMapSize: 4096, pixelRatioCap: 2, terrainSegments: 200, outlines: true },
 };
 
 const SUN_DIR = new Vector3(-0.55, 0.62, 0.42).normalize();
@@ -52,6 +56,10 @@ export class Stage {
   private readonly sky: Mesh;
   private readonly staticMeshes: Mesh[] = [];
   private preset: GraphicsPreset;
+
+  get outlines(): boolean {
+    return this.preset.outlines;
+  }
 
   constructor(canvas: HTMLCanvasElement, presetName: keyof typeof PRESETS = "medium") {
     this.preset = PRESETS[presetName];
@@ -91,6 +99,8 @@ export class Stage {
     const h = window.innerHeight;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.preset.pixelRatioCap));
     this.renderer.setSize(w, h, false);
+    const buf = this.renderer.getDrawingBufferSize(new Vector2());
+    setOutlineViewport(buf.x, buf.y); // outline thickness is in device pixels
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }

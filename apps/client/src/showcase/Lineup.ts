@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { CollisionWorld, FLAG } from "@cb/shared";
-import { ARCHETYPES, decodeSpec, generateCharacter, type CharacterSpec } from "@cb/procedural";
+import { ARCHETYPES, FIELDS, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId } from "@cb/procedural/three";
 import { Stage } from "../render/Stage.ts";
 
@@ -13,6 +13,10 @@ import { Stage } from "../render/Stage.ts";
  *   pose=walk     walk|idle|carry|crouch|air|down
  *   look=<code>   show exactly one encoded character (from the creator) instead of the row
  *   marks=1       add campaign history marks (scars, gold tooth, eyepatch, wooden leg, medals)
+ *   set=hat:9,hair:8   force spec fields on every character (field names from @cb/procedural FIELDS)
+ *   vary=hat      cycle that field's options across the row (one option per character, in catalog order)
+ *   outline=0     turn the silhouette outline off
+ *   zoom=0.4      pull the camera in (multiplier on distance) and aim at head height; for reviewing faces and headwear
  */
 export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): void {
   const stage = new Stage(canvas, (params.get("gfx") as "low" | "medium" | "high" | null) ?? "high");
@@ -43,10 +47,21 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
     });
   }
 
+  // Field overrides (?set=hat:9,hair:8) and per-character cycling (?vary=hat) for reviewing catalog options.
+  const overrides = (params.get("set") ?? "").split(",").filter(Boolean).map((kv) => kv.split(":") as [string, string]);
+  const vary = params.get("vary");
+  const varyDef = FIELDS.find((f) => f.key === vary);
+  specs.forEach((spec, i) => {
+    const o = spec as unknown as Record<string, number>;
+    for (const [k, v] of overrides) o[k] = Number(v);
+    if (varyDef) o[varyDef.key] = i % (varyDef.max + 1);
+    Object.assign(spec, sanitizeSpec(spec));
+  });
+
   const spacing = 1.9;
   const rigs: { rig: CharacterRig; anim: CharacterAnimator }[] = [];
   specs.forEach((spec, i) => {
-    const rig = buildCharacter(spec);
+    const rig = buildCharacter(spec, { outline: params.get("outline") !== "0" });
     rig.root.position.set((i - (specs.length - 1) / 2) * spacing, 0, 0);
     // The rig faces -Z; the camera sits at +Z, so turn each figure around (plus a little three-quarter variety).
     rig.root.rotation.y = Math.PI + (params.get("turn") ? Number(params.get("turn")) : -0.3 + (i % 2) * 0.6);
@@ -65,8 +80,9 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
     target.set(r.root.position.x, r.proportions.totalHeight * 0.82, 0);
     camera.position.set(target.x + 0.2, target.y + 0.1, 2.6);
   } else {
-    camera.position.set(0, 1.35, Math.max(7.5, specs.length * 1.55));
-    target.set(0, 0.95, 0);
+    const zoom = Number(params.get("zoom") ?? 1);
+    camera.position.set(0, zoom < 1 ? 1.6 : 1.35, Math.max(7.5, specs.length * 1.55) * zoom);
+    target.set(0, zoom < 1 ? 1.5 : 0.95, 0);
   }
   camera.lookAt(target);
 
