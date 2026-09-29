@@ -9,6 +9,7 @@ import {
   type Scene,
 } from "three";
 import type { GoreLevel } from "@cb/procedural/three";
+import { PALETTE } from "@cb/shared";
 
 export const HITFX = {
   /** Live particle cap (a hit spawns 6-18; four players can only produce so many per second). */
@@ -33,9 +34,9 @@ interface Style {
 
 // "off" keeps the impact readable with a harmless burst of dust and stars: same timing, no blood.
 const STYLES: Record<GoreLevel, Style> = {
-  full: { colors: [0xa3161a, 0x8a1216, 0xb81d20], count: [7, 18], size: 0.045, speed: 4.2, stain: 0.5, stainColor: 0x6e0f12 },
-  reduced: { colors: [0x7d4136, 0x6b352d], count: [4, 9], size: 0.035, speed: 3.2, stain: 0, stainColor: 0 },
-  off: { colors: [0xf3e6b8, 0xd9c98a, 0xffffff], count: [5, 10], size: 0.04, speed: 3.6, stain: 0, stainColor: 0 },
+  full: { colors: [...PALETTE.hitFx.full], count: [7, 18], size: 0.045, speed: 4.2, stain: 0.5, stainColor: PALETTE.hitFx.stain },
+  reduced: { colors: [...PALETTE.hitFx.reduced], count: [4, 9], size: 0.035, speed: 3.2, stain: 0, stainColor: 0 },
+  off: { colors: [...PALETTE.hitFx.off], count: [5, 10], size: 0.04, speed: 3.6, stain: 0, stainColor: 0 },
 };
 
 const dummy = new Object3D();
@@ -76,7 +77,7 @@ export class HitFx {
     this.parts.instanceMatrix.setUsage(DynamicDrawUsage);
     this.parts.frustumCulled = false; // instances move; the base bounding sphere is meaningless
     this.parts.count = 0;
-    const stainMat = new MeshBasicMaterial({ color: 0x6e0f12, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const stainMat = new MeshBasicMaterial({ color: PALETTE.hitFx.stain, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     this.decals = new InstancedMesh(new CircleGeometry(1, 9), stainMat, HITFX.maxDecals);
     this.decals.instanceMatrix.setUsage(DynamicDrawUsage);
     this.decals.frustumCulled = false;

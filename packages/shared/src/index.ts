@@ -10,3 +10,4 @@ export * from "./protocol.ts";
 export * from "./props.ts";
 export * from "./casualty.ts";
 export * from "./wounds.ts";
+export * from "./palette.ts";

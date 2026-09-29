@@ -7,7 +7,7 @@ import {
   MeshStandardMaterial,
   type Scene,
 } from "three";
-import { PROP_DEFS, PropKind, type PropKindId, type PropStateType } from "@cb/shared";
+import { PALETTE, PROP_DEFS, PropKind, type PropKindId, type PropStateType } from "@cb/shared";
 
 interface Look {
   geometry: BufferGeometry;
@@ -21,10 +21,10 @@ function buildLooks(): Record<PropKindId, Look> {
   const o = PROP_DEFS[PropKind.BOTTLE].half;
   const h = PROP_DEFS[PropKind.CHAIR].half;
   return {
-    [PropKind.CRATE]: { geometry: new BoxGeometry(c[0] * 2, c[1] * 2, c[2] * 2), material: new MeshStandardMaterial({ color: 0x9a7a4a, roughness: 0.9 }) },
-    [PropKind.BARREL]: { geometry: new CylinderGeometry(b[0], b[0] * 0.92, b[1] * 2, 14), material: new MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.8 }) },
-    [PropKind.BOTTLE]: { geometry: new CapsuleGeometry(o[0], o[1] * 2, 4, 8), material: new MeshStandardMaterial({ color: 0x3d7a4d, roughness: 0.25, metalness: 0.1 }) },
-    [PropKind.CHAIR]: { geometry: new BoxGeometry(h[0] * 2, h[1] * 2, h[2] * 2), material: new MeshStandardMaterial({ color: 0x7a3f2a, roughness: 0.85 }) },
+    [PropKind.CRATE]: { geometry: new BoxGeometry(c[0] * 2, c[1] * 2, c[2] * 2), material: new MeshStandardMaterial({ color: PALETTE.props.crate, roughness: 0.9 }) },
+    [PropKind.BARREL]: { geometry: new CylinderGeometry(b[0], b[0] * 0.92, b[1] * 2, 14), material: new MeshStandardMaterial({ color: PALETTE.props.barrel, roughness: 0.8 }) },
+    [PropKind.BOTTLE]: { geometry: new CapsuleGeometry(o[0], o[1] * 2, 4, 8), material: new MeshStandardMaterial({ color: PALETTE.props.bottle, roughness: 0.25, metalness: 0.1 }) },
+    [PropKind.CHAIR]: { geometry: new BoxGeometry(h[0] * 2, h[1] * 2, h[2] * 2), material: new MeshStandardMaterial({ color: PALETTE.props.chair, roughness: 0.85 }) },
   };
 }
 

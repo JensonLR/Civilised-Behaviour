@@ -80,6 +80,10 @@ Done + verified (wounds and ragdoll, 2026-09-29):
   tether, animator channel reset.
 - Found: `JointData.limits` is silently ignored in rapier 0.21 (limits must be set on the created joint) and the animator did not own every joint channel
   (a finished ragdoll left stale rotations); both fixed with regression tests.
+Done + verified (character rebuild, 2026-09-29): lofted bodies and coats/boots (D-020), sculpted faces (D-021), one game palette with art-direction tests (D-022).
+Judged by eye on software GL (`docs/ART_DIRECTION.md` lists the review commands); 63 procedural + 55 shared + 19 client tests; full Playwright suite green.
+Known rough edges: hair shells and beards are flat-shaded masses (no strand detail), ears are simple cups, expressions do not yet move the jaw, the low-poly
+lower face shows toon band contours on close-ups (a 5-step ramp would soften them), and crowds still need character LOD (head has a coarse mode ready).
 Not done in M2 (next):
 - Wounds have no gameplay effect yet (limp is animation only; a real slow-down needs `wounds` as a predicted input of the shared step). No bleed-out or
   medical supplies (M5). Dirt/mud accumulation and blood on clothing beyond the dressings. Outline rollout to NPC crowds (LOD).

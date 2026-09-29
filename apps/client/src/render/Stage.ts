@@ -25,7 +25,7 @@ import {
   WebGLRenderer,
   BackSide,
 } from "three";
-import { ARENA_RADIUS, Rng, clamp, type CollisionWorld, type Obstacle } from "@cb/shared";
+import { ARENA_RADIUS, PALETTE, Rng, clamp, type CollisionWorld, type Obstacle } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
 
 export interface GraphicsPreset {
@@ -52,7 +52,7 @@ export class Stage {
   readonly renderer: WebGLRenderer;
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(65, 1, 0.1, 600);
-  private readonly sun = new DirectionalLight(0xffd9a8, 3.2);
+  private readonly sun = new DirectionalLight(PALETTE.light.sun, 3.0);
   private readonly sky: Mesh;
   private readonly staticMeshes: Mesh[] = [];
   private preset: GraphicsPreset;
@@ -70,11 +70,11 @@ export class Stage {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
 
-    const horizon = new Color(0xe9c9a0);
+    const horizon = new Color(PALETTE.sky.horizon);
     this.scene.background = horizon;
     this.scene.fog = new FogExp2(horizon, 0.0085);
 
-    this.scene.add(new HemisphereLight(0xbfd6ff, 0x5a4a32, 0.9));
+    this.scene.add(new HemisphereLight(PALETTE.light.sky, PALETTE.light.bounce, 1.0));
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(this.preset.shadowMapSize, this.preset.shadowMapSize);
     const sc = this.sun.shadow.camera;
@@ -124,9 +124,9 @@ export class Stage {
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position as BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
-    const grass = new Color(0x5f8036);
-    const dry = new Color(0x9a8f47);
-    const rock = new Color(0x7d7468);
+    const grass = new Color(PALETTE.world.grass);
+    const dry = new Color(PALETTE.world.dry);
+    const rock = new Color(PALETTE.world.rock);
     const c = new Color();
     const rng = new Rng(1);
     for (let i = 0; i < pos.count; i++) {
@@ -177,21 +177,21 @@ export class Stage {
       this.staticMeshes.push(im as unknown as Mesh);
     };
 
-    make(new IcosahedronGeometry(1, 1), 0x8a8478, boulders, (o) => {
+    make(new IcosahedronGeometry(1, 1), PALETTE.world.boulder, boulders, (o) => {
       if (o.kind !== "circle") return;
       const h = o.y1 - o.y0;
       p.set(o.x, o.y0 + h * 0.5 + 0.2, o.z);
       q.setFromAxisAngle(up, o.x * 7.31);
       s.set(o.r * 1.15, h * 0.5, o.r * 1.15);
     });
-    make(new CylinderGeometry(1, 1.25, 1, 10), 0x5b4630, trunks, (o) => {
+    make(new CylinderGeometry(1, 1.25, 1, 10), PALETTE.world.trunk, trunks, (o) => {
       if (o.kind !== "circle") return;
       const h = o.y1 - o.y0;
       p.set(o.x, o.y0 + h * 0.5, o.z);
       q.identity();
       s.set(o.r, h, o.r);
     });
-    make(new BoxGeometry(1, 1, 1), 0xa68a5b, boxes, (o) => {
+    make(new BoxGeometry(1, 1, 1), PALETTE.world.ruin, boxes, (o) => {
       if (o.kind !== "box") return;
       const h = o.y1 - o.y0;
       p.set(o.x, o.y0 + h * 0.5, o.z);
@@ -201,7 +201,7 @@ export class Stage {
 
     // Tree crowns on top of trunks (instanced, sharing one geometry).
     const crownGeo = new SphereGeometry(1, 10, 8);
-    const crownMat = new MeshStandardMaterial({ color: 0x3f6a2c, roughness: 0.9, flatShading: true });
+    const crownMat = new MeshStandardMaterial({ color: PALETTE.world.crown, roughness: 0.9, flatShading: true });
     const crowns = new InstancedMesh(crownGeo, crownMat, Math.max(trunks.length, 1));
     crowns.count = trunks.length;
     const rng = new Rng(77);
@@ -226,9 +226,9 @@ export class Stage {
       depthWrite: false,
       fog: false,
       uniforms: {
-        top: { value: new Color(0x2f5c9e) },
-        mid: { value: new Color(0x9fb8d4) },
-        horizon: { value: new Color(0xe9c9a0) },
+        top: { value: new Color(PALETTE.sky.top) },
+        mid: { value: new Color(PALETTE.sky.mid) },
+        horizon: { value: new Color(PALETTE.sky.horizon) },
         sunDir: { value: SUN_DIR.clone() },
       },
       vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",

@@ -1,3 +1,4 @@
+import { PALETTE } from "@cb/shared";
 /**
  * Option catalogs for the caricature character system. Order is part of the wire format: append new
  * options at the END of a list only (existing saved characters store indices). Names are UI strings.
@@ -19,13 +20,11 @@ export const WOODEN_LEG = ["None", "Left", "Right"] as const;
 export const EYEPATCH = ["None", "Left", "Right"] as const;
 
 /** Skin tones (sRGB hex). Deliberately varied; these are caricature bodies, not ethnic types. */
-export const SKIN_TONES = [0xf2c7a5, 0xe0a67e, 0xc98a5e, 0xa66a43, 0x8a5634, 0x6b4229, 0xe8b59a, 0xd39a76] as const;
-export const HAIR_COLORS = [0x1c1410, 0x3b2616, 0x6a4423, 0x9a6a2f, 0xc79a4a, 0xa64a24, 0x8a8a8a, 0xe6e2d6, 0x2a2a3a, 0x7a2a1a] as const;
+export const SKIN_TONES = PALETTE.skin;
+export const HAIR_COLORS = PALETTE.hair;
 /** Cloth palette: muted Victorian dyes. */
-export const CLOTH_COLORS = [
-  0x8f2d22, 0x2f4f7f, 0x3f6a3a, 0x8a6a1f, 0x5a3a5a, 0x2b2b30, 0x7a7466, 0xb8a06a, 0x4a5a3a, 0x6a2a2a, 0x3a5a6a, 0xa8552f,
-] as const;
-export const ACCENT_COLORS = [0xd4a93a, 0xc0c0c8, 0xb8732f, 0xd9d0b8] as const;
+export const CLOTH_COLORS = PALETTE.cloth;
+export const ACCENT_COLORS = PALETTE.metal;
 
 export const SCAR_BITS = { CHEEK: 1, BROW: 2, CHIN: 4, NECK: 8, FOREHEAD: 16 } as const;
 export const TEETH_BITS = { MISSING_FRONT: 1, GOLD_FRONT: 2, MISSING_SIDE: 4, GOLD_SIDE: 8 } as const;

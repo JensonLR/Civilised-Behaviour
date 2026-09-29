@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### Added
+- Faces rebuilt as one sculpted skin (brow, sockets, cheeks, lips, chin) with swept noses/moustaches/beards, shell hair, cupped ears, catch-light eyes, a real mouth with teeth and tongue.
+- One shared game palette (`palette.ts`) driving characters, terrain, props, effects and UI, with art-direction tests and `docs/ART_DIRECTION.md`.
 - Character rebuild: lofted torso, sleeves, trousers, coats and boots (real clothing forms), toon lighting, chunkier boots and hands, jacket details (lapels, epaulettes, braces, belts, pockets). Fewer triangles than before.
 - Wounds (zone + severity, server-owned) with bandage/plaster/stain visuals, limp and flinch, hit particles and ground stains, HUD injury chart, Gore Full/Reduced/Off.
 - Client-side Rapier ragdoll for knock-downs (capped, tethered, blends back to the lying pose); `@cb/physics` shared package.

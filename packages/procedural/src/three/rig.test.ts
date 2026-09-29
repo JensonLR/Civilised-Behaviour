@@ -37,7 +37,7 @@ describe("buildCharacter", () => {
     }
     // Budgets: recorded in docs/PERFORMANCE.md; tighten when LOD lands (M4/M12).
     expect(maxMeshes).toBeLessThanOrEqual(20); // measured 18 without outlines
-    expect(maxTris).toBeLessThan(10000); // measured 2026-09-29 after the body rebuild: avg 5.6k, max 7.1k (art pass was 6.6k / 8.4k)
+    expect(maxTris).toBeLessThan(10000); // measured 2026-09-29 after the face sculpt: avg 7.5k, max 8.6k (body rebuild was 5.6k / 7.1k; the head is 3.3k of it)
     expect(sumTris / N).toBeLessThan(7500);
   });
 

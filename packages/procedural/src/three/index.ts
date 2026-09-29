@@ -5,3 +5,4 @@ export * from "./outline.ts";
 export * from "./head.ts";
 export * from "./wounds.ts";
 export * from "./loft.ts";
+export * from "./sweep.ts";

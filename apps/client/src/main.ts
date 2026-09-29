@@ -1,3 +1,8 @@
+import { paletteCssVars } from "@cb/shared";
+
+/** Publishes the shared palette as CSS custom properties so the interface and the 3D world can never drift apart. */
+for (const [name, value] of Object.entries(paletteCssVars())) document.documentElement.style.setProperty(name, value);
+
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const params = new URLSearchParams(location.search);
 

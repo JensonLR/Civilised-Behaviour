@@ -130,3 +130,19 @@ per-primitive tint was cut to ~4% because posterised tints made skin look camouf
 wound dressings so bandages sit on the real surface). Rejected: sculpted/skinned meshes and imported assets (one dev, rigid-bone dismemberment,
 procedural variation); textures (vertex colour + ramp is enough for the target style).
 
+**D-021 Faces are sculpted (2026-09-29).** A head used to be ~25 spheres, cones and boxes; it read as objects stacked on objects however carefully they were
+placed. Now the skin is ONE surface, a function `r(direction)` (egg + brushes for brow, sockets, cheeks, lips, groove, chin) that is meshed on a grid dense at
+the face, coloured with baked blush/shade/lips, and *queried* by everything that attaches (`front(x, y)`, `normal(p)`): eyes, nose, moustache, scars, plasters
+and glasses. Hair, jaw beards and sideburns are shells built on the same shape, clipped at a mask iso-line so hairlines are smooth curves rather than the
+grid's staircase; noses, moustaches, brows, lips and beard tufts are sweeps (tapered tubes along a curve). Analytic normals from the shape function keep
+toon bands clean. Cost: the head grew from ~1.5k to ~3.3k triangles; recovered by 32x24 grid, shells on a coarser grid, and low sample/segment counts on
+sweeps. Bug found on the way: `front(0, 0)` returned z = 0 (the centre of the head) and collapsed a nose control point; now tested. Rejected: an authored head
+mesh with morph targets (asset pipeline for one dev, no procedural variety), and SDF meshing (marching cubes cost and faceting for no visible gain).
+
+**D-022 One palette (2026-09-29).** Colours were scattered: 8 literals in Stage, 4 in PropViews, 40+ in the rig, a third set in CSS. `PALETTE` in
+`packages/shared/src/palette.ts` is now the only place a world or interface colour is defined; everything else imports it, CSS variables are published from
+it at startup (with fallbacks a test keeps identical), and `palette.test.ts` enforces the art direction (ink is darkest, chroma caps, one warm skin family
+with derived blush, twelve distinguishable dyes, gore Off contains no red, UI contrast ratios). `paletteGuard.test.ts` fails on any six-digit colour literal in
+rendering code, so drift is caught in CI. The retune that came with it: less orange skin, sun 0xffe0b8 at 3.0, plum "bounce" for warm coloured shadows, boot
+leather lightened so it reads against the ink outline.
+

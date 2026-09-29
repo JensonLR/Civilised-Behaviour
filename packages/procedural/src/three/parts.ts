@@ -12,8 +12,10 @@ import {
   TorusGeometry,
   Vector3,
 } from "three";
+import { PALETTE } from "@cb/shared";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { loftGeometry, type Ring } from "./loft.ts";
+import { sweepGeometry, type SweepOptions, type SweepSection } from "./sweep.ts";
 
 export type V3 = readonly [number, number, number];
 
@@ -110,6 +112,10 @@ export class PartBuilder {
     const segments = PartBuilder.hullMode ? 6 : 10;
     return this.add(loftGeometry(rings, { color, segments, ...opts }), color, pos, rot, scale);
   }
+  /** A tube swept along a spine with a tapering cross-section (see sweep.ts): moustaches, brows, noses, hair locks, beards. */
+  sweep(spine: readonly V3[], section: (t: number, i: number) => SweepSection, color: number, opts: Partial<SweepOptions> = {}): this {
+    return this.add(sweepGeometry(spine, section, { color, segments: PartBuilder.hullMode ? 5 : 6, ...opts }), color);
+  }
   /** Capsule-like limb segment from (0,0,0) down to (0,-len,0): a stretched sphere pair via cylinder + caps. */
   limb(rTop: number, rBottom: number, len: number, color: number, pos: V3 = [0, 0, 0]): this {
     this.cylinder(rTop, rBottom, len, color, [pos[0], pos[1] - len / 2, pos[2]], undefined, undefined, true); // ends hidden inside the joint spheres
@@ -147,10 +153,10 @@ export function singe(color: number, level: number): number {
   return c.getHex();
 }
 
-export const LEATHER = 0x5a3a24;
-export const WOOD = 0x7a5230;
-export const CREAM = 0xe8dcc0;
-export const SOOT = 0x141210;
+export const LEATHER: number = PALETTE.material.leather;
+export const WOOD: number = PALETTE.material.wood;
+export const CREAM: number = PALETTE.material.cream;
+export const SOOT: number = PALETTE.material.soot;
 
 /**
  * Adds `onormal`: the vertex normal averaged over every vertex at the same position. Box/cylinder faces have split

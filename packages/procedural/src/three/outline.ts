@@ -1,3 +1,4 @@
+import { PALETTE } from "@cb/shared";
 import { BackSide, Color, ShaderLib, ShaderMaterial, UniformsUtils, Vector2 } from "three";
 
 /**
@@ -9,7 +10,7 @@ export const outlineSettings = {
   /** Base thickness in device pixels at ~10 m. */
   thickness: 2.2,
   viewport: new Vector2(1280, 720),
-  color: new Color(0x17100a),
+  color: new Color(PALETTE.ink),
 };
 
 let material: ShaderMaterial | undefined;

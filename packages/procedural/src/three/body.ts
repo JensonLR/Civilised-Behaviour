@@ -1,4 +1,5 @@
 import { Color, type BufferGeometry } from "three";
+import { PALETTE } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
 import * as K from "../catalog.ts";
@@ -147,7 +148,7 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   }
   // Shirt pattern on the visible shirt: horizontal bands, plus vertical rules for checks.
   if ((spec.jacket === 0 || spec.jacket === 3) && (spec.shirt === 1 || spec.shirt === 2)) {
-    const stripe = singe(0x8a6a5a, burnt);
+    const stripe = singe(PALETTE.trim.shirtStripe, burnt);
     const y0 = spec.jacket === 3 ? 0.78 : 0.3;
     const y1 = 0.94;
     for (let y = y0; y < y1; y += 0.07) {
@@ -196,7 +197,7 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
     if (buckle) b.box(0.07, halfH * 2.2, 0.03, accent, [0, h * y, frontZ({ ...s, rz: s.rz * k }, 0) - 0.012]);
   };
   if (spec.belt === 1) band(waist, 0.022, 1.03, LEATHER, true);
-  if (spec.belt === 2) band(waist + 0.02, 0.055, 1.03, singe(0x7a1f2a, burnt), false);
+  if (spec.belt === 2) band(waist + 0.02, 0.055, 1.03, singe(PALETTE.trim.cummerbund, burnt), false);
   if (spec.jacket === 5) band(waist, 0.02, 1.03, LEATHER, true); // hunting jackets come belted
   if (spec.jacket === 5) {
     // patch pockets
@@ -213,16 +214,16 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   // Sash: a diagonal band or a broad waist wrap.
   if (spec.sash === 1) {
     const s = at(h * 0.6);
-    b.torus(1, 0.04, singe(0x8f1f2a, burnt), [0, h * 0.55, s.cz], [Math.PI / 2, 0.6, 0.28], [s.rx * 1.1, s.rz * 1.12, 1]);
+    b.torus(1, 0.04, singe(PALETTE.trim.sashRed, burnt), [0, h * 0.55, s.cz], [Math.PI / 2, 0.6, 0.28], [s.rx * 1.1, s.rz * 1.12, 1]);
   }
-  if (spec.sash === 2) band(waist + 0.06, 0.06, 1.04, singe(0xb8a06a, burnt), false);
+  if (spec.sash === 2) band(waist + 0.06, 0.06, 1.04, singe(PALETTE.trim.sashGold, burnt), false);
   // Medals on the left breast (-X), pinned to the surface.
   for (let i = 0; i < spec.medals; i++) {
     const mx = -W * 0.5 + (i % 3) * 0.055;
     const my = h * 0.74 - Math.floor(i / 3) * 0.07;
     const sz = surf(my, mx);
     b.cylinder(0.026, 0.026, 0.008, i % 2 ? K.ACCENT_COLORS[1] : accent, [mx, my, sz - 0.012], [Math.PI / 2, 0, 0]);
-    b.box(0.02, 0.05, 0.006, i % 2 ? 0x2a4f8a : 0x8a2a2a, [mx, my + 0.04, sz - 0.008]);
+    b.box(0.02, 0.05, 0.006, i % 2 ? PALETTE.trim.ribbonBlue : PALETTE.trim.ribbonRed, [mx, my + 0.04, sz - 0.008]);
   }
   // Scorch marks.
   if (burnt >= 2) {
@@ -444,7 +445,7 @@ export function buildLowerLeg(c: BodyCtx, wooden: boolean): BufferGeometry | und
       WOOD,
     );
     b.cylinder(r * 0.66, r * 0.66, 0.06, leather, [0, -0.01, 0]); // leather cup at the knee
-    b.cylinder(r * 0.45, r * 0.45, 0.035, 0x555555, [0, -wl + 0.02, 0]); // iron ferrule
+    b.cylinder(r * 0.45, r * 0.45, 0.035, PALETTE.material.iron, [0, -wl + 0.02, 0]); // iron ferrule
     return b.build();
   }
   const tc = c.trouserC;
@@ -466,7 +467,7 @@ export function buildLowerLeg(c: BodyCtx, wooden: boolean): BufferGeometry | und
   );
   // boot shaft
   const shaftTop = -len * (1 - bootTop);
-  const shaftC = spec.boots === 2 ? singe(0xd9d0b8, burnt) : leather;
+  const shaftC = spec.boots === 2 ? singe(PALETTE.trim.ivory, burnt) : leather;
   b.loft(
     [
       { y: shaftTop + 0.01, rx: legR * 0.9, rz: legR * 0.88, color: tone(shaftC, 1.15) },
@@ -518,8 +519,8 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number): v
   b.box(fw * 0.75, footH * 0.9, fl * 0.2, soleC, [0, yFloor + footH * 0.45, heelZ - fl * 0.02]);
   if (spec.boots === 2) {
     // spats: cream cloth over the instep
-    const spat = singe(0xd9d0b8, c.burnt);
+    const spat = singe(PALETTE.trim.ivory, c.burnt);
     b.loft([{ y: 0.03, rx: fw * 0.5, rz: H * 0.5, cz: H * 0.55, color: spat }, { y: fl * 0.5, rx: fw * 0.55, rz: H * 0.42, cz: H * 0.5, crease: true, color: spat }], bootC, [0, yFloor + 0.025, heelZ - fl * 0.02], [-Math.PI / 2, 0, 0], undefined, { capBottom: false });
   }
-  if (spec.boots === 3) for (let i = 0; i < 6; i++) b.sphere(0.014, 0x8a8a8a, [((i % 2) - 0.5) * fw * 0.6, yFloor - 0.004, heelZ - fl * (0.15 + (i >> 1) * 0.3)], [1, 0.5, 1]);
+  if (spec.boots === 3) for (let i = 0; i < 6; i++) b.sphere(0.014, PALETTE.trim.hobnail, [((i % 2) - 0.5) * fw * 0.6, yFloor - 0.004, heelZ - fl * (0.15 + (i >> 1) * 0.3)], [1, 0.5, 1]);
 }

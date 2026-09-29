@@ -22,6 +22,7 @@ Read first: `docs/BUILD_STATE.md` (where we are), `docs/DECISIONS.md` (why), `do
 - Gore has Full/Reduced/Off and dismemberment On/Off; gameplay must not depend on gore for readability.
 - No ads, energy, pay-to-win, gambling, loot boxes. Payments only via storefronts. Minimise personal data (`docs/PRIVACY_DATA_MAP.md`).
 - Electron: `nodeIntegration:false`, `contextIsolation:true`, narrow preload API. No secrets in the renderer.
+- **Colours live in `packages/shared/src/palette.ts`** (see `docs/ART_DIRECTION.md`); a test rejects colour literals in rendering code.
 - Never claim something is done if it is placeholder-only. Update `docs/BUILD_STATE.md` honestly.
 
 ## Repo map

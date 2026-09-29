@@ -9,7 +9,7 @@ import { Stage } from "../render/Stage.ts";
  * Character lineup / marketing showcase scene (`?showcase=lineup`). Deterministic: same URL -> same picture.
  *   seed=N        base seed for the row
  *   n=K           characters in the row (default: one per archetype)
- *   close=I       frame character I's head and shoulders
+ *   close=I       frame character I's head and shoulders (cd=1.2 for a tight face portrait)
  *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry)
  *   pose=walk     walk|idle|carry|crouch|air|down
  *   look=<code>   show exactly one encoded character (from the creator) instead of the row
@@ -22,6 +22,7 @@ import { Stage } from "../render/Stage.ts";
  *   ragdoll=T     knock everyone down and simulate the ragdoll for T seconds, then freeze (add live=1 to keep it running);
  *                 figures are shoved in different directions so the row shows several falls
  *   gore=off      full|reduced|off stain style
+ *   heads=1       portrait row: every head at eye level filling the canvas (review faces side by side)
  *   aim=0.5       height (m) the camera looks at in the non-close views (0.5 = legs and boots)
  *   zoom=0.4      pull the camera in (multiplier on distance) and aim at head height; for reviewing faces and headwear
  */
@@ -65,7 +66,7 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
     Object.assign(spec, sanitizeSpec(spec));
   });
 
-  const spacing = 1.9;
+  const spacing = params.get("heads") === "1" ? 1.1 : 1.9;
   const rigs: { rig: CharacterRig; anim: CharacterAnimator }[] = [];
   specs.forEach((spec, i) => {
     const rig = buildCharacter(spec, { outline: params.get("outline") !== "0" });
@@ -93,11 +94,22 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
   if (close !== null && rigs[Number(close)]) {
     const r = rigs[Number(close)]!.rig;
     target.set(r.root.position.x, r.proportions.totalHeight * 0.82, 0);
-    camera.position.set(target.x + 0.2, target.y + 0.1, 2.6);
+    camera.position.set(target.x + 0.2, target.y + 0.1, Number(params.get("cd") ?? 2.6));
   } else {
     const zoom = Number(params.get("zoom") ?? 1);
     camera.position.set(0, params.get("aim") ? Number(params.get("aim")) + 0.4 : zoom < 1 ? 1.6 : 1.35, Math.max(7.5, specs.length * 1.55) * zoom);
     target.set(0, params.get("aim") ? Number(params.get("aim")) : zoom < 1 ? 1.5 : 0.95, 0);
+  }
+  if (params.get("heads") === "1") {
+    // Portrait row: every head at eye level, framed so the whole row fills the canvas width.
+    camera.fov = 22;
+    camera.updateProjectionMatrix();
+    const headY = rigs.reduce((sum, r) => sum + r.rig.proportions.totalHeight, 0) / rigs.length - 0.16;
+    const aspect = window.innerWidth / window.innerHeight;
+    const width = spacing * specs.length * 1.08;
+    const dist = width / (2 * Math.tan((camera.fov * Math.PI) / 360) * aspect);
+    target.set(0, headY, 0);
+    camera.position.set(0, headY + 0.05, dist);
   }
   camera.lookAt(target);
 

@@ -17,7 +17,7 @@ interface FaceTarget {
 }
 
 const EXPRESSIONS: Record<ExpressionId, FaceTarget> = {
-  neutral: { brow: 0, browTilt: 0, eyes: 0.85, mouthCurve: 0.1, mouthOpen: 0 },
+  neutral: { brow: 0, browTilt: 0, eyes: 0.85, mouthCurve: 0.4, mouthOpen: 0 },
   pain: { brow: -0.2, browTilt: -0.7, eyes: 0.25, mouthCurve: -0.8, mouthOpen: 0.6 },
   fear: { brow: 1, browTilt: -0.6, eyes: 1.15, mouthCurve: -0.3, mouthOpen: 0.8 },
   triumph: { brow: 0.5, browTilt: 0.2, eyes: 0.9, mouthCurve: 1, mouthOpen: 0.5 },
@@ -219,7 +219,7 @@ export class CharacterAnimator {
 
     // Brows: height + tilt (mirrored).
     const R = this.rig.proportions.headRadius;
-    const by = R * 0.42 + this.face.brow * R * 0.14;
+    const by = face.browY + this.face.brow * R * 0.12;
     face.browL.position.y = by;
     face.browR.position.y = by;
     face.browL.rotation.z = -this.face.browTilt * 0.5;
@@ -227,15 +227,17 @@ export class CharacterAnimator {
 
     // Mouth: arc flips between smile and frown; opening stretches it vertically.
     const curve = this.face.mouthCurve;
-    face.mouth.rotation.z = curve >= 0 ? Math.PI : 0;
-    face.mouth.scale.set(1, 0.35 + Math.abs(curve) * 0.65 + this.face.mouthOpen * 0.8, 1 + this.face.mouthOpen * 0.25);
-    const my = face.mouthY - (curve >= 0 ? 0 : -R * 0.06) - this.face.mouthOpen * R * 0.05;
-    face.mouth.position.y = my;
-    // Interior appears as the mouth opens: cavity grows downward, teeth stay on the upper lip line.
     const open = this.face.mouthOpen;
-    face.mouthInterior.visible = open > 0.12;
-    face.mouthInterior.position.y = my - open * R * 0.05;
-    face.mouthInterior.scale.set(1, 0.4 + open * 1.2, 1);
+    // Lip line: an arch (frown) flipped into a smile; it fades out as the mouth opens into a D-shaped cavity.
+    face.mouth.rotation.z = curve >= 0 ? Math.PI : 0;
+    face.mouth.scale.set(1, 0.3 + Math.abs(curve) * 1.1, 1);
+    face.mouth.position.y = face.mouthY;
+    face.mouth.visible = open < 0.3;
+    // Cavity hangs from the upper lip line; corners widen a little with a grin.
+    const w = face.mouthWidth * 0.5 * (0.85 + 0.25 * Math.max(0, curve) + 0.1 * open);
+    face.mouthInterior.visible = open > 0.1;
+    face.mouthCavity.scale.set(w, Math.max(0.001, open * R * 0.25), R * 0.03);
+    face.mouthInterior.position.y = face.mouthY + R * 0.005;
 
     // Pupils wander when drunk.
     const wobble = this.drunkness * Math.sin(this.time * 2.1) * face.eyeRadius * 0.3;

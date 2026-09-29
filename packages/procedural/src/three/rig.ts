@@ -3,6 +3,8 @@ import {
   Group,
   Mesh,
   MeshToonMaterial,
+  MeshBasicMaterial,
+  Color,
   DataTexture,
   NearestFilter,
   RedFormat,
@@ -10,11 +12,13 @@ import {
   TorusGeometry,
   BoxGeometry,
 } from "three";
-import { ZONE, ZONE_COUNT, woundLevel, type ZoneId } from "@cb/shared";
+import { PALETTE, ZONE, ZONE_COUNT, woundLevel, type ZoneId } from "@cb/shared";
 import * as K from "../catalog.ts";
 import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
-import { buildHead, mouthPlacement } from "./head.ts";
+import { buildHead, eyePlacement, mouthPlacement } from "./head.ts";
+import { headShape, skinRamp } from "./headShape.ts";
+import { sweepGeometry, curve } from "./sweep.ts";
 import { outlineMaterial } from "./outline.ts";
 import { CREAM, PartBuilder, singe } from "./parts.ts";
 import { buildForeArm, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
@@ -44,8 +48,10 @@ export interface FaceParts {
   browL: Mesh;
   browR: Mesh;
   mouth: Mesh;
-  /** Dark cavity + teeth, revealed as the mouth opens. */
+  /** Dark cavity + teeth + tongue, revealed as the mouth opens. */
   mouthInterior: Group;
+  /** The cavity mesh (its Y scale is the mouth opening). */
+  mouthCavity: Mesh;
   /** Rest position of the mouth on the face surface (head-centre relative). */
   mouthY: number;
   mouthZ: number;
@@ -54,6 +60,8 @@ export interface FaceParts {
   /** Resting geometry constants the animator needs. */
   eyeRadius: number;
   mouthWidth: number;
+  /** Resting height of the brows (head-centre relative); the animator raises/lowers from here. */
+  browY: number;
 }
 
 export interface CharacterRig {
@@ -110,7 +118,9 @@ export function clearCharacterCaches(): void {
   geometryCache.clear();
 }
 
-const face = { white: 0xf4efe2, pupil: 0x15100c, brow: 0x2a1c12 };
+const face = { white: PALETTE.face.white, pupil: PALETTE.face.pupil };
+/** Iris colours (chosen per character from the spec so it stays stable). */
+const IRIS_COLORS = PALETTE.iris;
 
 /**
  * Builds the full articulated caricature for a spec. The hierarchy is rigid (no skinning) so limbs can
@@ -126,9 +136,9 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const key = encodeSpec(spec);
   const skin = K.SKIN_TONES[spec.skin] ?? K.SKIN_TONES[0];
   const burnt = spec.burnt;
-  const jacketC = singe(K.CLOTH_COLORS[spec.jacketColor] ?? 0x555555, burnt);
-  const trouserC = singe(K.CLOTH_COLORS[spec.trousersColor] ?? 0x333333, burnt);
-  const hatC = singe(K.CLOTH_COLORS[spec.hatColor] ?? 0x333333, burnt);
+  const jacketC = singe(K.CLOTH_COLORS[spec.jacketColor] ?? PALETTE.cloth[6], burnt);
+  const trouserC = singe(K.CLOTH_COLORS[spec.trousersColor] ?? PALETTE.cloth[5], burnt);
+  const hatC = singe(K.CLOTH_COLORS[spec.hatColor] ?? PALETTE.cloth[5], burnt);
   const accent = K.ACCENT_COLORS[spec.accentColor] ?? K.ACCENT_COLORS[0];
   const hairC = K.HAIR_COLORS[spec.hairColor] ?? K.HAIR_COLORS[0];
   const shirtC = singe(CREAM, burnt);
@@ -223,24 +233,37 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   faceRoot.position.y = R;
   head.add(faceRoot);
   const ownedGeosLate: BufferGeometry[] = [];
-  const eyeR = R * 0.17;
-  const eyeX = R * 0.4;
-  const eyeY = R * 0.1;
-  const eyeZ = -R * 0.86;
+  const eye = eyePlacement(P);
+  const eyeR = eye.radius;
+  const eyeX = eye.x;
+  const eyeY = eye.y;
+  const eyeZ = eye.z;
+  const shape = headShape(P);
+  const irisC = IRIS_COLORS[(spec.hairColor + spec.skin * 3) % IRIS_COLORS.length]!;
   const whiteMat = new MeshToonMaterial({ color: face.white, gradientMap: toonRamp() });
+  const irisMat = new MeshToonMaterial({ color: irisC, gradientMap: toonRamp() });
   const pupilMat = new MeshToonMaterial({ color: face.pupil, gradientMap: toonRamp() });
+  const glintMat = new MeshBasicMaterial({ color: 0xffffff });
   const browMat = new MeshToonMaterial({ color: hairC, gradientMap: toonRamp() });
-  const skinMat = new MeshToonMaterial({ color: skin, gradientMap: toonRamp() });
-  const mouthMat = new MeshToonMaterial({ color: 0x5a1f1a, gradientMap: toonRamp() });
+  // The lid is a cap of the same skin tone the socket is baked with, so a blink closes into the face instead of onto it.
+  const skinMat = new MeshToonMaterial({ color: new Color(skin).lerp(skinRamp(skin).shade, 0.35), gradientMap: toonRamp() });
+  const mouthMat = new MeshToonMaterial({ color: PALETTE.face.mouth, gradientMap: toonRamp() });
   const mkEye = (x: number): { g: Group; pupil: Mesh; lid: Mesh } => {
     const g = new Group();
     g.position.set(x, eyeY, eyeZ);
-    const white = new Mesh(new SphereGeometry(eyeR, 8, 6), whiteMat);
-    const pupil = new Mesh(new SphereGeometry(eyeR * 0.5, 6, 4), pupilMat);
-    pupil.position.set(0, 0, -eyeR * 0.72);
+    const white = new Mesh(new SphereGeometry(eyeR, 12, 8), whiteMat);
+    // Iris (the mesh the animator wanders), with the pupil and a catch-light riding on it: the catch-light is what makes an eye look alive.
+    const pupil = new Mesh(new SphereGeometry(eyeR * 0.54, 10, 6), irisMat);
+    pupil.scale.set(1, 1, 0.5);
+    pupil.position.set(0, 0, -eyeR * 0.74);
+    const dark = new Mesh(new SphereGeometry(eyeR * 0.3, 8, 5), pupilMat);
+    dark.position.set(0, 0, -eyeR * 0.3);
+    const glint = new Mesh(new SphereGeometry(eyeR * 0.13, 6, 4), glintMat);
+    glint.position.set(-eyeR * 0.2 * Math.sign(x || 1), eyeR * 0.22, -eyeR * 0.5);
+    pupil.add(dark, glint);
     // A shallow skin-coloured cap over the eyeball. Axis +Y at rest; the animator tilts it: 0.5 rad = retracted
     // up-and-back (eye open), -PI/2 = axis pointing forward over the pupil (eye closed / blink).
-    const lid = new Mesh(new SphereGeometry(eyeR * 1.07, 8, 3, 0, Math.PI * 2, 0, 1.15), skinMat);
+    const lid = new Mesh(new SphereGeometry(eyeR * 1.07, 10, 4, 0, Math.PI * 2, 0, 1.15), skinMat);
     lid.rotation.x = 0.5;
     g.add(white, pupil, lid);
     faceRoot.add(g);
@@ -248,42 +271,58 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   };
   const eL = mkEye(-eyeX);
   const eRr = mkEye(eyeX);
-  const browGeo = new BoxGeometry(R * 0.36, R * 0.07, R * 0.08);
+  // Brows: a tapered, arched tube (thick at the inner end) sitting on the brow ridge. Its origin is its centre so the animator can tilt it.
+  const browY = R * 0.37;
+  const browZ = shape.front(eyeX, browY)[2] - R * 0.012;
+  const browSpine = curve([[-R * 0.2, -R * 0.005, 0], [-R * 0.08, R * 0.035, 0], [R * 0.06, R * 0.035, 0], [R * 0.2, -R * 0.01, R * 0.01]], 9);
+  const browGeo = sweepGeometry(browSpine, (t) => ({ rx: R * (0.04 + 0.03 * Math.sin(Math.PI * Math.min(1, t * 1.1)) ), rz: R * 0.05, pow: 2.2 }), { color: hairC, segments: 6, side: [0, 1, 0] });
   const browL = new Mesh(browGeo, browMat);
   const browR = new Mesh(browGeo, browMat);
-  browL.position.set(-eyeX, R * 0.42, -R * 0.86);
-  browR.position.set(eyeX, R * 0.42, -R * 0.86);
+  // Inner ends toward the nose: the left brow is mirrored so the thick end is always inner.
+  browL.scale.x = -1;
+  browL.position.set(-eyeX, browY, browZ);
+  browR.position.set(eyeX, browY, browZ);
   faceRoot.add(browL, browR);
-  const mouthWidth = R * 0.5;
-  const mouth = new Mesh(new TorusGeometry(mouthWidth * 0.5, R * 0.03, 4, 10, Math.PI), mouthMat);
+  const mouthWidth = R * 0.56;
   const mp = mouthPlacement(P);
+  // Lip line: a shallow, tapered arc swept along the sculpted groove. Built as a frown (arch); the animator flips it for a smile.
+  const lipSpine = curve([[-mouthWidth / 2, 0, 0], [-mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 2, 0, 0]], 9);
+  const mouth = new Mesh(
+    sweepGeometry(lipSpine, (t) => ({ rx: R * 0.026 * (0.5 + 0.5 * Math.sin(Math.PI * t)), rz: R * 0.024, pow: 2 }), { color: PALETTE.face.mouth, segments: 5, side: [0, 1, 0] }),
+    mouthMat,
+  );
   mouth.position.set(0, mp.y, mp.z);
-  mouth.rotation.z = Math.PI; // smile arc opens upward by default
   faceRoot.add(mouth);
-  // Mouth interior: a dark cavity with a row of teeth (ivory, gold, or missing per the campaign-owned `teeth` flags).
+  // Open mouth: a D-shaped cavity hanging from the upper lip line, upper teeth along its top edge and a tongue at the bottom.
   const mouthInterior = new Group();
-  mouthInterior.position.set(0, mp.y, mp.z + R * 0.012);
+  mouthInterior.position.set(0, mp.y, mp.z - R * 0.004);
   mouthInterior.visible = false;
-  const cavity = new Mesh(new SphereGeometry(1, 8, 5), new MeshToonMaterial({ color: 0x2a0c0c, gradientMap: toonRamp() }));
-  cavity.scale.set(mouthWidth * 0.5, R * 0.15, R * 0.03);
+  const cavityMat = new MeshToonMaterial({ color: PALETTE.face.cavity, gradientMap: toonRamp() });
+  const cavity = new Mesh(new SphereGeometry(1, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), cavityMat);
+  cavity.scale.set(mouthWidth * 0.5, R * 0.01, R * 0.03);
+  const tongueMat = new MeshToonMaterial({ color: PALETTE.face.tongue, gradientMap: toonRamp() });
+  const tongue = new Mesh(new SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), tongueMat);
+  tongue.scale.set(0.5, 0.38, 0.9);
+  tongue.position.set(0, -0.98, 0.15);
+  cavity.add(tongue);
   mouthInterior.add(cavity);
   const teethGeo = buildTeeth(spec, mouthWidth, R, accent);
   if (teethGeo) {
     const teeth = new Mesh(teethGeo, material);
-    teeth.position.y = R * 0.03;
+    teeth.position.set(0, -R * 0.043, -R * 0.005);
     mouthInterior.add(teeth);
     ownedGeosLate.push(teethGeo);
   }
-  ownedGeosLate.push(cavity.geometry);
+  ownedGeosLate.push(cavity.geometry, tongue.geometry);
   faceRoot.add(mouthInterior);
   for (const m of [browL, browR, mouth, eL.pupil, eRr.pupil, eL.lid, eRr.lid]) m.castShadow = false;
 
   const faceParts: FaceParts = {
     eyeL: eL.g, eyeR: eRr.g, pupilL: eL.pupil, pupilR: eRr.pupil, browL, browR, mouth, lidL: eL.lid, lidR: eRr.lid,
-    eyeRadius: eyeR, mouthWidth, mouthInterior, mouthY: mp.y, mouthZ: mp.z,
+    eyeRadius: eyeR, mouthWidth, browY, mouthInterior, mouthCavity: cavity, mouthY: mp.y, mouthZ: mp.z,
   };
   const ownedGeos: BufferGeometry[] = [browGeo, mouth.geometry, eL.lid.geometry, eRr.lid.geometry, ...ownedGeosLate];
-  const ownedMats = [whiteMat, pupilMat, browMat, skinMat, mouthMat, cavity.material as MeshToonMaterial];
+  const ownedMats = [whiteMat, irisMat, pupilMat, glintMat, browMat, skinMat, mouthMat, cavityMat, tongueMat];
   eL.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
   eRr.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
 
@@ -351,7 +390,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
 function buildTeeth(spec: CharacterSpec, mouthWidth: number, R: number, gold: number): BufferGeometry | undefined {
   const b = new PartBuilder();
   const w = (mouthWidth * 0.86) / 6;
-  const ivory = 0xeee6cc;
+  const ivory: number = PALETTE.trim.teeth;
   for (let i = 0; i < 6; i++) {
     const front = i === 2 || i === 3;
     const side = i === 0 || i === 5;
@@ -359,7 +398,7 @@ function buildTeeth(spec: CharacterSpec, mouthWidth: number, R: number, gold: nu
     if (front && (spec.teeth & 1)) continue; // missing front teeth
     if (side && (spec.teeth & 4)) continue; // missing side teeth
     const isGold = (front && (spec.teeth & 2) !== 0) || (goldSide && (spec.teeth & 8) !== 0);
-    b.box(w * 0.92, R * 0.085, R * 0.03, isGold ? gold : ivory, [(i - 2.5) * w, 0, 0]);
+    b.box(w * 0.92, R * 0.065, R * 0.03, isGold ? gold : ivory, [(i - 2.5) * w, 0, 0]);
   }
   return b.build();
 }

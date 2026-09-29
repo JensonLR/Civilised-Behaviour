@@ -1,5 +1,5 @@
 import type { BufferGeometry } from "three";
-import { ZONE, type ZoneId } from "@cb/shared";
+import { PALETTE, ZONE, type ZoneId } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
 import { frontZ, ringAt, torsoRings, upperArmRings, upperLegRings, type BodyCtx } from "./body.ts";
@@ -19,14 +19,14 @@ interface Palette {
   drips: boolean;
 }
 
-const BANDAGE = 0xe6dbbd;
-const BANDAGE_DIRTY = 0xc9bb96;
+const BANDAGE: number = PALETTE.material.bandage;
+const BANDAGE_DIRTY: number = PALETTE.material.bandageDirty;
 
 const PALETTES: Record<GoreLevel, Palette> = {
-  full: { fresh: 0xa3161a, old: 0x6e0f12, drip: 0x8a1216, size: 1, drips: true },
-  reduced: { fresh: 0x7d4136, old: 0x5c302a, drip: 0x6b352d, size: 0.7, drips: false },
+  full: { ...PALETTE.gore.full, size: 1, drips: true },
+  reduced: { ...PALETTE.gore.reduced, size: 0.7, drips: false },
   // Iodine and grime: reads as "treated wound" with no blood at all.
-  off: { fresh: 0xc08a2c, old: 0x9c8a66, drip: 0xb08028, size: 0.85, drips: false },
+  off: { ...PALETTE.gore.off, size: 0.85, drips: false },
 };
 
 /**
