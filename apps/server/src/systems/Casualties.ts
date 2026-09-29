@@ -3,15 +3,25 @@ import {
   CASUALTY,
   CollisionWorld,
   FLAG,
+  LIMB,
   WOUNDS,
   addWound,
   capWounds,
   findDownedTarget,
+  ZONE,
+  isLimb,
   isZone,
+  limbZone,
   pickZone,
+  setWound,
+  severChance,
   severityForDamage,
+  woundLevel,
+  zoneLimb,
   wrapAngle,
   type HitEvent,
+  type LimbId,
+  type SeverEvent,
   type PlayerStateType,
   type Rng,
   type ZoneId,
@@ -31,6 +41,10 @@ export interface CasualtyHost {
   rng: Rng;
   /** Tell clients about a hit (cosmetic: flinch, blood, ragdoll impulse). */
   emitHit(e: HitEvent): void;
+  /** Tell clients a limb came off (cosmetic companion of PlayerState.missing). */
+  emitSever(e: SeverEvent): void;
+  /** Whether this campaign allows limbs to be severed. */
+  dismemberment(): boolean;
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -79,7 +93,10 @@ export class Casualties {
     p.health = Math.max(0, Math.round(p.health - amount));
 
     // Where it landed and how badly it marked them. Wounds are server-owned state; everything visual derives from them.
-    const zone = isZone(hit.zone) ? hit.zone : pickZone(this.host.rng);
+    let zone = isZone(hit.zone) ? hit.zone : pickZone(this.host.rng);
+    const limb = zoneLimb(zone);
+    if (!isZone(hit.zone) && limb !== undefined && (p.missing & limb) !== 0) zone = ZONE.TORSO; // an unaimed blow does not pick on a stump
+    const levelBefore = woundLevel(p.wounds, zone);
     p.wounds = addWound(p.wounds, zone, severityForDamage(amount));
     let dx = hit.dirX ?? 0;
     let dz = hit.dirZ ?? 0;
@@ -91,8 +108,33 @@ export class Casualties {
       len = 1;
     }
     const down = p.health === 0;
-    this.host.emitHit({ id: sessionId, zone, dx: dx / len, dz: dz / len, power: Math.min(1, amount / 60), down });
+    const power = Math.min(1, amount / 60);
+    this.host.emitHit({ id: sessionId, zone, dx: dx / len, dz: dz / len, power, down });
+    // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
+    // so unrelated hits never consume randomness.
+    const target = zoneLimb(zone);
+    if (target !== undefined && this.host.dismemberment() && (p.missing & target) === 0) {
+      const chance = severChance(amount, levelBefore);
+      if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
+    }
     if (down) this.down(sessionId, p);
+  }
+
+  /** Takes a limb off (state + event). Also the entry point for scripted losses (campaign events, debug). No-op if already gone. */
+  sever(sessionId: string, limb: LimbId, dirX = 0, dirZ = 1, power = 0.8): boolean {
+    const p = this.host.players.get(sessionId);
+    if (!p || !isLimb(limb) || (p.missing & limb) !== 0) return false;
+    p.missing |= limb;
+    p.wounds = setWound(p.wounds, limbZone(limb), 3); // the stump stays grievously wounded
+    this.host.emitSever({ id: sessionId, limb, dx: dirX, dz: dirZ, power });
+    log.info("casualty.sever", { sessionId, limb });
+    return true;
+  }
+
+  /** Restores every lost limb (debug, and later: prosthetics and medical care in the campaign layer). */
+  restoreLimbs(sessionId: string): void {
+    const p = this.host.players.get(sessionId);
+    if (p) p.missing = 0;
   }
 
   down(sessionId: string, p: PlayerStateType): void {

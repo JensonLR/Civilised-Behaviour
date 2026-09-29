@@ -65,6 +65,8 @@ export interface HeadShape {
   normal(p: Vec): [number, number, number];
   /** The tagged brush weights (0..1) at a direction, for colouring. */
   weights(dx: number, dy: number, dz: number): Record<BrushTag, number>;
+  /** Half-width of the widest horizontal cross-section of the skull at height y (head-centre relative): the size a hat band must be to clear it. */
+  widthAt(y: number): number;
 }
 
 const cache = new Map<string, HeadShape>();
@@ -154,7 +156,27 @@ function makeShape(R: number, jaw: number): HeadShape {
     return [nx / l, ny / l, nz / l];
   };
 
-  return { R, radius, front, normal, weights };
+  const widthAt = (y: number): number => {
+    if (y >= radius(0, 1, 0) - 1e-6) return 0;
+    let widest = 0;
+    for (const ph of [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4, Math.PI]) {
+      // Find the elevation where the skin is at height y for this azimuth (radius*sin(theta) is monotonic in theta near the crown).
+      let lo = -Math.PI / 2;
+      let hi = Math.PI / 2;
+      for (let i = 0; i < 28; i++) {
+        const th = (lo + hi) / 2;
+        const r = radius(Math.sin(ph) * Math.cos(th), Math.sin(th), -Math.cos(ph) * Math.cos(th));
+        if (r * Math.sin(th) < y) lo = th;
+        else hi = th;
+      }
+      const th = (lo + hi) / 2;
+      const r = radius(Math.sin(ph) * Math.cos(th), Math.sin(th), -Math.cos(ph) * Math.cos(th));
+      widest = Math.max(widest, r * Math.cos(th));
+    }
+    return widest;
+  };
+
+  return { R, radius, front, normal, weights, widthAt };
 }
 
 /** z (head-centre relative, negative = front) of the face at lateral x, height y. Kept for callers that only need depth. */

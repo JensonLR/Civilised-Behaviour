@@ -32,7 +32,9 @@ import {
   type MoveInputType,
   type PlayerStateType,
   type WorldStateType,
+  type LimbId,
   type ZoneId,
+  ZONE,
 } from "@cb/shared";
 import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
@@ -105,6 +107,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
     this.state.seed = seed;
     this.state.code = generateJoinCode();
+    // Campaign rule: the server default, which the creator may switch off (never on when the server has it off).
+    this.state.dismemberment = getRoomConfig().dismemberment && options?.dismemberment !== false;
     this.world = createArena(seed);
     await initRapier();
     this.physics = new PhysicsWorld(this.world);
@@ -130,6 +134,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         notify: (text) => this.broadcast("notice", { text }),
         rng: new Rng(seed ^ 0x5eed_c0de),
         emitHit: (e) => this.broadcast("hit", e),
+        emitSever: (e) => this.broadcast("sever", e),
+        dismemberment: () => this.state.dismemberment,
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -206,6 +212,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.title = "";
     player.health = CASUALTY.maxHealth;
     player.wounds = 0; // numeric schema fields decode as undefined until first assigned
+    player.missing = 0;
     player.reviveProgress = 0;
     player.reviver = "";
     player.dragger = "";
@@ -319,7 +326,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     if (cmd === "hurt") this.damagePlayer(client.sessionId, 40);
-    else if (cmd === "down") this.damagePlayer(client.sessionId, 1000);
+    else if (cmd === "down") this.damagePlayer(client.sessionId, 1000, { zone: ZONE.TORSO }); // (a random zone at 1000 damage would take a limb)
+    else if (cmd?.startsWith("sever:")) this.casualties.sever(client.sessionId, Number(cmd.slice(6)) as LimbId, -Math.sin(player.facing), -Math.cos(player.facing));
+    else if (cmd === "restore") this.casualties.restoreLimbs(client.sessionId);
     else if (cmd?.startsWith("hit:")) {
       // hit:<zone>:<amount>, pushed from behind the player's facing (QA + e2e: reproducible wounds and knock direction)
       const [, z, a] = cmd.split(":");

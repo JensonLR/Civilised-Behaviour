@@ -12,7 +12,7 @@ import {
   TorusGeometry,
   BoxGeometry,
 } from "three";
-import { PALETTE, ZONE, ZONE_COUNT, woundLevel, type ZoneId } from "@cb/shared";
+import { LIMB, PALETTE, ZONE, ZONE_COUNT, woundLevel, zoneLimb, type LimbId, type ZoneId } from "@cb/shared";
 import * as K from "../catalog.ts";
 import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
@@ -21,7 +21,7 @@ import { headShape, skinRamp } from "./headShape.ts";
 import { sweepGeometry, curve } from "./sweep.ts";
 import { outlineMaterial } from "./outline.ts";
 import { CREAM, PartBuilder, singe } from "./parts.ts";
-import { buildForeArm, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
+import { buildStump, buildForeArm, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
 import { buildWoundGeometry, type GoreLevel } from "./wounds.ts";
 
 /** Named bones of the rigid articulated hierarchy. Every visual part hangs off exactly one of these. */
@@ -79,6 +79,11 @@ export interface CharacterRig {
    * belongs to. Cheap to call every frame with an unchanged mask. `gore` recolours stains (never removes the dressings).
    */
   setWounds(mask: number, gore?: GoreLevel): void;
+  /**
+   * Removes lost limbs (LIMB bit mask from @cb/shared): the limb's meshes (and outlines) are hidden and a capped stump appears at the
+   * joint. Cheap to call every frame with an unchanged mask. `gore` recolours the wound cap.
+   */
+  setMissing(mask: number, gore?: GoreLevel): void;
   dispose(): void;
 }
 
@@ -177,6 +182,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const meshes: Mesh[] = [];
   const outlines: Mesh[] = [];
   let outlineOn = options.outline ?? true;
+  const hiddenBones = new Set<string>();
   const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined): void => {
     const geo = cached(`${bone}|${key}`, make);
     if (!geo) return;
@@ -342,8 +348,15 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (mask === shownMask && gore === shownGore) return;
     shownMask = mask;
     shownGore = gore;
+    applyWounds();
+  };
+  /** (Re)builds the dressings from the current mask; a zone whose limb is gone shows nothing (the stump carries the wound). */
+  function applyWounds(): void {
+    const mask = shownMask;
+    const gore = shownGore;
     for (let z = 0; z < ZONE_COUNT; z++) {
-      const sev = woundLevel(mask, z);
+      const lost = zoneLimb(z);
+      const sev = lost !== undefined && (shownMissing & lost) !== 0 ? 0 : woundLevel(mask, z);
       let m = woundMeshes[z];
       if (sev === 0) {
         if (m) m.visible = false;
@@ -361,6 +374,49 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       m.geometry = geo;
       m.visible = true;
     }
+  }
+
+  // ---- lost limbs: hide the limb's bone meshes, show a stump at the joint ---------------------------------------------------------------
+  const LIMB_BONES: Record<number, { bones: string[]; joint: Group; kind: "arm" | "leg" }> = {
+    [LIMB.ARM_L]: { bones: ["upperArmL", "foreArmL"], joint: shoulderL, kind: "arm" },
+    [LIMB.ARM_R]: { bones: ["upperArmR", "foreArmR"], joint: shoulderR, kind: "arm" },
+    [LIMB.LEG_L]: { bones: ["upperLegL", "lowerLegL"], joint: hipL, kind: "leg" },
+    [LIMB.LEG_R]: { bones: ["upperLegR", "lowerLegR"], joint: hipR, kind: "leg" },
+  };
+  const stumpMeshes = new Map<number, Mesh>();
+  let shownMissing = 0;
+  let shownMissingGore: GoreLevel = "full";
+  const setMissing = (mask: number, gore: GoreLevel = "full"): void => {
+    if (mask === shownMissing && gore === shownMissingGore) return;
+    shownMissing = mask;
+    shownMissingGore = gore;
+    for (const limb of [LIMB.ARM_L, LIMB.ARM_R, LIMB.LEG_L, LIMB.LEG_R] as LimbId[]) {
+      const info = LIMB_BONES[limb]!;
+      const gone = (mask & limb) !== 0;
+      for (const bone of info.bones) {
+        if (gone) hiddenBones.add(bone);
+        else hiddenBones.delete(bone);
+      }
+      for (const m of meshes) if (info.bones.includes(m.name.slice(5))) m.visible = !gone;
+      for (const o of outlines) if (info.bones.includes(o.name.slice(8))) o.visible = outlineOn && !gone;
+      let stump = stumpMeshes.get(limb);
+      if (!gone) {
+        if (stump) stump.visible = false;
+        continue;
+      }
+      const geo = cached(`stump|${info.kind}|${gore}|${key}`, () => buildStump(body, info.kind, gore));
+      if (!geo) continue;
+      if (!stump) {
+        stump = new Mesh(geo, material);
+        stump.name = `stump_${limb}`;
+        stump.castShadow = true;
+        info.joint.add(stump);
+        stumpMeshes.set(limb, stump);
+      }
+      stump.geometry = geo;
+      stump.visible = true;
+    }
+    applyWounds();
   };
 
   return {
@@ -370,13 +426,14 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     proportions: P,
     spec,
     get meshCount() {
-      return meshes.length + 7 + (outlineOn ? outlines.length : 0) + woundMeshes.filter((m) => m?.visible).length;
+      return meshes.filter((m) => m.visible).length + 7 + (outlineOn ? outlines.filter((o) => o.visible).length : 0) + woundMeshes.filter((m) => m?.visible).length + [...stumpMeshes.values()].filter((m) => m.visible).length;
     },
     setWounds,
     setOutline(on: boolean) {
       outlineOn = on;
-      for (const o of outlines) o.visible = on;
+      for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8));
     },
+    setMissing,
     dispose() {
       // Bone geometry belongs to the shared cache; only per-instance face parts are freed here.
       for (const g of new Set(ownedGeos)) g.dispose();

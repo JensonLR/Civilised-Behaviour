@@ -84,26 +84,48 @@ export function buildNose(c: FaceCtx): void {
   });
   const spine = curve(pts, 9);
   const color = spec.noseStyle === 5 ? mix(c.skin, PALETTE.trim.blushHot, 0.35) : c.skin;
-  b.sweep(
-    spine,
-    (t) => ({
-      rx: lerpAt(st.rx, t) * R,
-      rz: lerpAt(st.rz, t) * R,
-      pow: 2.4,
-      color: t > 0.75 ? mix(color, tipTone, (t - 0.75) * 3.2 > 1 ? 1 : (t - 0.75) * 4 * 0.75) : color,
-    }),
-    color,
-    { side: [1, 0, 0], segments: 8 },
-  );
-  // nostrils: two small dark dents tucked under the tip
+  const noseSection = (t: number) => ({
+    rx: lerpAt(st.rx, t) * R,
+    rz: lerpAt(st.rz, t) * R,
+    pow: 2.4,
+    color: t > 0.75 ? mix(color, tipTone, Math.min(1, (t - 0.75) * 3)) : color,
+  });
+  b.sweep(spine, noseSection, color, { side: [1, 0, 0], segments: 9, round: "end" });
+
+  // Nostrils: two dark oval openings flush with the underside of the tip (a tiny tube sunk into the nose whose mouth lies on the surface),
+  // so they read as holes in the nose rather than beads stuck beside it.
+  const last = spine.length - 1;
+  const iN = Math.max(1, Math.round(last * 0.9));
+  const at = spine[iN]!;
+  const prev = spine[iN - 1]!;
+  const tan: V3 = norm3([at[0] - prev[0], at[1] - prev[1], at[2] - prev[2]]);
+  // "Down" for the tip: world down projected off the tangent; a nose pointing straight down faces its nostrils forward (-Z).
+  let under = norm3([0, -1, -0.25]);
+  const dot = under[0] * tan[0] + under[1] * tan[1] + under[2] * tan[2];
+  under = norm3([under[0] - tan[0] * dot, under[1] - tan[1] * dot, under[2] - tan[2] * dot]);
+  if (Math.hypot(under[0], under[1], under[2]) < 0.2) under = [0, 0, -1];
+  const secN = noseSection(iN / last);
+  const depth = Math.max(secN.rx, secN.rz);
+  const surfaceOff = secN.rz; // distance from the spine to the surface along `under` (the section's depth axis is the one facing down)
+  const holeC = mix(c.skin, PALETTE.face.nostril, 0.85);
+  for (const sx of [-1, 1]) {
+    const cx = sx * secN.rx * 0.5;
+    const start: V3 = [at[0] + cx + under[0] * (surfaceOff + R * 0.004), at[1] + under[1] * (surfaceOff + R * 0.004), at[2] + under[2] * (surfaceOff + R * 0.004)];
+    const end: V3 = [start[0] - under[0] * depth * 0.9, start[1] - under[1] * depth * 0.9, start[2] - under[2] * depth * 0.9];
+    b.sweep([start, end], () => ({ rx: Math.min(secN.rx * 0.42, R * 0.045), rz: Math.min(secN.rx * 0.3, R * 0.03), pow: 2 }), holeC, { side: [1, 0, 0], segments: 7 });
+  }
+  // alar wings: the nostril flare, only on the wider styles
   const tip = pts[pts.length - 1]!;
   const wide = lerpAt(st.rx, 1) * R;
-  for (const sx of [-1, 1]) b.sphere(R * 0.03, mix(c.skin, PALETTE.face.nostril, 0.7), [sx * wide * 0.5, tip[1] - lerpAt(st.rz, 1) * R * 0.55, tip[2] + R * 0.05], [1, 0.7, 1.2]);
-  // alar wings: the nostril flare, only on the wider styles
   if (spec.noseStyle === 2 || spec.noseStyle === 5 || spec.noseStyle === 4) {
-    for (const sx of [-1, 1]) b.sphere(R * 0.075, color, [sx * wide * 0.85, tip[1] + R * 0.02, tip[2] + len * 0.02 + R * 0.06], [1, 0.9, 0.9]);
+    for (const sx of [-1, 1]) b.sphere(R * 0.07, color, [sx * wide * 0.8, tip[1] + R * 0.03, tip[2] + len * 0.04 + R * 0.07], [1, 0.9, 0.9]);
   }
 }
+
+const norm3 = (v: V3): V3 => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
 
 // ---- ears --------------------------------------------------------------------------------------------------------------------
 
@@ -157,7 +179,7 @@ function stache(c: FaceCtx, pts: readonly (readonly [number, number])[], widths:
     spine,
     (t) => ({ rx: lerpAt(widths, t) * R * 0.55, rz: lerpAt(widths, t) * R * thick, pow: 2.2 }),
     c.hairC,
-    { side: [0, 1, 0], segments: 5 },
+    { side: [0, 1, 0], segments: 5, round: "end" },
   );
 }
 
@@ -218,7 +240,7 @@ function lobe(c: FaceCtx, pts: readonly (readonly [number, number, number])[], w
     }),
     7,
   );
-  b.sweep(spine, (t) => ({ rx: lerpAt(widths, t) * R, rz: lerpAt(depths, t) * R, pow: 2.3 }), c.hairC, { side: [1, 0, 0], segments: 6 });
+  b.sweep(spine, (t) => ({ rx: lerpAt(widths, t) * R, rz: lerpAt(depths, t) * R, pow: 2.3 }), c.hairC, { side: [1, 0, 0], segments: 6, round: "end" });
 }
 
 export function buildBeard(c: FaceCtx): void {
@@ -281,24 +303,29 @@ export function buildSideburns(c: FaceCtx): void {
   if (g) b.add(g, c.hairC, [0, cy, 0]);
 }
 
-/** A shell-based beard over the jaw with a window left open for the mouth. */
+/**
+ * A shell-based beard over the jaw. Its upper edge runs from the sideburn at the ear diagonally down to just under the lower lip (never up
+ * over the cheekbone, never across the mouth or the moustache's ground), so it frames the face instead of masking it.
+ */
 function jawBeard(c: FaceCtx, cheeks: boolean, chin: boolean): void {
   const { shape, b, cy } = c;
+  // y of the beard's upper edge by azimuth: under the lip at the front, up to the sideburn near the ear.
+  const top = (az: number): number => -0.66 + (-0.16 + 0.66) * smooth(0.25, 1.15, az);
   const g = buildShell(shape, {
     color: c.hairC,
     coarse: PartBuilder.hullMode,
     mask: (d) => {
-      const q = (d.x / 0.3) ** 2 + ((d.y + 0.47) / 0.12) ** 2; // mouth window
-      const window = smooth(0.9, 1.5, q);
-      const jaw = chin ? smooth(-0.26, -0.4, d.y) * smooth(1.1, 0.6, d.az < 1.9 ? d.az : 9) : 0;
-      const cheek = cheeks ? smooth(0.5, 0.65, d.az) * (1 - smooth(1.25, 1.4, d.az)) * smooth(-0.08, -0.2, d.y) * smooth(-0.9, -0.5, d.y) : 0;
-      return Math.max(jaw, cheek) * window * (d.z < 0.5 ? 1 : 0);
+      const edge = 1 - smooth(top(d.az) - 0.04, top(d.az) + 0.04, d.y); // 1 below the edge
+      const side = smooth(0.35, 0.6, d.az); // 0 at the front, 1 at the cheeks
+      const region = chin ? (cheeks ? 1 : 1 - side) : cheeks ? side : 0;
+      return edge * region * (1 - smooth(1.45, 1.6, d.az)) * (d.z < 0.55 ? 1 : 0);
     },
-    thick: (d) => 0.1 + 0.13 * smooth(-0.5, -0.95, d.y),
+    thick: (d) => 0.09 + 0.14 * smooth(-0.45, -0.95, d.y),
     lift: (d) => {
-      const w = Math.exp(-(((d.x / 0.35) ** 2) + (((d.y + 0.9) / 0.2) ** 2)));
-      return [0, -0.2 * w, -0.05 * w];
+      const w = Math.exp(-(((d.x / 0.4) ** 2) + (((d.y + 0.92) / 0.22) ** 2)));
+      return [0, -0.22 * w, -0.06 * w];
     },
   });
   if (g) b.add(g, c.hairC, [0, cy, 0]);
 }
+

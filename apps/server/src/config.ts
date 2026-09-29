@@ -11,6 +11,8 @@ export interface ServerConfig {
   debugCommands: boolean;
   /** Seconds with every connected player downed before the party is hauled back up. */
   routSeconds: number;
+  /** Server-wide default for the campaign rule "dismemberment" (creators can still switch it off for their campaign). */
+  dismemberment: boolean;
   /** Artificial round-trip latency in ms for bad-network testing. Never set in production. */
   simulatedLatencyMs: number;
 }
@@ -33,6 +35,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const debugCommands = env.DEBUG_COMMANDS ? env.DEBUG_COMMANDS === "1" : nodeEnv !== "production";
   if (nodeEnv === "production" && debugCommands) errors.push("DEBUG_COMMANDS must not be enabled in production");
 
+  const dismemberment = env.DISMEMBERMENT ? env.DISMEMBERMENT !== "0" : true;
   const routSeconds = Number(env.ROUT_SECONDS ?? 8);
   if (!Number.isFinite(routSeconds) || routSeconds < 0.5 || routSeconds > 120) errors.push("ROUT_SECONDS must be 0.5-120");
 
@@ -43,5 +46,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const databaseUrl = env.DATABASE_URL || undefined;
 
   if (errors.length) throw new Error(`Invalid server configuration:\n - ${errors.join("\n - ")}`);
-  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, simulatedLatencyMs };
+  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, simulatedLatencyMs };
 }

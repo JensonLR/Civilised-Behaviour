@@ -12,6 +12,8 @@ export interface JoinOptions {
   seed?: number;
   /** Encoded character look (untrusted; the server validates, clamps and strips server-owned history). */
   look?: string;
+  /** Campaign rule chosen when creating: allow dismemberment (default true). Ignored when joining. */
+  dismemberment?: boolean;
 }
 
 /** Client -> server messages other than the input stream. */
@@ -31,6 +33,19 @@ export interface ServerMessages {
   notice: { text: string };
   /** A player took a hit. Cosmetic only (flinch, blood, ragdoll impulse); the authoritative result is in PlayerState. */
   hit: HitEvent;
+  /** A limb was severed (cosmetic companion of the authoritative PlayerState.missing bit). */
+  sever: SeverEvent;
+}
+
+/** Broadcast when a limb comes off. Direction and power drive the flying limb and the spray. */
+export interface SeverEvent {
+  /** Session id of the victim. */
+  id: string;
+  /** LIMB bit. */
+  limb: number;
+  dx: number;
+  dz: number;
+  power: number;
 }
 
 /** Broadcast when a player is harmed. `dx`/`dz` is the unit horizontal direction the blow pushes the victim. */

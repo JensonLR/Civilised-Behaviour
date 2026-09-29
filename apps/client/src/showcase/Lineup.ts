@@ -9,7 +9,7 @@ import { Stage } from "../render/Stage.ts";
  * Character lineup / marketing showcase scene (`?showcase=lineup`). Deterministic: same URL -> same picture.
  *   seed=N        base seed for the row
  *   n=K           characters in the row (default: one per archetype)
- *   close=I       frame character I's head and shoulders (cd=1.2 for a tight face portrait)
+ *   close=I       frame character I's head and shoulders (cd=1.2 for a tight face portrait; cx / cyo offset the camera sideways / up to look from an angle or from below)
  *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry)
  *   pose=walk     walk|idle|carry|crouch|air|down
  *   look=<code>   show exactly one encoded character (from the creator) instead of the row
@@ -21,6 +21,7 @@ import { Stage } from "../render/Stage.ts";
  *   woundsVary=1  character i gets severity (i % 4) on every zone, to compare tiers side by side
  *   ragdoll=T     knock everyone down and simulate the ragdoll for T seconds, then freeze (add live=1 to keep it running);
  *                 figures are shoved in different directions so the row shows several falls
+ *   missing=N     lost limbs as a bit mask (1 left arm, 2 right arm, 4 left leg, 8 right leg); missingVary=1 cycles through examples
  *   gore=off      full|reduced|off stain style
  *   heads=1       portrait row: every head at eye level filling the canvas (review faces side by side)
  *   aim=0.5       height (m) the camera looks at in the non-close views (0.5 = legs and boots)
@@ -78,7 +79,11 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
       else for (let z = 0; z < ZONE_COUNT; z++) mask = setWound(mask, z, Number(w));
     }
     if (params.get("woundsVary") === "1") for (let z = 0; z < ZONE_COUNT; z++) mask = setWound(mask, z, i % 4);
-    rig.setWounds(mask, (params.get("gore") as "full" | "reduced" | "off" | null) ?? "full");
+    const goreLevel = (params.get("gore") as "full" | "reduced" | "off" | null) ?? "full";
+    rig.setWounds(mask, goreLevel);
+    // missing=N: limb bit mask (1 left arm, 2 right arm, 4 left leg, 8 right leg); missingVary=1 cycles 0,1,4,6,15 across the row
+    const missingBits = params.get("missingVary") === "1" ? [0, 1, 4, 6, 15][i % 5]! : Number(params.get("missing") ?? 0);
+    rig.setMissing(missingBits, goreLevel);
     // The rig faces -Z; the camera sits at +Z, so turn each figure around (plus a little three-quarter variety).
     rig.root.rotation.y = Math.PI + (params.get("turn") ? Number(params.get("turn")) : -0.3 + (i % 2) * 0.6);
     stage.scene.add(rig.root);
@@ -94,7 +99,7 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
   if (close !== null && rigs[Number(close)]) {
     const r = rigs[Number(close)]!.rig;
     target.set(r.root.position.x, r.proportions.totalHeight * 0.82, 0);
-    camera.position.set(target.x + 0.2, target.y + 0.1, Number(params.get("cd") ?? 2.6));
+    camera.position.set(target.x + Number(params.get("cx") ?? 0.2), target.y + Number(params.get("cyo") ?? 0.1), Number(params.get("cd") ?? 2.6));
   } else {
     const zoom = Number(params.get("zoom") ?? 1);
     camera.position.set(0, params.get("aim") ? Number(params.get("aim")) + 0.4 : zoom < 1 ? 1.6 : 1.35, Math.max(7.5, specs.length * 1.55) * zoom);

@@ -16,8 +16,12 @@ export interface SweepOptions {
   segments?: number;
   /** Reference "side" direction used to orient the sections (default +X). Pick the axis the form is widest along. */
   side?: V3;
+  /** Per-spine-point reference side (index into the spine you passed), for ribbons that wrap a curved surface: the wide axis must follow the surface, not one fixed direction. */
+  sideAt?: (i: number) => V3;
   /** Close the ends with fans. Default true. */
   caps?: boolean;
+  /** Round off the start and/or end into a smooth dome instead of a flat cut (noses, tufts, beard tips). */
+  round?: "start" | "end" | "both";
 }
 
 const c = new Color();
@@ -31,10 +35,44 @@ const ref = new Vector3();
  * Section frames follow the spine tangent with a stable side axis, so planar curves (the common case) never twist.
  * Output has position, normal, uv (unused) and per-vertex colour, like loftGeometry, and always faces outward.
  */
-export function sweepGeometry(spine: readonly V3[], section: (t: number, i: number) => SweepSection, opts: SweepOptions): BufferGeometry {
+export function sweepGeometry(spineIn: readonly V3[], section: (t: number, i: number) => SweepSection, opts: SweepOptions): BufferGeometry {
   const seg = Math.max(4, opts.segments ?? 6);
+  let spine: readonly V3[] = spineIn;
+  if (spine.length < 2) throw new Error("sweep needs at least two spine points");
+  // Optional dome ends: extra rings past the last spine point whose radii follow a quarter circle, so the tube closes smoothly.
+  const baseN = spine.length;
+  const secs: SweepSection[] = spine.map((_, i) => section(i / (baseN - 1), i));
+  const pts: V3[] = [...spine];
+  const DOME = [0.5, 0.86, 0.985];
+  const sideRefs: (V3 | undefined)[] = opts.sideAt ? spine.map((_, i) => opts.sideAt!(i)) : [];
+  if (opts.round === "end" || opts.round === "both") {
+    const a = pts[pts.length - 2]!;
+    const b = pts[pts.length - 1]!;
+    const s = secs[secs.length - 1]!;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1;
+    const r = Math.max(s.rx, s.rz);
+    for (const u of DOME) {
+      const k = Math.sqrt(1 - u * u);
+      pts.push([b[0] + ((b[0] - a[0]) / len) * r * u, b[1] + ((b[1] - a[1]) / len) * r * u, b[2] + ((b[2] - a[2]) / len) * r * u]);
+      secs.push({ ...s, rx: s.rx * k, rz: s.rz * k });
+      if (opts.sideAt) sideRefs.push(sideRefs[baseN - 1]);
+    }
+  }
+  if (opts.round === "start" || opts.round === "both") {
+    const a = pts[1]!;
+    const b = pts[0]!;
+    const s = secs[0]!;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1;
+    const r = Math.max(s.rx, s.rz);
+    for (const u of DOME) {
+      const k = Math.sqrt(1 - u * u);
+      pts.unshift([b[0] + ((b[0] - a[0]) / len) * r * u, b[1] + ((b[1] - a[1]) / len) * r * u, b[2] + ((b[2] - a[2]) / len) * r * u]);
+      secs.unshift({ ...s, rx: s.rx * k, rz: s.rz * k });
+      if (opts.sideAt) sideRefs.unshift(sideRefs[0]);
+    }
+  }
+  spine = pts;
   const n = spine.length;
-  if (n < 2) throw new Error("sweep needs at least two spine points");
   const pos: number[] = [];
   const col: number[] = [];
   const index: number[] = [];
@@ -47,11 +85,13 @@ export function sweepGeometry(spine: readonly V3[], section: (t: number, i: numb
     T.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     if (T.lengthSq() < 1e-12) T.set(0, 1, 0);
     T.normalize();
+    const rv = sideRefs[i];
+    if (rv) ref.set(rv[0], rv[1], rv[2]);
     S.copy(ref).addScaledVector(T, -ref.dot(T));
     if (S.lengthSq() < 1e-6) S.set(Math.abs(T.z) < 0.9 ? 0 : 1, 0, Math.abs(T.z) < 0.9 ? 1 : 0); // spine runs along the reference axis: pick another
     S.addScaledVector(T, -S.dot(T)).normalize();
     B.crossVectors(T, S).normalize();
-    const sec = section(n === 1 ? 0 : i / (n - 1), i);
+    const sec = secs[i]!;
     c.setHex(sec.color ?? opts.color);
     const e = 2 / (sec.pow ?? 2.2);
     for (let k = 0; k < seg; k++) {
@@ -92,7 +132,7 @@ export function sweepGeometry(spine: readonly V3[], section: (t: number, i: numb
       const q = spine[i + dirSign] ?? p;
       const centre = pos.length / 3;
       pos.push(p[0], p[1], p[2]);
-      c.setHex(section(i / (n - 1), i).color ?? opts.color);
+      c.setHex(secs[i]!.color ?? opts.color);
       col.push(c.r, c.g, c.b);
       const base = pos.length / 3;
       for (let k = 0; k < seg; k++) {

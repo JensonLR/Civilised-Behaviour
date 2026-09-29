@@ -34,6 +34,8 @@ export const PlayerState = schema({
   health: t.uint8(),
   /** Packed wound severities, 2 bits per ZONE (see wounds.ts). Server-owned; drives bandages, blood and limping on every client. */
   wounds: t.uint16(),
+  /** Bit mask of lost limbs (LIMB in limbs.ts). Server-owned; persists through downing and reviving. */
+  missing: t.uint8(),
   /** 0..100 progress of a revive in progress ON this (downed) player. */
   reviveProgress: t.uint8(),
   /** Session id of whoever is reviving this player, or "". */
@@ -67,5 +69,7 @@ export const WorldState = schema({
   seed: t.uint32(),
   players: t.map(PlayerState),
   props: t.map(PropState),
+  /** This campaign allows limbs to be severed (rules chosen at creation). Clients may still opt out of SEEING it. */
+  dismemberment: t.boolean(),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

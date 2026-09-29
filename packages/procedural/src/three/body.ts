@@ -3,8 +3,9 @@ import { PALETTE } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
 import * as K from "../catalog.ts";
+import { skinRamp } from "./headShape.ts";
 import type { Ring } from "./loft.ts";
-import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe } from "./parts.ts";
+import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe, type V3 } from "./parts.ts";
 
 /** Everything the body builders need, resolved once per character. */
 export interface BodyCtx {
@@ -213,8 +214,55 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   }
   // Sash: a diagonal band or a broad waist wrap.
   if (spec.sash === 1) {
-    const s = at(h * 0.6);
-    b.torus(1, 0.04, singe(PALETTE.trim.sashRed, burnt), [0, h * 0.55, s.cz], [Math.PI / 2, 0.6, 0.28], [s.rx * 1.1, s.rz * 1.12, 1]);
+    // A ribbon that lies ON the torso: over the right shoulder, diagonally across the chest to the left hip, and the same path
+    // mirrored on the back. Points come from the torso's own superellipse sections so it can never float or sink; the wide axis
+    // follows the surface (normal x tangent).
+    const sashC = singe(PALETTE.trim.sashRed, burnt);
+    const surfacePoint = (y: number, phi: number, lift: number): V3 => {
+      const q = at(y);
+      const e = 2 / q.pow;
+      const sn = Math.sin(phi);
+      const cs = Math.cos(phi);
+      const x = q.cx + (q.rx + lift) * Math.sign(sn) * Math.abs(sn) ** e;
+      const z = q.cz - (q.rz + lift) * Math.sign(cs) * Math.abs(cs) ** e;
+      return [x, y, z];
+    };
+    const path: V3[] = [];
+    const normals: V3[] = [];
+    const STEPS = 6;
+    const push = (y: number, phi: number): void => {
+      path.push(surfacePoint(y, phi, 0.014));
+      normals.push([Math.sin(phi), 0, -Math.cos(phi)]);
+    };
+    const shoulderPhi = 0.72;
+    const hipPhi = -1.0;
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      push(h * (0.24 + 0.7 * t), hipPhi + (shoulderPhi - hipPhi) * t); // hip -> shoulder, front
+    }
+    for (let i = 1; i < 4; i++) {
+      const t = i / 4;
+      push(h * (0.945 + 0.04 * Math.sin(Math.PI * t)), shoulderPhi + (Math.PI - shoulderPhi - shoulderPhi) * t); // over the shoulder
+    }
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      push(h * (0.94 - 0.7 * t), Math.PI - shoulderPhi + (shoulderPhi - hipPhi) * t); // shoulder -> hip, back (mirror of the front)
+    }
+    const half = 0.052;
+    b.sweep(path, () => ({ rx: half, rz: 0.011, pow: 3.2 }), sashC, {
+      segments: 6,
+      round: "both",
+      sideAt: (i) => {
+        const a = path[Math.max(0, i - 1)]!;
+        const c2 = path[Math.min(path.length - 1, i + 1)]!;
+        const tx = c2[0] - a[0];
+        const ty = c2[1] - a[1];
+        const tz = c2[2] - a[2];
+        const n = normals[i]!;
+        // side = n x T (lies in the surface, across the ribbon)
+        return [n[1] * tz - n[2] * ty, n[2] * tx - n[0] * tz, n[0] * ty - n[1] * tx];
+      },
+    });
   }
   if (spec.sash === 2) band(waist + 0.06, 0.06, 1.04, singe(PALETTE.trim.sashGold, burnt), false);
   // Medals on the left breast (-X), pinned to the surface.
@@ -523,4 +571,38 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number): v
     b.loft([{ y: 0.03, rx: fw * 0.5, rz: H * 0.5, cz: H * 0.55, color: spat }, { y: fl * 0.5, rx: fw * 0.55, rz: H * 0.42, cz: H * 0.5, crease: true, color: spat }], bootC, [0, yFloor + 0.025, heelZ - fl * 0.02], [-Math.PI / 2, 0, 0], undefined, { capBottom: false });
   }
   if (spec.boots === 3) for (let i = 0; i < 6; i++) b.sphere(0.014, PALETTE.trim.hobnail, [((i % 2) - 0.5) * fw * 0.6, yFloor - 0.004, heelZ - fl * (0.15 + (i >> 1) * 0.3)], [1, 0.5, 1]);
+}
+
+// ---- stumps (where a limb used to be) ----------------------------------------------------------------------------------------
+
+/**
+ * The end of a limb that has been taken off, in the shoulder or hip frame: a short stub of sleeve or trouser with a torn edge and a
+ * capped wound - flesh, a ring of blood (iodine when gore is off) and the pale disc of bone. Bone-local, hanging along -Y.
+ */
+export function buildStump(c: BodyCtx, limb: "arm" | "leg", gore: "full" | "reduced" | "off"): BufferGeometry | undefined {
+  const { P } = c;
+  const b = new PartBuilder();
+  const cloth = limb === "arm" ? c.armC : c.trouserC;
+  const rings = limb === "arm" ? upperArmRings(P, cloth) : upperLegRings(c);
+  const len = limb === "arm" ? P.armUpper : P.legUpper;
+  const cut = len * (limb === "arm" ? 0.3 : 0.28);
+  // Keep the top of the limb's own rings down to the cut, then close with a torn edge.
+  const stub: Ring[] = [];
+  for (const r of rings) if (-r.y <= cut) stub.push(r);
+  const end = ringAt(rings, -cut);
+  stub.push({ y: -cut, rx: end.rx, rz: end.rz, color: tone(cloth, 0.8) });
+  stub.push({ y: -cut, rx: end.rx * 1.04, rz: end.rz * 1.04, color: tone(cloth, 0.6), crease: true });
+  stub.push({ y: -cut - 0.02, rx: end.rx * 0.98, rz: end.rz * 0.98, color: tone(cloth, 0.5) });
+  b.loft(stub, cloth, undefined, undefined, undefined, { capTop: false, capBottom: false });
+  // The wound cap: flesh disc, blood ring, bone.
+  const ramp = skinRamp(c.skin);
+  const flesh = tone(ramp.lip.getHex(), 0.95);
+  const blood = gore === "off" ? PALETTE.gore.off.fresh : gore === "reduced" ? PALETTE.gore.reduced.fresh : PALETTE.gore.full.fresh;
+  const rx = end.rx * 0.93;
+  const rz = end.rz * 0.93;
+  const y = -cut - 0.022;
+  b.loft([{ y: y + 0.01, rx, rz, color: blood }, { y: y - 0.012, rx: rx * 0.97, rz: rz * 0.97, color: blood }], blood);
+  b.loft([{ y: y - 0.008, rx: rx * 0.78, rz: rz * 0.78, color: flesh }, { y: y - 0.02, rx: rx * 0.74, rz: rz * 0.74, color: flesh }], flesh);
+  b.loft([{ y: y - 0.018, rx: rx * 0.34, rz: rz * 0.34, color: PALETTE.trim.ivory }, { y: y - 0.03, rx: rx * 0.3, rz: rz * 0.3, color: PALETTE.trim.ivory }], PALETTE.trim.ivory);
+  return b.build();
 }

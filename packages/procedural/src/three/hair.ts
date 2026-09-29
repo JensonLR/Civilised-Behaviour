@@ -10,7 +10,7 @@ import type { V3 } from "./parts.ts";
 const hairline = (az: number, front = 0.42, side = 0.1, back = -0.25): number =>
   front + (side - front) * smooth(0.5, 1.7, az) + (back - side) * smooth(1.7, 3.0, az);
 
-export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean): void {
+export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean, hatSeat = 0.6): void {
   const { spec, P, b, shape, hairC, cy } = c;
   const R = P.headRadius;
   const shell = (s: Omit<ShellSpec, "color" | "coarse">): void => {
@@ -18,7 +18,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean): void {
     if (g) b.add(g, hairC, [0, cy, 0]);
   };
   // Under a hat the crown is cut away so nothing pokes through it.
-  const hatCut = (y: number): number => (hatOn ? 1 - smooth(0.5, 0.68, y) : 1);
+  const hatCut = (y: number): number => (hatOn ? 1 - smooth(hatSeat - 0.14, hatSeat + 0.02, y) : 1);
   const cap = (front = 0.42, side = 0.1, back = -0.25): ((d: Dir) => number) => (d) => smooth(hairline(d.az, front, side, back) - 0.05, hairline(d.az, front, side, back) + 0.05, d.y) * hatCut(d.y);
 
   switch (spec.hair) {
@@ -54,7 +54,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: boolean): void {
       const curl = (p: V3, r: number): void => void b.add(new SphereGeometry(r, 8, 5), hairC, p, [0, 0, 0], [1, 0.9, 1]);
       for (let i = 0; i < 10; i++) {
         const az = 0.85 + (i / 9) * 4.55; // from the temple round the back to the other temple
-        const dy = 0.2 + (i % 3) * 0.16;
+        const dy = Math.min(0.2 + (i % 3) * 0.16, hatOn ? hatSeat - 0.14 : 9);
         curl(skinDir(c, Math.sin(az) * (1 - dy * 0.3), dy, -Math.cos(az) * (1 - dy * 0.3), R * 0.09), R * 0.2);
       }
       if (!hatOn) for (let i = 0; i < 5; i++) curl(skinDir(c, Math.cos(i * 1.26) * 0.45, 0.93, Math.sin(i * 1.26) * 0.45 + 0.1, R * 0.06), R * 0.22);

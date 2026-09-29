@@ -7,9 +7,11 @@ export interface RoomConfig {
   debugCommands: boolean;
   /** Seconds with the whole party down before the rout. Overridable so tests need not wait 8 s. */
   routSeconds: number;
+  /** Server default for the dismemberment campaign rule. */
+  dismemberment: boolean;
 }
 
-let current: RoomConfig = { debugCommands: false, routSeconds: 8 };
+let current: RoomConfig = { debugCommands: false, routSeconds: 8, dismemberment: true };
 
 export const setRoomConfig = (c: RoomConfig): void => {
   current = c;
