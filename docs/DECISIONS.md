@@ -164,3 +164,18 @@ a rubber-stamp call to action), the creator is a ledger with index tabs and bras
 colour alone), the injury chart is a surgeon's luggage tag, nametags are luggage tags, notices are telegrams, prompts are tickets, being down is a mourning card. All of it
 is CSS plus a few inline SVGs (no image assets), every colour is a palette variable, and type is IM Fell English / English SC (period printing) with Special Elite for the
 telegraph, bundled via `@fontsource` (SIL OFL, listed in ASSET_REGISTER) so the game works offline on Steam. Contrast stays with the palette tests' ratios.
+
+**D-025 World as illustrated ephemera (2026-09-29).** The environment was PBR flat-shaded grey-green with lollipop trees, a tan box for a wall and a gradient sky: it looked like a
+different, cheaper game next to the toon-shaded, ink-lined characters. It now uses the characters' language: `MeshToonMaterial` + the same 4-step ramp, palette vertex colours, and the
+inverted-hull ink outline, extended to `InstancedMesh` (`#ifdef USE_INSTANCING` in the outline shader; the hull shares the instance buffer, so one extra draw covers every instance). The rules:
+(1) **one source of truth for what a thing is**: obstacles carry a `tag` (tree, rock, snag, tent, fire, flag, sign, luggage, cart, crate, wall) and the authored camp lives in `camp.ts`, which feeds
+collision (`createArena`), visuals (`world/landmarks.ts`) and keep-out (`scatterProps`), so the tent you see is the tent you hit and no prop ever spawns inside one; untagged obstacles keep the old
+height contract (`classifyObstacle`). Fixing that contract also removed a latent bug: the tallest boulders (r > 2.1) were classified as trunks. (2) **Decisions are pure and shared**
+(`worldgen.ts`: species by position, ground colour, cover density) so they are unit-tested in Node and identical everywhere. (3) **Everything repeated is instanced**; everything unique and solid
+is merged into one geometry (the whole camp is one draw + one hull), so the world is 22-28 draw calls including the shadow pass. (4) **The world does not end**: the visible ground eases flat past
+the playable radius, a skirt and three hazed hill rings continue it, fog/sky/skirt/hills share one colour of distance. (5) **Text is generated at runtime** (canvas, IM Fell bundled): no image assets.
+Also changed: the sun shadow got a softer edge (`shadow.radius`) and a larger bias because faceted canvas and foliage dithered at the terminator. Rejected: PBR with a toon post-process (fights the
+character look and costs a full-screen pass), imported tree/rock packs (asset pipeline and licence burden for one dev, no procedural variation, cannot share the character outline), impostor billboards
+for distant trees (not needed at this triangle budget), real point lights for the fire (per-pixel cost on every material for a cosmetic; a baked warm tint, additive glow and flicker read the same).
+Not done: wind on trees, weather, day/night (the sky is one fixed afternoon), grass that bends around walkers, collision for shrubs, vegetation streaming (M4), LOD for distant trees.
+

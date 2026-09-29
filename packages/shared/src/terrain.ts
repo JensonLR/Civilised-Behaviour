@@ -19,7 +19,8 @@ export interface TerrainOptions {
 
 const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
 
-function valueNoise(seed: number, x: number, z: number): number {
+/** Smooth 2D value noise in [0, 1): the shared building block for terrain height AND painted ground colour. */
+export function valueNoise(seed: number, x: number, z: number): number {
   const xi = Math.floor(x);
   const zi = Math.floor(z);
   const xf = fade(x - xi);

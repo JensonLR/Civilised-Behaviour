@@ -44,6 +44,41 @@ node scripts/shot.mjs "?showcase=lineup&n=4&close=1&cd=1.25&expr=triumph|pain|fe
 Checklist for a new feature: reads at distance? sits on the sculpt (no float/sink)? uses only palette colours? survives Gore Off? fits the triangle
 budget in `docs/PERFORMANCE.md`?
 
+## World (D-025): an expedition into territory not yet improved by the Society
+The environment is drawn with the same tools as the people in it: **`MeshToonMaterial` with the shared 4-step ramp** (`sharedToonRamp()` in `outline.ts`;
+`rig.ts` holds an identical private copy, keep them equal), **vertex colours from the palette**, and the **inverted-hull ink outline** (now instanced) on everything solid.
+Nothing in the world is a plain PBR material or a texture, except the two runtime canvases below.
+- **Palette.** `PALETTE.world` (terrain, rocks, trees, blooms, three hill rings, the sky's cloud/glow/sun colours), `PALETTE.props` (crate/barrel/bottle/chair detail) and
+  `PALETTE.camp` (canvas, rope, the pennant, cart, luggage, fire). Flames, embers and the glow are the only world colours allowed to be properly saturated (`camp.flame*/ember/glow`,
+  chroma cap 0.7, everything else 0.4). `palette.test.ts` covers all of it.
+- **Ground** (`packages/shared/src/worldgen.ts`, `groundColour`): a soft two-tone grass base, deep green in hollows, dry gold on rises, *hard-edged* painted patches (sunny meadow, shaded
+  clump, moss dapple) from three noise scales, a ragged worn-earth clearing round the camp with a scorched hearth, a track that leaves past the signpost, bare rock on slopes.
+  Pure and tested (finite, in gamut, chroma <= 0.4 everywhere). Smooth normals, so the toon ramp bands the swells.
+- **Beyond the map:** the visible ground eases to a flat plain 22 m past the playable radius, a ground skirt carries the meadow out to the fog, three low-poly hill rings (radius 150 / 236 / 332,
+  paler and hazier with distance; aerial perspective is painted into their vertex colours; wooded shoulders) and a few unreachable groves. Fog, the sky's lowest band, the skirt and
+  the hills all use `fogColour()` (horizon nudged 14% toward the sky's mid blue): one colour of distance.
+- **Sky** (`world/sky.ts`): banded gradient, an azimuth-aware warm glow pooled on the horizon behind the sun, a sun disc with a thin ring and two halo bands, and toon clouds (flat shapes,
+  a lit and a shaded tone, lit on the side facing the sun). Three octaves of noise, no textures.
+- **Vegetation** (`world/flora.ts`): *broadleaf* (leaning tapered trunk, two limbs, six faceted crown lobes in deep green underneath and sunlit green on top), *acacia* (thin forked trunk, two flat
+  dish canopies with a lighter sunlit skin), *snag* (bleached cracked trunk with bare limbs, standing near rock outcrops), shrubs, faceted mossy-footed rocks with pale weathered tops and pebble
+  litter, wind-swept grass tufts and wildflowers. Species follow a low-frequency noise field (`treeSpecies`) so groves are of one kind with 14% strays. Every kind is one merged geometry
+  instanced with per-instance colour and size variation; the ink hull uses a coarser geometry (`lod` 0, fattened 6%).
+- **The camp** (`camp.ts` is the single source for collision, visuals and prop/spawn keep-out): two elliptical bell tents (sixteen flat canvas panels alternating in tone, red hem and crown, dark
+  doorway, finial, guy ropes), a campfire ring with tripod, pot and charred logs under an unlit flame (seven curling tongues, flicker driven from `update`) plus a soft additive glow sprite and
+  ground pool (no lights), a flagpole with the Society's pennant (compass rose and motto drawn on a runtime canvas, rippling in the vertex shader), a signpost whose four arrowed boards carry
+  lettering, a steamer-trunk stack, a covered supply cart, the two step-up crates, and the ruined dry-stone wall (irregular courses, broken crown, mossy foot, fallen blocks; the collision box is the
+  full-height footprint so breaks are limited to the top 0.5 m). Solid landmarks are ONE merged geometry; the pennant and lettering share one textured mesh.
+- **Props** (`world/objects.ts`): slatted crates with corner posts, braces and nails; staved barrels with iron hoops; glass bottles with neck, cork, paper label and a glint; bentwood cane-seat chairs.
+  Each stays within ~5% of its physics box (a test enforces it).
+- **Review commands** (`?showcase=world`, real arena, deterministic):
+```
+node scripts/shot.mjs "?showcase=world&view=game" out.png 1280x720 5000     # the view a player has at spawn
+node scripts/shot.mjs "?showcase=world&view=camp|tents|fire|flag|sign|wall|cart|luggage|crates|edge|hills|sky" out.png
+node scripts/shot.mjs "?showcase=world&view=tree&i=3" out.png                # also rock, snag; i picks which one
+node scripts/shot.mjs "?showcase=world&propline=1&figures=0&cam=0,0.9,-1.4&at=0,0.25,-3&fov=45" out.png 1200x500
+node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png   # low preset (no ink), world-only counts
+```
+
 ## Interface (D-024)
 The interface is the Society's stationery, not a game HUD skin: paper, brass, ink, rubber stamps, luggage tags, telegrams. Rules: colours only from the `--ink/--paper/--brass/--stamp...`
 variables (which come from `PALETTE.ui`); meaning is never colour alone (gauge = needle + number + "!", injuries = fill + outline weight + hatching + words); type is IM Fell

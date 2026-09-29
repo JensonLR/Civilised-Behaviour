@@ -33,7 +33,7 @@ Done + verified (tests in parens):
 - Deterministic shared sim: RNG, terrain, analytic collision, `stepCharacter` (14 vitest cases: determinism, walls, sliding, step-up, jump, latch, stumble, bounds, cliff).
 - WorldRoom: join/leave, unique slots, max 4, name sanitising, authoritative movement, hostile input, reconnect, code lookup (7 integration cases).
 - Browser e2e with two real Chromium contexts: create, join by code, prediction, remote sync, bad-code error (2 Playwright cases).
-- Client: Stage (instanced obstacles, terrain vertex colours, sky shader, texel-snapped shadow follow), CameraRig, Controls (KBM+pad),
+- Client: Stage (lighting, fog, texel-snapped shadow follow; the world itself is `render/world/`, see "World" below), CameraRig, Controls (KBM+pad),
   Menu (with basic pad focus), DebugOverlay (F3).
 Also done (2026-09-29): server-authoritative props + pick up/carry/drop/throw (Rapier, D-014) verified in a real browser; QA debug command; origin enforcement (D-012); bot client (`apps/server/src/bots`); prediction verified at 0/100/150 ms RTT with 0 drift, and
 fixed a real desync (D-013: idle-tick synthesis). See NETWORKING.md.
@@ -93,6 +93,17 @@ Done + verified (cosmetics, dismemberment, interface, 2026-09-29):
   for a witness who hid limbs). Not done: prosthetics, movement effects, sound.
 - Interface (D-024): charter/ledger/gauge/luggage-tag/telegram redesign, period fonts bundled. Judged by screenshots at 1440x800 and 800x450 only; gamepad focus rings,
   UI scale and colour-blind review of the creator swatches still to do.
+Done + verified (world art pass, D-025, 2026-09-29): the environment now shares the characters' look. Toon ramp + palette vertex colours + instanced ink outlines on trees, rocks, camp and props;
+painted terrain (`groundColour`); hill rings + ground skirt + distant groves so the arena edge is not the end of the world; painterly banded sky with a sun disc and ring; three tree species,
+shrubs, faceted rocks, wind-swept grass tufts and flowers; a collidable expedition camp at the spawn (two bell tents, campfire with unlit flame and glow, flagpole with a rippling pennant, signpost with
+lettered boards, luggage, supply cart, the two step-up crates, a ruined dry-stone wall) driven by `camp.ts`, which also keeps props and spawns out of it; props are one instanced mesh per kind with
+crate slats, hooped barrels, glass bottles and bentwood chairs. Tests: shared 11 (camp/spawn/prop keep-out, determinism, tag contract, ground colour finite/in gamut/muted, cover density,
+species), palette coverage for the new colours, client 53 (geometry finite / outward / has `onormal`, hull cheaper, props inside their physics boxes, camp inside its collision footprints, banner UVs,
+PropViews instancing, WorldView draw/triangle budget per preset, dispose), procedural 4 (outline instancing path). `pnpm typecheck`, `pnpm test`, e2e "two players share" and "picks it up" green.
+Measured (software GL): world 22 / 28 / 28 draw calls (low / medium / high) incl. shadow pass; in the game medium is 86 calls / 297k tris (was 61 / 91k). Judged by renders on software GL only.
+Known weak spots: wildflowers are small flat cups that read as dots; the spawn clearing is a large uniform-ish earth disc; the hill rings are smooth slabs (no tree-line texture); clouds are one soft
+layer; the snag is thin; no wind on trees, weather or day/night; `rig.ts` still owns a private copy of the toon ramp (`sharedToonRamp` in `outline.ts` is the same four values; make rig import it);
+shrubs and grass have no collision or reaction to walkers; an ink outline on world objects is the same pixel width as on characters, which reads heavy on close rocks.
 Not done in M2 (next):
 - Wounds have no gameplay effect yet (limp is animation only; a real slow-down needs `wounds` as a predicted input of the shared step). No bleed-out or
   medical supplies (M5). Dirt/mud accumulation and blood on clothing beyond the dressings. Outline rollout to NPC crowds (LOD).
@@ -108,7 +119,7 @@ Not done in M2 (next):
 - Steam wrapper choice open (D-010).
 
 ## Test results (last full run 2026-09-29)
-`pnpm typecheck` clean; shared 35/35; procedural 24/24; server 58/58 (origin, netcode bots, physics, interaction, look, casualties, flood); Playwright 5/5 (carry+throw, creator, revive+drag);  client production build OK (213 kB gzip JS).
+`pnpm typecheck` clean; shared 71/71; procedural 95/95; client 77/77; server 73/73 (2026-09-29, after the world art pass); Playwright "two players share" and "picks it up" re-run green, the rest of the suite last run green before the world pass; client production build last measured OK (213 kB gzip JS) before the world pass.
 
 ## Conventions reminder
 See CLAUDE.md. Keep this file current: completed / in progress / next / blockers / test results.

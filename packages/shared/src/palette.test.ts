@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE, chroma, contrast, cssHex, hsl, luminance, paletteCssVars } from "./palette.ts";
 
+/** Flames, embers and glows are light sources: the only world colours allowed to be properly saturated. */
+const isLight = (key: string): boolean => /^(flame|ember|glow)/.test(key);
+
 /** Every colour that stands for a surface in the world (not UI chrome), by group, for the art-direction rules. */
 const worldColours: Record<string, readonly number[]> = {
   world: Object.values(PALETTE.world),
   props: Object.values(PALETTE.props),
+  camp: Object.entries(PALETTE.camp).filter(([k]) => !isLight(k)).map(([, v]) => v),
+  campLight: Object.entries(PALETTE.camp).filter(([k]) => isLight(k)).map(([, v]) => v),
   material: Object.values(PALETTE.material),
   trim: Object.values(PALETTE.trim),
   metal: PALETTE.metal,
@@ -30,7 +35,7 @@ describe("art direction: the palette", () => {
 
   it("world surfaces are dusty, not neon: chroma is capped per group", () => {
     // Chroma caps by group: terrain, props and cloth are muted; metals, hair and irises may be a little richer.
-    const caps: Record<string, number> = { world: 0.4, props: 0.4, material: 0.3, trim: 0.5, metal: 0.6, skin: 0.4, hair: 0.55, cloth: 0.5, iris: 0.4 };
+    const caps: Record<string, number> = { world: 0.4, props: 0.4, camp: 0.4, campLight: 0.7, material: 0.3, trim: 0.5, metal: 0.6, skin: 0.4, hair: 0.55, cloth: 0.5, iris: 0.4 };
     for (const [group, colours] of Object.entries(worldColours)) {
       for (const c of colours) expect(chroma(c), `${group} ${cssHex(c)}`).toBeLessThanOrEqual(caps[group]!);
     }
@@ -60,7 +65,7 @@ describe("art direction: the palette", () => {
   });
 
   it("the outline reads on every surface: enough contrast against the lightest and the mid-tone materials", () => {
-    for (const c of [...PALETTE.cloth, ...PALETTE.skin, ...Object.values(PALETTE.world)]) expect(contrast(PALETTE.ink, c), cssHex(c)).toBeGreaterThan(1.6);
+    for (const c of [...PALETTE.cloth, ...PALETTE.skin, ...Object.values(PALETTE.world), ...Object.values(PALETTE.props), ...Object.values(PALETTE.camp)]) expect(contrast(PALETTE.ink, c), cssHex(c)).toBeGreaterThan(1.6);
   });
 
   it("gore Off contains no red at all; Full and Reduced stains are red-family", () => {
@@ -86,6 +91,22 @@ describe("art direction: the palette", () => {
     expect(luminance(PALETTE.sky.mid)).toBeLessThan(luminance(PALETTE.sky.horizon));
     const [h] = hsl(PALETTE.sky.horizon);
     expect(h).toBeLessThan(50);
+  });
+
+  it("the world palette has the colours the environment needs: three receding hill rings, two crown greens, camp light sources", () => {
+    const w = PALETTE.world;
+    // aerial perspective: each ring is paler (lighter) than the one in front of it, and all are lighter than the ground under them
+    expect(luminance(w.hillNear)).toBeLessThan(luminance(w.hillMid));
+    expect(luminance(w.hillMid)).toBeLessThan(luminance(w.hillFar));
+    expect(luminance(w.crownDeep)).toBeLessThan(luminance(w.crownLight));
+    expect(luminance(w.rockDark)).toBeLessThan(luminance(w.rockPale));
+    // clouds are lighter than their shade, and both sit below the sun disc (which must not be pure white)
+    expect(luminance(w.skyCloudShade)).toBeLessThan(luminance(w.skyCloud));
+    expect(luminance(w.skyCloud)).toBeLessThanOrEqual(luminance(w.sunDisc));
+    // flames are warm and brighter than the ember they sit in
+    for (const c of [PALETTE.camp.flameOuter, PALETTE.camp.flameMid, PALETTE.camp.flameCore, PALETTE.camp.glow]) expect(hsl(c)[0], cssHex(c)).toBeLessThan(50);
+    expect(luminance(PALETTE.camp.flameCore)).toBeGreaterThan(luminance(PALETTE.camp.flameMid));
+    expect(luminance(PALETTE.camp.flameMid)).toBeGreaterThan(luminance(PALETTE.camp.ember));
   });
 
   it("UI text is readable on its surfaces (WCAG AA, most at AAA)", () => {

@@ -25,6 +25,9 @@ no per-frame garbage in hot loops; bounded physics bodies/ragdolls; bounded memo
 | 2026-09-29 | Client ragdoll world, 6 simultaneous ragdolls (the cap), 2 x 60 Hz Rapier steps per 30 Hz frame | Node 22, sandbox VM, no GPU | median **3.2 ms**/frame (physics + animation + pose writes), p95 11 ms, first-frame spike ~100 ms (JIT). One or two ragdolls (realistic) ~1 ms. Physics only runs while a ragdoll exists. |
 | 2026-09-29 | Client bundle after `@cb/physics` | `vite build` | Eager JS unchanged in spirit (~0.85 MB raw). Rapier is a **lazy chunk: 4.3 MB raw / 1.67 MB gzip** (the `-compat` build inlines the WASM as base64), fetched when a game starts. Follow-up: switch to the non-compat build with a separate `.wasm` asset (compresses far better) before web release; irrelevant inside Electron. |
 
+| 2026-09-29 | World as illustrated ephemera (D-025): painted terrain, hill rings, 3 tree species, rocks, shrubs, grass, flowers, camp, toon + ink on everything; seed 7 arena | Headless Chromium, **SwiftShader**, `?showcase=world&figures=0&props=0` (renderer.info, includes the shadow pass), plus `perf-capture` | World alone, per frame: **low 22 draw calls / 168k tris**, **medium 28 / 268k**, **high 28 / 328k** (limit was ~45). Main-pass meshes: low 16, medium/high 22. In the game (1 player, ink outline, 14 props, 1280x720): **medium 86 calls, 297k tris, 12 fps, 68 MB heap; low 65 calls, 193k tris, 12 fps; high 81 calls, 355k tris, 10 fps** (frame-capped at 100 ms on a software rasteriser; the M2 baseline was 61 calls / 91k tris). **Software GL: counts are valid, fps is a floor.** |
+| 2026-09-29 | World geometry, one instance each (Node, `WorldView` + builders) | Node, no GPU | Triangles main / ink hull: broadleaf 370/170, acacia 288/100, snag 104/92, shrub 120/60, boulder 120/60, pebble 20, grass tuft 7, flower 7, camp (all solid landmarks merged) 6.6k/5.2k, crate 420/324, barrel 328/192, bottle 244/178, chair 460/302. Terrain 18k / 51k / 80k (96 / 160 / 200 segments). Seed-7 arena: 79 trees + 81 distant trees, 48 rocks, 3 snags. Medium world = 206k tris of which terrain 51k, grass 35k, broadleaf 31k (+14k hull), acacia 17k (+6k), shrubs 13k (+6k). |
+
 **Known character-cost risk:** 30 NPCs x ~17 meshes x 2 (shadow) is ~1000 draw calls, over the 400-600 budget. Planned mitigations (M4/M12): a merged single-mesh LOD1 for mid distance (~1.5k tris, 1-2 calls), impostor/instanced LOD2 beyond, shadow casting only for near characters, and `InstancedMesh` per bone for identical-archetype crowds. Do not add NPC crowds before LOD lands.
 
 Client production bundle (2026-09-29): 780 kB JS raw / 213 kB gzip (three + colyseus SDK + game), 2.9 kB CSS.
@@ -32,3 +35,9 @@ Client production bundle (2026-09-29): 780 kB JS raw / 213 kB gzip (three + coly
 ## TODO measurements (M12 unless noted)
 Real-GPU frame time (CPU vs GPU split); shader compile stalls; GC spikes; server tick time and bandwidth per player with 4 players
 and 30 NPCs; memory per room; soak (hours); reconnect storm; bad-network (100-150 ms + jitter).
+
+## World draw calls (2026-09-29, D-025)
+Instancing plan: terrain 1, skirt 1, hills 1, sky 1; broadleaf / acacia / snag / shrubs / rocks = 1 instanced mesh each (+1 ink hull each on medium/high, +1 shadow pass for the casters);
+pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennant and signboards one textured mesh, flame 1, fire glow 2. Props are one instanced mesh per KIND
+(4, empty kinds are not drawn, +4 hulls) instead of one mesh per prop, so 48 props cost at most 8 draws. Static instances use real bounding spheres; grass/flowers skip culling (one draw either way).
+`WorldView.stats` reports draws and triangles per part; `WorldView.test.ts` fails if the world exceeds 45 draw calls or the triangle ceilings on any preset.

@@ -4,6 +4,8 @@ export * from "./constants.ts";
 export * from "./terrain.ts";
 export * from "./collision.ts";
 export * from "./arena.ts";
+export * from "./camp.ts";
+export * from "./worldgen.ts";
 export * from "./movement.ts";
 export * from "./schema.ts";
 export * from "./protocol.ts";

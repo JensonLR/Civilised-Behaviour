@@ -1,4 +1,5 @@
 import { CHARACTER } from "./constants.ts";
+import { inCampFootprint } from "./camp.ts";
 import { angleDelta } from "./math.ts";
 import { Rng } from "./rng.ts";
 import type { Terrain } from "./terrain.ts";
@@ -99,19 +100,19 @@ export interface PropSpawn {
   yaw: number;
 }
 
-/** Deterministic prop scatter around the spawn clearing (no authored content yet). */
+/** Deterministic prop scatter around the spawn clearing (no authored content yet). Never inside the camp's tents, cart, fire or wall. */
 export function scatterProps(seed: number, terrain: Terrain, count: number): PropSpawn[] {
   const rng = new Rng(seed ^ 0x51ed270b);
   const kinds: PropKindId[] = [PropKind.CRATE, PropKind.BARREL, PropKind.BOTTLE, PropKind.CHAIR, PropKind.CRATE, PropKind.BARREL];
   const out: PropSpawn[] = [];
-  for (let i = 0; i < Math.min(count, INTERACT.maxPropsPerRoom); i++) {
+  const want = Math.min(count, INTERACT.maxPropsPerRoom);
+  for (let tries = 0; out.length < want && tries < want * 12; tries++) {
     const a = rng.range(0, Math.PI * 2);
     const d = rng.range(4.5, 12);
     const x = Math.cos(a) * d;
     const z = Math.sin(a) * d;
-    // Keep clear of the authored wall (z=-12, |x|<6) and crates near (4,6).
-    if (z < -10 && Math.abs(x) < 7) continue;
-    if (Math.hypot(x - 4.6, z - 6.2) < 2) continue;
+    // Keep clear of every authored landmark (wall, crates, tents, fire, flag, sign, luggage, cart) with room to grab a prop beside it.
+    if (inCampFootprint(x, z, 0.9)) continue;
     void terrain;
     out.push({ kind: rng.pick(kinds), x, z, yaw: rng.range(0, Math.PI * 2) });
   }

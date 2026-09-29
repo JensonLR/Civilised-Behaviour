@@ -1,45 +1,39 @@
 import {
   ACESFilmicToneMapping,
-  BoxGeometry,
-  BufferAttribute,
   Color,
-  CylinderGeometry,
   DirectionalLight,
   FogExp2,
   HemisphereLight,
-  IcosahedronGeometry,
-  InstancedMesh,
-  Matrix4,
   Mesh,
-  MeshStandardMaterial,
   PCFShadowMap,
   PerspectiveCamera,
-  PlaneGeometry,
-  Quaternion,
   Scene,
-  ShaderMaterial,
-  SphereGeometry,
   SRGBColorSpace,
   Vector2,
   Vector3,
   WebGLRenderer,
-  BackSide,
 } from "three";
-import { ARENA_RADIUS, PALETTE, Rng, clamp, type CollisionWorld, type Obstacle } from "@cb/shared";
+import { PALETTE, type CollisionWorld } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
+import { WorldView } from "./world/WorldView.ts";
+import { buildSky, fogColour } from "./world/sky.ts";
 
 export interface GraphicsPreset {
   shadowMapSize: number;
   pixelRatioCap: number;
   terrainSegments: number;
-  /** Silhouette outlines on characters: ~+37% triangles and one extra draw per bone, so the low preset drops them. */
+  /** Ink outlines on characters (~+37% triangles and one extra draw per bone) and on world objects (one extra draw per instanced set): the low preset drops them. */
   outlines: boolean;
+  /** Instanced ground cover and shrubs. Static, so only vertex/triangle cost: low keeps a sparse meadow. */
+  grassTufts: number;
+  flowers: number;
+  bushes: number;
 }
 
 export const PRESETS: Record<"low" | "medium" | "high", GraphicsPreset> = {
-  low: { shadowMapSize: 1024, pixelRatioCap: 1, terrainSegments: 96, outlines: false },
-  medium: { shadowMapSize: 2048, pixelRatioCap: 1.5, terrainSegments: 160, outlines: true },
-  high: { shadowMapSize: 4096, pixelRatioCap: 2, terrainSegments: 200, outlines: true },
+  low: { shadowMapSize: 1024, pixelRatioCap: 1, terrainSegments: 96, outlines: false, grassTufts: 1800, flowers: 300, bushes: 60 },
+  medium: { shadowMapSize: 2048, pixelRatioCap: 1.5, terrainSegments: 160, outlines: true, grassTufts: 5000, flowers: 900, bushes: 130 },
+  high: { shadowMapSize: 4096, pixelRatioCap: 2, terrainSegments: 200, outlines: true, grassTufts: 8000, flowers: 1500, bushes: 200 },
 };
 
 const SUN_DIR = new Vector3(-0.55, 0.62, 0.42).normalize();
@@ -54,7 +48,7 @@ export class Stage {
   readonly camera = new PerspectiveCamera(65, 1, 0.1, 600);
   private readonly sun = new DirectionalLight(PALETTE.light.sun, 3.0);
   private readonly sky: Mesh;
-  private readonly staticMeshes: Mesh[] = [];
+  private worldView?: WorldView;
   private preset: GraphicsPreset;
 
   get outlines(): boolean {
@@ -70,9 +64,10 @@ export class Stage {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
 
-    const horizon = new Color(PALETTE.sky.horizon);
-    this.scene.background = horizon;
-    this.scene.fog = new FogExp2(horizon, 0.0085);
+    // One colour of distance for fog, the sky's lowest band, the ground skirt and the far hills (world/sky.ts).
+    const haze = fogColour(new Color());
+    this.scene.background = haze;
+    this.scene.fog = new FogExp2(haze, 0.0085);
 
     this.scene.add(new HemisphereLight(PALETTE.light.sky, PALETTE.light.bounce, 1.0));
     this.sun.castShadow = true;
@@ -84,11 +79,12 @@ export class Stage {
     sc.bottom = -34;
     sc.near = 1;
     sc.far = 160;
-    this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.04;
+    this.sun.shadow.bias = -0.0009;
+    this.sun.shadow.radius = 2.5; // softens the PCF edge so faceted canvas and foliage do not dither at the terminator
+    this.sun.shadow.normalBias = 0.07;
     this.scene.add(this.sun, this.sun.target);
 
-    this.sky = this.buildSky();
+    this.sky = buildSky(SUN_DIR);
     this.scene.add(this.sky);
     this.resize();
     window.addEventListener("resize", () => this.resize());
@@ -105,149 +101,15 @@ export class Stage {
     this.camera.updateProjectionMatrix();
   }
 
-  /** Builds terrain + obstacle meshes from the same deterministic data the server simulates. */
+  /** Builds the world (painted terrain, hills, trees, rocks, ground cover, the camp) from the same deterministic data the server simulates. */
   buildWorld(world: CollisionWorld): void {
-    for (const m of this.staticMeshes) {
-      this.scene.remove(m);
-      m.geometry.dispose();
-      (m.material as MeshStandardMaterial).dispose();
-    }
-    this.staticMeshes.length = 0;
-    this.addTerrain(world);
-    this.addObstacles(world.obstacles);
+    this.worldView?.dispose();
+    this.worldView = new WorldView(this.scene, world, this.preset, SUN_DIR);
   }
 
-  private addTerrain(world: CollisionWorld): void {
-    const size = ARENA_RADIUS * 2 + 60;
-    const seg = this.preset.terrainSegments;
-    const geo = new PlaneGeometry(size, size, seg, seg);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position as BufferAttribute;
-    const colors = new Float32Array(pos.count * 3);
-    const grass = new Color(PALETTE.world.grass);
-    const dry = new Color(PALETTE.world.dry);
-    const rock = new Color(PALETTE.world.rock);
-    const c = new Color();
-    const rng = new Rng(1);
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const h = world.terrainHeight(x, z);
-      pos.setY(i, h);
-      const e = 0.6;
-      const slope = Math.hypot(world.terrainHeight(x + e, z) - h, world.terrainHeight(x, z + e) - h) / e;
-      c.copy(grass).lerp(dry, clamp((h + 1) / 5, 0, 1));
-      c.lerp(rock, clamp((slope - 0.25) * 2.2, 0, 0.85));
-      const j = 0.92 + rng.next() * 0.12;
-      colors[i * 3] = c.r * j;
-      colors[i * 3 + 1] = c.g * j;
-      colors[i * 3 + 2] = c.b * j;
-    }
-    geo.setAttribute("color", new BufferAttribute(colors, 3));
-    geo.computeVertexNormals();
-    const mesh = new Mesh(geo, new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    this.staticMeshes.push(mesh);
-  }
-
-  private addObstacles(obstacles: readonly Obstacle[]): void {
-    const boulders = obstacles.filter((o) => o.kind === "circle" && o.y1 - o.y0 < 5);
-    const trunks = obstacles.filter((o) => o.kind === "circle" && o.y1 - o.y0 >= 5);
-    const boxes = obstacles.filter((o) => o.kind === "box");
-    const m4 = new Matrix4();
-    const q = new Quaternion();
-    const s = new Vector3();
-    const p = new Vector3();
-    const up = new Vector3(0, 1, 0);
-
-    const make = (geo: IcosahedronGeometry | CylinderGeometry | BoxGeometry, color: number, list: Obstacle[], place: (o: Obstacle) => void) => {
-      const mat = new MeshStandardMaterial({ color, roughness: 0.9, flatShading: geo instanceof IcosahedronGeometry });
-      const im = new InstancedMesh(geo, mat, Math.max(list.length, 1));
-      im.count = list.length;
-      list.forEach((o, i) => {
-        place(o);
-        m4.compose(p, q, s);
-        im.setMatrixAt(i, m4);
-      });
-      im.castShadow = true;
-      im.receiveShadow = true;
-      im.instanceMatrix.needsUpdate = true;
-      this.scene.add(im);
-      this.staticMeshes.push(im as unknown as Mesh);
-    };
-
-    make(new IcosahedronGeometry(1, 1), PALETTE.world.boulder, boulders, (o) => {
-      if (o.kind !== "circle") return;
-      const h = o.y1 - o.y0;
-      p.set(o.x, o.y0 + h * 0.5 + 0.2, o.z);
-      q.setFromAxisAngle(up, o.x * 7.31);
-      s.set(o.r * 1.15, h * 0.5, o.r * 1.15);
-    });
-    make(new CylinderGeometry(1, 1.25, 1, 10), PALETTE.world.trunk, trunks, (o) => {
-      if (o.kind !== "circle") return;
-      const h = o.y1 - o.y0;
-      p.set(o.x, o.y0 + h * 0.5, o.z);
-      q.identity();
-      s.set(o.r, h, o.r);
-    });
-    make(new BoxGeometry(1, 1, 1), PALETTE.world.ruin, boxes, (o) => {
-      if (o.kind !== "box") return;
-      const h = o.y1 - o.y0;
-      p.set(o.x, o.y0 + h * 0.5, o.z);
-      q.setFromAxisAngle(up, -o.yaw);
-      s.set(o.hx * 2, h, o.hz * 2);
-    });
-
-    // Tree crowns on top of trunks (instanced, sharing one geometry).
-    const crownGeo = new SphereGeometry(1, 10, 8);
-    const crownMat = new MeshStandardMaterial({ color: PALETTE.world.crown, roughness: 0.9, flatShading: true });
-    const crowns = new InstancedMesh(crownGeo, crownMat, Math.max(trunks.length, 1));
-    crowns.count = trunks.length;
-    const rng = new Rng(77);
-    trunks.forEach((o, i) => {
-      if (o.kind !== "circle") return;
-      const r = 1.8 + rng.next() * 1.4;
-      p.set(o.x, o.y1 + r * 0.2, o.z);
-      q.identity();
-      s.set(r, r * 0.8, r);
-      m4.compose(p, q, s);
-      crowns.setMatrixAt(i, m4);
-    });
-    crowns.castShadow = true;
-    crowns.instanceMatrix.needsUpdate = true;
-    this.scene.add(crowns);
-    this.staticMeshes.push(crowns as unknown as Mesh);
-  }
-
-  private buildSky(): Mesh {
-    const mat = new ShaderMaterial({
-      side: BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: {
-        top: { value: new Color(PALETTE.sky.top) },
-        mid: { value: new Color(PALETTE.sky.mid) },
-        horizon: { value: new Color(PALETTE.sky.horizon) },
-        sunDir: { value: SUN_DIR.clone() },
-      },
-      vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
-      fragmentShader: `
-        varying vec3 vDir; uniform vec3 top; uniform vec3 mid; uniform vec3 horizon; uniform vec3 sunDir;
-        void main(){
-          float h = clamp(vDir.y, 0.0, 1.0);
-          vec3 col = mix(horizon, mid, smoothstep(0.0, 0.25, h));
-          col = mix(col, top, smoothstep(0.2, 0.85, h));
-          float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
-          col += vec3(1.0, 0.82, 0.55) * (pow(s, 600.0) * 3.0 + pow(s, 12.0) * 0.28);
-          gl_FragColor = vec4(col, 1.0);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-    });
-    const sky = new Mesh(new SphereGeometry(400, 24, 16), mat);
-    sky.frustumCulled = false;
-    return sky;
+  /** Draw/triangle counts of the built world, for docs/PERFORMANCE.md. */
+  get worldStats(): import("./world/WorldView.ts").WorldStats | undefined {
+    return this.worldView?.stats;
   }
 
   /** Keeps the shadow frustum centred on the action, snapped to texels to avoid shimmer. */
@@ -262,6 +124,7 @@ export class Stage {
   }
 
   render(): void {
+    this.worldView?.update(performance.now() / 1000);
     this.renderer.render(this.scene, this.camera);
   }
 }

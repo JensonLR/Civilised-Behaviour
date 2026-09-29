@@ -48,7 +48,7 @@ export class Game {
     this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1 });
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.tagLayer = hud;
-    this.props = new PropViews(stage.scene);
+    this.props = new PropViews(stage.scene, stage.outlines);
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));

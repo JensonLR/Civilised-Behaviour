@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### Added
+- World art pass (D-025): the environment shares the characters' toon + ink look. Painted terrain, hill rings and ground skirt past the arena edge, painterly sky with sun disc, three tree species, faceted rocks, shrubs, wind-swept grass and flowers, and a collidable expedition camp at the spawn (bell tents, campfire, Society pennant, signpost, luggage, supply cart, ruined wall). Instanced outlines, detailed crates/barrels/bottles/chairs, `?showcase=world` review scene.
 - Faces rebuilt as one sculpted skin (brow, sockets, cheeks, lips, chin) with swept noses/moustaches/beards, shell hair, cupped ears, catch-light eyes, a real mouth with teeth and tongue.
 - One shared game palette (`palette.ts`) driving characters, terrain, props, effects and UI, with art-direction tests and `docs/ART_DIRECTION.md`.
 - Character rebuild: lofted torso, sleeves, trousers, coats and boots (real clothing forms), toon lighting, chunkier boots and hands, jacket details (lapels, epaulettes, braces, belts, pockets). Fewer triangles than before.

@@ -9,8 +9,15 @@ import type { Terrain } from "./terrain.ts";
  * cheap, allocation-free and bit-identical on both sides. Rapier owns the *dynamic* world
  * (props, ragdolls, vehicles), which the controller never has to replay.
  */
+/**
+ * What an obstacle IS, so the renderer can dress it (a tree, a tent, a signpost). Purely descriptive: collision ignores it, and an
+ * untagged obstacle falls back to `classifyObstacle` in worldgen.ts (circle >= 5 m tall = tree, otherwise a rock).
+ */
+export type ObstacleTag = "tree" | "snag" | "rock" | "wall" | "crate" | "tent" | "fire" | "flag" | "sign" | "luggage" | "cart";
+
 export interface CircleObstacle {
   kind: "circle";
+  tag?: ObstacleTag;
   x: number;
   z: number;
   r: number;
@@ -21,6 +28,7 @@ export interface CircleObstacle {
 
 export interface BoxObstacle {
   kind: "box";
+  tag?: ObstacleTag;
   x: number;
   z: number;
   hx: number;
