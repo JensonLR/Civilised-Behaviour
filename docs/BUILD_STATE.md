@@ -43,6 +43,11 @@ Not done in M1:
 - Pad remapping, settings UI, UI scale (M11).
 - Real character art: `Puppet` is an M1 stand-in only.
 
+## Deployment (see DEPLOYMENT.md)
+Render free-tier test deploy is live: client https://cb-client-42gz.onrender.com, server https://cb-server-86wx.onrender.com.
+Server-side WebSocket joins verified; end-to-end browser session against it NOT yet verified (sandbox Chromium gets 404 on wss upgrade).
+Open: enforce ALLOWED_ORIGINS; set health-check path in Render dashboard.
+
 ## Open / blockers (human-only)
 - Steam App ID, Steamworks account, Steam Direct fee, signing certificates, domain(s), Cloudflare + Railway accounts: none exist yet.
   All isolated behind config; see DEPLOYMENT.md / STEAM_RELEASE.md (drafts, not verified).
