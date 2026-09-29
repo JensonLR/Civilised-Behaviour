@@ -9,6 +9,15 @@ export interface Intent {
 
 const DEADZONE = 0.18;
 
+/** Keys whose press must never be lost between two fixed input samples. */
+const TAP_BUTTONS: Record<string, number> = {
+  Space: BUTTON.JUMP,
+  KeyE: BUTTON.INTERACT,
+  KeyR: BUTTON.RELOAD,
+  KeyV: BUTTON.MELEE,
+  KeyG: BUTTON.THROW,
+};
+
 /** Radial deadzone with rescale, so slow sticks stay precise and never drift. */
 function stick(x: number, y: number): [number, number] {
   const m = Math.hypot(x, y);
@@ -33,6 +42,8 @@ export class Controls {
   private lookX = 0;
   private lookY = 0;
   private sprintToggled = false;
+  /** Buttons pressed since the last sample: a tap shorter than one 33 ms step must still register. */
+  private latched = 0;
   /** Set true whenever the last meaningful input came from a pad (drives UI glyphs). */
   usingGamepad = false;
   onToggleDebug: (() => void) | undefined;
@@ -45,6 +56,7 @@ export class Controls {
       if (e.repeat) return;
       this.keys.add(e.code);
       this.usingGamepad = false;
+      this.latched |= TAP_BUTTONS[e.code] ?? 0;
       if (e.code === "F3") {
         e.preventDefault();
         this.onToggleDebug?.();
@@ -129,6 +141,8 @@ export class Controls {
       if (b(7) || (p.buttons[7]?.value ?? 0) > 0.4) buttons |= BUTTON.FIRE;
       if (b(10)) buttons |= BUTTON.SPRINT;
     }
+    buttons |= this.latched;
+    this.latched = 0;
     const m = Math.hypot(f, r);
     if (m > 1) {
       f /= m;

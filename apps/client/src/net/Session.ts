@@ -12,6 +12,7 @@ import {
   type MoveCommand,
   type MoveInputType,
   type PlayerStateType,
+  type PropStateType,
   type WorldStateType,
 } from "@cb/shared";
 
@@ -77,6 +78,7 @@ export class Session {
     this.world = createArena(room.state.seed);
     this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
+    this.predict.attachAll("props", { x: "lerp", y: "lerp", z: "lerp", qx: "lerp", qy: "lerp", qz: "lerp", qw: "lerp" } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;
   }
 
@@ -131,8 +133,16 @@ export class Session {
       step: (ctx: { dt: number }, state: PlayerStateType, cmd: MoveInputType) =>
         stepCharacter(state, cmd as MoveCommand, ctx.dt, this.world),
       smoothMs: 65,
+      // Turns on the SDK's drift telemetry (it is off unless watched). The tolerance is huge so it never warns.
+      warnOnDivergence: 1e9,
     } as never);
     return me;
+  }
+
+  /** Reconciler drift vs the server (metres): `ema` persistent, `peak` worst. Zero means prediction matches. */
+  get drift(): { ema: number; peak: number; lastCorrection: number } {
+    const r = this.reconciler as unknown as { drift: { ema: number; peak: number }; lastCorrectionMag: number } | undefined;
+    return { ema: r?.drift.ema ?? 0, peak: r?.drift.peak ?? 0, lastCorrection: r?.lastCorrectionMag ?? 0 };
   }
 
   get local(): PlayerStateType | undefined {

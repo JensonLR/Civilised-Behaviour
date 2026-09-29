@@ -56,11 +56,13 @@ export function installMatchmakingOriginPolicy(policy: OriginPolicy): () => void
     return original.invokeMethod.call(this, method, roomName, clientOptions, authContext);
   };
   c.getCorsHeaders = (headers: Headers) => ({
+    // Always a single concrete origin, never "*": the SDK fetches with credentials:'include', and browsers
+    // reject a credentialed response unless Allow-Credentials is "true" AND the origin is not a wildcard.
+    // (Removing Allow-Credentials breaks every real browser; only the Playwright e2e catches that.)
     "Access-Control-Allow-Origin": policy.corsOrigin(headers.get("origin")),
+    "Access-Control-Allow-Credentials": "true",
     Vary: "Origin",
   });
-  // Credentials are never used (no cookies); do not advertise them.
-  delete (c.DEFAULT_CORS_HEADERS as Record<string, string>)["Access-Control-Allow-Credentials"];
 
   return () => {
     c.invokeMethod = original.invokeMethod;

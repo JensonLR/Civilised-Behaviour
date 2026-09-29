@@ -6,6 +6,7 @@ import { log } from "./log.ts";
 import { metrics } from "./metrics.ts";
 import { createOriginPolicy, installMatchmakingOriginPolicy, originUpgradeGuard } from "./origins.ts";
 import { RateLimiter } from "./ratelimit.ts";
+import { setRoomConfig } from "./roomConfig.ts";
 import { WorldRoom } from "./rooms/WorldRoom.ts";
 
 /** Code lookups are the only unauthenticated enumeration surface: 10 burst, then 1 per 6 s per IP. */
@@ -18,6 +19,7 @@ function clientIp(request: Request | undefined): string {
 
 export function createGameServer(config: ServerConfig): Server {
   const origins = createOriginPolicy(config.allowedOrigins);
+  setRoomConfig({ debugCommands: config.debugCommands });
   const health = createEndpoint("/health", { method: "GET" }, async (ctx) =>
     ctx.json({ ok: true, env: config.nodeEnv, uptimeS: Math.round(process.uptime()) }),
   );

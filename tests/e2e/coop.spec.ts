@@ -79,3 +79,28 @@ test("joining a bad code shows a friendly error", async ({ page }) => {
   await page.click("#join");
   await expect(page.locator("#status")).toContainText(/No campaign/);
 });
+
+test("a player walks up to a prop, picks it up, and throws it (real browser, server-authoritative)", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await start(page, "Porter");
+  const propsHeld = () =>
+    page.evaluate(() => {
+      const h = (window as unknown as { __cb: { session: { sessionId: string; room: { state: { props: Map<string, { holder: string }> } } } } }).__cb;
+      return [...h.session.room.state.props.values()].filter((p) => p.holder === h.session.sessionId).length;
+    });
+
+  await page.evaluate(() => (window as unknown as { __cb: { session: { room: { send(t: string, m: unknown): void } } } }).__cb.session.room.send("debug", { cmd: "nearProp" }));
+  await expect(page.locator(".prompt")).toContainText("Pick up", { timeout: 20_000 });
+  await page.screenshot({ path: "test-results/prop-prompt.png" });
+
+  await page.locator("#stage").focus();
+  await page.keyboard.press("KeyE"); // a very short tap must still register (input latching)
+  await expect.poll(propsHeld, { timeout: 20_000 }).toBe(1);
+  await expect(page.locator(".prompt")).toContainText("Throw");
+  await page.screenshot({ path: "test-results/prop-carried.png" });
+
+  await page.keyboard.press("KeyG");
+  await expect.poll(propsHeld, { timeout: 20_000 }).toBe(0);
+  expect(errors).toEqual([]);
+});

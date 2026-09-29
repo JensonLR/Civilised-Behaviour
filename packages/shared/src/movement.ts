@@ -64,12 +64,14 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const control = s.stumble > 0 ? MOVEMENT.stumbleControl : 1;
   s.stumble = Math.max(0, s.stumble - dt);
 
+  const carrying = (s.flags & FLAG.CARRYING) !== 0;
   const crouching = !downed && (buttons & BUTTON.CROUCH) !== 0;
-  const sprinting = !downed && !crouching && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
+  const sprinting = !downed && !crouching && !carrying && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
   let topSpeed: number = MOVEMENT.runSpeed;
   if (downed) topSpeed = 0.9;
   else if (crouching) topSpeed = MOVEMENT.crouchSpeed;
   else if (sprinting) topSpeed = MOVEMENT.sprintSpeed;
+  if (carrying) topSpeed *= MOVEMENT.carryFactor;
 
   // Camera-relative world direction. Yaw 0 looks down -Z; +R is camera-right.
   const sinY = Math.sin(camYaw);
@@ -97,7 +99,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const jumpHeld = (buttons & BUTTON.JUMP) !== 0;
   let flags = s.flags;
   if (!jumpHeld) flags &= ~FLAG.JUMP_LATCH;
-  if (jumpHeld && wasGrounded && !downed && !crouching && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
+  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
     s.vy = MOVEMENT.jumpSpeed;
     flags |= FLAG.JUMP_LATCH;
     flags &= ~FLAG.GROUNDED;

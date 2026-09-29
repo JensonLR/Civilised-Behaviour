@@ -12,6 +12,8 @@ class Metrics {
   reconnectFailures = 0;
   tickOverruns = 0;
   saveFailures = 0;
+  /** Live Rapier bodies (props + player capsules) across all rooms. */
+  physicsBodies = 0;
   private ticks = new Float64Array(TICK_RING);
   private tickCount = 0;
 
@@ -43,6 +45,7 @@ class Metrics {
       reconnectFailures: this.reconnectFailures,
       tickOverruns: this.tickOverruns,
       saveFailures: this.saveFailures,
+      physicsBodies: this.physicsBodies,
       tick: this.tickStats(),
       heapMB: Math.round(mem.heapUsed / 1048576),
       rssMB: Math.round(mem.rss / 1048576),

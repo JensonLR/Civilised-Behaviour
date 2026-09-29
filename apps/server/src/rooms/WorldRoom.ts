@@ -1,8 +1,15 @@
 import { CloseCode, Room, type Client } from "@colyseus/core";
 import {
+  BUTTON,
   CHARACTER,
   CollisionWorld,
   FLAG,
+  INTERACT,
+  PropState,
+  findInteractTarget,
+  holdPosition,
+  scatterProps,
+  type MoveCommand,
   JOIN_CODE_ALPHABET,
   JOIN_CODE_LENGTH,
   MAX_MESSAGES_PER_SECOND,
@@ -20,10 +27,13 @@ import {
   stepCharacter,
   type JoinOptions,
   type MoveInputType,
+  type PlayerStateType,
   type WorldStateType,
 } from "@cb/shared";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
+import { getRoomConfig } from "../roomConfig.ts";
+import { PhysicsWorld, initRapier } from "../physics.ts";
 
 /**
  * Server state must be a pure function of the input sequence, so an empty tick skips the player
@@ -61,14 +71,32 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   });
 
   private world!: CollisionWorld;
+  private physics!: PhysicsWorld;
+  /** Last buttons seen per player, for rising-edge detection (interact/throw). */
+  private prevButtons = new Map<string, number>();
+  /** sessionId -> prop id currently carried. */
+  private carrying = new Map<string, string>();
+  private readonly hold = { x: 0, y: 0, z: 0 };
   private usedSlots = new Set<number>();
   private emptyTicks = new Map<string, number>();
 
-  override onCreate(options: JoinOptions): void {
+  override async onCreate(options: JoinOptions): Promise<void> {
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
     this.state.seed = seed;
     this.state.code = generateJoinCode();
     this.world = createArena(seed);
+    await initRapier();
+    this.physics = new PhysicsWorld(this.world);
+    for (const spawn of scatterProps(seed, this.world.terrain, 14)) {
+      const body = this.physics.spawnProp(spawn, this.world.terrainHeight(spawn.x, spawn.z));
+      if (!body) continue;
+      const ps = new PropState();
+      ps.kind = spawn.kind;
+      ps.holder = "";
+      this.state.props.set(body.id, ps);
+      this.writeProp(body.id, true);
+    }
+    metrics.physicsBodies += this.physics.props.size;
     void this.setMetadata({ code: this.state.code });
     // Campaigns are friends-first: unlisted, reachable only via join code or direct room id.
     void this.setPrivate(true);
@@ -81,13 +109,24 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         const frames = this.inputs.get(sessionId).drain();
         if (frames.length > 0) {
           this.emptyTicks.set(sessionId, 0);
-          for (const cmd of frames) stepCharacter(player, cmd, ctx.dt, this.world);
-          return;
+          for (const cmd of frames) {
+            stepCharacter(player, cmd, ctx.dt, this.world);
+            this.handleInteraction(sessionId, player, cmd);
+          }
+        } else {
+          const empty = (this.emptyTicks.get(sessionId) ?? 0) + 1;
+          this.emptyTicks.set(sessionId, empty);
+          if (empty > IDLE_AFTER_TICKS) stepCharacter(player, IDLE_COMMAND, ctx.dt, this.world);
         }
-        const empty = (this.emptyTicks.get(sessionId) ?? 0) + 1;
-        this.emptyTicks.set(sessionId, empty);
-        if (empty > IDLE_AFTER_TICKS) stepCharacter(player, IDLE_COMMAND, ctx.dt, this.world);
+        this.physics.syncPlayer(sessionId, player.x, player.y, player.z, (player.flags & FLAG.CROUCHING) !== 0);
+        const held = this.carrying.get(sessionId);
+        if (held) {
+          holdPosition(player, this.hold);
+          this.physics.moveHeld(held, this.hold.x, this.hold.y, this.hold.z, player.facing);
+        }
       });
+      this.physics.step(ctx.dt);
+      for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
       const ms = performance.now() - t0;
       metrics.recordTick(ms);
       if (ms > ctx.dtMs) {
@@ -95,6 +134,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         log.warn("room.tick_overrun", { roomId: this.roomId, ms: Math.round(ms * 100) / 100, budgetMs: ctx.dtMs });
       }
     }, TICK_RATE);
+
+    if (getRoomConfig().debugCommands) {
+      log.warn("room.debug_enabled", { roomId: this.roomId });
+      this.onMessage("debug", (client, msg: { cmd?: string }) => this.debugCommand(client, msg?.cmd));
+    }
 
     this.onMessage("ping", (client, msg: { t?: number }) => {
       client.send("pong", { t: typeof msg?.t === "number" ? msg.t : 0, serverTime: Date.now() });
@@ -113,6 +157,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     Object.assign(player, c);
     this.state.players.set(client.sessionId, player);
     metrics.players++;
+    metrics.physicsBodies++;
     log.info("room.join", { roomId: this.roomId, sessionId: client.sessionId, slot, name: player.name });
   }
 
@@ -133,6 +178,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         log.info("room.reconnect_expired", { roomId: this.roomId, sessionId: client.sessionId });
       }
     }
+    this.dropHeld(client.sessionId, player);
+    this.physics.removePlayer(client.sessionId);
+    metrics.physicsBodies--;
+    this.prevButtons.delete(client.sessionId);
     this.usedSlots.delete(player.slot);
     this.emptyTicks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
@@ -142,7 +191,109 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
   override onDispose(): void {
     metrics.rooms--;
+    if (this.physics) {
+      metrics.physicsBodies -= this.physics.props.size; // player capsules are released in onLeave
+      this.physics.dispose();
+    }
     log.info("room.dispose", { roomId: this.roomId, code: this.state.code });
+  }
+
+  /**
+   * Server-authoritative interaction, evaluated per input frame on rising button edges only:
+   * INTERACT picks up the best target in reach (shared rule) or drops what is held; THROW hurls it.
+   */
+  private handleInteraction(sessionId: string, player: PlayerStateType, cmd: MoveCommand): void {
+    const prev = this.prevButtons.get(sessionId) ?? 0;
+    this.prevButtons.set(sessionId, cmd.buttons);
+    const pressed = cmd.buttons & ~prev;
+    if (pressed === 0) return;
+    const held = this.carrying.get(sessionId);
+
+    if (held) {
+      if (pressed & (BUTTON.INTERACT | BUTTON.THROW)) {
+        const throwing = (pressed & BUTTON.THROW) !== 0;
+        const dirX = -Math.sin(player.facing);
+        const dirZ = -Math.cos(player.facing);
+        this.physics.release(
+          held,
+          player.vx + (throwing ? dirX * INTERACT.throwSpeed : 0),
+          throwing ? INTERACT.throwLift : 0,
+          player.vz + (throwing ? dirZ * INTERACT.throwSpeed : 0),
+        );
+        this.finishHold(sessionId, held, player);
+      }
+      return;
+    }
+    if (pressed & BUTTON.INTERACT) {
+      const target = findInteractTarget<string>(player, (cb) => this.state.props.forEach((p, id) => cb(id, p)));
+      if (target === undefined || !this.physics.hold(target, sessionId)) return;
+      this.carrying.set(sessionId, target);
+      player.flags |= FLAG.CARRYING;
+      const ps = this.state.props.get(target);
+      if (ps) ps.holder = sessionId;
+    }
+  }
+
+  /** QA-only commands (see docs/NETWORKING.md). Registered only when config.debugCommands is true. */
+  private debugCommand(client: Client, cmd: string | undefined): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (cmd === "nearProp") {
+      // Stand 1.2 m south of the closest free prop, facing it.
+      let best: { x: number; y: number; z: number } | undefined;
+      let bestD = Infinity;
+      this.state.props.forEach((p) => {
+        if (p.holder) return;
+        const d = Math.hypot(p.x - player.x, p.z - player.z);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
+      });
+      if (!best) return;
+      player.x = best.x;
+      player.z = best.z + 1.2;
+      player.y = best.y - 0.3;
+      player.facing = 0;
+      player.vx = 0;
+      player.vz = 0;
+    }
+  }
+
+  private finishHold(sessionId: string, propId: string, player: PlayerStateType): void {
+    this.carrying.delete(sessionId);
+    player.flags &= ~FLAG.CARRYING;
+    const ps = this.state.props.get(propId);
+    if (ps) ps.holder = "";
+  }
+
+  /** Drops whatever a departing player carries, where it hangs. */
+  private dropHeld(sessionId: string, player: PlayerStateType): void {
+    const held = this.carrying.get(sessionId);
+    if (!held) return;
+    this.physics.release(held, 0, 0, 0);
+    this.finishHold(sessionId, held, player);
+  }
+
+  /** Copies a body's pose into replicated state, skipping sub-millimetre jitter to save bandwidth. */
+  private writeProp(id: string, force: boolean): void {
+    const pb = this.physics.props.get(id);
+    const ps = this.state.props.get(id);
+    if (!pb || !ps) return;
+    const t = pb.body.translation();
+    const q = pb.body.rotation();
+    const eps = 0.002;
+    if (force || Math.abs(ps.x - t.x) > eps || Math.abs(ps.y - t.y) > eps || Math.abs(ps.z - t.z) > eps) {
+      ps.x = t.x;
+      ps.y = t.y;
+      ps.z = t.z;
+    }
+    if (force || Math.abs(ps.qx - q.x) > 0.002 || Math.abs(ps.qy - q.y) > 0.002 || Math.abs(ps.qz - q.z) > 0.002 || Math.abs(ps.qw - q.w) > 0.002) {
+      ps.qx = q.x;
+      ps.qy = q.y;
+      ps.qz = q.z;
+      ps.qw = q.w;
+    }
   }
 
   private freeSlot(): number {

@@ -1,9 +1,10 @@
 import { Vector3 } from "three";
-import { yawToWire, type PlayerStateType } from "@cb/shared";
+import { FLAG, PROP_DEFS, findInteractTarget, yawToWire, type PlayerStateType, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
 import { Puppet } from "../render/Puppet.ts";
+import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 
@@ -20,6 +21,8 @@ export class Game {
   readonly overlay: DebugOverlay;
   private readonly actors = new Map<string, Actor>();
   private readonly tagLayer: HTMLElement;
+  private readonly props: PropViews;
+  private readonly prompt: HTMLDivElement;
   private last = performance.now();
   private raf = 0;
   private running = false;
@@ -35,10 +38,19 @@ export class Game {
     this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1 });
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.tagLayer = hud;
+    this.props = new PropViews(stage.scene);
+    this.prompt = document.createElement("div");
+    this.prompt.className = "prompt";
+    this.prompt.hidden = true;
+    hud.appendChild(this.prompt);
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
       rttMs: () => session.rttMs,
+      extra: () => {
+        const d = session.drift;
+        return `props ${this.props.count}  drift ema ${d.ema.toFixed(3)} peak ${d.peak.toFixed(3)} m`;
+      },
     });
     controls.onToggleDebug = () => this.overlay.toggle();
     stage.buildWorld(session.world);
@@ -66,6 +78,8 @@ export class Game {
     cancelAnimationFrame(this.raf);
     for (const a of this.actors.values()) this.removeActor(a);
     this.actors.clear();
+    this.props.dispose();
+    this.prompt.remove();
   }
 
   private frame(now: number): void {
@@ -92,6 +106,8 @@ export class Game {
     }
 
     this.syncActors(dt);
+    this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
+    this.updatePrompt();
 
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
@@ -100,6 +116,25 @@ export class Game {
     }
     this.stage.render();
     this.overlay.frame(dt);
+  }
+
+  /** Contextual prompt from the same shared rule the server enforces (the server still validates). */
+  private updatePrompt(): void {
+    const me = this.session.predicted;
+    if (!me) return;
+    const pad = this.controls.usingGamepad;
+    let text = "";
+    if ((me.flags & FLAG.CARRYING) !== 0) {
+      text = `${pad ? "X" : "E"}  Drop     ${pad ? "LB" : "G"}  Throw`;
+    } else {
+      const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
+      if (id !== undefined) {
+        const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
+        text = `${pad ? "X" : "E"}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
+      }
+    }
+    this.prompt.hidden = text === "";
+    if (this.prompt.textContent !== text) this.prompt.textContent = text;
   }
 
   private syncActors(dt: number): void {

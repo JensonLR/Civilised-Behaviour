@@ -75,13 +75,26 @@ describe("origin enforcement (integration)", () => {
     expect(await rooms()).toBe(n0);
   });
 
-  it("CORS headers only ever name the allowed origin, without credentials", async () => {
+  it("CORS: credentialed requests are satisfiable for the allowed origin and never for others", async () => {
+    // The SDK fetches with credentials:'include' => browsers require Allow-Credentials:true + a concrete origin.
     const res = await colyseus.http.post(`/matchmake/create/${ROOM_WORLD}`, {
       headers: { "content-type": "application/json", origin: GOOD },
       body: { name: "t" },
     });
     expect(res.headers["access-control-allow-origin"]).toBe(GOOD);
-    expect(res.headers["access-control-allow-credentials"]).toBeUndefined();
+    expect(res.headers["access-control-allow-credentials"]).toBe("true");
+
+    const preflight = (origin: string) =>
+      fetch(`http://127.0.0.1:${PORT}/matchmake/create/${ROOM_WORLD}`, {
+        method: "OPTIONS",
+        headers: { origin, "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+      });
+    const ok = await preflight(GOOD);
+    expect(ok.headers.get("access-control-allow-origin")).toBe(GOOD);
+    expect(ok.headers.get("access-control-allow-credentials")).toBe("true");
+    const bad = await preflight(EVIL);
+    expect(bad.headers.get("access-control-allow-origin")).not.toBe(EVIL);
+    expect(bad.headers.get("access-control-allow-origin")).not.toBe("*");
   });
 
   it("campaign lookup refuses foreign origins", async () => {

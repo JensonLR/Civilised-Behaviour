@@ -30,6 +30,8 @@ export const MOVEMENT = {
   /** Fraction of control kept while stumbling. */
   stumbleControl: 0.15,
   terminalVelocity: 40,
+  /** Speed multiplier while carrying a prop (further scaled by the prop's weight class). */
+  carryFactor: 0.72,
 } as const;
 
 /** Bit flags packed into PlayerState.flags (uint8). */
@@ -39,6 +41,8 @@ export const FLAG = {
   CROUCHING: 4,
   SPRINTING: 8,
   DOWNED: 16,
+  /** Set by the server while a player holds a prop (slows movement, blocks sprint/jump). */
+  CARRYING: 32,
 } as const;
 
 /** Bit flags packed into MoveInput.buttons (uint16). */
