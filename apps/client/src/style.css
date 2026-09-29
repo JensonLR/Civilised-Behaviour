@@ -39,7 +39,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
     linear-gradient(var(--paper), var(--paper-2));
   color: var(--ink);
 }
-.panel::before, .codebar::before, .prompt::before, .progress::before, .notice::before, .downed::before, .wounds::before, .nametag::before {
+.panel::before { /* grain only on the menu: blend modes and filters are costly on the software rasteriser the e2e suite runs on, so the HUD stays flat */
   content: ""; position: absolute; inset: 0; background: var(--grain); opacity: 0.22; mix-blend-mode: multiply; pointer-events: none; border-radius: inherit;
 }
 
@@ -157,7 +157,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 @media (max-width: 62rem) { .help { display: none; } }
 
 /* Luggage tags over heads. */
-.nametag { position: absolute; left: 0; top: 0; padding: 0.05rem 0.55rem 0.05rem 1.05rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; white-space: nowrap; will-change: transform; border-radius: 2px 5px 5px 2px; border: 1px solid var(--brass-dark); clip-path: polygon(0 50%, 0.5rem 0, 100% 0, 100% 100%, 0.5rem 100%); filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--scrim) 50%, transparent)); }
+.nametag { position: absolute; left: 0; top: 0; padding: 0.05rem 0.55rem 0.05rem 1.05rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; white-space: nowrap; will-change: transform; border-radius: 2px 5px 5px 2px; border: 1px solid var(--brass-dark); clip-path: polygon(0 50%, 0.5rem 0, 100% 0, 100% 100%, 0.5rem 100%); }
 .nametag::after { content: ""; position: absolute; left: 0.42rem; top: 50%; width: 0.28rem; height: 0.28rem; margin-top: -0.14rem; border-radius: 50%; background: var(--scrim); box-shadow: 0 0 0 1.5px var(--brass); }
 
 /* Context prompt: a ticket. */
@@ -196,7 +196,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 .notice::after { content: "TELEGRAM"; position: absolute; left: 0; right: 0; top: 0.35rem; text-align: center; font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.4em; color: var(--stamp); }
 
 /* Surgeon's tag. Severity = fill + outline weight + hatching + the words beside it. */
-.wounds { position: absolute; left: 8.6rem; bottom: 0.9rem; display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.8rem 0.4rem 1.2rem; max-width: 22rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; border: 1.5px solid var(--brass-dark); border-radius: 3px; clip-path: polygon(0 50%, 0.7rem 0, 100% 0, 100% 100%, 0.7rem 100%); filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--scrim) 50%, transparent)); }
+.wounds { position: absolute; left: 8.6rem; bottom: 0.9rem; display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.8rem 0.4rem 1.2rem; max-width: 22rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; border: 1.5px solid var(--brass-dark); border-radius: 3px; clip-path: polygon(0 50%, 0.7rem 0, 100% 0, 100% 100%, 0.7rem 100%); }
 .wounds::after { content: ""; position: absolute; left: 0.32rem; top: 50%; width: 0.32rem; height: 0.32rem; margin-top: -0.16rem; border-radius: 50%; background: var(--scrim); box-shadow: 0 0 0 1.5px var(--brass); }
 .wounds .chart { width: 1.6rem; height: 3.4rem; flex: none; }
 .wounds .chart [data-z] { fill: transparent; stroke: var(--brass-dark); stroke-width: 1; }

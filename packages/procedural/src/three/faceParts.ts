@@ -284,23 +284,24 @@ export function buildBeard(c: FaceCtx): void {
 }
 
 export function buildSideburns(c: FaceCtx): void {
-  const { spec, P, shape, b, cy } = c;
-  void P;
-  // [how far down the face they run, how far forward they start, flare toward the jaw]
-  const style = [null, { bottom: -0.16, lo: 1.28, flare: 0 }, { bottom: -0.5, lo: 1.15, flare: 0.5 }, { bottom: -0.68, lo: 1.05, flare: 1.0 }][spec.sideburns];
+  const { spec, P, b } = c;
+  const R = P.headRadius;
+  // [how far down the face they run (direction y), azimuth in front of the ear, extra reach forward toward the jaw, width in R]
+  const style = [null, { bottom: -0.16, az: 1.22, flare: 0.0, width: 0.1 }, { bottom: -0.5, az: 1.16, flare: 0.25, width: 0.115 }, { bottom: -0.68, az: 1.1, flare: 0.5, width: 0.14 }][spec.sideburns];
   if (!style) return;
-  const g = buildShell(shape, {
-    color: c.hairC,
-    coarse: PartBuilder.hullMode,
-    mask: (d) => {
-      const lo = style.lo - style.flare * 0.35 * smooth(0.2, style.bottom, d.y) * 0 - style.flare * 0.3 * smooth(0.1, style.bottom, d.y);
-      const across = smooth(lo - 0.05, lo + 0.05, d.az) * (1 - smooth(1.5, 1.6, d.az));
-      const along = smooth(style.bottom - 0.05, style.bottom + 0.06, d.y) * (1 - smooth(0.2, 0.3, d.y));
-      return across * along;
-    },
-    thick: (d) => 0.055 + 0.03 * smooth(0.1, style.bottom, d.y),
-  });
-  if (g) b.add(g, c.hairC, [0, cy, 0]);
+  // A tapered tube laid along the skin just in front of the ear (a shell on the coarse hair grid broke into islands at this width).
+  const pts: V3[] = [];
+  const N = 6;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const y = 0.3 + (style.bottom - 0.3) * t;
+    const az = style.az - style.flare * t;
+    const k = Math.sqrt(Math.max(0.05, 1 - y * y));
+    pts.push(skinDir(c, Math.sin(az) * k, y, -Math.cos(az) * k, R * 0.02));
+  }
+  const side: V3 = [Math.cos(style.az), 0, Math.sin(style.az)];
+  b.sweep(pts, (t) => ({ rx: R * style.width * (1 - 0.35 * t) * (1 + style.flare * t), rz: R * 0.04 * (1 - 0.3 * t), pow: 2.6 }), c.hairC, { side, segments: 6, round: "end" });
+  b.sweep(pts.map((p): V3 => [-p[0], p[1], p[2]]), (t) => ({ rx: R * style.width * (1 - 0.35 * t) * (1 + style.flare * t), rz: R * 0.04 * (1 - 0.3 * t), pow: 2.6 }), c.hairC, { side: [-side[0], 0, side[2]], segments: 6, round: "end" });
 }
 
 /**

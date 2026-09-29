@@ -60,6 +60,9 @@ export function frontZ(section: ReturnType<typeof ringAt>, x = 0): number {
   return section.cz - section.rz * (1 - u ** section.pow) ** (1 / section.pow);
 }
 
+/** Half-width of the waist: never much narrower than the shoulders it hangs from, or the figure reads as a wasp in a coat. */
+export const waistHalf = (P: Proportions): number => Math.max(P.torsoWidth / 2 + P.bellyRadius * 0.5, P.shoulderHalfWidth * 0.74);
+
 /** The torso's cross-sections, bone-local (origin at the waist joint, +Y up to the base of the neck). Shared with the wound dressings. */
 export function torsoRings(P: Proportions, color: number): Ring[] {
   const h = P.torsoHeight;
@@ -68,11 +71,12 @@ export function torsoRings(P: Proportions, color: number): Ring[] {
   const BF = P.bellyForward;
   const BR = P.bellyRadius;
   const SH = P.shoulderHalfWidth;
+  const WH = waistHalf(P);
   return [
-    { y: -0.05 * h, rx: W * 0.85, rz: D * 0.78, cz: -BF * 0.15, color: tone(color, 0.8) },
-    { y: 0.1 * h, rx: W * 0.95 + BR * 0.3, rz: D * 0.9 + BF * 0.15, cz: -BF * 0.45, color: tone(color, 0.9) },
-    { y: 0.28 * h, rx: W * 1.0 + BR * 0.5, rz: D * 0.98 + BF * 0.4, cz: -BF * 0.55, pow: 2.2, color },
-    { y: 0.5 * h, rx: W * 1.04, rz: D * 0.95 + BF * 0.1, cz: -BF * 0.2, color },
+    { y: -0.05 * h, rx: Math.max(W * 0.85, WH * 0.92), rz: D * 0.78, cz: -BF * 0.15, color: tone(color, 0.8) },
+    { y: 0.1 * h, rx: Math.max(W * 0.95 + BR * 0.3, WH * 0.97), rz: D * 0.9 + BF * 0.15, cz: -BF * 0.45, color: tone(color, 0.9) },
+    { y: 0.28 * h, rx: Math.max(W * 1.0 + BR * 0.5, WH), rz: D * 0.98 + BF * 0.4, cz: -BF * 0.55, pow: 2.2, color },
+    { y: 0.5 * h, rx: Math.max(W * 1.04, WH * 1.03), rz: D * 0.95 + BF * 0.1, cz: -BF * 0.2, color },
     { y: 0.72 * h, rx: W * 1.12, rz: D * 0.9, cz: -BF * 0.05, pow: 2.6, color },
     { y: 0.87 * h, rx: SH * 0.96, rz: D * 0.78, pow: 3.4, color },
     { y: 0.96 * h, rx: SH * 0.55, rz: D * 0.55, pow: 2.6, color },
@@ -294,9 +298,9 @@ export function buildPelvis(c: BodyCtx): BufferGeometry | undefined {
   const sc = P.scale;
   b.loft(
     [
-      { y: 0.09 * sc, rx: W * 0.86, rz: D * 0.74, cz: -P.bellyForward * 0.12, color: tone(c.trouserC, 0.95) },
-      { y: -0.02 * sc, rx: P.hipWidth + r * 1.2, rz: D * 0.82, color: c.trouserC },
-      { y: -0.12 * sc, rx: P.hipWidth + r * 0.95, rz: D * 0.66, color: tone(c.trouserC, 0.85) },
+      { y: 0.09 * sc, rx: waistHalf(P) * 0.95, rz: D * 0.78, cz: -P.bellyForward * 0.12, color: tone(c.trouserC, 0.95) },
+      { y: -0.02 * sc, rx: Math.max(P.hipWidth + r * 1.1, waistHalf(P) * 1.02), rz: D * 0.86, color: c.trouserC },
+      { y: -0.12 * sc, rx: P.hipWidth + r * 0.95, rz: D * 0.7, color: tone(c.trouserC, 0.85) },
     ],
     c.trouserC,
   );
@@ -429,7 +433,7 @@ function buildHand(b: PartBuilder, c: BodyCtx, armLength: number): void {
 
 // ---- legs ---------------------------------------------------------------------------------------------------------------
 
-export const legRadius = (c: BodyCtx): number => (c.spec.trousers === 3 ? 0.14 : 0.11) * c.P.scale + 0.02;
+export const legRadius = (c: BodyCtx): number => (c.spec.trousers === 3 ? 0.15 : 0.12) * c.P.scale + 0.02;
 
 /** Thigh sections in the hip frame (hanging down) for the spec's trouser cut. Shared with the wound dressings. */
 export function upperLegRings(c: BodyCtx): Ring[] {

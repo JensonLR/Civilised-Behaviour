@@ -62,7 +62,8 @@ export function computeProportions(s: CharacterSpec): Proportions {
     scale: 1,
     legUpper,
     legLower,
-    hipWidth: torsoWidth * 0.34,
+    // The legs must stand clear of each other: a thigh is ~0.17 wide (see legRadius), so the hips never sit closer than 0.2 apart.
+    hipWidth: Math.max(torsoWidth * 0.36, 0.2),
     torsoHeight,
     torsoWidth,
     torsoDepth: torsoDepth + bellyRadius,

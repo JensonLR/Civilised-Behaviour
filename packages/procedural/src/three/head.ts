@@ -88,7 +88,10 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
     case 1: { // monocle on a chain
       lens(1, eye.radius * 1.5, accent);
       const ring: V3 = [ex + eye.radius * 0.35, ey - eye.radius * 1.5, glassZ];
-      b.sweep(curve([ring, onSkin(fc, ex + R * 0.2, -R * 0.35, R * 0.03), onSkin(fc, R * 0.55, -R * 0.75, R * 0.03), onSkin(fc, R * 0.4, -R * 1.02, R * 0.02)], 12), () => ({ rx: R * 0.008, rz: R * 0.008, pow: 2 }), accent, { side: [0, 0, 1], segments: 5, round: "end" });
+      // The chain hangs free in front of the cheek and jaw (proud of the skin, so it never lies across the face like a scratch).
+      const chain = [ring, onSkin(fc, ex + R * 0.1, -R * 0.3, R * 0.09), onSkin(fc, ex + R * 0.16, -R * 0.75, R * 0.15), onSkin(fc, ex + R * 0.2, -R * 1.05, R * 0.17)];
+      b.sweep(curve(chain, 10), () => ({ rx: R * 0.01, rz: R * 0.01, pow: 2 }), accent, { side: [0, 0, 1], segments: 5, round: "end" });
+      b.sphere(R * 0.035, accent, chain[3]!);
       break;
     }
     case 2: { // spectacles: two round rims, an arched bridge over the nose root, arms hugging the temples back to the ears
@@ -119,7 +122,7 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   }
   if (spec.eyepatch > 0) {
     const sx = spec.eyepatch === 1 ? -1 : 1;
-    b.sphere(eye.radius * 1.6, PALETTE.ink, [sx * ex, ey, eye.z - eye.radius * 0.75], [1, 1, 0.35]);
+    b.sphere(eye.radius * 1.4, PALETTE.ink, [sx * ex, ey, eye.z - eye.radius * 0.7], [1, 1, 0.3]);
     // The strap climbs from the patch over the ear, round the back of the head and to the other temple.
     strap(PALETTE.ink, 0.6, 2 * Math.PI - 1.25, 0.12, 0.34, sx, 0.016, 0.03, [[sx * ex, ey, eye.z - eye.radius * 0.75]]);
   }
@@ -147,6 +150,9 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   const hy = cy + seatY * R;
   const band = (radius: number, y: number, color: number = accent): void => void b.torus(radius, R * 0.04, color, [0, y, 0], [Math.PI / 2, 0, 0]);
   const dome = (r: number, sy: number, y: number, color: number, sx = 1, sz = 1): void => void b.add(new SphereGeometry(r, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), color, [0, y, 0], [0, 0, 0], [sx, sy, sz]);
+  // Every crown must clear the top of the sculpted skull with a margin, whatever height the hat's own design says.
+  const topH = Math.max(R * 0.3, shape.radius(0, 1, 0) + R * 0.1 - seatY * R);
+  const domeH = (rx: number, minSy: number): number => Math.max(minSy, topH / rx);
   switch (spec.hat) {
     case 1: // top hat: tapered crown, flat brim with a rolled edge, band
       b.cylinder(rb * 0.9, rb * 1.03, R * 1.15, hatC, [0, hy + R * 0.575, 0]);
@@ -156,17 +162,18 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
       band(rb * 1.03, hy + R * 0.16, singe(PALETTE.trim.hatBand, burnt));
       break;
     case 2: // bowler: dome, rolled brim, band
-      dome(rb * 1.02, 0.9, hy, hatC);
+      dome(rb * 1.02, domeH(rb * 1.02, 0.9), hy, hatC);
       b.cylinder(rb * 1.24, rb * 1.22, R * 0.05, hatC, [0, hy, 0]);
       b.torus(rb * 1.23, R * 0.035, hatC, [0, hy, 0], [Math.PI / 2, 0, 0]);
       band(rb * 1.02, hy + R * 0.05, singe(PALETTE.trim.hatBand, burnt));
       break;
     case 3: // pith helmet: broad dome, ridged brim all round, band, knob
-      dome(rb * 1.1, 0.6, hy, hatC);
+      const pithSy = domeH(rb * 1.1, 0.6);
+      dome(rb * 1.1, pithSy, hy, hatC);
       b.cylinder(rb * 1.42, rb * 1.4, R * 0.05, hatC, [0, hy, 0]);
       b.torus(rb * 1.4, R * 0.04, hatC, [0, hy, 0], [Math.PI / 2, 0, 0]);
       band(rb * 1.08, hy + R * 0.06, singe(PALETTE.trim.ivory, burnt));
-      b.sphere(R * 0.1, accent, [0, hy + rb * 1.1 * 0.6, 0]);
+      b.sphere(R * 0.1, accent, [0, hy + rb * 1.1 * pithSy, 0]);
       break;
     case 4: // shako: tall, flared crown, peak, cord and spike
       b.cylinder(rb * 1.12, rb * 1.0, R * 1.15, hatC, [0, hy + R * 0.575, 0]);
@@ -175,35 +182,37 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
       b.cone(R * 0.16, R * 0.7, singe(PALETTE.trim.ivory, burnt), [0, hy + R * 1.5, 0]);
       break;
     case 5: // bicorne: wide crescent worn sideways with a cockade
-      dome(rb, 0.6, hy, hatC, 2.0, 0.95);
+      dome(rb, domeH(rb, 0.6), hy, hatC, 2.0, 0.95);
       b.torus(rb, R * 0.05, accent, [0, hy, 0], [Math.PI / 2, 0, 0], [2.0, 0.95, 1]);
       b.sphere(R * 0.14, accent, [rb * 1.9, hy + R * 0.12, 0]);
       break;
     case 6: // slouch hat: soft dome, wide drooping brim, band
-      dome(rb * 1.02, 0.62, hy, hatC);
+      dome(rb * 1.02, domeH(rb * 1.02, 0.62), hy, hatC);
       b.cylinder(rb * 1.75, rb * 1.75, R * 0.04, hatC, [0, hy - R * 0.02, 0], [0.1, 0, 0.05]);
       band(rb * 1.02, hy + R * 0.06, singe(PALETTE.trim.hatBandBrown, burnt));
       break;
     case 7: // peaked cap: low crown, visor, badge
-      b.cylinder(rb * 1.0, rb * 1.07, R * 0.4, hatC, [0, hy + R * 0.2, 0]);
-      b.cylinder(rb * 0.98, rb * 0.98, R * 0.03, hatC, [0, hy + R * 0.4, 0]);
+      b.cylinder(rb * 1.0, rb * 1.07, topH, hatC, [0, hy + topH / 2, 0]);
+      b.cylinder(rb * 0.98, rb * 0.98, R * 0.03, hatC, [0, hy + topH, 0]);
       b.box(rb * 1.05, R * 0.04, R * 0.5, LEATHER, [0, hy, -rb * 1.02]);
       b.sphere(R * 0.1, accent, [0, hy + R * 0.14, -rb * 1.06]);
       band(rb * 1.05, hy + R * 0.06, singe(PALETTE.trim.hatBand, burnt));
       break;
     case 8: // flat cap: squashed dome with a short peak
-      dome(rb * 1.06, 0.42, hy, hatC, 1.05, 1.1);
+      const capSy = domeH(rb * 1.06, 0.42);
+      dome(rb * 1.06, capSy, hy, hatC, 1.05, 1.1);
       b.box(rb * 0.85, R * 0.05, R * 0.4, hatC, [0, hy, -rb * 1.12], [0.15, 0, 0]);
-      b.sphere(R * 0.07, accent, [0, hy + rb * 1.06 * 0.42, 0]);
+      b.sphere(R * 0.07, accent, [0, hy + rb * 1.06 * capSy, 0]);
       break;
     case 9: // plumed helmet: polished dome, crest ridge, swept plume
-      dome(rb * 1.04, 0.9, hy, accent);
+      const helmSy = domeH(rb * 1.04, 0.9);
+      dome(rb * 1.04, helmSy, hy, accent);
       b.cylinder(rb * 1.1, rb * 1.1, R * 0.05, accent, [0, hy, 0]);
-      b.box(R * 0.09, R * 0.14, rb * 1.7, singe(PALETTE.trim.plumeQuill, burnt), [0, hy + rb * 1.04 * 0.9, R * 0.05]);
-      for (let i = 0; i < 4; i++) b.cone(R * 0.16, R * 0.75, singe(PALETTE.trim.plume, burnt), [0, hy + rb * 1.04 * 0.9 + R * 0.05 - i * R * 0.05, R * (0.4 + i * 0.32)], [Math.PI / 2 + 0.25 * i, 0, 0]);
+      b.box(R * 0.09, R * 0.14, rb * 1.7, singe(PALETTE.trim.plumeQuill, burnt), [0, hy + rb * 1.04 * helmSy, R * 0.05]);
+      for (let i = 0; i < 4; i++) b.cone(R * 0.16, R * 0.75, singe(PALETTE.trim.plume, burnt), [0, hy + rb * 1.04 * helmSy + R * 0.05 - i * R * 0.05, R * (0.4 + i * 0.32)], [Math.PI / 2 + 0.25 * i, 0, 0]);
       break;
     case 10: // boater: flat-topped straw crown, stiff flat brim, striped band
-      b.cylinder(rb * 0.96, rb * 1.0, R * 0.5, singe(PALETTE.trim.straw, burnt), [0, hy + R * 0.25, 0]);
+      b.cylinder(rb * 0.96, rb * 1.0, topH, singe(PALETTE.trim.straw, burnt), [0, hy + topH / 2, 0]);
       b.cylinder(rb * 1.5, rb * 1.5, R * 0.04, singe(PALETTE.trim.straw, burnt), [0, hy, 0]);
       b.cylinder(rb * 1.005, rb * 1.005, R * 0.14, singe(PALETTE.cloth[0], burnt), [0, hy + R * 0.12, 0]);
       break;

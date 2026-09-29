@@ -295,7 +295,7 @@ test("wounds are server-owned and visible to everyone; a knock-down plays a ragd
   for (const p of [a, b]) {
     // The Rapier WASM loads lazily; give it time, then the fall must have been observed and must end.
     await expect.poll(() => p.evaluate(() => (window as unknown as { __sawRagdoll?: boolean }).__sawRagdoll === true), { timeout: 30_000 }).toBe(true);
-    await expect.poll(() => ragdolled(p, aId), { timeout: 60_000 }).toBe(false);
+    await expect.poll(() => ragdolled(p, aId), { timeout: 120_000 }).toBe(false); // sim time only advances with frames: a starved software rasteriser (two pages + server) can need minutes
   }
   await b.screenshot({ path: "test-results/ragdoll-settled.png" });
   // Revived: wounds are patched (grievous head -> dressing) but not gone.
