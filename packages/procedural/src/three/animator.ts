@@ -54,6 +54,8 @@ export class CharacterAnimator {
   private air = 0;
   private carry = 0;
   private down = 0;
+  private kneel = 0;
+  private haul = 0;
   private breath = 0;
   /** Idle blinking. Disable for stills (photo mode) and deterministic tests. */
   autoBlink = true;
@@ -79,11 +81,15 @@ export class CharacterAnimator {
     const downed = (pose.flags & FLAG.DOWNED) !== 0;
     const carrying = (pose.flags & FLAG.CARRYING) !== 0;
     const sprinting = (pose.flags & FLAG.SPRINTING) !== 0;
+    const reviving = (pose.flags & FLAG.REVIVING) !== 0;
+    const dragging = (pose.flags & FLAG.DRAGGING) !== 0;
 
     this.crouch = damp(this.crouch, crouching ? 1 : 0, 14, dt);
     this.air = damp(this.air, grounded ? 0 : 1, 16, dt);
     this.carry = damp(this.carry, carrying ? 1 : 0, 12, dt);
     this.down = damp(this.down, downed ? 1 : 0, 6, dt);
+    this.kneel = damp(this.kneel, reviving ? 1 : 0, 10, dt);
+    this.haul = damp(this.haul, dragging ? 1 : 0, 8, dt);
 
     // Gait: one stride per ~1.5 m of travel; cadence rises with speed but stays distance-locked.
     const stride = 1.25 * (P.legUpper + P.legLower) * 1.5;
@@ -96,20 +102,20 @@ export class CharacterAnimator {
     // Legs: thighs swing, knees bend on the back-swing. Airborne: tuck.
     const legL = s * swing;
     const legR = -s * swing;
-    j.hipL.rotation.x = legL * (1 - this.air) - this.air * 0.5 - this.crouch * 0.9;
-    j.hipR.rotation.x = legR * (1 - this.air) - this.air * 0.2 - this.crouch * 0.9;
-    j.kneeL.rotation.x = Math.max(0, -s) * swing * 1.5 * (1 - this.air) + this.air * 0.9 + this.crouch * 1.5;
-    j.kneeR.rotation.x = Math.max(0, s) * swing * 1.5 * (1 - this.air) + this.air * 0.5 + this.crouch * 1.5;
+    j.hipL.rotation.x = legL * (1 - this.air) - this.air * 0.5 - this.crouch * 0.9 - this.kneel * 1.1;
+    j.hipR.rotation.x = legR * (1 - this.air) - this.air * 0.2 - this.crouch * 0.9 + this.kneel * 0.2;
+    j.kneeL.rotation.x = Math.max(0, -s) * swing * 1.5 * (1 - this.air) + this.air * 0.9 + this.crouch * 1.5 + this.kneel * 1.9;
+    j.kneeR.rotation.x = Math.max(0, s) * swing * 1.5 * (1 - this.air) + this.air * 0.5 + this.crouch * 1.5 + this.kneel * 1.7;
 
     // Pelvis: bob twice per stride, sway, and drop when crouching.
     const bob = Math.abs(c) * 0.035 * move;
-    const crouchDrop = this.crouch * (P.legUpper + P.legLower) * 0.32;
+    const crouchDrop = (this.crouch * 0.32 + this.kneel * 0.5) * (P.legUpper + P.legLower);
     j.pelvis.position.y = (P.legUpper + P.legLower + 0.05 * P.scale) - crouchDrop + bob - this.down * 0.55;
     j.pelvis.rotation.y = s * 0.18 * move;
     j.pelvis.rotation.z = -s * 0.05 * move;
 
     // Torso: lean into acceleration/sprint, counter-rotate against the pelvis, breathe.
-    const leanTarget = Math.min(speed / 4.4, 1.5) * (sprinting ? 0.28 : 0.13) + this.crouch * 0.25;
+    const leanTarget = Math.min(speed / 4.4, 1.5) * (sprinting ? 0.28 : 0.13) + this.crouch * 0.25 + this.kneel * 0.55 - this.haul * 0.3;
     this.lean = damp(this.lean, leanTarget, 8, dt);
     j.torso.rotation.x = -(P.lean + this.lean) - this.down * 0.15;
     j.torso.rotation.y = -s * 0.22 * move;
@@ -117,15 +123,17 @@ export class CharacterAnimator {
     j.torso.scale.set(1 + breathe, 1 + breathe * 0.6, 1 + breathe);
 
     // Arms: counter-swing; carrying raises both forward and in; downed sprawl.
-    const armL = -s * swing * 1.1 * (1 - this.carry);
-    const armR = s * swing * 1.1 * (1 - this.carry);
-    j.shoulderL.rotation.x = armL - this.carry * 0.95 - this.air * 0.5 * (1 - this.carry);
-    j.shoulderR.rotation.x = armR - this.carry * 0.95 - this.air * 0.5 * (1 - this.carry);
+    const busy = Math.max(this.carry, this.kneel, this.haul);
+    const armL = -s * swing * 1.1 * (1 - busy);
+    const armR = s * swing * 1.1 * (1 - busy);
+    // Kneeling: hands reach forward and down over the patient. Hauling: arms trail BACK, gripping the body under the arms.
+    j.shoulderL.rotation.x = armL - this.carry * 0.95 - this.kneel * 1.0 + this.haul * 0.9 - this.air * 0.5 * (1 - busy);
+    j.shoulderR.rotation.x = armR - this.carry * 0.95 - this.kneel * 1.0 + this.haul * 0.9 - this.air * 0.5 * (1 - busy);
     // Carrying pulls the arms in toward the centre line (cradling), not out to the sides.
     j.shoulderL.rotation.z = -0.08 - this.air * 0.7 + this.carry * 0.55 + this.down * 0.6;
     j.shoulderR.rotation.z = 0.08 + this.air * 0.7 - this.carry * 0.55 - this.down * 0.6;
-    j.elbowL.rotation.x = -0.15 - Math.max(0, s) * swing * 0.5 - this.carry * 0.75;
-    j.elbowR.rotation.x = -0.15 - Math.max(0, -s) * swing * 0.5 - this.carry * 0.75;
+    j.elbowL.rotation.x = -0.15 - Math.max(0, s) * swing * 0.5 * (1 - busy) - this.carry * 0.75 - this.kneel * 0.4 - this.haul * 0.1;
+    j.elbowR.rotation.x = -0.15 - Math.max(0, -s) * swing * 0.5 * (1 - busy) - this.carry * 0.75 - this.kneel * 0.4 - this.haul * 0.1;
 
     // Head: stays level against torso motion, subtle lag.
     j.head.rotation.x = (P.lean + this.lean) * 0.7 - this.crouch * 0.1;

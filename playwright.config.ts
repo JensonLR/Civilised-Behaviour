@@ -7,13 +7,15 @@ const executablePath = process.env.CB_CHROMIUM ?? candidates.find((p) => existsS
 
 export default defineConfig({
   testDir: "tests/e2e",
-  timeout: 90_000,
+  // Multi-browser scenarios on a software-rendered (~10 fps) runner are slow by nature; polls inside tests carry their own budgets.
+  timeout: 180_000,
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
   use: {
     baseURL: "http://127.0.0.1:5173",
-    viewport: { width: 1280, height: 720 },
+    // Small viewport: e2e runs on a software rasteriser, and frame time scales with pixels. Visual QA uses scripts/shot.mjs.
+    viewport: { width: 800, height: 450 },
     launchOptions: {
       ...(executablePath ? { executablePath } : {}),
       args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"],

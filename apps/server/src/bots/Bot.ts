@@ -40,8 +40,10 @@ export interface BotStats {
   /** Reconciler drift: persistent component (ema) and worst single divergence (peak) vs the server, metres. */
   driftEma: number;
   driftPeak: number;
-  /** Largest per-reconcile correction the reconciler had to inject, metres. */
+  /** Largest per-reconcile POSITION correction (x/y/z only), metres. Flag flips (down, carry...) are not "corrections". */
   correctionMax: number;
+  /** Mean positional correction per reconcile after warm-up, metres. */
+  correctionMean: number;
 }
 
 /**
@@ -57,6 +59,9 @@ export class Bot {
   private timer: ReturnType<typeof setInterval> | undefined;
   private tickNo = 0;
   private correctionMax = 0;
+  private correctionSum = 0;
+  private correctionCount = 0;
+  private lastReconcileSeq = -1;
   private lastRender: { x: number; z: number; t: number } | undefined;
   private reconciler: ReturnType<Predict<WorldStateType>["reconciler"]> | undefined;
 
@@ -120,6 +125,7 @@ export class Bot {
       driftEma: this.reconciler?.drift.ema ?? 0,
       driftPeak: this.reconciler?.drift.peak ?? 0,
       correctionMax: this.correctionMax,
+      correctionMean: this.correctionCount ? this.correctionSum / this.correctionCount : 0,
     };
   }
 
@@ -149,7 +155,17 @@ export class Bot {
       this.input.send();
     }
     // Skip the first 2 s: the spawn snap (client starts at default state, server truth arrives) is expected.
-    if (this.tickNo > 60) this.correctionMax = Math.max(this.correctionMax, this.reconciler.lastCorrectionMag);
+    // Only positional fields count: server-owned flag changes (going down, carrying...) adopt as "corrections" of 16..256
+    // in the reconciler's own numbers but are not visible prediction error.
+    const rc = this.reconciler as unknown as { reconcileSeq: number; lastCorrection: Record<string, number> };
+    if (this.tickNo > 60 && rc.reconcileSeq !== this.lastReconcileSeq) {
+      const c = rc.lastCorrection;
+      const mag = Math.hypot(c.x ?? 0, c.y ?? 0, c.z ?? 0);
+      this.correctionMax = Math.max(this.correctionMax, mag);
+      this.correctionSum += mag;
+      this.correctionCount++;
+    }
+    this.lastReconcileSeq = rc.reconcileSeq;
     // Measure what a player would see: rendered position vs. what the bot's velocity explains.
     const x = this.predict.value(me as never, "x" as never);
     const z = this.predict.value(me as never, "z" as never);

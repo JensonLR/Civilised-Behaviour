@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { FLAG, PROP_DEFS, findInteractTarget, yawToWire, type PlayerStateType, type PropKindId } from "@cb/shared";
+import { CASUALTY, FLAG, PROP_DEFS, findDownedTarget, findInteractTarget, yawToWire, type PlayerStateType, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -7,6 +7,7 @@ import { CharacterActor } from "../render/CharacterActor.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
+import { Hud } from "../ui/Hud.ts";
 
 interface Actor {
   body: CharacterActor;
@@ -22,7 +23,7 @@ export class Game {
   private readonly actors = new Map<string, Actor>();
   private readonly tagLayer: HTMLElement;
   private readonly props: PropViews;
-  private readonly prompt: HTMLDivElement;
+  private readonly hud: Hud;
   private last = performance.now();
   private raf = 0;
   private running = false;
@@ -39,10 +40,7 @@ export class Game {
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.tagLayer = hud;
     this.props = new PropViews(stage.scene);
-    this.prompt = document.createElement("div");
-    this.prompt.className = "prompt";
-    this.prompt.hidden = true;
-    hud.appendChild(this.prompt);
+    this.hud = new Hud(hud);
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
@@ -55,6 +53,7 @@ export class Game {
     controls.onToggleDebug = () => this.overlay.toggle();
     stage.buildWorld(session.world);
 
+    session.room.onMessage("notice", (m: { text: string }) => this.hud.showNotice(m.text));
     session.room.onMessage("pong", (m: { t: number }) => {
       const rtt = performance.now() - m.t;
       session.rttMs = session.rttMs === 0 ? rtt : session.rttMs * 0.8 + rtt * 0.2;
@@ -79,7 +78,7 @@ export class Game {
     for (const a of this.actors.values()) this.removeActor(a);
     this.actors.clear();
     this.props.dispose();
-    this.prompt.remove();
+    this.hud.dispose();
   }
 
   private frame(now: number): void {
@@ -118,23 +117,59 @@ export class Game {
     this.overlay.frame(dt);
   }
 
-  /** Contextual prompt from the same shared rule the server enforces (the server still validates). */
+  /** HUD + contextual prompt, from the same shared rules the server enforces (the server still validates). */
   private updatePrompt(): void {
     const me = this.session.predicted;
-    if (!me) return;
+    const mine = this.session.local;
+    if (!me || !mine) return;
     const pad = this.controls.usingGamepad;
-    let text = "";
-    if ((me.flags & FLAG.CARRYING) !== 0) {
-      text = `${pad ? "X" : "E"}  Drop     ${pad ? "LB" : "G"}  Throw`;
-    } else {
-      const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
-      if (id !== undefined) {
-        const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
-        text = `${pad ? "X" : "E"}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
+    const use = pad ? "X" : "E";
+    const grab = pad ? "RB" : "F";
+    const players = this.session.room.state.players;
+    const flags = me.flags;
+    let prompt = "";
+    let byMe = -1;
+    let patientName = "";
+    let reviverName = "";
+
+    if (mine.reviver) reviverName = players.get(mine.reviver)?.name ?? "";
+    if ((flags & FLAG.REVIVING) !== 0) {
+      // Find whoever I am reviving: the downed player whose reviver is me.
+      players.forEach((o, id) => {
+        if (o.reviver === this.session.sessionId) {
+          byMe = o.reviveProgress;
+          patientName = players.get(id)?.name ?? "";
+        }
+      });
+      prompt = `Hold ${use}...`;
+    } else if ((flags & FLAG.DRAGGING) !== 0) {
+      prompt = `${grab}  Let go`;
+    } else if ((flags & FLAG.CARRYING) !== 0) {
+      prompt = `${use}  Drop     ${pad ? "LB" : "G"}  Throw`;
+    } else if ((flags & FLAG.DOWNED) === 0) {
+      const downedId = findDownedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
+        players.forEach((o, id) => id !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+      );
+      if (downedId !== undefined) {
+        prompt = `Hold ${use}  Revive ${players.get(downedId)?.name ?? "comrade"}      ${grab}  Drag`;
+      } else {
+        const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
+        if (id !== undefined) {
+          const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
+          prompt = `${use}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
+        }
       }
     }
-    this.prompt.hidden = text === "";
-    if (this.prompt.textContent !== text) this.prompt.textContent = text;
+    this.hud.update({
+      flags,
+      health: mine.health,
+      reviveProgressOnMe: mine.reviveProgress,
+      reviveProgressByMe: byMe,
+      prompt,
+      reviverName,
+      patientName,
+      usingGamepad: pad,
+    });
   }
 
   private syncActors(dt: number): void {
@@ -155,7 +190,8 @@ export class Game {
       const speed = Math.hypot(this.session.value(p, "vx"), this.session.value(p, "vz"));
       a.body.setLook(p.look);
       a.body.update(dt, x, y, z, this.session.value(p, "facing"), speed, flags);
-      a.tag.textContent = p.connected ? p.name : `${p.name} (reconnecting)`;
+      const status = (p.flags & FLAG.DOWNED) !== 0 ? " ✚ DOWN" : "";
+      a.tag.textContent = (p.connected ? p.name : `${p.name} (reconnecting)`) + status;
       tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
       const visible = tmp.z < 1 && Math.abs(tmp.x) < 1.2 && Math.abs(tmp.y) < 1.2 && !isMe;
       a.tag.style.display = visible ? "block" : "none";

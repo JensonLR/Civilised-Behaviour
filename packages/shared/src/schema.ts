@@ -22,13 +22,22 @@ export const PlayerState = schema({
   vy: t.float32(),
   vz: t.float32(),
   facing: t.float32(),
-  flags: t.uint8(),
+  /** FLAG bits (uint16: more than 8 states now). */
+  flags: t.uint16(),
   stumble: t.float32(),
   // --- server-owned, not predicted ---
   /** Encoded CharacterSpec (see @cb/procedural). Validated and re-encoded by the server; ~54 chars. */
   look: t.string(),
   /** Campaign nickname/title shown with the name (server-owned; empty until earned). */
   title: t.string(),
+  /** 0..100. Server-owned. Reaching 0 puts the player down (revivable), never removes them. */
+  health: t.uint8(),
+  /** 0..100 progress of a revive in progress ON this (downed) player. */
+  reviveProgress: t.uint8(),
+  /** Session id of whoever is reviving this player, or "". */
+  reviver: t.string(),
+  /** Session id of whoever is dragging this player, or "". */
+  dragger: t.string(),
   slot: t.uint8(),
   connected: t.boolean(),
 });

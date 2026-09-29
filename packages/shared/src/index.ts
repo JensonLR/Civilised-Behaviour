@@ -8,3 +8,4 @@ export * from "./movement.ts";
 export * from "./schema.ts";
 export * from "./protocol.ts";
 export * from "./props.ts";
+export * from "./casualty.ts";

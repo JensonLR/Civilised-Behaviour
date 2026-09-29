@@ -49,6 +49,8 @@ node scripts/shot.mjs "?showcase=lineup&n=6" out.png   # look at the art; ALWAYS
 - Reproduce -> root cause -> fix -> regression test. No symptom patching. Never hard-code around tests.
 - Verify fast-moving APIs against the installed package types/docs, not memory. (Colyseus 0.18: client is `@colyseus/sdk`,
   not `colyseus.js`; schemas use `schema({...})`/`t.*`; inputs via `defineInput`/`room.input`; prediction via `Predict`.)
+- A stale dev server is a classic false failure: `tsx watch` restarts on edits, but a server started by hand is NOT restarted, and a schema change
+  then decodes as garbage on the client. Kill leftovers with `fuser -k 2567/tcp` before e2e. (`ss` is not installed; `pkill -f` can kill your own shell.)
 - Headless Chromium here is software-rendered (~10 fps). Do not write timing-based e2e assertions; poll state instead.
   Software-GL numbers are a floor, never a perf claim.
 - Keep hot loops allocation-free; pool particles/decals/projectiles; cap ragdolls and physics bodies.

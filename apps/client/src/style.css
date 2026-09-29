@@ -55,3 +55,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1610; col
 .creator .swatch[aria-checked="true"] { outline: 3px solid var(--ink); outline-offset: 1px; }
 .creator .actions { justify-content: space-between; }
 @media (max-width: 60rem) { #menu { flex-direction: column; align-items: center; justify-content: flex-start; } .panel { width: min(94vw, 27rem); } }
+
+/* ---- gameplay HUD ---- */
+.health { position: absolute; left: 0.9rem; bottom: 0.9rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.7rem; background: rgba(239, 227, 200, 0.92); border: 1.5px solid var(--brass-dark); border-radius: 4px; font-weight: 700; }
+.health .bar, .progress .bar { position: relative; width: 9rem; height: 0.85rem; background: #d9caa3; border: 1.5px solid var(--brass-dark); border-radius: 2px; overflow: hidden; }
+.health .fill, .progress .fill { height: 100%; background: repeating-linear-gradient(90deg, var(--ink) 0 8px, #4a3d2c 8px 10px); transition: width 0.15s; }
+.health[data-state="critical"] .fill { background: repeating-linear-gradient(90deg, var(--stamp) 0 8px, #5a1a12 8px 10px); }
+.health[data-state="critical"] .num::after { content: " !"; }
+.health[data-state="down"] .num::after { content: " ✚"; }
+.health .num { min-width: 2.2rem; text-align: right; }
+.progress { position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%); display: grid; gap: 0.3rem; justify-items: center; padding: 0.5rem 1rem; background: rgba(239, 227, 200, 0.94); border: 1.5px solid var(--brass-dark); border-radius: 4px; font-weight: 700; }
+.progress[hidden], .downed[hidden], .notice[hidden] { display: none; }
+.progress .bar { width: 14rem; height: 1rem; }
+.downed { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); text-align: center; padding: 0.8rem 1.6rem; color: #fbf0dc; background: rgba(60, 14, 10, 0.86); border: 2px solid var(--stamp); border-radius: 4px; box-shadow: 0 0 60px 20px rgba(120, 20, 10, 0.35); }
+.downed .title { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.04em; }
+.downed .sub { margin-top: 0.25rem; font-size: 0.95rem; opacity: 0.92; }
+.notice { position: absolute; left: 50%; top: 4.5rem; transform: translateX(-50%); max-width: min(90vw, 36rem); text-align: center; padding: 0.6rem 1.2rem; font-style: italic; background: rgba(239, 227, 200, 0.95); border: 1.5px solid var(--brass-dark); border-radius: 4px; }

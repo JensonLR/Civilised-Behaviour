@@ -57,9 +57,14 @@ Done + verified:
 - Server: `look` validated/canonicalised on join, `setLook` rate-limited, history stripped (5 integration tests, mutation-checked).
 - Client: `CharacterActor` replaces the stand-in puppet; creator UI generated from field metadata with live 3D turntable preview, gamepad navigation (`PadNav`),
   look persisted per browser; lineup/close-up showcase scene; 4 Playwright tests incl. creator + cross-player look replication.
+Done + verified (downed/drag/revive, 2026-09-29):
+- Health + down state through one damage entry point; timed revive (server ticks), drag with server-steered velocity, rout; kneel/haul animations; wounds HUD,
+  revive progress, "you are down" banner, nametag markers, prompts; Grab control (F / RB). 16 casualty integration tests + 4 prediction/flood bot tests
+  (mutation-checked) + 12 shared tests + a two-browser Playwright scenario (revive, then drag).
+- Security finding + fix: input-frame flooding gave 3.0x speed; now bounded to ~1.03x by a server-side input budget (D-017).
 Not done in M2 (next):
 - Art polish pass: outlines/silhouette pass, clay material response, dirt/blood accumulation, more hat/hair/moustache variety, hands with fingers.
-- Wounds/damage zones, dismemberment (detachable limbs + wound caps), ragdoll (Rapier), drag body / revive - the rest of the M2/M3 board.
+- Damage zones/wounds visuals, dismemberment (detachable limbs + wound caps), ragdoll (Rapier). Shoulder-carry a body (reuse prop-carry), wagon transport (M5).
 - Character LOD for crowds (see PERFORMANCE.md risk); NPC use of the generator.
 - Expression triggers beyond downed=pain; head-look; drunkenness from gameplay.
 - Creator: colour-blind-safe review, UI scale, keyboard shortcuts; title/nickname editing.
@@ -71,7 +76,7 @@ Not done in M2 (next):
 - Steam wrapper choice open (D-010).
 
 ## Test results (last full run 2026-09-29)
-`pnpm typecheck` clean; shared 23/23; procedural 24/24; server 38/38 (origin, netcode bots, physics, interaction, look); Playwright 4/4 (incl. carry+throw, creator);  client production build OK (213 kB gzip JS).
+`pnpm typecheck` clean; shared 35/35; procedural 24/24; server 58/58 (origin, netcode bots, physics, interaction, look, casualties, flood); Playwright 5/5 (carry+throw, creator, revive+drag);  client production build OK (213 kB gzip JS).
 
 ## Conventions reminder
 See CLAUDE.md. Keep this file current: completed / in progress / next / blockers / test results.

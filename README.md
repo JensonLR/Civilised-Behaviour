@@ -24,8 +24,8 @@ pnpm test           # unit + Colyseus integration tests
 pnpm e2e            # Playwright multi-client browser tests
 ```
 
-Controls: WASD move, Shift sprint, Space jump, C crouch, mouse look (click to capture), F3 performance overlay.
-Gamepad: left stick move, right stick look, A jump, B crouch, L3 sprint.
+Controls: WASD move, Shift sprint, Space jump, C crouch, E pick up / drop / hold to revive, G throw, F grab (drag a downed teammate), mouse look (click to capture), F3 performance overlay.
+Gamepad: left stick move, right stick look, A jump, B crouch, L3 sprint, X interact, LB throw, RB grab.
 
 ## Layout
 

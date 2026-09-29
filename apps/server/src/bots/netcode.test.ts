@@ -59,6 +59,21 @@ describe("prediction under simulated latency", () => {
     expectMatched(stats);
   });
 
+  it("a long client hitch (350 ms) is applied in full: the input budget tolerates real stalls", async () => {
+    colyseus.server.simulateLatency(60);
+    const bot = await Bot.create(URL, "stall", wallBumper);
+    bot.start();
+    await sleep(2200);
+    for (let i = 0; i < 4; i++) {
+      await bot.hitch(350);
+      await sleep(700);
+    }
+    await sleep(600);
+    const stats = await bot.stop();
+    results["longhitch_rtt60"] = stats;
+    expectMatched(stats);
+  });
+
   for (const rtt of [0, 100, 150]) {
     it(`circle walk at ${rtt} ms RTT: no visible correction pops`, async () => {
       const r = await run(rtt, circleWalker, 5);

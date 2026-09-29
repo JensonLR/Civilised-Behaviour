@@ -32,6 +32,10 @@ export const MOVEMENT = {
   terminalVelocity: 40,
   /** Speed multiplier while carrying a prop (further scaled by the prop's weight class). */
   carryFactor: 0.72,
+  /** Speed multiplier while dragging a body. */
+  dragFactor: 0.55,
+  /** Crawl speed of a downed player. */
+  crawlSpeed: 0.9,
 } as const;
 
 /** Bit flags packed into PlayerState.flags (uint8). */
@@ -43,6 +47,12 @@ export const FLAG = {
   DOWNED: 16,
   /** Set by the server while a player holds a prop (slows movement, blocks sprint/jump). */
   CARRYING: 32,
+  /** Server-set: this player is kneeling over a downed teammate, reviving them. */
+  REVIVING: 64,
+  /** Server-set: this player is dragging a downed teammate. */
+  DRAGGING: 128,
+  /** Server-set: this (downed) player is being dragged; the server steers their velocity, input is ignored. */
+  DRAGGED: 256,
 } as const;
 
 /** Bit flags packed into MoveInput.buttons (uint16). */
@@ -56,6 +66,8 @@ export const BUTTON = {
   RELOAD: 1 << 6,
   MELEE: 1 << 7,
   THROW: 1 << 8,
+  /** Grab / let go of a downed teammate to drag them. */
+  GRAB: 1 << 9,
 } as const;
 
 /** Physics/collision layer bit masks. Planned up front so nothing collides with everything. */

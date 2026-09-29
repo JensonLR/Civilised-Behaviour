@@ -56,9 +56,9 @@ Testing note: `@colyseus/testing` `boot(server, port)` ignores `port` for Server
 player's input buffer empty stepped them with zero input. The client never predicted that step, so under normal timer jitter the
 server drifted from prediction (measured: reconciler drift EMA up to 0.05, single corrections up to 1.26 m, varying run to run).
 Server state must be a pure function of the input sequence, so `WorldRoom` now steps a player exactly once per received input and
-skips empty ticks; only after `IDLE_AFTER_TICKS` (6 ticks = 200 ms) of silence does it apply zero-input steps so a stalled or
+skips empty ticks; only after `IDLE_AFTER_TICKS` (12 ticks = 400 ms, unified with the input budget in D-017; originally 6) of silence does it apply zero-input steps so a stalled or
 disconnected player lands and stops. Result: drift exactly 0 at 0/100/150 ms RTT incl. wall collisions and 150 ms client hitches.
-Consequence: a stall > 200 ms does desync briefly; the reconciler corrects it on resume. Revisit if playtests show stall corrections.
+Consequence: a stall > 400 ms does desync briefly; the reconciler corrects it on resume. Revisit if playtests show stall corrections.
 Gotcha: Colyseus reconciler drift telemetry is OFF unless `warnOnDivergence` is set (or debug bundle loaded) - zeros mean "not measuring".
 
 **D-014 Props and interaction (2026-09-29).** Props are server-side Rapier bodies (capped at 48/room, sleeping when at rest, static world = heightfield +
@@ -78,3 +78,21 @@ Tessellation is size-adaptive (see PERFORMANCE.md). Lesson: the first render exp
 would have caught; visual checks via `?showcase=lineup` + `scripts/shot.mjs` are part of the workflow.
 Second instance: the animator laid downed characters face-down and the unit test asserted the same wrong sign (tests had encoded the bug); a render caught
 it. Assert *geometry* (where does the head point?) rather than raw joint angles wherever a sign convention is involved.
+
+**D-016 Casualties: down, revive, drag, rout (2026-09-29).** Players go DOWN at 0 health, never dead (brief: stories, not hard resets). All harm funnels through
+`WorldRoom.damagePlayer` -> `Casualties.damage` (weapons/explosions/friendly fire will call it; today only debug commands do). Revive = hold Interact beside a
+downed teammate for 2.5 s; the timer runs on SERVER ticks using the last known button state, so a client cannot speed it up by flooding frames; it cancels on
+release, distance, state change, or when the client's frames stop for >1 s (tolerates hitches: a 300 ms stale window wrongly cancelled revives on loaded
+machines). Drag = Grab (F / RB) on a downed teammate; the body trails the dragger. Dragged bodies are steered by a SERVER-WRITTEN VELOCITY (dragger velocity +
+spring toward the trailing spot) that the shared `stepCharacter` DRAGGED branch integrates with normal collision and ground rules, ignoring input; this keeps
+the client's prediction for the dragged player consistent instead of fighting the server (measured: mean positional correction 1.2 cm at 0 ms RTT, 5 cm at
+120 ms; worst case ~1 m at 120 ms at the instant pulling starts - acceptable for a passive state, revisit if playtests complain). If every connected player is
+down for 8 s, the whole party is hauled back up at spawn with 40% health ("rout", announced with an in-fiction line); this is the placeholder for campaign
+consequences (M8). Flags widened to uint16. Not yet: shoulder carry of a body, wagon transport, bleed-out/death, medical supplies (M5).
+
+**D-017 Input budget (security, 2026-09-29).** Movement is a pure function of the input frames a client sends, so unbounded frames = speed hack. Measured on
+open ground: a client sending 3 frames per step moved **3.0x** faster (the framework's own message cap only limits it to ~4x). `WorldRoom` now runs a per-player
+token bucket: refill 1.05 frames per server tick (5% clock-drift tolerance), capacity 12 (=`HITCH_TOLERANCE_TICKS`, 400 ms) so a genuine stall's burst is
+applied in full; excess frames are dropped and counted in `/metrics` `inputFramesDropped`. Steady-state flooding now yields ~1.03x. Tests are mutation-checked
+(no budget -> ratio 3.0). Note the burst allowance is deliberate: a cheater can bank ~400 ms of extra movement after idling; bounded and not worth more complexity.
+Also: `correctionMax` metrics must ignore server-owned flag changes (flags are numeric fields, so a DRAGGED flip reads as a 256 "correction").

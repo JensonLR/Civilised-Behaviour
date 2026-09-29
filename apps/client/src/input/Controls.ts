@@ -16,6 +16,7 @@ const TAP_BUTTONS: Record<string, number> = {
   KeyR: BUTTON.RELOAD,
   KeyV: BUTTON.MELEE,
   KeyG: BUTTON.THROW,
+  KeyF: BUTTON.GRAB,
 };
 
 /** Radial deadzone with rescale, so slow sticks stay precise and never drift. */
@@ -120,6 +121,7 @@ export class Controls {
     if (k.has("KeyR")) buttons |= BUTTON.RELOAD;
     if (k.has("KeyV")) buttons |= BUTTON.MELEE;
     if (k.has("KeyG")) buttons |= BUTTON.THROW;
+    if (k.has("KeyF")) buttons |= BUTTON.GRAB;
     if (this.mouseButtons & 1) buttons |= BUTTON.FIRE;
     if (this.mouseButtons & 4) buttons |= BUTTON.AIM;
 
@@ -137,6 +139,7 @@ export class Controls {
       if (b(2)) buttons |= BUTTON.INTERACT | BUTTON.RELOAD;
       if (b(3)) buttons |= BUTTON.MELEE;
       if (b(4)) buttons |= BUTTON.THROW;
+      if (b(5)) buttons |= BUTTON.GRAB; // RB
       if (b(6) || (p.buttons[6]?.value ?? 0) > 0.4) buttons |= BUTTON.AIM;
       if (b(7) || (p.buttons[7]?.value ?? 0) > 0.4) buttons |= BUTTON.FIRE;
       if (b(10)) buttons |= BUTTON.SPRINT;

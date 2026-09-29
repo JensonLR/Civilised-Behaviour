@@ -17,7 +17,8 @@ const hook = (page: Page) => page.evaluate(() => {
 });
 
 async function start(page: Page, name: string, code?: string) {
-  await page.goto(code ? `/?join=${code}` : "/");
+  await page.goto(code ? `/?join=${code}&gfx=low` : "/?gfx=low"); // low preset: fewer pixels/shadows for the software rasteriser
+  await page.waitForSelector("#name", { timeout: 60_000 }); // the game boots via dynamic import after `load`
   await page.fill("#name", name);
   await page.click(code ? "#join" : "#create");
   await page.waitForFunction(() => Boolean((window as unknown as { __cb?: unknown }).__cb));
@@ -110,7 +111,7 @@ test("character creator: customise, join, and each player sees the other's look"
   const pageWith = async (name: string, code?: string) => {
     const page = await (await browser.newContext()).newPage();
     page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto(code ? `/?join=${code}` : "/");
+    await page.goto(code ? `/?join=${code}&gfx=low` : "/?gfx=low");
     await page.waitForSelector(".creator .fields"); // the game boots via dynamic import after `load`
     return page;
   };
@@ -161,5 +162,71 @@ test("character creator: customise, join, and each player sees the other's look"
   }
   await b.locator("#stage").focus();
   await b.screenshot({ path: "test-results/two-characters.png" });
+  expect(errors).toEqual([]);
+});
+
+test("a downed player is revived by a teammate holding interact, then dragged to safety (two real browsers)", async ({ browser }) => {
+  const errors: string[] = [];
+  const mk = async () => {
+    const p = await (await browser.newContext()).newPage();
+    p.on("pageerror", (e) => errors.push(e.message));
+    return p;
+  };
+  const send = (p: Page, cmd: string) =>
+    p.evaluate((c) => (window as unknown as { __cb: { session: { room: { send(t: string, m: unknown): void } } } }).__cb.session.room.send("debug", { cmd: c }), cmd);
+  const me = (p: Page) =>
+    p.evaluate(() => {
+      const h = (window as unknown as { __cb: { session: { sessionId: string; room: { state: { players: Map<string, { flags: number; health: number; x: number; z: number; dragger: string }> } } } } }).__cb;
+      const s = h.session.room.state.players.get(h.session.sessionId)!;
+      return { flags: s.flags, health: s.health, x: s.x, z: s.z, dragger: s.dragger };
+    });
+  const DOWNED = 16;
+  const DRAGGED = 256;
+
+  const a = await mk();
+  await start(a, "Wounded");
+  const { code } = await hook(a);
+  const b = await mk();
+  await start(b, "Medic", code);
+  await expect.poll(async () => (await hook(a)).players, { timeout: 30_000 }).toBe(2);
+
+  // A goes down: banner + status appear for A, and B sees the marker on A's nametag.
+  await send(a, "down");
+  await expect(a.locator(".downed")).toContainText("You are down", { timeout: 20_000 });
+  await expect.poll(async () => (await me(a)).flags & DOWNED, { timeout: 20_000 }).toBe(DOWNED);
+  expect((await me(a)).health).toBe(0);
+  await a.screenshot({ path: "test-results/downed.png" });
+
+  // B stands beside A, sees the prompt, holds E: progress bar climbs, A is revived with partial health.
+  await send(b, "nearDowned");
+  await expect(b.locator(".prompt")).toContainText("Revive", { timeout: 20_000 });
+  await b.locator("#stage").focus();
+  await b.keyboard.down("KeyE");
+  await expect(b.locator(".progress")).toBeVisible({ timeout: 20_000 });
+  await b.screenshot({ path: "test-results/reviving.png" });
+  await expect.poll(async () => (await me(a)).flags & DOWNED, { timeout: 30_000 }).toBe(0);
+  await b.keyboard.up("KeyE");
+  expect((await me(a)).health).toBe(35);
+  await expect(a.locator(".downed")).toBeHidden({ timeout: 20_000 });
+
+  // Drag: A down again, B grabs (F) and walks north (W); A's body follows.
+  await send(a, "down");
+  await expect.poll(async () => (await me(a)).flags & DOWNED, { timeout: 20_000 }).toBe(DOWNED);
+  await send(b, "nearDowned");
+  await expect(b.locator(".prompt")).toContainText("Drag", { timeout: 20_000 });
+  await b.keyboard.press("KeyF");
+  await expect.poll(async () => (await me(a)).flags & DRAGGED, { timeout: 20_000 }).toBe(DRAGGED);
+  const before = await me(a);
+  await b.keyboard.down("KeyW");
+  await expect
+    .poll(async () => {
+      const now = await me(a);
+      return Math.hypot(now.x - before.x, now.z - before.z);
+    }, { timeout: 40_000 })
+    .toBeGreaterThan(2);
+  await b.screenshot({ path: "test-results/dragging.png" });
+  await b.keyboard.up("KeyW");
+  await b.keyboard.press("KeyF"); // let go
+  await expect.poll(async () => (await me(a)).flags & DRAGGED, { timeout: 20_000 }).toBe(0);
   expect(errors).toEqual([]);
 });

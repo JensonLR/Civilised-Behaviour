@@ -64,14 +64,23 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const control = s.stumble > 0 ? MOVEMENT.stumbleControl : 1;
   s.stumble = Math.max(0, s.stumble - dt);
 
+  const dragged = (s.flags & FLAG.DRAGGED) !== 0;
+  if (dragged) {
+    stepDragged(s, dt, world);
+    return;
+  }
   const carrying = (s.flags & FLAG.CARRYING) !== 0;
+  const dragging = (s.flags & FLAG.DRAGGING) !== 0;
+  const reviving = (s.flags & FLAG.REVIVING) !== 0;
   const crouching = !downed && (buttons & BUTTON.CROUCH) !== 0;
-  const sprinting = !downed && !crouching && !carrying && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
+  const sprinting = !downed && !crouching && !carrying && !dragging && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
   let topSpeed: number = MOVEMENT.runSpeed;
-  if (downed) topSpeed = 0.9;
+  if (downed) topSpeed = MOVEMENT.crawlSpeed;
   else if (crouching) topSpeed = MOVEMENT.crouchSpeed;
   else if (sprinting) topSpeed = MOVEMENT.sprintSpeed;
   if (carrying) topSpeed *= MOVEMENT.carryFactor;
+  if (dragging) topSpeed *= MOVEMENT.dragFactor;
+  if (reviving) topSpeed = 0; // kneeling over a teammate: hold position (turning still allowed)
 
   // Camera-relative world direction. Yaw 0 looks down -Z; +R is camera-right.
   const sinY = Math.sin(camYaw);
@@ -99,7 +108,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const jumpHeld = (buttons & BUTTON.JUMP) !== 0;
   let flags = s.flags;
   if (!jumpHeld) flags &= ~FLAG.JUMP_LATCH;
-  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
+  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && !dragging && !reviving && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
     s.vy = MOVEMENT.jumpSpeed;
     flags |= FLAG.JUMP_LATCH;
     flags &= ~FLAG.GROUNDED;
@@ -185,6 +194,24 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   flags = crouching ? flags | FLAG.CROUCHING : flags & ~FLAG.CROUCHING;
   flags = sprinting ? flags | FLAG.SPRINTING : flags & ~FLAG.SPRINTING;
   s.flags = flags;
+}
+
+/**
+ * A dragged body has no will of its own: the server writes its velocity each tick (dragger's velocity plus a spring toward
+ * the trailing position) and this integrates it with the same collision and ground rules as a walker. Input is ignored, so
+ * the client's prediction of a dragged local player stays consistent with the server instead of fighting it.
+ * Facing is server-owned while dragged.
+ */
+function stepDragged(s: CharState, dt: number, world: CollisionWorld): void {
+  scratch.x = s.x + s.vx * dt;
+  scratch.z = s.z + s.vz * dt;
+  world.resolveXZ(scratch, s.y, CHARACTER.radius, CHARACTER.crouchHeight);
+  s.x = scratch.x;
+  s.z = scratch.z;
+  s.y = world.groundHeight(s.x, s.z, s.y + CHARACTER.snapDistance);
+  s.vy = 0;
+  s.flags |= FLAG.GROUNDED;
+  s.stumble = 0;
 }
 
 /** Terrain-slope check for a grounded move. Obstacle step-ups are handled by groundHeight. */

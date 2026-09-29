@@ -1,6 +1,7 @@
 import { CloseCode, Room, type Client } from "@colyseus/core";
 import {
   BUTTON,
+  CASUALTY,
   CHARACTER,
   CollisionWorld,
   FLAG,
@@ -37,14 +38,27 @@ import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
+import { Casualties } from "../systems/Casualties.ts";
+
+/** Ticks of client silence/hitch the server tolerates (12 ticks = 400 ms). Used for BOTH the frame-budget burst and the idle threshold. */
+const HITCH_TOLERANCE_TICKS = 12;
 
 /**
  * Server state must be a pure function of the input sequence, so an empty tick skips the player
  * (client and server then agree exactly). Only after a genuine stall do we apply zero-input steps so
  * a stalled/disconnected player lands and comes to rest instead of hanging mid-air at speed.
  */
-const IDLE_AFTER_TICKS = 6;
+const IDLE_AFTER_TICKS = HITCH_TOLERANCE_TICKS;
 const IDLE_COMMAND = { moveF: 0, moveR: 0, yaw: 0, buttons: 0 } as const;
+
+/**
+ * Movement is a pure function of the input frames a player sends, so the server must bound how many it applies:
+ * without a budget, a client sending 3 frames per step moved ~31% faster than allowed. A token bucket refills a little over
+ * one frame per server tick (5% clock-drift tolerance) and holds up to 12 (400 ms) so genuine hitches, whose queued frames
+ * arrive in a burst, are applied in full. Excess frames are dropped (never queued) and counted.
+ */
+const INPUT_BUDGET_REFILL = 1.05;
+const INPUT_BUDGET_MAX = HITCH_TOLERANCE_TICKS;
 
 /** How long a dropped player's slot is held for reconnection. */
 const RECONNECT_WINDOW_S = 45;
@@ -75,6 +89,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
   private world!: CollisionWorld;
   private physics!: PhysicsWorld;
+  private casualties!: Casualties;
   /** Last buttons seen per player, for rising-edge detection (interact/throw). */
   private prevButtons = new Map<string, number>();
   /** sessionId -> prop id currently carried. */
@@ -83,6 +98,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private usedSlots = new Set<number>();
   private emptyTicks = new Map<string, number>();
   private lastSetLook = new Map<string, number>();
+  private frameBudget = new Map<string, number>();
 
   override async onCreate(options: JoinOptions): Promise<void> {
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
@@ -101,6 +117,19 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       this.writeProp(body.id, true);
     }
     metrics.physicsBodies += this.physics.props.size;
+    this.casualties = new Casualties(
+      {
+        players: this.state.players,
+        world: this.world,
+        dropHeldProp: (sid) => {
+          const p = this.state.players.get(sid);
+          if (p) this.dropHeld(sid, p);
+        },
+        routSpawn: (slot) => spawnPoint(slot, MAX_PLAYERS),
+        notify: (text) => this.broadcast("notice", { text }),
+      },
+      { routSeconds: getRoomConfig().routSeconds },
+    );
     void this.setMetadata({ code: this.state.code });
     // Campaigns are friends-first: unlisted, reachable only via join code or direct room id.
     void this.setPrivate(true);
@@ -110,7 +139,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.setFixedTimestep((ctx) => {
       const t0 = performance.now();
       this.state.players.forEach((player, sessionId) => {
-        const frames = this.inputs.get(sessionId).drain();
+        let frames = this.inputs.get(sessionId).drain();
+        const budget = Math.min(INPUT_BUDGET_MAX, (this.frameBudget.get(sessionId) ?? INPUT_BUDGET_MAX) + INPUT_BUDGET_REFILL);
+        const allowed = Math.floor(budget);
+        if (frames.length > allowed) {
+          metrics.inputFramesDropped += frames.length - allowed;
+          frames = frames.slice(0, allowed);
+        }
+        this.frameBudget.set(sessionId, budget - frames.length);
         if (frames.length > 0) {
           this.emptyTicks.set(sessionId, 0);
           for (const cmd of frames) {
@@ -122,13 +158,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
           this.emptyTicks.set(sessionId, empty);
           if (empty > IDLE_AFTER_TICKS) stepCharacter(player, IDLE_COMMAND, ctx.dt, this.world);
         }
-        this.physics.syncPlayer(sessionId, player.x, player.y, player.z, (player.flags & FLAG.CROUCHING) !== 0);
+        this.physics.syncPlayer(sessionId, player.x, player.y, player.z, (player.flags & (FLAG.CROUCHING | FLAG.DOWNED)) !== 0);
         const held = this.carrying.get(sessionId);
         if (held) {
           holdPosition(player, this.hold);
           this.physics.moveHeld(held, this.hold.x, this.hold.y, this.hold.z, player.facing);
         }
       });
+      this.casualties.tick(ctx.dt);
       this.physics.step(ctx.dt);
       for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
       const ms = performance.now() - t0;
@@ -164,6 +201,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     for (const k of HISTORY_KEYS) blank[k] = 0;
     player.look = encodeSpec(blank);
     player.title = "";
+    player.health = CASUALTY.maxHealth;
+    player.reviveProgress = 0;
+    player.reviver = "";
+    player.dragger = "";
     const sp = spawnPoint(slot, MAX_PLAYERS);
     const c = createCharState(sp.x, sp.z, this.world);
     Object.assign(player, c);
@@ -190,6 +231,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         log.info("room.reconnect_expired", { roomId: this.roomId, sessionId: client.sessionId });
       }
     }
+    this.casualties.onLeave(client.sessionId);
     this.dropHeld(client.sessionId, player);
     this.physics.removePlayer(client.sessionId);
     metrics.physicsBodies--;
@@ -197,6 +239,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.usedSlots.delete(player.slot);
     this.emptyTicks.delete(client.sessionId);
     this.lastSetLook.delete(client.sessionId);
+    this.frameBudget.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     metrics.players--;
     log.info("room.leave", { roomId: this.roomId, sessionId: client.sessionId, consented });
@@ -219,6 +262,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const prev = this.prevButtons.get(sessionId) ?? 0;
     this.prevButtons.set(sessionId, cmd.buttons);
     const pressed = cmd.buttons & ~prev;
+    // Casualty rules run first: downed players may not use props, and reviving a teammate outranks picking things up.
+    if (this.casualties.onFrame(sessionId, player, cmd.buttons, pressed)) return;
     if (pressed === 0) return;
     const held = this.carrying.get(sessionId);
 
@@ -260,11 +305,37 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.look = encodeSpec(applyClientAppearance(current, incoming));
   }
 
+  /** The single entry point for harm (weapons, explosions, friendly fire, debug). Health 0 puts a player down, never out. */
+  damagePlayer(sessionId: string, amount: number): void {
+    this.casualties.damage(sessionId, amount);
+  }
+
   /** QA-only commands (see docs/NETWORKING.md). Registered only when config.debugCommands is true. */
   private debugCommand(client: Client, cmd: string | undefined): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (cmd === "nearProp") {
+    if (cmd === "hurt") this.damagePlayer(client.sessionId, 40);
+    else if (cmd === "down") this.damagePlayer(client.sessionId, 1000);
+    else if (cmd === "nearDowned") {
+      // Stand beside the nearest downed teammate, facing them.
+      let best: PlayerStateType | undefined;
+      let bestD = Infinity;
+      this.state.players.forEach((o, id) => {
+        if (id === client.sessionId || (o.flags & FLAG.DOWNED) === 0) return;
+        const d = Math.hypot(o.x - player.x, o.z - player.z);
+        if (d < bestD) {
+          bestD = d;
+          best = o;
+        }
+      });
+      if (!best) return;
+      player.x = best.x;
+      player.z = best.z + 1.0;
+      player.y = best.y;
+      player.facing = 0;
+      player.vx = 0;
+      player.vz = 0;
+    } else if (cmd === "nearProp") {
       // Stand 1.2 m south of the closest free prop, facing it.
       let best: { x: number; y: number; z: number } | undefined;
       let bestD = Infinity;

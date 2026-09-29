@@ -45,6 +45,17 @@ Requests without an `Origin` header (curl, native/Electron main-process, bots) p
 Tests: `origins.test.ts` (mutation-checked: fail when enforcement is off). `/health` and `/metrics` are still readable by
 non-browser clients; `/metrics` exposes counts only.
 
+## Input budget and hitch tolerance (D-017)
+The server applies at most ~1.05 input frames per tick per player on average (bucket of 12 for hitches); excess is dropped and counted
+(`inputFramesDropped`). A client silent for >12 ticks (400 ms) is stepped with zero input so it lands and stops. Measured: flooding 3 frames/step:
+3.0x speed without the budget, ~1.03x with. Legit 150 ms and 350 ms client stalls keep prediction drift at exactly 0.
+
+## Casualties (D-016)
+Health 0..100 (server-owned). At 0 the player is DOWNED (crawl only, no props, cannot revive). Revive: hold Interact within 1.8 m for 2.5 s (server-tick timed).
+Drag: Grab within 1.7 m; body trails 1.2 m behind, velocity-steered by the server; auto-release beyond 3.2 m, on revive, or if either party goes down/leaves.
+Rout: all connected players down for 8 s (`ROUT_SECONDS`) -> everyone up at spawn with 40 health + a `notice` broadcast.
+Prediction while dragged (bot-measured, `casualtyNet.test.ts`): mean positional correction 1.2 cm @0 ms, 5.3 cm @120 ms RTT; worst ~1.07 m at pull start.
+
 ## Props and interaction
 Physics props live in a server-only Rapier world (`apps/server/src/physics.ts`, layers from `LAYER`). Only awake/held props are written to
 `state.props` (pose changes < 2 mm are skipped); clients interpolate with `Predict.attachAll("props")`. Pick up / drop / throw arrive as
@@ -54,7 +65,7 @@ in front of the holder and ignores player capsules. Client keyboard taps are lat
 
 ## QA debug commands
 `DEBUG_COMMANDS` (default on outside production; config validation rejects it in production) registers a `debug` message on rooms. Currently
-`{cmd:"nearProp"}` teleports the caller next to the nearest free prop (used by the browser e2e). Never ship these enabled.
+`nearProp` / `nearDowned` teleport the caller next to the nearest free prop / downed teammate; `hurt` (-40 health) and `down` (health 0) harm the caller (all used by the browser e2e). Never ship these enabled.
 
 ## Dev controls
 - `SIMULATED_LATENCY_MS` (server env, RTT ms) - forbidden in production by config validation.
