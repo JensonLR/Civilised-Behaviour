@@ -1,5 +1,7 @@
 /* Colour variables (--ink, --paper, --brass, ...) are published from the shared palette at startup (see applyPalette in main.ts);
-   these fallbacks only cover the first frame and must match packages/shared/src/palette.ts (a test asserts they do). */
+   these fallbacks only cover the first frame and must match packages/shared/src/palette.ts (a test asserts they do).
+   Direction: the printed ephemera of a Victorian expedition society - charter paper, brass fittings, rubber stamps, luggage tags,
+   telegrams. Type: IM Fell (period printing) for text and small caps, Special Elite for the telegraph. See docs/ART_DIRECTION.md. */
 :root {
   --ink: #2a2118;
   --paper: #efe3c8;
@@ -13,80 +15,190 @@
   --text: #fbf0dc;
   --backdrop: #1b1610;
   --scrim: #140e08;
-  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-  font-family: "Georgia", "Iowan Old Style", "Palatino Linotype", serif;
+  --shadow: 0 12px 36px color-mix(in srgb, var(--scrim) 60%, transparent);
+  --brass-grad: linear-gradient(180deg, color-mix(in srgb, var(--brass) 62%, var(--text)) 0%, var(--brass) 46%, var(--brass-dark) 100%);
+  --leather: color-mix(in srgb, var(--stamp-dark) 55%, var(--scrim));
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  --display: "IM Fell English SC", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --serif: "IM Fell English", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --type: "Special Elite", "Courier New", monospace;
+  font-family: var(--serif);
+  font-size: 17px;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdrop); color: var(--ink); }
 #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+
+/* ---- shared surfaces ---- */
+
+/* Charter paper: warm sheet, faint grain, darker edges. */
+.panel, .codebar, .prompt, .progress, .notice, .downed, .wounds, .nametag, .health {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 40%, transparent 55%, color-mix(in srgb, var(--brass-dark) 22%, transparent) 100%),
+    linear-gradient(var(--paper), var(--paper-2));
+  color: var(--ink);
+}
+.panel::before, .codebar::before, .prompt::before, .progress::before, .notice::before, .downed::before, .wounds::before, .nametag::before {
+  content: ""; position: absolute; inset: 0; background: var(--grain); opacity: 0.22; mix-blend-mode: multiply; pointer-events: none; border-radius: inherit;
+}
+
+/* Small caps label: the workhorse of printed forms. */
+.caps { font-family: var(--display); letter-spacing: 0.09em; text-transform: none; }
+
+/* Brass fittings: primary and secondary buttons share one construction (a stamped plate). */
+.panel button, .codebar button {
+  font-family: var(--display); font-size: 1.05rem; letter-spacing: 0.08em; color: var(--ink);
+  padding: 0.55rem 1.1rem; min-height: 2.75rem; cursor: pointer; border-radius: 3px;
+  border: 1.5px solid var(--brass-dark);
+  background: linear-gradient(var(--field), var(--paper-2));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 80%, transparent), 0 2px 0 var(--brass-dark), 0 3px 6px color-mix(in srgb, var(--scrim) 35%, transparent);
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.12s;
+}
+.panel button:hover, .codebar button:hover { filter: brightness(1.05); }
+.panel button:active, .codebar button:active { transform: translateY(2px); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 60%, transparent), 0 0 0 var(--brass-dark); }
+.panel button:focus-visible, .panel input:focus-visible, .panel select:focus-visible, .codebar button:focus-visible { outline: 3px solid var(--stamp); outline-offset: 2px; }
+.panel button:disabled { opacity: 0.55; cursor: progress; }
+/* The rubber stamp: the one call to action per panel. */
+.panel button.primary {
+  flex: 1; color: var(--text); font-size: 1.2rem; letter-spacing: 0.12em;
+  background: linear-gradient(color-mix(in srgb, var(--stamp) 88%, var(--text)), var(--stamp) 45%, var(--stamp-dark));
+  border-color: var(--stamp-dark);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 35%, transparent), inset 0 0 0 3px color-mix(in srgb, var(--stamp-dark) 55%, transparent), inset 0 0 0 4px color-mix(in srgb, var(--text) 30%, transparent), 0 2px 0 var(--stamp-dark), 0 4px 8px color-mix(in srgb, var(--scrim) 40%, transparent);
+  text-shadow: 0 1px 0 var(--stamp-dark);
+}
+
+/* ---- front door ---- */
+
 #menu { position: fixed; inset: 0; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.5rem clamp(0.75rem, 3vw, 3rem); pointer-events: none; overflow-y: auto; }
+#menu::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 50% 55%, transparent 40%, color-mix(in srgb, var(--scrim) 62%, transparent) 100%); }
 #menu > .panel { pointer-events: auto; max-height: calc(100vh - 3rem); overflow-y: auto; }
 #menu[hidden] { display: none; }
-.panel { width: min(92vw, 27rem); flex: none; padding: 2rem 2rem 1.5rem; background: linear-gradient(var(--paper), var(--paper-2)); border: 2px solid var(--brass-dark); border-radius: 6px; box-shadow: var(--shadow), inset 0 0 0 6px color-mix(in srgb, var(--brass) 18%, transparent); }
-.panel h1 { margin: 0; font-size: 2.1rem; letter-spacing: 0.02em; }
-.panel .tag { margin: 0.25rem 0 1.25rem; font-style: italic; opacity: 0.75; }
-.panel label { display: grid; gap: 0.35rem; font-weight: 600; }
-.panel input { font: inherit; padding: 0.6rem 0.7rem; border: 1.5px solid var(--brass-dark); border-radius: 4px; background: var(--field); color: var(--ink); min-width: 0; }
-.panel input:focus, .panel button:focus-visible { outline: 3px solid var(--stamp); outline-offset: 2px; }
-.panel .row { display: flex; gap: 0.6rem; margin-top: 0.9rem; }
-.panel .row input { flex: 1; text-transform: uppercase; letter-spacing: 0.25em; text-align: center; }
-.panel button, .codebar button { font: inherit; font-weight: 700; padding: 0.65rem 1.1rem; border: 1.5px solid var(--brass-dark); border-radius: 4px; background: var(--paper); color: var(--ink); cursor: pointer; min-height: 2.75rem; }
-.panel button.primary { flex: 1; background: var(--stamp); color: var(--text); border-color: var(--stamp-dark); }
-.panel button:disabled { opacity: 0.55; cursor: progress; }
-.or { margin-top: 1.1rem; text-align: center; font-size: 0.9rem; opacity: 0.7; }
-#status { min-height: 1.4rem; margin: 0.9rem 0 0; }
-#status.error { color: var(--stamp); font-weight: 700; }
-.fine { margin: 0.6rem 0 0; font-size: 0.78rem; opacity: 0.6; }
-#hud { position: fixed; inset: 0; pointer-events: none; }
-#hud[hidden] { display: none; }
-.codebar { position: absolute; top: 0.9rem; right: 0.9rem; display: flex; gap: 0.6rem; align-items: center; padding: 0.4rem 0.6rem 0.4rem 0.9rem; background: color-mix(in srgb, var(--paper) 92%, transparent); border: 1.5px solid var(--brass-dark); border-radius: 4px; pointer-events: auto; }
-.codebar b { letter-spacing: 0.2em; font-size: 1.15rem; }
-.help { position: absolute; left: 50%; bottom: 0.8rem; transform: translateX(-50%); padding: 0.3rem 0.8rem; font-size: 0.8rem; color: var(--text); background: color-mix(in srgb, var(--scrim) 55%, transparent); border-radius: 3px; white-space: nowrap; }
-.nametag { position: absolute; left: 0; top: 0; padding: 0.1rem 0.5rem; font-size: 0.82rem; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--scrim) 60%, transparent); border-radius: 3px; white-space: nowrap; will-change: transform; }
-.prompt { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); padding: 0.45rem 1.1rem; font-weight: 700; letter-spacing: 0.02em; color: var(--ink); background: color-mix(in srgb, var(--paper) 94%, transparent); border: 1.5px solid var(--brass-dark); border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.35); white-space: pre; }
-.prompt[hidden] { display: none; }
-#debug { position: fixed; left: 0.6rem; top: 0.6rem; margin: 0; padding: 0.5rem 0.7rem; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #cfe8c8; background: rgba(0, 0, 0, 0.6); border-radius: 3px; pointer-events: none; white-space: pre; }
-#debug[hidden] { display: none; }
-@media (max-width: 40rem) { .help { display: none; } }
 
-/* ---- character creator ---- */
-.creator h2 { margin: 0 0 0.6rem; font-size: 1.35rem; }
-.creator .tabs { display: flex; gap: 0.3rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-.creator .tabs button { min-height: 2.4rem; padding: 0.3rem 0.8rem; }
-.creator .tabs button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
-.creator .fields { display: grid; gap: 0.55rem; }
-.creator .field { display: grid; grid-template-columns: 8.2rem 1fr; align-items: center; gap: 0.6rem; font-weight: 600; font-size: 0.95rem; }
-.creator input[type="range"] { width: 100%; accent-color: var(--stamp); min-height: 1.6rem; }
-.creator select { font: inherit; padding: 0.35rem; border: 1.5px solid var(--brass-dark); border-radius: 4px; background: var(--field); color: var(--ink); min-width: 0; }
-.creator .swatches { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.creator .swatch { width: 1.7rem; height: 1.7rem; min-height: 0; padding: 0; border: 2px solid rgba(0,0,0,0.35); border-radius: 50%; color: #fff; text-shadow: 0 0 3px #000; font-size: 0.9rem; line-height: 1; }
-.creator .swatch[aria-checked="true"] { outline: 3px solid var(--ink); outline-offset: 1px; }
-.creator .actions { justify-content: space-between; }
+/* A leather-bound charter: leather cover, brass corner protectors, stitching, then the page with a double rule. */
+.panel {
+  width: min(92vw, 27rem); flex: none; padding: 1.7rem 1.9rem 1.3rem; border-radius: 5px;
+  border: 9px solid var(--leather);
+  box-shadow:
+    var(--shadow),
+    0 0 0 1.5px var(--brass-dark),
+    inset 0 0 0 3px var(--paper), inset 0 0 0 4.5px color-mix(in srgb, var(--brass-dark) 80%, transparent),
+    inset 0 0 0 8px var(--paper), inset 0 0 0 9px color-mix(in srgb, var(--brass) 55%, transparent);
+}
+.panel::after { /* brass corner protectors */
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 0;
+  background:
+    radial-gradient(circle at 0 0, var(--brass) 0 13px, transparent 14px) top left,
+    radial-gradient(circle at 100% 0, var(--brass) 0 13px, transparent 14px) top right,
+    radial-gradient(circle at 0 100%, var(--brass) 0 13px, transparent 14px) bottom left,
+    radial-gradient(circle at 100% 100%, var(--brass) 0 13px, transparent 14px) bottom right;
+  background-repeat: no-repeat; filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--scrim) 60%, transparent));
+}
+.panel .society { margin: 0; text-align: center; font-family: var(--display); font-size: 0.78rem; letter-spacing: 0.15em; color: var(--brass-dark); }
+.panel .rule { display: flex; align-items: center; gap: 0.6rem; margin: 0.55rem 0 0.4rem; color: var(--brass-dark); }
+.panel .rule::before, .panel .rule::after { content: ""; flex: 1; height: 5px; border-top: 1.5px solid currentColor; border-bottom: 0.75px solid currentColor; }
+.panel .rule svg { width: 2rem; height: 2rem; flex: none; }
+.panel h1 { margin: 0; text-align: center; font-family: var(--display); font-weight: 400; font-size: 2.35rem; line-height: 1.05; letter-spacing: 0.04em; text-shadow: 0 1px 0 color-mix(in srgb, var(--text) 70%, transparent), 0 -0.5px 0 color-mix(in srgb, var(--ink) 50%, transparent); }
+.panel .tag { margin: 0.35rem 0 1.15rem; text-align: center; font-style: italic; font-size: 0.98rem; opacity: 0.78; }
+.panel label { display: grid; gap: 0.15rem; font-family: var(--display); font-size: 0.98rem; letter-spacing: 0.1em; }
+.panel input, .panel select {
+  font: inherit; font-family: var(--serif); font-size: 1.1rem; min-width: 0; color: var(--ink);
+  padding: 0.4rem 0.3rem 0.3rem; border: 0; border-bottom: 1.5px solid var(--ink); border-radius: 0;
+  background: color-mix(in srgb, var(--field) 55%, transparent);
+}
+.panel select { padding: 0.3rem 0.4rem; border: 1.5px solid var(--brass-dark); border-radius: 3px; background: var(--field); }
+.panel input::placeholder { font-style: italic; color: var(--ink); opacity: 0.6; }
+.panel .row { display: flex; gap: 0.6rem; margin-top: 0.85rem; }
+.panel .row input { flex: 1; text-transform: uppercase; letter-spacing: 0.3em; text-align: center; font-family: var(--type); font-size: 1.05rem; border: 1.5px dashed var(--brass-dark); border-radius: 3px; }
+.or { display: flex; align-items: center; gap: 0.6rem; margin-top: 1.05rem; font-style: italic; font-size: 0.95rem; opacity: 0.75; }
+.or::before, .or::after { content: ""; flex: 1; border-top: 1px dotted currentColor; }
+#status { min-height: 1.4rem; margin: 0.8rem 0 0; font-style: italic; }
+#status.error { color: var(--stamp); font-weight: 700; font-style: normal; }
+.fine { margin: 0.5rem 0 0; font-size: 0.82rem; opacity: 0.68; line-height: 1.3; }
+.opt { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.9rem; }
+
+/* ---- character creator: the bearer's particulars ---- */
+
+.creator h2 { margin: 0 0 0.7rem; text-align: center; font-family: var(--display); font-weight: 400; font-size: 1.45rem; letter-spacing: 0.1em; }
+.creator .tabs { display: flex; gap: 0.25rem; margin: 0 -0.2rem 0; padding: 0 0.2rem; border-bottom: 1.5px solid var(--brass-dark); flex-wrap: wrap; }
+.creator .tabs button { min-height: 2.2rem; padding: 0.25rem 0.85rem 0.2rem; font-size: 0.98rem; border-radius: 4px 4px 0 0; border-bottom: 0; box-shadow: none; background: linear-gradient(var(--paper-2), var(--track)); margin-bottom: -1.5px; transform: none; }
+.creator .tabs button:active { transform: none; box-shadow: none; }
+.creator .tabs button[aria-selected="true"] { background: var(--field); font-weight: 700; padding-top: 0.4rem; border-top: 3px solid var(--stamp); box-shadow: 0 -2px 0 color-mix(in srgb, var(--brass) 40%, transparent); }
+.creator .fields { display: grid; gap: 0.35rem; margin-top: 0.85rem; }
+.creator .field { display: grid; grid-template-columns: 8.4rem 1fr; align-items: center; gap: 0.6rem; font-size: 1rem; letter-spacing: 0.06em; }
+.creator .swatches { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.creator .swatch { width: 1.75rem; height: 1.75rem; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid var(--brass-dark); box-shadow: inset 0 -3px 5px color-mix(in srgb, var(--scrim) 35%, transparent), inset 0 2px 2px color-mix(in srgb, var(--text) 40%, transparent), 0 1px 0 var(--brass-dark); color: var(--text); text-shadow: 0 0 3px var(--scrim); font-size: 0.95rem; line-height: 1; letter-spacing: 0; }
+.creator .swatch:active { transform: none; }
+.creator .swatch[aria-checked="true"] { outline: 2.5px solid var(--ink); outline-offset: 2px; }
+.creator .actions { justify-content: space-between; margin-top: 1.1rem; }
+/* Sliders: an engraved rule with tick marks and a brass knob. */
+.creator input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 1.6rem; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.creator input[type="range"]::-webkit-slider-runnable-track { height: 0.42rem; border-radius: 2px; background: linear-gradient(var(--brass-dark), var(--track)); box-shadow: inset 0 1px 1px color-mix(in srgb, var(--scrim) 50%, transparent); }
+.creator input[type="range"]::-moz-range-track { height: 0.42rem; border-radius: 2px; background: linear-gradient(var(--brass-dark), var(--track)); box-shadow: inset 0 1px 1px color-mix(in srgb, var(--scrim) 50%, transparent); }
+.creator input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 1.15rem; height: 1.15rem; margin-top: -0.36rem; border-radius: 50%; border: 1.5px solid var(--brass-dark); background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--brass) 55%, var(--text)), var(--brass) 50%, var(--brass-dark)); box-shadow: 0 1px 2px color-mix(in srgb, var(--scrim) 55%, transparent); }
+.creator input[type="range"]::-moz-range-thumb { width: 1.05rem; height: 1.05rem; border-radius: 50%; border: 1.5px solid var(--brass-dark); background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--brass) 55%, var(--text)), var(--brass) 50%, var(--brass-dark)); box-shadow: 0 1px 2px color-mix(in srgb, var(--scrim) 55%, transparent); }
+.creator input[type="range"]:focus-visible { outline: 3px solid var(--stamp); outline-offset: 3px; border-radius: 3px; }
 @media (max-width: 60rem) { #menu { flex-direction: column; align-items: center; justify-content: flex-start; } .panel { width: min(94vw, 27rem); } }
 
-/* ---- gameplay HUD ---- */
-.health { position: absolute; left: 0.9rem; bottom: 0.9rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.7rem; background: color-mix(in srgb, var(--paper) 92%, transparent); border: 1.5px solid var(--brass-dark); border-radius: 4px; font-weight: 700; }
-.health .bar, .progress .bar { position: relative; width: 9rem; height: 0.85rem; background: var(--track); border: 1.5px solid var(--brass-dark); border-radius: 2px; overflow: hidden; }
-.health .fill, .progress .fill { height: 100%; background: repeating-linear-gradient(90deg, var(--ink) 0 8px, color-mix(in srgb, var(--ink) 82%, var(--paper)) 8px 10px); transition: width 0.15s; }
-.health[data-state="critical"] .fill { background: repeating-linear-gradient(90deg, var(--stamp) 0 8px, var(--stamp-dark) 8px 10px); }
-.health[data-state="critical"] .num::after { content: " !"; }
-.health[data-state="down"] .num::after { content: " ✚"; }
-.health .num { min-width: 2.2rem; text-align: right; }
-.progress { position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%); display: grid; gap: 0.3rem; justify-items: center; padding: 0.5rem 1rem; background: color-mix(in srgb, var(--paper) 94%, transparent); border: 1.5px solid var(--brass-dark); border-radius: 4px; font-weight: 700; }
-.progress[hidden], .downed[hidden], .notice[hidden] { display: none; }
-.progress .bar { width: 14rem; height: 1rem; }
-.downed { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); text-align: center; padding: 0.8rem 1.6rem; color: var(--text); background: color-mix(in srgb, var(--stamp-dark) 86%, transparent); border: 2px solid var(--stamp); border-radius: 4px; box-shadow: 0 0 60px 20px color-mix(in srgb, var(--stamp) 35%, transparent); }
-.downed .title { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.04em; }
-.downed .sub { margin-top: 0.25rem; font-size: 0.95rem; opacity: 0.92; }
-.notice { position: absolute; left: 50%; top: 4.5rem; transform: translateX(-50%); max-width: min(90vw, 36rem); text-align: center; padding: 0.6rem 1.2rem; font-style: italic; background: color-mix(in srgb, var(--paper) 95%, transparent); border: 1.5px solid var(--brass-dark); border-radius: 4px; }
+/* ---- in game ---- */
 
-/* Injury chart: severity = fill + outline weight (+ the words), never colour alone. */
-.wounds { position: absolute; left: 0.9rem; bottom: 3.5rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.6rem; background: color-mix(in srgb, var(--paper) 92%, transparent); border: 1.5px solid var(--brass-dark); border-radius: 4px; font-size: 0.8rem; font-weight: 700; max-width: 22rem; }
+#hud { position: fixed; inset: 0; pointer-events: none; font-size: 16px; }
+#hud[hidden] { display: none; }
+#debug { position: fixed; left: 0.6rem; top: 0.6rem; margin: 0; padding: 0.5rem 0.7rem; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--text); background: color-mix(in srgb, var(--scrim) 75%, transparent); border-radius: 3px; pointer-events: none; white-space: pre; }
+#debug[hidden] { display: none; }
+
+/* Expedition number: a brass-cornered plaque. */
+.codebar { position: absolute; top: 0.9rem; right: 0.9rem; display: flex; gap: 0.7rem; align-items: center; padding: 0.4rem 0.6rem 0.4rem 0.95rem; border: 2px solid var(--brass-dark); border-radius: 3px; pointer-events: auto; box-shadow: var(--shadow), inset 0 0 0 3px var(--paper), inset 0 0 0 4px color-mix(in srgb, var(--brass) 60%, transparent); font-family: var(--display); letter-spacing: 0.1em; }
+.codebar b { font-family: var(--type); letter-spacing: 0.3em; font-size: 1.15rem; color: var(--stamp); font-weight: 400; }
+.codebar button { min-height: 2.1rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; }
+.help { position: absolute; right: 0.9rem; bottom: 0.9rem; padding: 0.25rem 0.9rem; font-family: var(--display); letter-spacing: 0.08em; font-size: 0.85rem; color: var(--text); background: color-mix(in srgb, var(--scrim) 62%, transparent); border-top: 1px solid var(--brass); border-bottom: 1px solid var(--brass); white-space: nowrap; }
+@media (max-width: 40rem) { .help { display: none; } }
+
+/* Luggage tags over heads. */
+.nametag { position: absolute; left: 0; top: 0; padding: 0.05rem 0.55rem 0.05rem 1.05rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; white-space: nowrap; will-change: transform; border-radius: 2px 5px 5px 2px; border: 1px solid var(--brass-dark); clip-path: polygon(0 50%, 0.5rem 0, 100% 0, 100% 100%, 0.5rem 100%); filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--scrim) 50%, transparent)); }
+.nametag::after { content: ""; position: absolute; left: 0.42rem; top: 50%; width: 0.28rem; height: 0.28rem; margin-top: -0.14rem; border-radius: 50%; background: var(--scrim); box-shadow: 0 0 0 1.5px var(--brass); }
+
+/* Context prompt: a ticket. */
+.prompt { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); padding: 0.4rem 1.5rem; font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.06em; white-space: pre; border-radius: 3px; border: 1.5px solid var(--brass-dark); box-shadow: 0 4px 14px color-mix(in srgb, var(--scrim) 50%, transparent), inset 0 0 0 3px var(--paper), inset 0 0 0 4px color-mix(in srgb, var(--brass) 55%, transparent); }
+.prompt[hidden] { display: none; }
+
+/* Brass-bound gauge: vitality. Severity is the needle position AND the number AND the "!" - never colour alone. */
+.health { position: absolute; left: 0.9rem; bottom: 0.9rem; width: 7.4rem; display: grid; justify-items: center; padding: 0.25rem 0.3rem 0.35rem; border: 2px solid var(--brass-dark); border-radius: 8px 8px 4px 4px; box-shadow: var(--shadow), inset 0 0 0 3px var(--paper), inset 0 0 0 4px color-mix(in srgb, var(--brass) 60%, transparent); font-family: var(--display); letter-spacing: 0.14em; font-size: 0.78rem; }
+.health .gauge { width: 6.2rem; height: 6.2rem; display: block; }
+.health .gauge .ring { fill: var(--brass); stroke: var(--brass-dark); stroke-width: 1; }
+.health .gauge .bezel { fill: none; stroke: color-mix(in srgb, var(--text) 55%, var(--brass)); stroke-width: 1.4; }
+.health .gauge .face { fill: var(--field); stroke: var(--brass-dark); stroke-width: 0.8; }
+.health .gauge .tick { stroke: var(--ink); stroke-width: 1; stroke-linecap: butt; }
+.health .gauge .tick.minor { stroke-width: 0.6; }
+.health .gauge .zone { fill: none; stroke: var(--stamp); stroke-width: 3.2; stroke-dasharray: 2 1.2; }
+.health .gauge .needle { stroke: var(--stamp-dark); stroke-width: 1.8; stroke-linecap: round; transform-box: view-box; transform-origin: 50px 50px; transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.health .gauge .hub { fill: var(--brass); stroke: var(--brass-dark); stroke-width: 1; }
+.health .gauge .num { font-family: var(--type); font-size: 11px; fill: var(--ink); text-anchor: middle; }
+.health[data-state="critical"] .gauge .needle { animation: tremble 0.5s infinite alternate; }
+@keyframes tremble { from { transform: rotate(calc(var(--angle) - 2deg)); } to { transform: rotate(calc(var(--angle) + 2deg)); } }
+@media (prefers-reduced-motion: reduce) { .health[data-state="critical"] .gauge .needle { animation: none; } .health .gauge .needle { transition: none; } }
+
+/* Revive progress: a brass tube filling with ink hatching. */
+.progress { position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%); display: grid; gap: 0.3rem; justify-items: center; padding: 0.5rem 1.2rem 0.6rem; font-family: var(--display); letter-spacing: 0.08em; border-radius: 3px; border: 1.5px solid var(--brass-dark); box-shadow: 0 4px 14px color-mix(in srgb, var(--scrim) 50%, transparent), inset 0 0 0 3px var(--paper), inset 0 0 0 4px color-mix(in srgb, var(--brass) 55%, transparent); }
+.progress .bar { position: relative; width: 14rem; height: 1rem; background: var(--track); border: 1.5px solid var(--brass-dark); border-radius: 8px; overflow: hidden; box-shadow: inset 0 2px 3px color-mix(in srgb, var(--scrim) 40%, transparent); }
+.progress .fill { height: 100%; background: repeating-linear-gradient(135deg, var(--ink) 0 5px, color-mix(in srgb, var(--ink) 75%, var(--paper)) 5px 8px); transition: width 0.15s; }
+.progress[hidden], .downed[hidden], .notice[hidden], .wounds[hidden] { display: none; }
+
+/* Down: a mourning card. Black border, stamped in ink-red; the text carries the meaning. */
+.downed { position: absolute; left: 50%; top: 27%; transform: translateX(-50%) rotate(-1deg); text-align: center; padding: 0.9rem 2.2rem 1rem; border: 5px solid var(--ink); border-radius: 2px; box-shadow: 0 0 0 1px var(--paper), 0 0 0 3px var(--ink), 0 0 70px 24px color-mix(in srgb, var(--stamp) 34%, transparent), var(--shadow); }
+.downed .title { font-family: var(--display); font-size: 1.9rem; letter-spacing: 0.16em; color: var(--stamp); text-shadow: 0 1px 0 color-mix(in srgb, var(--text) 60%, transparent); }
+.downed .sub { margin-top: 0.3rem; font-style: italic; font-size: 1.05rem; }
+
+/* Notices arrive by telegram. */
+.notice { position: absolute; left: 50%; top: 4.5rem; transform: translateX(-50%); max-width: min(90vw, 36rem); text-align: left; padding: 1.5rem 1.4rem 0.7rem; font-family: var(--type); font-size: 0.98rem; line-height: 1.35; border-top: 3px double var(--ink); border-bottom: 3px double var(--ink); box-shadow: var(--shadow); }
+.notice::after { content: "TELEGRAM"; position: absolute; left: 0; right: 0; top: 0.35rem; text-align: center; font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.4em; color: var(--stamp); }
+
+/* Surgeon's tag. Severity = fill + outline weight + hatching + the words beside it. */
+.wounds { position: absolute; left: 8.6rem; bottom: 0.9rem; display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.8rem 0.4rem 1.2rem; max-width: 22rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; border: 1.5px solid var(--brass-dark); border-radius: 3px; clip-path: polygon(0 50%, 0.7rem 0, 100% 0, 100% 100%, 0.7rem 100%); filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--scrim) 50%, transparent)); }
+.wounds::after { content: ""; position: absolute; left: 0.32rem; top: 50%; width: 0.32rem; height: 0.32rem; margin-top: -0.16rem; border-radius: 50%; background: var(--scrim); box-shadow: 0 0 0 1.5px var(--brass); }
 .wounds .chart { width: 1.6rem; height: 3.4rem; flex: none; }
 .wounds .chart [data-z] { fill: transparent; stroke: var(--brass-dark); stroke-width: 1; }
 .wounds .chart [data-sev="1"] { fill: color-mix(in srgb, var(--ink) 28%, transparent); stroke-width: 1.6; }
 .wounds .chart [data-sev="2"] { fill: color-mix(in srgb, var(--ink) 60%, transparent); stroke-width: 2.2; }
 .wounds .chart [data-sev="3"] { fill: var(--stamp); stroke: var(--ink); stroke-width: 3; }
-.opt { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.7rem; font-weight: 700; }
-.opt select { font: inherit; padding: 0.25rem 0.4rem; }
-.wounds[hidden] { display: none; }
+.wounds .chart [data-sev="4"] { fill: transparent; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 2.5 2; }

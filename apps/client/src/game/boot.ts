@@ -49,7 +49,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     const link = `${location.origin}${location.pathname}?join=${s.code}`;
     const bar = document.createElement("div");
     bar.className = "codebar";
-    bar.innerHTML = `<span>Expedition code <b>${s.code}</b></span><button type="button">Copy invite</button>`;
+    bar.innerHTML = `<span>Expedition No. <b>${s.code}</b></span><button type="button">Copy invite</button>`;
     bar.querySelector("button")!.addEventListener("click", (e) => {
       void navigator.clipboard?.writeText(link);
       (e.target as HTMLButtonElement).textContent = "Copied";

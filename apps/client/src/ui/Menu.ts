@@ -8,6 +8,9 @@ export interface MenuHandlers {
 import { startPadNav } from "./PadNav.ts";
 import { GORE_LEVELS, getGore, setGore } from "../settings.ts";
 
+/** A compass rose for the letterhead: eight points, drawn in currentColor so it takes the brass of the rule beside it. */
+const COMPASS = `<svg viewBox="0 0 32 32" fill="currentColor"><path d="M16 1 19 13 31 16 19 19 16 31 13 19 1 16 13 13Z"/><circle cx="16" cy="16" r="2.4" fill="none" stroke="currentColor" stroke-width="1"/><path d="M16 7 17.6 14.4 25 16 17.6 17.6 16 25 14.4 17.6 7 16 14.4 14.4Z" fill="none" stroke="currentColor" stroke-width=".6" transform="rotate(45 16 16)"/></svg>`;
+
 /** Front door: name + create/join. Plain DOM so it works identically with mouse, keyboard and pad focus. */
 export class Menu {
   private readonly nameInput: HTMLInputElement;
@@ -30,20 +33,22 @@ export class Menu {
     }
     root.innerHTML = `
       <div class="panel main" role="dialog" aria-labelledby="title">
+        <p class="society">The Imperial Cartographic &amp; Improvement Society</p>
+        <div class="rule" aria-hidden="true">${COMPASS}</div>
         <h1 id="title">Civilised Behaviour</h1>
-        <p class="tag">An expedition of the Imperial Cartographic &amp; Improvement Society</p>
-        <label>Name on the manifest
+        <p class="tag">Charter for an expedition into territories not yet improved</p>
+        <label>Name upon the manifest
           <input id="name" maxlength="20" autocomplete="off" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
         </label>
         <div class="row">
           <button id="create" class="primary">New campaign</button>
         </div>
-        <div class="or">or join an existing expedition</div>
+        <div class="or">or present a code to join a party</div>
         <div class="row">
           <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
           <button id="join">Join</button>
         </div>
-        <label class="opt">Gore
+        <label class="opt">Sensibilities: gore
           <select id="gore" aria-describedby="gore-note">${GORE_LEVELS.map((g) => `<option value="${g}"${g === getGore() ? " selected" : ""}>${g[0]!.toUpperCase()}${g.slice(1)}</option>`).join("")}</select>
         </label>
         <p id="gore-note" class="fine">Off replaces all blood with bandages and iodine. Wounds stay just as readable.</p>

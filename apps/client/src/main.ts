@@ -1,3 +1,7 @@
+import "@fontsource/im-fell-english/latin-400.css";
+import "@fontsource/im-fell-english/latin-400-italic.css";
+import "@fontsource/im-fell-english-sc/latin-400.css";
+import "@fontsource/special-elite/latin-400.css";
 import { paletteCssVars } from "@cb/shared";
 
 /** Publishes the shared palette as CSS custom properties so the interface and the 3D world can never drift apart. */

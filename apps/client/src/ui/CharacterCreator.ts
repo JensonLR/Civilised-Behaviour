@@ -29,7 +29,7 @@ export class CharacterCreator {
     this.spec = { ...initial };
     root.classList.add("creator");
     root.innerHTML = `
-      <h2>Your Explorer</h2>
+      <h2>Particulars of the Bearer</h2>
       <div class="tabs" role="tablist"></div>
       <div class="fields" role="tabpanel"></div>
       <div class="row actions">

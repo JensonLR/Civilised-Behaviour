@@ -1,6 +1,29 @@
 import { CASUALTY, FLAG, ZONE_COUNT, ZONE_NAMES, woundLevel } from "@cb/shared";
 
-const SEVERITY_WORDS = ["", "scratch", "gash", "grievous wound"] as const;
+const SEVERITY_WORDS = ["", "scratch", "gash", "grievous wound", "lost"] as const;
+
+// Gauge geometry: the needle sweeps 240 degrees, 0 at lower left to 100 at lower right; the last CRITICAL_AT percent is the red zone.
+const SWEEP = 240;
+const CRITICAL_AT = 35;
+const angleFor = (pct: number): number => -SWEEP / 2 + (SWEEP * pct) / 100;
+const polar = (r: number, deg: number): [number, number] => [50 + r * Math.sin((deg * Math.PI) / 180), 50 - r * Math.cos((deg * Math.PI) / 180)];
+
+function gaugeSvg(): string {
+  let ticks = "";
+  for (let i = 0; i <= 20; i++) {
+    const major = i % 2 === 0;
+    const [x1, y1] = polar(major ? 31 : 33, angleFor(i * 5));
+    const [x2, y2] = polar(37, angleFor(i * 5));
+    ticks += `<line class="tick${major ? "" : " minor"}" x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
+  }
+  const [zx0, zy0] = polar(40.5, angleFor(0));
+  const [zx1, zy1] = polar(40.5, angleFor(CRITICAL_AT));
+  return `<svg class="gauge" viewBox="0 0 100 100" aria-hidden="true">
+    <circle class="ring" cx="50" cy="50" r="48"/><circle class="bezel" cx="50" cy="50" r="45"/><circle class="face" cx="50" cy="50" r="42"/>
+    <path class="zone" d="M${zx0.toFixed(2)} ${zy0.toFixed(2)} A40.5 40.5 0 0 1 ${zx1.toFixed(2)} ${zy1.toFixed(2)}"/>${ticks}
+    <text class="num" x="50" y="74"></text>
+    <line class="needle" x1="50" y1="52" x2="50" y2="15"/><circle class="hub" cx="50" cy="50" r="4"/></svg>`;
+}
 
 /** Everything the HUD needs for one frame; the game builds this from replicated + predicted state. */
 export interface HudView {
@@ -27,8 +50,8 @@ export interface HudView {
  */
 export class Hud {
   private readonly health: HTMLElement;
-  private readonly healthFill: HTMLElement;
-  private readonly healthText: HTMLElement;
+  private readonly needle: SVGElement;
+  private readonly healthText: SVGElement;
   private readonly prompt: HTMLElement;
   private readonly progress: HTMLElement;
   private readonly progressFill: HTMLElement;
@@ -43,9 +66,13 @@ export class Hud {
 
   constructor(private readonly root: HTMLElement) {
     this.health = el(root, "div", "health");
-    this.health.innerHTML = `<span class="label">Health</span><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="fill"></div></div><b class="num"></b>`;
-    this.healthFill = this.health.querySelector<HTMLElement>(".fill")!;
-    this.healthText = this.health.querySelector<HTMLElement>(".num")!;
+    this.health.setAttribute("role", "meter");
+    this.health.setAttribute("aria-label", "Vitality");
+    this.health.setAttribute("aria-valuemin", "0");
+    this.health.setAttribute("aria-valuemax", "100");
+    this.health.innerHTML = `${gaugeSvg()}<span class="label">Vitality</span>`;
+    this.needle = this.health.querySelector<SVGElement>(".needle")!;
+    this.healthText = this.health.querySelector<SVGElement>(".num")!;
 
     // Injury chart: one shape per body zone (ZONE order). Severity is shown by fill AND outline weight AND the words beside it,
     // never by colour alone.
@@ -83,10 +110,14 @@ export class Hud {
 
   update(v: HudView): void {
     const pct = Math.max(0, Math.min(100, v.health));
-    this.healthFill.style.width = `${(pct / CASUALTY.maxHealth) * 100}%`;
-    this.healthText.textContent = `${pct}`;
-    this.health.querySelector(".bar")!.setAttribute("aria-valuenow", String(pct));
-    this.health.dataset.state = pct === 0 ? "down" : pct <= 35 ? "critical" : "ok";
+    const frac = (pct / CASUALTY.maxHealth) * 100;
+    const angle = angleFor(frac);
+    this.needle.style.setProperty("--angle", `${angle}deg`);
+    this.needle.style.transform = `rotate(${angle}deg)`;
+    const state = pct === 0 ? "down" : frac <= CRITICAL_AT ? "critical" : "ok";
+    this.healthText.textContent = `${pct}${state === "critical" ? " !" : state === "down" ? " ✚" : ""}`;
+    this.health.setAttribute("aria-valuenow", String(pct));
+    this.health.dataset.state = state;
 
     this.updateWounds(v.wounds);
 

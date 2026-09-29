@@ -38,6 +38,15 @@ importers:
       '@colyseus/sdk':
         specifier: ^0.18.4
         version: 0.18.4(@colyseus/core@0.18.17)(typescript@7.0.2)
+      '@fontsource/im-fell-english':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/im-fell-english-sc':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/special-elite':
+        specifier: ^5.3.0
+        version: 5.3.0
       three:
         specifier: ^0.186.1
         version: 0.186.1
@@ -372,6 +381,15 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/im-fell-english-sc@5.3.0':
+    resolution: {integrity: sha512-jKnCJ22tgVwxWVs1YQ/GCWmP60ulVq49IJZ7c0wgv0MXHe8T8LPbl0sOteYLOkCURW5+ZKwFiLNU2h/l9fHgrg==}
+
+  '@fontsource/im-fell-english@5.3.0':
+    resolution: {integrity: sha512-FcgdWfY9WeUM2gQkfmwhn4Ed9LVtlll8LSSZvHfbsUrnHK5tHHnGg6BgwAfHogp52adU3eE89J/3B52qV3b+Vw==}
+
+  '@fontsource/special-elite@5.3.0':
+    resolution: {integrity: sha512-fOQ9XU8m4KnqzcLibAXCxTsKzbxePNDjPqVss5GSMcPVCY1TuCv+Wq8gm1ebqIR6XS1rhMbQ7ECP9ocKVEEpTA==}
 
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
@@ -1502,6 +1520,12 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@fontsource/im-fell-english-sc@5.3.0': {}
+
+  '@fontsource/im-fell-english@5.3.0': {}
+
+  '@fontsource/special-elite@5.3.0': {}
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
