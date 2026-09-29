@@ -59,7 +59,7 @@ export class CharacterAnimator {
   private kneel = 0;
   private haul = 0;
   private breath = 0;
-  /** Idle blinking. Disable for stills (photo mode) and deterministic tests. */
+  /** Ambient life (idle blinking, weight shift, glances). Disable for stills (photo mode) and deterministic tests. */
   autoBlink = true;
   private drunkness = 0;
   /** Limp amount 0..1 and which leg it favours (-1 left, +1 right). */
@@ -181,6 +181,20 @@ export class CharacterAnimator {
     j.head.rotation.x = (P.lean + this.lean) * 0.7 - this.crouch * 0.1 + this.jolt[0]! * 0.5;
     j.head.rotation.y = -j.torso.rotation.y * 0.6 + Math.sin(this.time * 0.6) * 0.05;
     j.head.rotation.z = -j.pelvis.rotation.z * 0.5 + this.drunkness * Math.sin(this.time * 1.3) * 0.12;
+
+    // Idle life: when standing still the body shifts its weight, the arms hang loose on the breath and the head glances about. Fades out as
+    // soon as the character moves, crouches or is busy, so it never fights a gait or an interaction.
+    const idle = (1 - Math.min(1, move * 2)) * (1 - this.air) * (1 - this.crouch) * (1 - busy) * (1 - this.down);
+    if (idle > 0 && this.autoBlink) {
+      const shift = Math.sin(this.time * 0.45);
+      j.pelvis.rotation.z += shift * 0.035 * idle;
+      j.torso.rotation.z -= shift * 0.03 * idle;
+      j.pelvis.position.x = shift * 0.012 * idle;
+      j.shoulderL.rotation.z -= Math.sin(this.breath * 1.7) * 0.02 * idle;
+      j.shoulderR.rotation.z += Math.sin(this.breath * 1.7) * 0.02 * idle;
+      j.head.rotation.y += Math.sin(this.time * 0.37) * Math.sin(this.time * 0.13 + 1) * 0.22 * idle;
+      j.head.rotation.x += Math.sin(this.time * 0.29) * 0.04 * idle;
+    } else j.pelvis.position.x = 0;
 
     // Downed: rotate the whole figure onto its back.
     this.rig.root.rotation.z = 0;

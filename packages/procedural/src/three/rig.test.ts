@@ -339,9 +339,26 @@ describe("CharacterAnimator", () => {
     expect(Math.abs(scratch.l - scratch.r)).toBeLessThan(0.02);
   });
 
+  it("idle life sways a standing character a little, and stops when they move", () => {
+    const rig = buildCharacter(generateCharacter(2), { outline: false });
+    const anim = new CharacterAnimator(rig);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < 300; i++) {
+      anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+      lo = Math.min(lo, rig.joints.torso.rotation.z);
+      hi = Math.max(hi, rig.joints.torso.rotation.z);
+    }
+    expect(hi - lo).toBeGreaterThan(0.01);
+    expect(hi - lo).toBeLessThan(0.15);
+    for (let i = 0; i < 60; i++) anim.update(1 / 30, { speed: 4.4, flags: FLAG.GROUNDED, vy: 0 });
+    expect(rig.joints.pelvis.position.x).toBe(0);
+  });
+
   it("a flinch pushes the torso away from the blow and settles back to rest", () => {
     const rig = buildCharacter(generateCharacter(2), { outline: false });
     const anim = new CharacterAnimator(rig);
+    anim.autoBlink = false; // no ambient idle sway: this test measures the flinch spring alone
     for (let i = 0; i < 30; i++) anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
     const rest = { x: rig.joints.torso.rotation.x, z: rig.joints.torso.rotation.z };
     anim.flinch(0, 1, 1); // shoved backwards (+z is behind the character)
