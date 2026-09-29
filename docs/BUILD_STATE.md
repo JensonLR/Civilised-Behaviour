@@ -46,7 +46,7 @@ Not done in M1:
 ## Deployment (see DEPLOYMENT.md)
 Render free-tier test deploy is live: client https://cb-client-42gz.onrender.com, server https://cb-server-86wx.onrender.com.
 Server-side WebSocket joins verified; end-to-end browser session against it NOT yet verified (sandbox Chromium gets 404 on wss upgrade).
-Open: enforce ALLOWED_ORIGINS; set health-check path in Render dashboard.
+ALLOWED_ORIGINS now enforced (D-012). Open: set health-check path in Render dashboard.
 
 ## Open / blockers (human-only)
 - Steam App ID, Steamworks account, Steam Direct fee, signing certificates, domain(s), Cloudflare + Railway accounts: none exist yet.
@@ -55,7 +55,7 @@ Open: enforce ALLOWED_ORIGINS; set health-check path in Render dashboard.
 - Steam wrapper choice open (D-010).
 
 ## Test results (last full run 2026-09-29)
-`pnpm typecheck` clean; shared 14/14; server 7/7; Playwright 2/2; client production build OK (213 kB gzip JS).
+`pnpm typecheck` clean; shared 14/14; server 16/16 (incl. origin policy); Playwright 2/2; client production build OK (213 kB gzip JS).
 
 ## Conventions reminder
 See CLAUDE.md. Keep this file current: completed / in progress / next / blockers / test results.

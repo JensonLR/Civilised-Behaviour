@@ -42,3 +42,8 @@ init, auth ticket, achievements, overlay. Gameplay never imports Steam directly 
 (free web service for the Colyseus server + static site for the client, Frankfurt) instead of Railway/Cloudflare. Free plan sleeps
 when idle, so it is for smoke tests only. Nothing in the code is Render-specific (PORT, /health, env config), so moving to Railway or
 a paid Render plan later is a config change. `DATABASE_URL` is no longer required in production until persistence (M10).
+
+**D-012 Origin enforcement (2026-09-29).** Exact-match allow-list applied to matchmaking, WS upgrade and code lookup; absent Origin
+allowed. Patches Colyseus's shared `matchMaker.controller` (`invokeMethod`, `getCorsHeaders`) because the router exposes no per-request
+hook; the patch is installed per server and restored on shutdown. Revisit if Colyseus adds a supported request guard.
+Testing note: `@colyseus/testing` `boot(server, port)` ignores `port` for Server instances - listen manually for a non-default port.

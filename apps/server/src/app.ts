@@ -4,6 +4,7 @@ import { ROOM_WORLD, isValidJoinCode } from "@cb/shared";
 import type { ServerConfig } from "./config.ts";
 import { log } from "./log.ts";
 import { metrics } from "./metrics.ts";
+import { createOriginPolicy, installMatchmakingOriginPolicy, originUpgradeGuard } from "./origins.ts";
 import { RateLimiter } from "./ratelimit.ts";
 import { WorldRoom } from "./rooms/WorldRoom.ts";
 
@@ -16,6 +17,7 @@ function clientIp(request: Request | undefined): string {
 }
 
 export function createGameServer(config: ServerConfig): Server {
+  const origins = createOriginPolicy(config.allowedOrigins);
   const health = createEndpoint("/health", { method: "GET" }, async (ctx) =>
     ctx.json({ ok: true, env: config.nodeEnv, uptimeS: Math.round(process.uptime()) }),
   );
@@ -23,6 +25,10 @@ export function createGameServer(config: ServerConfig): Server {
 
   // Join-by-code: resolves a private campaign's room id. The client then joins by id.
   const lookup = createEndpoint("/campaign/:code", { method: "GET" }, async (ctx) => {
+    if (!origins.allows(ctx.request?.headers.get("origin"))) {
+      ctx.setStatus(403);
+      return ctx.json({ error: "origin_not_allowed" });
+    }
     const code = String(ctx.params?.code ?? "").toUpperCase();
     if (!codeLookupLimiter.take(clientIp(ctx.request))) {
       ctx.setStatus(429);
@@ -42,12 +48,17 @@ export function createGameServer(config: ServerConfig): Server {
   });
 
   const server = new Server({
-    transport: new WebSocketTransport({}),
+    transport: new WebSocketTransport({ beforeUpgrade: originUpgradeGuard(origins) }),
     gracefullyShutdown: true,
     greet: false,
   });
   server.router = createRouter({ health, metrics: metricsEndpoint, lookup }) as never;
   server.define(ROOM_WORLD, WorldRoom);
-  server.onShutdown(() => log.info("server.shutdown"));
+  const restoreMatchmaking = installMatchmakingOriginPolicy(origins);
+  server.onShutdown(() => {
+    restoreMatchmaking();
+    log.info("server.shutdown");
+  });
+  if (config.allowedOrigins.length === 0) log.warn("server.origins_open", { note: "ALLOWED_ORIGINS empty: all browser origins accepted" });
   return server;
 }

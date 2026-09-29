@@ -24,6 +24,15 @@ Server-authoritative, Colyseus 0.18 over WebSocket (TCP, ordered - so `mode: "re
 Input sanitised in `defineInput`; `maxMessagesPerSecond = 120` (client is disconnected above it); names sanitised; codes validated
 before any lookup. Tested in `apps/server/src/rooms/WorldRoom.test.ts`.
 
+## Origin policy (`apps/server/src/origins.ts`)
+`ALLOWED_ORIGINS` (comma-separated, exact scheme+host+port, required in production, empty = open in dev/test) is enforced on:
+matchmaking POSTs (`invokeMethod` wrapper), the WebSocket upgrade (`beforeUpgrade` -> 403), and `/campaign/:code` (403).
+CORS headers name only the allowed origin and no longer advertise credentials (Colyseus default reflected any origin with credentials).
+Requests without an `Origin` header (curl, native/Electron main-process, bots) pass: this stops cross-site *browser* abuse
+(cross-site WebSocket hijacking, blind room creation via non-preflighted `text/plain` POST); it is not authentication.
+Tests: `origins.test.ts` (mutation-checked: fail when enforcement is off). `/health` and `/metrics` are still readable by
+non-browser clients; `/metrics` exposes counts only.
+
 ## Dev controls
 - `SIMULATED_LATENCY_MS` (server env, RTT ms) - forbidden in production by config validation.
 - `/metrics` JSON: rooms, players, tick avg/p99/max, overruns, reconnects, heap/RSS.

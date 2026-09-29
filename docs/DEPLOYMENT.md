@@ -19,9 +19,7 @@ client origin; server logs show real joins/leaves from a curl WebSocket handshak
 Node SDK succeed with identical headers, so this looks like a sandbox-proxy artefact, but it is unproven. Open the client URL in a normal
 browser (two tabs) to confirm; `scripts/deploy-smoke.mjs <clientUrl>` automates it where the network allows.
 
-**Known gaps:** Render health-check path is not set (the MCP tool cannot set it; set `/health` in the dashboard). `ALLOWED_ORIGINS` is
-validated at boot but **not yet enforced** on HTTP/WebSocket requests (a cross-origin page can currently create rooms); enforce before any public
-link is shared. First request after idle cold-starts the instance.
+**Known gaps:** Render health-check path is not set (the MCP tool cannot set it; set `/health` in the dashboard). `ALLOWED_ORIGINS` is enforced (see NETWORKING.md); the Electron build's renderer origin must be added to it when that app exists. First request after idle cold-starts the instance.
 
 ## Target
 - Web + demo: Cloudflare Workers Static Assets; large assets on R2 behind a custom asset domain (not r2.dev), immutable hashed filenames.

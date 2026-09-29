@@ -64,9 +64,15 @@ importers:
       '@colyseus/testing':
         specifier: ^0.18.6
         version: 0.18.6(@colyseus/core@0.18.17)(@colyseus/sdk@0.18.4(@colyseus/core@0.18.17)(typescript@7.0.2))(@colyseus/tools@0.18.4(@colyseus/core@0.18.17)(@colyseus/ws-transport@0.18.4))
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      ws:
+        specifier: ^8.22.0
+        version: 8.22.0
 
   packages/shared:
     dependencies:
