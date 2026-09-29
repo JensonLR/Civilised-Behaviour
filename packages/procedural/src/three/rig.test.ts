@@ -139,7 +139,12 @@ describe("CharacterAnimator", () => {
     const rig = buildCharacter(generateCharacter(2));
     const anim = new CharacterAnimator(rig);
     for (let i = 0; i < 90; i++) anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED | FLAG.DOWNED, vy: 0 });
-    expect(rig.root.rotation.x).toBeLessThan(-1.2);
+    // Lying on the BACK means the head tips backward (+X). (An earlier version asserted the opposite sign and
+    // shipped characters falling face-down; only looking at a render caught it.)
+    expect(rig.root.rotation.x).toBeGreaterThan(1.2);
+    rig.root.updateMatrixWorld(true);
+    const headUp = new Vector3(0, 1, 0).applyQuaternion(rig.root.quaternion); // character's local up in world space
+    expect(headUp.z).toBeGreaterThan(0.9); // up now points backward (+Z, opposite the facing direction)
     const rig2 = buildCharacter(generateCharacter(2));
     const anim2 = new CharacterAnimator(rig2);
     for (let i = 0; i < 90; i++) anim2.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED | FLAG.CARRYING, vy: 0 });
@@ -165,5 +170,4 @@ describe("CharacterAnimator", () => {
     expect(pain.smile).toBeCloseTo(0, 3); // frown
   });
 
-  void Vector3;
 });

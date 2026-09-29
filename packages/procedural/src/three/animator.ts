@@ -111,7 +111,7 @@ export class CharacterAnimator {
     // Torso: lean into acceleration/sprint, counter-rotate against the pelvis, breathe.
     const leanTarget = Math.min(speed / 4.4, 1.5) * (sprinting ? 0.28 : 0.13) + this.crouch * 0.25;
     this.lean = damp(this.lean, leanTarget, 8, dt);
-    j.torso.rotation.x = -(P.lean + this.lean) + this.down * 0.2;
+    j.torso.rotation.x = -(P.lean + this.lean) - this.down * 0.15;
     j.torso.rotation.y = -s * 0.22 * move;
     const breathe = Math.sin(this.breath * 1.7) * 0.012;
     j.torso.scale.set(1 + breathe, 1 + breathe * 0.6, 1 + breathe);
@@ -119,12 +119,13 @@ export class CharacterAnimator {
     // Arms: counter-swing; carrying raises both forward and in; downed sprawl.
     const armL = -s * swing * 1.1 * (1 - this.carry);
     const armR = s * swing * 1.1 * (1 - this.carry);
-    j.shoulderL.rotation.x = armL - this.carry * 1.15 - this.air * 0.5 * (1 - this.carry);
-    j.shoulderR.rotation.x = armR - this.carry * 1.15 - this.air * 0.5 * (1 - this.carry);
-    j.shoulderL.rotation.z = -0.08 - this.air * 0.7 - this.carry * 0.25 + this.down * 0.6;
-    j.shoulderR.rotation.z = 0.08 + this.air * 0.7 + this.carry * 0.25 - this.down * 0.6;
-    j.elbowL.rotation.x = -0.15 - Math.max(0, s) * swing * 0.5 - this.carry * 0.9;
-    j.elbowR.rotation.x = -0.15 - Math.max(0, -s) * swing * 0.5 - this.carry * 0.9;
+    j.shoulderL.rotation.x = armL - this.carry * 0.95 - this.air * 0.5 * (1 - this.carry);
+    j.shoulderR.rotation.x = armR - this.carry * 0.95 - this.air * 0.5 * (1 - this.carry);
+    // Carrying pulls the arms in toward the centre line (cradling), not out to the sides.
+    j.shoulderL.rotation.z = -0.08 - this.air * 0.7 + this.carry * 0.55 + this.down * 0.6;
+    j.shoulderR.rotation.z = 0.08 + this.air * 0.7 - this.carry * 0.55 - this.down * 0.6;
+    j.elbowL.rotation.x = -0.15 - Math.max(0, s) * swing * 0.5 - this.carry * 0.75;
+    j.elbowR.rotation.x = -0.15 - Math.max(0, -s) * swing * 0.5 - this.carry * 0.75;
 
     // Head: stays level against torso motion, subtle lag.
     j.head.rotation.x = (P.lean + this.lean) * 0.7 - this.crouch * 0.1;
@@ -133,7 +134,8 @@ export class CharacterAnimator {
 
     // Downed: rotate the whole figure onto its back.
     this.rig.root.rotation.z = 0;
-    this.rig.root.rotation.x = -this.down * (Math.PI / 2 - 0.1);
+    // +X tilts the head backward (leaning forward is negative X in this rig), so a downed character lies on their back.
+    this.rig.root.rotation.x = this.down * (Math.PI / 2 - 0.1);
     this.rig.root.position.y = this.down * (P.torsoDepth * 0.5 + 0.05);
 
     this.updateFace(dt);

@@ -76,3 +76,5 @@ Visuals are a rigid hierarchy (no skinning): one merged, vertex-coloured mesh pe
 animated face meshes. Body is fitted into the fixed gameplay envelope by `computeProportions`, so customisation never changes collision or gameplay.
 Tessellation is size-adaptive (see PERFORMANCE.md). Lesson: the first render exposed a real bug (face parts parented at the wrong height) that no unit test
 would have caught; visual checks via `?showcase=lineup` + `scripts/shot.mjs` are part of the workflow.
+Second instance: the animator laid downed characters face-down and the unit test asserted the same wrong sign (tests had encoded the bug); a render caught
+it. Assert *geometry* (where does the head point?) rather than raw joint angles wherever a sign convention is involved.
