@@ -29,6 +29,22 @@ export const SET_LOOK_MIN_INTERVAL_MS = 1500;
 export interface ServerMessages {
   pong: { t: number; serverTime: number };
   notice: { text: string };
+  /** A player took a hit. Cosmetic only (flinch, blood, ragdoll impulse); the authoritative result is in PlayerState. */
+  hit: HitEvent;
+}
+
+/** Broadcast when a player is harmed. `dx`/`dz` is the unit horizontal direction the blow pushes the victim. */
+export interface HitEvent {
+  /** Session id of the victim. */
+  id: string;
+  /** ZONE the blow landed in. */
+  zone: number;
+  dx: number;
+  dz: number;
+  /** 0..1: how hard the blow was (damage / 60, clamped); scales particles and ragdoll impulse. */
+  power: number;
+  /** This hit put the victim down. */
+  down: boolean;
 }
 
 export const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cb/physics": "workspace:*",
     "@cb/shared": "workspace:*",
     "@colyseus/core": "^0.18.17",
     "@colyseus/schema": "^5.0.34",

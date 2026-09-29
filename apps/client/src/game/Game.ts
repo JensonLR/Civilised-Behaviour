@@ -1,9 +1,12 @@
 import { Vector3 } from "three";
-import { CASUALTY, FLAG, PROP_DEFS, findDownedTarget, findInteractTarget, yawToWire, type PlayerStateType, type PropKindId } from "@cb/shared";
+import { CASUALTY, FLAG, PROP_DEFS, ZONE, findDownedTarget, findInteractTarget, yawToWire, type HitEvent, type PlayerStateType, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
 import { CharacterActor } from "../render/CharacterActor.ts";
+import { HitFx } from "../render/HitFx.ts";
+import { RagdollWorld } from "../render/Ragdoll.ts";
+import { getGore } from "../settings.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
@@ -24,9 +27,13 @@ export class Game {
   private readonly tagLayer: HTMLElement;
   private readonly props: PropViews;
   private readonly hud: Hud;
+  private readonly hitFx: HitFx;
+  /** Loaded lazily (Rapier's WASM only ships once we are in a game); until then knock-downs use the plain fall animation. */
+  private ragdolls: RagdollWorld | undefined;
   private last = performance.now();
   private raf = 0;
   private running = false;
+  private disposed = false;
   private pingTimer = 0;
 
   constructor(
@@ -41,6 +48,7 @@ export class Game {
     this.tagLayer = hud;
     this.props = new PropViews(stage.scene);
     this.hud = new Hud(hud);
+    this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
@@ -52,6 +60,15 @@ export class Game {
     });
     controls.onToggleDebug = () => this.overlay.toggle();
     stage.buildWorld(session.world);
+
+    RagdollWorld.create(session.world).then(
+      (w) => {
+        if (this.disposed) w.dispose();
+        else this.ragdolls = w;
+      },
+      (err) => console.warn("ragdoll physics unavailable; knock-downs will use the plain fall animation", err),
+    );
+    session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
 
     session.room.onMessage("notice", (m: { text: string }) => this.hud.showNotice(m.text));
     session.room.onMessage("pong", (m: { t: number }) => {
@@ -79,6 +96,10 @@ export class Game {
     this.actors.clear();
     this.props.dispose();
     this.hud.dispose();
+    this.hitFx.dispose();
+    this.disposed = true;
+    this.ragdolls?.dispose();
+    this.ragdolls = undefined;
   }
 
   private frame(now: number): void {
@@ -104,7 +125,9 @@ export class Game {
       this.session.room.send("ping", { t: performance.now() });
     }
 
+    this.ragdolls?.step(dt);
     this.syncActors(dt);
+    this.hitFx.update(dt);
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
 
@@ -169,6 +192,7 @@ export class Game {
       reviverName,
       patientName,
       usingGamepad: pad,
+      wounds: mine.wounds,
     });
   }
 
@@ -187,9 +211,12 @@ export class Game {
       const x = this.session.value(p, "x");
       const y = this.session.value(p, "y");
       const z = this.session.value(p, "z");
-      const speed = Math.hypot(this.session.value(p, "vx"), this.session.value(p, "vz"));
       a.body.setLook(p.look);
-      a.body.update(dt, x, y, z, this.session.value(p, "facing"), speed, flags);
+      a.body.update(
+        dt,
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds },
+        getGore(),
+      );
       const status = (p.flags & FLAG.DOWNED) !== 0 ? " ✚ DOWN" : "";
       a.tag.textContent = (p.connected ? p.name : `${p.name} (reconnecting)`) + status;
       tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
@@ -207,8 +234,21 @@ export class Game {
     }
   }
 
+  /** A blow landed (server event, cosmetic): spray, flinch, maybe a ragdoll fall, and a camera jolt if it was me. */
+  private onHit(e: HitEvent): void {
+    const a = this.actors.get(e.id);
+    const p = this.session.room.state.players.get(e.id);
+    if (!a || !p) return;
+    const facing = this.session.value(p, "facing");
+    const h = a.body.height;
+    const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;
+    this.hitFx.burst(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power, getGore());
+    a.body.hit(e, facing);
+    if (e.id === this.session.sessionId) this.rig.addShake(0.25 + e.power * 0.5);
+  }
+
   private addActor(p: PlayerStateType): Actor {
-    const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines);
+    const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
     const tag = document.createElement("div");
     tag.className = "nametag";
     this.tagLayer.appendChild(tag);

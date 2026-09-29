@@ -1,7 +1,8 @@
 import { Vector3 } from "three";
-import { CollisionWorld, FLAG } from "@cb/shared";
+import { CollisionWorld, FLAG, ZONE_COUNT, setWound } from "@cb/shared";
 import { ARCHETYPES, FIELDS, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId } from "@cb/procedural/three";
+import { RagdollWorld } from "../render/Ragdoll.ts";
 import { Stage } from "../render/Stage.ts";
 
 /**
@@ -16,6 +17,11 @@ import { Stage } from "../render/Stage.ts";
  *   set=hat:9,hair:8   force spec fields on every character (field names from @cb/procedural FIELDS)
  *   vary=hat      cycle that field's options across the row (one option per character, in catalog order)
  *   outline=0     turn the silhouette outline off
+ *   wounds=S      wound severity S (1-3) on every zone; or wounds=0:3,4:2 for zone:severity pairs (0 head, 1 torso, 2/3 arms, 4/5 legs)
+ *   woundsVary=1  character i gets severity (i % 4) on every zone, to compare tiers side by side
+ *   ragdoll=T     knock everyone down and simulate the ragdoll for T seconds, then freeze (add live=1 to keep it running);
+ *                 figures are shoved in different directions so the row shows several falls
+ *   gore=off      full|reduced|off stain style
  *   zoom=0.4      pull the camera in (multiplier on distance) and aim at head height; for reviewing faces and headwear
  */
 export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): void {
@@ -63,6 +69,14 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
   specs.forEach((spec, i) => {
     const rig = buildCharacter(spec, { outline: params.get("outline") !== "0" });
     rig.root.position.set((i - (specs.length - 1) / 2) * spacing, 0, 0);
+    let mask = 0;
+    const w = params.get("wounds");
+    if (w) {
+      if (w.includes(":")) for (const pair of w.split(",")) { const [z, s] = pair.split(":"); mask = setWound(mask, Number(z), Number(s)); }
+      else for (let z = 0; z < ZONE_COUNT; z++) mask = setWound(mask, z, Number(w));
+    }
+    if (params.get("woundsVary") === "1") for (let z = 0; z < ZONE_COUNT; z++) mask = setWound(mask, z, i % 4);
+    rig.setWounds(mask, (params.get("gore") as "full" | "reduced" | "off" | null) ?? "full");
     // The rig faces -Z; the camera sits at +Z, so turn each figure around (plus a little three-quarter variety).
     rig.root.rotation.y = Math.PI + (params.get("turn") ? Number(params.get("turn")) : -0.3 + (i % 2) * 0.6);
     stage.scene.add(rig.root);
@@ -91,12 +105,36 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
   // Step the animation to a settled, deterministic frame for stills, then keep animating for live viewing.
   for (let i = 0; i < 90; i++) for (const { anim } of rigs) anim.update(1 / 30, { speed, flags, vy: pose === "air" ? 2 : 0 });
 
+  // Optional ragdoll review: knock every figure down at t=0 and run the physics to a chosen moment.
+  const ragT = params.get("ragdoll");
+  let ragdolls: RagdollWorld | undefined;
+  const ragdollFrame = (dt: number) => {
+    for (const { anim } of rigs) anim.update(dt, { speed: 0, flags: FLAG.GROUNDED | FLAG.DOWNED, vy: 0 });
+    ragdolls?.step(dt);
+    for (const r of live) r.applyPose(dt);
+  };
+  const live: import("../render/Ragdoll.ts").Ragdoll[] = [];
+  const ready = { ready: ragT === null };
+  if (ragT !== null) {
+    void RagdollWorld.create(flat).then((w) => {
+      ragdolls = w;
+      rigs.forEach(({ rig }, i) => {
+        const a = (i / rigs.length) * Math.PI * 2 + 0.6;
+        const r = w.spawn(rig, { vx: 0, vy: 0, vz: 0, dx: Math.cos(a), dz: Math.sin(a), power: 0.55 + (i % 3) * 0.2, zone: 1 + (i % 5) });
+        if (r) live.push(r);
+      });
+      for (let t = 0; t < Number(ragT); t += 1 / 30) ragdollFrame(1 / 30);
+      ready.ready = true;
+    });
+  }
+
   stage.followShadow(new Vector3(0, 0, 0));
   let last = performance.now();
   const loop = (now: number) => {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    if (params.get("live") === "1") for (const { anim } of rigs) anim.update(dt, { speed, flags, vy: 0 });
+    if (ragT !== null && params.get("live") === "1" && ready.ready) ragdollFrame(dt);
+    else if (params.get("live") === "1") for (const { anim } of rigs) anim.update(dt, { speed, flags, vy: 0 });
     stage.followShadow(new Vector3(0, 0, 0));
     stage.render();
     requestAnimationFrame(loop);
@@ -105,7 +143,9 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
 
   const info = stage.renderer.info;
   (window as unknown as Record<string, unknown>).__showcase = {
-    ready: true,
+    get ready() {
+      return ready.ready;
+    },
     stats: () => ({ calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries }),
     heights: rigs.map((r) => r.rig.proportions.totalHeight),
   };

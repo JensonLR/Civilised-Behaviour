@@ -32,13 +32,14 @@ import {
   type MoveInputType,
   type PlayerStateType,
   type WorldStateType,
+  type ZoneId,
 } from "@cb/shared";
 import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
-import { Casualties } from "../systems/Casualties.ts";
+import { Casualties, type HitInfo } from "../systems/Casualties.ts";
 
 /** Ticks of client silence/hitch the server tolerates (12 ticks = 400 ms). Used for BOTH the frame-budget burst and the idle threshold. */
 const HITCH_TOLERANCE_TICKS = 12;
@@ -127,6 +128,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         },
         routSpawn: (slot) => spawnPoint(slot, MAX_PLAYERS),
         notify: (text) => this.broadcast("notice", { text }),
+        rng: new Rng(seed ^ 0x5eed_c0de),
+        emitHit: (e) => this.broadcast("hit", e),
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -202,6 +205,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.look = encodeSpec(blank);
     player.title = "";
     player.health = CASUALTY.maxHealth;
+    player.wounds = 0; // numeric schema fields decode as undefined until first assigned
     player.reviveProgress = 0;
     player.reviver = "";
     player.dragger = "";
@@ -306,8 +310,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   }
 
   /** The single entry point for harm (weapons, explosions, friendly fire, debug). Health 0 puts a player down, never out. */
-  damagePlayer(sessionId: string, amount: number): void {
-    this.casualties.damage(sessionId, amount);
+  damagePlayer(sessionId: string, amount: number, hit?: HitInfo): void {
+    this.casualties.damage(sessionId, amount, hit);
   }
 
   /** QA-only commands (see docs/NETWORKING.md). Registered only when config.debugCommands is true. */
@@ -316,6 +320,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (!player) return;
     if (cmd === "hurt") this.damagePlayer(client.sessionId, 40);
     else if (cmd === "down") this.damagePlayer(client.sessionId, 1000);
+    else if (cmd?.startsWith("hit:")) {
+      // hit:<zone>:<amount>, pushed from behind the player's facing (QA + e2e: reproducible wounds and knock direction)
+      const [, z, a] = cmd.split(":");
+      this.damagePlayer(client.sessionId, Number(a) || 10, { zone: Number(z) as ZoneId, dirX: -Math.sin(player.facing), dirZ: -Math.cos(player.facing) });
+    }
     else if (cmd === "nearDowned") {
       // Stand beside the nearest downed teammate, facing them.
       let best: PlayerStateType | undefined;

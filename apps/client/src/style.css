@@ -71,3 +71,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1610; col
 .downed .title { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.04em; }
 .downed .sub { margin-top: 0.25rem; font-size: 0.95rem; opacity: 0.92; }
 .notice { position: absolute; left: 50%; top: 4.5rem; transform: translateX(-50%); max-width: min(90vw, 36rem); text-align: center; padding: 0.6rem 1.2rem; font-style: italic; background: rgba(239, 227, 200, 0.95); border: 1.5px solid var(--brass-dark); border-radius: 4px; }
+
+/* Injury chart: severity = fill + outline weight (+ the words), never colour alone. */
+.wounds { position: absolute; left: 0.9rem; bottom: 3.5rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.6rem; background: rgba(239, 227, 200, 0.92); border: 1.5px solid var(--brass-dark); border-radius: 4px; font-size: 0.8rem; font-weight: 700; max-width: 22rem; }
+.wounds .chart { width: 1.6rem; height: 3.4rem; flex: none; }
+.wounds .chart [data-z] { fill: transparent; stroke: var(--brass-dark); stroke-width: 1; }
+.wounds .chart [data-sev="1"] { fill: rgba(60, 40, 20, 0.28); stroke-width: 1.6; }
+.wounds .chart [data-sev="2"] { fill: rgba(60, 40, 20, 0.6); stroke-width: 2.2; }
+.wounds .chart [data-sev="3"] { fill: var(--stamp, #8f2a1c); stroke: #2a1a10; stroke-width: 3; }
+.opt { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.7rem; font-weight: 700; }
+.opt select { font: inherit; padding: 0.25rem 0.4rem; }

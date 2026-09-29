@@ -7,12 +7,14 @@ import {
   TorusGeometry,
   BoxGeometry,
 } from "three";
+import { ZONE, ZONE_COUNT, woundLevel, type ZoneId } from "@cb/shared";
 import * as K from "../catalog.ts";
 import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
 import { buildHead, mouthPlacement } from "./head.ts";
 import { outlineMaterial } from "./outline.ts";
 import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe } from "./parts.ts";
+import { buildWoundGeometry, type GoreLevel } from "./wounds.ts";
 
 /** Named bones of the rigid articulated hierarchy. Every visual part hangs off exactly one of these. */
 export interface Joints {
@@ -60,6 +62,11 @@ export interface CharacterRig {
   readonly meshCount: number;
   /** Silhouette outline on/off (extra draw per bone). Cheap to toggle. */
   setOutline(on: boolean): void;
+  /**
+   * Shows the wounds in a packed mask (see @cb/shared wounds.ts): plasters, dressings and stains on the bone each zone
+   * belongs to. Cheap to call every frame with an unchanged mask. `gore` recolours stains (never removes the dressings).
+   */
+  setWounds(mask: number, gore?: GoreLevel): void;
   dispose(): void;
 }
 
@@ -360,6 +367,43 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   eL.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
   eRr.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
 
+  // ---- wounds: one lazily created mesh per zone on its bone, geometry swapped by (severity, gore) ------------------------
+  const zoneBones: Record<number, Group> = {
+    [ZONE.HEAD]: head,
+    [ZONE.TORSO]: torso,
+    [ZONE.ARM_L]: shoulderL,
+    [ZONE.ARM_R]: shoulderR,
+    [ZONE.LEG_L]: hipL,
+    [ZONE.LEG_R]: hipR,
+  };
+  const woundMeshes: (Mesh | undefined)[] = new Array(ZONE_COUNT).fill(undefined);
+  let shownMask = 0;
+  let shownGore: GoreLevel = "full";
+  const setWounds = (mask: number, gore: GoreLevel = "full"): void => {
+    if (mask === shownMask && gore === shownGore) return;
+    shownMask = mask;
+    shownGore = gore;
+    for (let z = 0; z < ZONE_COUNT; z++) {
+      const sev = woundLevel(mask, z);
+      let m = woundMeshes[z];
+      if (sev === 0) {
+        if (m) m.visible = false;
+        continue;
+      }
+      const geo = cached(`wound|${z}|${sev}|${gore}|${key}`, () => buildWoundGeometry(z as ZoneId, sev, gore, P, spec));
+      if (!geo) continue;
+      if (!m) {
+        m = new Mesh(geo, material);
+        m.name = `wound_${z}`;
+        m.castShadow = false;
+        zoneBones[z]!.add(m);
+        woundMeshes[z] = m;
+      }
+      m.geometry = geo;
+      m.visible = true;
+    }
+  };
+
   return {
     root,
     joints: { root, pelvis, torso, head, shoulderL, shoulderR, elbowL, elbowR, hipL, hipR, kneeL, kneeR },
@@ -367,8 +411,9 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     proportions: P,
     spec,
     get meshCount() {
-      return meshes.length + 7 + (outlineOn ? outlines.length : 0);
+      return meshes.length + 7 + (outlineOn ? outlines.length : 0) + woundMeshes.filter((m) => m?.visible).length;
     },
+    setWounds,
     setOutline(on: boolean) {
       outlineOn = on;
       for (const o of outlines) o.visible = on;

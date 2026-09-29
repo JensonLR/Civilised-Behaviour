@@ -32,6 +32,8 @@ export const PlayerState = schema({
   title: t.string(),
   /** 0..100. Server-owned. Reaching 0 puts the player down (revivable), never removes them. */
   health: t.uint8(),
+  /** Packed wound severities, 2 bits per ZONE (see wounds.ts). Server-owned; drives bandages, blood and limping on every client. */
+  wounds: t.uint16(),
   /** 0..100 progress of a revive in progress ON this (downed) player. */
   reviveProgress: t.uint8(),
   /** Session id of whoever is reviving this player, or "". */

@@ -1,6 +1,6 @@
 import { Box3, Mesh, Vector3 } from "three";
 import { afterAll, describe, expect, it } from "vitest";
-import { FLAG } from "@cb/shared";
+import { FLAG, ZONE, ZONE_COUNT, setWound } from "@cb/shared";
 import { generateCharacter } from "../spec.ts";
 import { MAX_HALF_WIDTH } from "../proportions.ts";
 import { buildCharacter, clearCharacterCaches, type CharacterRig } from "./rig.ts";
@@ -133,6 +133,98 @@ describe("outline", () => {
   });
 });
 
+describe("wounds", () => {
+  const allZones = (sev: number): number => {
+    let m = 0;
+    for (let z = 0; z < ZONE_COUNT; z++) m = setWound(m, z, sev);
+    return m;
+  };
+  const woundMeshes = (rig: CharacterRig): Mesh[] => {
+    const out: Mesh[] = [];
+    rig.root.traverse((o) => o instanceof Mesh && o.name.startsWith("wound_") && out.push(o));
+    return out;
+  };
+
+  it("a clean body has no wound meshes; each wounded zone gets exactly one, on the right bone", () => {
+    const rig = buildCharacter(generateCharacter(3), { outline: false });
+    expect(woundMeshes(rig)).toHaveLength(0);
+    const before = rig.meshCount;
+    rig.setWounds(setWound(setWound(0, ZONE.HEAD, 2), ZONE.LEG_R, 1));
+    const visible = woundMeshes(rig).filter((m) => m.visible);
+    expect(visible).toHaveLength(2);
+    expect(rig.meshCount).toBe(before + 2);
+    const parents = visible.map((m) => m.parent!.name).sort();
+    expect(parents).toEqual(["head", "hipR"]);
+    rig.setWounds(0);
+    expect(woundMeshes(rig).every((m) => !m.visible)).toBe(true);
+    expect(rig.meshCount).toBe(before);
+    rig.dispose();
+  });
+
+  it("higher severity means a bigger, more elaborate dressing", () => {
+    const rig = buildCharacter(generateCharacter(4), { outline: false });
+    const tris: number[] = [];
+    for (const sev of [1, 2, 3]) {
+      rig.setWounds(setWound(0, ZONE.TORSO, sev));
+      const m = woundMeshes(rig).find((x) => x.visible)!;
+      tris.push(m.geometry.index!.count / 3);
+    }
+    expect(tris[1]!).toBeGreaterThan(tris[0]!);
+    expect(tris[2]!).toBeGreaterThan(tris[1]!);
+    rig.dispose();
+  });
+
+  it("gore 'off' shows dressings but not a single red vertex; 'full' does", () => {
+    const redVerts = (gore: "full" | "reduced" | "off"): number => {
+      let red = 0;
+      for (let seed = 0; seed < 12; seed++) {
+        const rig = buildCharacter(generateCharacter(seed), { outline: false });
+        rig.setWounds(allZones(3), gore);
+        for (const m of woundMeshes(rig)) {
+          const c = m.geometry.attributes.color!;
+          for (let i = 0; i < c.count; i++) if (c.getX(i) > 0.25 && c.getY(i) < 0.35 * c.getX(i) && c.getZ(i) < 0.35 * c.getX(i)) red++;
+        }
+        expect(woundMeshes(rig).filter((m) => m.visible)).toHaveLength(ZONE_COUNT); // still readable: the dressings remain
+        rig.dispose();
+      }
+      return red;
+    };
+    expect(redVerts("full")).toBeGreaterThan(100);
+    expect(redVerts("off")).toBe(0);
+  });
+
+  it("wounds stay cheap: all six zones at severity 3 add < 2500 triangles, and never change the body's extents", () => {
+    let worst = 0;
+    for (let seed = 0; seed < 60; seed++) {
+      const rig = buildCharacter(generateCharacter(seed), { outline: false });
+      const base = triangles(rig);
+      const box = bounds(rig);
+      rig.setWounds(allZones(3));
+      worst = Math.max(worst, triangles(rig) - base);
+      const after = bounds(rig);
+      // Dressings sit on the body (a few cm proud), so the envelope grows by well under 10 cm.
+      expect(after.max.x - box.max.x).toBeLessThan(0.1);
+      expect(after.max.y - box.max.y).toBeLessThan(0.1);
+      rig.dispose();
+    }
+    expect(worst).toBeLessThan(2500); // measured 2026-09-29: ~2.0k for the (unrealistic) all-grievous case
+  });
+
+  it("the same wounds on a rebuilt rig reuse the cached geometry", () => {
+    const spec = generateCharacter(8);
+    const a = buildCharacter(spec, { outline: false });
+    const b = buildCharacter(spec, { outline: false });
+    a.setWounds(allZones(2));
+    b.setWounds(allZones(2));
+    const ga = woundMeshes(a).map((m) => m.geometry);
+    const gb = woundMeshes(b).map((m) => m.geometry);
+    expect(ga.length).toBe(ZONE_COUNT);
+    ga.forEach((g, i) => expect(gb[i]).toBe(g));
+    a.dispose();
+    b.dispose();
+  });
+});
+
 describe("CharacterAnimator", () => {
   const exprs: ExpressionId[] = ["neutral", "pain", "fear", "triumph", "drunk", "angry"];
 
@@ -168,6 +260,65 @@ describe("CharacterAnimator", () => {
     expect(rest).toBeLessThan(0.05);
     expect(walk).toBeGreaterThan(rest + 0.15);
     expect(run).toBeGreaterThan(walk);
+  });
+
+  it("a badly wounded leg limps: that leg swings less than the healthy one, and the pelvis dips; healthy characters are symmetric", () => {
+    const peaks = (wounds: number) => {
+      const rig = buildCharacter(generateCharacter(2), { outline: false });
+      const anim = new CharacterAnimator(rig);
+      let l = 0;
+      let r = 0;
+      let dip = Infinity;
+      let top = -Infinity;
+      for (let i = 0; i < 150; i++) {
+        anim.update(1 / 30, { speed: 2.2, flags: FLAG.GROUNDED, vy: 0, wounds });
+        if (i > 60) {
+          l = Math.max(l, Math.abs(rig.joints.hipL.rotation.x));
+          r = Math.max(r, Math.abs(rig.joints.hipR.rotation.x));
+          dip = Math.min(dip, rig.joints.pelvis.position.y);
+          top = Math.max(top, rig.joints.pelvis.position.y);
+        }
+      }
+      return { l, r, range: top - dip };
+    };
+    const healthy = peaks(0);
+    expect(Math.abs(healthy.l - healthy.r)).toBeLessThan(0.02);
+    const limping = peaks(setWound(0, ZONE.LEG_L, 3));
+    expect(limping.l).toBeLessThan(limping.r * 0.8);
+    expect(limping.range).toBeGreaterThan(healthy.range + 0.01);
+    const arm = peaks(setWound(0, ZONE.ARM_L, 3)); // arm wounds do not affect the gait
+    expect(Math.abs(arm.l - arm.r)).toBeLessThan(0.02);
+    const scratch = peaks(setWound(0, ZONE.LEG_R, 1)); // a scratch is not a limp
+    expect(Math.abs(scratch.l - scratch.r)).toBeLessThan(0.02);
+  });
+
+  it("a flinch pushes the torso away from the blow and settles back to rest", () => {
+    const rig = buildCharacter(generateCharacter(2), { outline: false });
+    const anim = new CharacterAnimator(rig);
+    for (let i = 0; i < 30; i++) anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+    const rest = { x: rig.joints.torso.rotation.x, z: rig.joints.torso.rotation.z };
+    anim.flinch(0, 1, 1); // shoved backwards (+z is behind the character)
+    let maxBack = 0;
+    for (let i = 0; i < 8; i++) {
+      anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+      maxBack = Math.max(maxBack, rig.joints.torso.rotation.x - rest.x);
+    }
+    expect(maxBack).toBeGreaterThan(0.1); // tilts back (the same sign the downed pose uses to fall onto its back)
+    anim.flinch(1, 0, 1); // shoved to the character's +x side
+    let maxSide = 0;
+    for (let i = 0; i < 8; i++) {
+      anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+      maxSide = Math.max(maxSide, Math.abs(rig.joints.torso.rotation.z - rest.z));
+    }
+    expect(maxSide).toBeGreaterThan(0.1);
+    for (let i = 0; i < 90; i++) anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+    expect(Math.abs(rig.joints.torso.rotation.x - rest.x)).toBeLessThan(0.01);
+    expect(Math.abs(rig.joints.torso.rotation.z - rest.z)).toBeLessThan(0.01);
+    anim.flinch(NaN, 0, 5); // a bad network value never poisons the pose
+    anim.flinch(0, Infinity, NaN);
+    anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+    expect(Number.isFinite(rig.joints.torso.rotation.x)).toBe(true);
+    expect(Number.isFinite(rig.joints.head.rotation.x)).toBe(true);
   });
 
   it("downed lays the figure on its back, carrying raises the arms", () => {

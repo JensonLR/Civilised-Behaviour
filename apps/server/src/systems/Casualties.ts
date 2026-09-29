@@ -3,9 +3,18 @@ import {
   CASUALTY,
   CollisionWorld,
   FLAG,
+  WOUNDS,
+  addWound,
+  capWounds,
   findDownedTarget,
+  isZone,
+  pickZone,
+  severityForDamage,
   wrapAngle,
+  type HitEvent,
   type PlayerStateType,
+  type Rng,
+  type ZoneId,
 } from "@cb/shared";
 import { log } from "../log.ts";
 
@@ -18,6 +27,18 @@ export interface CasualtyHost {
   /** Where a player wakes up after a rout. */
   routSpawn(slot: number): { x: number; z: number };
   notify(text: string): void;
+  /** Seeded randomness for unaimed hits (zone, direction), so a campaign seed reproduces its injuries. */
+  rng: Rng;
+  /** Tell clients about a hit (cosmetic: flinch, blood, ragdoll impulse). */
+  emitHit(e: HitEvent): void;
+}
+
+/** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
+export interface HitInfo {
+  zone?: ZoneId;
+  /** Horizontal direction the blow pushes the victim (need not be normalised). */
+  dirX?: number;
+  dirZ?: number;
 }
 
 interface Revive {
@@ -52,11 +73,26 @@ export class Casualties {
 
   // ---- damage entry point (weapons, explosions, friendly fire and debug commands all come through here) ----
 
-  damage(sessionId: string, amount: number): void {
+  damage(sessionId: string, amount: number, hit: HitInfo = {}): void {
     const p = this.host.players.get(sessionId);
     if (!p || (p.flags & FLAG.DOWNED) !== 0 || !(amount > 0)) return;
     p.health = Math.max(0, Math.round(p.health - amount));
-    if (p.health === 0) this.down(sessionId, p);
+
+    // Where it landed and how badly it marked them. Wounds are server-owned state; everything visual derives from them.
+    const zone = isZone(hit.zone) ? hit.zone : pickZone(this.host.rng);
+    p.wounds = addWound(p.wounds, zone, severityForDamage(amount));
+    let dx = hit.dirX ?? 0;
+    let dz = hit.dirZ ?? 0;
+    let len = Math.hypot(dx, dz);
+    if (!(len > 1e-6)) {
+      const a = this.host.rng.next() * Math.PI * 2;
+      dx = Math.cos(a);
+      dz = Math.sin(a);
+      len = 1;
+    }
+    const down = p.health === 0;
+    this.host.emitHit({ id: sessionId, zone, dx: dx / len, dz: dz / len, power: Math.min(1, amount / 60), down });
+    if (down) this.down(sessionId, p);
   }
 
   down(sessionId: string, p: PlayerStateType): void {
@@ -77,6 +113,7 @@ export class Casualties {
     p.flags &= ~(FLAG.DOWNED | FLAG.DRAGGED);
     p.reviveProgress = 0;
     p.reviver = "";
+    p.wounds = capWounds(p.wounds, WOUNDS.revivedCap); // patched up, not cured: the scars of the day stay visible
     this.releaseDragOf(sessionId);
   }
 

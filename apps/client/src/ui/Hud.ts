@@ -1,4 +1,6 @@
-import { CASUALTY, FLAG } from "@cb/shared";
+import { CASUALTY, FLAG, ZONE_COUNT, ZONE_NAMES, woundLevel } from "@cb/shared";
+
+const SEVERITY_WORDS = ["", "scratch", "gash", "grievous wound"] as const;
 
 /** Everything the HUD needs for one frame; the game builds this from replicated + predicted state. */
 export interface HudView {
@@ -15,6 +17,8 @@ export interface HudView {
   reviverName: string;
   patientName: string;
   usingGamepad: boolean;
+  /** Packed wound mask of the local player (see @cb/shared wounds.ts). */
+  wounds: number;
 }
 
 /**
@@ -31,13 +35,28 @@ export class Hud {
   private readonly progressLabel: HTMLElement;
   private readonly downed: HTMLElement;
   private readonly notice: HTMLElement;
+  private readonly wounds: HTMLElement;
+  private readonly woundParts: SVGElement[];
+  private readonly woundText: HTMLElement;
+  private shownWounds = -1;
   private noticeTimer = 0;
 
   constructor(private readonly root: HTMLElement) {
     this.health = el(root, "div", "health");
-    this.health.innerHTML = `<span class="label">Wounds</span><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="fill"></div></div><b class="num"></b>`;
+    this.health.innerHTML = `<span class="label">Health</span><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="fill"></div></div><b class="num"></b>`;
     this.healthFill = this.health.querySelector<HTMLElement>(".fill")!;
     this.healthText = this.health.querySelector<HTMLElement>(".num")!;
+
+    // Injury chart: one shape per body zone (ZONE order). Severity is shown by fill AND outline weight AND the words beside it,
+    // never by colour alone.
+    this.wounds = el(root, "div", "wounds");
+    this.wounds.hidden = true;
+    this.wounds.innerHTML = `<svg viewBox="0 0 40 88" class="chart" role="img" aria-label="Injuries">
+      <circle data-z="0" cx="20" cy="9" r="7"/><rect data-z="1" x="11" y="18" width="18" height="30" rx="4"/>
+      <rect data-z="2" x="3" y="19" width="6" height="28" rx="3"/><rect data-z="3" x="31" y="19" width="6" height="28" rx="3"/>
+      <rect data-z="4" x="11" y="50" width="8" height="34" rx="3"/><rect data-z="5" x="21" y="50" width="8" height="34" rx="3"/></svg><span class="text"></span>`;
+    this.woundParts = [...this.wounds.querySelectorAll<SVGElement>("[data-z]")].sort((a, b) => Number(a.dataset.z) - Number(b.dataset.z));
+    this.woundText = this.wounds.querySelector<HTMLElement>(".text")!;
 
     this.prompt = el(root, "div", "prompt");
     this.prompt.hidden = true;
@@ -69,6 +88,8 @@ export class Hud {
     this.health.querySelector(".bar")!.setAttribute("aria-valuenow", String(pct));
     this.health.dataset.state = pct === 0 ? "down" : pct <= 35 ? "critical" : "ok";
 
+    this.updateWounds(v.wounds);
+
     const down = (v.flags & FLAG.DOWNED) !== 0;
     this.downed.hidden = !down;
     if (down) {
@@ -99,8 +120,24 @@ export class Hud {
     if (this.prompt.textContent !== text) this.prompt.textContent = text;
   }
 
+  private updateWounds(mask: number): void {
+    if (mask === this.shownWounds) return;
+    this.shownWounds = mask;
+    const found: { name: string; sev: number }[] = [];
+    for (let z = 0; z < ZONE_COUNT; z++) {
+      const sev = woundLevel(mask, z);
+      this.woundParts[z]?.setAttribute("data-sev", String(sev));
+      if (sev > 0) found.push({ name: ZONE_NAMES[z]!, sev });
+    }
+    this.wounds.hidden = found.length === 0;
+    found.sort((a, b) => b.sev - a.sev);
+    const text = found.slice(0, 3).map((f) => `${f.name}: ${SEVERITY_WORDS[f.sev]}`).join(" · ");
+    this.woundText.textContent = text;
+    this.wounds.setAttribute("aria-label", `Injuries: ${text || "none"}`);
+  }
+
   dispose(): void {
-    for (const e of [this.health, this.prompt, this.progress, this.downed, this.notice]) e.remove();
+    for (const e of [this.health, this.wounds, this.prompt, this.progress, this.downed, this.notice]) e.remove();
     window.clearTimeout(this.noticeTimer);
   }
 }

@@ -6,6 +6,7 @@ export interface MenuHandlers {
 }
 
 import { startPadNav } from "./PadNav.ts";
+import { GORE_LEVELS, getGore, setGore } from "../settings.ts";
 
 /** Front door: name + create/join. Plain DOM so it works identically with mouse, keyboard and pad focus. */
 export class Menu {
@@ -42,6 +43,10 @@ export class Menu {
           <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
           <button id="join">Join</button>
         </div>
+        <label class="opt">Gore
+          <select id="gore" aria-describedby="gore-note">${GORE_LEVELS.map((g) => `<option value="${g}"${g === getGore() ? " selected" : ""}>${g[0]!.toUpperCase()}${g.slice(1)}</option>`).join("")}</select>
+        </label>
+        <p id="gore-note" class="fine">Off replaces all blood with bandages and iodine. Wounds stay just as readable.</p>
         <p id="status" role="status" aria-live="polite"></p>
         <p class="fine">Mature content: strong violence, coarse language and dark satire.</p>
       </div>
@@ -53,6 +58,7 @@ export class Menu {
     this.buttons = [...root.querySelectorAll<HTMLButtonElement>(".main button")];
     root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name())));
     root.querySelector("#join")!.addEventListener("click", () => void this.join());
+    root.querySelector<HTMLSelectElement>("#gore")!.addEventListener("change", (e) => setGore((e.target as HTMLSelectElement).value as (typeof GORE_LEVELS)[number]));
     this.codeInput.addEventListener("input", () => (this.codeInput.value = this.codeInput.value.toUpperCase()));
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
     this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name())));

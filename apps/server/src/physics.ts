@@ -1,4 +1,3 @@
-import RAPIER from "@dimforge/rapier3d-compat";
 import {
   CHARACTER,
   INTERACT,
@@ -8,19 +7,12 @@ import {
   type PropKindId,
   type PropSpawn,
 } from "@cb/shared";
+import { RAPIER, buildStaticWorld, collisionGroups as groups, initRapier, yawQuat } from "@cb/physics";
 
-let rapierReady: Promise<void> | undefined;
-/** Rapier's WASM is initialised once per process. */
-export function initRapier(): Promise<void> {
-  rapierReady ??= RAPIER.init();
-  return rapierReady;
-}
-
-/** Collision group helper: Rapier packs membership (high 16) and filter (low 16) bits. */
-const groups = (membership: number, filter: number): number => ((membership & 0xffff) << 16) | (filter & 0xffff);
+export { initRapier, yawQuat };
 
 const G = {
-  WORLD: groups(LAYER.WORLD, LAYER.PROP | LAYER.RAGDOLL | LAYER.PLAYER),
+  // Static world geometry is created by buildStaticWorld (shared with the client's ragdoll world).
   PROP: groups(LAYER.PROP, LAYER.WORLD | LAYER.PROP | LAYER.PLAYER),
   // Players are kinematic pushers: they collide with props only (players never collide with each other here).
   PLAYER: groups(LAYER.PLAYER, LAYER.PROP),
@@ -35,8 +27,6 @@ export interface PropBody {
   collider: RAPIER.Collider;
   holder: string;
 }
-
-const HEIGHTFIELD_STEP = 1; // metres between height samples
 
 /**
  * Server-side dynamic world: props (crates, barrels, bottles...), player push-capsules and, later,
@@ -55,29 +45,7 @@ export class PhysicsWorld {
   }
 
   private buildStatic(): void {
-    const r = this.terrainWorld.boundsRadius;
-    const n = Math.floor((2 * r) / HEIGHTFIELD_STEP) + 1; // samples per side
-    // Rapier heightfield: nrows x ncols, column-major, scale = full extent in x/z and a y multiplier.
-    const heights = new Float32Array(n * n);
-    for (let col = 0; col < n; col++) {
-      for (let row = 0; row < n; row++) {
-        const x = -r + col * HEIGHTFIELD_STEP;
-        const z = -r + row * HEIGHTFIELD_STEP;
-        heights[col * n + row] = this.terrainWorld.terrainHeight(x, z);
-      }
-    }
-    const hf = RAPIER.ColliderDesc.heightfield(n - 1, n - 1, heights, { x: 2 * r, y: 1, z: 2 * r }).setCollisionGroups(G.WORLD);
-    this.world.createCollider(hf);
-
-    for (const o of this.terrainWorld.obstacles) {
-      const hy = (o.y1 - o.y0) / 2;
-      const cy = (o.y0 + o.y1) / 2;
-      const desc =
-        o.kind === "circle"
-          ? RAPIER.ColliderDesc.cylinder(hy, o.r).setTranslation(o.x, cy, o.z)
-          : RAPIER.ColliderDesc.cuboid(o.hx, hy, o.hz).setTranslation(o.x, cy, o.z).setRotation(yawQuat(-o.yaw));
-      this.world.createCollider(desc.setCollisionGroups(G.WORLD));
-    }
+    buildStaticWorld(this.world, this.terrainWorld);
   }
 
   get propCount(): number {
@@ -178,11 +146,6 @@ export class PhysicsWorld {
     this.props.clear();
     this.players.clear();
   }
-}
-
-/** Quaternion for a rotation of `yaw` radians about +Y. */
-export function yawQuat(yaw: number): { x: number; y: number; z: number; w: number } {
-  return { x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) };
 }
 
 export type { PropKindId };
