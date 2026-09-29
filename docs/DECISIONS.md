@@ -105,3 +105,16 @@ cost +91% triangles versus +37%. Shading is baked into vertex colours (normal-y 
 Face features are placed from the real skull/jaw surface (`faceSurfaceZ`) rather than hand-tuned offsets, after noses, moustaches and beards kept clipping or
 floating as proportions varied. Catalog options remain append-only so stored looks decode unchanged. Lesson repeated: two regressions (lost outline normals,
 hair through hats) were only visible in renders, so the outline now has unit regressions and the lineup showcase is the review tool.
+
+**D-019 Wounds and ragdoll (2026-09-29).** *Wounds* are server-owned state, not client decoration: a 12-bit mask (2 bits per zone) on `PlayerState`, changed only by
+`Casualties.damage`, so every client, save file and newspaper agrees on who is injured where. Severity tiers come from damage (8/22/42), repeat hits on a zone
+escalate it, unaimed hits use the room's seeded RNG (a campaign seed reproduces its injuries), and revives patch down to a dressing rather than clearing (the
+story stays on the body). Visuals derive from the mask only; the `hit` event is cosmetic and lossy by design. Severity reads through the *dressings* (plaster,
+wrap, bulky wrap with tail), while gore only recolours the stains, so Gore Off (iodine and grime, zero red vertices, asserted by a test) is exactly as readable.
+Deliberately **no gameplay effect yet**: a slow-down must exist in the shared movement step to keep prediction honest, so it waits until wounds are a predicted
+input; the limp is animation only. *Ragdoll* is client-side and cosmetic: the server keeps its capsule (zero bandwidth, no authority risk, no cross-platform
+physics determinism to chase), the client plays about two seconds of Rapier tumble seeded from the victim's velocity and the blow, tethered to the capsule
+(without the tether a sprinting victim ended ~5 m from where the server says they are), then blends world-space joint orientations back into the animated lying
+pose. Rapier is lazy-loaded and capped at 6 ragdolls. Trade-off accepted: two clients see slightly different tumbles. The static arena colliders were extracted
+into `@cb/physics` because a second consumer (the client) now needs them. Two traps recorded: rapier 0.21 silently ignores `JointData.limits` (set limits on the
+created joint), and the animator must own every joint channel or a finished ragdoll leaves stale rotations behind.

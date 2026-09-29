@@ -230,3 +230,74 @@ test("a downed player is revived by a teammate holding interact, then dragged to
   await expect.poll(async () => (await me(a)).flags & DRAGGED, { timeout: 20_000 }).toBe(0);
   expect(errors).toEqual([]);
 });
+
+test("wounds are server-owned and visible to everyone; a knock-down plays a ragdoll that ends in the lying pose (two real browsers)", async ({ browser }) => {
+  const errors: string[] = [];
+  const mk = async () => {
+    const p = await (await browser.newContext()).newPage();
+    p.on("pageerror", (e) => errors.push(e.message));
+    return p;
+  };
+  const send = (p: Page, cmd: string) =>
+    p.evaluate((c) => (window as unknown as { __cb: { session: { room: { send(t: string, m: unknown): void } } } }).__cb.session.room.send("debug", { cmd: c }), cmd);
+  const woundsOf = (p: Page, sessionId: string) =>
+    p.evaluate((id) => {
+      const h = (window as unknown as { __cb: { session: { room: { state: { players: Map<string, { wounds: number; flags: number }> } } } } }).__cb;
+      const s = h.session.room.state.players.get(id);
+      return s ? { wounds: s.wounds, flags: s.flags } : null;
+    }, sessionId);
+  // Test-only peeks into the running game (Game.actors is private in TypeScript but reachable at runtime).
+  type Actor = { body: { ragdolled: boolean; root: { traverse(cb: (o: { name: string; visible: boolean }) => void): void } } };
+  type GameHook = { __cb: { game: { actors: Map<string, Actor> } } };
+  /** Names of the wound meshes currently visible on someone's rig, as THIS page renders it. */
+  const visibleWounds = (p: Page, sessionId: string) =>
+    p.evaluate((id) => {
+      const a = (window as unknown as GameHook).__cb.game.actors.get(id);
+      const out: string[] = [];
+      a?.body.root.traverse((o) => o.name.startsWith("wound_") && o.visible && out.push(o.name));
+      return out.sort();
+    }, sessionId);
+  const ragdolled = (p: Page, sessionId: string) => p.evaluate((id) => (window as unknown as GameHook).__cb.game.actors.get(id)?.body.ragdolled ?? false, sessionId);
+
+  const a = await mk();
+  await start(a, "Bloodied");
+  const { code, id: aId } = await hook(a);
+  const b = await mk();
+  await start(b, "Witness", code);
+  await expect.poll(async () => (await hook(a)).players, { timeout: 30_000 }).toBe(2);
+
+  // A grievous head wound (zone 0, 50 damage) and a gash on the right leg (zone 5, 25 damage).
+  await send(a, "hit:0:50");
+  await send(a, "hit:5:25");
+  // head (zone 0) = grievous (3) in bits 0-1; right leg (zone 5) = gash (2) in bits 10-11. Poll for the WHOLE mask: the two hits arrive in separate patches.
+  await expect.poll(async () => (await woundsOf(b, aId))?.wounds ?? 0, { timeout: 20_000 }).toBe(3 | (2 << 10));
+  // Both the victim and the witness render dressings on exactly those zones.
+  await expect.poll(() => visibleWounds(b, aId), { timeout: 20_000 }).toEqual(["wound_0", "wound_5"]);
+  await expect.poll(() => visibleWounds(a, aId), { timeout: 20_000 }).toEqual(["wound_0", "wound_5"]);
+  // The victim's own HUD shows the injury chart with words, not just colour.
+  await expect(a.locator(".wounds")).toBeVisible();
+  await expect(a.locator(".wounds .text")).toContainText("head: grievous wound");
+  await expect(a.locator(".wounds .text")).toContainText("right leg: gash");
+  await b.screenshot({ path: "test-results/wounds-witness.png" });
+
+  // Knock-down: both browsers should see A's body go ragdoll, then settle back into the lying pose.
+  for (const p of [a, b]) {
+    await p.evaluate((id) => {
+      const w = window as unknown as GameHook & { __sawRagdoll?: boolean };
+      w.__sawRagdoll = false;
+      setInterval(() => {
+        if (w.__cb.game.actors.get(id)?.body.ragdolled) w.__sawRagdoll = true;
+      }, 20);
+    }, aId);
+  }
+  await send(a, "down");
+  await expect.poll(async () => ((await woundsOf(b, aId))?.flags ?? 0) & 16, { timeout: 20_000 }).toBe(16);
+  for (const p of [a, b]) {
+    // The Rapier WASM loads lazily; give it time, then the fall must have been observed and must end.
+    await expect.poll(() => p.evaluate(() => (window as unknown as { __sawRagdoll?: boolean }).__sawRagdoll === true), { timeout: 30_000 }).toBe(true);
+    await expect.poll(() => ragdolled(p, aId), { timeout: 60_000 }).toBe(false);
+  }
+  await b.screenshot({ path: "test-results/ragdoll-settled.png" });
+  // Revived: wounds are patched (grievous head -> dressing) but not gone.
+  expect(errors.filter((e) => !/favicon|Failed to load resource/.test(e))).toEqual([]);
+});

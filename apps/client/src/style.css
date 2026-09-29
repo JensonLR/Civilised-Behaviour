@@ -81,3 +81,4 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1610; col
 .wounds .chart [data-sev="3"] { fill: var(--stamp, #8f2a1c); stroke: #2a1a10; stroke-width: 3; }
 .opt { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.7rem; font-weight: 700; }
 .opt select { font: inherit; padding: 0.25rem 0.4rem; }
+.wounds[hidden] { display: none; }

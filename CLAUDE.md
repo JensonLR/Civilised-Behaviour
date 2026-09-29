@@ -29,6 +29,7 @@ Read first: `docs/BUILD_STATE.md` (where we are), `docs/DECISIONS.md` (why), `do
 apps/client   Vite + Three.js game (browser + Electron renderer)
 apps/server   Colyseus 0.18 game server (Node 22)
 packages/shared   protocol schemas, constants, deterministic sim (movement, collision, terrain, rng)
+packages/physics   Rapier setup + the static arena colliders shared by the server (props) and the client (ragdolls)
 packages/procedural   caricature character system: pure spec/codec/generator (server-safe) + ./three rig & animator (client only)
 (planned) apps/desktop, apps/website, packages/game-data, infra/ - create only when first used
 tests/e2e     Playwright (real Chromium, multi-client)

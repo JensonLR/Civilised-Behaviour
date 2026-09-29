@@ -68,9 +68,23 @@ Done + verified (character art polish pass, 2026-09-29):
   ridges, nose that cannot swallow the mouth, face features placed on the real face surface, 10 hair styles, 8 beards, 10 moustaches, 11 hats; fist hands with
   thumb and knuckles; teeth (gold/missing) and a mouth interior. New catalog entries are append-only so old looks still decode. Verified by renders
   (`?showcase=lineup`), 26 procedural tests incl. outline regressions, and the full Playwright suite. Judged by eye on software GL only: needs a look on a real GPU.
+Done + verified (wounds and ragdoll, 2026-09-29):
+- Wounds: 6 body zones x severity 0-3 packed in `PlayerState.wounds`; `Casualties.damage` takes zone + direction, stacks wounds, emits a cosmetic `hit` event;
+  revive patches to at most a dressing. Rig shows plasters/dressings/stains per zone (one merged mesh per wounded zone, ~2.0k tris only if all six are grievous);
+  animator gains a limp (leg wounds) and a flinch spring; hit particles + ground stains pooled (`HitFx`); HUD injury chart (fill + outline weight + words);
+  Gore Full/Reduced/Off in the menu (Off = bandages + iodine, no red; verified by a vertex-colour test).
+- Ragdoll: client-side Rapier (lazy chunk), 11 bodies with hinge/ball joints and limits, capped at 6, tethered to the server capsule, ~2.6 s max, then blends
+  into the animator's lying pose. Triggered by the `hit` event with `down`. `@cb/physics` extracted so server and client build identical static colliders.
+  Tests: 22 wound/animator (shared 8, procedural 7, server 7 integration), 10 ragdoll (limits, tether, cap, no leaks, blend equality, no pops), 6 HitFx,
+  plus a two-browser Playwright scenario (wounds visible to both, ragdoll seen and ended). Protections mutation-checked: revive cap, zone validation, joint limits,
+  tether, animator channel reset.
+- Found: `JointData.limits` is silently ignored in rapier 0.21 (limits must be set on the created joint) and the animator did not own every joint channel
+  (a finished ragdoll left stale rotations); both fixed with regression tests.
 Not done in M2 (next):
-- Art polish, remaining: dirt/blood accumulation (needs the wounds system), outline rollout to NPC crowds (LOD), a proper toon/clay ramp if the baked shading proves too flat under different lighting.
-- Damage zones/wounds visuals, dismemberment (detachable limbs + wound caps), ragdoll (Rapier). Shoulder-carry a body (reuse prop-carry), wagon transport (M5).
+- Wounds have no gameplay effect yet (limp is animation only; a real slow-down needs `wounds` as a predicted input of the shared step). No bleed-out or
+  medical supplies (M5). Dirt/mud accumulation and blood on clothing beyond the dressings. Outline rollout to NPC crowds (LOD).
+- Dismemberment (detachable limbs + wound caps; the rig is rigid per bone for this reason; needs a Dismemberment On/Off setting), ragdolls for living
+  characters (explosion knock-back) and NPCs, persistent limp bodies while dragged. Shoulder-carry a body (reuse prop-carry), wagon transport (M5).
 - Character LOD for crowds (see PERFORMANCE.md risk); NPC use of the generator.
 - Expression triggers beyond downed=pain; head-look; drunkenness from gameplay.
 - Creator: colour-blind-safe review, UI scale, keyboard shortcuts; title/nickname editing.

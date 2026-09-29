@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### Added
+- Wounds (zone + severity, server-owned) with bandage/plaster/stain visuals, limp and flinch, hit particles and ground stains, HUD injury chart, Gore Full/Reduced/Off.
+- Client-side Rapier ragdoll for knock-downs (capped, tethered, blends back to the lying pose); `@cb/physics` shared package.
 - Character art polish: silhouette outlines (per-preset), baked clay shading, rebuilt heads and faces, fist hands, teeth, more hair/beard/moustache/hat options.
 - Downed state, timed revive, dragging a downed teammate, and a party rout; wounds HUD and animations.
 - Server input budget closing an input-flooding speed hack (3.0x -> ~1.03x).

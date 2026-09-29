@@ -16,10 +16,13 @@ Persistence (PostgreSQL + Drizzle) attaches to the server at M10; Redis only whe
 - `@cb/shared` - **only** code both sides need: wire schemas (`schema.ts`), constants, `protocol.ts`, `rng.ts`, `terrain.ts`,
   `collision.ts`, `movement.ts`, `arena.ts`. No DOM, no Node APIs. TypeScript source is consumed directly (no build step);
   the server bundles it with esbuild for production (see DEPLOYMENT.md).
+- `@cb/physics` - Rapier init, collision-group helpers and `buildStaticWorld` (terrain heightfield + obstacles built from the shared
+  `CollisionWorld`). Used by the server prop world and by the client's cosmetic ragdoll world, so both agree on where the ground is.
+- `@cb/procedural` - caricature spec/codec/generator (server-safe) plus `./three`: rig, animator, wound dressings, outline (client only).
 - `@cb/server` - Colyseus rooms, config validation, logging, metrics, rate limiting.
 - `@cb/client` - Vite app. `render/` (Three only), `net/` (Colyseus session), `input/`, `game/` (frame orchestration), `ui/` (DOM).
 - Planned, created when first used: `apps/desktop` (Electron), `apps/website`, `packages/game-data` (faction/scenario/newspaper data),
-  `packages/procedural` (caricature, kits, foliage generators - shared by client and offline tools), `infra/`.
+  foliage/kit generators, `infra/`.
 
 ## Simulation model
 - Authoritative state lives in `WorldState` (Colyseus schema). Movement-relevant fields are scalars mirrored 1:1 into

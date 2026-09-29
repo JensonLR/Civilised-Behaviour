@@ -19,6 +19,10 @@ no per-frame garbage in hot loops; bounded physics bodies/ragdolls; bounded memo
 
 | 2026-09-29 | Character geometry after art polish pass (150 seeds, `rig.test.ts`) | Node, no GPU | Without outline: **avg 6.6k, max 8.4k** tris, <=20 meshes. With outline hull: **avg 9.1k, max 11.9k** tris, 29 meshes (the hull is built coarse: +37%; the first naive hull was +91%). Outlines are therefore off on the low preset and must be off for crowds. |
 
+| 2026-09-29 | Wound dressings (60 seeds, `rig.test.ts`) | Node, no GPU | All six zones grievous (worst case, unrealistic): **+2.0k tris**, +6 draw calls, geometry cached per (spec, zone, severity, gore). One or two wounds: roughly +300-700 tris. |
+| 2026-09-29 | Client ragdoll world, 6 simultaneous ragdolls (the cap), 2 x 60 Hz Rapier steps per 30 Hz frame | Node 22, sandbox VM, no GPU | median **3.2 ms**/frame (physics + animation + pose writes), p95 11 ms, first-frame spike ~100 ms (JIT). One or two ragdolls (realistic) ~1 ms. Physics only runs while a ragdoll exists. |
+| 2026-09-29 | Client bundle after `@cb/physics` | `vite build` | Eager JS unchanged in spirit (~0.85 MB raw). Rapier is a **lazy chunk: 4.3 MB raw / 1.67 MB gzip** (the `-compat` build inlines the WASM as base64), fetched when a game starts. Follow-up: switch to the non-compat build with a separate `.wasm` asset (compresses far better) before web release; irrelevant inside Electron. |
+
 **Known character-cost risk:** 30 NPCs x ~17 meshes x 2 (shadow) is ~1000 draw calls, over the 400-600 budget. Planned mitigations (M4/M12): a merged single-mesh LOD1 for mid distance (~1.5k tris, 1-2 calls), impostor/instanced LOD2 beyond, shadow casting only for near characters, and `InstancedMesh` per bone for identical-archetype crowds. Do not add NPC crowds before LOD lands.
 
 Client production bundle (2026-09-29): 780 kB JS raw / 213 kB gzip (three + colyseus SDK + game), 2.9 kB CSS.

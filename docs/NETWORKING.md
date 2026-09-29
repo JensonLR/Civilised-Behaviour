@@ -56,6 +56,14 @@ Drag: Grab within 1.7 m; body trails 1.2 m behind, velocity-steered by the serve
 Rout: all connected players down for 8 s (`ROUT_SECONDS`) -> everyone up at spawn with 40 health + a `notice` broadcast.
 Prediction while dragged (bot-measured, `casualtyNet.test.ts`): mean positional correction 1.2 cm @0 ms, 5.3 cm @120 ms RTT; worst ~1.07 m at pull start.
 
+## Wounds and hit events (D-019)
+`PlayerState.wounds` (uint16): 2 bits of severity per body zone (head, torso, arms, legs; `@cb/shared` `wounds.ts`). Server-owned and delta-encoded, so a
+wound costs two bytes once, not per tick. `Casualties.damage(id, amount, {zone?, dirX?, dirZ?})` picks a seeded-random zone when unaimed, adds severity
+by damage tier, and broadcasts one small `hit` message `{id, zone, dx, dz, power, down}` (about 40 bytes). The message is cosmetic: it drives flinch,
+spray and the ragdoll impulse, and losing it changes no authoritative state. Revive/rout patch wounds down to severity 2 (a dressing), never to zero.
+Wounds have **no movement effect yet**: a gameplay slow-down would need `wounds` as a predicted input of the shared step (client and server must agree),
+so the limp is animation only. Ragdolls are client-side and cosmetic (see ARCHITECTURE/D-019); the server keeps a plain capsule.
+
 ## Props and interaction
 Physics props live in a server-only Rapier world (`apps/server/src/physics.ts`, layers from `LAYER`). Only awake/held props are written to
 `state.props` (pose changes < 2 mm are skipped); clients interpolate with `Predict.attachAll("props")`. Pick up / drop / throw arrive as
@@ -65,7 +73,7 @@ in front of the holder and ignores player capsules. Client keyboard taps are lat
 
 ## QA debug commands
 `DEBUG_COMMANDS` (default on outside production; config validation rejects it in production) registers a `debug` message on rooms. Currently
-`nearProp` / `nearDowned` teleport the caller next to the nearest free prop / downed teammate; `hurt` (-40 health) and `down` (health 0) harm the caller (all used by the browser e2e). Never ship these enabled.
+`nearProp` / `nearDowned` teleport the caller next to the nearest free prop / downed teammate; `hurt` (-40 health), `down` (health 0) and `hit:<zone>:<damage>` (aimed, pushed from behind the caller) harm the caller (all used by the browser e2e). Never ship these enabled.
 
 ## Dev controls
 - `SIMULATED_LATENCY_MS` (server env, RTT ms) - forbidden in production by config validation.
