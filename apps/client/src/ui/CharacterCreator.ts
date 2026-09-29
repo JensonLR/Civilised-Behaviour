@@ -8,6 +8,22 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "colour", label: "Colours" },
 ];
 
+/** Headings inside a tab: which fields sit under which. Order here is the order on screen. */
+export const SECTIONS: Partial<Record<Tab, { title: string; keys: readonly string[] }[]>> = {
+  face: [
+    { title: "Features", keys: ["noseScale", "earScale", "jaw", "noseStyle", "earShape", "brows", "eyeShape", "eyeColor"] },
+    { title: "Hair and whiskers", keys: ["hair", "greying", "moustache", "beard", "sideburns", "stubble"] },
+    { title: "Complexion and marks", keys: ["age", "complexion", "mark", "facePaint", "tattoo"] },
+    { title: "Worn on the face", keys: ["eyewear", "earring"] },
+  ],
+  clothes: [
+    { title: "Headwear", keys: ["hat", "hatTrim"] },
+    { title: "Coat and shirt", keys: ["jacket", "coatTrim", "shirt", "neckwear", "epaulettes", "decoration", "medals", "sash", "gloves", "ring"] },
+    { title: "Trousers and boots", keys: ["trousers", "trouserTrim", "boots", "belt"] },
+    { title: "Gear", keys: ["pack", "hipGear"] },
+  ],
+};
+
 const hex = (n: number): string => `#${n.toString(16).padStart(6, "0")}`;
 
 /**
@@ -77,12 +93,36 @@ export class CharacterCreator {
 
   private fieldsForTab(): FieldDef[] {
     const group = this.tab === "clothes" ? ["clothes"] : this.tab === "face" ? ["face"] : this.tab === "colour" ? ["colour"] : ["body"];
-    return (FIELDS as readonly FieldDef[]).filter((f) => group.includes(f.group));
+    const fields = (FIELDS as readonly FieldDef[]).filter((f) => group.includes(f.group));
+    // Grouped under headings (a field with no entry in SECTIONS lands in the last section of its tab, so a newly appended option still shows up).
+    const order = SECTIONS[this.tab];
+    if (!order) return fields;
+    const rank = (f: FieldDef): number => {
+      const i = order.findIndex((sec) => sec.keys.includes(f.key));
+      return i < 0 ? order.length - 1 : i;
+    };
+    return [...fields].sort((a, b) => rank(a) - rank(b)); // (stable: the catalog order is kept inside a section)
   }
 
   private render(): void {
     this.body.replaceChildren();
-    for (const f of this.fieldsForTab()) this.body.appendChild(this.control(f));
+    const order = SECTIONS[this.tab];
+    let last = -1;
+    for (const f of this.fieldsForTab()) {
+      if (order) {
+        const i = order.findIndex((sec) => sec.keys.includes(f.key));
+        const idx = i < 0 ? order.length - 1 : i;
+        if (idx !== last) {
+          last = idx;
+          const h = document.createElement("h3");
+          h.className = "section";
+          h.textContent = order[idx]!.title;
+          h.style.cssText = "margin:0.7rem 0 0.1rem;font:inherit;font-family:var(--display);letter-spacing:0.12em;border-bottom:1px solid var(--brass-dark)";
+          this.body.appendChild(h);
+        }
+      }
+      this.body.appendChild(this.control(f));
+    }
   }
 
   private set(key: string, value: number): void {

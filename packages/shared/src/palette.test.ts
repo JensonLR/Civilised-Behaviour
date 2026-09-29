@@ -68,6 +68,25 @@ describe("art direction: the palette", () => {
     for (const c of [...PALETTE.cloth, ...PALETTE.skin, ...Object.values(PALETTE.world), ...Object.values(PALETTE.props), ...Object.values(PALETTE.camp)]) expect(contrast(PALETTE.ink, c), cssHex(c)).toBeGreaterThan(1.6);
   });
 
+  it("the character cosmetics palettes: five boot leathers and the shirt linens are distinguishable, the ink reads on all of them, and face paint stays pale or dark", () => {
+    const m = PALETTE.material;
+    const leathers = [m.leather, m.leatherBlack, m.leatherTan, m.leatherOx, m.leatherGrey];
+    for (let i = 0; i < leathers.length; i++) for (let j = i + 1; j < leathers.length; j++) expect(dist(leathers[i]!, leathers[j]!), `leather ${i} vs ${j}`).toBeGreaterThan(14);
+    for (const c of [...leathers, m.rubber, m.fur, m.furDark, m.rope, m.linen, m.cream, PALETTE.trim.puttee, PALETTE.trim.zinc, PALETTE.trim.rouge]) expect(contrast(PALETTE.ink, c), cssHex(c)).toBeGreaterThan(1.45);
+    // zinc and chalk are the light paints; rouge is the only warm cheek colour; the tattoo ink is a cold blue-grey that reads on every skin tone
+    expect(luminance(PALETTE.trim.zinc)).toBeGreaterThan(0.6);
+    const [h, s2] = hsl(PALETTE.face.tattoo);
+    expect(h).toBeGreaterThan(190);
+    expect(s2).toBeLessThan(0.45);
+    // (on the deepest skin tones ink is naturally subtle - that is how it looks - so the bar drops with the tone)
+    for (const skin of PALETTE.skin) expect(contrast(PALETTE.face.tattoo, skin), cssHex(skin)).toBeGreaterThan(luminance(skin) > 0.3 ? 1.9 : 1.4);
+    // eyes: every iris is distinguishable from the sclera and the pupil
+    for (const iris of PALETTE.iris) {
+      expect(contrast(iris, PALETTE.face.white)).toBeGreaterThan(2);
+      expect(contrast(iris, PALETTE.face.pupil)).toBeGreaterThan(1.5);
+    }
+  });
+
   it("gore Off contains no red at all; Full and Reduced stains are red-family", () => {
     const isRed = (c: number): boolean => {
       const [h, s] = hsl(c);

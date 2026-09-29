@@ -104,6 +104,12 @@ Measured (software GL): world 22 / 28 / 28 draw calls (low / medium / high) incl
 Known weak spots: wildflowers are small flat cups that read as dots; the spawn clearing is a large uniform-ish earth disc; the hill rings are smooth slabs (no tree-line texture); clouds are one soft
 layer; the snag is thin; no wind on trees, weather or day/night; `rig.ts` still owns a private copy of the toon ramp (`sharedToonRamp` in `outline.ts` is the same four values; make rig import it);
 shrubs and grass have no collision or reaction to walkers; an ink outline on world objects is the same pixel width as on characters, which reads heavy on close rocks.
+Done + verified (final upgrade pass, 2026-09-29; D-026..D-029): injuries change movement and carrying through the predicted step (server hostile-input tests, 12 mutation checks);
+characters gained ~100 cosmetics, garment patches, face decals, strand hair, prosthetics, three LODs and a richer animator (audit test over every option); the world gained a day cycle,
+water, wind, ambient life, landmarks and paths; first-person view (X). Unit tests: shared 144, procedural 430, client 152, server 104. Everything visual judged on software GL only.
+Known weak spots (details in docs/_notes/*.md): cape/poncho read as bowls from above and clip at extreme arm swings; sideburns 4-6 read as dark curtains; hands are still fists;
+LOD1 is heavier than aimed (5.7k); face parts rebuild per instance (crowds need them cached); ragdoll from a mid idle-act pose can overshoot an elbow limit for a frame; first-person arms
+only show when looking down; day clock is per client; nothing grants wooden legs in the campaign yet; no weather, no sound.
 Not done in M2 (next):
 - Wounds have no gameplay effect yet (limp is animation only; a real slow-down needs `wounds` as a predicted input of the shared step). No bleed-out or
   medical supplies (M5). Dirt/mud accumulation and blood on clothing beyond the dressings. Outline rollout to NPC crowds (LOD).

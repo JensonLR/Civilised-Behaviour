@@ -133,9 +133,8 @@ function pocket(v: TorsoView, x: number, y: number, w: number, hgt: number, colo
 }
 
 /** Collars: a band that hugs the neck (never smaller than the neck it sits on), plus the style's turn-down. */
-function collar(v: TorsoView, kind: "stand" | "fall" | "shirt" | "high" | "shawl" | "cape"): void {
+function collar(v: TorsoView, kind: "stand" | "fall" | "shirt" | "high" | "shawl" | "cape", cloth = kind === "shirt" || kind === "high" ? singe(CREAM, v.c.burnt) : v.facing): void {
   const { b, nrx, nrz, neckY } = v;
-  const cloth = kind === "shirt" || kind === "high" ? singe(CREAM, v.c.burnt) : v.facing;
   const bandTop = kind === "high" ? 0.075 : kind === "stand" ? 0.06 : 0.04;
   if (kind === "fall" || kind === "shawl" || kind === "cape") {
     // a turned-down collar: tight at the neck, flaring out onto the shoulders, the fold at the top
@@ -225,7 +224,7 @@ export function dressTorso(v: TorsoView): void {
   const trimGold = spec.coatTrim === 4 ? tone(PALETTE.trim.sashGold, 1) : gold;
   // ---- the neck: collar -------------------------------------------------------------------------------------------------------
   if (j === JACKET.SHIRT || j === JACKET.WAISTCOAT) {
-    if (spec.shirt === 3) collar(v, "stand");
+    if (spec.shirt === 3) collar(v, "stand", singe(CREAM, c.burnt)); // (a collarless shirt: a plain band of shirt cloth)
     else {
       collar(v, spec.shirt === 4 ? "high" : "shirt");
       if (spec.shirt !== 5) collarPoints(v, spec.shirt === 4);
@@ -399,33 +398,38 @@ export function dressTorso(v: TorsoView): void {
 
 // ---- capes and ponchos (torso bone) -----------------------------------------------------------------------------------------------------------
 
-/** The cape: a bell of cloth from the collar to the hip that covers the arms, with a lining band at the hem and a clasp at the throat. */
-export function dressCape(v: TorsoView): void {
-  const { b, c, h, D, SH, nrx, nrz, neckY } = v;
-  const ar = c.P.armRadius;
+/** The cape's sections (torso frame): a bell of cloth from the collar to the hip that clears whatever it hangs over. */
+export function capeRings(P: Proportions, cloth: number, lining: number): Ring[] {
+  const h = P.torsoHeight;
+  const D = P.torsoDepth / 2;
+  const SH = P.shoulderHalfWidth;
+  const ar = P.armRadius;
+  const nk = neckRadii(P);
+  const neckY = h * 0.985;
   const hemY = -0.1 * h;
-  const cloth = v.coat;
-  const lining = v.facing;
+  const base = torsoRings(P, cloth, 0);
   const rx = (k: number): number => SH + ar * k;
   // the cape must clear the body under it (a belly or a pack would otherwise poke through)
-  const rzAt = (y: number, k: number): number => Math.max(D * k, v.at(y).rz * 1.14 + Math.abs(v.at(y).cz) + 0.03);
-  b.loft(
-    [
-      { y: neckY + 0.02, rx: nrx * 1.14, rz: nrz * 1.14, color: tone(cloth, 1.05) },
-      { y: neckY - 0.03, rx: nrx * 1.5, rz: nrz * 1.5, color: cloth },
-      { y: h * 0.9, rx: rx(1.3), rz: rzAt(h * 0.9, 1.05), pow: 2.3, color: cloth },
-      { y: h * 0.62, rx: rx(1.8), rz: rzAt(h * 0.62, 1.25), pow: 2.2, color: cloth },
-      { y: h * 0.28, rx: rx(2.15), rz: rzAt(h * 0.28, 1.38), pow: 2.2, color: tone(cloth, 0.94) },
-      { y: hemY, rx: rx(2.4), rz: rzAt(h * 0.05, 1.48), pow: 2.2, color: tone(cloth, 0.88) },
-      { y: hemY, rx: rx(2.4), rz: rzAt(h * 0.05, 1.48), pow: 2.2, color: lining, crease: true },
-      { y: hemY - 0.03, rx: rx(2.42), rz: rzAt(h * 0.05, 1.5), pow: 2.2, color: lining },
-    ],
-    cloth,
-    undefined,
-    undefined,
-    undefined,
-    { capTop: false, capBottom: false },
-  );
+  const rzAt = (y: number, k: number): number => {
+    const s = ringAt(base, y);
+    return Math.max(D * k, s.rz * 1.14 + Math.abs(s.cz) + 0.03);
+  };
+  return [
+    { y: neckY + 0.02, rx: nk.rx * 1.14, rz: nk.rz * 1.14, color: tone(cloth, 1.05) },
+    { y: neckY - 0.03, rx: nk.rx * 1.5, rz: nk.rz * 1.5, color: cloth },
+    { y: h * 0.9, rx: rx(1.3), rz: rzAt(h * 0.9, 1.05), pow: 2.3, color: cloth },
+    { y: h * 0.62, rx: rx(1.8), rz: rzAt(h * 0.62, 1.25), pow: 2.2, color: cloth },
+    { y: h * 0.28, rx: rx(2.15), rz: rzAt(h * 0.28, 1.38), pow: 2.2, color: tone(cloth, 0.94) },
+    { y: hemY, rx: rx(2.4), rz: rzAt(h * 0.05, 1.48), pow: 2.2, color: tone(cloth, 0.88) },
+    { y: hemY, rx: rx(2.4), rz: rzAt(h * 0.05, 1.48), pow: 2.2, color: lining, crease: true },
+    { y: hemY - 0.03, rx: rx(2.42), rz: rzAt(h * 0.05, 1.5), pow: 2.2, color: lining },
+  ];
+}
+
+/** The cape: a bell of cloth from the collar to the hip that covers the arms, with a lining band at the hem and a clasp at the throat. */
+export function dressCape(v: TorsoView): void {
+  const { b, c, neckY } = v;
+  b.loft(capeRings(c.P, v.coat, v.facing), v.coat, undefined, undefined, undefined, { capTop: false, capBottom: false });
   // the clasp: two brass studs joined by a chain, and the seam down the front
   const zf = frontZ(v.at(neckY - 0.06), 0);
   b.sphere(0.026, c.accent, [-0.05, neckY - 0.05, zf - 0.035], [1, 1, 0.6]);
@@ -433,43 +437,51 @@ export function dressCape(v: TorsoView): void {
   b.sweep([[-0.05, neckY - 0.05, zf - 0.04], [0, neckY - 0.075, zf - 0.05], [0.05, neckY - 0.05, zf - 0.04]], () => ({ rx: 0.005, rz: 0.005 }), c.accent, { side: [0, 1, 0], segments: 4 });
 }
 
-/** The poncho: a blanket with a hole for the head, four points (front, back and over each arm), stripes and a fringe. */
-export function dressPoncho(v: TorsoView): void {
-  const { b, c, h, D, SH, nrx, nrz, neckY } = v;
-  const ar = c.P.armRadius;
-  const cloth = v.coat;
-  const stripe1 = v.trim;
-  const stripe2 = tone(v.facing, 1.3);
+/** The poncho's sections (torso frame): a blanket with a hole for the head and four points, striped near the hem. */
+export function ponchoRings(P: Proportions, cloth: number, stripe1: number, stripe2: number): Ring[] {
+  const h = P.torsoHeight;
+  const D = P.torsoDepth / 2;
+  const SH = P.shoulderHalfWidth;
+  const ar = P.armRadius;
+  const nk = neckRadii(P);
+  const neckY = h * 0.985;
   const hemY = h * 0.34;
   const rx = (k: number): number => SH + ar * k;
   const ring = (y: number, kx: number, kz: number, color: number, crease = false): Ring => ({ y, rx: rx(kx), rz: D * kz, pow: 1.75, color, crease });
-  b.loft(
-    [
-      { y: neckY + 0.02, rx: nrx * 1.2, rz: nrz * 1.2, pow: 2, color: tone(cloth, 1.1) },
-      { y: neckY - 0.03, rx: nrx * 1.55, rz: nrz * 1.55, pow: 2, color: cloth },
-      ring(h * 0.93, 1.1, 1.05, cloth),
-      ring(h * 0.78, 1.9, 1.7, cloth),
-      ring(h * 0.7, 2.25, 1.95, stripe1),
-      ring(h * 0.62, 2.55, 2.15, stripe1),
-      ring(h * 0.56, 2.75, 2.28, cloth),
-      ring(hemY + 0.05, 3.0, 2.45, stripe2),
-      ring(hemY + 0.02, 3.05, 2.5, stripe2),
-      ring(hemY, 3.1, 2.55, tone(cloth, 0.75), true),
-      ring(hemY - 0.03, 3.12, 2.56, tone(cloth, 0.7)),
-    ],
-    cloth,
-    undefined,
-    undefined,
-    undefined,
-    { capTop: false, capBottom: false },
-  );
+  return [
+    { y: neckY + 0.02, rx: nk.rx * 1.2, rz: nk.rz * 1.2, pow: 2, color: tone(cloth, 1.1) },
+    { y: neckY - 0.03, rx: nk.rx * 1.55, rz: nk.rz * 1.55, pow: 2, color: cloth },
+    ring(h * 0.93, 1.1, 1.05, cloth),
+    ring(h * 0.78, 1.9, 1.7, cloth),
+    ring(h * 0.7, 2.25, 1.95, stripe1),
+    ring(h * 0.62, 2.55, 2.15, stripe1),
+    ring(h * 0.56, 2.75, 2.28, cloth),
+    ring(hemY + 0.05, 3.0, 2.45, stripe2),
+    ring(hemY + 0.02, 3.05, 2.5, stripe2),
+    ring(hemY, 3.1, 2.55, tone(cloth, 0.75), true),
+    ring(hemY - 0.03, 3.12, 2.56, tone(cloth, 0.7)),
+  ];
+}
+
+/** The poncho: a blanket with a hole for the head, four points (front, back and over each arm), stripes and a fringe. */
+export function dressPoncho(v: TorsoView): void {
+  const { b, c, h, D, SH } = v;
+  const ar = c.P.armRadius;
+  const cloth = v.coat;
+  const hemY = h * 0.34;
+  b.loft(ponchoRings(c.P, cloth, v.trim, tone(v.facing, 1.3)), cloth, undefined, undefined, undefined, { capTop: false, capBottom: false });
   // fringe: short tassels round the hem
-  const zf = -D * 2.55 * 0.72;
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
-    b.box(0.014, 0.06, 0.014, tone(cloth, 0.65), [Math.sin(a) * rx(3.1) * 0.72, hemY - 0.06, -Math.cos(a) * D * 2.55 * 0.72]);
+    b.box(0.014, 0.06, 0.014, tone(cloth, 0.65), [Math.sin(a) * (SH + ar * 3.1) * 0.72, hemY - 0.06, -Math.cos(a) * D * 2.55 * 0.72]);
   }
-  void zf;
+}
+
+/** The outermost torso surface for dressings that must lie on what a player sees: the cape or poncho when one is worn, else the torso. */
+export function outerTorsoRings(P: Proportions, color: number, jacket: number): Ring[] {
+  if (jacket === JACKET.CAPE) return capeRings(P, color, color);
+  if (jacket === JACKET.PONCHO) return ponchoRings(P, color, color, color);
+  return torsoRings(P, color, jacket);
 }
 
 // ---- coat skirts (pelvis bone) -------------------------------------------------------------------------------------------------------------

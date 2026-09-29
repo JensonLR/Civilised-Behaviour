@@ -180,7 +180,7 @@ describe("catalog audit: every option builds sound geometry and shows up", () =>
 });
 
 describe("generated people are sound", () => {
-  it("60 generated characters build clean, outward, connected geometry", () => {
-    for (let seed = 0; seed < 60; seed++) checkClean(`seed ${seed}`, build(generateCharacter(seed)));
+  it("150 generated characters build clean, outward, connected geometry", () => {
+    for (let seed = 0; seed < 150; seed++) checkClean(`seed ${seed}`, build(generateCharacter(seed)));
   });
 });

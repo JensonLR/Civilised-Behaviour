@@ -22,6 +22,7 @@ const launch = (over: Partial<RagdollLaunch> = {}): RagdollLaunch => ({ vx: 0, v
 function standing(seed = 3, x = 0, z = 0) {
   const rig = buildCharacter(generateCharacter(seed), { outline: false });
   const anim = new CharacterAnimator(rig);
+  anim.autoBlink = false; // ambient idle acts (a hand to the hat, a glance at a watch) would make every run start from a different pose
   rig.root.position.set(x, 0, z);
   for (let i = 0; i < 30; i++) anim.update(DT, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
   rig.root.position.set(x, 0, z);

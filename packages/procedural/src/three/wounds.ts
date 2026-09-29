@@ -2,7 +2,8 @@ import type { BufferGeometry } from "three";
 import { PALETTE, ZONE, type ZoneId } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
-import { frontZ, ringAt, torsoRings, upperArmRings, upperLegRings, type BodyCtx } from "./body.ts";
+import { frontZ, ringAt, upperArmRings, upperLegRings, type BodyCtx } from "./body.ts";
+import { outerTorsoRings } from "./garments.ts";
 import { faceSurfaceZ } from "./head.ts";
 import { PartBuilder } from "./parts.ts";
 
@@ -68,7 +69,7 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
   switch (zone) {
     case ZONE.TORSO: {
       const h = P.torsoHeight;
-      const rings = torsoRings(P, 0xffffff, spec.jacket);
+      const rings = outerTorsoRings(P, 0xffffff, spec.jacket); // (over a cape or poncho the dressing lies on the cloth a player sees)
       const sec = (y: number) => ringAt(rings, y);
       if (sev === 1) {
         const y = h * 0.66;

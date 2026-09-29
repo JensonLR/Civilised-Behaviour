@@ -594,7 +594,7 @@ export function buildLowerLeg(c: BodyCtx, wooden: boolean, side: "L" | "R" = "L"
     // folded top / cuff of the boot
     const fold = kind.rubber ? tone(boot, 1.28) : tone(boot, 1.5);
     b.loft([{ y: shaftTop + 0.032, rx: legR * 0.99 * wide, rz: legR * 0.97 * wide, color: fold }, { y: shaftTop - 0.03, rx: legR * 0.99 * wide, rz: legR * 0.97 * wide, color: fold, crease: true }], boot, undefined, undefined, undefined, { capBottom: false, capTop: false });
-    if (!kind.rubber) b.box(0.028, 0.03, 0.022, c.accent, [legR * 0.9, shaftTop - 0.11, -legR * 0.05]); // strap buckle on the outer side
+    if (!kind.rubber) b.box(0.028, 0.03, 0.022, c.accent, [legR * 0.88, shaftTop - Math.min(0.11, len * bootTop * 0.45), -legR * 0.05]); // strap buckle on the outer side
     if (kind.rubber) for (const sx of [-1, 1]) b.box(0.02, 0.09, 0.02, tone(boot, 1.2), [sx * legR * wide * 0.98, shaftTop - 0.05, 0]); // pull-on loops
   }
   if (!kind.tall && !kind.soft && !kind.clog && tr !== 2 && tr !== 4 && tr !== 5 && tr !== 6) {

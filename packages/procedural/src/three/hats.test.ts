@@ -6,7 +6,7 @@ import { buildHead } from "./head.ts";
 const colors = { skin: 0xd29c76, hairC: 0x3b2616, hatC: 0x555555, accent: 0xd0a94a, burnt: 0 };
 
 describe("hats cover the skull", () => {
-  for (let hat = 1; hat <= 10; hat++) {
+  for (let hat = 1; hat <= 20; hat++) {
     it(`hat ${hat}: the crown clears the top of the head on every build`, () => {
       for (let seed = 0; seed < 30; seed++) {
         const spec = { ...generateCharacter(seed), hat, hair: 0 };

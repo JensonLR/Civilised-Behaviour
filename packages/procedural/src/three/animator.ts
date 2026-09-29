@@ -453,8 +453,8 @@ export class CharacterAnimator {
           headPitch -= 0.06 * w;
           break;
         case "watch":
-          shL = lerp(shL, 0.85, w);
-          elL = lerp(elL, 2.2, w);
+          shL = lerp(shL, 1.0, w);
+          elL = lerp(elL, 1.75, w); // (kept well inside the ragdoll's elbow limit: a body can be knocked down mid-act)
           szL = lerp(szL, 0.35, w);
           headPitch += 0.28 * w;
           break;

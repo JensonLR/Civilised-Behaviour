@@ -119,7 +119,7 @@ test("character creator: customise, join, and each player sees the other's look"
 
   const a = await pageWith("Ada");
   const initialLook = await storedLook(a);
-  expect(initialLook).toMatch(/^[A-Za-z0-9_-]{40,60}$/);
+  expect(initialLook).toMatch(/^[A-Za-z0-9_-]{40,120}$/);
 
   // Controls change the stored (and previewed) look.
   await a.click('[data-act="dice"]');

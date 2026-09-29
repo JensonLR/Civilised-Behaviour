@@ -192,7 +192,7 @@ export const PALETTE = {
     bandage: 0xe6dbbd,
     bandageDirty: 0xc9bb96,
     // leathers for boots and straps (the boot colour field picks among these), plus fur, rope and rubber
-    leatherBlack: 0x33291f,
+    leatherBlack: 0x40352a,
     leatherTan: 0x957a58,
     leatherOx: 0x5f2c26,
     leatherGrey: 0x6c675e,
@@ -251,7 +251,7 @@ export const PALETTE = {
   iris: [0x4f7a9a, 0x5f8a4a, 0x7a5030, 0x8a6a30, 0x3a4a6a],
 
   /** Face-part constants. */
-  face: { white: 0xf4efe2, pupil: 0x15100c, mouth: 0x5a1f1a, cavity: 0x2a0c0c, tongue: 0xc4646a, scar: 0x9a4a4a, nostril: 0x2a1418, tattoo: 0x46566f, gum: 0xa85a5a, lash: 0x2a1c14 },
+  face: { white: 0xf4efe2, pupil: 0x15100c, mouth: 0x5a1f1a, cavity: 0x2a0c0c, tongue: 0xc4646a, scar: 0x9a4a4a, nostril: 0x2a1418, tattoo: 0x2c3650, gum: 0xa85a5a, lash: 0x2a1c14 },
 
   /** Wound stains per gore setting. `off` deliberately contains no red at all (iodine and grime). */
   gore: {
