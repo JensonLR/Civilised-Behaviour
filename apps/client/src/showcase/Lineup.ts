@@ -22,6 +22,7 @@ import { Stage } from "../render/Stage.ts";
  *   ragdoll=T     knock everyone down and simulate the ragdoll for T seconds, then freeze (add live=1 to keep it running);
  *                 figures are shoved in different directions so the row shows several falls
  *   gore=off      full|reduced|off stain style
+ *   aim=0.5       height (m) the camera looks at in the non-close views (0.5 = legs and boots)
  *   zoom=0.4      pull the camera in (multiplier on distance) and aim at head height; for reviewing faces and headwear
  */
 export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): void {
@@ -95,8 +96,8 @@ export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): v
     camera.position.set(target.x + 0.2, target.y + 0.1, 2.6);
   } else {
     const zoom = Number(params.get("zoom") ?? 1);
-    camera.position.set(0, zoom < 1 ? 1.6 : 1.35, Math.max(7.5, specs.length * 1.55) * zoom);
-    target.set(0, zoom < 1 ? 1.5 : 0.95, 0);
+    camera.position.set(0, params.get("aim") ? Number(params.get("aim")) + 0.4 : zoom < 1 ? 1.6 : 1.35, Math.max(7.5, specs.length * 1.55) * zoom);
+    target.set(0, params.get("aim") ? Number(params.get("aim")) : zoom < 1 ? 1.5 : 0.95, 0);
   }
   camera.lookAt(target);
 

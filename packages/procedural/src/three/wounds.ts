@@ -2,6 +2,7 @@ import type { BufferGeometry } from "three";
 import { ZONE, type ZoneId } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
+import { frontZ, ringAt, torsoRings, upperArmRings, upperLegRings, type BodyCtx } from "./body.ts";
 import { faceSurfaceZ } from "./head.ts";
 import { PartBuilder } from "./parts.ts";
 
@@ -27,10 +28,6 @@ const PALETTES: Record<GoreLevel, Palette> = {
   // Iodine and grime: reads as "treated wound" with no blood at all.
   off: { fresh: 0xc08a2c, old: 0x9c8a66, drip: 0xb08028, size: 0.85, drips: false },
 };
-
-/** Front (-Z) surface of an ellipsoid centred at (0, cy, 0) at height y and lateral offset x. Falls back to the equator. */
-const ellipsoidFront = (cy: number, rx: number, ry: number, rz: number, x: number, y: number): number =>
-  -rz * Math.sqrt(Math.max(0.05, 1 - (x / rx) ** 2 - ((y - cy) / ry) ** 2));
 
 /**
  * Bandages, plasters and stains for one body zone at one severity, as a single merged vertex-coloured geometry in the
@@ -71,30 +68,32 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
   switch (zone) {
     case ZONE.TORSO: {
       const h = P.torsoHeight;
-      const rx = P.torsoWidth / 2;
-      const rz = P.torsoDepth / 2;
-      const ry = h * 0.52;
-      const cy = h * 0.5;
+      const rings = torsoRings(P, 0xffffff);
+      const sec = (y: number) => ringAt(rings, y);
       if (sev === 1) {
         const y = h * 0.66;
-        plaster(rx * 0.32, y, ellipsoidFront(cy, rx * 1.05, ry, rz, rx * 0.32, y) - 0.012, 0.11, 0.055);
+        const x = sec(y).rx * 0.3;
+        plaster(x, y, frontZ(sec(y), x) - 0.012, 0.11, 0.055);
       } else {
-        // A chest wrap following the torso ellipse: open cylinder scaled to rx/rz.
+        // A chest wrap hugging the torso section at its height.
         const top = sev === 2 ? 0.74 : 0.8;
         const bot = sev === 2 ? 0.56 : 0.46;
         const wy = h * (top + bot) * 0.5;
         const wh = h * (top - bot);
-        b.cylinder(1, 1, wh, BANDAGE, [0, wy, 0], undefined, [rx * 1.08 + P.bellyRadius * 0.12, 1, rz * 1.1 + P.bellyForward * 0.25], true);
-        edge(0.994, wy + wh / 2, rx * 1.08 + P.bellyRadius * 0.12, rz * 1.1 + P.bellyForward * 0.25);
-        edge(0.994, wy - wh / 2, rx * 1.08 + P.bellyRadius * 0.12, rz * 1.1 + P.bellyForward * 0.25);
-        const fz = -(rz * 1.1 + P.bellyForward * 0.25) - 0.006;
-        stain(rx * 0.3, wy, fz, sev === 2 ? 0.06 : 0.1, sev === 2 ? 0.07 : 0.13);
+        const s = sec(wy);
+        const k = 1.05;
+        b.cylinder(1, 1, wh, BANDAGE, [s.cx, wy, s.cz], undefined, [s.rx * k, 1, s.rz * k], true);
+        for (const e of [wy + wh / 2, wy - wh / 2]) {
+          b.cylinder(1.006, 1.006, 0.016, BANDAGE_DIRTY, [s.cx, e, s.cz], undefined, [s.rx * k, 1, s.rz * k], true);
+        }
+        const fz = s.cz - s.rz * k - 0.006;
+        stain(s.rx * 0.3, wy, fz, sev === 2 ? 0.06 : 0.1, sev === 2 ? 0.07 : 0.13);
         if (sev === 3) {
-          stain(-rx * 0.35, wy - wh * 0.15, fz + 0.004, 0.05, 0.06, pal.old);
-          if (pal.drips) b.sphere(1, pal.drip, [rx * 0.3, wy - wh * 0.5 - 0.09, fz + 0.002], [0.016, 0.1, 0.008]);
+          stain(-s.rx * 0.35, wy - wh * 0.15, fz + 0.004, 0.05, 0.06, pal.old);
+          if (pal.drips) b.sphere(1, pal.drip, [s.rx * 0.3, wy - wh * 0.5 - 0.09, fz + 0.002], [0.016, 0.1, 0.008]);
         }
         // and one on the back so it reads from the follow camera
-        stain(-rx * 0.2, wy, rz * 1.1 + P.bellyForward * 0.02 + 0.006, sev === 2 ? 0.05 : 0.09, sev === 2 ? 0.06 : 0.11);
+        stain(-s.rx * 0.2, wy, s.cz + s.rz * k + 0.006, sev === 2 ? 0.05 : 0.09, sev === 2 ? 0.06 : 0.11);
       }
       break;
     }
@@ -135,9 +134,12 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
     case ZONE.ARM_L:
     case ZONE.ARM_R: {
       const sx = zone === ZONE.ARM_L ? -1 : 1;
-      const r = P.armRadius;
       const len = P.armUpper;
-      const rad = (f: number): number => r * (1.15 - 0.15 * f);
+      const armRings = upperArmRings(P, 0xffffff);
+      const rad = (f: number): number => {
+        const s = ringAt(armRings, -len * f);
+        return (s.rx + s.rz) / 2;
+      };
       if (sev === 1) {
         plaster(sx * rad(0.5) * 0.35, -len * 0.5, -rad(0.5) - 0.01, 0.09, 0.05, 0.5);
       } else {
@@ -155,9 +157,13 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
     case ZONE.LEG_L:
     case ZONE.LEG_R: {
       const sx = zone === ZONE.LEG_L ? -1 : 1;
-      const r = (spec.trousers === 3 ? 0.14 : 0.11) * P.scale + 0.02;
       const len = P.legUpper;
-      const rad = (f: number): number => r * (1.15 - 0.15 * f);
+      const ctx = { spec, P, skin: 0, jacketC: 0, trouserC: 0, shirtC: 0, armC: 0, accent: 0, burnt: 0, footH: 0 } satisfies BodyCtx;
+      const legRings = upperLegRings(ctx);
+      const rad = (f: number): number => {
+        const s = ringAt(legRings, -len * f);
+        return (s.rx + s.rz) / 2;
+      };
       if (sev === 1) {
         plaster(sx * rad(0.5) * 0.3, -len * 0.5, -rad(0.5) - 0.01, 0.1, 0.055, -0.5);
       } else {

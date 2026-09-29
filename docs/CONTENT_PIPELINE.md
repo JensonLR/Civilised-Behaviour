@@ -19,7 +19,7 @@ Source of truth: `packages/procedural/src/spec.ts` (fields) and `catalog.ts` (op
 (never reorder), bump nothing else for pure appends; raise `max` accordingly; add a case in `three/rig.ts` (bone builders); the creator UI updates
 automatically. Adding a new *field* appends to `FIELDS` and extends `SPEC_BYTES` (old saved strings are rejected, so also bump `SPEC_VERSION` and write
 a migration once persistence exists, M10). Preview any character deterministically:
-`/?showcase=lineup&seed=3&n=6` (row), `&close=0` (head shot), `&pose=walk|carry|crouch|down|air`, `&expr=pain|fear|triumph|drunk|angry`, `&marks=1`, `&wounds=S` (severity 1-3 everywhere) or `&wounds=zone:sev,...`, `&woundsVary=1` (tiers side by side), `&gore=full|reduced|off`, `&ragdoll=T` (knock everyone down and freeze the physics at T seconds; add `&live=1` to keep running), `&set=field:val,...` (override spec fields by name), `&vary=field` (cycle one field across the row), `&zoom=`, `&turn=`, `&outline=0`
+`/?showcase=lineup&seed=3&n=6` (row), `&close=0` (head shot), `&pose=walk|carry|crouch|down|air`, `&expr=pain|fear|triumph|drunk|angry`, `&aim=0.5` (look at legs/boots; default aims at the torso), `&marks=1`, `&wounds=S` (severity 1-3 everywhere) or `&wounds=zone:sev,...`, `&woundsVary=1` (tiers side by side), `&gore=full|reduced|off`, `&ragdoll=T` (knock everyone down and freeze the physics at T seconds; add `&live=1` to keep running), `&set=field:val,...` (override spec fields by name), `&vary=field` (cycle one field across the row), `&zoom=`, `&turn=`, `&outline=0`
 (campaign history), `&look=<encoded>`; capture with `node scripts/shot.mjs "<query>" out.png [WxH]`.
 
 ## Data-driven content (planned `packages/game-data`)

@@ -2,7 +2,10 @@ import {
   BufferGeometry,
   Group,
   Mesh,
-  MeshStandardMaterial,
+  MeshToonMaterial,
+  DataTexture,
+  NearestFilter,
+  RedFormat,
   SphereGeometry,
   TorusGeometry,
   BoxGeometry,
@@ -13,7 +16,8 @@ import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
 import { buildHead, mouthPlacement } from "./head.ts";
 import { outlineMaterial } from "./outline.ts";
-import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe } from "./parts.ts";
+import { CREAM, PartBuilder, singe } from "./parts.ts";
+import { buildForeArm, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
 import { buildWoundGeometry, type GoreLevel } from "./wounds.ts";
 
 /** Named bones of the rigid articulated hierarchy. Every visual part hangs off exactly one of these. */
@@ -73,9 +77,20 @@ export interface CharacterRig {
 // Bone geometry is cached by (bone, canonical spec) so identical characters (crowds, clones) share GPU memory.
 const geometryCache = new Map<string, BufferGeometry | null>();
 const MAX_CACHE = 256; // 2 entries per bone (main + outline hull) x ~12 bones x a handful of live specs
-let sharedMaterial: MeshStandardMaterial | undefined;
+let sharedMaterial: MeshToonMaterial | undefined;
 
-const clothMaterial = (): MeshStandardMaterial => (sharedMaterial ??= new MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0.02 }));
+/** A 4-step lighting ramp: banded light and shadow give forms a graphic, illustrated read that flat PBR shading smears out. */
+let ramp: DataTexture | undefined;
+function toonRamp(): DataTexture {
+  if (ramp) return ramp;
+  const tex = new DataTexture(new Uint8Array([120, 175, 225, 255]), 4, 1, RedFormat);
+  tex.minFilter = NearestFilter;
+  tex.magFilter = NearestFilter;
+  tex.needsUpdate = true;
+  return (ramp = tex);
+}
+
+const clothMaterial = (): MeshToonMaterial => (sharedMaterial ??= new MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() }));
 
 function cached(key: string, make: () => BufferGeometry | undefined): BufferGeometry | undefined {
   const hit = geometryCache.get(key);
@@ -180,120 +195,25 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     }
   };
 
-  // ---- pelvis: hips, belt, coat tails ------------------------------------------------------------------
-  attach("pelvis", pelvis, () => {
-    const b = new PartBuilder();
-    b.sphere(1, trouserC, [0, 0.0, 0], [P.hipWidth * 1.9 + P.torsoWidth * 0.32, 0.12 * P.scale + 0.05, P.torsoDepth * 0.42]);
-    if (spec.jacket === 1 || spec.jacket === 4) {
-      // frock coat / greatcoat skirts hanging behind and beside the hips
-      const len = spec.jacket === 4 ? P.legUpper * 1.45 : P.legUpper * 0.95;
-      b.box(P.torsoWidth * 0.95, len, 0.05, jacketC, [0, -len / 2 + 0.02, P.torsoDepth * 0.3], [0.08, 0, 0]);
-      b.box(0.05, len * 0.9, P.torsoDepth * 0.6, jacketC, [-P.torsoWidth * 0.46, -len * 0.45, 0.02]);
-      b.box(0.05, len * 0.9, P.torsoDepth * 0.6, jacketC, [P.torsoWidth * 0.46, -len * 0.45, 0.02]);
-    }
-    return b.build();
-  });
-
-  // ---- torso: body, coat details, belt, sash, medals -----------------------------------------------------
-  attach("torso", torso, () => {
-    const b = new PartBuilder();
-    const h = P.torsoHeight;
-    const rx = P.torsoWidth / 2;
-    const rz = P.torsoDepth / 2;
-    const bodyC = spec.jacket === 3 ? trouserC : sleeved ? jacketC : shirtC; // waistcoat: darker cloth body over shirt
-    b.sphere(1, bodyC, [0, h * 0.5, 0], [rx * 1.05, h * 0.52, rz]);
-    if (P.bellyRadius > 0.01) {
-      b.sphere(1, bodyC, [0, h * 0.3, -P.bellyForward * 0.55], [rx * 0.98 + P.bellyRadius * 0.4, h * 0.36 + P.bellyRadius * 0.5, rz + P.bellyForward * 0.8]);
-    }
-    // shoulders (yoke) so the arm joints read as attached
-    b.sphere(1, bodyC, [0, h * 0.86, 0], [P.shoulderHalfWidth + 0.03, h * 0.16, rz * 0.9]);
-    // shirt front / collar
-    const collarC = singe(CREAM, burnt);
-    if (spec.jacket !== 0) {
-      b.sphere(1, shirtC, [0, h * 0.72, -rz * 0.86], [rx * 0.32, h * 0.2, rz * 0.24]);
-    }
-    b.torus(P.neck + 0.06, 0.028, collarC, [0, h * 0.99, 0], [Math.PI / 2, 0, 0], [1.05, 1.05, 1]);
-    // shirt pattern: stripes / checks as thin dark bands across the shirt front
-    if (spec.shirt === 1 || spec.shirt === 2) {
-      for (let i = 0; i < 4; i++) b.box(rx * 0.5, 0.012, 0.01, singe(0x8a6a5a, burnt), [0, h * (0.6 + i * 0.07), -rz * 1.06]);
-    }
-    // jacket buttons
-    if (spec.jacket !== 0) {
-      const rows = spec.jacket === 2 ? 5 : 4;
-      for (let i = 0; i < rows; i++) b.sphere(0.018, accent, [0.0, h * (0.28 + i * 0.13), -rz * (1.0 + 0.06) - (i < 2 ? P.bellyForward * 0.9 : 0)]);
-    }
-    // belt / cummerbund at the waist, following the belly ellipse
-    const waistY = h * 0.22;
-    const wx = rx * 0.98 + P.bellyRadius * 0.45;
-    const wz = rz + P.bellyForward * 0.7;
-    if (spec.belt === 1) b.torus(1, 0.025, LEATHER, [0, waistY, -P.bellyForward * 0.4], [Math.PI / 2, 0, 0], [wx, wz, 1]);
-    if (spec.belt === 1) b.box(0.05, 0.05, 0.02, accent, [0, waistY, -wz - P.bellyForward * 0.4 - 0.03]);
-    if (spec.belt === 2) b.torus(1, 0.06, singe(0x7a1f2a, burnt), [0, waistY, -P.bellyForward * 0.4], [Math.PI / 2, 0, 0], [wx, wz, 1]);
-    // sash: a tilted ring around the torso (diagonal) or a fat ring at the waist
-    if (spec.sash === 1) b.torus(1, 0.04, singe(0x8f1f2a, burnt), [0, h * 0.52, -P.bellyForward * 0.15], [Math.PI / 2, 0.55, 0.25], [rx * 1.12 + P.bellyRadius * 0.2, rz * 1.1 + P.bellyForward * 0.5, 1]);
-    if (spec.sash === 2) b.torus(1, 0.05, singe(0xb8a06a, burnt), [0, h * 0.34, -P.bellyForward * 0.3], [Math.PI / 2, 0, 0], [wx * 1.03, wz * 1.05, 1]);
-    // medals on the character's left breast (-X), pinned to the surface
-    for (let i = 0; i < spec.medals; i++) {
-      const mx = -rx * 0.55 + (i % 3) * 0.055;
-      const my = h * 0.72 - Math.floor(i / 3) * 0.07;
-      b.cylinder(0.026, 0.026, 0.008, i % 2 ? K.ACCENT_COLORS[1] : accent, [mx, my, -rz * 1.03 - 0.01], [Math.PI / 2, 0, 0]);
-      b.box(0.02, 0.05, 0.006, i % 2 ? 0x2a4f8a : 0x8a2a2a, [mx, my + 0.04, -rz * 1.02]);
-    }
-    // scorch marks
-    if (burnt >= 2) {
-      b.sphere(1, SOOT, [rx * 0.4, h * 0.5, -rz * 0.98], [0.09, 0.07, 0.02]);
-      b.sphere(1, SOOT, [-rx * 0.2, h * 0.25, -rz * 1.0 - P.bellyForward * 0.6], [0.07, 0.09, 0.02]);
-    }
-    return b.build();
-  });
+  const body: BodyCtx = { spec, P, skin, jacketC, trouserC, shirtC, armC, accent, burnt, footH };
+  // ---- pelvis, torso ---------------------------------------------------------------------------------------------
+  attach("pelvis", pelvis, () => buildPelvis(body));
+  attach("torso", torso, () => buildTorso(body));
 
   // ---- head ------------------------------------------------------------------------------------------------
   const R = P.headRadius;
   attach("head", head, () => buildHead(spec, P, { skin, hairC, hatC, accent, burnt }));
 
   // ---- arms ------------------------------------------------------------------------------------------------------
-  const armMeshes: [string, Group, Group, number][] = [
-    ["L", shoulderL, elbowL, -1],
-    ["R", shoulderR, elbowR, 1],
-  ];
-  for (const [side, shoulder, elbow] of armMeshes) {
-    attach(`upperArm${side}`, shoulder, () => {
-      const b = new PartBuilder();
-      b.limb(P.armRadius * 1.15, P.armRadius, P.armUpper, armC);
-      if (spec.jacket !== 0 && spec.jacket !== 3) b.sphere(P.armRadius * 1.4, armC, [0, 0.03, 0], [1, 0.8, 1]); // shoulder cap (clearly larger than the limb top, no coincident shells)
-      return b.build();
-    });
-    attach(`foreArm${side}`, elbow, () => {
-      const b = new PartBuilder();
-      b.limb(P.armRadius, P.armRadius * 0.85, P.armLower, armC);
-      // cuff + hand
-      b.torus(P.armRadius * 0.9, 0.022, singe(CREAM, burnt), [0, -P.armLower + 0.02, 0], [Math.PI / 2, 0, 0]);
-      // Fist: palm, four knuckles across the front, thumb wrapped forward. Reads as a hand at any distance and holds a prop convincingly.
-      const hr = P.handRadius;
-      const hy = -P.armLower - hr * 0.75;
-      b.sphere(hr, skin, [0, hy, 0], [1, 1.1, 0.85]);
-      for (let k = 0; k < 4; k++) b.sphere(hr * 0.3, skin, [(k - 1.5) * hr * 0.44, hy - hr * 0.52, -hr * 0.3], [1, 1.25, 1]);
-      b.sphere(hr * 0.32, skin, [0, hy + hr * 0.05, -hr * 0.62], [0.9, 1.3, 0.9]);
-      return b.build();
-    });
+  for (const [side, shoulder, elbow] of [["L", shoulderL, elbowL], ["R", shoulderR, elbowR]] as const) {
+    attach(`upperArm${side}`, shoulder, () => buildUpperArm(body));
+    attach(`foreArm${side}`, elbow, () => buildForeArm(body));
   }
 
   // ---- legs ---------------------------------------------------------------------------------------------------------
-  const legs: [string, Group, Group, number][] = [
-    ["L", hipL, kneeL, 1],
-    ["R", hipR, kneeR, 2],
-  ];
-  for (const [side, hip, knee, woodId] of legs) {
-    const wooden = spec.woodenLeg === woodId;
-    attach(`upperLeg${side}`, hip, () => {
-      const b = new PartBuilder();
-      const stripe = spec.trousers === 1;
-      const r = spec.trousers === 3 ? 0.14 * P.scale + 0.02 : 0.11 * P.scale + 0.02;
-      b.limb(r * 1.15, r, P.legUpper, trouserC);
-      if (stripe) b.box(0.012, P.legUpper * 0.95, 0.012, singe(CREAM, burnt), [0.0, -P.legUpper / 2, -r * 1.0]);
-      return b.build();
-    });
-    attach(`lowerLeg${side}`, knee, () => buildLowerLeg(spec, P, { trouserC, wooden, footH, burnt, accent }));
+  for (const [side, hip, knee, woodId] of [["L", hipL, kneeL, 1], ["R", hipR, kneeR, 2]] as const) {
+    attach(`upperLeg${side}`, hip, () => buildUpperLeg(body));
+    attach(`lowerLeg${side}`, knee, () => buildLowerLeg(body, spec.woodenLeg === woodId));
   }
 
   // ---- face (animated parts, separate small meshes) ---------------------------------------------------------------------
@@ -307,11 +227,11 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const eyeX = R * 0.4;
   const eyeY = R * 0.1;
   const eyeZ = -R * 0.86;
-  const whiteMat = new MeshStandardMaterial({ color: face.white, roughness: 0.35 });
-  const pupilMat = new MeshStandardMaterial({ color: face.pupil, roughness: 0.2 });
-  const browMat = new MeshStandardMaterial({ color: hairC, roughness: 0.9 });
-  const skinMat = new MeshStandardMaterial({ color: skin, roughness: 0.75 });
-  const mouthMat = new MeshStandardMaterial({ color: 0x5a1f1a, roughness: 0.6 });
+  const whiteMat = new MeshToonMaterial({ color: face.white, gradientMap: toonRamp() });
+  const pupilMat = new MeshToonMaterial({ color: face.pupil, gradientMap: toonRamp() });
+  const browMat = new MeshToonMaterial({ color: hairC, gradientMap: toonRamp() });
+  const skinMat = new MeshToonMaterial({ color: skin, gradientMap: toonRamp() });
+  const mouthMat = new MeshToonMaterial({ color: 0x5a1f1a, gradientMap: toonRamp() });
   const mkEye = (x: number): { g: Group; pupil: Mesh; lid: Mesh } => {
     const g = new Group();
     g.position.set(x, eyeY, eyeZ);
@@ -344,7 +264,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const mouthInterior = new Group();
   mouthInterior.position.set(0, mp.y, mp.z + R * 0.012);
   mouthInterior.visible = false;
-  const cavity = new Mesh(new SphereGeometry(1, 8, 5), new MeshStandardMaterial({ color: 0x2a0c0c, roughness: 0.7 }));
+  const cavity = new Mesh(new SphereGeometry(1, 8, 5), new MeshToonMaterial({ color: 0x2a0c0c, gradientMap: toonRamp() }));
   cavity.scale.set(mouthWidth * 0.5, R * 0.15, R * 0.03);
   mouthInterior.add(cavity);
   const teethGeo = buildTeeth(spec, mouthWidth, R, accent);
@@ -363,7 +283,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     eyeRadius: eyeR, mouthWidth, mouthInterior, mouthY: mp.y, mouthZ: mp.z,
   };
   const ownedGeos: BufferGeometry[] = [browGeo, mouth.geometry, eL.lid.geometry, eRr.lid.geometry, ...ownedGeosLate];
-  const ownedMats = [whiteMat, pupilMat, browMat, skinMat, mouthMat, cavity.material as MeshStandardMaterial];
+  const ownedMats = [whiteMat, pupilMat, browMat, skinMat, mouthMat, cavity.material as MeshToonMaterial];
   eL.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
   eRr.g.children.forEach((c) => c instanceof Mesh && ownedGeos.push(c.geometry));
 
@@ -425,46 +345,6 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       root.removeFromParent();
     },
   };
-}
-
-interface LegOpts {
-  trouserC: number;
-  wooden: boolean;
-  footH: number;
-  burnt: number;
-  accent: number;
-}
-
-function buildLowerLeg(spec: CharacterSpec, P: Proportions, o: LegOpts): BufferGeometry | undefined {
-  const b = new PartBuilder();
-  const r = (spec.trousers === 3 ? 0.14 : 0.11) * P.scale + 0.02;
-  const len = P.legLower;
-  if (o.wooden) {
-    b.cylinder(r * 0.55, r * 0.35, len + o.footH, WOOD, [0, -(len + o.footH) / 2, 0]);
-    b.cylinder(r * 0.6, r * 0.6, 0.05, LEATHER, [0, -0.03, 0]); // leather cup at the knee
-    b.cylinder(r * 0.5, r * 0.5, 0.03, 0x555555, [0, -(len + o.footH) + 0.02, 0]); // iron ferrule
-    return b.build();
-  }
-  const bootTall = spec.boots === 0;
-  const leather = singe(LEATHER, o.burnt);
-  if (spec.trousers === 2) {
-    // breeches: legs end at the knee, socks/boots below
-    b.limb(r, r * 0.8, len * 0.25, o.trouserC);
-    b.limb(r * 0.8, r * 0.75, len, bootTall ? leather : singe(0xd9d0b8, o.burnt), [0, -len * 0.05, 0]);
-  } else {
-    b.limb(r, r * 0.85, len, o.trouserC);
-    if (bootTall) b.cylinder(r * 0.98, r * 0.86, len * 0.62, leather, [0, -len * 0.7, 0]);
-  }
-  if (spec.trousers === 1) b.box(0.012, len * 0.95, 0.012, singe(CREAM, o.burnt), [0, -len / 2, -r * 1.0]);
-  // boot
-  const fl = P.footLength;
-  const fw = P.footWidth;
-  const bootC = spec.boots === 2 ? leather : leather;
-  b.sphere(1, bootC, [0, -len - o.footH * 0.4, -fl * 0.22], [fw, o.footH * 1.4 + 0.03, fl * 0.62]);
-  if (spec.boots === 2) b.sphere(1, singe(0xd9d0b8, o.burnt), [0, -len + 0.03, -fl * 0.12], [fw * 0.9, 0.09, fl * 0.42]); // spats
-  if (spec.boots === 3) for (let i = 0; i < 4; i++) b.sphere(0.012, 0x777777, [((i % 2) - 0.5) * fw, -len - o.footH * 1.15, -fl * (0.1 + (i >> 1) * 0.35)]); // hobnails
-  if (spec.boots === 1) b.cylinder(r * 0.9, r * 0.9, 0.08, bootC, [0, -len + 0.02, 0]);
-  return b.build();
 }
 
 /** A row of six teeth. Bits (TEETH_BITS): 1 missing front, 2 gold front, 4 missing side, 8 gold side. Returns undefined if none remain. */

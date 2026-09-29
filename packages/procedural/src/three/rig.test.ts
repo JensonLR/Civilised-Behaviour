@@ -37,7 +37,7 @@ describe("buildCharacter", () => {
     }
     // Budgets: recorded in docs/PERFORMANCE.md; tighten when LOD lands (M4/M12).
     expect(maxMeshes).toBeLessThanOrEqual(20); // measured 18 without outlines
-    expect(maxTris).toBeLessThan(10000); // measured 2026-09-29 after the art pass: avg 6.6k, max 8.4k (was 5.9k / 7.6k)
+    expect(maxTris).toBeLessThan(10000); // measured 2026-09-29 after the body rebuild: avg 5.6k, max 7.1k (art pass was 6.6k / 8.4k)
     expect(sumTris / N).toBeLessThan(7500);
   });
 
@@ -130,6 +130,53 @@ describe("outline", () => {
     rig.setOutline(true);
     expect(rig.meshCount).toBe(on);
     expect(buildCharacter(generateCharacter(4), { outline: false }).meshCount).toBeLessThan(on);
+  });
+});
+
+describe("body construction", () => {
+  /** Signed volume of an indexed mesh: negative means the faces point inward (it renders inside-out, black under an outline hull). */
+  const volume = (g: import("three").BufferGeometry): number => {
+    const p = g.attributes.position!;
+    const ix = g.index!;
+    let v = 0;
+    for (let i = 0; i < ix.count; i += 3) {
+      const a = ix.getX(i);
+      const b = ix.getX(i + 1);
+      const c = ix.getX(i + 2);
+      v += (p.getX(a) * (p.getY(b) * p.getZ(c) - p.getZ(b) * p.getY(c)) - p.getY(a) * (p.getX(b) * p.getZ(c) - p.getZ(b) * p.getX(c)) + p.getZ(a) * (p.getX(b) * p.getY(c) - p.getY(b) * p.getX(c))) / 6;
+    }
+    return v;
+  };
+
+  it("every bone mesh, main and outline hull, faces outward (regression: top-down limb lofts were inside-out)", () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const rig = buildCharacter(generateCharacter(seed));
+      rig.root.traverse((o) => {
+        if (!(o instanceof Mesh) || !/^(mesh|outline)_(pelvis|torso|upperArm|foreArm|upperLeg|lowerLeg)/.test(o.name)) return;
+        expect(volume(o.geometry), `${o.name} seed ${seed}`).toBeGreaterThan(0);
+      });
+      rig.dispose();
+    }
+  });
+
+  it("vertex colours stay in range and geometry is finite for every jacket, trouser and boot combination", () => {
+    for (let jacket = 0; jacket <= 5; jacket++) {
+      for (let trousers = 0; trousers <= 3; trousers++) {
+        for (let boots = 0; boots <= 3; boots++) {
+          const spec = { ...generateCharacter(jacket * 16 + trousers * 4 + boots), jacket, trousers, boots };
+          const rig = buildCharacter(spec, { outline: false });
+          rig.root.traverse((o) => {
+            if (!(o instanceof Mesh)) return;
+            for (const name of ["position", "normal", "color"] as const) {
+              const attr = o.geometry.attributes[name];
+              if (!attr) continue;
+              for (let i = 0; i < attr.array.length; i++) if (!Number.isFinite(attr.array[i])) throw new Error(`${o.name}.${name}[${i}] not finite`);
+            }
+          });
+          rig.dispose();
+        }
+      }
+    }
   });
 });
 

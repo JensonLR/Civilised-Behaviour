@@ -118,3 +118,15 @@ physics determinism to chase), the client plays about two seconds of Rapier tumb
 pose. Rapier is lazy-loaded and capped at 6 ragdolls. Trade-off accepted: two clients see slightly different tumbles. The static arena colliders were extracted
 into `@cb/physics` because a second consumer (the client) now needs them. Two traps recorded: rapier 0.21 silently ignores `JointData.limits` (set limits on the
 created joint), and the animator must own every joint channel or a finished ragdoll leaves stale rotations behind.
+
+**D-020 Character body construction: lofts and toon shading (2026-09-29).** After the art pass the bodies still read as "blobs": torsos, limbs and coats were
+stacked scaled spheres and straight tubes, and PBR shading smeared the little form they had. Two changes. (1) `loft.ts`: a body part is a stack of
+superellipse cross-sections (`Ring`: y, half-axes, offset, squareness, colour, optional crease), so coats, sleeves, trouser cuts, boots and hands get real
+silhouettes with tapers, shoulders, cuffs and hems for fewer triangles than the sphere stacks, and per-section colour gives baked darkening at the bottom of
+each form. Sections may be listed top-down (limbs hang from their joint); the winding follows, after a limb came out inside-out and drew as solid black under the
+outline hull (tests now assert positive signed volume of every bone mesh and hull). (2) `MeshToonMaterial` with a 4-step ramp for bodies AND face parts:
+banded light and shadow gives clay-figure readability that survives distance and fog; the baked normal-y shading was reduced so the two do not fight, and the
+per-primitive tint was cut to ~4% because posterised tints made skin look camouflaged. `body.ts` owns the body builders (torso rings are shared with the
+wound dressings so bandages sit on the real surface). Rejected: sculpted/skinned meshes and imported assets (one dev, rigid-bone dismemberment,
+procedural variation); textures (vertex colour + ramp is enough for the target style).
+

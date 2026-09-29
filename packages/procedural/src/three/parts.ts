@@ -13,6 +13,7 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { loftGeometry, type Ring } from "./loft.ts";
 
 export type V3 = readonly [number, number, number];
 
@@ -62,13 +63,16 @@ export class PartBuilder {
     const c = new Color(color);
     const n = geo.attributes.position!.count;
     const normals = geo.attributes.normal!;
+    const own = geo.attributes.color; // lofts carry per-section colours; everything else is one flat colour
     const colors = new Float32Array(n * 3);
-    // Clay feel: each primitive gets its own slight tint (hand-sculpted patches) and every vertex is shaded by
-    // which way it faces: undersides darken (contact/occlusion cue under brims, chins, bellies), tops lift a touch.
-    const tint = 1 + (h01(this.seq++ * 7919 + Math.round(pos[1] * 1000)) - 0.5) * 0.09;
+    // Clay feel: a barely-there per-primitive tint (a few percent: enough to break up big flat areas, small enough that
+    // skin never looks camouflaged) and every vertex is shaded by which way it faces: undersides darken (contact/occlusion
+    // cue under brims, chins, bellies), tops lift a touch.
+    const tint = 1 + (h01(this.seq++ * 7919 + Math.round(pos[1] * 1000)) - 0.5) * 0.04;
     for (let i = 0; i < n; i++) {
       const ny = normals.getY(i);
-      const shade = tint * (ny < 0 ? 1 + ny * 0.34 : 1 + ny * 0.07);
+      const shade = tint * (ny < 0 ? 1 + ny * 0.22 : 1 + ny * 0.03); // toon lighting does the modelling; this only adds contact darkening underneath
+      if (own) c.setRGB(own.getX(i), own.getY(i), own.getZ(i));
       colors[i * 3] = Math.min(1, c.r * shade);
       colors[i * 3 + 1] = Math.min(1, c.g * shade);
       colors[i * 3 + 2] = Math.min(1, c.b * shade);
@@ -100,6 +104,11 @@ export class PartBuilder {
   torus(r: number, tube: number, color: number, pos?: V3, rot?: V3, scale?: V3, arc = Math.PI * 2): this {
     const radial = Math.max(8, Math.round((r * Math.max(scale?.[0] ?? 1, scale?.[1] ?? 1) >= 0.2 ? 18 : 12) * Math.min(1, arc / Math.PI + 0.2)));
     return this.add(new TorusGeometry(r, tube, PartBuilder.hullMode ? 3 : 4, PartBuilder.hullMode ? Math.max(6, Math.round(radial * 0.6)) : radial, arc), color, pos, rot, scale);
+  }
+  /** A smooth lofted form through cross-sections (see loft.ts): coats, sleeves, trouser legs, boots. */
+  loft(rings: readonly Ring[], color: number, pos?: V3, rot?: V3, scale?: V3, opts: { capBottom?: boolean; capTop?: boolean } = {}): this {
+    const segments = PartBuilder.hullMode ? 6 : 10;
+    return this.add(loftGeometry(rings, { color, segments, ...opts }), color, pos, rot, scale);
   }
   /** Capsule-like limb segment from (0,0,0) down to (0,-len,0): a stretched sphere pair via cylinder + caps. */
   limb(rTop: number, rBottom: number, len: number, color: number, pos: V3 = [0, 0, 0]): this {
@@ -138,7 +147,7 @@ export function singe(color: number, level: number): number {
   return c.getHex();
 }
 
-export const LEATHER = 0x2a1c14;
+export const LEATHER = 0x5a3a24;
 export const WOOD = 0x7a5230;
 export const CREAM = 0xe8dcc0;
 export const SOOT = 0x141210;

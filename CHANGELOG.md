@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### Added
+- Character rebuild: lofted torso, sleeves, trousers, coats and boots (real clothing forms), toon lighting, chunkier boots and hands, jacket details (lapels, epaulettes, braces, belts, pockets). Fewer triangles than before.
 - Wounds (zone + severity, server-owned) with bandage/plaster/stain visuals, limp and flinch, hit particles and ground stains, HUD injury chart, Gore Full/Reduced/Off.
 - Client-side Rapier ragdoll for knock-downs (capped, tethered, blends back to the lying pose); `@cb/physics` shared package.
 - Character art polish: silhouette outlines (per-preset), baked clay shading, rebuilt heads and faces, fist hands, teeth, more hair/beard/moustache/hat options.
