@@ -84,3 +84,55 @@ pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennan
 
 **What to watch on a real GPU.** The village is the one place in the game where ~230-320 more draw calls appear at once (the world itself is 64): people are 11-37 meshes each because the rig is not merged. The plan is already ranked by distance, so the first lever is `lod0`/`lod1` in `FOLK_BUDGETS`; the real fix is the merged LOD1 and instanced LOD2 already named under "Known character-cost risk". The shared geometry cache (`MAX_CACHE = 512` in `rig.ts`) holds ~11 entries per person per level: 22 people visiting all three levels is ~800, so walking through the village evicts and rebuilds bone geometry (a 6-40 ms hitch per rebuilt person). Raise the cache before playtests.
 
+
+## Software-renderer pass: the `test` preset, boot order, and a cheaper `low` (2026-09-30)
+Method (repeatable: `node scripts/boot-capture.mjs <low|medium|high|test> ["&shaderchecks=0"]`, needs `pnpm dev`): Headless Chromium, **SwiftShader software GL**, 800x450, one player in a room on the local server, a 4-core shared sandbox. "ms" is one full frame (shadow pass included) rendered and SYNCED with a `readPixels`, so the GPU process's time is in it; "fps" is rAF callbacks per second in game; "nameS" is navigation to Playwright seeing `#name`; "playableS" is navigation to a created session's first predicted position. **All of this is a software rasteriser: a floor, never a performance claim for players.** Before = HEAD before this pass, served from a second Vite on :5174 and run back to back with the after build.
+
+| Preset | Build | nameS | playableS | fps | ms/frame | draws / tris (one frame) | programs |
+|---|---|---|---|---|---|---|---|
+| low | before | 7.5-7.9 | 22.8-23.7 | 2.8-3.0 | 368-402 | 138 / 316k | 68 |
+| low | after | 0.6 (see note) | 24.0 (**16.0** with `&shaderchecks=0`) | **4.8** | **207** | 138 / 264k | 71 |
+| medium | before | 10.1 | 31.3 | 1.8 | 594 | - | 92 |
+| medium | after | 0.6 | 31.4 | 2.0 | 595 | 283 / 603k | 102 |
+| high | before | 10.2 | 31.6 | 1.6 | 762 | - | 92 |
+| high | after | 0.6 | 33.7 | 1.4 | 740 | 302 / 705k | 102 |
+| **test** (new) | after | 0.55-2.8 | **8.2-8.4** | **20-21** | **38-42** | 59 / 102k | 45 |
+
+Reading it: medium and high are unchanged in look and in cost (the small differences are noise; they carry about ten more linked programs than before, cause not found, see weak spots). `low` is about 45% cheaper per frame. `test` is what the e2e suite needs: 7x the frame rate of `low`, and a session starts in ~8 s instead of ~23. Note on nameS: Playwright polls `#name` with rAF, so when a long task owns the main thread the poll is late; the door itself is in the DOM at ~0.55 s (a `MutationObserver` mark in the page), and a run where the poll lands inside the WebGL-context stall reads 2.8-3.7 s. Before, it was 7.5+ s because nothing painted until the stage, the figure and the whole camp were built.
+
+### The `test` preset (`?gfx=test`, never listed in Settings: `GFX_PLAYER_LEVELS`)
+No shadow pass and no shadow sampling in any material, no MSAA, flat banded sky (no cloud decks, stars, moon), no ground cover / bushes / clutter / tree line / flock / ambient life / rain / water fx / trail overlay / ink / villagers, lite toon shading (no valley mist, no fire term), 64-segment terrain, trees and their far ring **drawn** at 40% (collision obstacles are the shared arena's and are never touched: `scatter.test.ts` proves thinning only removes), no camp behind the front door, three.js' per-program shader checks off (a one-shot `Stage.verifyPrograms()` at frame 90 logs any program that failed to link; proven with a deliberately broken shader), and a **half-size frame buffer** (`renderScale` 0.5: nobody reads those pixels; `coop-a.png` and friends are smaller and softer, use `scripts/shot.mjs` to look at art). Steps, each measured on the same machine:
+
+| Step | ms/frame | playableS |
+|---|---|---|
+| `low` as it was | 368-402 | 22.8-23.7 |
+| `test` without `renderScale` (shadows, sky, cover, people, AA gone) | 74 | 13.4-14.3 |
+| + shader checks off | 74 | 8.7-9.2 |
+| + half-size frame buffer | 38-42 | 8.2-8.4 |
+
+Two pages in one browser (the multi-player e2e shape) share one GPU process and every page renders every frame: a second page boots in ~12.6 s with the first already running (8.8 s alone), a third in ~19.5 s. The e2e timeouts hold, but this is why three-page tests are slow and why fewer pixels matter most.
+
+### Why boot was slow, and what changed
+A CPU profile of boot shows `WebGLProgram.getUniforms` -> `onFirstUse` (the wait for a program to be linked) at **6.2 s of 9.8** on `low`, and `getContext` (creating the GPU process's context) at 1.1-1.3 s. On SwiftShader every program costs about 70-160 ms to link whatever its size, there are 45-100 of them, and this build has **no `KHR_parallel_shader_compile`**, so `compileAsync` degrades to the sequential path here (it helps on real browsers; it is called before a session's first frame and raced against a 20 s timeout). Levers that did work:
+- **Door first.** `bootGame` builds the front door's DOM and audio hooks, then yields a paint, then (after 80 ms) makes the stage, controls, creator and figure, then (only if the preset wants it and nobody has clicked in 500 ms) builds the camp behind the door **hidden, with its shaders linked before it is revealed**. Clicking New campaign / Join cancels the backdrop from the click, not from the session. The door's first build of the camp used to cost ~3 s of main thread that the session then threw away and paid again (the door's lights, sun + rim + fill, give different programs from the game's single sun).
+- **`renderer.debug.checkShaderErrors`** (per-preset `shaderChecks`, `?shaderchecks=0|1`): three.js asks for the info log of the program and both shaders the first time a program is used, three blocking round trips each (~75 ms each under load here). Off: `playableS` 24-25 -> 16.0 on `low`, 13.4-14.3 -> 8.7-9.2 on `test`. Players keep the checks (a real driver answers in microseconds; the error log is worth having in bug reports); `test` turns them off and verifies once, later.
+- **`buildWorld` builds the new world before disposing the old one**, so programs both use stay linked instead of being destroyed and relinked (a live preset change no longer recompiles what did not change).
+- The idle scene no longer uploads buffers: `ShotFx` (a dozen pooled buffers, ~30 KB/frame) and `Projectiles` (96 matrices) skip their loops and uploads when nothing is alive and nothing was last frame. A 6 s CPU profile of steady state on `low` shows the main thread 91% idle and ~100 ms of JS in total: **the frame rate is entirely GPU-process time**, nothing allocates or rebuilds per frame that shows up.
+
+### `low`: what each change saved (ms/frame at 800x450, software GL; independent or sequential as stated)
+| Change | Saved | Kept? |
+|---|---|---|
+| **MSAA off** on `low` (canvas `antialias: false`; it is a context attribute, so a live preset change keeps the first choice until the next start) | 311 -> 225 (-86, 28%) | yes |
+| Trees at the coarse level of detail on `low` (`treeLod 0`: 20-face crown lobes, 5-sided limbs; about half the triangles, in the shadow pass too; world 180k -> 153k tris) | -13 | yes |
+| Sky drawn LAST with its depth pinned to the far plane | 0 here (SwiftShader shades every sky pixel either way: 50 ms with the world hidden or shown); early-Z does the work on a real GPU | yes (free) |
+| Shadows off entirely (for reference) | -54 | no: shadows are the look |
+| Hard one-tap shadow edge (`BasicShadowMap`) | -20 | **no**: acne along the yurt and tent at any bias that hid the terminator; PCF stays |
+| Flat sky for reference | -28 | no (test only) |
+| Sky without the high deck and without the lit-edge lookup | -5 | no: not worth a second look |
+| Sky with the stars, moon and lightning branches compiled out (they do not run at noon) | -19 | **not done**, a clear next lever: a day variant of the sky program swapped in while `stars`, `moon` and `flash` are zero (SwiftShader pays for the dead branches' code, a GPU would not) |
+| Grass 1800 -> 0 / flowers -> 0 / bushes -> 0 | -10 / -6 / -7 | no: look |
+| Trees drawn at 50% | -10 | no: look (this is what `test` does) |
+| Mist + fire term (`liteShading`) | -3 | no |
+| Villagers off / terrain 96 -> 64 segments | -3 / -2 | no |
+
+Not done, and why: **chunking the big instanced sets** so frustum culling (and the 68 m shadow frustum) can drop whole cells needs 10-30 more draws on `low`, and the WorldView budget test may only be lowered (low: 37 draws); **near-only shadow casters** needs the same split; **merged villager LODs** is the long-standing item under "Known character-cost risk" (villagers measured -3 ms at `low`, 3 visible, so not this pass); a **cloud texture** instead of the fbm would change the clouds' look and cost nothing on a GPU. Next measurement to take on a real GPU: MSAA on/off on an integrated GPU at 1080p, the shadow pass with the near/far split, and the sky day/night variant.

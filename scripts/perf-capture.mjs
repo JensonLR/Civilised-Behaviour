@@ -1,4 +1,4 @@
-// Headless client performance capture. Usage: node scripts/perf-capture.mjs [WxH] [low|medium|high] [seconds]
+// Headless client performance capture. Usage: node scripts/perf-capture.mjs [WxH] [low|medium|high|test] [seconds]
 // Requires `pnpm dev` (server + client) to be running. Software GL numbers are a floor, not a target:
 // real-GPU numbers go in docs/PERFORMANCE.md separately.
 import { chromium } from "@playwright/test";

@@ -205,7 +205,13 @@ class BillboardPool {
     (this.mesh.geometry as InstancedBufferGeometry).instanceCount = n;
   }
 
+  private last = 0;
+
+  /** Uploads the three buffers, unless nothing was drawn last frame and nothing is this frame (an idle pool costs no buffer traffic). */
   flush(): void {
+    const c = (this.mesh.geometry as InstancedBufferGeometry).instanceCount;
+    if (c === 0 && this.last === 0) return;
+    this.last = c;
     this.pos.needsUpdate = true;
     this.col.needsUpdate = true;
     this.rot.needsUpdate = true;
@@ -738,6 +744,9 @@ export class ShotFx {
     return { puffs, flashes, streaks, debris };
   }
 
+  /** How many of each pool were drawn last frame: when that and this frame's are both zero, nothing is uploaded. */
+  private readonly lastDrawn = { streaks: 0, debris: 0, rings: 0, marks: 0 };
+
   update(dtReal: number): void {
     const dt = dtReal * this.slow;
     this.time += dt;
@@ -813,9 +822,12 @@ export class ShotFx {
       n++;
     }
     (this.streaks.geometry as InstancedBufferGeometry).instanceCount = n;
-    this.sA.needsUpdate = true;
-    this.sB.needsUpdate = true;
-    this.sC.needsUpdate = true;
+    if (n > 0 || this.lastDrawn.streaks > 0) {
+      this.sA.needsUpdate = true;
+      this.sB.needsUpdate = true;
+      this.sC.needsUpdate = true;
+    }
+    this.lastDrawn.streaks = n;
 
     // debris
     let maxLive = 0;
@@ -852,7 +864,8 @@ export class ShotFx {
       this.deb.setMatrixAt(i, d.matrix);
     }
     this.deb.count = maxLive;
-    this.deb.instanceMatrix.needsUpdate = true;
+    if (maxLive > 0 || this.lastDrawn.debris > 0) this.deb.instanceMatrix.needsUpdate = true;
+    this.lastDrawn.debris = maxLive;
 
     // shock rings
     let rn = 0;
@@ -871,8 +884,11 @@ export class ShotFx {
       rn++;
     }
     this.ring.count = rn;
-    this.ring.instanceMatrix.needsUpdate = true;
-    alpha.needsUpdate = true;
+    if (rn > 0 || this.lastDrawn.rings > 0) {
+      this.ring.instanceMatrix.needsUpdate = true;
+      alpha.needsUpdate = true;
+    }
+    this.lastDrawn.rings = rn;
 
     // ground scars: appear at once, hold, fade over the last quarter of their life
     let mn = 0;
@@ -892,9 +908,12 @@ export class ShotFx {
       mn++;
     }
     this.marks.count = mn;
-    this.marks.instanceMatrix.needsUpdate = true;
-    ma.needsUpdate = true;
-    ms.needsUpdate = true;
+    if (mn > 0 || this.lastDrawn.marks > 0) {
+      this.marks.instanceMatrix.needsUpdate = true;
+      ma.needsUpdate = true;
+      ms.needsUpdate = true;
+    }
+    this.lastDrawn.marks = mn;
     this.whizzCool = Math.max(0, this.whizzCool - dt);
   }
 

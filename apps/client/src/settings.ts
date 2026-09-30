@@ -264,14 +264,19 @@ export const setMuteUnfocused = (on: boolean): void => muteUnfocused.set(on);
 
 // ---- video -----------------------------------------------------------------------------------------------------------------------------
 
-export type Gfx = "low" | "medium" | "high";
-export const GFX_LEVELS: readonly Gfx[] = ["low", "medium", "high"];
+/**
+ * Graphics presets. `test` is NOT a player option: it is the software-renderer preset for the e2e suite and headless tooling (`?gfx=test`; no
+ * shadows, sky clouds, ground cover, ambient life or villagers, see `PRESETS.test`), so the Settings screen lists `GFX_PLAYER_LEVELS` only.
+ */
+export type Gfx = "low" | "medium" | "high" | "test";
+export const GFX_PLAYER_LEVELS: readonly Gfx[] = ["low", "medium", "high"];
+export const GFX_LEVELS: readonly Gfx[] = [...GFX_PLAYER_LEVELS, "test"];
 let gfx: Gfx | undefined;
-/** Graphics preset. `?gfx=` overrides for the session (the e2e suite runs on `low`). */
+/** Graphics preset. `?gfx=` overrides for the session (the e2e suite runs on `test`). */
 export function getGfx(): Gfx {
   if (gfx) return gfx;
   const raw = readStored("cb.gfx", "gfx");
-  gfx = raw === "low" || raw === "medium" || raw === "high" ? raw : "medium";
+  gfx = raw === "low" || raw === "medium" || raw === "high" || raw === "test" ? raw : "medium";
   return gfx;
 }
 export function setGfx(level: Gfx): void {

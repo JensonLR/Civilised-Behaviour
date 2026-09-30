@@ -80,13 +80,21 @@ export function applyDaySky(u: SkyUniforms, d: DayState): void {
   }
 }
 
+export type SkyDetail = "flat" | "full";
+
 /**
  * A painted sky. Everything is stepped like the characters' toon ramp: the gradient climbs in soft-edged bands, two cloud layers drift
  * at different speeds and heights (a low puffy deck with a lit and a shaded tone, lit on the side facing the sun, and a high thin
  * deck of streaks), the sun is a disc with a thin ring and two halo bands, a warm glow pools on the horizon behind it, and at night
  * the moon (a gibbous disc with a halo) and a few hundred twinkling stars replace it. All from hashed noise; no textures.
+ *
+ * The dome is drawn LAST with its depth pinned to the far plane (`gl_Position.z = w`), so the depth test throws away every pixel the ground,
+ * hills and trees already cover before the (expensive) fragment shader runs: only the sky you can see is shaded. `lite` compiles a flat banded
+ * gradient with the sun's disc and glow, no clouds, stars or moon (the test preset: a software rasteriser pays for every noise call). Measured
+ * and dropped: a middle "one cloud deck, no second noise lookup" sky saved 5 ms of 210 per frame on the software rasteriser.
  */
-export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms } {
+export function buildSky(sunDir: Vector3, detail: SkyDetail = "full"): { mesh: Mesh; uniforms: SkyUniforms } {
+  const lite = detail === "flat";
   const c = (hex: number): { value: Color } => ({ value: new Color(hex) });
   const uniforms: SkyUniforms = {
     top: c(PALETTE.sky.top),
@@ -118,8 +126,9 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
     depthWrite: false,
     fog: false,
     uniforms: uniforms as unknown as Record<string, { value: unknown }>,
-    vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = (projectionMatrix * modelViewMatrix * vec4(position,1.0)).xyww; }",
     fragmentShader: /* glsl */ `
+      ${lite ? "#define SKY_LITE" : ""}
       varying vec3 vDir;
       uniform vec3 top; uniform vec3 mid; uniform vec3 horizon; uniform vec3 glow;
       uniform vec3 cloudLit; uniform vec3 cloudShade; uniform vec3 cloudHigh;
@@ -150,6 +159,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         float pool = pow(toSun, 3.0) * (1.0 - smoothstep(0.0, 0.4 + 0.25 * uDusk, h));
         col = mix(col, glow, band(pool, 4.0) * (0.55 + 0.5 * uDusk) * sunUp);
 
+        #ifndef SKY_LITE
         // stars: a sparse bright layer, a dense faint one, a milky band of extra faint ones, and now and then a shooting star
         if (uStars > 0.01 && d.y > 0.0) {
           vec2 suv = vec2(atan(d.z, d.x) * 9.0, asin(clamp(d.y, -1.0, 1.0)) * 16.0);
@@ -213,6 +223,8 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
           }
         }
 
+        #endif
+
         // sun: disc with a ring and two halo bands
         float ang = acos(clamp(dot(d, normalize(sunDir)), -1.0, 1.0));
         float halo = 1.0 - smoothstep(0.0, 0.42, ang);
@@ -221,6 +233,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         col = mix(col, sunRing, ring * 0.85 * sunSee);
         col = mix(col, sunDisc, (1.0 - smoothstep(0.032, 0.036, ang)) * sunSee);
 
+        #ifndef SKY_LITE
         // high deck: thin stretched streaks, slow, banded in two tones
         vec2 huv = d.xz / (d.y + 0.16) * 0.5 + vec2(uTime * 0.0022, uTime * 0.0006);
         float hn = fbm(vec2(huv.x * 0.9, huv.y * 3.2) * 1.4 + 5.0);
@@ -251,6 +264,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         cc = mix(cc, cloudShade * 0.5, sunSide * 0.55 * (1.0 - rim));
         cc = mix(cc, glow * 1.35, rim * sunSide * 1.6 + rim * uDusk * 0.25);
         col = mix(col, cc, body);
+        #endif
         // rain curtain: the low sky greys out
         col = mix(col, horizon, uRain * (1.0 - smoothstep(0.0, 0.5, h)) * 0.55);
         // lightning: a jagged bolt in the sky for the first instants, then the whole dome flares (clouds most)
@@ -263,7 +277,11 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
           float bolt = (1.0 - smoothstep(0.0012, 0.0036, da)) * smoothstep(0.02, 0.09, el) * (1.0 - smoothstep(0.5, 0.62, el));
           bolt = max(bolt, (1.0 - smoothstep(0.001, 0.0028, fork)) * smoothstep(0.27, 0.3, el) * (1.0 - smoothstep(0.36, 0.5, el)) * 0.8);
           col = mix(col, flashCol, bolt * uBolt.y * smoothstep(0.25, 0.75, uFlash));
+          #ifdef SKY_LITE
+          col = mix(col, flashCol, uFlash * 0.3);
+          #else
           col = mix(col, flashCol, uFlash * (0.3 + 0.5 * body));
+          #endif
         }
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
@@ -273,5 +291,6 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
   const mesh = new Mesh(new SphereGeometry(400, 32, 20), mat);
   mesh.frustumCulled = false;
   mesh.name = "sky";
+  mesh.renderOrder = 1000; // last among the opaque draws (its depth is the far plane, so only uncovered pixels are shaded)
   return { mesh, uniforms };
 }

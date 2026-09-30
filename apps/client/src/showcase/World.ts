@@ -30,7 +30,7 @@ import { folkHints } from "../render/world/villagers.ts";
  *   propline=1 one crate, barrel, bottle and chair in a row at (0, -3) instead of the scatter
  */
 export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): void {
-  const stage = new Stage(canvas, (params.get("gfx") as "low" | "medium" | "high" | null) ?? "medium");
+  const stage = new Stage(canvas, (params.get("gfx") as import("../render/Stage.ts").PresetName | null) ?? "medium");
   const seed = Number(params.get("seed") ?? 7);
   const world = createArena(seed);
   stage.buildWorld(world);

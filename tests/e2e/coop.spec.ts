@@ -17,7 +17,7 @@ const hook = (page: Page) => page.evaluate(() => {
 });
 
 async function start(page: Page, name: string, code?: string, extra = "") {
-  await page.goto(code ? `/?join=${code}&gfx=low${extra}` : `/?gfx=low${extra}`); // low preset: fewer pixels/shadows for the software rasteriser
+  await page.goto(code ? `/?join=${code}&gfx=test${extra}` : `/?gfx=test${extra}`); // test preset: no shadows, sky clouds, ground cover or people, half-size frame buffer (see PRESETS.test): ~4x the frame rate on the software rasteriser
   await page.waitForSelector("#name", { timeout: 120_000 }); // the game boots via dynamic import after `load` (2-3 s idle; software GL under load can take much longer)
   await page.fill("#name", name);
   await page.click(code ? "#join" : "#create");
@@ -112,7 +112,7 @@ test("character creator: customise, join, and each player sees the other's look"
   const pageWith = async (name: string, code?: string) => {
     const page = await (await browser.newContext()).newPage();
     page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto(code ? `/?join=${code}&gfx=low` : "/?gfx=low");
+    await page.goto(code ? `/?join=${code}&gfx=test` : "/?gfx=test");
     await page.waitForSelector(".creator .fields"); // the game boots via dynamic import after `load`
     return page;
   };

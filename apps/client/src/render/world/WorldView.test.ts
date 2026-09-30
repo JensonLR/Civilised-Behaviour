@@ -20,7 +20,7 @@ afterAll(() => {
 const sun = new Vector3(-0.55, 0.62, 0.42).normalize();
 
 describe("WorldView budget", () => {
-  for (const name of ["low", "medium", "high"] as const) {
+  for (const name of ["test", "low", "medium", "high"] as const) {
     it(`${name}: the whole world is within its draw-call and triangle budget`, () => {
       const view = new WorldView(new Scene(), createArena(7), PRESETS[name], sun);
       if (process.env.WORLD_STATS) process.stderr.write(`${name} ${JSON.stringify(view.stats)}\n`);
@@ -30,19 +30,31 @@ describe("WorldView budget", () => {
       // and the wild ones now share one collapsing mesh per group: 4 draws, as before). Measured: low 36, medium 64, high 64. Everything else that is new rides
       // inside an existing mesh: the HQ marquee, the windmill and the snow range (hills), the lit windows (lantern glass), the dragonflies (butterflies),
       // the swallows (birds).)
-      expect(view.stats.meshes).toBeLessThanOrEqual(name === "low" ? 37 : 66);
+      expect(view.stats.meshes).toBeLessThanOrEqual(name === "test" ? 28 : name === "low" ? 37 : 66);
       // (2026-09-30: 150k / 300k / 380k -> 160k / 330k / 440k. The Observatory is now a walk-in ruin of real stone courses with a ribbed copper dome
       // (+8k), the hill tree line has proper lumpy crowns instead of paper hexagons (+~15k medium), the camp cloth is its own mesh, and rain is one
       // pooled quad set (+4k medium, 7k high, vertex-culled when it is dry). See docs/PERFORMANCE.md.)
       // (2026-09-30, the settlement: 160k / 330k / 440k -> 195k / 430k / 540k. Measured: 180k / 420k / 525k. Village 41k + 14k hull, crags 9k, the animals 30k
       // (a collapsed species still counts here, though its triangles are dropped at primitive assembly), a doubled ground detail pass costs shader time not
       // triangles. See docs/PERFORMANCE.md.)
-      expect(view.stats.triangles).toBeLessThan(name === "low" ? 195_000 : name === "medium" ? 430_000 : 540_000);
+      // (2026-09-30, performance pass: low's trees are built at the coarse level of detail (20-face crown lobes: half the triangles, in the shadow pass too), 195k -> 160k
+      // (measured 153k); the test preset (software rasteriser) has no ground cover, tree line or bushes and thinner trees: measured 106k.)
+      expect(view.stats.triangles).toBeLessThan(name === "test" ? 115_000 : name === "low" ? 160_000 : name === "medium" ? 430_000 : 540_000);
       expect(view.stats.meshes).toBeGreaterThan(12);
       view.update(1.5); // animates without throwing or allocating scene objects
       view.dispose();
     });
   }
+
+  it("the test preset builds no people, no grass and no ambient life, and keeps the camp, the village and the ruin", () => {
+    const scene = new Scene();
+    const view = new WorldView(scene, createArena(7), PRESETS.test, sun);
+    for (const part of ["grass", "daisies", "ferns", "bush", "hill-rounds", "hill-conifers"]) expect(view.root.getObjectByName(part), part).toBeUndefined();
+    for (const part of ["terrain", "hills", "camp", "village", "ruin", "water"]) expect(view.root.getObjectByName(part), part).toBeDefined();
+    expect(view.folkView).toBeUndefined();
+    view.update(1, { x: 0, y: 0, z: 0 }); // (no villagers to update)
+    view.dispose();
+  });
 
   it("outlines follow the preset: none on low, one hull per solid set on medium and high", () => {
     const hulls = (name: "low" | "medium"): number => {

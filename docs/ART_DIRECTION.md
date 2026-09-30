@@ -179,7 +179,7 @@ node scripts/shot.mjs "?showcase=world&cam=13,0.8,22&at=14,0.25,20&push=14,20&fi
 node scripts/shot.mjs "?showcase=world&view=village|vtop|vmarket|vjetty|vweir|b-gate|b-hall|b-mill|b-shop|b-stilt-w|b-gran-a|b-stall-1&time=12&figures=0&props=0" out.png   # Hollowmere (d=N distance, a=N angle round a building)
 node scripts/shot.mjs "?showcase=world&view=village&time=18.3|21|7&moon=0.5" out.png    # dusk, lit windows, dawn mist; moon phase 0..1
 node scripts/shot.mjs "?showcase=world&cam=-13,3,-30&at=-21,-3,-35&time=11&figures=0&props=0&fov=45" out.png   # the pond and its ducks (camera y is world y; the village ground is about -2 to -3)
-node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png    # low preset (no ink, no ambient life, no rain or puddles, no flock, vertex-painted paths)
+node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png    # low preset (no ink, no MSAA, coarse tree crowns, no ambient life, no rain or puddles, no flock, vertex-painted paths); gfx=test is the e2e preset (see PERFORMANCE.md)
 ```
 
 ## Interface (D-024)

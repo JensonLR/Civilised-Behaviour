@@ -246,6 +246,13 @@ const SEASON_BODY = /* glsl */ `
   }
 `;
 
+/**
+ * Lite shading (the test preset, for software rasterisers): scenery materials drop the valley mist (two noise lookups per fragment) and the
+ * campfire's warm term. Set by `WorldView` before it builds any material; part of the program cache key.
+ */
+let toonLite = false;
+export const setToonLite = (on: boolean): void => void (toonLite = on);
+
 export interface ToonOptions {
   doubleSided?: boolean;
   wind?: WindKind;
@@ -273,7 +280,8 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   const m = new MeshToonMaterial({ vertexColors: true, gradientMap: sharedToonRamp() });
   if (opts.doubleSided) m.side = DoubleSide; // never pass `side: undefined`: three warns about it
   const wind = opts.wind ?? "none";
-  const fire = opts.fire ?? true;
+  const lite = toonLite;
+  const fire = (opts.fire ?? true) && !lite;
   const patch = opts.colourPatch;
   const puddles = opts.puddles ?? false;
   const vpatch = opts.vertexPatch;
@@ -319,7 +327,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}`,
     );
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
     fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}`);
@@ -337,10 +345,10 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
       );
     }
     // Valley mist: ground fog that pools in the low country and thickens toward the far end of the view, on top of the ordinary exponential fog.
-    fs = fs.replace("#include <fog_fragment>", MIST_FOG);
+    if (!lite) fs = fs.replace("#include <fog_fragment>", MIST_FOG);
     shader.fragmentShader = fs;
   };
-  m.customProgramCacheKey = (): string => `world|${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}`;
+  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}`;
   return m;
 }
 

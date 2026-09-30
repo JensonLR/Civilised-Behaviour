@@ -3,7 +3,7 @@ import { RIVER, createArena, inCampFootprint, nearTrail, villageKeepOut, waterEd
 import { PRESETS } from "../Stage.ts";
 import { BLOOM_HUES, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 
-const detail = (name: "low" | "medium" | "high") => PRESETS[name];
+const detail = (name: "test" | "low" | "medium" | "high") => PRESETS[name];
 const all = (p: ScatterPlan): [string, Item[]][] => Object.entries(p).filter(([k]) => k !== "butterflies") as [string, Item[]][];
 const inside = (o: Obstacle, x: number, z: number, margin: number): boolean => (o.kind === "circle" ? Math.hypot(o.x - x, o.z - z) < o.r + margin : Math.hypot(o.x - x, o.z - z) < Math.hypot(o.hx, o.hz) * 0.7 + margin);
 
@@ -84,6 +84,25 @@ describe("where things grow", () => {
     expect(low.daisies.length + low.cups.length).toBeLessThanOrEqual(PRESETS.low.flowers);
     expect(low.ferns.length + low.reeds.length + low.mushrooms.length).toBeLessThan(high.ferns.length + high.reeds.length + high.mushrooms.length);
     expect(low.bushes.length + low.berries.length).toBeLessThanOrEqual(PRESETS.low.bushes);
+  });
+
+  it("thinning the trees is visual only: the test preset draws a share of them, each on a real obstacle, and the arena's obstacles are the same objects and count", () => {
+    const fresh = createArena(7);
+    const before = JSON.stringify(fresh.obstacles);
+    const n = fresh.obstacles.length;
+    const thin = planScatter(fresh, detail("test"));
+    const full = planScatter(fresh, { ...detail("test"), treeDensity: 1 });
+    expect(fresh.obstacles.length).toBe(n);
+    expect(JSON.stringify(fresh.obstacles)).toBe(before); // planning never touches the shared obstacles (collision stays identical to the server's)
+    const trees = (p: ScatterPlan): number => p.broadleaf.length + p.acacia.length + p.birch.length + p.pine.length + p.snag.length;
+    expect(trees(full)).toBeGreaterThan(100);
+    expect(trees(thin)).toBeLessThan(trees(full) * 0.6);
+    expect(trees(thin)).toBeGreaterThan(trees(full) * 0.25);
+    const key = (t: Item): string => `${t.x}|${t.z}`;
+    const fullAt = new Set([...full.broadleaf, ...full.acacia, ...full.birch, ...full.pine, ...full.snag].map(key));
+    for (const t of [...thin.broadleaf, ...thin.acacia, ...thin.birch, ...thin.pine, ...thin.snag]) expect(fullAt.has(key(t)), key(t)).toBe(true); // thinning only ever removes: nothing new, nothing moved
+    // density 1 is exactly the old behaviour: every preset that leaves it out gets the whole forest
+    expect(planScatter(fresh, detail("low"))).toEqual(planScatter(fresh, { ...detail("low"), treeDensity: undefined }));
   });
 
   it("works on any seed and on a world with no obstacles at all", () => {

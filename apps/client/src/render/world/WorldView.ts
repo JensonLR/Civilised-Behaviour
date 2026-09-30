@@ -62,11 +62,19 @@ import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type Scatt
 import { setRgb } from "./sky.ts";
 import { buildTerrain, groundDetailTexture, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
 import { buildFalls, buildWaterMesh, type WaterUniforms } from "./water.ts";
-import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, toonMaterial, villageUniforms, windowLight, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
+import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, setToonLite, toonMaterial, villageUniforms, windowLight, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
 
 /** What a graphics preset decides about the world. */
 export interface WorldDetail {
   outlines: boolean;
+  /** Toon materials without valley mist and the fire's warm term (software rasterisers). */
+  liteShading: boolean;
+  /** Hollowmere's ambient people (false builds none). */
+  villagers: boolean;
+  /** Level of detail of the trees' visible mesh: 1 full, 0 the coarse shape (20-face crown lobes, 5-sided limbs: about half the triangles, in the shadow pass too). */
+  treeLod: Lod;
+  /** Share of trees and their shrubs that are drawn (0..1); collision obstacles never thin out. */
+  treeDensity: number;
   terrainSegments: number;
   grassTufts: number;
   flowers: number;
@@ -109,6 +117,8 @@ interface SetOptions {
   noCull?: boolean;
   /** Leaves take the region's autumn (the material must have `season: true`). */
   season?: boolean;
+  /** Which level of detail the VISIBLE mesh is built at (default 1; 0 is the coarse hull shape: half the triangles). */
+  lod?: Lod;
 }
 
 /**
@@ -140,6 +150,7 @@ export class WorldView {
     sun: Vector3,
   ) {
     this.root.name = "world";
+    setToonLite(detail.liteShading);
     scene.add(this.root);
     this.hillU = createHillUniforms(sun);
     this.addTerrain();
@@ -235,7 +246,7 @@ export class WorldView {
   private instanced(name: string, build: (lod: Lod) => BufferGeometry, material: MeshToonMaterial, items: readonly Item[], colours: Color[] | undefined, o: SetOptions = {}): InstanceSet | undefined {
     if (items.length === 0) return undefined;
     const mats = items.map((it) => composeInstance(new Matrix4(), it.x, it.y, it.z, it.yaw, it.sx, it.sy, it.sz, it.tiltX ?? 0, it.tiltZ ?? 0));
-    const geo = this.track(build(1));
+    const geo = this.track(build(o.lod ?? 1));
     const ink = this.detail.outlines && o.ink !== undefined;
     const hull = ink ? this.track(build(0)) : undefined;
     const set = makeInstances(this.root, geo, material, mats, colours, { name, castShadow: o.shadow ?? false, outline: ink, ink: o.ink, wind: o.wind, hullGeometry: hull });
@@ -276,7 +287,7 @@ export class WorldView {
     if (this.detail.species) {
       kinds.push({ key: "birch", build: birchGeometry, items: p.birch, mat: treeMat, season: true }, { key: "pine", build: pineGeometry, items: p.pine, mat: pineMat, season: false });
     }
-    for (const k of kinds) this.instanced(k.key, k.build, k.mat, k.items, k.items.map((i) => this.varied(i.v, 0.16)), { shadow: true, ink: "large", wind: "tree", season: k.season });
+    for (const k of kinds) this.instanced(k.key, k.build, k.mat, k.items, k.items.map((i) => this.varied(i.v, 0.16)), { shadow: true, ink: "large", wind: "tree", season: k.season, lod: this.detail.treeLod });
     this.instanced("bush", bushGeometry, bushMat, p.bushes, p.bushes.map((i) => this.varied(i.v, 0.2)), { season: true });
     this.instanced("berry-bush", berryBushGeometry, bushMat, p.berries, p.berries.map((i) => this.varied(i.v, 0.12)), { season: true });
   }
@@ -481,6 +492,7 @@ export class WorldView {
   private readonly folkFrame = { hours: 12, worldSec: 0, rain: 0, x: 0, y: 0, z: 0, walkers: this.walkers, walkerCount: 0 };
 
   private addFolk(): void {
+    if (!this.detail.villagers) return;
     const budget = folkBudget(this.detail);
     if (budget.count <= 0) return;
     this.folk = new Villagers(this.scene, this.world, budget);

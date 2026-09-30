@@ -32,7 +32,7 @@ test("V-alternative (X) toggles first person: head hidden, camera at the eyes, c
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => m.type() === "error" && !/favicon|Failed to load resource/.test(m.text()) && errors.push(m.text()));
 
-  await page.goto("/?gfx=low&view=third"); // explicit: the saved choice is per browser
+  await page.goto("/?gfx=test&view=third"); // explicit: the saved choice is per browser
   await page.waitForSelector("#name", { timeout: 60_000 });
   await page.fill("#name", "Periscope");
   await page.click("#create");

@@ -51,6 +51,8 @@ export interface ScatterDetail {
   bushes: number;
   /** Multiplier on ferns, mushrooms and reeds. */
   clutter: number;
+  /** Share (0..1, default 1) of the trees and snags that are drawn. The obstacles themselves are the shared arena's and never thin out; only the picture does. */
+  treeDensity?: number;
 }
 
 export interface ScatterPlan {
@@ -113,6 +115,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
   /** Free ground for a plant: no obstacle, no bare path, not in the water. */
   const freeGround = (x: number, z: number, margin: number): boolean => !blocked(x, z, margin) && !nearTrail(x, z, 0.25) && waterEdgeDistance(x, z) > 0.25;
   const rng = new Rng(0xb05e);
+  const treeDensity = detail.treeDensity ?? 1;
   const trees: { x: number; z: number; r: number; kind: TreeKind }[] = [];
 
   // ---- trees, snags and the shrubs round them ---------------------------------------------------------------------------------
@@ -125,6 +128,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
   for (const o of world.obstacles) {
     const tag = classifyObstacle(o);
     if (o.kind !== "circle" || (tag !== "tree" && tag !== "snag")) continue;
+    if (treeDensity < 1 && h01(31, o.x, o.z) >= treeDensity) continue; // (drawn thinner; the obstacle stays)
     const kind = tag === "snag" ? "snag" : treeSpecies(o.x, o.z);
     const y = h(o.x, o.z);
     const s = (o.r / TREE_BASE_RADIUS) * (0.94 + h01(1, o.x, o.z) * 0.14);
@@ -151,7 +155,9 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
       const z = cz + Math.sin(t) * d;
       const kind = treeSpecies(x, z);
       const s = 0.9 + far.next() * 0.55;
-      plan[kind].push(item(x, visualHeight(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next()));
+      const it = item(x, visualHeight(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next());
+      if (treeDensity < 1 && h01(32, x, z) >= treeDensity) continue; // (after the draws above, so thinning never shifts the trees that stay)
+      plan[kind].push(it);
     }
   }
   // lone shrubs in the open

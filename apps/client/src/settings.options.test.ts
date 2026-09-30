@@ -95,6 +95,14 @@ describe("persistence and overrides", () => {
     expect(store["cb.gfx"]).toBe("high");
   });
 
+  it("the test preset is reachable by URL or storage but is never offered to players", async () => {
+    const a = await load({ search: "?gfx=test" });
+    expect(a.s.getGfx()).toBe("test");
+    expect(a.s.GFX_PLAYER_LEVELS).toEqual(["low", "medium", "high"]);
+    expect(a.s.GFX_LEVELS).toContain("test");
+    expect((await load({ store: { "cb.gfx": "test" } })).s.getGfx()).toBe("test");
+  });
+
   it("blocked storage still works for the session", async () => {
     const { s } = await load({ storageThrows: true });
     expect(s.getVolume("sfx")).toBe(0.9);

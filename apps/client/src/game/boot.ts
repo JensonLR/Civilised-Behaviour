@@ -17,7 +17,19 @@ import { Menu } from "../ui/Menu.ts";
 import { SoundPlaque } from "../ui/SoundPlaque.ts";
 import { Game } from "./Game.ts";
 
-/** Boots the networked game: stage, controls and the create/join menu. */
+/** Resolves after the browser has painted what was just added to the page (so a heavy step that follows cannot delay it). */
+const afterPaint = (delayMs = 0): Promise<void> => new Promise((r) => requestAnimationFrame(() => setTimeout(r, delayMs)));
+
+const idleFor = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Boots the networked game in three steps so the page never waits on work it does not need yet:
+ *  1. the front door (DOM only: name, buttons, settings, how-to) and the audio hooks; this paints first, so the page is usable at once;
+ *  2. after that paint: the stage (WebGL context, sky), controls, the character creator and the figure, which start drawing;
+ *  3. after another half second, if nobody has started a session (and the preset wants one): the camp behind the door (`createArena` +
+ *     `Stage.buildWorld`, about a second of JS), its shaders linked in parallel.
+ * A session that starts sooner waits for step 2 (it needs the stage) and builds its own world; step 3 is then never done.
+ */
 export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): void {
   const hud = document.querySelector<HTMLElement>("#hud")!;
   const menuEl = document.querySelector<HTMLElement>("#menu")!;
@@ -31,13 +43,6 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     applyDisplaySettings();
     applyMotion();
   });
-  const stage = new Stage(canvas, getGfx());
-  onSettingChange((k) => {
-    if (k === "gfx" || k === "all") stage.setPreset(getGfx());
-  });
-  const controls = new Controls(canvas, { sensitivity: 0.0022, padSensitivity: 1, holdToSprint: true });
-  onInputBlocked((blocked) => (controls.blocked = blocked)); // a settings / pause / manual sheet is up: hands off the game
-  new Captions(document.body);
   attachUiSounds(document.body);
   startAmbience(); // sound begins at the first click or key press (browsers require a gesture); the front door has wind, birds and a fire
   startMusic("menu");
@@ -47,9 +52,12 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       openHowTo();
     }
   });
-  stage.setTime(17.2); // the front door sits at golden hour in the camp; a joined room's clock takes over (Game feeds it to the stage)
   new SoundPlaque(document.body); // "Click anywhere to enable sound" until the audio context has had its gesture
 
+  let stage!: Stage;
+  let controls!: Controls;
+  let preview!: CreatorPreview;
+  let pause!: Pause;
   let game: Game | undefined;
   let session: Session | undefined;
 
@@ -73,19 +81,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   let look = loadLook();
   saveLook(look);
 
-  // The front door's backdrop is the real camp (arena seed 7). Building the world takes about a second, so the door is drawn first (the golden sky and the
-  // figure) and the camp is built after that first paint; a session that starts sooner simply builds its own world and this one is never made.
-  const preview = new CreatorPreview(stage, canvas);
   let backdropWanted = true;
-  const buildBackdrop = (): void => {
-    if (!backdropWanted) return;
-    const world = createArena(7);
-    stage.buildWorld(world);
-    preview.setGround((x, z) => world.terrainHeight(x, z));
-    canvas.dataset.backdrop = "ready";
-  };
-  requestAnimationFrame(() => setTimeout(buildBackdrop, 60));
-
   let removeChrome: (() => void) | undefined;
   function showHud(s: Session): void {
     hud.hidden = false;
@@ -93,9 +89,56 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     removeChrome = buildHudChrome(hud, s.code, `${location.origin}${location.pathname}?join=${s.code}`);
   }
 
+  // Step 2 (after the door has painted): everything that needs the GPU.
+  const ready = afterPaint(80).then(() => {
+    // (80 ms: creating the WebGL context alone can block the page for a second on some machines; let the door be seen and clicked first)
+    stage = new Stage(canvas, getGfx());
+    onSettingChange((k) => {
+      if (k === "gfx" || k === "all") stage.setPreset(getGfx());
+    });
+    controls = new Controls(canvas, { sensitivity: 0.0022, padSensitivity: 1, holdToSprint: true });
+    onInputBlocked((blocked) => (controls.blocked = blocked)); // a settings / pause / manual sheet is up: hands off the game
+    new Captions(document.body);
+    stage.setTime(17.2); // the front door sits at golden hour in the camp; a joined room's clock takes over (Game feeds it to the stage)
+    pause = new Pause({
+      canvas,
+      invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: session.room.state.players.size } : undefined),
+      leave: () => {
+        session?.leave();
+        location.assign(location.pathname); // back to the front door with a clean slate (the world, sockets and audio all restart)
+      },
+    });
+    preview = new CreatorPreview(stage, canvas);
+    const initial = decodeSpec(look)!;
+    new CharacterCreator(menu.creatorHost, initial, (spec) => {
+      look = encodeSpec(spec);
+      saveLook(look);
+      preview.setSpec(spec);
+    });
+    preview.setSpec(initial);
+    preview.start();
+  });
+
+  // Step 3 (after the next paint): the real camp behind the door. The world is built hidden and its shaders are linked in parallel, so the door
+  // keeps animating and the camp appears whole.
+  void ready
+    .then(() => afterPaint())
+    .then(async () => {
+      if (!backdropWanted || !stage.menuBackdrop) return;
+      await idleFor(500); // the door is usable first; anyone who clicks "New campaign" in that time never pays for a camp they will not see
+      if (!backdropWanted) return;
+      const world = createArena(7);
+      await stage.buildWorldAsync(world, () => backdropWanted);
+      if (!backdropWanted) return;
+      preview.setGround((x, z) => world.terrainHeight(x, z));
+      canvas.dataset.backdrop = "ready";
+    })
+    .catch((e) => console.error("backdrop failed", e));
+
   async function enter(s: Session): Promise<void> {
     backdropWanted = false;
     menu.progress("Surveying the territory...");
+    await ready;
     // let the working card paint before the (synchronous) world build blocks the page
     await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));
     preview.stop();
@@ -105,6 +148,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     s.room.onLeave((code) => {
       if (code !== 4000) console.warn("Left room", code);
     });
+    await stage.precompile(); // link the game's shaders in parallel instead of one stall per first draw
     game.start();
     canvas.focus();
     startMusic("game");
@@ -114,37 +158,20 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     }
   }
 
-  const pause = new Pause({
-    canvas,
-    invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: session.room.state.players.size } : undefined),
-    leave: () => {
-      session?.leave();
-      location.assign(location.pathname); // back to the front door with a clean slate (the world, sockets and audio all restart)
-    },
-  });
-
   const menu = new Menu(menuEl, {
     onCreate: async (name, rules, progress) => {
+      backdropWanted = false; // (from the click, not from the session: the camp behind the door is not worth building now)
       progress("Posting the telegram...");
       const s = await Session.create(name, look, rules);
       progress("Reply received. Packing the trunks...");
       await enter(s);
     },
     onJoin: async (code, name, progress) => {
+      backdropWanted = false;
       progress("Presenting your code...");
       const s = await Session.join(code, name, look);
       progress("Reply received. Packing the trunks...");
       await enter(s);
     },
   });
-  const initial = decodeSpec(look)!;
-  new CharacterCreator(menu.creatorHost, initial, (spec) => {
-    look = encodeSpec(spec);
-    saveLook(look);
-    preview.setSpec(spec);
-  });
-  preview.setSpec(initial);
-  preview.start();
-  void session;
-  void game;
 }

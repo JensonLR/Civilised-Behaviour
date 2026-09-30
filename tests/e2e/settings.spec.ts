@@ -19,7 +19,7 @@ async function menu(page: Page, extra = ""): Promise<string[]> {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => m.type() === "error" && !/404|favicon/.test(m.text()) && errors.push(m.text()));
-  await page.goto(`/?gfx=low${extra}`);
+  await page.goto(`/?gfx=test${extra}`);
   await page.waitForSelector("#name", { timeout: 60_000 });
   return errors;
 }

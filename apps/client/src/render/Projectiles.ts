@@ -57,6 +57,7 @@ export class Projectiles {
     const i = this.next;
     this.next = (this.next + 1) % PROJECTILES.cap;
     this.alive[i] = 1;
+    this.active = true;
     this.x[i] = x;
     this.y[i] = y;
     this.z[i] = z;
@@ -68,7 +69,11 @@ export class Projectiles {
     this.smoke[i] = 0;
   }
 
+  /** False while nothing is in flight: `update` then does no work and uploads nothing. */
+  private active = false;
+
   update(dt: number): void {
+    if (!this.active) return;
     let maxLive = 0;
     for (let i = 0; i < PROJECTILES.cap; i++) {
       if (this.alive[i] === 0) {
@@ -134,6 +139,7 @@ export class Projectiles {
     }
     this.mesh.count = maxLive;
     this.mesh.instanceMatrix.needsUpdate = true;
+    if (maxLive === 0) this.active = false;
   }
 
   dispose(): void {

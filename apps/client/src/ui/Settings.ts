@@ -235,10 +235,10 @@ export class SettingsSheet {
     const p = this.page("video", body);
     this.select(p, {
       label: "Graphics",
-      options: [["low", "Low"], ["medium", "Medium"], ["high", "High"]],
+      options: S.GFX_PLAYER_LEVELS.map((l) => [l, l[0]!.toUpperCase() + l.slice(1)] as const), // (the `test` preset is never offered)
       get: S.getGfx,
       set: S.setGfx,
-      note: "Applied at once to the world, shadows and sharpness. Ink outlines on characters take effect for people who arrive after the change.",
+      note: "Applied at once to the world, shadows and sharpness. Ink outlines on characters take effect for people who arrive after the change, and edge smoothing (off on Low) at the next start.",
     });
     this.slider(p, { label: "Interface scale", min: 80, max: 150, step: 5, get: () => Math.round(S.getUiScale() * 100), set: (v) => S.setUiScale(v / 100), fmt: (v) => `${v}%`, note: "Scales every menu and the gauge, tags and prompts in the field." });
     this.slider(p, { label: "Field of view", min: 50, max: 100, step: 1, get: S.getFov, set: S.setFov, fmt: (v) => `${v}°`, note: "Vertical, in third person. First person keeps its own wider view, shifted by the same amount." });

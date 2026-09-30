@@ -45,7 +45,7 @@ import { getGfx } from "../settings.ts";
 import { CombatHud } from "../ui/CombatHud.ts";
 
 /** Fewer or more effects by graphics preset. */
-const FX_SCALE = { low: 0.5, medium: 1, high: 1.4 } as const;
+const FX_SCALE = { low: 0.5, medium: 1, high: 1.4, test: 0.5 } as const;
 
 const BUSY = FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.DRAGGED | FLAG.REVIVING | FLAG.OPERATING;
 
