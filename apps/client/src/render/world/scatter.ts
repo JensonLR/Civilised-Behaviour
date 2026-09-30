@@ -10,6 +10,7 @@ import {
   hash3,
   inCampFootprint,
   inMeadow,
+  villageKeepOut,
   nearTrail,
   reedDensity,
   riverCentre,
@@ -64,6 +65,8 @@ export interface ScatterPlan {
   berries: Item[];
   rocks: Item[];
   slabs: Item[];
+  /** Stratified crags (the arena's `cliff` obstacles): x/z at the centre, sx = half-length along the contour, sy = height of the face above its foot, sz = half-depth. */
+  cliffs: Item[];
   pebbles: Item[];
   stumps: Item[];
   logs: Item[];
@@ -89,7 +92,7 @@ export const GRASS_MEADOW = 2;
 const h01 = (seed: number, a: number, b = 0): number => hash3(seed, Math.round(a * 100), Math.round(b * 100)) / 4294967296;
 
 export function emptyPlan(): ScatterPlan {
-  return { broadleaf: [], acacia: [], birch: [], pine: [], snag: [], lilies: [], bushes: [], berries: [], rocks: [], slabs: [], pebbles: [], stumps: [], logs: [], grass: [], daisies: [], cups: [], ferns: [], mushrooms: [], reeds: [], flagstones: [], butterflies: [] };
+  return { broadleaf: [], acacia: [], birch: [], pine: [], snag: [], lilies: [], bushes: [], berries: [], rocks: [], slabs: [], cliffs: [], pebbles: [], stumps: [], logs: [], grass: [], daisies: [], cups: [], ferns: [], mushrooms: [], reeds: [], flagstones: [], butterflies: [] };
 }
 
 const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: number, sz: number, cls = 0, v = 0, tiltX = 0, tiltZ = 0): Item => ({ x, y, z, yaw, sx, sy, sz, cls, v, tiltX, tiltZ });
@@ -105,7 +108,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
       const r = o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz);
       if ((o.x - x) ** 2 + (o.z - z) ** 2 < (r + margin) ** 2) hit = true;
     });
-    return hit || inCampFootprint(x, z, margin);
+    return hit || inCampFootprint(x, z, margin) || villageKeepOut(x, z, 0);
   };
   /** Free ground for a plant: no obstacle, no bare path, not in the water. */
   const freeGround = (x: number, z: number, margin: number): boolean => !blocked(x, z, margin) && !nearTrail(x, z, 0.25) && waterEdgeDistance(x, z) > 0.25;
@@ -194,6 +197,10 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
           if (!blocked(px, pz, 0.15)) pebble(px, pz, rr.range(0.1, 0.3));
         }
       }
+    } else if (o.kind === "box" && tag === "cliff") {
+      // the face stands from just under the lowest ground beneath it to the obstacle's top; `yaw` is the collision one (three's is its negative)
+      const foot = o.y0 + 2.4 - 0.32;
+      plan.cliffs.push(item(o.x, foot, o.z, -o.yaw, o.hx, o.y1 - foot, o.hz, 0, h01(7, o.x, o.z)));
     } else if (o.kind === "circle" && tag === "stump") {
       const y = h(o.x, o.z);
       plan.stumps.push(item(o.x, y - 0.02, o.z, h01(3, o.x, o.z) * Math.PI * 2, o.r / 0.86, o.y1 - y, o.r / 0.86, 0, h01(7, o.x, o.z)));

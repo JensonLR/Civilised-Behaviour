@@ -127,9 +127,12 @@ export class PhysicsWorld {
   shoveProp(id: string, dx: number, dy: number, dz: number, impulse: number, px: number, py: number, pz: number, maxSpeed: number): void {
     const p = this.props.get(id);
     if (!p || p.holder !== "" || !(impulse > 0)) return;
+    // (callers lift the direction a little - dy + 0.5 for a blast - which makes it longer than a unit vector: normalise, or a light prop leaves 12% over the cap)
+    const len = Math.hypot(dx, dy, dz);
+    if (!(len > 1e-6)) return;
     const mass = p.body.mass();
     const dv = Math.min(maxSpeed, impulse / Math.max(mass, 0.05));
-    const j = dv * mass;
+    const j = (dv * mass) / len;
     p.body.applyImpulseAtPoint({ x: dx * j, y: dy * j, z: dz * j }, { x: px, y: py, z: pz }, true);
   }
 

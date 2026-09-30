@@ -17,7 +17,7 @@ import {
   type Scene,
   type Texture,
 } from "three";
-import { PALETTE, autumnAt, buildFlock, classifyObstacle, smoothstep, type CollisionWorld, type DayState, type LandscapeTerrain } from "@cb/shared";
+import { CanopyIndex, GATE_CLOCK_Y, PALETTE, RIVER, autumnAt, buildFlock, classifyObstacle, riverCentre, smoothstep, villagePlan, type CollisionWorld, type DayState, type LandscapeTerrain } from "@cb/shared";
 import { sharedToonRamp, type WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, motion } from "./atmosphere.ts";
 import { createAtlasTexture, createGlowTexture } from "./atlas.ts";
@@ -26,6 +26,7 @@ import {
   acaciaGeometry,
   berryBushGeometry,
   boulderGeometry,
+  cliffGeometry,
   broadleafGeometry,
   bushGeometry,
   cupGeometry,
@@ -50,14 +51,17 @@ import { disposeTree } from "./kit.ts";
 import { buildBanners, buildFlame, buildLandmarks } from "./landmarks.ts";
 import { buildCampCloth, lanternGlass, lanternSpots } from "./camplife.ts";
 import { buildRain } from "./rain.ts";
+import { buildShafts, createShaftUniforms, type ShaftSpot } from "./shafts.ts";
 import { buildRuins } from "./ruins.ts";
+import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
+import { buildVillage } from "./village.ts";
 import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 import { setRgb } from "./sky.ts";
-import { buildTerrain, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
+import { buildTerrain, groundDetailTexture, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
 import { buildFalls, buildWaterMesh, type WaterUniforms } from "./water.ts";
-import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, toonMaterial, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
+import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, toonMaterial, villageUniforms, windowLight, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
 
 /** What a graphics preset decides about the world. */
 export interface WorldDetail {
@@ -118,6 +122,7 @@ export class WorldView {
   private readonly disposables: { dispose(): void }[] = [];
   private readonly hillU: HillUniforms;
   private readonly ambientU: AmbientUniforms = createAmbientUniforms();
+  private readonly shaftU = createShaftUniforms();
   private readonly tint = new Color(1, 1, 1);
   private flame?: Mesh;
   private glow?: SpriteMaterial;
@@ -143,6 +148,7 @@ export class WorldView {
       this.addRocks(plan);
       this.addTimber(plan);
       this.addGroundCover(plan);
+      this.addVillage(); // (before the camp: its lit windows join the lantern glass)
       this.addCamp();
       this.addClearing(plan);
       this.addRuin();
@@ -150,6 +156,7 @@ export class WorldView {
       this.addWater();
       this.addAmbient(plan);
       this.addRain();
+      this.addShafts(plan);
       this.addFlock();
     }
     this.count();
@@ -180,11 +187,13 @@ export class WorldView {
   // ---- ground, hills, skirt ---------------------------------------------------------------------------------------------------
 
   private addTerrain(): void {
-    const ground = this.track(buildTerrain(this.world.terrain, this.detail.terrainSegments));
+    // fallen leaves lie under every crown (vertex-painted on all presets, flecked in the crisp overlay on medium and high)
+    const canopy = this.world.obstacles.length > 0 ? new CanopyIndex(this.world.obstacles.filter((o) => o.kind === "circle" && (classifyObstacle(o) === "tree" || classifyObstacle(o) === "snag")).map((o) => ({ x: o.x, z: o.z, r: (o as { r: number }).r }))) : undefined;
+    const ground = this.track(buildTerrain(this.world.terrain, this.detail.terrainSegments, canopy));
     let patch: ReturnType<typeof trailOverlayPatch> | undefined;
     if (this.detail.trailOverlay && this.world.obstacles.length > 0) {
       const mask = this.track(trailMaskTexture());
-      patch = trailOverlayPatch(mask);
+      patch = trailOverlayPatch(mask, this.track(groundDetailTexture(this.world.terrain, canopy)));
     }
     const terrain = new Mesh(ground, this.track(toonMaterial({ colourPatch: patch, puddles: this.detail.rain > 0, wetDark: 1 })));
     terrain.name = "terrain";
@@ -197,6 +206,14 @@ export class WorldView {
     this.root.add(skirt);
 
     const hillGeo = buildHills();
+    // the windmill's sails turn about a hub on the second summit, facing the arena
+    if (hillGeo.summit) {
+      const sm = hillGeo.summit;
+      const yaw = Math.atan2(sm.axisZ, sm.axisX);
+      const hubAt = { x: sm.x + (WINDMILL.hubX * Math.cos(yaw)), z: sm.z + WINDMILL.hubX * Math.sin(yaw) };
+      this.hillU.uSailPivot.value.set(hubAt.x, sm.y - 0.6 + WINDMILL.hubY, hubAt.z);
+      this.hillU.uSailAxis.value.set(Math.cos(yaw), 0, Math.sin(yaw));
+    }
     const hills = new Mesh(this.track(hillGeo.geometry), this.track(hillMaterial(this.hillU)));
     hills.name = "hills";
     hills.frustumCulled = false;
@@ -266,6 +283,7 @@ export class WorldView {
     const rockMat = this.track(toonMaterial({ wetDark: 1 }));
     this.instanced("rock", boulderGeometry, rockMat, p.rocks, p.rocks.map((i) => this.varied(i.v, 0.14)), { shadow: true, ink: "medium" });
     this.instanced("slab", slabGeometry, rockMat, p.slabs, p.slabs.map((i) => this.varied(i.v, 0.12)), { shadow: true, ink: "medium" });
+    this.instanced("cliff", cliffGeometry, rockMat, p.cliffs, p.cliffs.map((i) => this.varied(i.v, 0.1)), { shadow: true, ink: "medium", noCull: true });
     this.instanced("pebbles", () => pebbleGeometry(), rockMat, p.pebbles, p.pebbles.map((i) => this.varied(i.v, 0.3)));
   }
 
@@ -314,7 +332,8 @@ export class WorldView {
   // ---- the camp ---------------------------------------------------------------------------------------------------------------
 
   private addCamp(): void {
-    const geo = buildLandmarks(this.world, 1);
+    const campLod = this.detail.outlines ? 1 : 0;
+    const geo = buildLandmarks(this.world, campLod);
     if (geo) {
       const hull = this.detail.outlines ? buildLandmarks(this.world, 0) : undefined;
       this.track(geo);
@@ -322,14 +341,14 @@ export class WorldView {
       makeSolid(this.root, geo, this.track(toonMaterial()), { name: "camp", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
     }
     // the washing, the hammock's canvas and the lanterns' chains and frames move in the wind: their own geometry, shadow and ink
-    const cloth = buildCampCloth(this.world, 1);
+    const cloth = buildCampCloth(this.world, campLod);
     if (cloth) {
       const clothHull = this.detail.outlines ? buildCampCloth(this.world, 0) : undefined;
       this.track(cloth);
       if (clothHull) this.track(clothHull);
       makeSolid(this.root, cloth, this.track(toonMaterial({ wind: "cloth", doubleSided: true })), { name: "camp-cloth", outline: this.detail.outlines, ink: "small", hullGeometry: clothHull, castShadow: true, wind: "cloth" });
     }
-    const glass = lanternGlass(this.world);
+    const glass = lanternGlass(this.world, this.windowPanes);
     if (glass) {
       this.lanternMat = this.track(clothBasicMaterial());
       const m = new Mesh(this.track(glass), this.lanternMat);
@@ -407,9 +426,35 @@ export class WorldView {
     this.instanced("flagstones", () => flagstoneGeometry(), stoneMat, p.flagstones, p.flagstones.map((i) => this.varied(i.v, 0.16)), { noCull: true });
   }
 
+  // ---- Hollowmere, the village -----------------------------------------------------------------------------------------------------------
+
+  private windowPanes: import("./camplife.ts").WindowPane[] = [];
+
+  private addVillage(): void {
+    // (the low preset keeps the buildings' forms but not their windows, frames, plants and clutter: about a third of the triangles)
+    const detailLod = this.detail.outlines ? 1 : 0;
+    const geo = buildVillage(this.world, detailLod, undefined, this.windowPanes);
+    if (!geo) return;
+    const plan = villagePlan(this.world.terrain);
+    // the moving parts read their positions from uniforms: the mill wheel's axle, the moored punt, the gate clock's centre and axis
+    const w = plan.wheel;
+    villageUniforms.uWheel.value.set(w.x, w.y, w.z, 0.85);
+    villageUniforms.uAxle.value.set(w.nx, 0, w.nz);
+    villageUniforms.uPunt.value.set(plan.punt.x, plan.punt.z, plan.punt.yaw, plan.punt.waterY);
+    const gate = plan.buildings.find((b) => b.kind === "clock")!;
+    villageUniforms.uClock.value.set(gate.x, gate.ground + GATE_CLOCK_Y, gate.z, 0);
+    villageUniforms.uClockAxis.value.set(Math.cos(gate.yaw), 0, Math.sin(gate.yaw));
+    const hull = this.detail.outlines ? buildVillage(this.world, 0) : undefined;
+    this.track(geo);
+    if (hull) this.track(hull);
+    makeSolid(this.root, geo, this.track(toonMaterial({ wind: "village", wetDark: 0.8 })), { name: "village", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true, wind: "village" });
+  }
+
   // ---- the flock -------------------------------------------------------------------------------------------------------------------------
 
   private flock?: Flock;
+  /** The time of day the world was last dressed for: it puts the village cat to bed. */
+  private hours = 12;
 
   private addFlock(): void {
     if (this.detail.flock <= 0) return;
@@ -471,8 +516,29 @@ export class WorldView {
       this.track(m.material as unknown as { dispose(): void });
     };
     add(buildMotes(d.motes, this.ambientU));
-    add(buildButterflies(p.butterflies.map((b) => new Vector3(b.x, b.y, b.z)), d.butterflies, this.ambientU));
-    add(buildBirds(d.birds, this.ambientU));
+    // dragonflies hover over the stream (a few per preset that has butterflies); swallows sweep low over the village and the pond (a few per preset that has birds)
+    const dragons: Vector3[] = [];
+    if (d.butterflies > 0) {
+      const ls = this.world.terrain as LandscapeTerrain;
+      const rc = { x: 0, z: 0 };
+      for (const s of [5.5, 13, 24.5, 33]) {
+        riverCentre(s, rc);
+        dragons.push(new Vector3(rc.x, ls.channelLevel(s) - RIVER.freeboard + 0.85, rc.z));
+      }
+      dragons.length = Math.min(dragons.length, Math.max(2, Math.ceil(d.butterflies / 3)));
+    }
+    const swallows: Vector3[] = [];
+    if (d.birds > 0) {
+      const vp = villagePlan(this.world.terrain);
+      const gate = vp.buildings.find((b) => b.id === "gate")!;
+      const spots: [number, number][] = [[-16, -52], [RIVER.b.x, RIVER.b.z], [gate.x, gate.z], [-32, -44], [-8, -40]];
+      for (let i = 0; i < Math.min(spots.length, d.birds * 2); i++) {
+        const [x, z] = spots[i]!;
+        swallows.push(new Vector3(x, this.world.terrainHeight(x, z) + 7.5 + (i % 3) * 1.4, z));
+      }
+    }
+    add(buildButterflies(p.butterflies.map((b) => new Vector3(b.x, b.y, b.z)), d.butterflies, this.ambientU, dragons));
+    add(buildBirds(d.birds, this.ambientU, swallows));
     const sources: SmokeSource[] = [];
     if (d.smoke > 0) {
       for (const o of this.world.obstacles) {
@@ -481,11 +547,36 @@ export class WorldView {
         sources.push({ at: new Vector3(o.x, y + 0.6, o.z), kind: 0, puffs: Math.max(4, Math.round(d.smoke * 0.72)) });
         sources.push({ at: new Vector3(o.x, y + 1.2, o.z), kind: 1, puffs: Math.max(3, Math.round(d.smoke * 0.28)) });
       }
+      // chimneys: the cottages' thin plumes and the smithy's stack
+      for (const v of villagePlan(this.world.terrain).smoke) sources.push({ at: new Vector3(v.x, this.world.terrainHeight(v.x, v.z) + v.y, v.z), kind: 0, puffs: Math.max(3, Math.round(d.smoke * 0.42)) });
     }
     add(buildSmoke(sources, this.ambientU));
     // lantern glows (cheap; kept on every preset so the camp still lights up at dusk)
     const spots = lanternSpots(this.world);
-    add(buildLanternGlow(spots.map((l) => new Vector3(l.x, this.world.terrainHeight(l.x, l.z) + l.y, l.z)), this.ambientU, spots.map((_, i) => (i === spots.length - 1 ? 0.7 : 0))));
+    add(buildLanternGlow(spots.map((l) => new Vector3(l.x, this.world.terrainHeight(l.x, l.z) + l.y, l.z)), this.ambientU, spots.map((l) => l.min)));
+  }
+
+  // ---- sun shafts through the canopy --------------------------------------------------------------------------------------------------
+
+  private addShafts(p: ScatterPlan): void {
+    if (this.detail.motes <= 0) return; // (low has no ambient light effects)
+    const spots: ShaftSpot[] = [];
+    const trees = [...p.broadleaf, ...p.birch, ...p.acacia].filter((t) => Math.hypot(t.x, t.z) < 82);
+    for (let i = 0, made = 0; i < trees.length && made < 30; i++) {
+      const t = trees[(i * 7 + 3) % trees.length]!;
+      if (Math.abs(Math.sin(t.x * 12.9898 + t.z * 78.233)) * 43758.5453 % 1 > 0.55) continue;
+      const a = Math.abs(Math.sin(t.z * 4.1 + t.x * 1.3)) * 6.28;
+      const d = 1.4 + (Math.abs(Math.sin(t.x * 7.7)) % 1) * 2.2;
+      const x = t.x + Math.cos(a) * d;
+      const z = t.z + Math.sin(a) * d;
+      spots.push({ x, y: this.world.terrainHeight(x, z), z, height: 4.6 + (Math.abs(Math.sin(t.x * 3.3 + t.z)) % 1) * 2.6, width: 0.5 + (Math.abs(Math.sin(t.z * 5.9)) % 1) * 0.9, v: Math.abs(Math.sin(t.x * 9.1 + t.z * 2.7)) % 1 });
+      made++;
+    }
+    const mesh = buildShafts(spots, this.shaftU);
+    if (!mesh) return;
+    this.track(mesh.geometry);
+    this.track(mesh.material as unknown as { dispose(): void });
+    this.root.add(mesh);
   }
 
   // ---- rain -----------------------------------------------------------------------------------------------------------------------
@@ -513,7 +604,7 @@ export class WorldView {
     this.tint.lerp(WHITE, 0.4).multiplyScalar(0.42 + 0.58 * d.ambient);
     this.hillU.uTint.value.copy(this.tint);
     if (this.water) {
-      this.water.uLight.value.copy(this.tint);
+      this.water.uLight.value.copy(this.tint).multiplyScalar(1 - 0.5 * d.night); // (unlit, so at night it must be dimmed on top of the tint or it glows against the dark ground)
       this.water.uSun.value = 1 - d.night;
       this.water.uSunDir.value.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
     }
@@ -533,8 +624,16 @@ export class WorldView {
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
     fireLight.uFireI.value = d.fire;
+    // canopy shafts: a low-to-middling sun in clear, ideally misty air
+    const el = d.lightDir.y;
+    this.shaftU.uSunDirS.value.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
+    setRgb(this.shaftU.uShaftCol.value, d.sun);
+    this.shaftU.uShaft.value = smoothstep(0.1, 0.28, el) * (1 - smoothstep(0.62, 0.92, el)) * (1 - d.night) * (1 - Math.min(1, d.cover * 1.5)) * (0.55 + 0.45 * atmoUniforms.uMist.value) * (1 - d.rain);
+    atmoUniforms.uHour.value = d.hours;
     this.fireLevel = d.fire;
+    this.hours = d.hours;
     if (this.lanternMat) this.lanternMat.color.setScalar(0.52 + 0.48 * d.fire);
+    windowLight.value = 0.04 + 0.96 * smoothstep(0.1, 0.7, d.fire);
   }
 
   /** Up to four things the grass and flowers bend away from. Entries past `n` are cleared. */
@@ -549,7 +648,8 @@ export class WorldView {
   /** Wind, pennant, flame and glow. Cheap: it only writes a few numbers. */
   update(t: number, camera?: { x: number; z: number }, worldSec = t): void {
     worldTime.value = t;
-    this.flock?.update(worldSec);
+    this.hillU.uSailAngle.value = t * 0.32;
+    this.flock?.update(worldSec, this.hours);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
     this.ambientU.uMotion.value = motion.value;
     if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;

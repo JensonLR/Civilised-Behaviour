@@ -141,3 +141,92 @@ node scripts/shot.mjs "?showcase=lineup&n=4&same=0&heads=1&vary=scarStyle&set=sc
 - Hand grip morphs are LOD0 only; at LOD1 a gripping crowd member shows a fist either way. The hand test bounds the fist size but does not check finger-finger penetration.
 - Only LOD0 is audited item by item; LOD1/2 are covered by triangle budgets, the finite-geometry sweep of 150 people and `lod.test.ts`.
 - `weaponPose.test.ts` (combat stream) currently fails on one reach-limit case; unrelated to this work.
+
+---
+
+# Limb fit pass (agent L, 2026-09-30): every sleeve, cuff, glove, hand, trouser leg, boot and prosthesis fits any body
+
+Trigger: "ugly overlaps with cosmetics and wearables; everything must fit perfectly, whatever the size or shape". Evidence was the slider extremes (thick/short, thin/tall, big limbs).
+
+## What was wrong (measured, not guessed)
+- Cuff stripes, cuff bands, buttons, garters, knee patches, epaulettes, boot straps and laces were positioned with absolute offsets from a *guessed* radius (`r * 1.02`, `legR * 0.87`), while the sleeve tapers
+  to 0.82 r at the wrist: naval stripes floated 2 cm off the cloth, epaulettes hovered 1.5 cm above the sleeve head, elbow patches sat *inside* the sleeve.
+- Arms hung at a fixed 5 degrees, so on a body whose hips, belly or coat skirt are wider than its shoulders the sleeves, cuffs and hands were inside the skirt (thin/tall in a frock coat: both arms vanished).
+- Breeches, jodhpurs and plus-fours were wider (1.6-1.7 x leg radius) than half the hip spacing: the two thighs interpenetrated; on short legs the boot's ring table ran *backwards* (inverted geometry).
+- A shin ring and the thigh ring above it were different sizes at the knee, so the overlap zone z-fought (teeth at the knee of breeches); a small foot under a stout leg made a shoe narrower than the ankle.
+- A gauntlet ran up past the elbow on a short forearm; the sole sank 6 mm into the ground, the peg's tip 1 cm.
+
+## How it is built now
+1. **One ring table per limb region, `three/limbRings.ts`.** `upperArmRings`, `foreArmRings` (sleeve, elbow crease, the cuff hang, and a last "tuck" section that closes the sleeve onto the hand's wrist),
+   `upperLegRings`/`trouserRings` (every cut, clamped to `legRxMax = hipWidth - 4 mm` so legs never touch), `lowerLegPlan` (shin + boot shaft + the two as one `surface`; the boot is never lower than the
+   shoe it stands in, the shin starts a hair inside the thigh's last section), `footDims` (the shoe is at least as wide as the ankle it carries, at least twice as long as wide, heel behind the leg).
+   Builders, the wound dressings, the prostheses, the fit engine's worn layer (`fit/worn.ts` should call `foreArmRings`/`lowerLegPlan` instead of its copies) and the new tests all read these.
+2. **Everything on a limb is placed by asking its table, `three/limbKit.ts`.** `limbSurface(rings)` answers a point and a normal *on the loft polygon* (the loft is 10-sided, so a smooth-curve answer sinks
+   into the flat by up to 5% of the radius); `bandOn` (cuffs, turn-ups, boot folds, garters, gauntlets: the table's sections lifted by a limb-proportional `clothLift(r)`, rolled edges),
+   `patchOn` (knee/elbow patches, mends, mud, stitched rims: masked pieces of the limb's own surface in metres), `stripOn` (stripes, side braid), `mountOn`/`buttonOn`/`boxBetween` (buttons, buckles,
+   tassels, threads). Nothing on a limb uses an absolute radius any more.
+3. **Arms clear the body (`three/armClearance.ts`).** `bodyOutline(spec, P)` = the widest of torso, coat skirt (the real skirt rings) and hips/legs at each depth below the shoulder;
+   `armRestAbduction` = the smallest resting abduction (0.08..0.5 rad) at which elbow, forearm and the back of the hand clear it. The animator adds the difference to its 0.08 base (not while carrying,
+   hauling, kneeling, airborne-scaled). `kneeFlexLimit` caps the knee bend by the leg's thickness (a stout or short leg cannot fold as far as a thin one).
+4. **Hands.** Palm is one rounded block narrow at the wrist and as wide as the four fingers across the knuckles; fingers touch (pitch = width), darker bands at the knuckles, no knuckle spheres (-40 tris);
+   the thumb springs from the thenar. Gloves are bands on the forearm table (gauntlet length = a fraction of the forearm, flare over the sleeve's own cuff; fur mitts bulge). The sleeve's end is tucked onto
+   `wristSize(P)`, which is tied to the hand radius, so a tiny hand in a big sleeve and a huge hand in a small one both join cleanly.
+5. **Tried and dropped: wrist roll.** Rolling the forearm so the fist's axis lies along the weapon's grip changed the mean axis error by at most 0.17 rad (rifle at the hip 1.04 -> 0.87, sabre 1.44 -> 1.39, the rest within 0.02): the forearm
+   points along the blade or barrel, so no roll can turn a fist (whose axis is across the forearm) onto it. A real fix needs a wrist joint (hand as its own bone, not a morph: the outline hull must bend with it); the holds read fine
+   without it (rifle, pistol, sabre and umbrella checked from three sides with the real models).
+6. **Boots.** Laces/eyelets/tongue/straps run along a *front line* (over the shoe's own instep sections, then up the shaft) so they lie on the surface of the shoe and the boot at any size.
+   Sole underside is exactly y = 0; the peg tip too. Hobnails are cones. Puttees follow the leg's polygon. Spur and buckle sit on the shaft's surface.
+
+## Numbers (Node; before = the commit this pass started from, measured with the same script on a worktree of it: `/tmp` scratch `cmp.mts`, 11 bodies x gaits)
+| | before | after |
+|---|---|---|
+| limb bones, average triangles at LOD0 (60 seeds; foreArm x2, lowerLeg x2, upperArm x2, upperLeg x2) | 3399 | 3294 |
+| sleeve / cuff / hand vertices inside the coat skirt, hips or thigh: worst over 7 gaits x 7 coats x 11 bodies | 14.2 cm (12-14 cm on most bodies: the arms are simply inside the skirt) | 2.8 cm (one body: the tiny-torso, wide-hip slider corner in a sprint; most bodies 0-2 cm) |
+| left thigh vertices inside the right thigh (5 trouser cuts, rest and 7 gaits) | 3.3 cm (jodhpurs, baggy, breeches) | 0.0 |
+| lowest point of the legs in the rest pose (9 boots, 2 leg kinds, 11 bodies) | -11 mm (the peg tip; soles -6 mm) | -2 mm (hobnail heads), soles and peg tip exactly 0 |
+
+## Tests (`three/limbFit.test.ts`, 12 tests, ~45 s; 80 generated people included)
+ring tables sound on 130 bodies (monotone, finite, legs never touch, shin continues thigh, sleeve closes on wrist, shoe carries ankle); details on limb (vertex-level vs the ring surface: floats, sinks, buried);
+arms vs skirt/hips/belly in 7 gaits x 7 coats x 11 bodies; left vs right leg in all gaits; sole on ground for 9 boots x 2 legs;
+limb triangle budget. `LIMB_VERBOSE=1 npx vitest run src/three/limbFit.test.ts -t "details sit" --disable-console-intercept` prints findings grouped by option.
+
+## Review switches added to `showcase/Lineup.ts`
+`act=0` (no idle acts: fit stills differ from figure to figure otherwise), `focus=handR|wristL|foreArmR|upperLegR|lowerLegR|kneeL|footR|legsR|body` with `fd fa fe ffov` (camera aimed at a body part *by
+proportion*, so a contact sheet of one figure per page frames every option alike), `fc`/`fh` (frame centre/height in metres), `wield=rifle|blunderbuss|pistol|sabre|umbrella` `aimw=1` `sw=0.4`
+(the real weapon model in the hands, hands closed on it), `pose=aim|pistol|sabre` now draw the weapon. Contact sheet driver used for this pass: one page per option, composed in a scratch Playwright page.
+
+## Weak spots (honest)
+- T's fit audit still counts the shoe (a 96-triangle loft on the lower-leg bone that is *meant* to cover the ankle) and mitten fingers as penetration of the leg / a hand ellipsoid: those "findings" for
+  boots and fur mitts are a modelling mismatch of the audit, not clipping. Fix on the audit side: a "foot" region above the ankle, or skip the foot loft.
+- Very wide bodies with narrow shoulders (pear shapes) hold their arms out up to 0.5 rad (29 degrees); a smaller angle would need a narrower coat skirt (garments) or thinner thighs.
+- A rigid rig cannot fold a stout leg all the way: deep crouches on fat/short legs stop earlier now (`kneeFlexLimit`), the calf/thigh overlap at the joint itself is inherent.
+- The hand has no wrist joint: a fist's axis is fixed across the forearm, so a weapon whose grip axis lies along the forearm (sabre thrust, rifle stock with the arm down the barrel) is held with the blade/barrel coming out of the fist along the arm (reads as a punch-dagger grip).
+- Hands: still one chunky block per hand (caricature); a fingerless glove's bare finger ends and a mitt are single sweeps. Grip morphs are LOD0 only.
+- Epaulette fringe and tassels are 6-mm boxes: they read in the creator and close-ups only.
+
+---
+
+# Third pass, agent H: everything on the head fits any head (2026-09-30)
+
+Problem: caps with detached "propeller" brims, long hair as a detached curtain, loose-stick moustaches, pasted-on ears and spectacle arms; the audit only checked bounding boxes.
+Principle: nothing is placed by an absolute offset. Everything asks the head (`headFit.ts`) and offsets along its normal.
+
+## What changed (all in `packages/procedural/src/three`)
+- `headFit.ts` (new): `headFit(fc)` = the head fit kit. `section(y)` skull cross-section radii; `outer()` skin plus hair; `ear(sx)` real ear anchors (top, lobe, front, back, outer) from `earModel`; `nose()` (from `noseShape.ts`: spine, `frontZ(y)`, `widthAt(y)`); `bodyDist` / `solidDist` / `pushOut` (neck, coat, arms via agent T's `makeBodyField`); `clearRadius` and `hangProfile` (the shoulder-clearance function: hair/veils/tails fall from the widest part of the head, follow the neck and shoulders, and end where they land instead of leaping over a shoulder). `starLoft`/`addStar`/`addBrim` build crowns as lofts through the skull's own sections and brims as two-layer patches rooted on the crown wall; `addConformedSweep` pushes every vertex of a tube out of the skull/neck/coat.
+- `hatsGeo.ts` rewritten: 21 hats are `dome()`/`column()` crowns from `hf.section` plus hair thickness (`hairBandThickness`, measured from the hair plan), brims rooted on the crown wall (top hat rolled sides, pith shelf, shako/kepi/peaked visors as tongues, tricorn, bicorne folded at front/back with upturned points, sou'wester tail, deerstalker peaks), bands/cords/badges/trims placed by `Crown.at(phi, y)`; veil of the veiled pith is a `hangProfile` patch resting on the shoulders; nightcap tail hangs by `hangProfile`. `head.ts`: the band rises over tall ears (`hatSeat`).
+- `hair.ts` rewritten around a plan (shells + extras): long lank and shaggy mane are curtains on the fall profile (fixed-resolution profile, so LODs share the silhouette), ponytail/plait leave the head at the tie and fall down the neck (conformed), hairlines are smooth ramps and open round the ear (`hole`), locks are densified in direction space and stop before the ear. `hairLiftFn` gives the hair thickness in any direction (bows, combs, pins, straps and the audit use it); `hairCoversFn` lets the skull skip cells fully under hair. `shell.ts`: strand grain, `settle` hook, lift fades with coverage.
+- `faceParts.ts`: ears are a dished plate (rim + bowl) hinged at the front edge and pushed out of the skull, from `earModel`; earrings pass through the real lobe; nose from `noseShape.ts`; moustaches are ONE bar tip to tip with an arc-shaped curl and are conformed; beards root in the skin, lie on the chest (`clearRadius`, `settle`, `addConformedSweep`), jaw-beard edge ramp widened; Piccadilly weepers hang beside the neck.
+- `eyewear.ts` (new, moved out of head.ts): lens plane in front of brow/cheek (`zFor`), bridge arches over the real nose, pads on its flanks, arms rise over the top of the ear that exists and hook behind it, straps loop over hair and ears (below a hat band), chains/cords pushed off the beard and coat, eyepatch strap over the ear.
+- `headExtras.ts`: bows, combs, pins, flower, feather sit on the hair as seen (`hf.outer`); pins are stuck through the hair and point down under a hat. `faceDecor.ts`: neck swallows are laid on the skull side. `headShape.ts`: `omit` (skull cells fully under hair are not drawn).
+- Tests: `headFit.test.ts` (new, real measurement: skull depth, body depth, floating gap for every option on tiny/huge/narrow/heavy/worst-body heads; ratchet), `headAudit.ts` (labelled primitives), `hatHair.test.ts` now uses it, `hats.test.ts` compares with the skull top. Agent T's `fit.test.ts` head ratchet lowered.
+
+## Numbers
+- `fit.test.ts` head group (FIT_SHAPES=6, head fields): headPenetration 173 findings / 8.7 cm worst before, 16 / 1.1 cm now (eyepatch on a tall thin head only); floating 16 / 6 cm before (hair pins), 0 now.
+- `headFit.test.ts` (15 fields x 5 head shapes, plus hat x long hair x wizard beard): skull sink worst 1.4 cm (a plume socket), body sink worst 1.4 cm (hem of a mane resting on a very narrow jaw's shoulder), floating 0.
+- Head triangles avg (150 seeds): 4412 before, 4414 now; LOD budgets unchanged.
+
+## Weak spots (honest)
+- Face-quality work asked for (eyelid/brow shapes, nostril and lip sculpt, neck-to-jaw blend, catchlights) was NOT done in this pass; only ears, nose data, hair grain and hairline ramps changed.
+- Long-hair curtains are one smooth sheet with a ragged hem: from behind they read as a cloth, not as strands; the front locks of Long Lank are still simple ribbons.
+- Nightcap tail and busby bag are hung by heuristics and were reviewed on a few heads only. Hats are reviewed at 3 angles on tiny/huge/average heads; extreme ear + hat combinations are only covered by the numeric audit.
+- Screens were reviewed on the software renderer; toon shading of thin brims can flicker at grazing angles.

@@ -1,20 +1,15 @@
-import { BufferGeometry } from "three";
 import { describe, expect, it } from "vitest";
 import * as K from "../catalog.ts";
-import { computeProportions } from "../proportions.ts";
 import { generateCharacter, type CharacterSpec } from "../spec.ts";
-import { buildHead } from "./head.ts";
-import { HAT_SEAT } from "./hatsGeo.ts";
-import { headShape } from "./headShape.ts";
+import { auditHead } from "./headAudit.ts";
 
 /**
  * Every hat over every hairstyle, with and without facial hair: nothing of the hair, sideburns or beard may show above the band of the hat unless the hat is over it.
- * Method: heads are built as (hat, hair, beard) and (hat only); what the first has and the second lacks IS the hair; and from every hair vertex above the band a ray goes
- * straight up - it must hit the hat (from inside: the crown covers it). A hair vertex that no hat surface lies above has poked through the crown or stands out beside it.
+ * Method: the head is built with the primitive audit on (headAudit.ts labels every primitive with its feature); from every vertex of the hair, sideburns, beard and moustache
+ * above the band a ray goes straight up - it must hit the hat (from inside: the crown covers it). A hair vertex that no hat surface lies above has poked through the crown or
+ * stands out beside it.
  */
 
-const colors = { skin: 0xd29c76, hairC: 0x3b2616, hatC: 0x555555, accent: 0xd0a94a, burnt: 0 };
-const key = (x: number, y: number, z: number): string => `${Math.round(x * 5000)},${Math.round(y * 5000)},${Math.round(z * 5000)}`;
 
 interface Tri {
   ax: number;
@@ -26,43 +21,6 @@ interface Tri {
   cx: number;
   cz: number;
   cy: number;
-}
-
-function vertexSet(g: BufferGeometry): Set<string> {
-  const p = g.attributes.position!;
-  const s = new Set<string>();
-  for (let i = 0; i < p.count; i++) s.add(key(p.getX(i), p.getY(i), p.getZ(i)));
-  return s;
-}
-
-/** Triangles of `g` having at least one vertex not in `known`. */
-function newTriangles(g: BufferGeometry, known: Set<string>): Tri[] {
-  const p = g.attributes.position!;
-  const ix = g.index!;
-  const out: Tri[] = [];
-  const isNew = (i: number): boolean => !known.has(key(p.getX(i), p.getY(i), p.getZ(i)));
-  for (let t = 0; t < ix.count; t += 3) {
-    const a = ix.getX(t);
-    const b = ix.getX(t + 1);
-    const c = ix.getX(t + 2);
-    if (!isNew(a) && !isNew(b) && !isNew(c)) continue;
-    out.push({ ax: p.getX(a), ay: p.getY(a), az: p.getZ(a), bx: p.getX(b), by: p.getY(b), bz: p.getZ(b), cx: p.getX(c), cy: p.getY(c), cz: p.getZ(c) });
-  }
-  return out;
-}
-
-/** The vertices of `g` that are not in `known`. */
-function newVertices(g: BufferGeometry, known: Set<string>): [number, number, number][] {
-  const p = g.attributes.position!;
-  const seen = new Set<string>();
-  const out: [number, number, number][] = [];
-  for (let i = 0; i < p.count; i++) {
-    const k = key(p.getX(i), p.getY(i), p.getZ(i));
-    if (known.has(k) || seen.has(k)) continue;
-    seen.add(k);
-    out.push([p.getX(i), p.getY(i), p.getZ(i)]);
-  }
-  return out;
 }
 
 /** Is there hat surface straight above (x, y, z)? (Ray up, tested in the xz plane; a small margin so a vertex just outside a triangle's edge still counts as covered.) */
@@ -92,15 +50,26 @@ function coveredAbove(tris: readonly Tri[], x: number, y: number, z: number, mar
 /** Bodies with different head sizes: the crown is fitted per head, so try a small, an average and a big head. */
 const BODIES = [3, 9, 17].map((seed, i) => ({ ...generateCharacter(seed), headScale: [10, 120, 250][i]!, hair: 1, hat: 0, hatTrim: 0, beard: 0, moustache: 0, sideburns: 0, eyewear: 0, scars: 0, eyepatch: 0, mark: 0, facePaint: 0, tattoo: 0, earring: 0, age: 0, greying: 0 }) as CharacterSpec);
 
+const HAIR_LABELS = new Set(["hair", "sideburns", "beard", "moustache"]);
+
 function poking(spec: CharacterSpec): { count: number; worst: [number, number, number] | undefined } {
-  const P = computeProportions(spec);
-  const R = P.headRadius;
-  const both = buildHead(spec, P, colors)!;
-  const hatOnly = buildHead({ ...spec, hair: 0, beard: 0, sideburns: 0, moustache: 0 }, P, colors)!;
-  const bare = buildHead({ ...spec, hair: 0, beard: 0, sideburns: 0, moustache: 0, hat: 0, hatTrim: 0 }, P, colors)!;
-  const hat = newTriangles(hatOnly, vertexSet(bare));
-  const hair = newVertices(both, vertexSet(hatOnly));
-  const bandY = R + (HAT_SEAT[spec.hat] ?? 0.5) * R; // (the head centre is R above the bone origin)
+  const a = auditHead(spec);
+  const R = a.P.headRadius;
+  const hat: Tri[] = [];
+  const hair: [number, number, number][] = [];
+  for (const p of a.prims) {
+    if (p.label === "hat") {
+      for (let t = 0; t < p.tris.length; t += 3) {
+        const A = p.tris[t]! * 3;
+        const B = p.tris[t + 1]! * 3;
+        const C = p.tris[t + 2]! * 3;
+        hat.push({ ax: p.verts[A]!, ay: p.verts[A + 1]!, az: p.verts[A + 2]!, bx: p.verts[B]!, by: p.verts[B + 1]!, bz: p.verts[B + 2]!, cx: p.verts[C]!, cy: p.verts[C + 1]!, cz: p.verts[C + 2]! });
+      }
+    } else if (HAIR_LABELS.has(p.label)) {
+      for (let i = 0; i < p.verts.length; i += 3) hair.push([p.verts[i]!, p.verts[i + 1]!, p.verts[i + 2]!]);
+    }
+  }
+  const bandY = R + a.seatY * R; // (the head centre is R above the bone origin)
   let count = 0;
   let worst: [number, number, number] | undefined;
   for (const [x, y, z] of hair) {

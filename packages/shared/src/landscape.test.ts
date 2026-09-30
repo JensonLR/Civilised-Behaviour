@@ -96,7 +96,7 @@ describe("the stream and its pond", () => {
   it("a walker can wade across the stream and out of the pond's far side with the shared movement step", () => {
     const w = createArena(7);
     const c = { x: 0, z: 0 };
-    riverCentre(RIVER.length * 0.5, c);
+    riverCentre(RIVER.length * 0.75, c); // (below the weir and the mill, whose walkway and wall are deliberately solid)
     // start a few metres to one side of the channel and walk straight across it (toward the far bank)
     const dir = { x: -(RIVER.b.z - RIVER.a.z), z: RIVER.b.x - RIVER.a.x };
     const dl = Math.hypot(dir.x, dir.z);

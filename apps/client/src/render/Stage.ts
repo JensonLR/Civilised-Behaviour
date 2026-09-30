@@ -13,7 +13,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { applyWeather, createDayState, dayState, hashFloat, parseClock, parseWeatherKind, type CollisionWorld } from "@cb/shared";
+import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
 import { WorldView } from "./world/WorldView.ts";
 import { atmoUniforms, atmosphereForWriting, motion, motionScale, windGain } from "./world/atmosphere.ts";
@@ -67,7 +67,7 @@ export const PRESETS: Record<"low" | "medium" | "high", GraphicsPreset> = {
 export class Stage {
   readonly renderer: WebGLRenderer;
   readonly scene = new Scene();
-  readonly camera = new PerspectiveCamera(65, 1, 0.1, 600);
+  readonly camera = new PerspectiveCamera(65, 1, 0.1, 820);
   private readonly sun = new DirectionalLight(0xffffff, 3.0);
   private readonly hemi = new HemisphereLight(0xffffff, 0xffffff, 1.0);
   private readonly sky: Mesh;
@@ -111,6 +111,7 @@ export class Stage {
       forcedWeather: parseWeatherKind(params.get("weather")),
       startWorldMs: Number(params.get("wms") ?? 0) || 0,
       localSeed: Number(params.get("wseed") ?? 7) || 7,
+      moon: params.get("moon") !== null && Number.isFinite(Number(params.get("moon"))) ? Number(params.get("moon")) : undefined,
     });
     motion.value = motionScale(params); // ?motion=0..1 or prefers-reduced-motion
 
@@ -222,7 +223,9 @@ export class Stage {
     const w = this.sky_.weather;
     applyWeather(d, w, this.sky_.lightning.flash);
     setRgb(this.sun.color, d.sun);
-    this.sun.intensity = d.sunIntensity;
+    // moonlight follows the moon's phase: a full moon lights the night well, a new moon hardly at all
+    const illum = 0.5 - 0.5 * Math.cos(this.sky_.moon * Math.PI * 2);
+    this.sun.intensity = d.sunIntensity * (1 - d.night * 0.6 * (1 - illum));
     // cloud takes the sun's shadows with it
     this.sun.shadow.intensity = 0.72 * (1 - 0.85 * Math.max(0, (d.cover - 0.06) / 0.94));
     setRgb(this.hemi.color, d.hemiSky);
@@ -233,8 +236,10 @@ export class Stage {
     this.fog.density = d.fogDensity;
     this.lightDir.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
     applyDaySky(this.skyUniforms, d);
+    this.skyUniforms.uPhase.value = this.sky_.moon * Math.PI * 2;
     atmoUniforms.uWindK.value = windGain(w.wind, motion.value);
     atmoUniforms.uWet.value = w.wet;
+    atmoUniforms.uMist.value = mistLevel(d.hours, w.wet);
     atmoUniforms.uRain.value = w.rain;
     this.worldView?.applyDay(d);
   }

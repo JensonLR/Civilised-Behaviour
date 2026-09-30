@@ -1,6 +1,7 @@
 import { FLAG, ZONE, woundLevel } from "@cb/shared";
 import { jawPoint } from "./faceMorph.ts";
 import type { CharacterRig } from "./rig.ts";
+import { armRestAbduction, kneeFlexLimit } from "./armClearance.ts";
 import { computeHold, newHoldOut, solveArm, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
 
 export type ExpressionId = "neutral" | "pain" | "fear" | "triumph" | "drunk" | "angry";
@@ -114,6 +115,10 @@ export class CharacterAnimator {
   private pegBlend = 0;
   private readonly seed: number;
   private readonly shoulderBaseY: number;
+  /** Extra resting abduction of the arms (radians) that this body needs to hang clear of its own belly, hips and coat skirt (see armClearance.ts). */
+  private readonly armExtra: number;
+  /** The deepest knee bend (radians) at which this body's calf and thigh still clear each other (see armClearance.ts `kneeFlexLimit`). */
+  private readonly kneeMax: number;
   private idleAct = 0;
   private idleAmt = 0;
   private idleSlot = -1;
@@ -135,6 +140,8 @@ export class CharacterAnimator {
     const s = rig.spec;
     this.seed = (s.height * 31 + s.headScale * 17 + s.belly * 7 + s.hat * 131 + s.noseStyle * 53) | 0;
     this.shoulderBaseY = rig.joints.shoulderL.position.y;
+    this.armExtra = Math.max(0, armRestAbduction(s, rig.proportions) - 0.08);
+    this.kneeMax = kneeFlexLimit(s, rig.proportions);
     this.blinkTimer = 1 + h01(this.seed) * 3;
   }
 
@@ -312,6 +319,11 @@ export class CharacterAnimator {
     kL = lerp(kL, 0.35, this.down);
     kR = lerp(kR, 0.12, this.down);
 
+    // a thick leg cannot fold as far as a thin one: past this the calf goes through the thigh
+    // (a kneeling body is exempt: the knee is on the ground and the shin lies along it whatever the thickness)
+    const kCap = lerp(this.kneeMax, 4, this.kneel);
+    kL = Math.min(kL, kCap);
+    kR = Math.min(kR, kCap);
     j.hipL.rotation.x = aL;
     j.hipR.rotation.x = aR;
     j.kneeL.rotation.x = -kL;
@@ -375,8 +387,10 @@ export class CharacterAnimator {
     let shR = armRx + this.air * (-0.45 + falling * -0.5);
     let elL = eBase * move + (1 - move) * 0.14 + Math.max(0, -s) * eSwing * move * (1 - busy);
     let elR = eBase * move + (1 - move) * 0.14 + Math.max(0, -sR) * eSwing * move * (1 - busy);
-    let szL = -0.08 - this.air * 0.7 + this.carry * 0.55 + this.down * 0.6 - crouchW * 0.05;
-    let szR = 0.08 + this.air * 0.7 - this.carry * 0.55 - this.down * 0.6 + crouchW * 0.05;
+    // (a wide body holds its arms further out; not while carrying, hauling or kneeling, when the arms are in front of it anyway)
+    const clear = this.armExtra * (1 - busy) * (1 - this.air * 0.5);
+    let szL = -0.08 - clear - this.air * 0.7 + this.carry * 0.55 + this.down * 0.6 - crouchW * 0.05;
+    let szR = 0.08 + clear + this.air * 0.7 - this.carry * 0.55 - this.down * 0.6 + crouchW * 0.05;
     // kneeling: hands reach forward and down over the patient. hauling: arms trail BACK, gripping the body under the arms. carrying: cradle.
     shL += -this.carry * 0.0 + this.carry * 1.0 + this.kneel * 1.0 - this.haul * 0.9;
     shR += this.carry * 1.0 + this.kneel * 1.0 - this.haul * 0.9;

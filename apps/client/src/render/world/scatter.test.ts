@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RIVER, createArena, inCampFootprint, nearTrail, waterEdgeDistance, type CollisionWorld, type Obstacle } from "@cb/shared";
+import { RIVER, createArena, inCampFootprint, nearTrail, villageKeepOut, waterEdgeDistance, type CollisionWorld, type Obstacle } from "@cb/shared";
 import { PRESETS } from "../Stage.ts";
 import { BLOOM_HUES, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 
@@ -104,5 +104,30 @@ describe("where things grow", () => {
     }
     // dry stones sit on the ground (their flat tops a hand above it), never floating or sunk
     for (const st of dry) expect(Math.abs(st.y - world.terrainHeight(st.x, st.z)), `stone at ${st.x.toFixed(1)},${st.z.toFixed(1)}`).toBeLessThan(0.15);
+  });
+
+  it("the village is left to its builders: no tree, rock, bush, flower, fern or reed grows inside its keep-out", () => {
+    for (const k of ["broadleaf", "acacia", "birch", "pine", "snag", "rocks", "slabs", "bushes", "berries", "stumps", "logs", "daisies", "cups", "ferns", "mushrooms", "pebbles", "grass"] as const) {
+      for (const it of plan[k] as Item[]) expect(villageKeepOut(it.x, it.z, 0), `${k} inside the village at ${it.x.toFixed(1)},${it.z.toFixed(1)}`).toBe(false);
+    }
+  });
+
+  it("crags: a handful of cliff faces on the hill flank, the rim and elsewhere, each planted on the ground, clear of the camp and the village, the same on every run", () => {
+    expect(plan.cliffs.length).toBeGreaterThanOrEqual(6);
+    for (const c of plan.cliffs) {
+      for (const v of [c.x, c.y, c.z, c.yaw, c.sx, c.sy, c.sz]) expect(Number.isFinite(v)).toBe(true);
+      expect(c.sy).toBeGreaterThan(1);
+      expect(inCampFootprint(c.x, c.z, 0)).toBe(false);
+      expect(villageKeepOut(c.x, c.z, 0), `cliff in the village at ${c.x.toFixed(1)},${c.z.toFixed(1)}`).toBe(false);
+      expect(c.y).toBeLessThan(world.terrainHeight(c.x, c.z) + 1.2); // its foot is at, or sunk into, the ground it stands on
+    }
+    for (const seed of [1, 7, 42]) {
+      const a = planScatter(createArena(seed), detail("medium")).cliffs;
+      expect(a.length, `seed ${seed}`).toBeGreaterThanOrEqual(6);
+      expect(planScatter(createArena(seed), detail("medium")).cliffs).toEqual(a);
+    }
+    // a cliff is a hard obstacle in the shared world: what the client draws, the server collides with
+    const obstacles = world.obstacles.filter((o) => o.tag === "cliff");
+    expect(obstacles.length).toBe(plan.cliffs.length);
   });
 });

@@ -115,16 +115,19 @@ export function buildMotes(count: number, u: AmbientUniforms): Points | undefine
 /** Four triangles: two wings meeting at a body line along +z; the vertex shader flaps them. */
 function butterflyGeometry(): BufferGeometry {
   const g = new BufferGeometry();
-  // per wing: two triangles (upper and lower wing), x lateral, z forward
+  // per wing: two triangles (upper and lower wing), x lateral, z forward; then the body, one thin triangle along the axis
   const p = [
     0, 0, 0.1, 0.22, 0, 0.16, 0.16, 0, -0.06,
     0, 0, -0.02, 0.16, 0, -0.06, 0.1, 0, -0.16,
     0, 0, 0.1, -0.16, 0, -0.06, -0.22, 0, 0.16,
     0, 0, -0.02, -0.1, 0, -0.16, -0.16, 0, -0.06,
+    -0.016, 0, 0.12, 0.016, 0, 0.12, 0, 0, -0.14,
   ];
   g.setAttribute("position", new BufferAttribute(new Float32Array(p), 3));
-  const shade = new Float32Array([1, 0.9, 0.7, 0.6, 0.55, 0.5, 1, 0.7, 0.9, 0.6, 0.5, 0.55]);
+  const shade = new Float32Array([1, 0.9, 0.7, 0.6, 0.55, 0.5, 1, 0.7, 0.9, 0.6, 0.5, 0.55, 0.35, 0.35, 0.35]);
   g.setAttribute("aShade", new BufferAttribute(shade, 1));
+  // 1 on the body's vertices: a dragonfly stretches it into a long abdomen
+  g.setAttribute("aBody", new BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]), 1));
   return g;
 }
 
@@ -132,48 +135,80 @@ function butterflyGeometry(): BufferGeometry {
  * Butterflies over flower clusters: each orbits a centre (a flower's position) in a figure-eight, its wings flapping fast. `centres`
  * are world positions; up to `count` are used.
  */
-export function buildButterflies(centres: readonly Vector3[], count: number, u: AmbientUniforms): InstancedMesh | undefined {
-  const n = Math.min(count, centres.length);
+export function buildButterflies(centres: readonly Vector3[], count: number, u: AmbientUniforms, dragons: readonly Vector3[] = []): InstancedMesh | undefined {
+  const nb = Math.min(count, centres.length);
+  const nd = dragons.length;
+  const n = nb + nd;
   if (n <= 0) return undefined;
   const geo = butterflyGeometry();
   const c = new Float32Array(n * 4);
+  const kind = new Float32Array(n);
   const rng = new Rng(0xb077);
   for (let i = 0; i < n; i++) {
-    const p = centres[i]!;
+    const p = i < nb ? centres[i]! : dragons[i - nb]!;
     c[i * 4] = p.x;
     c[i * 4 + 1] = p.y;
     c[i * 4 + 2] = p.z;
     c[i * 4 + 3] = rng.next() * 100;
+    kind[i] = i < nb ? 0 : 1;
   }
   geo.setAttribute("aCentre", new InstancedBufferAttribute(c, 4));
+  geo.setAttribute("aFly", new InstancedBufferAttribute(kind, 1));
   const mat = new ShaderMaterial({
     side: DoubleSide,
     uniforms: shared(u),
     vertexShader: /* glsl */ `
       attribute vec4 aCentre;
       attribute float aShade;
+      attribute float aBody;
+      attribute float aFly;
       uniform float uTime; uniform float uDay; uniform vec3 uLight; uniform float uMotion;
       varying vec3 vCol;
+      float h11(float x) { return fract(sin(x * 12.9898 + 4.1414) * 43758.5453); }
       vec3 orbit(float a, float ph) {
         float r = 1.6 + 0.8 * sin(ph * 3.0);
         return vec3(cos(a) * r, 0.75 + 0.35 * sin(a * 2.0 + ph) + 0.15 * sin(a * 5.0), sin(a * 2.0) * r * 0.55);
       }
+      // a dragonfly hovers, then darts to the next hover spot along the stream
+      vec3 hoverSpot(float k, float ph) {
+        return vec3((h11(k * 1.7 + ph) - 0.5) * 4.6, (h11(k * 3.1 + ph) - 0.3) * 0.5, (h11(k * 5.3 + ph) - 0.5) * 4.6);
+      }
       void main() {
         float ph = aCentre.w;
-        float sp = 0.42 + 0.12 * fract(ph);
-        float a = uTime * sp * (0.3 + 0.7 * uMotion) + ph;
-        vec3 p1 = orbit(a, ph);
-        vec3 p2 = orbit(a + 0.05, ph);
-        vec3 f = normalize(vec3(p2.x - p1.x, 0.0, p2.z - p1.z) + vec3(1e-4));
+        vec3 p1; vec3 f; float flap; vec3 lp;
+        vec3 pos = position;
+        if (aFly < 0.5) {
+          float sp = 0.42 + 0.12 * fract(ph);
+          float a = uTime * sp * (0.3 + 0.7 * uMotion) + ph;
+          p1 = orbit(a, ph);
+          vec3 p2 = orbit(a + 0.05, ph);
+          f = normalize(vec3(p2.x - p1.x, 0.0, p2.z - p1.z) + vec3(1e-4));
+          flap = sin(uTime * (17.0 + 5.0 * fract(ph * 1.7)) + ph) * (0.3 + 0.65 * uMotion);
+        } else {
+          float seg = uTime * 0.42 * (0.4 + 0.6 * uMotion) + ph;
+          float k = floor(seg);
+          float m = smoothstep(0.8, 0.97, fract(seg));
+          vec3 t0 = hoverSpot(k, ph);
+          vec3 t1 = hoverSpot(k + 1.0, ph);
+          p1 = mix(t0, t1, m) + vec3(0.0, 0.05 * sin(uTime * 9.0 + ph), 0.0);
+          vec3 dir = t1 - t0;
+          f = normalize(vec3(dir.x, 0.0, dir.z) + vec3(1e-4));
+          flap = sin(uTime * 38.0 + ph) * (0.25 + 0.4 * uMotion);
+          // long thin abdomen, narrow long wings
+          if (aBody > 0.5) { pos.z *= 2.4; pos.x *= 2.6; } else { pos.z *= 0.75; pos.x *= 1.15; }
+        }
         vec3 r = vec3(f.z, 0.0, -f.x);
-        float flap = sin(uTime * (17.0 + 5.0 * fract(ph * 1.7)) + ph) * (0.3 + 0.65 * uMotion);
-        float lift = abs(position.x) * sin(flap);
-        vec3 lp = r * position.x * cos(flap) + f * position.z + vec3(0.0, lift, 0.0);
+        float lift = abs(pos.x) * sin(flap) * (aFly < 0.5 ? 1.0 : 0.4);
+        float sc = aFly < 0.5 ? 1.0 : 0.85;
+        lp = (r * pos.x * cos(flap) + f * pos.z + vec3(0.0, lift, 0.0)) * sc;
         vec3 world = aCentre.xyz + p1 + lp;
         float show = step(0.05, uDay);
         vec4 mv = viewMatrix * vec4(mix(vec3(0.0, -1000.0, 0.0), world, show), 1.0);
         gl_Position = projectionMatrix * mv;
-        vCol = instanceColor * (0.7 + 0.3 * aShade) * uLight;
+        vec3 base = instanceColor;
+        // a dragonfly's wings are pale glass over its jewel-coloured body
+        if (aFly > 0.5) base = mix(base, vec3(0.85, 0.93, 0.95), (1.0 - aBody) * 0.4);
+        vCol = base * (0.7 + 0.3 * aShade) * uLight;
       }`,
     fragmentShader: /* glsl */ `
       varying vec3 vCol;
@@ -185,9 +220,10 @@ export function buildButterflies(centres: readonly Vector3[], count: number, u: 
   });
   const mesh = new InstancedMesh(geo, mat, n);
   const palette = [PALETTE.world.bloomYellow, PALETTE.world.bloomWhite, PALETTE.world.bloomBlue, PALETTE.world.bloomRed, PALETTE.world.bloomPink];
+  const dragon = [PALETTE.world.dragonBlue, PALETTE.world.dragonGreen];
   const col = new Color();
   for (let i = 0; i < n; i++) {
-    mesh.setColorAt(i, col.set(palette[i % palette.length]!).multiplyScalar(1.1));
+    mesh.setColorAt(i, col.set(i < nb ? palette[i % palette.length]! : dragon[(i - nb) % dragon.length]!).multiplyScalar(1.1));
     mesh.setMatrixAt(i, new Matrix4());
   }
   mesh.name = "butterflies";
@@ -206,11 +242,13 @@ function birdGeometry(): BufferGeometry {
 }
 
 /** A few distant birds circling high over the country: V shapes with slow flaps, faded by fog with distance. */
-export function buildBirds(count: number, u: AmbientUniforms): InstancedMesh | undefined {
-  if (count <= 0) return undefined;
+export function buildBirds(count: number, u: AmbientUniforms, swallows: readonly Vector3[] = []): InstancedMesh | undefined {
+  const total = count + swallows.length;
+  if (total <= 0) return undefined;
   const geo = birdGeometry();
   const rng = new Rng(0xb1d5);
-  const a = new Float32Array(count * 4);
+  const a = new Float32Array(total * 4);
+  const sw = new Float32Array(total);
   for (let i = 0; i < count; i++) {
     const flockAngle = (i % 2) * 2.4 + 0.6;
     a[i * 4] = Math.cos(flockAngle) * rng.range(55, 105) + rng.range(-8, 8); // circle centre x
@@ -218,7 +256,18 @@ export function buildBirds(count: number, u: AmbientUniforms): InstancedMesh | u
     a[i * 4 + 2] = Math.sin(flockAngle) * rng.range(55, 105) + rng.range(-8, 8); // centre z
     a[i * 4 + 3] = rng.next() * 100;
   }
+  // swallows: small fast birds that sweep low circles over the village and the pond (their own Rng: the high birds never move)
+  const low = new Rng(0x5a110);
+  swallows.forEach((c, k) => {
+    const i = count + k;
+    a[i * 4] = c.x;
+    a[i * 4 + 1] = c.y;
+    a[i * 4 + 2] = c.z;
+    a[i * 4 + 3] = low.next() * 100;
+    sw[i] = 1;
+  });
   geo.setAttribute("aCircle", new InstancedBufferAttribute(a, 4));
+  geo.setAttribute("aSwallow", new InstancedBufferAttribute(sw, 1));
   const mat = new ShaderMaterial({
     side: DoubleSide,
     fog: true,
@@ -226,17 +275,20 @@ export function buildBirds(count: number, u: AmbientUniforms): InstancedMesh | u
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
       attribute vec4 aCircle;
+      attribute float aSwallow;
       uniform float uTime; uniform float uDay; uniform float uMotion;
       void main() {
         float ph = aCircle.w;
-        float R = 22.0 + 10.0 * fract(ph * 3.1);
-        float w = 0.11 + 0.03 * fract(ph * 1.3);
+        bool sw = aSwallow > 0.5;
+        float R = sw ? 8.0 + 9.0 * fract(ph * 3.1) : 22.0 + 10.0 * fract(ph * 3.1);
+        float w = sw ? 0.3 + 0.08 * fract(ph * 1.3) : 0.11 + 0.03 * fract(ph * 1.3);
         float ang = uTime * w + ph;
-        vec3 c = vec3(cos(ang) * R, sin(uTime * 0.2 + ph) * 3.0, sin(ang) * R);
+        vec3 c = vec3(cos(ang) * R, sw ? sin(uTime * 0.85 + ph * 3.0) * 2.4 : sin(uTime * 0.2 + ph) * 3.0, sin(ang) * R);
         vec3 f = normalize(vec3(-sin(ang), 0.0, cos(ang)));
         vec3 r = vec3(f.z, 0.0, -f.x);
-        float flap = sin(uTime * 3.4 + ph * 7.0) * 0.55 * (0.3 + 0.7 * uMotion) * step(0.0, sin(uTime * 0.4 + ph));
-        float s = 1.25;
+        // swallows beat their wings in bursts between long glides; the high birds flap slowly
+        float flap = sw ? sin(uTime * 13.0 + ph * 7.0) * 0.7 * (0.3 + 0.7 * uMotion) * step(-0.2, sin(uTime * 1.3 + ph)) : sin(uTime * 3.4 + ph * 7.0) * 0.55 * (0.3 + 0.7 * uMotion) * step(0.0, sin(uTime * 0.4 + ph));
+        float s = sw ? 0.6 : 1.25;
         vec3 lp = r * position.x * cos(flap) * s + f * position.z * s + vec3(0.0, abs(position.x) * sin(flap) * s, 0.0);
         vec3 world = aCircle.xyz + c + lp;
         float show = step(0.15, uDay);
@@ -255,8 +307,8 @@ export function buildBirds(count: number, u: AmbientUniforms): InstancedMesh | u
       }`,
   });
   Object.assign(mat.uniforms, shared(u)); // by reference: UniformsUtils.merge would clone the clock and the day
-  const mesh = new InstancedMesh(geo, mat, count);
-  for (let i = 0; i < count; i++) mesh.setMatrixAt(i, new Matrix4());
+  const mesh = new InstancedMesh(geo, mat, total);
+  for (let i = 0; i < total; i++) mesh.setMatrixAt(i, new Matrix4());
   mesh.name = "birds";
   mesh.frustumCulled = false;
   return mesh;

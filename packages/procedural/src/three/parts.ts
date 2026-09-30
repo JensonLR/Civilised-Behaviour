@@ -27,6 +27,10 @@ export interface PrimitiveAudit {
   /** Mean of (face normal . direction from the primitive's centre to the face), area weighted: > 0 for a form whose faces point outward. */
   outward: number;
   triangles: number;
+  /** Vertex count: primitives are merged in the order they were added, so this locates each one's vertices in the bone mesh (the fit audit, fit/penetration.ts). */
+  vertices: number;
+  /** Set by builders around pieces that are meant to be buried in the body they grow from (a collar's base in the shoulder slope): the fit audit does not count their depth. */
+  anchored?: boolean;
   /** The bone builder that made it ("torso", "head", ...) - set by the rig while the hook is on. */
   tag: string;
   /** Which helper made it (sphere, loft, sweep ...). */
@@ -89,7 +93,7 @@ function auditPrimitive(geo: BufferGeometry): PrimitiveAudit {
     }
     outward = tris > 0 ? agree / tris - 0.5 : 0;
   }
-  return { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z], outward, triangles: n / 3, tag: PartBuilder.auditTag, kind: PartBuilder.auditKind };
+  return { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z], outward, triangles: n / 3, vertices: p.count, anchored: PartBuilder.anchored, tag: PartBuilder.auditTag, kind: PartBuilder.auditKind };
 }
 
 /** Primitives smaller than this (metres, bounding radius) are left out of the outline hull. */
@@ -137,6 +141,8 @@ export class PartBuilder {
   static audit: PrimitiveAudit[] | undefined = undefined;
   static auditTag = "";
   static auditKind = "add";
+  /** Test hook (see PrimitiveAudit.anchored): true while a builder adds pieces that are buried in their base by design. */
+  static anchored = false;
 
   private readonly parts: BufferGeometry[] = [];
   private seq = 0;

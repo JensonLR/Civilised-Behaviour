@@ -263,6 +263,66 @@ export function slabGeometry(lod: Lod): BufferGeometry {
   return k.build()!;
 }
 
+
+/**
+ * A crag: a stratified escarpment. Local frame: x along the contour (-1..1), y up (0..1), z across it (+z is the exposed, downhill face, -z is buried in the
+ * hillside), scaled by the instance to the cliff's length, height and depth. Seven courses of sedimentary stone, each its own tone, stepping in and
+ * out so every other one is a ledge with a mossy top; a dark seam between courses, a frost fissure, an overhanging capstone with moss drips, and
+ * rubble at the foot. One merged mesh; the ink hull is the same mesh.
+ */
+export function cliffGeometry(lod: Lod): BufferGeometry {
+  const k = new Kit();
+  const thick = [0.17, 0.15, 0.15, 0.14, 0.13, 0.13, 0.13];
+  const front = [1.0, 0.7, 0.92, 0.62, 0.84, 0.58, 0.76];
+  const tones = [cStrata, cBoulder, cPale, cStrata, cBoulder, cRockDark, cPale];
+  let y = -0.02;
+  thick.forEach((t, i) => {
+    const w = [1.0, 0.88, 0.96, 0.76, 0.84, 0.6, 0.68][i]!;
+    const back = -0.92;
+    const zc = (front[i]! + back) / 2;
+    const seg = lod ? 5 : 2;
+    k.add(new BoxGeometry(w * 2, t + 0.02, front[i]! - back, seg, 1, lod ? 2 : 1), {
+      at: [[0, 0.09, -0.07, 0.14, -0.12, 0.06, -0.02][i]!, y + t / 2, zc],
+      rot: [0, ((i % 2) - 0.5) * 0.04, ((i * 5) % 3 - 1) * 0.025],
+      colour: (p, n, out) => {
+        out.copy(tones[i]!);
+        const h = Math.abs(Math.sin(Math.floor((p.x + 1.3) * 4.0) * 12.9898 + i * 37.719) * 43758.5453) % 1;
+        out.lerp(cRockDark, h > 0.72 ? 0.25 : 0);
+        if (n.y > 0.5) {
+          // the ledge top: moss and a pale weathered lip
+          out.lerp(cMoss, 0.55);
+          if (h < 0.22) out.lerp(cPale, 0.4);
+        } else if (n.y < -0.5) out.lerp(cRockDark, 0.6);
+        else {
+          const drip = Math.abs(Math.sin(Math.floor((p.x + 1.3) * 5.0) * 78.233 + i)) > 0.7 ? 0.4 : 0;
+          out.lerp(cMoss, drip * (i / 6));
+          if (p.y - y > t * 0.86) out.lerp(cRockDark, 0.3); // the seam under the next course
+          if (h > 0.9) out.lerp(cLichenO, 0.7);
+        }
+      },
+      perFace: lod === 1,
+      flat: lod === 0,
+      jitter: lod ? 0.03 : 0.02,
+      seed: 900 + i,
+    });
+    y += t;
+  });
+  // the capstone overhangs the face
+  k.add(new BoxGeometry(2.1, 0.09, 2.15, lod ? 6 : 2, 1, 2), { at: [0.02, y + 0.03, 0.14], rot: [0.03, 0.02, -0.02], colour: (p, n, out) => (n.y > 0.5 ? out.copy(cMoss).lerp(cPale, 0.25 + 0.2 * Math.sin(p.x * 9)) : out.copy(cRockDark)), perFace: lod === 1, flat: lod === 0, jitter: 0.03, seed: 920 });
+  if (lod) {
+    // fallen blocks against both ends of the face, and rubble at the foot
+    for (const sx of [-1, 1]) k.add(new IcosahedronGeometry(1, 0), { at: [sx * 1.02, 0.11, 0.55], scale: [0.2, 0.2, 0.55], rot: [0, sx * 0.4, 0], colour: rockColour, flat: true, jitter: 0.06, seed: 950 + sx });
+    // a frost fissure down the face
+    k.add(new BoxGeometry(0.035, 0.7, 0.05), { at: [0.3, 0.5, 0.86], rot: [0, 0, 0.07], colour: W.rockDark, flat: true });
+    k.add(new BoxGeometry(0.03, 0.5, 0.05), { at: [-0.55, 0.62, 0.62], rot: [0, 0, -0.05], colour: W.rockDark, flat: true });
+    for (let i = 0; i < 6; i++) {
+      const r = 0.08 + ((i * 53) % 7) * 0.012;
+      k.add(new IcosahedronGeometry(r, 0), { at: [-1.05 + i * 0.4 + ((i * 17) % 5) * 0.03, r * 0.5, 1.1 + ((i * 29) % 4) * 0.08], scale: [0.7, 0.7, 1.3], colour: rockColour, flat: true, jitter: 0.02, seed: 930 + i });
+    }
+  }
+  return k.build()!;
+}
+
 /**
  * A flat stepping stone: a thick slab with a worn, pale top and a dark rim, seven-sided and a little irregular. Local frame: radius 1,
  * 0.2 tall, base at y = 0. Scaled by the instance (0.3 m stones); no ink (too flat and small to carry a line).

@@ -118,6 +118,8 @@ export interface OutlineDisplace {
   uniforms: Record<string, { value: unknown }>;
   header: string;
   apply: string;
+  /** Optional GLSL run on the hull's local-space `vec4 local` BEFORE the instance matrix is applied (so an animated instanced mesh can pose its own hull). */
+  pre?: string;
 }
 
 export interface WorldOutlineOptions {
@@ -171,6 +173,7 @@ export function worldOutlineMaterial(o: WorldOutlineOptions): ShaderMaterial {
       void main() {
         vec4 local = vec4(position, 1.0);
         vec3 on = onormal;
+        ${d?.pre ?? ""}
         #ifdef USE_INSTANCING
           mat3 im = mat3(instanceMatrix);
           local = instanceMatrix * local;

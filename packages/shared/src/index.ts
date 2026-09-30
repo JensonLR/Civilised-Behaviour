@@ -9,6 +9,7 @@ export * from "./worldgen.ts";
 export * from "./landscape.ts";
 export * from "./ruins.ts";
 export * from "./clearing.ts";
+export * from "./village.ts";
 export * from "./fauna.ts";
 export * from "./daycycle.ts";
 export * from "./weather.ts";

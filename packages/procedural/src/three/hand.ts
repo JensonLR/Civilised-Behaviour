@@ -1,7 +1,9 @@
 import { PALETTE } from "@cb/shared";
 import { curve } from "./sweep.ts";
-import { CREAM, PartBuilder, singe, type V3 } from "./parts.ts";
-import { tone, type BodyCtx } from "./bodyKit.ts";
+import { PartBuilder, singe, type V3 } from "./parts.ts";
+import { ringAt, tone, type BodyCtx } from "./bodyKit.ts";
+import { CUFF_HANG, foreArmRings, handColour, wristSize } from "./limbRings.ts";
+import { bandOn, clothLift } from "./limbKit.ts";
 
 /**
  * Hands. At full detail a hand is a palm slab with four fingers (three joints each, fanned a little and curled a little when relaxed), a thumb and knuckles - not a
@@ -13,16 +15,8 @@ import { tone, type BodyCtx } from "./bodyKit.ts";
  * front (-Z), the way a relaxed arm hangs. Fingers curl toward the palm side, so a grip closes on a rod running front-to-back.
  */
 
-/** Colour of the hand: bare skin, or the glove. */
-export function handColor(c: BodyCtx): number {
-  const g = c.spec.gloves;
-  if (g === 1) return singe(CREAM, c.burnt);
-  if (g === 2) return singe(c.leather, c.burnt);
-  if (g === 3) return singe(tone(c.leather, 0.92), c.burnt);
-  if (g === 4) return singe(tone(c.leather, 0.85), c.burnt);
-  if (g === 5) return singe(PALETTE.material.fur, c.burnt);
-  return c.skin;
-}
+/** Colour of the hand: bare skin, or the glove (limbRings.ts: the sleeve's end is tucked onto it). */
+export const handColor = handColour;
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
@@ -40,7 +34,7 @@ function fingerPath(hr: number, sx: number, k: number, g: number, palmBottom: nu
   const spread = lerp(SPREAD[k]!, 0, g);
   let x = -sx * hr * lerp(0.02, 0.22, g); // (in a fist the knuckles roll toward the palm side)
   let y = palmBottom;
-  let z = -hr * (0.55 - 0.365 * k);
+  let z = -hr * (0.51 - 0.34 * k);
   const out: V3[] = [[x, y, z]];
   let a = 0;
   for (let i = 0; i < 3; i++) {
@@ -57,8 +51,8 @@ function fingerPath(hr: number, sx: number, k: number, g: number, palmBottom: nu
 /** The thumb's three control points at grip g: hanging forward of the palm, or folded across the front of the curled fingers. */
 function thumbPath(hr: number, sx: number, g: number, wristY: number): V3[] {
   const at = (x: number, yf: number, z: number): V3 => [-sx * x * hr, wristY - yf * hr, z * hr];
-  const relaxed = [at(0.24, 0.4, -0.62), at(0.34, 0.78, -0.82), at(0.46, 1.06, -0.86)];
-  const fist = [at(0.3, 0.4, -0.62), at(0.7, 0.88, -0.62), at(0.72, 0.95, -0.12)];
+  const relaxed = [at(0.2, 0.2, -0.58), at(0.3, 0.62, -0.74), at(0.4, 0.98, -0.84)];
+  const fist = [at(0.26, 0.24, -0.58), at(0.68, 0.84, -0.6), at(0.72, 0.95, -0.12)];
   return relaxed.map((p, i) => [lerp(p[0], fist[i]![0], g), lerp(p[1], fist[i]![1], g), lerp(p[2], fist[i]![2], g)] as V3);
 }
 
@@ -73,6 +67,7 @@ export function buildHand(b: PartBuilder, c: BodyCtx, armLength: number, side: "
   const hr = P.handRadius;
   const sx = side === "R" ? 1 : -1;
   const wristY = -armLength;
+  const wr = wristSize(P);
   const Y = (f: number): number => wristY - hr * f; // f: heights below the wrist in hand radii
   const mitt = spec.gloves === 5;
   const fingerless = spec.gloves === 3;
@@ -85,33 +80,35 @@ export function buildHand(b: PartBuilder, c: BodyCtx, armLength: number, side: "
     return;
   }
 
-  // ---- palm: a rounded slab, wider across the knuckles --------------------------------------------------------------------------------------------
+  // ---- palm: the back of the hand and the palm as one rounded block, narrow at the wrist, as wide as the four fingers across the knuckles and rounded off under them ----------------------
   b.loft(
     [
-      { y: wristY + 0.012, rx: hr * 0.34, rz: hr * 0.46, color: tone(skin, 0.9) },
-      { y: Y(0.3), rx: hr * 0.4, rz: hr * 0.72, pow: 2.6, color: skin },
-      { y: Y(0.76), rx: hr * 0.38, rz: hr * 0.82, pow: 2.8, color: knuckleBands ? tattooC : skin },
-      { y: Y(0.94), rx: hr * 0.32, rz: hr * 0.78, pow: 2.8, color: knuckleBands ? tattooC : tone(skin, 0.96) },
-      { y: Y(1.06), rx: hr * 0.2, rz: hr * 0.62, pow: 2.4, color: tone(skin, 0.88) },
+      { y: wristY + 0.03, rx: Math.min(hr * 0.34, wr.rx * 0.95), rz: Math.min(hr * 0.46, wr.rz * 0.95), color: tone(skin, 0.9) },
+      { y: Y(0.34), rx: hr * 0.4, rz: hr * 0.6, cz: -hr * 0.03, pow: 2.3, color: skin },
+      { y: Y(0.74), rx: hr * 0.4, rz: hr * 0.7, cz: -hr * 0.02, pow: 2.4, color: knuckleBands ? tattooC : skin },
+      { y: Y(0.96), rx: hr * 0.35, rz: hr * 0.69, pow: 2.5, color: knuckleBands ? tattooC : tone(skin, 0.97) },
+      { y: Y(1.08), rx: hr * 0.22, rz: hr * 0.58, pow: 2.3, color: tone(skin, 0.88) },
     ],
     skin,
+    undefined,
+    undefined,
+    undefined,
+    { capBottom: false },
   );
   // The outline hull is drawn once and never morphs, so it must not contain anything that moves with the grip (a hull of the relaxed fingers would hang below a fist as a black ghost).
   if (PartBuilder.hullMode) {
     cuffs(b, c, armLength, skin);
     return;
   }
-  // knuckles: two proud bumps on the back of the hand read the fist and the flat hand alike
-  for (const zz of [-0.36, 0.36]) b.sphere(hr * 0.2, tone(skin, 1.04), [sx * hr * 0.34, Y(0.86), zz * hr], [0.7, 0.8, 1.2]);
-
   // ---- fingers -----------------------------------------------------------------------------------------------------------------------------------
   const ringOn = (side === "R" && (spec.ring === 1 || spec.ring === 2 || spec.ring === 4)) || (side === "L" && (spec.ring === 3 || spec.ring === 4));
   const palmBottom = Y(0.9);
   const section = (k: number, base: number) => (t: number) => ({
-    rx: hr * (0.155 - 0.035 * t) * (mitt ? 1.2 : 1),
-    rz: hr * (0.15 - 0.032 * t),
-    pow: 2.3,
-    color: fingerless && t > 0.36 ? bare : t > 0.62 ? tone(skin, (k % 2 ? 0.92 : 1.02) * 1.06) : t < 0.12 ? tone(base, 0.8) : base,
+    rx: hr * (0.17 - 0.04 * t) * (mitt ? 1.2 : 1),
+    rz: hr * (0.16 - 0.036 * t),
+    pow: 2.2,
+    // (a slightly darker band at each knuckle, a paler tip)
+    color: fingerless && t > 0.36 ? bare : t > 0.68 ? tone(skin, (k % 2 ? 0.94 : 1.02) * 1.06) : t < 0.1 ? tone(base, 0.82) : Math.abs(t - 0.34) < 0.05 || Math.abs(t - 0.62) < 0.05 ? tone(base, 0.92) : base,
   });
   if (mitt) {
     // one mass for the four fingers (a mitten), then the thumb apart
@@ -145,7 +142,7 @@ export function buildHand(b: PartBuilder, c: BodyCtx, armLength: number, side: "
   // ---- thumb --------------------------------------------------------------------------------------------------------------------------------------
   b.sweep(
     curve(thumbPath(hr, sx, g, wristY), 4),
-    (t) => ({ rx: hr * (0.185 - 0.045 * t), rz: hr * (0.185 - 0.045 * t), pow: 2.3, color: fingerless && t > 0.5 ? bare : t > 0.7 ? tone(skin, 1.05) : skin }),
+    (t) => ({ rx: hr * (0.235 - 0.085 * t), rz: hr * (0.225 - 0.08 * t), pow: 2.3, color: fingerless && t > 0.5 ? bare : t > 0.7 ? tone(skin, 1.05) : skin }),
     skin,
     { side: [1, 0, 0], segments: 5, round: "end" },
   );
@@ -177,47 +174,41 @@ function fistBall(b: PartBuilder, c: BodyCtx, armLength: number, skin: number): 
   );
 }
 
-/** Glove cuffs at the wrist (they are part of the hand geometry but do not move with the grip). */
+/**
+ * The glove's wrist, laid on the sleeve's own rings (they do not move with the grip): a leather gauntlet that flares up the forearm, a knitted band, a shaggy fur cuff. All of them
+ * are offsets of the forearm's sections (limbKit `bandOn`), lifted clear of the sleeve's cuff, and their length is a fraction of the forearm, so they fit a stubby arm and a long one.
+ */
 function cuffs(b: PartBuilder, c: BodyCtx, armLength: number, skin: number): void {
   const { P, spec } = c;
-  const hr = P.handRadius;
-  const hy = -armLength - hr * 0.7; // (the old fist's centre: the cuffs are placed relative to it, as they always were)
+  const g = spec.gloves;
+  if (g < 2) return;
+  const rings = foreArmRings(c);
   const r = P.armRadius;
-  if (spec.gloves === 2 || spec.gloves === 4) {
+  const bottom = -armLength - CUFF_HANG;
+  const over = clothLift(r) * 1.9; // clear of the sleeve's own cuff (the biggest stands 1.5 lifts proud)
+  const cl = clothLift(r);
+  if (g === 2 || g === 4) {
     // leather gauntlet: a flared cuff running up the wrist; gauntlets are longer and stiffer
-    const long = spec.gloves === 4;
-    const g = tone(skin, 1.12);
-    b.loft(
-      [
-        { y: hy + hr * 0.95, rx: r * 0.95, rz: r * 0.92, color: tone(skin, 0.9) },
-        { y: hy + hr * (long ? 1.9 : 1.5), rx: r * (long ? 1.25 : 1.1), rz: r * (long ? 1.2 : 1.06), color: g },
-        { y: hy + hr * (long ? 2.7 : 2.0), rx: r * (long ? 1.42 : 1.16), rz: r * (long ? 1.36 : 1.12), color: g, crease: true },
-      ],
-      skin,
-      undefined,
-      undefined,
-      undefined,
-      { capTop: false },
-    );
-    if (long) b.torus(r * 1.3, 0.008, c.accent, [0, hy + hr * 2.2, 0], [Math.PI / 2, 0, 0]);
-  }
-  if (spec.gloves === 3) {
+    const long = g === 4;
+    const top = bottom + Math.min(armLength * (long ? 0.55 : 0.34), long ? 0.24 : 0.14);
+    const col = tone(skin, 1.12);
+    bandOn(b, rings, top, bottom, col, { lift: over + cl * (long ? 1.1 : 0.7), liftBottom: over, steps: 1, colorBottom: tone(skin, 0.9), crease: true });
+    if (long) {
+      const y = bottom + (top - bottom) * 0.62;
+      const s = ringAtY(rings, y);
+      const rm = (s.rx + s.rz) / 2 + over + cl * 0.55 + 0.004;
+      b.torus(rm, 0.008, c.accent, [s.cx, y, s.cz], [Math.PI / 2, 0, 0], [(s.rx + over) / ((s.rx + s.rz) / 2 + over), (s.rz + over) / ((s.rx + s.rz) / 2 + over), 1]);
+    }
+  } else if (g === 3) {
     // fingerless glove: a knitted wrist band
-    b.loft(
-      [
-        { y: hy + hr * 1.5, rx: r * 0.98, rz: r * 0.95, color: tone(skin, 1.08) },
-        { y: hy + hr * 0.95, rx: r * 0.92, rz: r * 0.9, color: skin },
-      ],
-      skin,
-      undefined,
-      undefined,
-      undefined,
-      { capTop: false, capBottom: false },
-    );
-  }
-  if (spec.gloves === 5) {
+    bandOn(b, rings, bottom + Math.min(0.06, armLength * 0.2), bottom, tone(skin, 1.08), { lift: over * 0.8, liftBottom: over * 0.8, steps: 1, colorBottom: skin });
+  } else if (g === 5) {
     // fur mitts: a shaggy cuff round the wrist
     const fur = singe(PALETTE.material.fur, c.burnt);
-    b.loft([{ y: hy + hr * 0.95, rx: r * 1.15, rz: r * 1.1, color: tone(fur, 0.8) }, { y: hy + hr * 1.5, rx: r * 1.32, rz: r * 1.26, color: fur }, { y: hy + hr * 2.0, rx: r * 1.18, rz: r * 1.12, color: tone(fur, 1.1) }], fur, undefined, undefined, undefined, { capTop: false });
+    bandOn(b, rings, bottom + Math.min(0.085, armLength * 0.28), bottom - 0.002, fur, { lift: over * 0.9, liftBottom: over * 0.9, steps: 2, bulge: cl * 1.2, colorBottom: tone(fur, 0.8) });
   }
+}
+
+function ringAtY(rings: ReturnType<typeof foreArmRings>, y: number): { rx: number; rz: number; cx: number; cz: number } {
+  return ringAt(rings, y);
 }

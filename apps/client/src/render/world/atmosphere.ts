@@ -83,6 +83,10 @@ export const atmoUniforms = {
   uSunColW: { value: new Color(1, 1, 1) },
   /** 0..1 rain falling right now (rain streak opacity, ripples in the puddles). */
   uRain: { value: 0 },
+  /** The clock hour 0..24 (the gate-tower's hands turn with it). */
+  uHour: { value: 13 },
+  /** 0..1 valley mist (dawn, and after rain): ground fog that pools in the hollows (see `toon.ts`). */
+  uMist: { value: 0 },
 };
 
 /** Wind strength (0..1) and the motion preference (0..1) -> the sway multiplier (0 = perfectly still). */

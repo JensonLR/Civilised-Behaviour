@@ -26,11 +26,18 @@ describe("WorldView budget", () => {
       if (process.env.WORLD_STATS) process.stderr.write(`${name} ${JSON.stringify(view.stats)}\n`);
       // Budget (docs/PERFORMANCE.md): was 45 draws / 280k tris before the environment upgrade added water, ruin, camp life,
       // ambient life and a dozen kinds of ground cover, each ONE instanced draw (+ one hull where it carries ink). Main pass only.
-      expect(view.stats.meshes).toBeLessThanOrEqual(name === "low" ? 34 : 60);
+      // (2026-09-30, the settlement: 34 / 60 -> 37 / 66. The village is 2 draws (solid + hull), the crags 2, the canopy shafts 1, the wildlife 2 (the farm animals
+      // and the wild ones now share one collapsing mesh per group: 4 draws, as before). Measured: low 36, medium 64, high 64. Everything else that is new rides
+      // inside an existing mesh: the HQ marquee, the windmill and the snow range (hills), the lit windows (lantern glass), the dragonflies (butterflies),
+      // the swallows (birds).)
+      expect(view.stats.meshes).toBeLessThanOrEqual(name === "low" ? 37 : 66);
       // (2026-09-30: 150k / 300k / 380k -> 160k / 330k / 440k. The Observatory is now a walk-in ruin of real stone courses with a ribbed copper dome
       // (+8k), the hill tree line has proper lumpy crowns instead of paper hexagons (+~15k medium), the camp cloth is its own mesh, and rain is one
       // pooled quad set (+4k medium, 7k high, vertex-culled when it is dry). See docs/PERFORMANCE.md.)
-      expect(view.stats.triangles).toBeLessThan(name === "low" ? 160_000 : name === "medium" ? 330_000 : 440_000);
+      // (2026-09-30, the settlement: 160k / 330k / 440k -> 195k / 430k / 540k. Measured: 180k / 420k / 525k. Village 41k + 14k hull, crags 9k, the animals 30k
+      // (a collapsed species still counts here, though its triangles are dropped at primitive assembly), a doubled ground detail pass costs shader time not
+      // triangles. See docs/PERFORMANCE.md.)
+      expect(view.stats.triangles).toBeLessThan(name === "low" ? 195_000 : name === "medium" ? 430_000 : 540_000);
       expect(view.stats.meshes).toBeGreaterThan(12);
       view.update(1.5); // animates without throwing or allocating scene objects
       view.dispose();

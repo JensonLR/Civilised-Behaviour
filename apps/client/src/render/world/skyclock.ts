@@ -1,4 +1,4 @@
-import { CLOCK, advanceClock, createLightning, createWeather, lightningAt, sanitizeDayMinutes, weatherAt, weatherPreset, worldHours, type Lightning, type Weather, type WeatherKind } from "@cb/shared";
+import { CLOCK, WORLD_CLOCK, advanceClock, createLightning, createWeather, lightningAt, moonPhase, sanitizeDayMinutes, weatherAt, weatherPreset, worldDay, worldHours, type Lightning, type Weather, type WeatherKind } from "@cb/shared";
 
 /**
  * Which hour it is and what the weather is doing, resolved from the many places that can say. Precedence for the HOUR:
@@ -20,6 +20,8 @@ export interface SkyClockOptions {
   startWorldMs?: number;
   /** Seed for the local weather schedule. */
   localSeed?: number;
+  /** `?moon=0..1` (already parsed): a fixed phase for review. */
+  moon?: number;
 }
 
 const FROZEN = 0;
@@ -32,6 +34,9 @@ export class SkyClock {
   seed: number;
   readonly weather: Weather = createWeather();
   readonly lightning: Lightning = createLightning();
+  /** The moon's phase tonight, 0..1 (0 new, 0.5 full): an eight-night cycle counted from the world's age; `?moon=` overrides. */
+  moon = 0.5;
+  private moonOverride: number | undefined;
   /** Storm strength to force for lightning in review scenes (-1 = follow the schedule). */
   private forceStorm = -1;
   private drift: boolean;
@@ -49,6 +54,7 @@ export class SkyClock {
     this.localMs = o.startWorldMs ?? 0;
     this.worldMs = this.localMs;
     this.seed = o.localSeed ?? 7;
+    this.moonOverride = o.moon;
   }
 
   get inRoom(): boolean {
@@ -99,6 +105,8 @@ export class SkyClock {
     else if (this.pinned !== undefined) this.hours = this.pinned;
     else if (r) this.hours = worldHours(r.startHour, this.worldMs, r.dayMinutes);
     else if (this.drift && dt > 0) this.hours = advanceClock(this.hours, dt);
+    const day = r ? worldDay(r.startHour, this.worldMs, r.dayMinutes) : worldDay(CLOCK.defaultStart, this.worldMs, WORLD_CLOCK.defaultDayMinutes);
+    this.moon = this.moonOverride ?? moonPhase(day, this.seed);
     if (this.forced) {
       weatherPreset(this.forced, this.weather);
       this.forceStorm = this.weather.storm;

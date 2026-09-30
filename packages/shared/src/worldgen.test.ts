@@ -147,11 +147,12 @@ describe("the arena and the camp", () => {
         const sp = spawnPoint(slot, MAX_PLAYERS);
         for (const o of w.obstacles) expect(insideObstacle(o, sp.x, sp.z, 0.6), `seed ${seed} slot ${slot} vs ${o.tag}`).toBe(false);
       }
-      const camp = w.obstacles.filter((o) => ["tent", "fire", "flag", "sign", "luggage", "cart", "crate", "wall", "table", "scope", "pole", "hammock"].includes(o.tag!));
+      const camp = w.obstacles.filter((o) => ["tent", "fire", "flag", "sign", "luggage", "cart", "crate", "wall", "table", "scope", "pole", "hammock", "marquee", "hq"].includes(o.tag!));
       for (let i = 0; i < camp.length; i++) {
         for (let j = i + 1; j < camp.length; j++) {
           const a = camp[i]!;
           const b = camp[j]!;
+          if (["marquee", "hq"].includes(a.tag!) || ["marquee", "hq"].includes(b.tag!)) continue; // (the HQ's pieces are checked exactly in village.test.ts)
           expect(Math.hypot(a.x - b.x, a.z - b.z), `${a.tag}/${b.tag}`).toBeGreaterThan(footprint(a) * 0.6 + footprint(b) * 0.6);
         }
       }

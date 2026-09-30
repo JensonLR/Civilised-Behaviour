@@ -42,6 +42,8 @@ export interface SkyUniforms {
   flashCol: { value: Color };
   /** Rain curtain: greys the low sky. */
   uRain: { value: number };
+  /** The moon's phase angle (radians): 0 new, PI full. */
+  uPhase: { value: number };
 }
 
 const tmp = new Color();
@@ -109,6 +111,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
     uBolt: { value: new Vector3(0, 0, 0) },
     flashCol: c(PALETTE.world.flash),
     uRain: { value: 0 },
+    uPhase: { value: Math.PI },
   };
   const mat = new ShaderMaterial({
     side: BackSide,
@@ -123,7 +126,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
       uniform vec3 sunDisc; uniform vec3 sunRing; uniform vec3 moonCol; uniform vec3 starCol;
       uniform vec3 sunDir; uniform vec3 moonDir;
       uniform float uTime; uniform float uDusk; uniform float uStars; uniform float uMoon;
-      uniform float uCover; uniform float uFlash; uniform vec3 uBolt; uniform vec3 flashCol; uniform float uRain;
+      uniform float uCover; uniform float uFlash; uniform vec3 uBolt; uniform vec3 flashCol; uniform float uRain; uniform float uPhase;
       float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
       float vnoise(vec2 p){
         vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -147,7 +150,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         float pool = pow(toSun, 3.0) * (1.0 - smoothstep(0.0, 0.4 + 0.25 * uDusk, h));
         col = mix(col, glow, band(pool, 4.0) * (0.55 + 0.5 * uDusk) * sunUp);
 
-        // stars and moon (night)
+        // stars: a sparse bright layer, a dense faint one, a milky band of extra faint ones, and now and then a shooting star
         if (uStars > 0.01 && d.y > 0.0) {
           vec2 suv = vec2(atan(d.z, d.x) * 9.0, asin(clamp(d.y, -1.0, 1.0)) * 16.0);
           vec2 cell = floor(suv * vec2(2.0, 2.0));
@@ -158,21 +161,56 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
           float sd = length(fp - off * 0.6);
           float tw = 0.65 + 0.35 * sin(uTime * (1.4 + r * 3.0) + r * 60.0);
           float star = present * (1.0 - smoothstep(0.03, 0.09 + 0.06 * hash(cell + 9.3), sd)) * tw;
-          col = mix(col, starCol, star * uStars * smoothstep(0.03, 0.25, d.y));
+          // faint dense layer
+          vec2 suv2 = suv * 2.7 + 31.0;
+          vec2 cell2 = floor(suv2);
+          vec2 fp2 = fract(suv2) - 0.5;
+          float r2 = hash(cell2 + 5.0);
+          vec2 off2 = vec2(hash(cell2 + 1.3), hash(cell2 + 2.9)) - 0.5;
+          float faint = step(0.8, r2) * (1.0 - smoothstep(0.02, 0.07, length(fp2 - off2 * 0.7))) * (0.5 + 0.5 * sin(uTime * (2.0 + r2 * 4.0) + r2 * 40.0));
+          // the milky band: a great circle tilted across the sky where the faint stars crowd
+          float band = 1.0 - smoothstep(0.0, 0.32, abs(dot(d, normalize(vec3(0.45, 0.62, -0.64)))));
+          float milk = step(0.55, r2) * (1.0 - smoothstep(0.02, 0.06, length(fp2 - off2 * 0.7))) * band;
+          float sky3 = smoothstep(0.03, 0.25, d.y) * uStars;
+          col = mix(col, starCol, clamp(star + faint * 0.5 + milk * 0.5, 0.0, 1.0) * sky3);
+          col = mix(col, starCol * 0.9, band * band * 0.05 * sky3 * (0.6 + 0.4 * vnoise(suv * 1.3)));
+          // a shooting star every so often (a streak that fades along its path)
+          float slot = floor(uTime / 23.0);
+          float sh = hash(vec2(slot, 4.0));
+          float lifeT = fract(uTime / 23.0) * 23.0;
+          if (sh > 0.55 && lifeT < 0.9) {
+            vec2 a0 = vec2(atan(d.z, d.x), asin(clamp(d.y, -1.0, 1.0)));
+            vec2 start = vec2(sh * 6.2831, 0.55 + 0.4 * hash(vec2(slot, 9.0)));
+            vec2 dirv = vec2(0.85, -0.5);
+            vec2 head = start + dirv * lifeT * 0.3;
+            vec2 rel = a0 - head;
+            rel.x = mod(rel.x + 3.14159265, 6.2831853) - 3.14159265;
+            float along = dot(rel, -dirv);
+            float across = abs(dot(rel, vec2(-dirv.y, dirv.x)));
+            float streak = step(0.0, along) * (1.0 - smoothstep(0.0, 0.22, along)) * (1.0 - smoothstep(0.0015, 0.004, across)) * (1.0 - lifeT / 0.9);
+            col = mix(col, starCol, streak * uStars * 0.9);
+          }
         }
+        // the moon, by its phase: the disc lit on the side facing the (hidden) sun, the rest in faint earthshine
         if (uMoon > 0.01) {
-          float ma = acos(clamp(dot(d, normalize(moonDir)), -1.0, 1.0));
-          float halo = 1.0 - smoothstep(0.0, 0.38, ma);
-          col = mix(col, moonCol, band(halo, 3.0) * 0.16 * uMoon);
-          // a gibbous moon: the disc minus a shifted disc
           vec3 mn = normalize(moonDir);
-          vec3 side = normalize(cross(mn, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
-          float shifted = acos(clamp(dot(d, normalize(mn + side * 0.03)), -1.0, 1.0));
-          float disc = 1.0 - smoothstep(0.050, 0.054, ma);
-          float bite = 1.0 - smoothstep(0.047, 0.052, shifted);
-          float lit = disc * (1.0 - bite * 0.78);
-          float mare = vnoise(vec2(atan(d.z, d.x) * 90.0, d.y * 90.0));
-          col = mix(col, moonCol * (0.88 + 0.12 * mare), lit * uMoon);
+          float ma = acos(clamp(dot(d, mn), -1.0, 1.0));
+          float illum = 0.5 - 0.5 * cos(uPhase);
+          float halo = 1.0 - smoothstep(0.0, 0.38, ma);
+          col = mix(col, moonCol, band(halo, 3.0) * (0.03 + 0.15 * illum) * uMoon);
+          if (ma < 0.08) {
+            vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), mn) + vec3(1e-4));
+            vec3 upv = cross(mn, side);
+            vec3 dd = d - mn * dot(d, mn);
+            vec2 muv = vec2(dot(dd, side), dot(dd, upv)) / 0.052;
+            float rr = length(muv);
+            float disc = 1.0 - smoothstep(0.94, 1.0, rr);
+            vec3 nrm = vec3(muv, sqrt(max(0.0, 1.0 - rr * rr)));
+            float lit = smoothstep(-0.03, 0.04, dot(nrm, vec3(sin(uPhase), 0.0, -cos(uPhase))));
+            float mare = vnoise(muv * 3.6 + 4.0) * 0.6 + vnoise(muv * 8.0) * 0.4;
+            vec3 face = moonCol * (0.9 + 0.1 * mare) * lit + moonCol * 0.14 * (1.0 - lit) * (0.8 + 0.2 * mare);
+            col = mix(col, face, disc * uMoon);
+          }
         }
 
         // sun: disc with a ring and two halo bands
@@ -203,7 +241,15 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         float lit = step(0.012, n - nl) * sunUp * (1.0 - uCover * 0.9);
         float core = smoothstep(thr + 0.075, thr + 0.083, n);
         vec3 cc = mix(cloudShade, cloudLit, max(lit, core * 0.6));
+        // volume: a third tone deep in the thick of a cloud (its belly), and a bright rim on the sun's edge of it
+        float belly = smoothstep(thr + 0.11, thr + 0.2, n) * (1.0 - lit);
+        cc = mix(cc, cloudShade * 0.78, belly * 0.7);
         cc = mix(cc, glow, (1.0 - h) * toSun * (0.3 + 0.4 * uDusk) * sunUp);
+        // sunset: clouds in front of the sun go dark plum with a burning rim (silhouettes), and the rim catches fire along its edge
+        float rim = smoothstep(thr, thr + 0.02, n) * (1.0 - smoothstep(thr + 0.025, thr + 0.07, n));
+        float sunSide = pow(toSun, 2.0) * uDusk * sunUp * (1.0 - smoothstep(0.0, 0.5, h));
+        cc = mix(cc, cloudShade * 0.5, sunSide * 0.55 * (1.0 - rim));
+        cc = mix(cc, glow * 1.35, rim * sunSide * 1.6 + rim * uDusk * 0.25);
         col = mix(col, cc, body);
         // rain curtain: the low sky greys out
         col = mix(col, horizon, uRain * (1.0 - smoothstep(0.0, 0.5, h)) * 0.55);

@@ -4,6 +4,7 @@ import { smoothstep } from "./math.ts";
 import { PALETTE } from "./palette.ts";
 import { hashFloat } from "./rng.ts";
 import { valueNoise } from "./terrain.ts";
+import { villageCobble, villageGarden, villageYard } from "./village.ts";
 import { HILL, waterEdgeDistance, waterField, riverHalfWidth, RIVER, trailSample, type TrailSample, type WaterField } from "./landscape.ts";
 
 /**
@@ -46,6 +47,74 @@ export function autumnAt(x: number, z: number, out: { amount: number; hue: numbe
 
 // ---- painted ground -----------------------------------------------------------------------------------------------------------
 
+// ---- ground detail: leaf litter under the canopy, crazed clay, the wet belt along the water ------------------------------------------------
+
+export interface CanopyTree {
+  x: number;
+  z: number;
+  r: number;
+}
+
+const CANOPY_CELL = 6;
+
+/** A spatial hash of the trees, so the ground can ask "how much shade and fallen leaf is here?" in a few lookups. Pure; built once per world. */
+export class CanopyIndex {
+  private readonly cells = new Map<number, CanopyTree[]>();
+  constructor(trees: readonly CanopyTree[]) {
+    for (const t of trees) {
+      const key = this.key(Math.floor(t.x / CANOPY_CELL), Math.floor(t.z / CANOPY_CELL));
+      const list = this.cells.get(key);
+      if (list) list.push(t);
+      else this.cells.set(key, [t]);
+    }
+  }
+
+  private key(cx: number, cz: number): number {
+    return (cx + 512) * 1024 + (cz + 512);
+  }
+
+  /** Leaf litter 0..1: full under a crown, ragged out to ~4 m from the trunk (noise breaks the edge into drifts). */
+  litter(x: number, z: number): number {
+    const cx = Math.floor(x / CANOPY_CELL);
+    const cz = Math.floor(z / CANOPY_CELL);
+    let best = 0;
+    for (let i = cx - 1; i <= cx + 1; i++) {
+      for (let j = cz - 1; j <= cz + 1; j++) {
+        const list = this.cells.get(this.key(i, j));
+        if (!list) continue;
+        for (const t of list) {
+          const d = Math.hypot(x - t.x, z - t.z);
+          const v = 1 - smoothstep(t.r + 0.8, t.r + 4.4, d);
+          if (v > best) best = v;
+        }
+      }
+    }
+    if (best <= 0) return 0;
+    const n = valueNoise(151, x / 1.9, z / 1.9);
+    const v = best * (0.55 + 0.9 * n) - 0.1;
+    return v < 0 ? 0 : v > 1 ? 1 : v;
+  }
+}
+
+/** Sun-baked clay 0..1: patches on the dry rises, away from water and paths (the shader draws the cracks in it). */
+export function crackPatch(x: number, z: number, h: number): number {
+  const n = crackNoise(x, z);
+  return n > 0 ? n * smoothstep(-0.4, 1.4, h) : 0;
+}
+
+/** The clay-patch field before the dryness of the ground is asked (cheap; 0 nearly everywhere). */
+export function crackNoise(x: number, z: number): number {
+  const n = valueNoise(131, x / 21, z / 21) * 0.7 + valueNoise(133, x / 6.4, z / 6.4) * 0.3;
+  return smoothstep(0.66, 0.74, n);
+}
+
+/** The wet belt along the water's edge, 0..1: dark, slick mud that the shore's foam and the animals' hooves have worked. */
+export function mudBelt(x: number, z: number): number {
+  const e = waterEdgeDistance(x, z);
+  if (e > 2.4) return 0;
+  return (1 - smoothstep(0.0, 2.4, e + (valueNoise(157, x / 2.2, z / 2.2) - 0.5) * 1.6)) * (e > -0.6 ? 1 : 0);
+}
+
 export interface Rgb {
   r: number;
   g: number;
@@ -76,6 +145,13 @@ const G = {
   pebble: rgb(W.pebble),
   pave: rgb(W.ruinPale),
   paveShade: rgb(W.ruinShadow),
+  cobble: rgb(W.vlCobble),
+  cobbleDark: rgb(W.vlCobbleDark),
+  soil: rgb(W.vlSoil),
+  litter: rgb(W.litter),
+  litterRed: rgb(W.litterRed),
+  crack: rgb(W.crackClay),
+  peb: rgb(W.pebble),
 };
 
 function mix(out: Rgb, c: Triple, t: number): void {
@@ -99,7 +175,8 @@ export function coverDensity(x: number, z: number, slope: number): number {
   const t = trailSample(x, z, tsScratch);
   const hearth = 1 - smoothstep(0.9, 2.2, Math.hypot(x - CAMP.fire.x, z - CAMP.fire.z));
   const water = 1 - smoothstep(-0.2, 0.9, waterEdgeDistance(x, z) + (n2 - 0.5) * 0.8);
-  const d = 1 - t.wear * 1.25 - t.shoulder * 0.35 - camp * 0.35 - hearth - water - smoothstep(0.4, 0.8, slope);
+  const village = villageYard(x, z) * 1.3 + villageCobble(x, z) * 2 + villageGarden(x, z) * 2;
+  const d = 1 - t.wear * 1.25 - t.shoulder * 0.35 - camp * 0.35 - hearth - water - smoothstep(0.4, 0.8, slope) - village;
   return d < 0 ? 0 : d > 1 ? 1 : d;
 }
 
@@ -134,7 +211,7 @@ export function inMeadow(x: number, z: number): boolean {
  * scorched hearth, a track leading out, and bare rock on slopes. Every input is a palette colour, so the result never leaves the
  * palette's chroma range (a convex mix of muted colours is muted).
  */
-export function groundColour(x: number, z: number, h: number, slope: number, out: Rgb): Rgb {
+export function groundColour(x: number, z: number, h: number, slope: number, out: Rgb, litter = 0): Rgb {
   const n1 = valueNoise(11, x / 11, z / 11);
   const n2 = valueNoise(23, x / 3.3, z / 3.3);
   const n3 = valueNoise(37, x / 1.4, z / 1.4);
@@ -152,6 +229,17 @@ export function groundColour(x: number, z: number, h: number, slope: number, out
   mix(out, G.deep, smoothstep(0.3, 0.26, field) * 0.55);
   mix(out, G.moss, smoothstep(0.24, 0.2, n2) * 0.4);
   mix(out, G.dry, smoothstep(0.84, 0.88, n3) * 0.3);
+  // Macro variation: whole tracts of country run warm and sun-bleached or cool and lush (a slow drift over ~100 m), with a mid-scale mottle
+  // of paler and deeper swathes; flower meadows lift the green where their blooms crowd.
+  const macro = valueNoise(101, x / 105, z / 105);
+  const swath = valueNoise(103, x / 34, z / 34);
+  mix(out, G.dry, smoothstep(0.6, 0.92, macro) * 0.26 * (1 - hollow));
+  mix(out, G.deep, smoothstep(0.4, 0.08, macro) * 0.3);
+  mix(out, G.meadow, smoothstep(0.62, 0.86, valueNoise(71, x / 16, z / 16) * 0.65 + valueNoise(73, x / 5.2, z / 5.2) * 0.55) * 0.3 * (1 - rise));
+  const k2 = 0.95 + swath * 0.1;
+  out.r *= k2;
+  out.g *= k2;
+  out.b *= k2;
 
   // Worn ground: a soft trampled halo round the camp, then footpaths radiating to its features, the ford, the Observatory and the map edge
   // (shoulders of trampled dry grass, bare beaten earth, wheel ruts), and a worn meeting place at the spawn.
@@ -173,6 +261,22 @@ export function groundColour(x: number, z: number, h: number, slope: number, out
   mix(out, G.worn, ts.wear * (smoothstep(0.62, 0.7, n3) * 0.4 + smoothstep(0.52, 0.56, n1) * 0.25));
   mix(out, G.dust, ts.wear * smoothstep(0.35, 0.75, n2) * 0.32);
   mix(out, G.rut, ts.rut * 0.85);
+  mix(out, G.peb, ts.wear * smoothstep(0.5, 0.75, n3) * 0.4); // gravel worked up on the beaten middle
+  // The village: trodden yards round every building, cobbles in the plaza and under the gate, tilled soil in the garden beds.
+  const yard = villageYard(x, z);
+  if (yard > 0) {
+    mix(out, G.worn, yard * 0.6 * (1 - hollow * 0.3));
+    mix(out, G.dirt, yard * smoothstep(0.35, 0.7, n2) * 0.3);
+    mix(out, G.dust, yard * smoothstep(0.55, 0.8, n3) * 0.25);
+  }
+  const cob = villageCobble(x, z);
+  if (cob > 0) {
+    const stone = (Math.floor(x / 0.62) * 7 + Math.floor(z / 0.5) * 13) & 3;
+    mix(out, G.cobble, cob * 0.9);
+    mix(out, G.cobbleDark, cob * (stone === 0 ? 0.55 : stone === 1 ? 0.25 : 0) * smoothstep(0.25, 0.6, n3 + 0.2));
+    mix(out, G.moss, cob * smoothstep(0.7, 0.92, n3) * 0.35);
+  }
+  mix(out, G.soil, villageGarden(x, z) * 0.92);
   // River banks: wet mud at the water's edge, a sandy pebble apron beyond it, the meadow returns further out.
   const wf = waterField(x, z, wfScratch);
   if (wf.q < 2.7) {
@@ -181,6 +285,17 @@ export function groundColour(x: number, z: number, h: number, slope: number, out
     mix(out, G.sand, (1 - smoothstep(0.2, 2.0, e + (n3 - 0.5) * 1.2)) * 0.8);
     mix(out, G.pebble, (1 - smoothstep(0.1, 0.9, e + (n2 - 0.5) * 0.9)) * smoothstep(0.55, 0.75, n3) * 0.7);
     mix(out, G.mud, (1 - smoothstep(-0.4, 0.5, e + (n3 - 0.5) * 0.5)) * 0.85);
+  }
+  // Sun-baked clay in patches on dry rises, wet mud along the water, and the litter of fallen leaves under every crown (autumn woods drop red ones).
+  const crackK = crackPatch(x, z, h) * (1 - ts.wear) * (1 - smoothstep(0.3, 1.2, slope));
+  mix(out, G.crack, crackK * 0.55);
+  mix(out, G.dust, crackK * smoothstep(0.35, 0.7, n2) * 0.25);
+  const mudK = mudBelt(x, z);
+  mix(out, G.mud, mudK * 0.6);
+  if (litter > 0) {
+    const turned = autumnAt(x, z).amount;
+    mix(out, G.litter, litter * 0.72 * (1 - turned * 0.6));
+    mix(out, G.litterRed, litter * 0.62 * turned);
   }
   // The Observatory's plateau: worn flagstones (a chequer of two tones with mossy joints) that give way to turf at a ragged edge.
   const dh = Math.hypot(x - HILL.x, z - HILL.z);

@@ -39,6 +39,44 @@ describe("shared uniforms stay shared (UniformsUtils.merge would clone them and 
   });
 });
 
+describe("dragonflies and swallows ride in the butterfly and bird meshes (no extra draws)", () => {
+  const u = createAmbientUniforms();
+
+  it("dragonflies are extra instances of the butterfly mesh: same draw, their own kind flag, a body triangle and finite wings", () => {
+    const flowers = [new Vector3(1, 0, 1), new Vector3(9, 0, 9), new Vector3(20, 0, 3)];
+    const dragons = [new Vector3(-8, -1.9, -35), new Vector3(11, -1.9, -31)];
+    const m = buildButterflies(flowers, 3, u, dragons)!;
+    expect(m.count).toBe(5);
+    const fly = m.geometry.getAttribute("aFly");
+    expect(Array.from({ length: 5 }, (_, i) => fly.getX(i))).toEqual([0, 0, 0, 1, 1]);
+    const c = m.geometry.getAttribute("aCentre");
+    expect(c.getX(3)).toBe(-8);
+    expect(c.getY(3)).toBeCloseTo(-1.9, 5);
+    expect(c.getZ(3)).toBe(-35);
+    expect(m.geometry.getAttribute("position").count).toBe(15);
+    expect(m.geometry.getAttribute("aBody").count).toBe(15);
+    for (const a of ["position", "aShade", "aBody"]) for (let i = 0; i < 15; i++) expect(Number.isFinite(m.geometry.getAttribute(a).getX(i))).toBe(true);
+    expect(buildButterflies([], 0, u, [])).toBeUndefined();
+    // dragonflies alone still make a mesh (a preset with no flowers keeps the stream alive)
+    expect(buildButterflies([], 0, u, dragons)!.count).toBe(2);
+  });
+
+  it("swallows are extra low-flying instances of the bird mesh, above the ground they were given; the high birds stay where they were", () => {
+    const plain = buildBirds(4, u)!;
+    const swallows = [new Vector3(-16, 6, -52), new Vector3(-20, 8, -36)];
+    const m = buildBirds(4, u, swallows)!;
+    expect(m.count).toBe(6);
+    const sw = m.geometry.getAttribute("aSwallow");
+    expect(Array.from({ length: 6 }, (_, i) => sw.getX(i))).toEqual([0, 0, 0, 0, 1, 1]);
+    const a = m.geometry.getAttribute("aCircle");
+    const b = plain.geometry.getAttribute("aCircle");
+    for (let i = 0; i < 16; i++) expect(a.array[i]).toBe(b.array[i]); // adding swallows moves no existing bird
+    expect([a.getX(4), a.getY(4), a.getZ(4)]).toEqual([-16, 6, -52]);
+    expect(buildBirds(0, u, [])).toBeUndefined();
+    expect(buildBirds(0, u, swallows)!.count).toBe(2);
+  });
+});
+
 describe("the water mesh", () => {
   it("is one finite mesh whose surface follows the shared channel level, faces up and stays inside the stream's corridor", () => {
     const terrain = createArena(7).terrain as LandscapeTerrain;

@@ -35,7 +35,7 @@ export const fireLight = { uFirePos: { value: new Vector3(0, -100, 0) }, uFireI:
 // ---- wind ------------------------------------------------------------------------------------------------------------------------
 
 /** `cloth` is for non-instanced geometry with an `aSway` attribute (0..1: how loose each vertex hangs): washing, the hammock, hanging lanterns. */
-export type WindKind = "none" | "tree" | "grass" | "flora" | "reed" | "cloth";
+export type WindKind = "none" | "tree" | "grass" | "flora" | "reed" | "cloth" | "village";
 
 /** Shared GLSL: a gust field, tree sway (crowns move, trunks are stiff) and blade sway that also bends away from up to four pushers. */
 export const WIND_HEAD = /* glsl */ `
@@ -92,6 +92,47 @@ export const WIND_HEAD = /* glsl */ `
   }
 `;
 
+/**
+ * The village's one moving-parts mesh. `aSway` doubles as a kind: 0..1 is cloth as everywhere (awnings, washing, lamps), 2 is the mill wheel (turns about
+ * its axle), 3 the moored punt (bobs and rolls on the water), 4/5 the gate clock's hour and minute hands on the +x face, 6/7 on the -x face.
+ * Everything is a displacement of the world-space position (the village sits at the origin), so the ink hull and the shadow pass use the same function.
+ */
+export const villageUniforms = {
+  /** Axle centre (xyz) and turn rate (radians a second). */
+  uWheel: { value: new Vector4(0, -100, 0, 0.8) },
+  uAxle: { value: new Vector3(1, 0, 0) },
+  /** The punt: x, z, yaw of its long axis, and the y its bob rests on. */
+  uPunt: { value: new Vector4(0, 0, 0, 0) },
+  /** The gate clock's face centre (xyz) and the outward axis of its +x face. */
+  uClock: { value: new Vector4(0, -100, 0, 0) },
+  uClockAxis: { value: new Vector3(1, 0, 0) },
+};
+export const VILLAGE_HEAD = /* glsl */ `
+  uniform vec4 uWheel; uniform vec3 uAxle; uniform vec4 uPunt; uniform vec4 uClock; uniform vec3 uClockAxis; uniform float uHour;
+  vec3 rotA(vec3 v, vec3 a, float ang) { float c = cos(ang); float s = sin(ang); return v * c + cross(a, v) * s + a * dot(a, v) * (1.0 - c); }
+  vec3 villageKin(vec3 p, float w) {
+    if (w < 1.5) return windCloth(p, w);
+    if (w < 2.5) { vec3 q = p - uWheel.xyz; return rotA(q, uAxle, uTime * uWheel.w) - q; }
+    if (w < 3.5) {
+      vec2 r = p.xz - uPunt.xy;
+      float along = r.x * cos(uPunt.z) + r.y * sin(uPunt.z);
+      float across = -r.x * sin(uPunt.z) + r.y * cos(uPunt.z);
+      float bob = sin(uTime * 1.25) * 0.035 + sin(uTime * 2.3 + 1.7) * 0.012;
+      return vec3(sin(uTime * 0.7) * 0.03, bob + along * sin(uTime * 0.9 + 1.0) * 0.03 + across * sin(uTime * 1.1) * 0.04, cos(uTime * 0.6) * 0.02);
+    }
+    float face = w < 5.5 ? 1.0 : -1.0;
+    float minute = (w < 4.5 || (w > 5.5 && w < 6.5)) ? 0.0 : 1.0;
+    float turns = minute > 0.5 ? uHour : uHour / 12.0;
+    vec3 ax = uClockAxis * face;
+    vec3 q = p - uClock.xyz;
+    return rotA(q, ax, -6.2831853 * turns) - q;
+  }
+  vec3 villageNormal(vec3 n, float w) {
+    if (w > 1.5 && w < 2.5) return rotA(n, uAxle, uTime * uWheel.w);
+    return n;
+  }
+`;
+
 const windApply = (kind: WindKind, fluttering: boolean): string => {
   switch (kind) {
     case "tree":
@@ -104,6 +145,8 @@ const windApply = (kind: WindKind, fluttering: boolean): string => {
       return `#ifdef USE_INSTANCING\n mvPosition.xyz += windBlade(transformed, instanceMatrix[3].xyz, 0.13, 0.5);\n#endif`;
     case "cloth":
       return "mvPosition.xyz += windCloth(mvPosition.xyz, aSway);";
+    case "village":
+      return "mvPosition.xyz += villageKin(mvPosition.xyz, aSway);";
     default:
       return "";
   }
@@ -111,6 +154,7 @@ const windApply = (kind: WindKind, fluttering: boolean): string => {
 
 /** The scenery outline follows the same tree sway (without the leaf flutter) so the ink stays glued to the crowns. */
 export function outlineDisplace(kind: WindKind): OutlineDisplace | undefined {
+  if (kind === "village") return { key: "village", uniforms: { uTime: worldTime, uPush: pushers, uWindK: atmoUniforms.uWindK, uHour: atmoUniforms.uHour, ...villageUniforms }, header: `${WIND_HEAD}\n${VILLAGE_HEAD}\nattribute float aSway;`, apply: "local.xyz += villageKin(local.xyz, aSway); on = villageNormal(on, aSway);" };
   if (kind === "cloth") return { key: "cloth", uniforms: { uTime: worldTime, uPush: pushers, uWindK: atmoUniforms.uWindK }, header: `${WIND_HEAD}\nattribute float aSway;`, apply: "local.xyz += windCloth(local.xyz, aSway);" };
   if (kind !== "tree") return undefined;
   return {
@@ -159,6 +203,31 @@ const PUDDLE_SHEEN = /* glsl */ `
     outgoingLight = mix(outgoingLight, uSheen, puddleMask * band * 0.75);
     outgoingLight += (uSunColW * glint * 0.9 + uSheen * ring * 0.7) * puddleMask;
   }
+`;
+
+/**
+ * Valley mist: `uMist` (0 at midday, ~1 at dawn) adds a height-falling, noise-patched fog to every toon surface: thick in the hollows by the water, thin
+ * on the rises, growing with distance. It uses the world position the materials already export (`vWPos`) and the scene's fog colour, so it takes
+ * the colour of the hour and needs no extra geometry.
+ */
+const MIST_HEAD = /* glsl */ `
+  float mHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float mNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mHash(i), mHash(i + vec2(1.0, 0.0)), f.x), mix(mHash(i + vec2(0.0, 1.0)), mHash(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+`;
+const MIST_FOG = /* glsl */ `
+  #ifdef USE_FOG
+    float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+    if (uMist > 0.005) {
+      float lowK = exp(-max(vWPos.y + 2.6, 0.0) * 0.36);
+      float mn = mNoise(vWPos.xz * 0.032 + vec2(uTime * 0.011, uTime * 0.004)) * 0.65 + mNoise(vWPos.xz * 0.09 - vec2(uTime * 0.006, 0.0)) * 0.35;
+      float mist = uMist * lowK * (0.2 + 1.5 * mn) * (1.0 - exp(-vFogDepth * 0.045));
+      fogFactor = max(fogFactor, clamp(mist, 0.0, 0.82));
+    }
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+  #endif
 `;
 
 /** Autumn's three shades (palette), shared by every seasonal material. */
@@ -214,10 +283,11 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     shader.uniforms.uTime = worldTime;
     shader.uniforms.uPush = pushers;
     Object.assign(shader.uniforms, atmoUniforms);
+    if (wind === "village") Object.assign(shader.uniforms, villageUniforms);
     if (fire) Object.assign(shader.uniforms, fireLight);
     if (patch) Object.assign(shader.uniforms, patch.uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nvarying vec3 vWPos;${opts.tinted ? "\nattribute float aTint;" : ""}${wind === "cloth" ? "\nattribute float aSway;" : ""}${vpatch ? `\n${vpatch.head}` : ""}${season ? "\nattribute vec2 aSeason; varying vec2 vSeason;" : ""}`)
+      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nvarying vec3 vWPos;${opts.tinted ? "\nattribute float aTint;" : ""}${wind === "cloth" || wind === "village" ? "\nattribute float aSway;" : ""}${wind === "village" ? `\n${VILLAGE_HEAD}` : ""}${vpatch ? `\n${vpatch.head}` : ""}${season ? "\nattribute vec2 aSeason; varying vec2 vSeason;" : ""}`)
       .replace(
         "#include <project_vertex>",
         `vec4 mvPosition = vec4(transformed, 1.0);
@@ -230,6 +300,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
         gl_Position = projectionMatrix * mvPosition;`,
       );
     if (vpatch) shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>\n${vpatch.body}`);
+    if (wind === "village") shader.vertexShader = shader.vertexShader.replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nobjectNormal = villageNormal(objectNormal, aSway);");
     if (season) {
       Object.assign(shader.uniforms, autumnUniforms);
       shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvSeason = aSeason;");
@@ -248,7 +319,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain;\n${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}`,
     );
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
     fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}`);
@@ -265,6 +336,8 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
         #include <opaque_fragment>`,
       );
     }
+    // Valley mist: ground fog that pools in the low country and thickens toward the far end of the view, on top of the ordinary exponential fog.
+    fs = fs.replace("#include <fog_fragment>", MIST_FOG);
     shader.fragmentShader = fs;
   };
   m.customProgramCacheKey = (): string => `world|${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}`;
@@ -278,7 +351,8 @@ export function windDepthMaterial(kind: WindKind): MeshDepthMaterial {
     shader.uniforms.uTime = worldTime;
     shader.uniforms.uPush = pushers;
     shader.uniforms.uWindK = atmoUniforms.uWindK;
-    shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>\n${WIND_HEAD}${kind === "cloth" ? "\nattribute float aSway;" : ""}`).replace(
+    if (kind === "village") Object.assign(shader.uniforms, villageUniforms, { uHour: atmoUniforms.uHour });
+    shader.vertexShader = shader.vertexShader.replace("#include <common>", `#include <common>\n${WIND_HEAD}${kind === "cloth" || kind === "village" ? "\nattribute float aSway;" : ""}${kind === "village" ? `\n${VILLAGE_HEAD}` : ""}`).replace(
       "#include <project_vertex>",
       `vec4 mvPosition = vec4(transformed, 1.0);
       #ifdef USE_INSTANCING
@@ -374,6 +448,7 @@ export function makeSolid(scene: Scene | Object3D, geometry: BufferGeometry, mat
     mesh.customDepthMaterial = windDepthMaterial("cloth");
     mesh.frustumCulled = false; // sway moves vertices past the static bounds; one draw either way
   }
+  if (o.wind === "village") mesh.customDepthMaterial = windDepthMaterial("village"); // (bounds are real: the moving parts stay within a metre of them)
   scene.add(mesh);
   const out: Mesh[] = [mesh];
   if (o.outline) {
@@ -386,15 +461,20 @@ export function makeSolid(scene: Scene | Object3D, geometry: BufferGeometry, mat
   return out;
 }
 
-/** An unlit vertex-coloured material (lantern glass) whose vertices sway like the cloth around it. Geometry needs `aSway`. */
+/** How brightly the village's lit windows burn (near 0 by day, 1 at night): the lantern glass mesh carries them as panes with `aLit = 1`. */
+export const windowLight = { value: 0.05 };
+
+/** An unlit vertex-coloured material (lantern glass and lit window panes) whose vertices sway like the cloth around it. Geometry needs `aSway` and `aLit`. */
 export function clothBasicMaterial(): MeshBasicMaterial {
   const m = new MeshBasicMaterial({ vertexColors: true, fog: true });
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = worldTime;
     shader.uniforms.uPush = pushers;
     shader.uniforms.uWindK = atmoUniforms.uWindK;
+    shader.uniforms.uWinK = windowLight;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nattribute float aSway;`)
+      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nattribute float aSway; attribute float aLit; uniform float uWinK;`)
+      .replace("#include <color_vertex>", "#include <color_vertex>\nvColor.rgb *= mix(1.0, uWinK, aLit);")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed += windCloth(transformed, aSway);");
   };
   m.customProgramCacheKey = (): string => "clothBasic";

@@ -1,7 +1,9 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, LatheGeometry, SphereGeometry, TorusGeometry, Vector2, type Vector3 } from "three";
-import { CAMP, PALETTE, hash3, ruinPlan, type CollisionWorld } from "@cb/shared";
+import { CAMP, PALETTE, hash3, hqPlan, ruinPlan, villagePlan, type CollisionWorld } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
 import type { Lod } from "./flora.ts";
+import { hqCloth } from "./hq.ts";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /**
  * The living details of the camp: the survey table, the brass telescope trained on the Observatory, a gramophone on a tea table, a
@@ -220,21 +222,63 @@ export function lanternFrames(k: Kit, world: CollisionWorld, lod: Lod, swing?: K
 /** How loose a hanging lantern is (the weight `aSway` gives its frame and glass; the glow point uses the same). */
 export const LANTERN_SWING = 0.5;
 
-/** Every hanging lantern in the world: the camp's, and the one in the Observatory's dark room (last). */
-export function lanternSpots(world: CollisionWorld): readonly { x: number; y: number; z: number }[] {
+/** A light in the world: a hanging lantern (kind 0: glass and frame), a forge's coals (1) or a shrine candle (2). `min` is how bright it burns at noon (0..1). */
+export interface LanternSpot {
+  x: number;
+  y: number;
+  z: number;
+  kind: 0 | 1 | 2;
+  min: number;
+}
+
+/** Every lit thing in the world: the camp's lanterns, the village's lamps, forge and shrine, and the one in the Observatory's dark room (last). */
+export function lanternSpots(world: CollisionWorld): readonly LanternSpot[] {
   if (world.obstacles.length === 0) return [];
-  return [...CAMP.lanterns, ruinPlan(world.terrain).lantern];
+  const v = villagePlan(world.terrain).lanterns.map((l): LanternSpot => ({ x: l.x, y: l.y, z: l.z, kind: l.kind, min: l.kind === 1 ? 0.62 : l.kind === 2 ? 0.4 : 0 }));
+  const hq = hqPlan().lamps.map((l): LanternSpot => ({ ...l, kind: 0, min: 0 }));
+  return [...CAMP.lanterns.map((l): LanternSpot => ({ ...l, kind: 0, min: 0 })), ...hq, ...v, { ...ruinPlan(world.terrain).lantern, kind: 0, min: 0.7 }];
 }
 
 /** The lantern glass as a tiny unlit geometry (vertex colours; the material brightens with the lamp level). Carries `aSway`: it swings with the frame. */
-export function lanternGlass(world: CollisionWorld): BufferGeometry | undefined {
+export function lanternGlass(world: CollisionWorld, panes: readonly WindowPane[] = []): BufferGeometry | undefined {
   const k = new Kit({ sway: true });
   k.clearBase();
   for (const l of lanternSpots(world)) {
+    if (l.kind !== 0) continue;
     const y = world.terrainHeight(l.x, l.z) + l.y;
     k.add(new CylinderGeometry(0.078, 0.084, 0.28, 6), { at: [l.x, y, l.z], colour: (p, _n, out) => blend(out, C.glowLantern, C.flameCore, Math.max(0, 1 - Math.abs(p.y) * 6)), flat: true, sway: LANTERN_SWING });
   }
-  return k.build();
+  const lamps = k.build();
+  if (!lamps) return undefined;
+  lamps.setAttribute("aLit", new BufferAttribute(new Float32Array(lamps.attributes.position!.count), 1));
+  // the village's lit windows: warm panes, dark by day and burning at night (same mesh, same material; `aLit` gates them)
+  const lit = panes.filter((p) => p.lit);
+  if (lit.length === 0) return lamps;
+  const wk = new Kit({ sway: true });
+  wk.clearBase();
+  for (const p of lit) {
+    wk.setBase(p.x, p.y, p.z, p.yaw);
+    wk.add(new BoxGeometry(0.03, p.h * 0.86, p.w * 0.86), { at: [0.03, 0, 0], colour: (q, _n, out) => blend(out, C.glowLantern, C.flameCore, 0.25 + 0.4 * Math.max(0, 1 - Math.abs(q.y) * 3)), flat: true, sway: 0 });
+  }
+  wk.clearBase();
+  const glass = wk.build();
+  if (!glass) return lamps;
+  glass.setAttribute("aLit", new BufferAttribute(new Float32Array(glass.attributes.position!.count).fill(1), 1));
+  const merged = mergeGeometries([lamps, glass], false);
+  lamps.dispose();
+  glass.dispose();
+  return merged ?? undefined;
+}
+
+/** A window pane, world x/y/z centre, the yaw it faces, its size, and whether the light behind it is lit at night. */
+export interface WindowPane {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  w: number;
+  h: number;
+  lit: boolean;
 }
 
 /** Everything in the camp that moves in the wind, as one geometry with `aSway` (the washing, the hammock's canvas, the lanterns' chains and frames). */
@@ -245,6 +289,7 @@ export function buildCampCloth(world: CollisionWorld, lod: Lod): BufferGeometry 
   washLine(still, world, lod, cloth);
   hammock(still, world, lod, cloth);
   lanternFrames(still, world, lod, cloth);
+  hqCloth(cloth, world, lod);
   still.build()?.dispose();
   return cloth.build();
 }

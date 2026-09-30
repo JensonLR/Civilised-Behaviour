@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { createArena } from "./arena.ts";
 import { insideObstacle } from "./camp.ts";
 import { PEN } from "./clearing.ts";
-import { FLOCKS, animalPose, buildFlock, createAnimalPose } from "./fauna.ts";
-import { waterEdgeDistance } from "./landscape.ts";
+import { FLOCKS, animalPose, buildFlock, createAnimalPose, sleepWeight } from "./fauna.ts";
+import { RIVER, waterEdgeDistance } from "./landscape.ts";
+import { villagePlan } from "./village.ts";
 
 const SEEDS = [1, 7, 42, 1234];
 
@@ -37,12 +38,13 @@ describe("the flock", () => {
             if (!hit && insideObstacle(o, pose.x, pose.z, 0.3)) hit = `${o.tag ?? "obstacle"} at ${o.x.toFixed(1)},${o.z.toFixed(1)}`;
           });
           expect(hit, `seed ${seed} ${a.kind} at t=${t} (${pose.x.toFixed(1)},${pose.z.toFixed(1)})`).toBe("");
-          expect(waterEdgeDistance(pose.x, pose.z), `seed ${seed} ${a.kind} in the water`).toBeGreaterThan(0.8);
+          if (a.kind === "duck") expect(waterEdgeDistance(pose.x, pose.z), `seed ${seed} duck out of the water`).toBeLessThan(-0.9);
+          else expect(waterEdgeDistance(pose.x, pose.z), `seed ${seed} ${a.kind} in the water`).toBeGreaterThan(0.8);
           expect(Math.hypot(pose.x, pose.z)).toBeLessThan(w.boundsRadius);
         }
       }
     }
-  });
+  }, 60_000);
 
   it("the sheep in the pen stay in the pen", () => {
     const w = createArena(7);
@@ -96,7 +98,7 @@ describe("the flock", () => {
       expect(stood, "grazes").toBeGreaterThan(200);
       expect(walked, "wanders").toBeGreaterThan(100);
     }
-  });
+  }, 60_000);
 
   it("time is the only input: the same instant is the same pose", () => {
     const w = createArena(7);
@@ -104,4 +106,59 @@ describe("the flock", () => {
     expect(animalPose(animal!, 123.4)).toEqual(animalPose(animal!, 123.4));
     expect(animalPose(animal!, 123.4)).not.toEqual(animalPose(animal!, 143.4));
   });
+
+  it("the new residents: ducks on the pond, deer (with a stag) at the forest edge, and the village cat, on every seed", () => {
+    for (const seed of SEEDS) {
+      const flock = buildFlock(createArena(seed));
+      const count = (k: string): number => flock.filter((a) => a.kind === k).length;
+      expect(count("duck"), `seed ${seed} ducks`).toBeGreaterThanOrEqual(3);
+      expect(count("deer") + count("stag"), `seed ${seed} deer`).toBeGreaterThanOrEqual(2);
+      expect(count("stag"), `seed ${seed} stag`).toBe(1);
+      expect(count("cat"), `seed ${seed} cat`).toBe(1);
+      for (const d of flock.filter((a) => a.kind === "duck")) for (let i = 0; i < d.route.length; i += 2) expect(Math.hypot(d.route[i]! - RIVER.b.x, d.route[i + 1]! - RIVER.b.z)).toBeLessThan(RIVER.pondRadius);
+      // deer are big, ducks are small
+      const size = (k: string): number => flock.find((a) => a.kind === k)!.size;
+      expect(size("stag")).toBeGreaterThan(size("deer"));
+      expect(size("deer")).toBeGreaterThan(size("sheep") * 1.2);
+      expect(size("duck")).toBeLessThan(size("cat"));
+    }
+  });
+
+  it("the cat naps by day near the granary, is curled up on the steps all night, and never walks through a wall at any hour", () => {
+    const pose = createAnimalPose();
+    for (const seed of SEEDS) {
+      const w = createArena(seed);
+      const cat = buildFlock(w).find((a) => a.kind === "cat")!;
+      const home = villagePlan(w.terrain).cat;
+      expect(Math.hypot(cat.route[0]! - home.x, cat.route[1]! - home.z), `seed ${seed}: sleeps on the steps`).toBeLessThan(3.5);
+      for (const h of [22, 23.5, 1, 3, 5]) {
+        animalPose(cat, 1000, pose, h);
+        expect(pose.curl, `curled at ${h}`).toBe(1);
+        expect(Math.hypot(pose.x - cat.route[0]!, pose.z - cat.route[1]!)).toBeLessThan(1e-4);
+        expect(pose.speed).toBe(0);
+      }
+      for (const h of [7, 9, 12, 15, 19, 20.9]) {
+        animalPose(cat, 1000, pose, h);
+        expect(pose.curl, `awake at ${h}`).toBe(0);
+      }
+      // a day's worth of cat, one second of world time per step: away from every obstacle, and it never jumps
+      const prev = createAnimalPose();
+      animalPose(cat, 0, prev, 0);
+      for (let t = 1; t < 4000; t++) {
+        const h = ((t / 80) * 1) % 24;
+        animalPose(cat, t, pose, h);
+        let hit = "";
+        w.forEachNear(pose.x, pose.z, (o) => {
+          if (!hit && insideObstacle(o, pose.x, pose.z, 0.1)) hit = `${o.tag ?? "obstacle"} at ${o.x.toFixed(1)},${o.z.toFixed(1)}`;
+        });
+        expect(hit, `seed ${seed} cat at ${h.toFixed(2)}h`).toBe("");
+        expect(Math.hypot(pose.x - prev.x, pose.z - prev.z), `seed ${seed} cat jumps at t ${t}`).toBeLessThan(1.6);
+        prev.x = pose.x;
+        prev.z = pose.z;
+      }
+    }
+    expect(sleepWeight(3)).toBe(1);
+    expect(sleepWeight(12)).toBe(0);
+    expect(sleepWeight(27)).toBe(1); // hours wrap
+  }, 60_000);
 });

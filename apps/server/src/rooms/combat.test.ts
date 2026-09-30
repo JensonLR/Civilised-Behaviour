@@ -280,8 +280,9 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
     it("cover works: a rifle round is stopped by the camp wall, and a man behind it is unharmed; a stone impact is reported", async () => {
       const { room, ps } = await setup(2);
       const [a, b] = ps as [Player, Player];
-      place(a.p, 0, -8);
-      place(b.p, 0, -17, 0);
+      // (the lane runs along x = 1.6: the expedition HQ's marquee and crates fill the ground west of x = 1 and its flag pole stands at x = 2.6)
+      place(a.p, 1.6, -8);
+      place(b.p, 1.6, -17, 0);
       await settle();
       await equip(a, WEAPON.RIFLE);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -712,7 +713,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       await settle();
       await equip(a, WEAPON.RIFLE);
       const yaw = yawTo(a.p, prop);
-      await trigger(a, yaw, Math.atan2(prop.y + 0.2 - (a.p.y + COMBAT.eyeHeight), 6));
+      await trigger(a, yaw, Math.atan2(prop.y - (a.p.y + COMBAT.eyeHeight), 6)); // (at its centre: the first prop can be a bottle, 0.3 m tall)
       await sleep(500);
       expect(b.p.health).toBe(100);
       expect(Math.hypot(prop.x - start.x, prop.z - start.z), id).toBeGreaterThan(0.01);

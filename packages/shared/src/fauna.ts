@@ -1,9 +1,10 @@
 import { insideObstacle } from "./camp.ts";
 import type { CollisionWorld } from "./collision.ts";
 import { PEN } from "./clearing.ts";
-import { waterEdgeDistance } from "./landscape.ts";
+import { RIVER, waterEdgeDistance } from "./landscape.ts";
 import { clamp, smoothstep, wrapAngle } from "./math.ts";
 import { Rng } from "./rng.ts";
+import { villagePlan } from "./village.ts";
 
 /**
  * The flock: sheep and goats that graze and wander. They are SCENERY, not simulation: a pure function of the world (which fixes each
@@ -13,7 +14,7 @@ import { Rng } from "./rng.ts";
  * no closing segment.
  */
 
-export type AnimalKind = "sheep" | "goat";
+export type AnimalKind = "sheep" | "goat" | "deer" | "stag" | "duck" | "cat";
 
 export interface FlockSpec {
   kind: AnimalKind;
@@ -22,12 +23,22 @@ export interface FlockSpec {
   radius: number;
   /** Stay inside the pen's fence (waypoints are inside the rails, with room to spare). */
   inPen?: boolean;
+  /** Swim: waypoints are in the pond's open water (clear of the jetty and the piles), not on land. */
+  water?: boolean;
+  /** The village cat: `home` is replaced by the granary steps (`villagePlan(...).cat`) and the first waypoint is the steps themselves, where it sleeps at night. */
+  cat?: boolean;
 }
 
 export const FLOCKS: readonly FlockSpec[] = [
   { kind: "sheep", count: 5, home: { x: PEN.x, z: PEN.z }, radius: 3.6, inPen: true },
   { kind: "sheep", count: 4, home: { x: -8.5, z: 25 }, radius: 8 },
   { kind: "goat", count: 3, home: { x: -14, z: 8 }, radius: 6 },
+  // the pond's ducks (the open water south of the jetty) and the deer at the forest edge east of the camp: both are scenery to be looked at from afar
+  { kind: "duck", count: 4, home: { x: RIVER.b.x, z: RIVER.b.z + 0.6 }, radius: 4.2, water: true },
+  { kind: "deer", count: 2, home: { x: 47, z: 9 }, radius: 9 },
+  { kind: "stag", count: 1, home: { x: 47, z: 9 }, radius: 9 },
+  // the cat: by the granary in the village (its home is filled in from the village plan)
+  { kind: "cat", count: 1, home: { x: 0, z: 0 }, radius: 3.4, cat: true },
 ];
 
 export interface Animal {
@@ -42,8 +53,10 @@ export interface Animal {
   size: number;
   /** 0..1 random for colour variation. */
   tone: number;
-  /** Nominal walking speed for the gait (m/s) - the animation's stride follows it. */
+  /** 0..1 random for gait phase and facing. */
   seed: number;
+  /** Sleeps curled up at route[0] through the night (the cat). */
+  sleeper?: boolean;
 }
 
 export interface AnimalPose {
@@ -57,11 +70,16 @@ export interface AnimalPose {
   graze: number;
   /** Metres per second right now. */
   mps: number;
+  /** 1 while curled up asleep (a sleeper at night), else 0; eases in and out. */
+  curl: number;
 }
 
-export const createAnimalPose = (): AnimalPose => ({ x: 0, z: 0, yaw: 0, speed: 0, graze: 0, mps: 0 });
+export const createAnimalPose = (): AnimalPose => ({ x: 0, z: 0, yaw: 0, speed: 0, graze: 0, mps: 0, curl: 0 });
 
 const CLEAR = 0.9;
+/** Body scale of each kind (the models share one frame: about a goat's size at scale 1) and the random spread added on top. */
+const SIZE: Record<AnimalKind, number> = { sheep: 0.95, goat: 0.86, deer: 1.45, stag: 1.75, duck: 0.4, cat: 0.5 };
+const SIZE_SPREAD: Record<AnimalKind, number> = { sheep: 0.16, goat: 0.16, deer: 0.14, stag: 0.08, duck: 0.05, cat: 0.05 };
 /** Seconds an animal takes to turn on the spot at the start of a leg. */
 const TURN = 1.8;
 
@@ -78,11 +96,23 @@ function freeSpot(world: CollisionWorld, x: number, z: number, margin: number): 
   return Math.hypot(world.terrainHeight(x + 0.6, z) - h, world.terrainHeight(x, z + 0.6) - h) / 0.6 < 0.55;
 }
 
-/** A straight leg is walkable if every half-metre along it is free ground. */
-function freeLeg(world: CollisionWorld, ax: number, az: number, bx: number, bz: number, margin: number): boolean {
+/** Open water for a duck: well inside the pond's edge and off every obstacle (the jetty's piles, the stepping stones, the punt) by `margin`. */
+function freeWater(world: CollisionWorld, x: number, z: number, margin: number): boolean {
+  if (Math.hypot(x - RIVER.b.x, z - RIVER.b.z) > RIVER.pondRadius - 1.1) return false;
+  let hit = false;
+  world.forEachNear(x, z, (o) => {
+    if (!hit && insideObstacle(o, x, z, margin)) hit = true;
+  });
+  return !hit;
+}
+
+/** A straight leg is walkable if every half-metre along it is free ground (or open water, for a swimmer). */
+function freeLeg(world: CollisionWorld, ax: number, az: number, bx: number, bz: number, margin: number, water = false): boolean {
   const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.4));
   for (let i = 0; i <= n; i++) {
-    if (!freeSpot(world, ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, margin)) return false;
+    const x = ax + ((bx - ax) * i) / n;
+    const z = az + ((bz - az) * i) / n;
+    if (!(water ? freeWater(world, x, z, margin) : freeSpot(world, x, z, margin))) return false;
   }
   return true;
 }
@@ -91,27 +121,31 @@ function freeLeg(world: CollisionWorld, ax: number, az: number, bx: number, bz: 
 export function buildFlock(world: CollisionWorld, flocks: readonly FlockSpec[] = FLOCKS): Animal[] {
   const out: Animal[] = [];
   if (world.obstacles.length === 0) return out;
+  const catAt = villagePlan(world.terrain).cat;
   flocks.forEach((f, fi) => {
+    const home = f.cat ? catAt : f.home;
     for (let i = 0; i < f.count; i++) {
       const rng = new Rng(0xf10c + fi * 977 + i * 31);
-      const inside = (x: number, z: number): boolean => (f.inPen ? Math.abs(x - PEN.x) < PEN.hx - 1.0 && Math.abs(z - PEN.z) < PEN.hz - 1.0 : Math.hypot(x - f.home.x, z - f.home.z) < f.radius);
-      const margin = f.inPen ? 0.7 : CLEAR;
-      // candidate waypoints
+      const inside = (x: number, z: number): boolean => (f.inPen ? Math.abs(x - PEN.x) < PEN.hx - 1.0 && Math.abs(z - PEN.z) < PEN.hz - 1.0 : Math.hypot(x - home.x, z - home.z) < f.radius);
+      const margin = f.inPen ? 0.7 : f.water ? 0.8 : f.cat ? 0.5 : CLEAR;
+      const free = (x: number, z: number): boolean => (f.water ? freeWater(world, x, z, margin) : freeSpot(world, x, z, margin));
+      // candidate waypoints (the cat's first is the steps it sleeps on, if they are clear)
       const pts: [number, number][] = [];
+      if (f.cat && freeSpot(world, catAt.x, catAt.z, margin)) pts.push([catAt.x, catAt.z]);
       for (let tries = 0; pts.length < 8 && tries < 400; tries++) {
         const a = rng.range(0, Math.PI * 2);
         const d = f.radius * Math.sqrt(rng.next());
-        const x = f.home.x + Math.cos(a) * d;
-        const z = f.home.z + Math.sin(a) * d;
-        if (inside(x, z) && freeSpot(world, x, z, margin)) pts.push([x, z]);
+        const x = home.x + Math.cos(a) * d;
+        const z = home.z + Math.sin(a) * d;
+        if (inside(x, z) && free(x, z)) pts.push([x, z]);
       }
       // chain them: from each waypoint go to a random other one the straight line to which is clear
       const route: number[] = [];
       if (pts.length > 0) {
-        let cur = pts.splice(Math.floor(rng.next() * pts.length), 1)[0]!;
+        let cur = pts.splice(f.cat ? 0 : Math.floor(rng.next() * pts.length), 1)[0]!;
         route.push(cur[0], cur[1]);
         for (let step = 0; step < 6 && pts.length > 0; step++) {
-          const options = pts.map((p, idx) => ({ p, idx })).filter(({ p }) => Math.hypot(p[0] - cur[0], p[1] - cur[1]) > 2.2 && Math.hypot(p[0] - cur[0], p[1] - cur[1]) < 9 && freeLeg(world, cur[0], cur[1], p[0], p[1], margin * 0.7));
+          const options = pts.map((p, idx) => ({ p, idx })).filter(({ p }) => Math.hypot(p[0] - cur[0], p[1] - cur[1]) > 2.2 && Math.hypot(p[0] - cur[0], p[1] - cur[1]) < 9 && freeLeg(world, cur[0], cur[1], p[0], p[1], margin * 0.7, f.water));
           if (options.length === 0) break;
           const pick = options[Math.floor(rng.next() * options.length)]!;
           pts.splice(pick.idx, 1);
@@ -129,9 +163,10 @@ export function buildFlock(world: CollisionWorld, flocks: readonly FlockSpec[] =
         route: new Float32Array(full),
         leg: 15 + rng.next() * 9,
         phase: rng.next() * 400,
-        size: (f.kind === "goat" ? 0.86 : 0.95) + rng.next() * 0.16,
+        size: SIZE[f.kind] + rng.next() * SIZE_SPREAD[f.kind],
         tone: rng.next(),
         seed: rng.next(),
+        sleeper: f.cat ? true : undefined,
       });
     }
   });
@@ -145,8 +180,49 @@ const legIndex = (a: Animal, t: number): { i: number; u: number } => {
   return { i: ((k % n) + n) % n, u: (tt - k * a.leg) / a.leg };
 };
 
-/** Where an animal is, which way it faces and how it moves, `t` seconds into the world's life. Pure; allocation-free with `out`. */
-export function animalPose(a: Animal, t: number, out: AnimalPose = createAnimalPose()): AnimalPose {
+/** How much of the night a sleeper has settled into (0 awake, 1 curled up): eases in at 21:00 and out at 06:00, each in a quarter of an hour of world time. */
+export function sleepWeight(hours: number): number {
+  const h = ((hours % 24) + 24) % 24;
+  return h >= 12 ? smoothstep(21, 21.25, h) : 1 - smoothstep(5.75, 6, h);
+}
+
+/**
+ * Where an animal is, which way it faces and how it moves, `t` seconds into the world's life. `hours` (the time of day) only matters to a
+ * sleeper: at night it is curled up at the first waypoint, and it goes there in the quarter hour before. Pure; allocation-free with `out`.
+ */
+export function animalPose(a: Animal, t: number, out: AnimalPose = createAnimalPose(), hours = 12): AnimalPose {
+  animalRoutePose(a, t, out);
+  out.curl = 0;
+  if (a.sleeper) {
+    const w = sleepWeight(hours);
+    if (w > 0) {
+      const hx = a.route[0]!;
+      const hz = a.route[1]!;
+      const dx = hx - out.x;
+      const dz = hz - out.z;
+      const d = Math.hypot(dx, dz);
+      if (w >= 1 || d < 0.02) {
+        out.x = hx;
+        out.z = hz;
+        if (w >= 1) out.yaw = a.seed * Math.PI * 2;
+        out.speed = 0;
+        out.mps = 0;
+        out.graze = 0;
+      } else {
+        out.x += dx * w;
+        out.z += dz * w;
+        out.yaw = Math.atan2(dz, dx);
+        out.speed = 0.5 * (1 - w);
+        out.mps = 0.45 * out.speed;
+        out.graze = 0;
+      }
+      out.curl = smoothstep(0.9, 1, w);
+    }
+  }
+  return out;
+}
+
+function animalRoutePose(a: Animal, t: number, out: AnimalPose): AnimalPose {
   const n = a.route.length / 2;
   const { i, u } = legIndex(a, t);
   const j = (i + 1) % n;

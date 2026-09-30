@@ -1,19 +1,22 @@
-import { BufferAttribute, SphereGeometry, type BufferGeometry } from "three";
+import { BufferAttribute, type BufferGeometry } from "three";
 import { PALETTE } from "@cb/shared";
-import type { Proportions } from "../proportions.ts";
 import { curve } from "./sweep.ts";
 import type { Ring } from "./loft.ts";
-import { sstep } from "./patch.ts";
 import { hookHand, pegShin } from "./prosthetics.ts";
-import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe, type V3 } from "./parts.ts";
-import { legRadius, ringAt, soil, tone, type BodyCtx } from "./bodyKit.ts";
-import { JACKET, closedSkirtLength } from "./garments.ts";
+import { CREAM, LEATHER, PartBuilder, singe, type V3 } from "./parts.ts";
+import { dyeAt, legRadius, ringAt, soil, tone, type BodyCtx } from "./bodyKit.ts";
+import { JACKET } from "./garments.ts";
 import { dressArmDrape } from "./drape.ts";
 import { buildHand, handColor } from "./hand.ts";
+import { CUFF_HANG, TR, bootColour, shaftColour, foreArmRings, footDims, lowerLegPlan, shirtSleeved, sleeveFull, sleeveWrist, stockingColour, upperArmRings, upperLegRings, type BootKind, type FootDims, type LowerLegPlan } from "./limbRings.ts";
+import { tipAlong, bandOn, boxBetween, buttonOn, clothLift, limbSurface, mountOn, patchOn, stripOn } from "./limbKit.ts";
 export { handColor } from "./hand.ts";
-import { dyeAt } from "./bodyKit.ts";
+export { foreArmRings, lowerLegPlan, upperArmRings, upperLegRings };
 
-/** Arms, hands, legs and feet: sleeves with cuffs and folds, fingered hands, trouser cuts and boots. */
+/**
+ * Arms, hands, legs and feet: sleeves with cuffs and folds, fingered hands, trouser cuts and boots. The ring tables live in limbRings.ts, the tools that place things on them
+ * (bands, patches, strips, mounts) in limbKit.ts: nothing here positions a detail by a guessed radius, so every option fits a thin limb and a thick one.
+ */
 
 /** The contrast cloth of a look: facings, cuffs, cords. A dye picked from the palette by the jacket's own colour so it always goes with it. */
 export function contrastCloth(c: BodyCtx): number {
@@ -22,64 +25,48 @@ export function contrastCloth(c: BodyCtx): number {
 
 // ---- arms ---------------------------------------------------------------------------------------------------------------
 
-/** Loose-sleeved coats hang wider; fitted ones hug. */
-function sleeveFull(jacket: number): number {
-  return jacket === JACKET.GREATCOAT ? 1.14 : jacket === JACKET.NORFOLK || jacket === JACKET.HUNTING ? 1.06 : jacket === JACKET.FROCK || jacket === JACKET.NAVAL ? 0.97 : 1;
-}
-
-/** Upper-arm sections in the shoulder frame (hanging down): a rounded sleeve head, a full upper arm, easing to the elbow. Shared with the wound dressings. */
-export function upperArmRings(P: Proportions, sleeveC: number, jacket = 0): Ring[] {
-  const r = P.armRadius;
-  const L = P.armUpper;
-  const f = sleeveFull(jacket);
-  return [
-    { y: r * 0.62, rx: r * 0.78 * f, rz: r * 0.74 * f, color: tone(sleeveC, 1.04) },
-    { y: r * 0.3, rx: r * 1.22 * f, rz: r * 1.16 * f, pow: 2.2, color: tone(sleeveC, 1.02) },
-    { y: -r * 0.1, rx: r * 1.42 * f, rz: r * 1.35 * f, pow: 2.2, color: sleeveC },
-    { y: -L * 0.14, rx: r * 1.42 * f, rz: r * 1.36 * f, pow: 2.2, color: sleeveC },
-    { y: -L * 0.5, rx: r * 1.18 * f, rz: r * 1.15 * f, color: sleeveC },
-    { y: -L * 0.92, rx: r * 1.02 * f, rz: r * 1.0 * f, color: tone(sleeveC, 0.9) },
-    { y: -L - r * 0.15, rx: r * 0.95 * f, rz: r * 0.95 * f, color: tone(sleeveC, 0.85) },
-  ];
-}
-
-/** Epaulettes sit on the sleeve head, in the shoulder frame. */
-function epaulette(b: PartBuilder, c: BodyCtx, side: "L" | "R"): void {
+/** Epaulettes sit on the sleeve head, in the shoulder frame: a pad that follows the shoulder from the front of the sleeve over the top and down the back. */
+function epaulette(b: PartBuilder, c: BodyCtx, side: "L" | "R", rings: readonly Ring[]): void {
   const kind = c.spec.epaulettes;
   if (kind === 0) return;
   const r = c.P.armRadius;
   const sx = side === "L" ? -1 : 1;
   const gold = c.accent;
   const cloth = tone(c.armC, 0.8);
-  const y = r * 0.42;
-  const w = r * 1.5; // across (X)
-  const len = r * 2.6; // front to back (Z)
-  const rot: V3 = [0, 0, sx * 0.14];
+  const surf = limbSurface(rings);
+  const head = rings[0]!;
+  const top = head.y;
+  const yA = r * 0.34;
+  const halfW = Math.min(head.rx * 0.86, r * 0.72);
+  // the pad's spine: down the front of the sleeve head, over the flat top, down the back; `lift` is how far its centre line stands off the sleeve
+  const spine = (lift: number): V3[] => {
+    const capY = top + lift;
+    return [surf(0, yA, lift).p, surf(0, top - r * 0.06, lift).p, [0, capY, -head.rz * 0.72], [0, capY, 0], [0, capY, head.rz * 0.72], surf(Math.PI, top - r * 0.06, lift).p, surf(Math.PI, yA, lift).p];
+  };
   if (kind === 1 || kind === 2 || kind === 3) {
-    b.loft([{ y: -len * 0.5, rx: w * 0.5, rz: 0.008, color: tone(gold, 0.85) }, { y: 0, rx: w * 0.55, rz: 0.01, color: gold }, { y: len * 0.5, rx: w * 0.45, rz: 0.008, color: tone(gold, 0.85) }], gold, [0, y + r * 0.35, 0], [Math.PI / 2, 0, 0]);
-    b.loft([{ y: -len * 0.44, rx: w * 0.4, rz: 0.011, color: cloth }, { y: len * 0.44, rx: w * 0.36, rz: 0.011, color: cloth }], cloth, [0, y + r * 0.38, 0], [Math.PI / 2, 0, 0]);
-    b.sphere(0.014, gold, [0, y + r * 0.5, 0], [1, 0.8, 1]);
+    b.sweep(spine(0.0035), () => ({ rx: halfW * 1.2, rz: 0.0055, pow: 2.6 }), gold, { side: [1, 0, 0], segments: 4 });
+    b.sweep(spine(0.0075), () => ({ rx: halfW * 0.86, rz: 0.0065, pow: 2.6 }), cloth, { side: [1, 0, 0], segments: 4 });
+    b.sphere(0.014, gold, [0, top + 0.0075 + 0.008, 0], [1, 0.8, 1]);
   }
   if (kind === 2 || kind === 3) {
-    // fringe (2) or thick bullion coils (3) hang off the outer end
+    // fringe (2) or thick bullion coils (3) hang off the outer end, along the slope of the sleeve head
     const n = kind === 3 ? 6 : 8;
     for (let i = 0; i < n; i++) {
-      const z = -len * 0.42 + (i / (n - 1)) * len * 0.84;
-      if (kind === 3) b.cylinder(0.011, 0.011, w * 0.5, tone(gold, i % 2 ? 0.85 : 1.1), [sx * w * 0.6, y + r * 0.1, z], [0, 0, Math.PI / 2 + sx * 0.4]);
-      else b.box(0.006, 0.07, 0.006, gold, [sx * w * 0.68, y - r * 0.15, z], rot);
+      const phi = sx * (Math.PI / 2) + (i - (n - 1) / 2) * (kind === 3 ? 0.3 : 0.24);
+      if (kind === 3) boxBetween(b, surf(phi, top - r * 0.12, 0.004).p, surf(phi, top - r * 0.12 - 0.04, 0.004).p, 0.02, 0.02, tone(gold, i % 2 ? 0.85 : 1.1));
+      else boxBetween(b, surf(phi, top - r * 0.1, 0.002).p, surf(phi, top - r * 0.1 - 0.07, 0.002).p, 0.006, 0.006, gold);
     }
-    if (kind === 3) b.torus(w * 0.5, 0.012, gold, [0, y + r * 0.38, 0], [Math.PI / 2, 0, 0], [1, len / (w * 1.0) * 0.5, 1]);
   }
   if (kind === 4) {
-    // shoulder cords: a braided loop from the shoulder seam round the sleeve head
+    // shoulder cords: a braided loop from the shoulder seam round the sleeve head, with a knot and a tail at the back
     const pts: V3[] = [];
     for (let i = 0; i <= 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      pts.push([Math.sin(a) * r * 1.0 * sx * 0 + Math.sin(a) * r * 1.05, y - r * 0.15 + Math.cos(a * 0.5) * 0.004, Math.cos(a) * r * 1.05]);
+      pts.push(surf(a, r * 0.22 + Math.cos(a * 0.5) * 0.004, 0.007).p);
     }
     b.sweep(curve(pts, 16), (t) => ({ rx: 0.008, rz: 0.008, pow: 2, color: Math.sin(t * 60) > 0 ? gold : tone(gold, 0.8) }), gold, { side: [0, 1, 0], segments: 4 });
-    b.sphere(0.02, gold, [0, y + r * 0.1, r * 1.1]);
-    b.box(0.01, 0.09, 0.01, gold, [sx * r * 0.6, y - r * 0.6, r * 1.15]);
+    b.sphere(0.02, gold, surf(Math.PI, r * 0.3, 0.014).p);
+    boxBetween(b, surf(Math.PI, r * 0.22, 0.012).p, surf(Math.PI, r * 0.22 - 0.09, 0.012).p, 0.01, 0.01, gold);
   }
 }
 
@@ -89,13 +76,19 @@ export function buildUpperArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry
   const r = P.armRadius;
   const L = P.armUpper;
   const sleeveC = c.armC;
-  b.loft(upperArmRings(P, sleeveC, spec.jacket), sleeveC);
+  const rings = upperArmRings(P, sleeveC, spec.jacket);
+  b.loft(rings, sleeveC);
   // the seam where the sleeve head meets the body: a darker line just under the shoulder
-  const f = sleeveFull(spec.jacket);
-  if (spec.jacket !== JACKET.SHIRT && spec.jacket !== JACKET.WAISTCOAT)
-    b.loft([{ y: -r * 0.05, rx: r * 1.44 * f, rz: r * 1.37 * f, color: tone(sleeveC, 0.72) }, { y: -r * 0.13, rx: r * 1.44 * f, rz: r * 1.37 * f, color: tone(sleeveC, 0.72) }], sleeveC, undefined, undefined, undefined, { capBottom: false, capTop: false });
-  if (spec.jacket === JACKET.HUNTING || spec.jacket === JACKET.NORFOLK) b.box(r * 0.5, L * 0.25, r * 0.2, LEATHER, [0, -L * 0.98, r * 0.85]); // elbow patch (back of the arm)
-  epaulette(b, c, side);
+  if (spec.jacket !== JACKET.SHIRT && spec.jacket !== JACKET.WAISTCOAT) bandOn(b, rings, -r * 0.05, -r * 0.14, tone(sleeveC, 0.72), { lift: 0.0025, edges: false, colorBottom: tone(sleeveC, 0.72) });
+  if (spec.jacket === JACKET.HUNTING || spec.jacket === JACKET.NORFOLK) {
+    // elbow patch on the back of the arm: an oval of leather laid on the sleeve, with its stitched rim
+    const surf = limbSurface(rings);
+    const y = -L * 0.96;
+    const rm = (ringAt(rings, y).rx + ringAt(rings, y).rz) / 2;
+    patchOn(b, surf, { phi: Math.PI, radius: rm, y, halfW: rm * 0.62, halfH: L * 0.14, shape: "oval", lift: 0.004, color: LEATHER, cells: 6 });
+    patchOn(b, surf, { phi: Math.PI, radius: rm, y, halfW: rm * 0.62, halfH: L * 0.14, shape: "ring", hole: 0.86, lift: 0.0058, color: tone(LEATHER, 1.35), cells: 8 });
+  }
+  epaulette(b, c, side, rings);
   dressArmDrape(b, c, side); // (a cape's or poncho's cloth over the arm rides on the arm, so it can never be pierced by it)
   return b.build();
 }
@@ -139,88 +132,119 @@ export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry 
   return base;
 }
 
-/** Extra cuff detail chosen in the creator: a row of buttons up the outer seam, gold links, or a buckled strap. In the forearm frame, outward = away from the body. */
-function cuffDetail(b: PartBuilder, c: BodyCtx, L: number, r: number, side: "L" | "R"): void {
-  const style = c.spec.cuffDetail;
-  if (style === 0 || PartBuilder.lod > 0) return;
-  const out = side === "L" ? -1 : 1;
-  const bottom = -L - 0.005;
-  const gold = c.accent;
-  const rr = r * 0.98;
-  if (style === 1) {
-    for (let i = 0; i < 4; i++) b.sphere(0.0115, gold, [out * (rr + 0.002), bottom + 0.024 + i * 0.021, -r * 0.05], [0.55, 1, 1]);
-  } else if (style === 2) {
-    const y = bottom + 0.045;
-    b.cylinder(0.0035, 0.0035, rr * 2 + 0.01, tone(gold, 0.8), [0, y, 0], [0, 0, Math.PI / 2]); // (the bar through the cuff)
-    for (const sx of [-1, 1]) {
-      b.cylinder(0.014, 0.014, 0.006, gold, [sx * (rr + 0.004), y, 0], [0, 0, Math.PI / 2]);
-      b.sphere(0.006, sx === out ? PALETTE.trim.gemRed : PALETTE.trim.pearl, [sx * (rr + 0.009), y, 0], [0.5, 1, 1]);
-    }
-  } else {
-    const y = bottom + 0.05;
-    const strap = tone(c.leather, 1.02);
-    const ring = (yy: number, k: number, color: number): Ring => ({ y: yy, rx: r * k, rz: r * k * 0.97, color });
-    b.loft([ring(y + 0.012, 1.02, tone(strap, 1.1)), ring(y - 0.012, 1.02, tone(strap, 0.85))], strap, undefined, undefined, undefined, { capBottom: false, capTop: false, segments: 8 });
-    b.box(0.008, 0.032, 0.026, gold, [out * (r * 1.04), y, 0]); // the buckle
-    b.box(0.006, 0.012, 0.018, tone(gold, 0.7), [out * (r * 1.06), y, 0]);
-    b.box(0.006, 0.01, 0.03, tone(strap, 0.9), [out * (r * 1.05), y - 0.024, 0]); // the loose tail
-  }
-}
+/** What a cuff looks like at a height: how far its outermost cloth stands off the sleeve (0 above the cuff), so a detail can sit on it. */
+type CuffLift = (y: number) => number;
 
-/** The cuff of a sleeve, in the forearm frame: `y0` = the wrist. */
-function cuff(b: PartBuilder, c: BodyCtx, L: number, r: number, side: "L" | "R" = "L"): void {
-  cuffBase(b, c, L, r);
-  cuffDetail(b, c, L, r, side);
-}
-
-function cuffBase(b: PartBuilder, c: BodyCtx, L: number, r: number): void {
+/**
+ * The cuff of a sleeve, in the forearm frame, laid on the sleeve's own rings: a turned band with a flared lower edge, gold stripes, a strap, a shirt cuff with a link. The bands are
+ * offsets of the sleeve's sections (limbKit `bandOn`), so a cuff fits whatever the arm's thickness and taper. Returns the cuff's lift at a height for the creator's cuff details.
+ */
+function cuffBase(b: PartBuilder, c: BodyCtx, rings: readonly Ring[], L: number, r: number, side: "L" | "R"): CuffLift {
   const j = c.spec.jacket;
   const contrast = contrastCloth(c);
-  const burnt = c.burnt;
-  const cream = singe(CREAM, burnt);
+  const cream = singe(CREAM, c.burnt);
   const shirtCuff = tone(c.shirtC, 1.04);
   const gold = c.accent;
   const trimC = c.spec.coatTrim === 2 && j !== JACKET.SHIRT && j !== JACKET.WAISTCOAT ? contrast : undefined;
-  const ring = (y: number, k: number, color: number): Ring => ({ y, rx: r * k, rz: r * k * 0.97, color });
-  const band = (yTop: number, yBot: number, kTop: number, kBot: number, color: number, buttons = 0): void => {
-    const thin = yTop - yBot < 0.03;
-    const rows = thin ? [ring(yTop, kTop + 0.02, tone(color, 1.05)), ring(yBot, kBot + 0.02, tone(color, 0.85))] : [ring(yTop, kTop, tone(color, 1.05)), ring(yTop - 0.004, kTop + 0.03, color), ring(yBot, kBot + 0.02, tone(color, 0.82))];
-    b.loft(rows, color, undefined, undefined, undefined, { capBottom: false, capTop: false, segments: 8 });
-    if (buttons > 0) for (let i = 0; i < buttons; i++) b.sphere(0.011, gold, [0, yTop - 0.012 - i * 0.02, r * 1.05 * kTop + 0.004], [1, 1, 0.5]);
+  const cl = clothLift(r);
+  const bottom = -L - CUFF_HANG;
+  const surf = limbSurface(rings);
+  const out: { yTop: number; yBot: number; l0: number; l1: number }[] = [];
+  const band = (uTop: number, uBot: number, color: number, l0: number, l1 = l0, thin = false): void => {
+    bandOn(b, rings, bottom + uTop, bottom + uBot, color, { lift: l0, liftBottom: l1, edges: !thin });
+    out.push({ yTop: bottom + uTop, yBot: bottom + uBot, l0, l1 });
   };
-  const bottom = -L - 0.005;
-  if (j === JACKET.SHIRT || j === JACKET.WAISTCOAT || j === JACKET.CAPE || j === JACKET.PONCHO) {
-    // a shirt cuff: the sleeve gathers into a stiff band with a link
-    band(bottom + 0.06, bottom, 0.9, 0.9, shirtCuff);
-    b.sphere(0.011, gold, [r * 0.9, bottom + 0.03, 0], [0.6, 1, 1]);
-    return;
+  const button = (y: number, phi: number, color = gold): void => {
+    buttonOn(b, surf, phi, y, liftOf(out, y) - 0.001, 0.011, color);
+  };
+  const outer = c.armC;
+  if (shirtSleeved(j)) {
+    // a shirt cuff: the sleeve gathers into a stiff band with a link on the outside of the wrist
+    band(0.06, 0, shirtCuff, cl * 0.7, cl * 0.9);
+    const y = bottom + 0.03;
+    const m = mountOn(surf, side === "L" ? -Math.PI / 2 : Math.PI / 2, y, liftOf(out, y) + 0.004);
+    b.sphere(0.011, gold, m.pos, [1, 1, 0.5], m.rot);
+    return (yy) => liftOf(out, yy);
   }
-  const outer = trimC ?? (j === JACKET.GREATCOAT || j === JACKET.SMOKING ? c.armC : c.armC);
   const facing = trimC ?? (j === JACKET.SMOKING ? contrast : j === JACKET.GREATCOAT ? tone(c.armC, 0.75) : j === JACKET.TUNIC ? tone(c.armC, 0.72) : c.armC);
   if (j === JACKET.FROCK) {
     // a turned cuff flaring a little at the edge, three buttons up the back seam, a line of shirt peeking below
-    band(bottom + 0.085, bottom + 0.012, 0.94, 1.02, trimC ?? tone(outer, 1.08), 3);
-    band(bottom + 0.014, bottom, 0.9, 0.9, cream);
+    band(0.085, 0.012, trimC ?? tone(outer, 1.08), cl * 0.8, cl * 1.15);
+    band(0.014, 0, cream, 0.004, 0.004, true);
+    for (let i = 0; i < 3; i++) button(bottom + 0.073 - i * 0.02, Math.PI);
   } else if (j === JACKET.GREATCOAT) {
-    band(bottom + 0.12, bottom + 0.01, 0.98, 1.08, facing, 2);
-    band(bottom + 0.014, bottom, 0.9, 0.9, cream);
+    band(0.12, 0.01, facing, cl * 0.9, cl * 1.4);
+    band(0.014, 0, cream, 0.004, 0.004, true);
+    for (let i = 0; i < 2; i++) button(bottom + 0.105 - i * 0.02, Math.PI);
   } else if (j === JACKET.SMOKING) {
-    band(bottom + 0.11, bottom + 0.01, 0.98, 1.1, facing, 0);
-    band(bottom + 0.014, bottom, 0.9, 0.9, cream);
+    band(0.11, 0.01, facing, cl * 0.9, cl * 1.5);
+    band(0.014, 0, cream, 0.004, 0.004, true);
   } else if (j === JACKET.NAVAL) {
-    // gold stripes: a broad band and two narrow ones with the executive curl
-    band(bottom + 0.12, bottom + 0.1, 1.0, 1.0, gold);
-    band(bottom + 0.085, bottom + 0.07, 1.0, 1.0, gold);
-    band(bottom + 0.055, bottom + 0.04, 1.0, 1.0, gold);
-    band(bottom + 0.014, bottom, 0.9, 0.9, cream);
-    if (trimC) band(bottom + 0.03, bottom + 0.014, 1.0, 1.0, trimC);
+    // gold stripes: a broad band and two narrow ones (the executive curl is left to the ink line)
+    band(0.12, 0.1, gold, cl * 0.5, cl * 0.5, true);
+    band(0.085, 0.07, gold, cl * 0.5, cl * 0.5, true);
+    band(0.055, 0.04, gold, cl * 0.5, cl * 0.5, true);
+    band(0.014, 0, cream, 0.004, 0.004, true);
+    if (trimC) band(0.03, 0.014, trimC, cl * 0.5, cl * 0.5, true);
   } else if (j === JACKET.TUNIC) {
-    band(bottom + 0.075, bottom + 0.005, 0.95, 1.04, facing, 2);
-    band(bottom + 0.014, bottom, 0.9, 0.9, cream);
+    band(0.075, 0.005, facing, cl * 0.8, cl * 1.2);
+    band(0.014, 0, cream, 0.004, 0.004, true);
+    for (let i = 0; i < 2; i++) button(bottom + 0.063 - i * 0.02, Math.PI);
   } else {
     // hunting / Norfolk: a strapped cuff
-    band(bottom + 0.07, bottom + 0.005, 0.96, 1.0, trimC ?? tone(outer, 0.9), 1);
-    band(bottom + 0.014, bottom, 0.9, 0.9, cream);
+    band(0.07, 0.005, trimC ?? tone(outer, 0.9), cl * 0.8, cl);
+    band(0.014, 0, cream, 0.004, 0.004, true);
+    button(bottom + 0.058, Math.PI);
+  }
+  return (yy) => liftOf(out, yy);
+}
+
+function liftOf(bands: readonly { yTop: number; yBot: number; l0: number; l1: number }[], y: number): number {
+  let best = 0;
+  for (const q of bands) {
+    if (y > q.yTop + 0.001 || y < q.yBot - 0.001) continue;
+    const t = q.yTop === q.yBot ? 0 : (q.yTop - y) / (q.yTop - q.yBot);
+    best = Math.max(best, q.l0 + (q.l1 - q.l0) * Math.max(0, Math.min(1, t)));
+  }
+  return best;
+}
+
+/** Extra cuff detail chosen in the creator: a row of buttons up the outer seam, gold links, or a buckled strap. `out` is the azimuth that faces away from the body. */
+function cuffDetail(b: PartBuilder, c: BodyCtx, rings: readonly Ring[], L: number, r: number, side: "L" | "R", lift: CuffLift): void {
+  const style = c.spec.cuffDetail;
+  if (style === 0 || PartBuilder.lod > 0 || shirtSleeved(c.spec.jacket) && c.spec.shirt === 6) return;
+  const outPhi = side === "L" ? -Math.PI / 2 : Math.PI / 2;
+  const bottom = -L - CUFF_HANG;
+  const gold = c.accent;
+  const surf = limbSurface(rings);
+  const cl = clothLift(r);
+  if (style === 1) {
+    for (let i = 0; i < 4; i++) {
+      const y = bottom + 0.024 + i * 0.021;
+      buttonOn(b, surf, outPhi, y, Math.max(lift(y), cl * 0.5) - 0.001, 0.0115, gold);
+    }
+  } else if (style === 2) {
+    // cufflinks: a head on each side of the cuff (the shank through the cloth is inside it; a red stone on the outer head)
+    const y = bottom + 0.045;
+    const l = Math.max(lift(y), cl * 0.5);
+    for (const [phi, gem] of [[-Math.PI / 2, side === "L"], [Math.PI / 2, side === "R"]] as const) {
+      const m = mountOn(surf, phi, y, l + 0.003);
+      b.cylinder(0.014, 0.014, 0.006, gold, m.pos, [0, 0, Math.PI / 2]);
+      b.sphere(0.006, gem ? PALETTE.trim.gemRed : PALETTE.trim.pearl, [m.pos[0] + m.n[0] * 0.005, m.pos[1] + m.n[1] * 0.005, m.pos[2] + m.n[2] * 0.005], [1, 1, 0.5], m.rot);
+    }
+  } else {
+    // a buckled strap round the cuff, with the buckle on the outside and a loose tail
+    const y = bottom + 0.05;
+    const strap = tone(c.leather, 1.02);
+    const l = Math.max(lift(y), cl * 0.5);
+    bandOn(b, rings, y + 0.012, y - 0.012, strap, { lift: l + 0.003, edges: false, colorBottom: tone(strap, 0.85) });
+    const m = mountOn(surf, outPhi, y, l + 0.008);
+    b.box(0.032, 0.03, 0.008, gold, m.pos, m.rot);
+    const m2 = mountOn(surf, outPhi, y, l + 0.011);
+    b.box(0.012, 0.018, 0.006, tone(gold, 0.7), m2.pos, m2.rot);
+    const tail0 = mountOn(surf, outPhi + (side === "L" ? -0.35 : 0.35), y - 0.012, l + 0.006);
+    const tail1 = mountOn(surf, outPhi + (side === "L" ? -0.35 : 0.35), y - 0.04, l + 0.006);
+    boxBetween(b, tail0.pos, tail1.pos, 0.01, 0.005, tone(strap, 0.9));
   }
 }
 
@@ -232,44 +256,20 @@ function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | 
   const j = spec.jacket;
   const sleeveC = c.armC;
   const f = sleeveFull(j);
-  const shirtSleeve = j === JACKET.SHIRT || j === JACKET.WAISTCOAT || j === JACKET.CAPE || j === JACKET.PONCHO;
-  const rolled = shirtSleeve && spec.shirt === 6; // work shirts are worn with the sleeves rolled to the elbow
-  const skin = handColor(c) === c.skin ? c.skin : c.skin;
-  const wristY = -L;
+  const rolled = shirtSleeved(j) && spec.shirt === 6; // work shirts are worn with the sleeves rolled to the elbow
   if (PartBuilder.lod >= 2) {
     // far figure: a tapered sleeve and a ball for the hand
-    b.loft([{ y: r * 0.3, rx: r * f, rz: r * 0.98 * f, color: tone(sleeveC, 0.9) }, { y: -L * 0.5, rx: r * f, rz: r * f, color: sleeveC }, { y: -L, rx: r * 0.84 * f, rz: r * 0.82 * f, color: sleeveC }], sleeveC);
+    const s = sleeveWrist(c);
+    b.loft([{ y: r * 0.3, rx: r * f, rz: r * 0.98 * f, color: tone(sleeveC, 0.9) }, { y: -L * 0.5, rx: r * f, rz: r * f, color: sleeveC }, { y: -L, rx: s.rx, rz: s.rz, color: sleeveC }], sleeveC);
     b.sphere(P.handRadius * 0.95, handColor(c), [0, -L - P.handRadius * 0.55, -P.handRadius * 0.15]);
     return b.build();
   }
-  // elbow crease + forearm, with the shirt's blouse gathering into the cuff
-  const rings: Ring[] = [
-    { y: r * 0.3, rx: r * 1.0 * f, rz: r * 0.98 * f, color: tone(sleeveC, 0.9) },
-    { y: r * 0.0, rx: r * 0.95 * f, rz: r * 0.93 * f, color: tone(sleeveC, 0.7), crease: true },
-    { y: -L * 0.12, rx: r * 1.04 * f, rz: r * 1.0 * f, color: tone(sleeveC, 1.02) },
-    { y: -L * 0.35, rx: r * 1.02 * f, rz: r * 1.0 * f, color: sleeveC },
-    { y: -L * 0.72, rx: r * (shirtSleeve ? 0.98 : 0.88) * f, rz: r * (shirtSleeve ? 0.96 : 0.86) * f, color: tone(sleeveC, 0.95) },
-    { y: -L * 0.9, rx: r * 0.84 * f, rz: r * 0.82 * f, color: soil(tone(sleeveC, 0.9), 0.22) },
-    { y: -L + 0.012, rx: r * 0.82 * f, rz: r * 0.8 * f, color: soil(tone(sleeveC, 0.85), 0.28) },
-  ];
-  if (rolled) {
-    // sleeve ends in a thick roll at the elbow; bare forearm below
-    const rollY = -L * 0.28;
-    const rl: Ring[] = [
-      { y: r * 0.3, rx: r * 1.0, rz: r * 0.98, color: tone(sleeveC, 0.9) },
-      { y: r * 0.0, rx: r * 0.95, rz: r * 0.93, color: tone(sleeveC, 0.7), crease: true },
-      { y: -L * 0.14, rx: r * 1.04, rz: r * 1.0, color: sleeveC },
-      { y: rollY + 0.03, rx: r * 1.08, rz: r * 1.04, color: sleeveC },
-      { y: rollY + 0.03, rx: r * 1.12, rz: r * 1.08, color: tone(sleeveC, 0.8), crease: true },
-      { y: rollY - 0.03, rx: r * 1.13, rz: r * 1.09, color: tone(sleeveC, 1.06) },
-      { y: rollY - 0.03, rx: r * 0.83, rz: r * 0.8, color: tone(skin, 0.95), crease: true },
-      { y: -L * 0.72, rx: r * 0.76, rz: r * 0.74, color: skin },
-      { y: wristY - 0.004, rx: r * 0.66, rz: r * 0.62, color: tone(skin, 0.94) },
-    ];
-    b.loft(rl, sleeveC);
-  } else {
-    b.loft(rings, sleeveC);
-    cuff(b, c, L, r, side);
+  // elbow crease + forearm, with the shirt's blouse gathering into the cuff (or the bare forearm below a roll)
+  const rings = foreArmRings(c);
+  b.loft(rings, sleeveC);
+  if (!rolled) {
+    const lift = cuffBase(b, c, rings, L, r, side);
+    cuffDetail(b, c, rings, L, r, side, lift);
   }
   if (spec.hook === (side === "L" ? 1 : 2)) hookHand(b, c, L);
   else buildHand(b, c, L, side, grip);
@@ -280,405 +280,329 @@ function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | 
 
 export { legRadius };
 
-/** Colour of the stockings shown where trousers stop short of the boot (breeches, plus-fours, shorts). */
-function sockColor(c: BodyCtx): number {
-  return singe(c.spec.trousers === 6 ? PALETTE.trim.ivory : tone(PALETTE.material.linen, 0.92), c.burnt);
-}
-
-/** Thigh sections in the hip frame (hanging down) for the spec's trouser cut. Shared with the wound dressings. */
-export function upperLegRings(c: BodyCtx): Ring[] {
-  const rings = trouserRings(c);
-  // the top of the thigh is rounded into the hip instead of ending in a flat slab that pokes out of the coat
-  const top = rings[0]!;
-  const out: Ring[] = [{ ...top, y: top.y - 0.004, rx: top.rx * 0.78, rz: top.rz * 0.8, color: tone(top.color ?? c.trouserC, 0.85) }, { ...top, y: -0.035 }, ...rings.slice(1)];
-  // Under a closed coat skirt the thigh is slimmed to a core: the skirt hides it, and two surfaces crossing show as a sawtooth.
-  const hem = closedSkirtLength(c.spec, c.P);
-  if (hem <= 0) return out;
-  return out.map((r) => {
-    const k = 0.55 + 0.45 * sstep(-hem * 1.05, -hem * 1.9, r.y);
-    return k >= 1 ? r : { ...r, rx: r.rx * k, rz: r.rz * k };
-  });
-}
-
-function trouserRings(c: BodyCtx): Ring[] {
-  const { spec, P } = c;
-  const r = legRadius(c);
-  const L = P.legUpper;
-  const tc = c.trouserC;
-  const kind = spec.trousers;
-  if (kind === 2) {
-    // breeches: puffed thigh, gathered tight above the knee
-    return [
-      { y: 0.04, rx: r * 1.3, rz: r * 1.25, color: tone(tc, 0.95) },
-      { y: -L * 0.35, rx: r * 1.6, rz: r * 1.5, pow: 2.2, color: tc },
-      { y: -L * 0.8, rx: r * 1.15, rz: r * 1.1, color: tone(tc, 0.9) },
-      { y: -L - 0.02, rx: r * 0.9, rz: r * 0.9, color: tone(tc, 0.85) },
-    ];
-  }
-  if (kind === 3) {
-    // baggy: hangs from the hip and billows, pinched a little at the knee, with a fold band where the cloth stacks
-    return [
-      { y: 0.04, rx: r * 1.25, rz: r * 1.2, color: tone(tc, 0.95) },
-      { y: -L * 0.3, rx: r * 1.38, rz: r * 1.32, pow: 2.2, color: tone(tc, 1.03) },
-      { y: -L * 0.62, rx: r * 1.28, rz: r * 1.22, color: tc },
-      { y: -L * 0.88, rx: r * 1.2, rz: r * 1.14, color: tone(tc, 0.86) },
-      { y: -L - 0.02, rx: r * 1.15, rz: r * 1.1, color: tone(tc, 0.8) },
-    ];
-  }
-  if (kind === 4) {
-    // plus-fours: full thigh and a generous blouse at the knee that overhangs the gaiter (continued in the shin)
-    return [
-      { y: 0.04, rx: r * 1.25, rz: r * 1.2, color: tone(tc, 0.95) },
-      { y: -L * 0.3, rx: r * 1.4, rz: r * 1.34, pow: 2.2, color: tone(tc, 1.03) },
-      { y: -L * 0.7, rx: r * 1.4, rz: r * 1.32, color: tc },
-      { y: -L - 0.02, rx: r * 1.32, rz: r * 1.26, color: tone(tc, 0.82) },
-    ];
-  }
-  if (kind === 5) {
-    // jodhpurs: flared at the hip like wings, then tight from mid-thigh
-    return [
-      { y: 0.04, rx: r * 1.32, rz: r * 1.26, color: tone(tc, 0.95) },
-      { y: -L * 0.22, rx: r * 1.72, rz: r * 1.4, pow: 2.1, color: tone(tc, 1.03) },
-      { y: -L * 0.5, rx: r * 1.3, rz: r * 1.2, color: tc },
-      { y: -L * 0.85, rx: r * 0.92, rz: r * 0.9, color: tone(tc, 0.9) },
-      { y: -L - 0.02, rx: r * 0.85, rz: r * 0.85, color: tone(tc, 0.82) },
-    ];
-  }
-  if (kind === 6) {
-    // shorts: the trouser leg stops above the knee; bare skin below it
-    const skin = c.skin;
-    return [
-      { y: 0.04, rx: r * 1.3, rz: r * 1.25, color: tone(tc, 0.95) },
-      { y: -L * 0.25, rx: r * 1.28, rz: r * 1.22, pow: 2.3, color: tone(tc, 1.03) },
-      { y: -L * 0.52, rx: r * 1.24, rz: r * 1.18, color: tone(tc, 0.9) },
-      { y: -L * 0.56, rx: r * 1.24, rz: r * 1.18, color: tone(tc, 0.7), crease: true },
-      { y: -L * 0.57, rx: r * 1.02, rz: r * 0.98, color: tone(skin, 1.0) },
-      { y: -L * 0.75, rx: r * 0.98, rz: r * 0.94, color: skin },
-      { y: -L - 0.02, rx: r * 0.9, rz: r * 0.9, color: tone(skin, 0.9) },
-    ];
-  }
-  // a tailored leg: full at the thigh, easing to the knee, a fold band behind the bend
-  return [
-    { y: 0.04, rx: r * 1.3, rz: r * 1.25, color: tone(tc, 0.95) },
-    { y: -L * 0.25, rx: r * 1.28, rz: r * 1.22, pow: 2.3, color: tone(tc, 1.03) },
-    { y: -L * 0.6, rx: r * 1.1, rz: r * 1.06, color: tc },
-    { y: -L * 0.9, rx: r * 0.96, rz: r * 0.94, color: tone(tc, 0.9) },
-    { y: -L - 0.02, rx: r * 0.92, rz: r * 0.92, color: tone(tc, 0.78) },
-  ];
-}
-
-/** Front surface z (negative) of the thigh at depth y below the hip. */
-function legFront(rings: readonly Ring[], y: number): number {
-  const s = ringAt(rings, y);
-  return s.cz - s.rz;
-}
-
 export function buildUpperLeg(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry | undefined {
   const { spec, P, burnt } = c;
   const b = new PartBuilder();
-  const r = legRadius(c);
   const L = P.legUpper;
   const tc = c.trouserC;
   const rings = upperLegRings(c);
   b.loft(rings, tc);
-  const shorts = spec.trousers === 6;
-  b.add(new SphereGeometry(r * 0.62, 6, 4), shorts ? tone(c.skin, 1.0) : tone(tc, 0.97), [0, -L - 0.01, -r * 0.55], [0, 0, 0], [1, 0.9, 0.8]); // knee cap: gives the bend a visible pivot
-  const crease = (y0: number, y1: number, color: number, w: number, lift = 0.004): void => {
-    // a pressed crease / stripe down the front of the leg, following the section
-    const pts: V3[] = [];
-    for (let i = 0; i <= 6; i++) {
-      const y = y0 + ((y1 - y0) * i) / 6;
-      pts.push([0, y, legFront(rings, y) - lift]);
-    }
-    b.sweep(pts, () => ({ rx: w, rz: 0.004, pow: 2.4 }), color, { side: [1, 0, 0], segments: 4, round: "both" });
-  };
-  if (spec.trousers === 1) crease(-0.02, -L * 0.96, singe(CREAM, burnt), 0.008); // stripe
-  else if (!shorts && spec.trousers !== 3) crease(-0.03, -L * 0.95, tone(tc, 1.28), 0.005); // pressed crease
-  if (spec.trousers === 2 || spec.trousers === 4) {
-    // garter strap / knee band
-    const y = spec.trousers === 4 ? -L - 0.004 : -L * 0.9;
-    const s = ringAt(rings, y);
-    b.loft([{ y: y + 0.02, rx: s.rx * 1.01, rz: s.rz * 1.01, color: c.leather }, { y: y - 0.02, rx: s.rx * 1.01, rz: s.rz * 1.01, color: c.leather, crease: true }], c.leather, undefined, undefined, undefined, { capBottom: false, capTop: false });
-    b.box(0.03, 0.03, 0.012, c.accent, [s.rx * 0.9, y, -s.rz * 0.5]);
+  const shorts = spec.trousers === TR.SHORTS;
+  const surf = limbSurface(rings);
+  // knee cap: gives the bend a visible pivot. It rides on the front of the knee section, so it is as big as the knee and stands the same 1.2 cm proud on a thin leg and a stout one.
+  const kn = ringAt(rings, -L - 0.01);
+  const kr = Math.min(kn.rx, kn.rz) * 0.55;
+  b.sphere(kr, shorts ? tone(c.skin, 1.0) : spec.trousers === TR.BREECHES || spec.trousers === TR.PLUS_FOURS ? tone(stockingColour(c), 0.96) : tone(tc, 0.97), [kn.cx, -L - 0.01, kn.cz - kn.rz - 0.008 + kr * 0.55], [1.15, 0.85, 0.55]); // (in the colour of the leg below, or it shows as a spike through the stocking)
+  const front = (y0: number, y1: number, color: number, w: number, thick: number): void => stripOn(b, rings, surf, 0, y0, y1, w, thick, color);
+  if (spec.trousers === TR.STRIPED) front(-0.02, -L * 0.9, singe(CREAM, burnt), 0.008, 0.004); // stripe (it stops above the knee: the knee cap and the bend are not striped)
+  else if (!shorts && spec.trousers !== TR.BAGGY) front(-0.03, -L * 0.88, tone(tc, 1.28), 0.008, 0.004); // pressed crease
+  if (spec.trousers === TR.BREECHES) {
+    // garter strap gathering the breeches above the knee
+    const y = -L * 0.9;
+    const cl = clothLift(legRadius(c));
+    bandOn(b, rings, y + 0.02, y - 0.02, c.leather, { lift: cl * 0.5, edges: false, crease: true, colorBottom: tone(c.leather, 0.85) });
+    const m = mountOn(surf, (side === "L" ? -1 : 1) * 0.9, y, cl * 0.5 + 0.007);
+    b.box(0.03, 0.03, 0.012, c.accent, m.pos, m.rot);
   }
-  trousersTrim(b, c, rings, L, side);
+  trousersTrim(b, c, rings, surf, L, side);
   return b.build();
 }
 
 /** Knee patches, mends, mud and side stripes on the thigh (hip frame). */
-function trousersTrim(b: PartBuilder, c: BodyCtx, rings: readonly Ring[], L: number, side: "L" | "R"): void {
+function trousersTrim(b: PartBuilder, c: BodyCtx, rings: readonly Ring[], surf: ReturnType<typeof limbSurface>, L: number, side: "L" | "R"): void {
   const t = c.spec.trouserTrim;
   if (t === 0) return;
-  const r = legRadius(c);
   const tc = c.trouserC;
   const patchC = tone(c.leather, 1.1);
-  const z = (y: number): number => legFront(rings, y);
   const sx = side === "L" ? -1 : 1;
-  const yK = -L * 0.94;
+  const yK = -L * 0.92;
+  const rad = (y: number): number => {
+    const s = ringAt(rings, y);
+    return (s.rx + s.rz) / 2;
+  };
   if (t === 1) {
     // leather knee patches: an oval pad with a stitched border
-    b.sphere(r * 0.7, patchC, [0, yK, z(yK) + r * 0.62], [1, 0.9, 0.34]);
-    b.torus(r * 0.62, 0.004, tone(patchC, 1.4), [0, yK, z(yK) + r * 0.05], [0, 0, 0], [1, 0.9, 1]);
+    const rm = rad(yK);
+    patchOn(b, surf, { phi: 0, radius: rm, y: yK, halfW: rm * 0.66, halfH: rm * 0.6, shape: "oval", lift: 0.005, color: patchC, cells: 8 });
+    patchOn(b, surf, { phi: 0, radius: rm, y: yK, halfW: rm * 0.66, halfH: rm * 0.6, shape: "ring", hole: 0.88, lift: 0.0068, color: tone(patchC, 1.4), cells: 10 });
   } else if (t === 2) {
     // patched and mended: a square patch of odd cloth and a darn, with stitches
-    const odd = tone(dyeAt(PALETTE.cloth, c.spec.trousersColor + 3), 1.05);
-    b.box(r * 0.62, r * 0.6, 0.012, singe(odd, c.burnt), [-sx * r * 0.2, -L * 0.9, z(-L * 0.9) - 0.002], [0, 0, 0.18]);
-    for (let i = 0; i < 4; i++) b.box(0.014, 0.004, 0.004, tone(tc, 0.55), [-sx * r * 0.2 + (i - 1.5) * 0.02, -L * 0.9 + r * 0.32, z(-L * 0.9) - 0.012]);
-    b.box(r * 0.4, r * 0.3, 0.01, tone(tc, 1.35), [sx * r * 0.25, -L * 0.38, z(-L * 0.38) - 0.002], [0, 0, -0.3]);
-    for (let i = 0; i < 3; i++) b.box(0.02, 0.004, 0.004, tone(tc, 0.5), [sx * r * 0.25 + (i - 1) * 0.02, -L * 0.38, z(-L * 0.38) - 0.01], [0, 0, -0.3]);
+    const odd = singe(tone(dyeAt(PALETTE.cloth, c.spec.trousersColor + 3), 1.05), c.burnt);
+    const y1 = -L * 0.88;
+    const r1 = rad(y1);
+    patchOn(b, surf, { phi: -sx * 0.28, radius: r1, y: y1, halfW: r1 * 0.36, halfH: r1 * 0.34, shape: "rect", turn: 0.18, lift: 0.004, color: odd, cells: 6 });
+    for (let i = 0; i < 4; i++) {
+      const m = mountOn(surf, -sx * 0.28 + (i - 1.5) * 0.11, y1 + r1 * 0.3, 0.0062);
+      b.box(0.014, 0.004, 0.004, tone(tc, 0.55), m.pos, m.rot);
+    }
+    const y2 = -L * 0.38;
+    const r2 = rad(y2);
+    patchOn(b, surf, { phi: sx * 0.3, radius: r2, y: y2, halfW: r2 * 0.25, halfH: r2 * 0.22, shape: "rect", turn: -0.3, lift: 0.004, color: tone(tc, 1.35), cells: 5 });
+    for (let i = 0; i < 3; i++) {
+      const m = mountOn(surf, sx * 0.3 + (i - 1) * 0.1, y2, 0.0062);
+      b.box(0.02, 0.004, 0.004, tone(tc, 0.5), m.pos, m.rot);
+    }
   } else if (t === 3) {
     // muddy knees: a dirty oval above and below the knee
     const mud = soil(tc, 0.7);
-    b.sphere(r * 0.9, mud, [0, yK, z(yK) + r * 0.62], [1, 1.1, 0.3]);
-    b.sphere(r * 0.5, tone(mud, 0.8), [sx * r * 0.2, yK - 0.05, z(yK) + r * 0.5], [1, 0.8, 0.3]);
+    const rm = rad(yK);
+    patchOn(b, surf, { phi: 0, radius: rm, y: yK, halfW: rm * 0.8, halfH: rm * 0.85, shape: "oval", lift: 0.0035, color: mud, cells: 8 });
+    patchOn(b, surf, { phi: sx * 0.2, radius: rm, y: yK - 0.05, halfW: rm * 0.45, halfH: rm * 0.4, shape: "oval", lift: 0.0045, color: tone(mud, 0.8), cells: 6 });
   } else if (t === 4) {
     // a broad side stripe (a uniform's braid) down the outer seam
     const stripe = c.spec.jacket === JACKET.NAVAL || c.spec.jacket === JACKET.TUNIC ? c.accent : tone(tc, 1.6);
-    const pts: V3[] = [];
-    for (let i = 0; i <= 6; i++) {
-      const y = 0.0 - (L * 0.98 * i) / 6;
-      const s = ringAt(rings, y);
-      pts.push([sx * (s.rx + 0.004), y, s.cz]);
-    }
-    b.sweep(pts, () => ({ rx: 0.012, rz: 0.014, pow: 2.4 }), stripe, { side: [0, 0, 1], segments: 4, round: "both" });
+    stripOn(b, rings, surf, sx * (Math.PI / 2), -0.01, c.spec.trousers === TR.SHORTS ? -L * 0.54 : -L * 0.98, 0.012, 0.007, stripe); // (shorts end above the knee)
   }
 }
 
 // ---- lower legs and boots ------------------------------------------------------------------------------------------------------
 
-interface BootKind {
-  /** Boot height as a fraction of the lower leg. */
-  top: number;
-  tall?: boolean;
-  laces?: boolean;
-  spats?: boolean;
-  hobnails?: boolean;
-  puttees?: boolean;
-  rubber?: boolean;
-  soft?: boolean;
-  clog?: boolean;
-  spurs?: boolean;
-}
-const BOOTS: readonly BootKind[] = [
-  { top: 0.36, tall: true },
-  { top: 0.1, laces: true },
-  { top: 0.14, spats: true },
-  { top: 0.1, laces: true, hobnails: true },
-  { top: 0.1, laces: true, puttees: true },
-  { top: 0.58, tall: true, rubber: true },
-  { top: 0.045, soft: true },
-  { top: 0.36, tall: true, spurs: true },
-  { top: 0.05, clog: true },
-];
-
-/** The material a boot is made of and its base colour. */
-const tr0 = (spec: { trousers: number }): number => spec.trousers;
-
-function bootColour(c: BodyCtx, k: BootKind): number {
-  if (k.rubber) return singe(PALETTE.material.rubber, c.burnt);
-  if (k.clog) return singe(WOOD, c.burnt);
-  if (k.soft) return singe(tone(dyeAt(PALETTE.cloth, c.spec.trousersColor + 8), 0.9), c.burnt);
-  return c.leather;
-}
-
 export function buildLowerLeg(c: BodyCtx, wooden: boolean, side: "L" | "R" = "L"): BufferGeometry | undefined {
   const { spec, P, burnt } = c;
   const b = new PartBuilder();
-  const r = legRadius(c);
   const len = P.legLower;
   if (wooden) {
     pegShin(b, c, len);
     return b.build();
   }
-  const kind = BOOTS[spec.boots] ?? BOOTS[0]!;
+  const plan = lowerLegPlan(c);
+  const { kind, shaftTop } = plan;
   const boot = bootColour(c, kind);
+  const dims = footDims(c, plan);
+  const tr = spec.trousers;
+  const bareShin = tr === TR.SHORTS;
+  const stockinged = tr === TR.BREECHES || tr === TR.PLUS_FOURS || bareShin;
+  const shinBase = bareShin ? c.skin : stockinged ? stockingColour(c) : c.trouserC;
   if (PartBuilder.lod >= 2) {
     // far figure: the trouser leg, the boot top, and a wedge for the foot
-    const legR0 = tr0(spec) === 3 ? r * 1.1 : r * 0.9;
-    const top = -len * (1 - Math.min(0.62, kind.top));
-    b.loft([{ y: 0.02, rx: legR0 * 1.04, rz: legR0 * 1.02, color: tone(c.trouserC, 0.9) }, { y: top, rx: legR0 * 0.86, rz: legR0 * 0.84, color: c.trouserC }], c.trouserC, undefined, undefined, undefined, { capTop: false });
-    b.loft([{ y: top + 0.01, rx: legR0 * 0.9, rz: legR0 * 0.88, color: boot }, { y: -len + 0.02, rx: legR0 * 0.8, rz: legR0 * 0.8, color: tone(boot, 0.9) }], boot, undefined, undefined, undefined, { capTop: false });
-    const fl = P.footLength;
-    const fw = P.footWidth;
-    const yFloor = -len - c.footH;
-    b.loft([{ y: 0, rx: fw * 0.45, rz: fl * 0.12, cz: fl * 0.1, color: tone(boot, 0.8) }, { y: fl * 0.6, rx: fw * 0.55, rz: fl * 0.13, cz: fl * 0.1, color: boot }, { y: fl * 1.05, rx: fw * 0.3, rz: fl * 0.09, cz: fl * 0.08, color: tone(boot, 1.1) }], boot, [0, yFloor + 0.01, fl * 0.34], [-Math.PI / 2, 0, 0]);
+    const s = plan.shin;
+    const h = plan.shaft;
+    b.loft([s[0]!, s[s.length - 1]!], c.trouserC, undefined, undefined, undefined, { capTop: false });
+    b.loft([h[0]!, h[h.length - 1]!], boot, undefined, undefined, undefined, { capTop: false });
+    footWedge(b, boot, dims, -len - c.footH);
     return b.build();
   }
   const tc = c.trouserC;
-  const tr = spec.trousers;
-  const legR = tr === 3 ? r * 1.1 : tr === 4 ? r * 1.0 : tr === 5 ? r * 0.84 : r * 0.9;
-  const bootTop = Math.min(0.62, kind.top);
-  const shaftTop = -len * (1 - bootTop);
-  const sock = sockColor(c);
-  const bareShin = tr === 6;
-  const stockinged = tr === 2 || tr === 4 || bareShin;
-  const shinBase = bareShin ? c.skin : stockinged ? sock : tc;
-  // trouser (or stocking, or skin) shin down to the boot
-  const shin: Ring[] = [
-    { y: 0.02, rx: legR * 1.05, rz: legR * 1.02, color: tone(shinBase, 0.78) },
-    { y: -len * 0.22, rx: legR * 1.04, rz: legR * 1.08, pow: 2.2, color: tone(shinBase, 1.02) }, // calf
-    { y: -len * 0.55, rx: legR * 0.94, rz: legR * 0.92, color: shinBase },
-    { y: Math.min(shaftTop + 0.02, -len * 0.6), rx: legR * 0.82, rz: legR * 0.8, color: soil(tone(shinBase, 0.9), 0.22 + 0.04 * spec.boots) },
-  ];
-  if (tr === 4) {
-    // plus-fours overhang: the knickerbocker cloth hangs over a gaiter
-    shin[0] = { y: 0.02, rx: legR * 1.32, rz: legR * 1.26, color: tone(tc, 0.82) };
-    shin.splice(1, 1, { y: -len * 0.06, rx: legR * 1.34, rz: legR * 1.28, pow: 2.2, color: tc });
-    shin.splice(2, 0, { y: -len * 0.2, rx: legR * 1.12, rz: legR * 1.08, color: tone(tc, 0.72) }, { y: -len * 0.21, rx: legR * 0.98, rz: legR * 0.96, color: sock, crease: true });
-  }
-  b.loft(shin, shinBase, undefined, undefined, undefined, { capTop: false });
+  const cl = clothLift(legRadius(c));
+  const surface = plan.surface;
+  const surf = limbSurface(surface);
+  b.loft(plan.shin, shinBase, undefined, undefined, undefined, { capTop: false });
   // boot shaft
-  const shaftC = kind.spats ? singe(PALETTE.trim.ivory, burnt) : boot;
-  const wide = kind.rubber ? 1.14 : 1;
-  if (!kind.soft && !kind.clog) {
-    b.loft(
-      [
-        { y: shaftTop + 0.012, rx: legR * 0.94 * wide, rz: legR * 0.92 * wide, color: tone(shaftC, 1.15) },
-        { y: shaftTop - 0.03, rx: legR * 0.88 * wide, rz: legR * 0.86 * wide, color: shaftC, crease: true },
-        { y: -len * (1 - bootTop * 0.4), rx: legR * 0.84 * wide, rz: legR * 0.83 * wide, color: tone(shaftC, 0.95) },
-        { y: -len + 0.02, rx: legR * 0.8 * wide, rz: legR * 0.8 * wide, color: tone(shaftC, 0.88) },
-      ],
-      shaftC,
-      undefined,
-      undefined,
-      undefined,
-      { capTop: false },
-    );
-  } else {
-    // slippers and clogs: only a low collar round the ankle
-    b.loft(
-      [
-        { y: shaftTop + 0.02, rx: legR * 0.9, rz: legR * 0.88, color: tone(boot, 1.15) },
-        { y: shaftTop - 0.005, rx: legR * 0.84, rz: legR * 0.82, color: boot, crease: true },
-        { y: -len + 0.02, rx: legR * 0.8, rz: legR * 0.8, color: tone(boot, 0.9) },
-      ],
-      boot,
-      undefined,
-      undefined,
-      undefined,
-      { capTop: false },
-    );
-  }
+  b.loft(plan.shaft, shaftColour(c, kind), undefined, undefined, undefined, { capTop: false, capBottom: false }); // (open at the top: the trouser runs down inside it)
+  const span = shaftTop - plan.ankleY;
   if (kind.tall) {
-    // folded top / cuff of the boot
+    // folded top / cuff of the boot, then a buckle strap on the outer side (or the pull-on loops of a rubber boot)
     const fold = kind.rubber ? tone(boot, 1.28) : tone(boot, 1.5);
-    b.loft([{ y: shaftTop + 0.032, rx: legR * 0.99 * wide, rz: legR * 0.97 * wide, color: fold }, { y: shaftTop - 0.03, rx: legR * 0.99 * wide, rz: legR * 0.97 * wide, color: fold, crease: true }], boot, undefined, undefined, undefined, { capBottom: false, capTop: false });
-    if (!kind.rubber) b.box(0.028, 0.03, 0.022, c.accent, [legR * 0.88, shaftTop - Math.min(0.11, len * bootTop * 0.45), -legR * 0.05]); // strap buckle on the outer side
-    if (kind.rubber) for (const sx of [-1, 1]) b.box(0.02, 0.09, 0.02, tone(boot, 1.2), [sx * legR * wide * 0.98, shaftTop - 0.05, 0]); // pull-on loops
-  }
-  if (!kind.tall && !kind.soft && !kind.clog && tr !== 2 && tr !== 4 && tr !== 5 && tr !== 6) {
-    // turn-up: a folded band of trouser cloth just above the boot, dirtier than the leg
-    const cuffC = soil(tone(tc, 1.12), 0.3);
-    b.loft([{ y: shaftTop + 0.075, rx: legR * 0.92, rz: legR * 0.9, color: cuffC }, { y: shaftTop + 0.06, rx: legR * 0.97, rz: legR * 0.95, color: cuffC }, { y: shaftTop - 0.015, rx: legR * 0.97, rz: legR * 0.95, color: tone(cuffC, 0.82), crease: true }], tc, undefined, undefined, undefined, { capBottom: false, capTop: false });
-  }
-  if (kind.laces && spec.laces === 0) {
-    // laces: little crossings up the front of the ankle (inside the shaft, never below the sole)
-    const lace = singe(PALETTE.trim.ivory, burnt);
-    const span = len * bootTop;
-    for (let i = 0; i < 2; i++) {
-      const y = shaftTop - span * (0.22 + 0.36 * i);
-      for (const sx of [-1, 1]) b.box(legR * 0.42, 0.007, 0.007, lace, [sx * legR * 0.1, y, -legR * 0.87], [0, 0, sx * 0.55]);
-    }
-  }
-  if (spec.laces > 0 && PartBuilder.lod === 0 && !kind.rubber && !kind.soft && !kind.clog) {
-    // the creator's choice of fastening: laced up the front (crossed or bowed) or strapped across; follows the shaft's own sections
-    const rzAt = (y: number): number => {
-      const pts: [number, number][] = [[shaftTop + 0.012, 0.92], [shaftTop - 0.03, 0.86], [-len * (1 - bootTop * 0.4), 0.83], [-len + 0.02, 0.8]];
-      for (let i = 0; i < pts.length - 1; i++) {
-        const [y0, k0] = pts[i]!;
-        const [y1, k1] = pts[i + 1]!;
-        if (y <= y0 && y >= y1) return legR * (k0 + ((k1 - k0) * (y0 - y)) / (y0 - y1));
-      }
-      return legR * (y > pts[0]![0] ? pts[0]![1] : pts[3]![1]);
-    };
-    const span = len * bootTop;
-    const yTop = shaftTop - Math.min(kind.tall ? 0.04 : 0.012, span * 0.3);
-    const yBot = Math.min(yTop - 0.022, Math.max(shaftTop - span * 0.88, -len + 0.03));
-    const lace = singe(PALETTE.trim.ivory, burnt);
-    if (spec.laces === 3) {
-      const n = kind.tall ? 3 : 2;
-      const strap = tone(boot, 1.18);
-      for (let i = 0; i < n; i++) {
-        const y = yTop - ((yTop - yBot) * i) / (n - 1) - 0.004;
-        const kx = rzAt(y) / legR;
-        const ring = (yy: number, k: number): Ring => ({ y: yy, rx: legR * kx * k * 1.02, rz: rzAt(yy) * k * 1.02, color: strap });
-        b.loft([ring(y + 0.009, 1.0), ring(y - 0.009, 1.0)], strap, undefined, undefined, undefined, { capBottom: false, capTop: false, segments: 8 });
-        b.box(0.01, 0.024, 0.02, c.accent, [legR * kx * 1.03 * (side === "L" ? -1 : 1), y, -legR * 0.05]);
-      }
+    bandOn(b, surface, shaftTop + 0.032, shaftTop - 0.03, fold, { lift: cl * 0.6, liftBottom: cl * 0.7, edges: true, crease: true });
+    const out = side === "L" ? -1 : 1;
+    if (!kind.rubber) {
+      const y = shaftTop - Math.min(0.11, Math.max(span, 0.05) * 0.45);
+      const m = mountOn(surf, out * (Math.PI / 2) * 0.92, y, 0.007);
+      b.box(0.028, 0.03, 0.014, c.accent, m.pos, m.rot); // strap buckle on the outer side
     } else {
-      const n = Math.max(2, Math.min(6, Math.floor((yTop - yBot) / 0.022) + 1));
-      const step = n > 1 ? (yTop - yBot) / (n - 1) : 0;
-      b.box(legR * 0.34, yTop - yBot + 0.02, 0.006, tone(boot, 0.7), [0, (yTop + yBot) / 2, -rzAt((yTop + yBot) / 2) + 0.001]); // the tongue
-      for (let i = 0; i < n; i++) {
-        const y = yTop - step * i;
-        const z = -rzAt(y) - 0.003;
-        for (const sx of [-1, 1]) b.sphere(0.006, c.accent, [sx * legR * 0.2, y, z + 0.002], [1, 1, 0.6]); // eyelets
-        if (spec.laces === 1) {
-          if (i < n - 1) for (const sx of [-1, 1]) b.box(legR * 0.46, 0.006, 0.006, lace, [0, y - step / 2, z - 0.001], [0, 0, sx * Math.atan2(step, legR * 0.4)]);
-        } else b.box(legR * 0.42, 0.006, 0.006, lace, [0, y, z - 0.001]);
-      }
-      if (spec.laces === 2) {
-        // a bow at the top: two loops and two tails
-        const zt = -rzAt(yTop) - 0.008;
-        for (const sx of [-1, 1]) {
-          b.torus(0.013, 0.003, lace, [sx * 0.015, yTop + 0.006, zt], [0, 0, 0], [1, 1.2, 1]);
-          b.box(0.005, 0.03, 0.005, lace, [sx * 0.012, yTop - 0.016, zt], [0, 0, sx * 0.2]);
-        }
-        b.sphere(0.005, tone(lace, 0.9), [0, yTop + 0.002, zt]);
+      for (const sx of [-1, 1]) {
+        const m0 = mountOn(surf, sx * (Math.PI / 2), shaftTop + 0.02, 0.006);
+        const m1 = mountOn(surf, sx * (Math.PI / 2), shaftTop - 0.07, 0.006);
+        boxBetween(b, m0.pos, m1.pos, 0.02, 0.012, tone(boot, 1.2)); // pull-on loops
       }
     }
   }
+  if (!kind.tall && !kind.soft && !kind.clog && tr !== TR.BREECHES && tr !== TR.PLUS_FOURS && tr !== TR.JODHPURS && tr !== TR.SHORTS) {
+    // turn-up: a folded band of trouser cloth just above the boot, dirtier than the leg, standing off the leg it wraps
+    const cuffC = soil(tone(tc, 1.12), 0.3);
+    bandOn(b, surface, shaftTop + 0.075, shaftTop - 0.015, cuffC, { lift: cl * 1.05, liftBottom: cl * 1.35, edges: true, crease: true, colorBottom: tone(cuffC, 0.82) });
+  }
+  if (tr === TR.PLUS_FOURS) {
+    // the knee band that gathers the plus-fours over the gaiter, with its buckle on the outer side
+    const y = -len * 0.175;
+    bandOn(b, surface, y + 0.02, y - 0.02, c.leather, { lift: cl * 0.5, edges: false, crease: true, colorBottom: tone(c.leather, 0.85) });
+    const m = mountOn(surf, (side === "L" ? -1 : 1) * 0.9, y, cl * 0.5 + 0.007);
+    b.box(0.03, 0.03, 0.012, c.accent, m.pos, m.rot);
+  }
+  const fastened = (kind.laces && spec.laces === 0) || (spec.laces > 0 && !kind.rubber && !kind.soft && !kind.clog);
+  if (fastened && PartBuilder.lod === 0) laceUp(b, c, plan, dims, boot, side, surf);
   if (kind.puttees) {
-    // puttees: a cloth strip wound in a spiral from the ankle to the knee
+    // puttees: a cloth strip wound in a spiral from the ankle to the knee, on the leg's own surface
     const wrapC = singe(PALETTE.trim.puttee, burnt);
-    const yTop = -len * 0.06;
+    const yTop = tr === TR.PLUS_FOURS ? -len * 0.31 : -len * 0.06; // (plus-fours end in a blouse that hangs over the gaiter: the wrap stops under it)
     const yBot = shaftTop + 0.01;
     const pts: V3[] = [];
     const turns = 5;
-    const N = turns * 8;
+    const N = turns * 6;
     for (let i = 0; i <= N; i++) {
       const t = i / N;
-      const y = yBot + (yTop - yBot) * t;
-      const a = t * turns * Math.PI * 2;
-      const s = legR * (1.0 + 0.05 * (1 - t));
-      pts.push([Math.sin(a) * s * 0.98, y, Math.cos(a) * s * 0.96]);
+      pts.push(surf(Math.PI + t * turns * Math.PI * 2, yBot + (yTop - yBot) * t, 0.006).p);
     }
-    b.sweep(pts, () => ({ rx: 0.02, rz: 0.008, pow: 2.4, color: wrapC }), wrapC, { side: [0, 1, 0], segments: 4, round: "both" });
-    b.loft([{ y: yTop + 0.02, rx: legR * 1.02, rz: legR * 1.0, color: tone(wrapC, 0.9) }, { y: yTop, rx: legR * 1.04, rz: legR * 1.02, color: tone(wrapC, 0.7), crease: true }], wrapC, undefined, undefined, undefined, { capBottom: false, capTop: false });
+    b.sweep(pts, () => ({ rx: 0.02, rz: 0.007, pow: 3.4, color: wrapC }), wrapC, { side: [0, 1, 0], segments: 6, round: "both" });
+    bandOn(b, surface, yTop + 0.02, yTop, wrapC, { lift: 0.007, edges: false, crease: true, colorBottom: tone(wrapC, 0.7) });
   }
   if (kind.spurs) {
     // a spur on the heel: a brass yoke, a shank and a rowel
-    const yS = -len + 0.06;
-    b.torus(legR * 0.86, 0.006, c.accent, [0, yS, legR * 0.05], [Math.PI / 2, 0, 0], [1, 1.05, 1], Math.PI * 1.2);
-    b.sweep([[0, yS, legR * 0.78], [0, yS - 0.01, legR * 0.95], [0, yS - 0.02, legR * 1.12]], () => ({ rx: 0.007, rz: 0.007, pow: 2 }), c.accent, { side: [1, 0, 0], segments: 4 });
-    b.torus(0.022, 0.005, c.accent, [0, yS - 0.02, legR * 1.15], [0, Math.PI / 2, 0]);
+    const yS = plan.ankleY + 0.04;
+    const sAt = ringAt(surface, yS);
+    const rm = (sAt.rx + sAt.rz) / 2;
+    b.torus(rm + 0.006, 0.006, c.accent, [sAt.cx, yS, sAt.cz + 0.005], [Math.PI / 2, 0, 0], [sAt.rx / rm, sAt.rz / rm, 1], Math.PI * 1.2);
+    const back = sAt.cz + sAt.rz;
+    b.sweep([[0, yS, back - 0.004], [0, yS - 0.01, back + 0.012], [0, yS - 0.02, back + 0.03]], () => ({ rx: 0.007, rz: 0.007, pow: 2 }), c.accent, { side: [1, 0, 0], segments: 4 });
+    b.torus(0.022, 0.005, c.accent, [0, yS - 0.02, back + 0.033], [0, Math.PI / 2, 0]);
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
-      b.cone(0.005, 0.014, c.accent, [0, yS - 0.02 + Math.sin(a) * 0.028, legR * 1.15 + Math.cos(a) * 0.028], [a + Math.PI / 2, 0, 0]);
+      b.cone(0.005, 0.014, c.accent, [0, yS - 0.02 + Math.sin(a) * 0.028, back + 0.033 + Math.cos(a) * 0.028], [a + Math.PI / 2, 0, 0]);
     }
   }
-  buildFoot(b, c, len, boot, kind);
-  void side;
-  void sstep;
+  buildFoot(b, c, len, boot, kind, dims);
   return b.build();
 }
 
-/** The shoe: a lofted last (heel to toe) with a raised toe cap, a darker sole and heel block, and optional spats or hobnails. */
-function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, kind: BootKind): void {
-  const { spec, P, footH } = c;
-  const fl = P.footLength;
-  const fw = P.footWidth;
-  // Chunky on purpose: a caricature shoe is a loaf, not a plank. Height follows length so big feet stay bulky.
-  let H = Math.max(footH * 1.6 + 0.04, fl * 0.27);
-  if (kind.soft) H *= 0.7;
-  if (kind.rubber) H *= 1.08;
-  const yFloor = -legLen - footH;
-  const soleC = kind.clog ? tone(bootC, 0.8) : kind.soft ? tone(bootC, 0.55) : tone(bootC, 0.5);
-  const heelZ = fl * 0.34;
-  const toeUp = kind.clog ? 0.16 : kind.soft ? 0.1 : 0;
-  // Loft axis: local +Y = forward (world -Z) after the rotation, local Z = up; cz lifts the section off the ground.
-  const fwK = kind.rubber ? 1.1 : 1;
-  const rings: Ring[] = [
+interface Station {
+  p: V3;
+  /** Unit normal of the surface there (pointing out of the boot). */
+  n: V3;
+  /** Where it is: on the shoe's upper at `f` (metres from the heel), or on the shaft at height `y`. */
+  f?: number;
+  y?: number;
+}
+
+/**
+ * The line up the front of the boot, from the toe box over the instep and up the shaft to its top: stations on the shoe's own upper (its sections, see footUpperRings) and then on
+ * the shaft's surface. Laces, eyelets and straps sit on these, so they follow the boot whatever its height, whatever the size of the foot or the leg.
+ */
+function frontLine(c: BodyCtx, plan: LowerLegPlan, d: FootDims, bootC: number, surf: ReturnType<typeof limbSurface>): { line: Station[]; across: (st: Station, half: number, lift: number, n: number) => V3[] } {
+  const yFloor = -plan.len - c.footH;
+  const upper = footUpperRings(d, bootC, plan.kind);
+  const y0 = yFloor + 0.012;
+  const topAt = (f: number, x: number, lift: number): V3 => {
+    const s = ringAt(upper, f);
+    const u = Math.min(0.999, Math.abs(x - s.cx) / s.rx);
+    const y = y0 + s.cz + (s.rz + lift) * (1 - u ** s.pow) ** (1 / s.pow);
+    return [x, y, d.heelZ - f];
+  };
+  const out: Station[] = [];
+  // the instep is only exposed IN FRONT of the leg's column: from just ahead of the ankle's front (measured from the heel) toward the toe cap
+  const fJoin = d.heelZ + plan.ankle.rz * 1.03;
+  const fToe = Math.min(d.fl * 0.8, fJoin + 0.09);
+  const steps = 4;
+  if (fToe > fJoin + 0.02) {
+    for (let i = 0; i <= steps; i++) {
+      const f = fToe - ((fToe - fJoin) * i) / steps; // toe first, then up toward the ankle
+      const p = topAt(f, 0, 0.002);
+      const a = topAt(f - 0.01, 0, 0);
+      const bp = topAt(f + 0.01, 0, 0);
+      // the surface rises toward the ankle: the normal is perpendicular to the tangent in the y-z plane, pointing up and forward
+      const tz = bp[2] - a[2];
+      const ty = bp[1] - a[1];
+      const l = Math.hypot(tz, ty) || 1;
+      out.push({ p, n: [0, tz / l, -ty / l], f });
+    }
+  }
+  const yJoin = out.length ? out[out.length - 1]!.p[1] : plan.ankleY;
+  const yTop = plan.shaftTop - Math.min(plan.kind.tall ? 0.04 : 0.005, (plan.shaftTop - plan.ankleY) * 0.3);
+  if (yTop > yJoin + 0.012) {
+    const n = Math.max(1, Math.round((yTop - yJoin) / 0.02));
+    for (let i = 1; i <= n; i++) {
+      const y = yJoin + ((yTop - yJoin) * i) / n;
+      const q = surf(0, y, 0.002);
+      out.push({ p: q.p, n: q.n, y });
+    }
+  }
+  // points across the boot at a station (x from one side to the other), following the section there: over the instep for the shoe, round the shaft for the shaft
+  const across = (st: Station, half: number, lift: number, n: number): V3[] => {
+    const pts: V3[] = [];
+    for (let j = 0; j < n; j++) {
+      const t = -1 + (2 * j) / (n - 1);
+      if (st.f !== undefined) {
+        const s = ringAt(upper, st.f);
+        pts.push(topAt(st.f, t * Math.min(half, s.rx * 0.92), lift));
+      } else {
+        const sec = ringAt(plan.surface, st.y!);
+        const phi = Math.asin(Math.min(0.95, half / Math.max(sec.rx, 1e-6))) * t;
+        pts.push(surf(phi, st.y!, lift).p);
+      }
+    }
+    return pts;
+  };
+  return { line: out, across };
+}
+
+/** The boot's fastening (the creator's `laces` choice, and the plain crossings of lace-up boots): eyelets and laces, a bow, or buckled straps, on the front line of the boot. */
+function laceUp(b: PartBuilder, c: BodyCtx, plan: LowerLegPlan, d: FootDims, boot: number, side: "L" | "R", surf: ReturnType<typeof limbSurface>): void {
+  const { spec, burnt } = c;
+  const { line, across } = frontLine(c, plan, d, boot, surf);
+  // arc length along the line, to space the eyelets evenly
+  const cum: number[] = [0];
+  for (let i = 1; i < line.length; i++) cum.push(cum[i - 1]! + Math.hypot(line[i]!.p[0] - line[i - 1]!.p[0], line[i]!.p[1] - line[i - 1]!.p[1], line[i]!.p[2] - line[i - 1]!.p[2]));
+  const total = cum[cum.length - 1]!;
+  if (total < 0.02) return;
+  const at = (s: number): Station => {
+    let i = 1;
+    while (i < cum.length - 1 && cum[i]! < s) i++;
+    const t = (s - cum[i - 1]!) / Math.max(1e-6, cum[i]! - cum[i - 1]!);
+    const A = line[i - 1]!;
+    const B = line[i]!;
+    const lerp3 = (p: V3, q: V3): V3 => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+    const n = lerp3(A.n, B.n);
+    const nl = Math.hypot(n[0], n[1], n[2]) || 1;
+    const st: Station = { p: lerp3(A.p, B.p), n: [n[0] / nl, n[1] / nl, n[2] / nl] };
+    // it lies on the shoe's upper or on the shaft, whichever end of the span it is nearer to
+    const from = t < 0.5 ? A : B;
+    if (from.f !== undefined) st.f = A.f !== undefined && B.f !== undefined ? A.f + (B.f - A.f) * t : from.f;
+    else st.y = A.y !== undefined && B.y !== undefined ? A.y + (B.y - A.y) * t : from.y;
+    return st;
+  };
+  const lace = singe(PALETTE.trim.ivory, burnt);
+  const eyeX = Math.min(plan.legR * 0.2, d.fw * 0.16);
+  const n = Math.max(2, Math.min(6, Math.floor(total / 0.024) + 1));
+  const stations: Station[] = [];
+  for (let i = 0; i < n; i++) stations.push(at((total * i) / (n - 1)));
+  const on = (st: Station, x: number, lift: number): V3 => [x, st.p[1] + st.n[1] * lift, st.p[2] + st.n[2] * lift];
+  if (spec.laces === 3) {
+    // buckled straps across the instep and the shaft
+    const strap = tone(boot, 1.18);
+    const k = Math.min(3, n);
+    for (let i = 0; i < k; i++) {
+      const st = stations[k === 1 ? 0 : Math.round((i * (n - 1)) / (k - 1))]!;
+      const w = plan.legR * 0.8;
+      const pts = across(st, w, 0.004, 7);
+      b.sweep(pts, () => ({ rx: 0.0095, rz: 0.004, pow: 2.4 }), strap, { side: st.f !== undefined ? [0, 0, 1] : [0, 1, 0], segments: 4 });
+      const end = pts[side === "L" ? 0 : 6]!;
+      b.box(0.014, 0.022, 0.012, c.accent, [end[0], end[1] + st.n[1] * 0.004, end[2] + st.n[2] * 0.004]);
+    }
+    return;
+  }
+  // eyelets, tongue and lace: laces 0 crossed (plain lace-up boots), 1 crossed, 2 crossed with a bow, 3 straps (above)
+  const top = stations[n - 1]!;
+  if (spec.laces > 0) for (let i = 0; i < n - 1; i++) boxBetween(b, on(stations[i]!, 0, 0.0015), on(stations[i + 1]!, 0, 0.0015), plan.legR * 0.34, 0.006, tone(boot, 0.7)); // the tongue
+  for (let i = 0; i < n; i++) {
+    const st = stations[i]!;
+    if (spec.laces > 0) for (const sx of [-1, 1]) b.cone(0.0065, 0.005, c.accent, on(st, sx * eyeX, 0.003), tipAlong(st.n)); // eyelets
+    if (i < n - 1) {
+      const nx = stations[i + 1]!;
+      if (spec.laces === 0 || spec.laces === 1) {
+        for (const sx of [-1, 1]) boxBetween(b, on(st, sx * eyeX, 0.006), on(nx, -sx * eyeX, 0.006), 0.006, 0.006, lace);
+      } else b.box(eyeX * 2.1, 0.006, 0.006, lace, on(st, 0, 0.006));
+    }
+  }
+  if (spec.laces === 2) {
+    // a bow at the top: two loops and two tails
+    const st = top;
+    for (const sx of [-1, 1]) {
+      b.torus(0.013, 0.003, lace, on(st, sx * 0.015, 0.012), [0, 0, 0], [1, 1.2, 1]);
+      b.box(0.005, 0.03, 0.005, lace, on(st, sx * 0.012, 0.008), [0, 0, sx * 0.2]);
+    }
+    b.sphere(0.005, tone(lace, 0.9), on(st, 0, 0.008));
+  }
+}
+
+/** A cheap wedge for the foot of a far figure. */
+function footWedge(b: PartBuilder, boot: number, d: FootDims, yFloor: number): void {
+  const { fl, fw } = d;
+  b.loft([{ y: 0, rx: fw * 0.45, rz: fl * 0.12, cz: fl * 0.1, color: tone(boot, 0.8) }, { y: fl * 0.6, rx: fw * 0.55, rz: fl * 0.13, cz: fl * 0.1, color: boot }, { y: fl * 1.05, rx: fw * 0.3, rz: fl * 0.09, cz: fl * 0.08, color: tone(boot, 1.1) }], boot, [0, yFloor + 0.01, fl * 0.34], [-Math.PI / 2, 0, 0]);
+}
+
+/** The shoe's upper as sections along the foot (local y forward from the heel, local z up): shared by the shoe and by the laces that run over its instep. */
+function footUpperRings(d: FootDims, bootC: number, kind: BootKind): Ring[] {
+  const { fl, fw, H, fwK, toeUp } = d;
+  return [
     { y: 0, rx: fw * 0.4 * fwK, rz: H * 0.46, cz: H * 0.5, pow: 2.5, color: tone(bootC, 0.88) },
     { y: fl * 0.14, rx: fw * 0.47 * fwK, rz: H * 0.5, cz: H * 0.52, pow: 2.8, color: bootC },
     { y: fl * 0.42, rx: fw * 0.5 * fwK, rz: H * 0.5, cz: H * 0.5, pow: 3, color: bootC },
@@ -686,13 +610,23 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, ki
     { y: fl * 0.9, rx: fw * 0.5 * fwK, rz: H * 0.33, cz: H * (0.38 + toeUp * 1.6), pow: 2.5, color: tone(bootC, 1.18) },
     { y: fl * 1.06, rx: fw * (kind.soft ? 0.22 : 0.3), rz: H * 0.24, cz: H * (0.36 + toeUp * 2.4), pow: 2.2, color: tone(bootC, 1.12) },
   ];
-  b.loft(rings, bootC, [0, yFloor + 0.01, heelZ], [-Math.PI / 2, 0, 0], undefined, { segments: 8 });
-  // sole slab (a touch wider than the upper) and a heel block
+}
+
+/** The shoe: a lofted last (heel to toe) with a raised toe cap, a darker sole and heel block, and optional spats or hobnails. The sole's underside is the ground plane (y = 0 in the rest pose). */
+function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, kind: BootKind, d: FootDims): void {
+  const { footH } = c;
+  const { fl, fw, H, heelZ, toeUp } = d;
+  const yFloor = -legLen - footH;
+  const soleC = kind.clog ? tone(bootC, 0.8) : kind.soft ? tone(bootC, 0.55) : tone(bootC, 0.5);
+  // Loft axis: local +Y = forward (world -Z) after the rotation, local Z = up; cz lifts the section off the ground.
+  const rings = footUpperRings(d, bootC, kind);
+  b.loft(rings, bootC, [0, yFloor + 0.012, heelZ], [-Math.PI / 2, 0, 0], undefined, { segments: 8 });
+  // sole slab (a touch wider than the upper) and a heel block; the slab's underside is exactly on the ground
   b.loft(
     [
-      { y: -0.01, rx: fw * 0.44, rz: 0.018, cz: 0.012, pow: 3, color: soleC },
-      { y: fl * 0.55, rx: fw * 0.6, rz: 0.018, cz: 0.012, pow: 3, color: soleC },
-      { y: fl * 1.08, rx: fw * 0.36, rz: 0.018, cz: 0.012 + toeUp * 0.1, pow: 3, color: soleC },
+      { y: -0.01, rx: fw * 0.44, rz: 0.009, cz: 0.009, pow: 3, color: soleC },
+      { y: fl * 0.55, rx: fw * 0.6, rz: 0.009, cz: 0.009, pow: 3, color: soleC },
+      { y: fl * 1.08, rx: fw * 0.36, rz: 0.009, cz: 0.009 + toeUp * 0.1, pow: 3, color: soleC },
     ],
     soleC,
     [0, yFloor, heelZ],
@@ -706,7 +640,7 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, ki
     const spat = singe(PALETTE.trim.ivory, c.burnt);
     b.loft([{ y: 0.03, rx: fw * 0.5, rz: H * 0.5, cz: H * 0.55, color: spat }, { y: fl * 0.5, rx: fw * 0.55, rz: H * 0.42, cz: H * 0.5, crease: true, color: spat }], bootC, [0, yFloor + 0.025, heelZ - fl * 0.02], [-Math.PI / 2, 0, 0], undefined, { capBottom: false });
   }
-  if (kind.hobnails) for (let i = 0; i < 6; i++) b.sphere(0.014, PALETTE.trim.hobnail, [((i % 2) - 0.5) * fw * 0.6, yFloor - 0.004, heelZ - fl * (0.15 + (i >> 1) * 0.3)], [1, 0.5, 1]);
+  if (kind.hobnails) for (let i = 0; i < 6; i++) b.cone(0.013, 0.01, PALETTE.trim.hobnail, [((i % 2) - 0.5) * fw * 0.6, yFloor + 0.003, heelZ - fl * (0.15 + (i >> 1) * 0.3)], [Math.PI, 0, 0]); // (nail heads under the sole, points down)
   if (kind.soft) {
     // slipper: a pompom / a curled toe tip
     b.sphere(fw * 0.14, tone(bootC, 1.35), [0, yFloor + H * 0.7, heelZ - fl * 0.98]);
@@ -715,5 +649,5 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, ki
     // carved clog: a band of darker wood across the instep and a pale carved rim
     b.loft([{ y: fl * 0.32, rx: fw * 0.52, rz: H * 0.46, cz: H * 0.52, color: tone(bootC, 0.7) }, { y: fl * 0.42, rx: fw * 0.5, rz: H * 0.5, cz: H * 0.5, color: tone(bootC, 0.7) }], bootC, [0, yFloor + 0.01, heelZ], [-Math.PI / 2, 0, 0], undefined, { capBottom: false, capTop: false });
   }
-  void spec;
 }
+

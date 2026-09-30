@@ -115,3 +115,46 @@ Also: the campfire's pool of light now lies on the ground (its plane used to be 
 - The room clock resets the world's age when a room is recreated (worlds do not persist yet); when campaigns persist, `worldMs` must be stored with them.
 - One `WorldView` build is now 0.6-0.7 s on medium (Node, warm): the block-built tower, the dome and the clearing. Not a frame cost, but worth watching if the world is ever rebuilt live (`Stage.setPreset` does).
 - `packages/procedural` `weaponPose.test.ts` fails in the working tree (a character/combat change, not this work).
+
+---
+
+# 2026-09-30 (third pass): Hollowmere, the HQ marquee, the waterside, ground and sky polish, wildlife
+
+Judged by looking. Stills are in `/tmp/claude-0/shots/` (not in the repo): `fin_v{7,12,18,21}` (the village at dawn, noon, dusk, night), `fin_{low,high}`, `fin_{rain,fog,storm}`, `duck5` / `deer1` / `cat1` / `dfly_9000` (the wildlife), `mud3` (tracks in mud), `gold_16.8` / `gold_17.8` (the golden hour), `sh_{8,16.8}` (canopy shafts), and earlier `sky` studies at 6.3 / 9 / 16.5 / 18.4 / 19.4 / 21.5 / 0.5.
+Everything below was rendered on SwiftShader (software GL); there are no GPU numbers.
+
+## What was built
+| Item | What |
+|---|---|
+| Village | `shared/village.ts`: ONE pure plan `villagePlan(terrain)` (WeakMap-cached, no `Math.random`, no seed) feeds collision (`villageObstacles`), client geometry, keep-outs (`villageKeepOut`, `villageYard`, `villageCobble`, `villageGarden`) and the ground pads (`VILLAGE_PADS`). 15 sites, 8 kinds: gate tower with a working clock (hands turn in the vertex shader from `uHour`), 3 cottages (tile, shingle, thatch), 2 stilted river houses (stairs adapt to the ground), 2 round-roofed granaries on mushroom stones, a terraced meeting hall, a smithy with chimney smoke, a water mill (the wheel turns, dips and splashes), 4 market awning stalls; streets (late trails), fences, gardens, washing lines, drying racks, a well, carts, crates, barrels, lanterns that light at dusk, 12 authored signs. Doors are real openings with dark interiors and walkable thresholds; walls are solid boxes (tests walk through every door and arch with the shared movement step). No villagers yet. The cat is one. |
+| HQ | `CAMP.hq` + `hqPlan()` in `shared/camp.ts`, `world/hq.ts`: a striped pavilion (open front and south, canvas on the back and north) with flags, poles, lamps, a map table (moved to z = -7), chairs, chest, a supply pyramid with barrels, crates with stencilled text, a notice board and the Society's heraldry. Cloth is part of the swaying camp cloth mesh. |
+| Waterside | A plank jetty on the pond's north shore with a moored punt that bobs (vertex kind 3), reeds, stepping stones across the stream, a timber weir with a walkway and a chute (`uWeir` in the water shader: sheet, boil of foam), lapping wavelets, wheel and punt splashes (`uSpots`), a mill wheel. `landscape.ts` exports `WEIR`, `MILL`, `JETTY` for the audio agent. |
+| Ground | Macro tone variation, trampled ground, gravel on paths, mud belts by the water (`mudBelt`), cracked clay (`crackNoise`/`crackPatch`, voronoi cracks in the shader), flower-meadow lift, leaf litter under crowns (`CanopyIndex`), plaza cobbles; a second baked 320^2 RGBA detail texture (R litter, G clay, B mud, A cobbles) beside the 1024^2 trail mask. Tracks in the mud (short trails of paired prints, a hashed cell each). |
+| Land | 10 crags per seed (`cliff` obstacles + `cliffGeometry` strata and ledges + a boulder field each), a windmill on a second summit (SW) and a distant snow range with layered haze, both inside the hills mesh (no extra draw; camera far = 820), valley mist at dawn (`mistLevel`, `uMist`). |
+| Sky and light | Sunset silhouettes and cloud bellies, a warmer/cooler grade per hour with a **golden-hour stop at 16.6** (top still blue while horizon, glow and sun are well into dusk: a straight fade turned the whole dome violet by 16.8), two star layers and a milky band, shooting stars, **moon phases** (`worldDay`, `moonPhase`, `?moon=0..1`; moonlight scales with the phase), cheap canopy sun shafts (one instanced draw, fade with cloud, rain, night and high sun), lit windows at dusk (in the lantern-glass mesh, `aLit`). |
+| Wildlife | `shared/fauna.ts`: ducks (4, open water of the pond, routes checked against the jetty and piles), deer (2 + a stag with antlers) at the forest edge east of the camp, and the village cat (naps near the granary by day, curled on the granary steps from 21:00 to 06:00; `sleepWeight`). Pure poses from the world clock and the hour. Client `world/animals.ts`: two instanced meshes (livestock; wildlife), each ONE geometry holding every species of its group with a per-vertex `aKind` and a per-instance `aSpec` (a vertex of another species collapses to nothing), the same vertex animation (legs, bob, head dip, per-species neck root, curl) for the mesh, the shadow and, through a new `pre` hook on `OutlineDisplace`, the ink hull. Ducks ride the pond's surface. Swallows are extra low, fast instances of the bird mesh (`aSwallow`); dragonflies are extra instances of the butterfly mesh (`aFly`: hover, then dart along the stream). No extra draws. |
+
+## Numbers (medium, seed 7, Node, `WORLD_STATS=1`)
+Main-pass draws: low 36, medium 64, high 64 (was 34 / 60 / 60 before this pass; the brief was "about 70 or fewer"). Triangles: low 180k, medium 420k, high 525k. Ceilings in `WorldView.test.ts` moved to 37 / 66 draws and 195k / 430k / 540k triangles with the reasons written there and in `docs/PERFORMANCE.md`. Build time of one medium `WorldView`: ~1.2-1.35 s of CPU in a loaded 4-core sandbox (load average 12), ~1.0 s when idle. `weldedOutlineNormals` (kit.ts, typed hash instead of a string key per vertex) cut the village build from 245 ms to 140 ms.
+
+## Decisions
+- **One plan feeds everything.** Collision, geometry, keep-outs, ground pads and the atlas signs all read `villagePlan`. Adding or moving a building is one edit and the tests (no overlap, roads clear, doors walkable, walls solid, dry ground, level pads, parity) fail if something disagrees.
+- **Existing forest never moves.** The village is appended to the arena after everything else; crags have their own Rng (`seed ^ 0xc1a6`); the village removes what stands inside it via `clashesFurniture`. Client scatter (flowers, ferns, pebbles, bushes) now also avoids the village keep-out, which does reshuffle those plants after the first rejected position (visual only, never on the server).
+- **Pads level the ground under buildings** (`withLandscape(base, pads)`): level = mean of the ground samples, blend stretched to `4.2 * diff` on slopes, small pads weigh more than big ones. Cliffs and sloping floors under buildings were the failure of the first attempt.
+- **Species share one draw by collapsing.** A vertex-shader `transformed = vec3(0)` for the other species costs vertex work, not fill, and keeps the draws at 4 for all five species (it was 4 for two). It also means `stats.triangles` counts the collapsed triangles.
+- **Tracks in the mud are static.** A hashed pattern in the ground shader where the mud channel is high, not a record of where animals actually walked.
+
+## Weak spots (honest)
+- **SwiftShader only.** No GPU frame times. The ground detail shader (voronoi cracks, cobbles, litter flecks, tracks), the mist chunk in every toon material, and the sky's star layers are unmeasured on hardware.
+- **The dragonflies are small and were seen once** (`dfly_9000`); they sit near the stream and are easy to miss. Swallows were checked by tests (attributes, determinism) and in the render stats, not judged in a still.
+- **Mud tracks** appear only in the mud belt and are round dots at a distance.
+- Animals do not react to players and leave no real tracks. The deer are not driven off by the camp; ducks do not dive.
+- The collapsed-species approach makes `livestock` (16k) and `wildlife` (13.5k) triangles look bigger than what is rasterised.
+- The `hill-foot` slopes on hostile seeds: pads guarantee level building floors on seeds 1, 7, 42 and 1234 (tests), not on every seed.
+- Only one garden survives (the cot-a garden was removed because the weir walkway lands there).
+- `ballistics` has a flaky ray test against grazing terrain in the working tree (passes on re-run); not touched.
+- The village has no villagers, no interiors beyond a dark room behind each door, and no sound (the audio agent reads `WEIR`, `MILL`, `JETTY` from `landscape.ts`).
+- Build time is at the edge of the 1.2 s target on a loaded machine (terrain 0.2 s, ground masks 0.15 s, village 0.14 s).
+
+## Registers
+Authored in-game text (village signs, notices, crate stencils, heraldry motto) is drawn at runtime on a canvas in the bundled IM Fell fonts; it is original satire written for the game and needs no external-asset entry. `docs/ASSET_REGISTER.md` still tells the truth: no external assets.

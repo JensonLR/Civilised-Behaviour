@@ -193,6 +193,8 @@ export interface SkullOptions {
   coarse?: GridLevel;
   /** Bakes extra colour into a vertex (stubble, ruddy cheeks ...): direction on the unit head, the vertex colour to edit, and the brush weights there. */
   paint?(dx: number, dy: number, dz: number, c: Color, w: Record<BrushTag, number>): void;
+  /** Directions where the skin is completely hidden under something opaque (a full-thickness hair shell): a grid cell with all four corners omitted is not drawn. */
+  omit?(dx: number, dy: number, dz: number): boolean;
 }
 
 /**
@@ -242,6 +244,7 @@ export function buildSkull(shape: HeadShape, opts: SkullOptions): BufferGeometry
   const pos: number[] = [];
   const col: number[] = [];
   const idx: number[] = [];
+  const hidden: boolean[] = [];
   const c = new Color();
   for (let j = 0; j <= rows; j++) {
     const th = thetas[j]!;
@@ -252,6 +255,7 @@ export function buildSkull(shape: HeadShape, opts: SkullOptions): BufferGeometry
       const dz = -Math.cos(ph) * Math.cos(th);
       const r = shape.radius(dx, dy, dz);
       pos.push(dx * r, dy * r, dz * r);
+      hidden.push(opts.omit?.(dx, dy, dz) === true);
       const w = shape.weights(dx, dy, dz);
       c.copy(ramp.skin);
       c.lerp(ramp.blush, w.cheek * 0.55);
@@ -268,6 +272,7 @@ export function buildSkull(shape: HeadShape, opts: SkullOptions): BufferGeometry
     for (let i = 0; i < cols; i++) {
       const a = j * cols + i;
       const b = j * cols + ((i + 1) % cols);
+      if (hidden[a] && hidden[b] && hidden[a + cols] && hidden[b + cols]) continue;
       idx.push(a, a + cols, b, b, a + cols, b + cols);
     }
   }

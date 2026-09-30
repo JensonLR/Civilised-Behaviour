@@ -60,6 +60,22 @@ export function crateParts(k: Kit, w: number, h: number, d: number, lod: Lod, to
   }
 }
 
+/**
+ * A lighter packing crate for the places crates come in dozens (the HQ's supply pyramid, the market): corner posts, two slatted bands and a diagonal
+ * brace on each long face; about a third of `crateParts`' triangles.
+ */
+export function crateSlim(k: Kit, w: number, h: number, d: number, tone = 1): void {
+  const post = 0.07 * Math.min(1, w / 0.8);
+  box(k, [w - 0.02, h - 0.02, d - 0.02], [0, 0, 0], (p, n, out) => blend(out, P.crate, P.crateDark, (((Math.floor(p.y * 9) % 2) + 2) % 2) * 0.35 + (n.y > 0.5 ? 0 : 0.1)).multiplyScalar(tone));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(k, [post, h + 0.01, post], [sx * (w / 2 - post / 2), 0, sz * (d / 2 - post / 2)], P.crate);
+  for (const sz of [-1, 1]) {
+    box(k, [w - post * 2, post * 0.7, 0.02], [0, h / 2 - post * 0.5, sz * (d / 2)], P.crate);
+    box(k, [w - post * 2, post * 0.7, 0.02], [0, -h / 2 + post * 0.5, sz * (d / 2)], P.crate);
+    const bl = Math.hypot(w - post * 2.4, h - post * 1.8);
+    box(k, [bl, post * 0.5, 0.025], [0, 0, sz * (d / 2)], P.crateDark, [0, 0, (sz > 0 ? 1 : -1) * Math.atan2(h - post * 1.8, w - post * 2.4)]);
+  }
+}
+
 export function crateGeometry(lod: Lod): BufferGeometry {
   const h = PROP_DEFS[PropKind.CRATE].half;
   const k = new Kit();

@@ -8,8 +8,13 @@ import { stumpPost } from "./prosthetics.ts";
 import { addNeckwear, addHipGear, addPack, type TorsoFrame } from "./gear.ts";
 import type { Ring } from "./loft.ts";
 import { PartBuilder, SOOT, singe } from "./parts.ts";
-import { dressSkirts, dressTorso, torsoRings, type TorsoView } from "./garments.ts";
-import { dressCape, dressPoncho } from "./drape.ts";
+import { dressSkirts, dressTorso, layerAtX, skirtRings, skirtSpec, torsoRings, type TorsoView } from "./garments.ts";
+import { dressCape, dressPoncho, outerTorsoRings } from "./drape.ts";
+import { patchSurface, polySurface, torsoSegments } from "./fit/surface.ts";
+import { frameAt, hangingStrip } from "./fit/torsoKit.ts";
+import { neckOuter } from "./fit/collarShape.ts";
+import { hipReach } from "./fit/skirtShape.ts";
+import { pelvisTopRings } from "./fit/skirtShape.ts";
 import { addBelt, addDecorations, addPockets, addSash } from "./torsoTrim.ts";
 import { legRadius, upperArmRings, upperLegRings } from "./limbs.ts";
 
@@ -40,9 +45,11 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   const nk = neckRadii(P);
   const under = j === 0 || j === 3 ? c.shirtC : j === 6 || j === 7 ? vestDye(c) : c.jacketC;
   const rings = torsoRings(P, under, j);
-  b.loft(rings, under);
+  const seg = torsoSegments();
+  b.loft(rings, under, undefined, undefined, undefined, { segments: seg });
   const at = (y: number) => ringAt(rings, y);
-  const surf = (y: number, x = 0) => frontZ(at(y), x);
+  const trunk = polySurface(rings, seg);
+  const surf = (y: number, x = 0) => trunk.front(y, x);
   const facing = j === 8 ? contrastDye(c) : tone(c.jacketC, 0.68);
   const view: TorsoView = {
     b,
@@ -57,7 +64,9 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
     nrz: nk.rz,
     at,
     surf,
-    surface: ringSurface(rings),
+    s: trunk,
+    surface: patchSurface(rings, seg),
+    layers: [],
     coat: j === 0 || j === 3 ? c.shirtC : c.jacketC,
     facing,
     vest: j === 3 ? c.jacketC : vestDye(c),
@@ -68,19 +77,48 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   if (j === 6) dressCape(view);
   if (j === 7) dressPoncho(view);
   if (j === 0) {
-    // Braces (suspenders) for shirt sleeves.
+    // Braces (suspenders) for shirt sleeves: two straps up the front from the waist over the shoulders.
     const braceC = tone(c.trouserC, 0.85);
     for (const sx of [-1, 1]) {
       const x = sx * W * 0.42;
-      const yTop = h * 0.94;
-      const yBot = h * 0.16;
-      const yMid = (yTop + yBot) / 2;
-      b.box(0.045, yTop - yBot, 0.014, braceC, [x, yMid, surf(yMid, x) - 0.005], [0, 0, sx * -0.035]);
+      hangingStrip(b, trunk, x, h * 0.94, h * 0.16, 0.0225, 0.005, braceC, { round: undefined });
     }
   }
 
-  // Belts, sashes, decorations and gear are shared by every jacket; they read the torso's own surface.
-  const frame: TorsoFrame = { b, spec, P, h, W, D, neckY: view.neckY, nr: Math.max(nk.rx, nk.rz), burnt, accent, dye: singe(PALETTE.cloth[(spec.hatColor + 4) % PALETTE.cloth.length]!, burnt), at, tone };
+  // Belts, sashes, decorations and gear are shared by every jacket; they read the torso's own surface (or, for gear, the drape over it).
+  const outerRings = outerTorsoRings(P, 0, j);
+  const outer = j === 6 || j === 7 ? polySurface(outerRings, seg) : trunk;
+  const legRings = upperLegRings(c);
+  const skirt = skirtSpec(spec, P);
+  const skirtR = skirt && skirt.len > 0 ? skirtRings(c, skirt.len, skirt.flare, 0, 0, legRings, skirt.open) : undefined;
+  const reach1 = hipReach(c, skirtR, legRings);
+  const reach = (y: number, y1 = y): { x: number; f: number; b: number } => {
+    const out = { x: 0, f: 0, b: 0 };
+    const n = y1 === y ? 0 : 6;
+    for (let i = 0; i <= n; i++) {
+      const r = reach1(n === 0 ? y : y + ((y1 - y) * i) / n);
+      out.x = Math.max(out.x, r.x);
+      out.f = Math.max(out.f, r.f);
+      out.b = Math.max(out.b, r.b);
+    }
+    return out;
+  };
+  const nOuter = neckOuter(P, spec, 0);
+  // the coat's facings stand this proud of the trunk (a strap or a plate goes above them)
+  const facingLift = [1, 3, 4, 8, 9].includes(j) ? 0.012 : j === 5 || j === 10 || j === 2 ? 0.008 : 0.002;
+  const layerAt = (x: number, y: number): number => (j === 6 || j === 7 ? 0 : layerAtX(view, x, y));
+  const frame: TorsoFrame = {
+    b, spec, P, h, W, D, neckY: view.neckY, nr: Math.max(nk.rx, nk.rz), burnt, accent, dye: singe(PALETTE.cloth[(spec.hatColor + 4) % PALETTE.cloth.length]!, burnt), at, tone,
+    s: outer,
+    trunk,
+    layer: j === 6 || j === 7 ? 0.008 : facingLift,
+    layerAt,
+    reach,
+    neck: (y, gap = 0) => {
+      const r = nOuter(y);
+      return { rx: r.rx + gap, rz: r.rz + gap };
+    },
+  };
   addBelt(frame, c);
   addSash(frame, c);
   addDecorations(frame, c);
@@ -90,8 +128,10 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   if (spec.hipGear) addHipGear(frame);
   // Scorch marks.
   if (burnt >= 2) {
-    b.sphere(1, SOOT, [W * 0.4, h * 0.5, surf(h * 0.5, W * 0.4) - 0.004], [0.09, 0.07, 0.02]);
-    b.sphere(1, SOOT, [-W * 0.2, h * 0.25, surf(h * 0.25, -W * 0.2) - 0.004], [0.07, 0.09, 0.02]);
+    for (const [x, y, sx, sy] of [[W * 0.4, h * 0.5, 0.09, 0.07], [-W * 0.2, h * 0.25, 0.07, 0.09]] as const) {
+      const fr = frameAt(trunk.atX(x, y, 0));
+      b.sphere(1, SOOT, fr.at(0, 0, layerAt(x, y) + 0.001), [sx, sy, 0.02], fr.rot);
+    }
   }
   return b.build();
 }
@@ -101,22 +141,11 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
 export function buildPelvis(c: BodyCtx): BufferGeometry | undefined {
   const { spec, P } = c;
   const b = new PartBuilder();
-  const D = P.torsoDepth / 2;
-  const r = legRadius(c);
-  const sc = P.scale;
   const tc = c.trouserC;
-  // Under a closed coat skirt the trouser top is tucked inside it (two surfaces cutting through each other show as a sawtooth).
-  const tuck = [2, 4, 5, 8, 9, 10].includes(spec.jacket) ? 0.86 : 1;
-  b.loft(
-    [
-      { y: 0.09 * sc, rx: waistHalf(P) * 0.95 * tuck, rz: D * 0.78 * tuck, cz: -P.bellyForward * 0.12, color: tone(tc, 0.95) },
-      { y: -0.02 * sc, rx: Math.max(P.hipWidth + r * 1.25, waistHalf(P) * 1.02) * tuck, rz: D * 0.86 * tuck, color: tc },
-      { y: -0.12 * sc, rx: (P.hipWidth + r * 1.2) * tuck, rz: D * 0.7 * tuck, color: tone(tc, 0.85) },
-    ],
-    tc,
-  );
+  // The trouser top (tucked in under a closed coat skirt: see fit/skirtShape.ts, which fits the skirt outside it).
+  b.loft(pelvisTopRings(c, { top: tone(tc, 0.95), mid: tc, low: tone(tc, 0.85) }), tc);
   // Coat skirts: every coat has its own (frock-coat tails with a centre vent, a greatcoat's long bell, a reefer's short flare, ...).
-  dressSkirts(b, c);
+  dressSkirts(b, c, upperLegRings(c));
   void spec;
   return b.build();
 }
@@ -135,7 +164,7 @@ export function buildStump(c: BodyCtx, limb: "arm" | "leg", gore: "full" | "redu
   const { P } = c;
   const b = new PartBuilder();
   const cloth = limb === "arm" ? c.armC : c.trouserC;
-  const rings = limb === "arm" ? upperArmRings(P, cloth) : upperLegRings(c);
+  const rings = limb === "arm" ? upperArmRings(P, cloth, c.spec.jacket) : upperLegRings(c);
   const len = limb === "arm" ? P.armUpper : P.legUpper;
   const cut = len * (limb === "arm" ? 0.3 : 0.28);
   // Keep the top of the limb's own rings down to the cut, then close with a torn edge.

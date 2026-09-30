@@ -1,5 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Mesh, ShaderMaterial, UniformsLib, UniformsUtils, Vector3 } from "three";
-import { PALETTE, RIVER, riverCentre, riverHalfWidth, ruinPlan, smoothstep, type LandscapeTerrain } from "@cb/shared";
+import { PALETTE, RIVER, WEIR, riverCentre, riverHalfWidth, ruinPlan, smoothstep, villagePlan, type LandscapeTerrain } from "@cb/shared";
+import { Vector4 } from "three";
 import { worldTime } from "./toon.ts";
 
 /**
@@ -13,6 +14,10 @@ export interface WaterUniforms {
   uLight: { value: Color };
   uSun: { value: number };
   uSunDir: { value: Vector3 };
+  /** The weir: x, z of its crest and the unit flow direction (x, z) there. */
+  uWeir: { value: Vector4 };
+  /** Splash spots (x, z, radius, strength): [0] the mill wheel's dip, [1] the moored punt's wake. */
+  uSpots: { value: Vector4[] };
 }
 
 const STREAM_ROWS = 60;
@@ -103,7 +108,7 @@ export function buildWater(terrain: LandscapeTerrain): BufferGeometry {
 
 export function waterMaterial(animated: boolean): { material: ShaderMaterial; uniforms: WaterUniforms } {
   const W = PALETTE.world;
-  const uniforms: WaterUniforms = { uLight: { value: new Color(1, 1, 1) }, uSun: { value: 1 }, uSunDir: { value: new Vector3(0, 1, 0) } };
+  const uniforms: WaterUniforms = { uLight: { value: new Color(1, 1, 1) }, uSun: { value: 1 }, uSunDir: { value: new Vector3(0, 1, 0) }, uWeir: { value: new Vector4(0, 0, 1, 0) }, uSpots: { value: [new Vector4(0, 0, 0.01, 0), new Vector4(0, 0, 0.01, 0)] } };
   const material = new ShaderMaterial({
     fog: true,
     uniforms: UniformsUtils.merge([
@@ -135,6 +140,7 @@ export function waterMaterial(animated: boolean): { material: ShaderMaterial; un
       uniform float uTime;
       uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uFoam; uniform vec3 uGlint;
       uniform vec3 uLight; uniform float uSun; uniform vec3 uSunDir;
+      uniform vec4 uWeir; uniform vec4 uSpots[2];
       varying float vQ; varying vec2 vFlow; varying vec3 vWorld;
       #include <fog_pars_fragment>
       float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -168,12 +174,36 @@ export function waterMaterial(animated: boolean): { material: ShaderMaterial; un
           col = mix(col, uFoam, glitter * 0.75);
           // foam hugs the banks, breaks up, and drifts
           float wob = (n1 - 0.5) * 0.12 + sin(dot(p, fdir) * 2.3 - uTime * speed * 2.0) * 0.012;
-          float e = smoothstep(0.56, 0.66, vQ + wob);
-          foamLine = e * step(0.42, n2 + e * 0.55);
+          float e = smoothstep(0.65, 0.7, vQ + wob) * (1.0 - smoothstep(0.76, 0.9, vQ + wob));
+          foamLine = e * step(0.5, n2 + e * 0.2);
+          // lapping wavelets: thin lines that run in toward the bank, catching the light
+          float lap = step(0.9, sin(vQ * 46.0 - uTime * 1.5 + n1 * 3.4)) * smoothstep(0.5, 0.88, vQ) * (1.0 - smoothstep(0.94, 1.0, vQ));
+          col = mix(col, uGlint, lap * 0.6 * (1.0 - foamLine));
+          // the weir: a sloping sheet of white streaks, and a boil of foam below the drop
+          vec2 wd = p - uWeir.xy;
+          float along = dot(wd, uWeir.zw);
+          float perpD = abs(dot(wd, vec2(-uWeir.w, uWeir.z)));
+          float nearW = 1.0 - smoothstep(4.0, 6.0, perpD);
+          float chute = smoothstep(-0.5, 0.0, along) * (1.0 - smoothstep(0.9, 1.3, along)) * nearW;
+          float sheetN = vnoise(vec2(dot(wd, vec2(-uWeir.w, uWeir.z)) * 6.0, along * 2.5 - uTime * 4.5));
+          col = mix(col, uFoam, chute * (0.35 + 0.65 * step(0.4, sheetN)));
+          float boil = smoothstep(0.85, 1.2, along) * (1.0 - smoothstep(1.6, 4.2, along)) * nearW;
+          float bn = vnoise(p * 3.4 + vec2(uTime * 0.8, -uTime * 0.55)) * 0.7 + vnoise(p * 7.5 - vec2(uTime * 1.2, 0.0)) * 0.3;
+          col = mix(col, uFoam, boil * step(0.62 - 0.3 * boil, bn));
+          // the crest itself: a bright lip, and a gently rounded slick just upstream
+          col = mix(col, uGlint, (1.0 - smoothstep(0.0, 0.3, abs(along + 0.15))) * nearW * 0.8);
+          // splash where the wheel dips and where the punt rocks
+          for (int i = 0; i < 2; i++) {
+            vec4 sp = uSpots[i];
+            float d = length(p - sp.xy) / sp.z;
+            float ring = (1.0 - smoothstep(0.55, 1.0, d)) * sp.w;
+            float sn = vnoise(p * 5.0 + vec2(uTime * (1.0 + float(i)), uTime * 0.7));
+            col = mix(col, uFoam, ring * step(0.5, sn + ring * 0.45));
+          }
         #else
           foamLine = smoothstep(0.62, 0.68, vQ);
         #endif
-        col = mix(col, uFoam, foamLine);
+        col = mix(col, mix(uFoam, uShallow, 0.2), foamLine * 0.9);
         col *= uLight;
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
@@ -189,6 +219,14 @@ export function waterMaterial(animated: boolean): { material: ShaderMaterial; un
 export function buildWaterMesh(terrain: LandscapeTerrain, animated: boolean): { mesh: Mesh; uniforms: WaterUniforms } {
   const geo = buildWater(terrain);
   const { material, uniforms } = waterMaterial(animated);
+  // the weir's crest and flow, and the two splash spots (the wheel's dip, the punt's wake)
+  const c0 = riverCentre(WEIR.s, { x: 0, z: 0 });
+  const c1 = riverCentre(WEIR.s + 0.4, { x: 0, z: 0 });
+  const tl = Math.hypot(c1.x - c0.x, c1.z - c0.z) || 1;
+  uniforms.uWeir.value.set(c0.x, c0.z, (c1.x - c0.x) / tl, (c1.z - c0.z) / tl);
+  const plan = villagePlan(terrain);
+  uniforms.uSpots.value[0]!.set(plan.wheel.x, plan.wheel.z, 1.3, 0.85);
+  uniforms.uSpots.value[1]!.set(plan.punt.x, plan.punt.z, 2.2, 0.28);
   const mesh = new Mesh(geo, material);
   mesh.name = "water";
   mesh.frustumCulled = true;

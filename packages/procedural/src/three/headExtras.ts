@@ -1,6 +1,7 @@
 import { Euler, Quaternion, Vector3 } from "three";
 import { PALETTE } from "@cb/shared";
-import { skinDir, type FaceCtx } from "./faceParts.ts";
+import { type FaceCtx } from "./faceParts.ts";
+import { headFit } from "./headFit.ts";
 import type { V3 } from "./parts.ts";
 import { curve } from "./sweep.ts";
 import { tone } from "./bodyKit.ts";
@@ -28,8 +29,10 @@ const norm = (a: V3): V3 => {
 
 /** A local frame on the skull in direction d: the point `off` proud of the skin, the outward normal and two tangents (t1 along the skin, roughly horizontal; t2 roughly up). */
 function frame(c: FaceCtx, d: V3, off: number): { p: V3; n: V3; t1: V3; t2: V3 } {
-  const p = skinDir(c, d[0], d[1], d[2], off);
-  const q = skinDir(c, d[0], d[1], d[2], off + 0.05);
+  // `off` is measured from the head AS SEEN (skin plus the hair over it), so a bow or a comb rests on the hair whatever the hairstyle and head size
+  const hf = headFit(c);
+  const p = hf.outer(d[0], d[1], d[2], off);
+  const q = hf.outer(d[0], d[1], d[2], off + 0.05);
   const n = norm([q[0] - p[0], q[1] - p[1], q[2] - p[2]]);
   const t1 = norm(cross([0, 1, 0], n));
   const t2 = norm(cross(n, t1));
@@ -50,7 +53,7 @@ export function buildHairAccessory(c: FaceCtx, hatOn: boolean): void {
   if (a === 1) {
     // ribbon bow: two loops, a knot and two tails
     const d: V3 = low ? [0.8, 0.02, 0.6] : [0.8, 0.52, -0.3];
-    const { p, n, t1, t2 } = frame(c, d, R * 0.13);
+    const { p, n, t1, t2 } = frame(c, d, R * 0.045);
     const red = PALETTE.trim.ribbonRed;
     const rot = orient(n);
     for (const s of [-1, 1]) {
@@ -67,33 +70,36 @@ export function buildHairAccessory(c: FaceCtx, hatOn: boolean): void {
     const yy = low ? 0.05 : 0.55;
     const zz = low ? 0.95 : 0.85;
     const pts: V3[] = [];
+    const hf = headFit(c);
     for (let k = 0; k <= 6; k++) {
       const s = (k / 6) * 2 - 1;
-      pts.push(skinDir(c, s * 0.5, yy, zz, R * 0.16));
+      pts.push(hf.outer(s * 0.5, yy, zz, R * 0.07));
     }
     const spine = curve(pts, 12);
     b.sweep(spine, (t) => ({ rx: R * (0.15 - 0.05 * Math.abs(t * 2 - 1)), rz: R * 0.04, pow: 2.4 }), shell, { side: [0, 1, 0], segments: 6, round: "both" });
     for (let k = 0; k < 7; k++) {
       const s = (k / 6) * 2 - 1;
-      const at = skinDir(c, s * 0.48, yy, zz, R * 0.1);
+      const at = hf.outer(s * 0.48, yy, zz, R * 0.02);
       b.box(R * 0.045, R * 0.24, R * 0.03, tone(shell, 0.85), [at[0], at[1] - R * 0.14, at[2]]);
     }
-    for (const s of [-1, 1]) b.sphere(R * 0.04, gold, skinDir(c, s * 0.52, yy, zz, R * 0.2));
+    for (const s of [-1, 1]) b.sphere(R * 0.04, gold, hf.outer(s * 0.52, yy, zz, R * 0.11));
   } else if (a === 3) {
     // three hairpins fanned out, each a slim metal shaft with a pearl or gem head
     const heads = [PALETTE.trim.pearl, PALETTE.trim.gemRed, PALETTE.trim.pearl];
     for (let k = 0; k < 3; k++) {
       const d: V3 = low ? [0.75, 0.15 + k * 0.12, 0.65] : [0.75, 0.5 + k * 0.14, 0.05 + k * 0.28];
-      const { p, n, t2 } = frame(c, d, R * 0.05);
-      const dir = norm(add(n, t2, 0.5 * (k - 1)));
-      const len = R * 0.34;
+      // (the pin is stuck into the hair: its shaft starts at the skin and comes out through the hair)
+      const lift = headFit(c).hairLift(d[0], d[1], d[2]);
+      const { p, n, t2 } = frame(c, d, -lift + R * 0.01);
+      const dir = low ? norm(add(n, t2, -0.75 + 0.3 * (k - 1))) : norm(add(n, t2, 0.5 * (k - 1))); // (under a hat the pins point down behind the ear, never up through the crown)
+      const len = R * 0.34 + lift;
       b.cylinder(R * 0.018, R * 0.018, len, gold, add(p, dir, len * 0.5), orient(dir));
       b.sphere(R * 0.06, heads[k]!, add(p, dir, len + R * 0.02));
     }
   } else if (a === 4) {
     // silk flower: a ring of petals round a gold heart, with two leaves
     const d: V3 = low ? [0.8, 0.05, 0.6] : [0.8, 0.5, -0.32];
-    const { p, n, t1, t2 } = frame(c, d, R * 0.1);
+    const { p, n, t1, t2 } = frame(c, d, R * 0.03);
     const petals = 6;
     for (let k = 0; k < petals; k++) {
       const ang = (k / petals) * Math.PI * 2;
@@ -109,7 +115,7 @@ export function buildHairAccessory(c: FaceCtx, hatOn: boolean): void {
   } else {
     // feather pin: a brass pin head and a long curved quill sweeping up and back
     const d: V3 = low ? [0.8, 0.1, 0.6] : [0.85, 0.5, 0.05];
-    const { p, n, t1, t2 } = frame(c, d, R * 0.08);
+    const { p, n, t1, t2 } = frame(c, d, R * 0.02);
     b.sphere(R * 0.05, gold, add(p, n, R * 0.008));
     // (bare-headed: up and back; under a hat it hangs down behind the ear instead, so nothing pokes through the crown)
     const up = low ? -1 : 1;

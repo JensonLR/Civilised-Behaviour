@@ -76,6 +76,21 @@ describe("the day cycle", () => {
     expect(a.fire).toBeLessThan(b.fire);
   });
 
+  it("the golden hour: an hour before dusk the top of the sky is still mostly day-blue while the horizon and the sun have already warmed", () => {
+    const noon = dayState(13, createDayState());
+    const gold = dayState(16.6, createDayState());
+    const dusk = dayState(18.6, createDayState());
+    const blueness = (c: { r: number; g: number; b: number }): number => c.b - c.r;
+    // the top: the blue-minus-red of the gold stop is closer to noon's than to dusk's (a straight fade would put it 60% of the way to violet)
+    expect(Math.abs(blueness(gold.top) - blueness(noon.top))).toBeLessThan(Math.abs(blueness(gold.top) - blueness(dusk.top)));
+    // the horizon and the sun: warmer (redder relative to blue) than noon's
+    expect(gold.horizon.r - gold.horizon.b).toBeGreaterThan(noon.horizon.r - noon.horizon.b);
+    expect(gold.sun.r - gold.sun.b).toBeGreaterThan(noon.sun.r - noon.sun.b);
+    // and dusk goes on from there: the fire is stronger, the sun lower
+    expect(dusk.fire).toBeGreaterThan(gold.fire);
+    expect(gold.lightDir.y).toBeGreaterThan(dusk.lightDir.y);
+  });
+
   it("changes smoothly: no colour, intensity or light direction jumps between neighbouring minutes, including across midnight", () => {
     const a = createDayState();
     const b = createDayState();

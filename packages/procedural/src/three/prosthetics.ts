@@ -2,7 +2,9 @@ import type { BufferGeometry } from "three";
 import { PALETTE } from "@cb/shared";
 import { curve } from "./sweep.ts";
 import { PartBuilder, SOOT, WOOD, singe, type V3 } from "./parts.ts";
-import { tone, type BodyCtx } from "./bodyKit.ts";
+import { legRadius, ringAt, tone, type BodyCtx } from "./bodyKit.ts";
+import { CUFF_HANG, KNEE_LAP, foreArmRings, upperLegRings } from "./limbRings.ts";
+import { bandOn, clothLift, limbSurface, mountOn } from "./limbKit.ts";
 
 /**
  * Prosthetics. Two looks come from the campaign history (both server-owned): a wooden leg (`woodenLeg`: 1 left, 2 right) and a hook (`hook`: 1 left,
@@ -13,32 +15,38 @@ import { tone, type BodyCtx } from "./bodyKit.ts";
  *     the lower half hangs from that joint (`buildProsthesis`), so a peg leg or an iron arm swings and bends with the animation.
  */
 
-/** Wood from the knee down: a turned peg with a leather socket, a brass rim, an iron ferrule and a rubber tip. Knee frame, hanging down. */
+/**
+ * Wood from the knee down: a turned peg with a leather socket, a brass rim, an iron ferrule and a rubber tip. Knee frame, hanging down. The socket takes the size of the trouser leg it
+ * hangs from (the thigh's last section), so it fits a stout leg and a thin one, and the tip stands exactly on the ground.
+ */
 export function pegShin(b: PartBuilder, c: BodyCtx, len: number): void {
-  const r = 0.12 * c.P.scale + 0.02;
+  const knee = ringAt(upperLegRings(c), -c.P.legUpper - KNEE_LAP);
+  const r = Math.max(0.02, (knee.rx + knee.rz) / 2);
   const wl = len + c.footH;
+  const pr = Math.min(r * 0.62, legRadius(c) * 0.72); // (the peg is thinner than the leg it replaces)
   b.loft(
     [
-      { y: 0.03, rx: r * 0.62, rz: r * 0.62, color: WOOD },
-      { y: -wl * 0.35, rx: r * 0.5, rz: r * 0.5, color: tone(WOOD, 0.95) },
-      { y: -wl * 0.75, rx: r * 0.4, rz: r * 0.4, color: tone(WOOD, 0.88) },
-      { y: -wl + 0.03, rx: r * 0.36, rz: r * 0.36, color: tone(WOOD, 0.8) },
+      { y: 0.03, rx: pr, rz: pr, color: WOOD },
+      { y: -wl * 0.35, rx: pr * 0.8, rz: pr * 0.8, color: tone(WOOD, 0.95) },
+      { y: -wl * 0.75, rx: pr * 0.65, rz: pr * 0.65, color: tone(WOOD, 0.88) },
+      { y: -wl + 0.03, rx: pr * 0.58, rz: pr * 0.58, color: tone(WOOD, 0.8) },
     ],
     WOOD,
   );
-  socket(b, c, r, 0);
-  b.cylinder(r * 0.42, r * 0.36, 0.05, PALETTE.material.iron, [0, -wl + 0.04, 0]); // iron ferrule
-  b.cylinder(r * 0.44, r * 0.46, 0.03, SOOT, [0, -wl + 0.005, 0]); // rubber tip
+  socket(b, c, knee, 0);
+  b.cylinder(pr * 0.68, pr * 0.58, 0.05, PALETTE.material.iron, [0, -wl + 0.04, 0]); // iron ferrule
+  b.cylinder(pr * 0.7, pr * 0.72, 0.03, SOOT, [0, -wl + 0.015, 0]); // rubber tip (its underside is the ground)
 }
 
-/** A leather socket cup with a brass rim and two buckled straps, centred at height y0 on a limb of radius r. */
-function socket(b: PartBuilder, c: BodyCtx, r: number, y0: number): void {
+/** A leather socket cup with a brass rim and two buckled straps, centred at height y0 on a limb whose section there is `end` (half-axes). */
+function socket(b: PartBuilder, c: BodyCtx, end: { rx: number; rz: number }, y0: number): void {
   const leather = singe(c.leather, c.burnt);
+  const { rx, rz } = end;
   b.loft(
     [
-      { y: y0 + 0.06, rx: r * 0.98, rz: r * 0.95, color: tone(leather, 0.9) },
-      { y: y0 - 0.02, rx: r * 0.92, rz: r * 0.9, color: leather },
-      { y: y0 - 0.13, rx: r * 0.6, rz: r * 0.6, color: tone(leather, 0.85) },
+      { y: y0 + 0.06, rx: rx * 0.98, rz: rz * 0.95, color: tone(leather, 0.9) },
+      { y: y0 - 0.02, rx: rx * 0.92, rz: rz * 0.9, color: leather },
+      { y: y0 - 0.13, rx: Math.min(rx, rz) * 0.6, rz: Math.min(rx, rz) * 0.6, color: tone(leather, 0.85) },
     ],
     leather,
     undefined,
@@ -46,9 +54,9 @@ function socket(b: PartBuilder, c: BodyCtx, r: number, y0: number): void {
     undefined,
     { capBottom: false },
   );
-  b.torus(r * 0.97, 0.008, c.accent, [0, y0 + 0.055, 0], [Math.PI / 2, 0, 0]);
-  for (const y of [y0 - 0.01, y0 - 0.075]) b.box(r * 0.5, 0.018, 0.012, tone(leather, 0.7), [0, y, -r * 0.95]);
-  b.sphere(0.011, c.accent, [0, y0 - 0.01, -r * 0.96 - 0.008]);
+  b.torus((rx + rz) * 0.49, 0.008, c.accent, [0, y0 + 0.055, 0], [Math.PI / 2, 0, 0], [rx / ((rx + rz) / 2), rz / ((rx + rz) / 2), 1]);
+  for (const y of [y0 - 0.01, y0 - 0.075]) b.box(rx * 0.5, 0.018, 0.012, tone(leather, 0.7), [0, y, -rz * 0.95]);
+  b.sphere(0.011, c.accent, [0, y0 - 0.01, -rz * 0.96 - 0.008]);
 }
 
 /** A hook: a swept steel J with a brass collar, hanging from `y0` (the wrist) down. `r` is the collar radius. */
@@ -64,24 +72,36 @@ export function hook(b: PartBuilder, c: BodyCtx, r: number, y0: number): void {
 }
 
 /**
- * Replaces the hand on an intact forearm: a leather cuff strapped over the wrist and the hook. Forearm frame (hanging down from the elbow);
- * `armLength` is the forearm length.
+ * Replaces the hand on an intact forearm: a leather cuff strapped over the end of the sleeve, a socket cup under the wrist and the hook. Forearm frame (hanging down from the elbow);
+ * `armLength` is the forearm length. The cuff is a band on the sleeve's own rings, so it fits the arm whatever its thickness.
  */
 export function hookHand(b: PartBuilder, c: BodyCtx, armLength: number): void {
   const r = c.P.armRadius;
   const leather = singe(c.leather, c.burnt);
-  const y0 = -armLength * 1.0;
+  const rings = foreArmRings(c);
+  const y0 = -armLength - CUFF_HANG;
+  const cl = clothLift(r);
+  const w = ringAt(rings, y0);
+  bandOn(b, rings, y0 + 0.08, y0, leather, { lift: cl * 1.5, liftBottom: cl * 1.9, steps: 1, colorBottom: tone(leather, 0.8) });
+  const kx = w.rx + cl * 1.9;
+  const kz = w.rz + cl * 1.9;
   b.loft(
     [
-      { y: y0 + 0.06, rx: r * 0.92, rz: r * 0.9, color: tone(leather, 0.9) },
-      { y: y0 - 0.02, rx: r * 1.02, rz: r * 1.0, color: leather },
-      { y: y0 - 0.1, rx: r * 0.82, rz: r * 0.8, color: tone(leather, 0.8) },
+      { y: y0 - 0.002, rx: kx, rz: kz, color: tone(leather, 0.9) },
+      { y: y0 - 0.05, rx: kx * 0.96, rz: kz * 0.96, color: leather },
+      { y: y0 - 0.1, rx: kx * 0.72, rz: kz * 0.72, color: tone(leather, 0.8) },
     ],
     leather,
+    undefined,
+    undefined,
+    undefined,
+    { capTop: false },
   );
-  for (const y of [y0 + 0.02, y0 - 0.04]) b.torus(r * 1.0, 0.007, tone(c.accent, 0.9), [0, y, 0], [Math.PI / 2, 0, 0]);
-  b.sphere(0.012, c.accent, [0, y0 - 0.005, -r * 1.02]);
-  hook(b, c, r * 0.62, y0 - 0.1);
+  const surf = limbSurface(rings);
+  for (const y of [y0 + 0.055, y0 + 0.015]) b.torus((kx + kz) * 0.5, 0.007, tone(c.accent, 0.9), [w.cx, y, w.cz], [Math.PI / 2, 0, 0], [kx / ((kx + kz) / 2), kz / ((kx + kz) / 2), 1]);
+  const m = mountOn(surf, 0, y0 + 0.035, cl * 1.9 + 0.006);
+  b.sphere(0.012, c.accent, m.pos, [1, 1, 0.6], m.rot);
+  hook(b, c, Math.min(kx, kz) * 0.78, y0 - 0.1);
 }
 
 /**
@@ -112,8 +132,7 @@ export function buildProsthesis(c: BodyCtx, kind: "arm" | "leg", _side: "L" | "R
  */
 export function stumpPost(b: PartBuilder, c: BodyCtx, kind: "arm" | "leg", cut: number, end: { rx: number; rz: number }): void {
   const len = kind === "arm" ? c.P.armUpper : c.P.legUpper;
-  const r = Math.max(end.rx, end.rz);
-  socket(b, c, r * 1.1, -cut - 0.02);
+  socket(b, c, { rx: end.rx * 1.1, rz: end.rz * 1.1 }, -cut - 0.02);
   const postC = kind === "leg" ? WOOD : PALETTE.material.iron;
   const pr = kind === "leg" ? end.rx * 0.42 : end.rx * 0.3;
   b.loft([{ y: -cut - 0.12, rx: pr, rz: pr, color: tone(postC, 1.05) }, { y: -len, rx: pr * 0.9, rz: pr * 0.9, color: postC }], postC);

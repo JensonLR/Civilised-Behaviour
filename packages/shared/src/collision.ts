@@ -13,7 +13,7 @@ import type { Terrain } from "./terrain.ts";
  * What an obstacle IS, so the renderer can dress it (a tree, a tent, a signpost). Purely descriptive: collision ignores it, and an
  * untagged obstacle falls back to `classifyObstacle` in worldgen.ts (circle >= 5 m tall = tree, otherwise a rock).
  */
-export type ObstacleTag = "tree" | "snag" | "rock" | "wall" | "crate" | "tent" | "fire" | "flag" | "sign" | "luggage" | "cart" | "ruin" | "table" | "scope" | "pole" | "hammock" | "stump" | "log" | "cannon" | "well" | "fence" | "waypost" | "bridge";
+export type ObstacleTag = "tree" | "snag" | "rock" | "wall" | "crate" | "tent" | "fire" | "flag" | "sign" | "luggage" | "cart" | "ruin" | "table" | "scope" | "pole" | "hammock" | "stump" | "log" | "cannon" | "well" | "fence" | "waypost" | "bridge" | "house" | "stall" | "vprop" | "jetty" | "weir" | "marquee" | "hq" | "cliff";
 
 export interface CircleObstacle {
   kind: "circle";

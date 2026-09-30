@@ -80,11 +80,20 @@ const W = PALETTE.world;
 
 const NIGHT: Omit<Stop, "h"> = { sun: W.nightSun, top: W.nightTop, mid: W.nightMid, horizon: W.nightHorizon, glow: W.nightGlow, hemiSky: W.nightSky, hemiGround: W.nightBounce, sunI: 0.95, hemiI: 0.62, fog: 0.0105, exposure: 0.4, fire: 1, ambient: 0.5 };
 
+/** A convex mix of two palette hexes as a hex (used at load only, for the golden hour between noon and dusk, so the stop stays a mix of palette entries). */
+function mixHex(a: number, b: number, t: number): number {
+  const ch = (shift: number): number => Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
 /** Stops on a 24 hour loop. Night appears at both ends so the span between the last and the first is a constant night. */
 const STOPS: readonly Stop[] = [
   { h: 4.5, ...NIGHT },
   { h: 7.5, sun: W.morningSun, top: W.morningTop, mid: W.morningMid, horizon: W.morningHorizon, glow: W.morningGlow, hemiSky: W.morningSky, hemiGround: W.morningBounce, sunI: 2.6, hemiI: 0.95, fog: 0.0095, exposure: 0.96, fire: 0.3, ambient: 0.92 },
   { h: 13, sun: L.sun, top: S.top, mid: S.mid, horizon: S.horizon, glow: W.skyGlow, hemiSky: L.sky, hemiGround: L.bounce, sunI: 3.0, hemiI: 1.0, fog: 0.0085, exposure: 1, fire: 0.04, ambient: 1 },
+  // The golden hour: the horizon, the glow and the sun are well into their dusk colours while the top of the sky is still mostly day-blue, so the low sun gilds a blue sky
+  // instead of the whole dome going violet an hour and a half early (a straight fade from noon to dusk does exactly that).
+  { h: 16.6, sun: mixHex(L.sun, W.duskSun, 0.6), top: mixHex(S.top, W.duskTop, 0.22), mid: mixHex(S.mid, W.duskMid, 0.4), horizon: mixHex(S.horizon, W.duskHorizon, 0.55), glow: W.duskGlow, hemiSky: mixHex(L.sky, W.duskSky, 0.4), hemiGround: mixHex(L.bounce, W.duskBounce, 0.5), sunI: 2.7, hemiI: 0.94, fog: 0.0088, exposure: 0.96, fire: 0.18, ambient: 0.92 },
   { h: 18.6, sun: W.duskSun, top: W.duskTop, mid: W.duskMid, horizon: W.duskHorizon, glow: W.duskGlow, hemiSky: W.duskSky, hemiGround: W.duskBounce, sunI: 2.2, hemiI: 0.82, fog: 0.0092, exposure: 0.86, fire: 0.7, ambient: 0.8 },
   { h: 21.5, ...NIGHT },
 ];
@@ -245,6 +254,15 @@ export function dayState(hoursIn: number, out: DayState): DayState {
 /** Clock hours advanced per real second by default: a game hour takes ~80 s, and the dark hours pass three times faster. */
 export const CLOCK = { hoursPerSecond: 1 / 80, nightSpeedup: 3, defaultStart: 9 };
 
+/** Valley mist 0..1: thickest an hour or so after first light and burning off by mid-morning, a thin haze in the evening, and the damp after rain. */
+export function mistLevel(hours: number, wet = 0): number {
+  const h = ((hours % 24) + 24) % 24;
+  const dawn = smoothstep(4.2, 5.6, h) * (1 - smoothstep(7.0, 9.6, h));
+  const eve = 0.22 * smoothstep(17.2, 19.0, h) * (1 - smoothstep(21, 23.5, h));
+  const v = dawn + eve + wet * 0.35;
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
 export function clockRate(hours: number): number {
   const h = wrapHours(hours);
   const dark = h < 5.2 || h > 20.6;
@@ -296,6 +314,20 @@ export const daySeconds = (dayMinutes: number): number => dayMinutes * 60;
 export function worldHours(startHour: number, worldMs: number, dayMinutes: number): number {
   if (!(dayMinutes > 0) || !Number.isFinite(dayMinutes) || !Number.isFinite(worldMs)) return wrapHours(startHour);
   return hourOfPhase(phaseOfHour(startHour) + (worldMs / 1000) * (PHASE_DAY / daySeconds(dayMinutes)));
+}
+
+/**
+ * How many dawns the world has seen (day 0 runs from the world's birth to its first dawn at 05:12). The night belongs to the day that began at
+ * the dawn before it, so the moon keeps one phase through a whole night.
+ */
+export function worldDay(startHour: number, worldMs: number, dayMinutes: number): number {
+  if (!(dayMinutes > 0) || !Number.isFinite(dayMinutes) || !Number.isFinite(worldMs)) return 0;
+  return Math.floor((phaseOfHour(startHour) + (worldMs / 1000) * (PHASE_DAY / daySeconds(dayMinutes))) / PHASE_DAY);
+}
+
+/** Moon phase 0..1 for a day count (0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter): an eight-night cycle, offset by the world's seed so worlds differ. */
+export function moonPhase(day: number, seed = 0): number {
+  return ((((day + (seed & 7)) % 8) + 8) % 8) / 8;
 }
 
 /** Clamps a configured day length to something sane (used by the server config and by clients reading the room state). */

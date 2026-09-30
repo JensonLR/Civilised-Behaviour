@@ -6,6 +6,8 @@ import { frontZ, ringAt, upperArmRings, upperLegRings, type BodyCtx } from "./bo
 import { drapeCover, outerTorsoRings } from "./drape.ts";
 import { faceSurfaceZ } from "./head.ts";
 import { PartBuilder } from "./parts.ts";
+import type { Ring } from "./loft.ts";
+import { torsoSegments } from "./fit/surface.ts";
 
 /** Player gore setting. "off" replaces every drop of red with dressings and iodine so wounds still read. */
 export type GoreLevel = "full" | "reduced" | "off";
@@ -82,19 +84,21 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
         const wy = h * (top + bot) * 0.5;
         const wh = h * (top - bot);
         const s = sec(wy);
-        const k = 1.05;
-        b.cylinder(1, 1, wh, BANDAGE, [s.cx, wy, s.cz], undefined, [s.rx * k, 1, s.rz * k], true);
-        for (const e of [wy + wh / 2, wy - wh / 2]) {
-          b.cylinder(1.006, 1.006, 0.016, BANDAGE_DIRTY, [s.cx, e, s.cz], undefined, [s.rx * k, 1, s.rz * k], true);
-        }
-        const fz = s.cz - s.rz * k - 0.006;
+        // the dressing wraps the very sections the torso is lofted from, with the same number of sides (so it never dips into a flat), 1.2 cm proud
+        const ring = (y: number, lift: number, color: number): Ring => {
+          const q = sec(y);
+          return { y, rx: q.rx + lift, rz: q.rz + lift, cx: q.cx, cz: q.cz, pow: q.pow, color };
+        };
+        b.loft([ring(wy - wh / 2, 0.0075, BANDAGE), ring(wy, 0.012, BANDAGE), ring(wy + wh / 2, 0.0075, BANDAGE)], BANDAGE, undefined, undefined, undefined, { capTop: false, capBottom: false, segments: torsoSegments() });
+        for (const [e, l] of [[wy + wh / 2, 0.0135], [wy - wh / 2, 0.0135]] as const) b.loft([ring(e - 0.008, l, BANDAGE_DIRTY), ring(e + 0.008, l, BANDAGE_DIRTY)], BANDAGE_DIRTY, undefined, undefined, undefined, { capTop: false, capBottom: false, segments: torsoSegments() });
+        const fz = s.cz - (s.rz + 0.012) - 0.004;
         stain(s.rx * 0.3, wy, fz, sev === 2 ? 0.06 : 0.1, sev === 2 ? 0.07 : 0.13);
         if (sev === 3) {
           stain(-s.rx * 0.35, wy - wh * 0.15, fz + 0.004, 0.05, 0.06, pal.old);
           if (pal.drips) b.sphere(1, pal.drip, [s.rx * 0.3, wy - wh * 0.5 - 0.09, fz + 0.002], [0.016, 0.1, 0.008]);
         }
         // and one on the back so it reads from the follow camera
-        stain(-s.rx * 0.2, wy, s.cz + s.rz * k + 0.006, sev === 2 ? 0.05 : 0.09, sev === 2 ? 0.06 : 0.11);
+        stain(-s.rx * 0.2, wy, s.cz + (s.rz + 0.012) + 0.004, sev === 2 ? 0.05 : 0.09, sev === 2 ? 0.06 : 0.11);
       }
       break;
     }

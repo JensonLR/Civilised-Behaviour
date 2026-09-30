@@ -261,22 +261,30 @@ export function buildFaceDecor(c: FaceCtx): void {
     strip(c, front, [[-0.5 * R, 0.55 * R], [-0.2 * R, 0.6 * R], [0.2 * R, 0.6 * R], [0.5 * R, 0.55 * R]], R * 0.045, ink, 0.12);
     strip(c, front, [[-0.5 * R, 0.55 * R], [-0.6 * R, 0.5 * R]], R * 0.03, ink, 0.12);
   } else if (spec.tattoo === 1) {
-    // swallows on the neck: a pair of little wings on each side, under the ear
+    // swallows on the side of the jaw under the ear: a pair of little wings, laid on the skull as seen from the side
     for (const sx of [-1, 1]) {
       const project: Project = (z, y) => {
-        // (u, v) = (z, y): the neck's side surface, seen from outside
-        const rx = R * 0.45;
-        const rz = R * 0.43;
-        const k = 1 - (z / rz) ** 2;
-        if (k <= 0.02) return undefined;
-        const x = sx * rx * Math.sqrt(k);
-        const n: V3 = [sx * Math.sqrt(k), 0, (z / rz) * 0.6];
-        const l = Math.hypot(n[0], n[1], n[2]);
-        return { p: [x + (sx * R * 0.004 * n[0]) / l, y, z], n: [n[0] / l, 0, n[2] / l] };
+        // (u, v) = (z, y): a ray from the side at depth z and centre-relative height y meets the skull
+        const inside = (x: number): boolean => {
+          const l = Math.hypot(x, y, z);
+          return l < c.shape.radius(x / l, y / l, z / l);
+        };
+        if (!inside(0.001)) return undefined;
+        let lo = 0.001;
+        let hi = R * 1.6;
+        for (let i = 0; i < 22; i++) {
+          const mid = (lo + hi) / 2;
+          if (inside(mid)) lo = mid;
+          else hi = mid;
+        }
+        const p: V3 = [sx * lo, y, z];
+        const n = c.shape.normal(p);
+        return { p: [p[0] + n[0] * lift, p[1] + n[1] * lift + c.cy, p[2] + n[2] * lift], n };
       };
-      const cyN = R * 0.34;
-      fan(c, project, [[-0.16 * R, cyN], [-0.02 * R, cyN + 0.07 * R], [0.14 * R, cyN + 0.02 * R], [0.02 * R, cyN - 0.03 * R]], ink);
-      fan(c, project, [[-0.2 * R, cyN - 0.1 * R], [-0.05 * R, cyN - 0.03 * R], [0.1 * R, cyN - 0.08 * R], [-0.02 * R, cyN - 0.16 * R]], ink);
+      const cyN = -R * 0.5;
+      const zC = R * 0.32;
+      fan(c, project, [[zC - 0.16 * R, cyN], [zC - 0.02 * R, cyN + 0.07 * R], [zC + 0.14 * R, cyN + 0.02 * R], [zC + 0.02 * R, cyN - 0.03 * R]], ink);
+      fan(c, project, [[zC - 0.2 * R, cyN - 0.1 * R], [zC - 0.05 * R, cyN - 0.03 * R], [zC + 0.1 * R, cyN - 0.08 * R], [zC - 0.02 * R, cyN - 0.16 * R]], ink);
     }
   }
 

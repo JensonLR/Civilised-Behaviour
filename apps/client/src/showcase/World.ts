@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { CAMP, FLAG, HILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint } from "@cb/shared";
+import { CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
@@ -11,6 +11,7 @@ import { Stage } from "../render/Stage.ts";
  *   view=game|camp|tents|fire|flag|sign|wall|cart|luggage|crates|props|tree|rock|snag|edge|hills|sky   (default game)
  *   view=table|scope|gramophone|wash|hammock|lanterns|ruin|tower|colonnade|aqueduct|ford|pond|source|meadow|trail|stump|log|far   (the environment upgrade)
  *   view=well|pen|bridge|waypost|door|inside|dome|refractor|flock   (the clearing's furniture, and the Observatory's doorway, dark room, dome and great telescope)
+ *   view=village|vtop|vmarket|vjetty|vweir|b-<id>   HOLLOWMERE (b-gate|b-hall|b-mill|b-shop|b-stilt-w|b-stilt-e|b-gran-a|b-gran-b|b-cot-a|b-cot-b|b-cot-c|b-stall-1); d=N sets the distance, a=N the angle
  *   time=13|dusk|night|17.5|...   the hour (see shared/daycycle.ts); without it the day drifts
  *   weather=clear|overcast|rain|storm|fog|dust   force a weather state at full strength (lightning in a storm); wms=N&wseed=S sits the schedule at N ms
  *   motion=0..1   the ambient-motion preference (0 = still trees and cloth); without it prefers-reduced-motion gives 0.3
@@ -127,6 +128,22 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     refractor: [new Vector3(plan.telescope.x + 4.5, hy + 2, plan.telescope.z + 4.5), new Vector3(plan.telescope.x, hy + 3.5, plan.telescope.z)],
     flock: [new Vector3(-9, 2.2, 27), new Vector3(-14, 0.5, 20)],
   };
+  // the village: an overview from the way in, a map-like top view, the market, the jetty, and one per building (the door side, `d` metres out, `a` radians round)
+  const vp = villagePlan(world.terrain);
+  views.village = [new Vector3(14, 5.5, -32), new Vector3(-14, 1.5, -52)];
+  views.vtop = [new Vector3(-14, 88, -47), new Vector3(-14.1, 0, -47)];
+  views.vmarket = [new Vector3(-21, 3.2, -49.5), new Vector3(-21, 1.2, -61)];
+  views.vjetty = [new Vector3(vp.jetty.x0 + 6, 3.2, vp.jetty.z0 - 5), new Vector3(vp.jetty.x1, vp.jetty.waterY, vp.jetty.z1)];
+  views.vweir = [new Vector3(vp.weir.x + 7, 2.6, vp.weir.z - 5), new Vector3(vp.weir.x, vp.weir.crestY, vp.weir.z)];
+  const dist = Number(params.get("d") ?? 13);
+  const ang = Number(params.get("a") ?? 0.35);
+  for (const b of vp.buildings) {
+    const t = b.kind === "clock" ? 11 : b.kind === "hall" ? 8 : 4;
+    const yaw = b.yaw + ang;
+    views[`b-${b.id}`] = [new Vector3(b.x + Math.cos(yaw) * (b.hx + dist), b.ground + 2.6, b.z + Math.sin(yaw) * (b.hx + dist)), new Vector3(b.x, b.ground + t * 0.45, b.z)];
+  }
+  void JETTY;
+  void MILL;
   // stump / log views find the nearest of that tag to the camp
   for (const [tag, key] of [["stump", "stump"], ["log", "log"]] as const) {
     const list = tagged(tag).sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));

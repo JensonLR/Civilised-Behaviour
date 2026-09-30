@@ -125,6 +125,25 @@ Nothing in the world is a plain PBR material or a texture, except the runtime ca
   chairs. Each stays within ~5% of its physics box (a test enforces it). One instanced set per kind, with the medium scenery ink.
 - **Ambient life** (`world/ambient.ts`, all GPU-driven from the clock, one draw each, pooled by construction, capped by preset): pollen by day and fireflies at dusk, ~12 butterflies
   circling the flower patches, distant birds, campfire smoke and pot steam, lantern glow points. Low builds none of it except the lantern glow.
+- **Hollowmere, the local society's village** (`shared/village.ts` is the single plan for collision, keep-outs, ground pads and looks; `world/village.ts` draws it as one merged mesh + one hull, `world/banners.ts` its
+  signs, `world/atlas.ts` the lettering): fifteen sites, eight fictional building types (a gate tower with a working clock, tile / shingle / thatch cottages, stilted river houses with stairs that follow the ground, round-roofed
+  granaries on mushroom stones, a terraced meeting hall, a smithy with chimney smoke, a water mill whose wheel turns, market awning stalls), streets as late trails, fences, gardens, washing lines, drying racks, a well, carts,
+  crates and lanterns that light at dusk. Doors are real openings with dark interiors; walls are solid; the ground under each building is levelled by a pad (`withLandscape`). Palette: the `vl*` set in `PALETTE.world` (plaster, tile,
+  shingle, thatch, awnings, cobble, herald blue and gold). Lit windows sit in the lantern-glass mesh (`aLit`, `windowLight`). Lod 0 (the hull, and the low preset) drops windows, framing, lamps, washing and small clutter.
+- **The expedition HQ** (`CAMP.hq`, `hqPlan()`, `world/hq.ts`): a striped pavilion, open at the front, with flags, a map table, crates with stencilled text, a supply pyramid, a notice board (runtime canvas text) and the
+  Society's heraldry (fictional). Its cloth flutters with the camp cloth.
+- **Waterside**: a plank jetty with a moored punt that bobs, reeds, stepping stones, a timber weir with a walkway and a foaming chute, lapping wavelets and wheel/punt splashes in the water shader, a mill wheel. `landscape.ts`
+  exports `WEIR`, `MILL`, `JETTY` (the audio agent reads them). Shore foam is a broken band at q 0.65-0.9, not a solid rim (a solid rim read as ice at noon).
+- **Ground detail** (`worldgen.ts` + `terrain.ts` `bakeGroundDetail`, medium/high): macro tone variation, gravel on paths, mud belts by the water (with short trails of paired prints), sun-cracked clay (voronoi seams in the shader),
+  flower-meadow lift, leaf litter in drifts under crowns, plaza cobbles. A second 320^2 RGBA texture (R litter, G clay, B mud, A cobbles) next to the 1024^2 trail mask.
+- **Land and far view**: ten crags per seed (strata, ledges, a boulder field each; `cliff` obstacles), a windmill on a second summit and a distant snow range with layered haze (both inside the hills mesh; camera far 820),
+  valley mist at dawn (`mistLevel`, `uMist`: one fog chunk in every toon material).
+- **Sky and light polish**: sunset silhouettes and lit cloud bellies, a **golden-hour stop at 16.6** (blue top, warm horizon: a straight fade to dusk went violet 90 minutes early), two star layers, a milky band and shooting
+  stars, **moon phases** (`worldDay`, `moonPhase`; `?moon=0..1` overrides; moonlight follows the phase), canopy sun shafts (one instanced draw, faded by cloud, rain, night and a high sun). Sunrise and sunset colours are convex
+  mixes of palette entries (`daycycle.test.ts` proves the chroma).
+- **Wildlife** (`shared/fauna.ts`, `world/animals.ts`, `world/ambient.ts`): ducks on the pond, deer (with a stag) at the forest edge, the village cat (naps by the granary, curled on its steps from 21:00 to 06:00), swallows over the
+  village and pond, dragonflies over the stream. Scenery, not simulation: pure poses from the world clock. Each animal group is ONE instanced mesh holding every species (vertices of other species collapse in the shader) so five
+  species cost the same four draws the two farm animals did. Swallows and dragonflies are extra instances of the bird and butterfly meshes.
 - **Review commands** (`?showcase=world`, real arena, deterministic):
 ```
 node scripts/shot.mjs "?showcase=world&view=game&time=13" out.png 1280x720 6000      # the view a player has at spawn, at noon
@@ -134,6 +153,9 @@ node scripts/shot.mjs "?showcase=world&view=well|pen|bridge|waypost|door|inside|
 node scripts/shot.mjs "?showcase=world&view=game&weather=storm|drizzle|fog|dust|overcast&time=13" out.png   # forced weather (lightning in a storm); try time=19 and time=0.5
 node scripts/shot.mjs "?showcase=world&view=tree&i=3" out.png                          # also rock, snag; i picks which one
 node scripts/shot.mjs "?showcase=world&cam=13,0.8,22&at=14,0.25,20&push=14,20&figures=0" out.png   # a walker bending the grass
+node scripts/shot.mjs "?showcase=world&view=village|vtop|vmarket|vjetty|vweir|b-gate|b-hall|b-mill|b-shop|b-stilt-w|b-gran-a|b-stall-1&time=12&figures=0&props=0" out.png   # Hollowmere (d=N distance, a=N angle round a building)
+node scripts/shot.mjs "?showcase=world&view=village&time=18.3|21|7&moon=0.5" out.png    # dusk, lit windows, dawn mist; moon phase 0..1
+node scripts/shot.mjs "?showcase=world&cam=-13,3,-30&at=-21,-3,-35&time=11&figures=0&props=0&fov=45" out.png   # the pond and its ducks (camera y is world y; the village ground is about -2 to -3)
 node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png    # low preset (no ink, no ambient life, no rain or puddles, no flock, vertex-painted paths)
 ```
 

@@ -19,6 +19,14 @@ export interface Dir {
   phi: number;
 }
 
+/** Deterministic 0..1 noise for a strand cell. */
+const strandHash = (a: number, b2: number): number => {
+  let x = (Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b2 | 0, 0x165667b1)) ^ 0x9e3779b9;
+  x = Math.imul(x ^ (x >>> 15), 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+};
+
 export interface ShellSpec {
   /** 0..1 coverage. Vertices at 0 are left out; small values feather to the skin. */
   mask(d: Dir): number;
@@ -33,6 +41,10 @@ export interface ShellSpec {
   /** Multiplies colour by height for a soft highlight on top. */
   shine?: number;
   coarse?: GridLevel;
+  /** Hair: a light/dark variation from strand to strand round the head (deterministic), so the mass has a grain instead of one flat colour. */
+  strands?: boolean;
+  /** Last word on a vertex position (head-centre relative): move it out of something it should not be inside. */
+  settle?(p: V3): V3;
 }
 
 /**
@@ -80,10 +92,13 @@ export function buildShell(shape: HeadShape, spec: ShellSpec): BufferGeometry | 
     const m = v.m;
     const t = spec.thick(d) * R * smooth(ISO, ISO + 0.4, m);
     const r = shape.radius(d.x, d.y, d.z) + t + 0.0015;
+    // (an extra displacement like a quiff's sweep fades with the coverage too: at the feathered edge the hair lies ON the skin, it does not stand off it)
+    const fade = smooth(ISO, ISO + 0.4, m);
     const lift = spec.lift?.(d) ?? [0, 0, 0];
-    const x = d.x * r + lift[0] * R;
-    const y = d.y * r + lift[1] * R;
-    const z = d.z * r + lift[2] * R;
+    let x = d.x * r + lift[0] * R * fade;
+    let y = d.y * r + lift[1] * R * fade;
+    let z = d.z * r + lift[2] * R * fade;
+    if (spec.settle) [x, y, z] = spec.settle([x, y, z]);
     const key = `${Math.round(x * 4000)},${Math.round(y * 4000)},${Math.round(z * 4000)}`;
     const hit = welded.get(key);
     if (hit !== undefined) return hit;
@@ -93,6 +108,7 @@ export function buildShell(shape: HeadShape, spec: ShellSpec): BufferGeometry | 
     c.copy(base);
     if (spec.tint && spec.tintColor !== undefined) c.lerp(tintCol.setHex(spec.tintColor), spec.tint(d));
     c.multiplyScalar(0.9 + (spec.shine ?? 0.16) * smooth(-0.4, 0.9, d.y) + 0.1 * smooth(0, 0.36 * R, t));
+    if (spec.strands) c.multiplyScalar(0.93 + 0.14 * strandHash(Math.round(d.phi * 13), Math.round(d.y * 4)));
     col.push(c.r, c.g, c.b);
     return id;
   };

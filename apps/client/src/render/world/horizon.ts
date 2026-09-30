@@ -15,6 +15,7 @@ import {
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ARENA_RADIUS, PALETTE, Rng, autumnAt, groundColour, valueNoise, type Rgb } from "@cb/shared";
 import { composeInstance } from "./toon.ts";
+import { WINDMILL, windmillGeometry } from "./windmill.ts";
 
 /**
  * The country beyond the arena: three low-poly hill rings that grow paler and hazier with distance, a tree line of tiny conifer and
@@ -34,6 +35,9 @@ export interface RingSpec {
   /** Tree height range on this ring (metres): bigger with distance so silhouettes keep their angular size. */
   tree: readonly [number, number];
 }
+
+/** The far range: snowcapped peaks beyond the last ring, far enough that haze layers them. Drawn inside the hills mesh (no extra draw). */
+export const RANGE = { radius: 520, width: 150, height: 215, haze: 0.5, segments: 96, seed: 11 } as const;
 
 export const HILL_RINGS: readonly RingSpec[] = [
   { radius: 150, width: 38, height: 24, haze: 0.2, segments: 56, colour: PALETTE.world.hillNear, seed: 3, tree: [9, 15] },
@@ -59,10 +63,14 @@ export interface HillUniforms {
   uExtraFog: { value: number };
   /** Bark colour for the tree-line trunks. */
   uTrunk: { value: Color };
+  /** The windmill on the second summit: its sails turn about this pivot and axis (`aSail` = 1 marks their vertices) at `uSailAngle` radians. */
+  uSailPivot: { value: Vector3 };
+  uSailAxis: { value: Vector3 };
+  uSailAngle: { value: number };
 }
 
 export function createHillUniforms(sun: Vector3): HillUniforms {
-  return { uFog: { value: new Color() }, uSunDir: { value: sun.clone().normalize() }, uTint: { value: new Color(1, 1, 1) }, uExtraFog: { value: 0 }, uTrunk: { value: new Color(PALETTE.world.trunk) } };
+  return { uFog: { value: new Color() }, uSunDir: { value: sun.clone().normalize() }, uTint: { value: new Color(1, 1, 1) }, uExtraFog: { value: 0 }, uTrunk: { value: new Color(PALETTE.world.trunk) }, uSailPivot: { value: new Vector3(0, -100, 0) }, uSailAxis: { value: new Vector3(1, 0, 0) }, uSailAngle: { value: 0 } };
 }
 
 /**
@@ -84,15 +92,23 @@ const HAZE_GLSL = /* glsl */ `
 const HILL_VERT = /* glsl */ `
   attribute vec3 aCol;
   attribute float aHaze;
+  attribute float aSail;
   uniform vec3 uFog; uniform vec3 uSunDir; uniform vec3 uTint;
+  uniform vec3 uSailPivot; uniform vec3 uSailAxis; uniform float uSailAngle;
   ${HAZE_GLSL}
   varying vec3 vCol;
+  vec3 sailRot(vec3 v, float ang) { float c = cos(ang); float s = sin(ang); return v * c + cross(uSailAxis, v) * s + uSailAxis * dot(uSailAxis, v) * (1.0 - c); }
   void main() {
     vec3 n = normal;
+    vec3 pos = position;
+    if (aSail > 0.5) {
+      pos = uSailPivot + sailRot(position - uSailPivot, uSailAngle);
+      n = sailRot(n, uSailAngle);
+    }
     float lit = clamp(dot(n, uSunDir), 0.0, 1.0);
     float stepK = lit > 0.62 ? 1.24 : (lit > 0.3 ? 1.0 : 0.78);
-    vCol = mix(aCol * stepK * uTint, uFog, hillHaze(aHaze, position));
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vCol = mix(aCol * stepK * uTint, uFog, hillHaze(aHaze, pos));
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }`;
 const HILL_FRAG = /* glsl */ `
   varying vec3 vCol;
@@ -112,11 +128,12 @@ interface RingCell {
 }
 
 /** All rings merged into one flat-faceted geometry: position, face normal, unhazed colour and haze. */
-export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[] } {
+export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[]; summit?: { x: number; y: number; z: number; axisX: number; axisZ: number } } {
   const pos: number[] = [];
   const nor: number[] = [];
   const col: number[] = [];
   const haze: number[] = [];
+  const sail: number[] = [];
   const slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[] = [];
   const a = new Vector3();
   const b = new Vector3();
@@ -176,19 +193,128 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
             nor.push(n.x, n.y, n.z);
             col.push(tmp.r, tmp.g, tmp.b);
             haze.push(Math.min(0.95, hazeY));
+            sail.push(0);
           }
           if (j < 2) slopes.push({ ring, tri: [a.clone(), b.clone(), c.clone()], j });
         }
       }
     }
   });
+  // ---- the far range: jagged peaks with snowfields above a snowline, hazed in layers ----
+  {
+    const rng = new Rng(RANGE.seed * 313);
+    const rock = new Color(PALETTE.world.peakRock);
+    const forestC = new Color(PALETTE.world.hillFar);
+    const snow = new Color(PALETTE.world.snow);
+    const shade = new Color(PALETTE.world.snowShade);
+    const cols: [number, number, number][][] = [];
+    const tints: number[][] = [];
+    for (let k = 0; k < RANGE.segments; k++) {
+      const theta = ((k + rng.range(-0.3, 0.3)) / RANGE.segments) * Math.PI * 2;
+      const cx = Math.cos(theta);
+      const cz = Math.sin(theta);
+      // ridged noise: sharp peaks and saddles
+      const r1 = 1 - Math.abs(2 * valueNoise(RANGE.seed, cx * 3.4 + 9, cz * 3.4 + 9) - 1);
+      const r2 = 1 - Math.abs(2 * valueNoise(RANGE.seed + 1, cx * 9 + 3, cz * 9 + 3) - 1);
+      const H = RANGE.height * (0.28 + 0.5 * r1 * r1 + 0.3 * r2 * r2) * rng.range(0.85, 1.12);
+      const snowline = H * rng.range(0.5, 0.62);
+      const rad = RANGE.radius + rng.range(-10, 10);
+      cols.push([
+        [cx * (RANGE.radius - RANGE.width), FOOT, cz * (RANGE.radius - RANGE.width)],
+        [cx * (rad - RANGE.width * 0.42), H * 0.34, cz * (rad - RANGE.width * 0.42)],
+        [cx * (rad - RANGE.width * 0.16), snowline, cz * (rad - RANGE.width * 0.16)],
+        [cx * rad, H, cz * rad],
+        [cx * (RANGE.radius + RANGE.width * 0.7), FOOT, cz * (RANGE.radius + RANGE.width * 0.7)],
+      ]);
+      tints.push([0, 0.5, 0.15, 1, 0]);
+    }
+    for (let k = 0; k < RANGE.segments; k++) {
+      const p = cols[k]!;
+      const q = cols[(k + 1) % RANGE.segments]!;
+      const pt = tints[k]!;
+      const qt = tints[(k + 1) % RANGE.segments]!;
+      for (let j = 0; j < 4; j++) {
+        const quad = [p[j]!, q[j]!, q[j + 1]!, p[j + 1]!];
+        const quadTint = [pt[j]!, qt[j]!, qt[j + 1]!, pt[j + 1]!];
+        for (const tri of [[0, 1, 2], [0, 2, 3]] as const) {
+          a.set(...quad[tri[0]]!);
+          b.set(...quad[tri[1]]!);
+          c.set(...quad[tri[2]]!);
+          n.copy(b).sub(a).cross(c.clone().sub(a)).normalize();
+          if (n.y < 0) n.negate();
+          // a face is snow if most of it lies above the snowline; steeper faces shed it
+          const snowy = j >= 2 ? (j === 3 ? 1 : 0.5) * (n.y > 0.35 ? 1 : 0.55) : 0;
+          for (const v of [a, b, c]) {
+            const frac = Math.min(1, Math.max(0, (v.y - FOOT) / (RANGE.height * 0.55 - FOOT)));
+            tmp.copy(rock).lerp(forestC, (1 - frac) * 0.55);
+            tmp.lerp(shade, snowy * 0.5).lerp(snow, snowy * (n.y > 0.5 ? 0.85 : 0.55));
+            pos.push(v.x, v.y, v.z);
+            nor.push(n.x, n.y, n.z);
+            col.push(tmp.r, tmp.g, tmp.b);
+            // layered haze: pale at the foot and thinning up the peaks, never clear
+            haze.push(Math.min(0.94, RANGE.haze + (1 - frac) * 0.36));
+            sail.push(0);
+          }
+        }
+      }
+    }
+  }
+  // ---- the second summit: a windmill on the near ring's highest crest in the south-west ----
+  let summit: { x: number; y: number; z: number; axisX: number; axisZ: number } | undefined;
+  {
+    const ring = HILL_RINGS[0]!;
+    const rng = new Rng(ring.seed * 977);
+    let bestH = -1;
+    let bx = 0;
+    let bz = 0;
+    for (let k = 0; k < ring.segments; k++) {
+      const theta = ((k + rng.range(-0.3, 0.3)) / ring.segments) * Math.PI * 2;
+      const H = ring.height * ridge(ring.seed, theta) * rng.range(0.85, 1.12);
+      rng.range(0.28, 0.5); // (the foothill and shoulder draws of the ring loop above: keep the stream in step)
+      rng.range(0.35, 0.6);
+      const rr = ring.radius + rng.range(-4, 4);
+      if (theta > 2.05 && theta < 3.35 && H > bestH) {
+        bestH = H;
+        bx = Math.cos(theta) * rr;
+        bz = Math.sin(theta) * rr;
+      }
+    }
+    // the windmill faces the arena; the ridge under it is levelled by a broad pad of packed earth (a low plinth in the geometry)
+    const len = Math.hypot(bx, bz) || 1;
+    const ax = -bx / len;
+    const az = -bz / len;
+    summit = { x: bx, y: bestH, z: bz, axisX: ax, axisZ: az };
+    const mill = windmillGeometry();
+    const mp = mill.attributes.position as BufferAttribute;
+    const mn2 = mill.attributes.normal as BufferAttribute;
+    const mc = mill.attributes.color as BufferAttribute;
+    const ms = mill.attributes.aSway as BufferAttribute;
+    const yaw = Math.atan2(az, ax); // local +x -> (ax, az)
+    const cy = Math.cos(yaw);
+    const sy = Math.sin(yaw);
+    for (let i = 0; i < mp.count; i++) {
+      const x = mp.getX(i);
+      const y = mp.getY(i);
+      const z = mp.getZ(i);
+      pos.push(bx + x * cy - z * sy, bestH - 0.6 + y, bz + x * sy + z * cy);
+      const nx = mn2.getX(i);
+      const nz = mn2.getZ(i);
+      nor.push(nx * cy - nz * sy, mn2.getY(i), nx * sy + nz * cy);
+      col.push(mc.getX(i), mc.getY(i), mc.getZ(i));
+      haze.push(0.16);
+      sail.push(ms.getX(i) > 0.5 ? 1 : 0);
+    }
+    mill.dispose();
+    void WINDMILL;
+  }
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute("normal", new BufferAttribute(new Float32Array(nor), 3));
   g.setAttribute("aCol", new BufferAttribute(new Float32Array(col), 3));
   g.setAttribute("aHaze", new BufferAttribute(new Float32Array(haze), 1));
+  g.setAttribute("aSail", new BufferAttribute(new Float32Array(sail), 1));
   g.computeBoundingSphere();
-  return { geometry: g, slopes };
+  return { geometry: g, slopes, summit };
 }
 
 // ---- the tree line -----------------------------------------------------------------------------------------------------------------

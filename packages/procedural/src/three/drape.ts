@@ -6,6 +6,7 @@ import { sstep } from "./patch.ts";
 import { PartBuilder, singe } from "./parts.ts";
 import { dyeAt, frontZ, neckRadii, ringAt, ringSurface, tone, type BodyCtx } from "./bodyKit.ts";
 import { lerpColor, torsoRings, type TorsoView } from "./garments.ts";
+import { patchSurface, polySurface } from "./fit/surface.ts";
 
 /**
  * Capes and ponchos: DRAPED cloth, not a bowl. Each is built from two kinds of piece:
@@ -201,7 +202,7 @@ export function dressCape(v: TorsoView): void {
   const top = neckY + 0.012;
   const openHem = cut.open(-0.3 * h); // (the front opening has reached its full width by the hem)
   const hemW = (w: number): number => cut.hem(openHem + w * (Math.PI - openHem));
-  const ROWS = [0, 0.03, 0.09, 0.2, 0.36, 0.55, 0.72, 0.83, 0.9, 0.95, 0.98, 1];
+  const ROWS = [0, 0.04, 0.14, 0.32, 0.55, 0.74, 0.87, 0.95, 1];
   const Y = rowsFromHem(hemW, top, ROWS);
   mirroredHalves(b, {
     phiOf: (w, y) => cut.open(y) + w * (Math.PI - cut.open(y)),
@@ -212,7 +213,7 @@ export function dressCape(v: TorsoView): void {
       const fold = 0.94 + 0.06 * cosF(phi, FOLDS); // a hint of the fold in the colour as well as the shading
       return lerpColor(tone(cloth, 1.06 * fold), tone(cloth, 0.84 * fold), k);
     },
-    nu: 16,
+    nu: 13,
     nv: ROWS.length - 1,
     lining,
   });
@@ -270,7 +271,7 @@ export function dressPoncho(v: TorsoView): void {
   }
   const surface = ringSurface(rings, undefined, cut.fold);
   const top = neckY + 0.012;
-  const NV = 10;
+  const NV = 8;
   const hemW = (w: number): number => cut.hem(w * Math.PI);
   const Y = stripedFromHem(hemW, top, [0.026, 0.06], NV, [0.2, 0.42, 0.62, 0.8, 0.92, 1]);
   mirroredHalves(b, {
@@ -284,7 +285,7 @@ export function dressPoncho(v: TorsoView): void {
       if (j <= 3) return stripe1;
       return lerpColor(tone(cloth, 1.06), tone(cloth, 0.9), sstep(h * 0.9, h * 0.3, y));
     },
-    nu: 16,
+    nu: 13,
     nv: NV,
     lining,
   });
@@ -323,11 +324,11 @@ function armRings(P: Proportions, jacket: number): Ring[] {
   const L = P.armUpper;
   const wide = jacket === 7 ? 1.32 : 1;
   return [
-    { y: r * 1.05, rx: r * 1.6 * wide + 0.02, rz: r * 1.55 * wide + 0.02, pow: 2.2 },
-    { y: 0, rx: r * 1.95 * wide + 0.025, rz: r * 1.85 * wide + 0.025, pow: 2.2 },
-    { y: -L * 0.3, rx: r * 2.2 * wide + 0.03, rz: r * 2.05 * wide + 0.03, pow: 2.2 },
-    { y: -L * 0.65, rx: r * 2.6 * wide + 0.04, rz: r * 2.35 * wide + 0.04, pow: 2.2 },
-    { y: -L * 0.9, rx: r * 2.9 * wide + 0.05, rz: r * 2.6 * wide + 0.05, pow: 2.2 },
+    { y: r * 1.05, rx: r * 1.35 * wide + 0.015, rz: r * 1.3 * wide + 0.015, pow: 2.2 },
+    { y: 0, rx: r * 1.55 * wide + 0.02, rz: r * 1.5 * wide + 0.02, pow: 2.2 },
+    { y: -L * 0.3, rx: r * 1.7 * wide + 0.02, rz: r * 1.62 * wide + 0.02, pow: 2.2 },
+    { y: -L * 0.65, rx: r * 1.9 * wide + 0.025, rz: r * 1.78 * wide + 0.025, pow: 2.2 },
+    { y: -L * 0.9, rx: r * 2.05 * wide + 0.03, rz: r * 1.9 * wide + 0.03, pow: 2.2 },
   ];
 }
 
@@ -368,7 +369,7 @@ export function dressArmDrape(b: PartBuilder, c: BodyCtx, side: "L" | "R"): void
       u1: Math.PI,
       v0: 0,
       v1: 1,
-      nu: 16,
+      nu: 12,
       nv: NV,
       lift: () => 0,
       color: (phi, t) => {
@@ -419,7 +420,9 @@ export function buildDrapeOnly(c: BodyCtx, part: "torso" | "armL" | "armR"): Buf
       nrz: nk.rz,
       at,
       surf: (y: number, x = 0) => frontZ(at(y), x),
-      surface: ringSurface(rings),
+      s: polySurface(rings),
+      surface: patchSurface(rings),
+      layers: [],
       coat: c.jacketC,
       facing: tone(c.jacketC, 0.68),
       vest: c.jacketC,

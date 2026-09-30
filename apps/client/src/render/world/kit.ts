@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Euler, Matrix4, Quaternion, Vector3, type Material, type Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { hash3 } from "@cb/shared";
-import { addOutlineNormals, isSharedInk } from "@cb/procedural/three";
+import { isSharedInk } from "@cb/procedural/three";
 
 export type V3 = readonly [number, number, number];
 
@@ -46,6 +46,7 @@ const dir = new Vector3();
 export class Kit {
   private readonly parts: BufferGeometry[] = [];
   private readonly baseMatrix = new Matrix4();
+  private baseYaw = 0;
 
   /** `sway: true` gives every piece an `aSway` attribute (0 unless the piece says otherwise): the geometry of things that move in the wind. */
   constructor(private readonly opts: { sway?: boolean } = {}) {}
@@ -54,16 +55,39 @@ export class Kit {
   setBase(x: number, y: number, z: number, yaw = 0): this {
     q.setFromAxisAngle(up, -yaw);
     this.baseMatrix.compose(pos.set(x, y, z), q, scl.set(1, 1, 1));
+    this.baseYaw = yaw;
     return this;
+  }
+
+  /** The collision-convention yaw of the current base (0 after `clearBase`). */
+  get yaw(): number {
+    return this.baseYaw;
+  }
+
+  /** A point given in the current base's frame, in world coordinates. */
+  worldPoint(x: number, y: number, z: number, out: [number, number, number] = [0, 0, 0]): [number, number, number] {
+    tmpP.set(x, y, z).applyMatrix4(this.baseMatrix);
+    out[0] = tmpP.x;
+    out[1] = tmpP.y;
+    out[2] = tmpP.z;
+    return out;
   }
 
   clearBase(): this {
     this.baseMatrix.identity();
+    this.baseYaw = 0;
     return this;
   }
 
   get count(): number {
     return this.parts.length;
+  }
+
+  /** Triangles accumulated so far (parts are non-indexed): for budgeting. */
+  get triangles(): number {
+    let n = 0;
+    for (const g of this.parts) n += g.attributes.position!.count / 3;
+    return n;
   }
 
   add(source: BufferGeometry, o: AddOptions): this {
@@ -158,11 +182,68 @@ export class Kit {
     for (const g of this.parts) g.dispose();
     this.parts.length = 0;
     if (!merged) return undefined;
-    addOutlineNormals(merged);
+    weldedOutlineNormals(merged);
     merged.computeBoundingSphere();
     merged.computeBoundingBox();
     return merged;
   }
+}
+
+/**
+ * The ink hull's smoothed normals (`onormal`): every vertex at the same position (to 0.5 mm) gets the normalised sum of the normals there, so a
+ * flat-shaded solid's hull does not split at its edges. The same result as `addOutlineNormals` in the character package, but keyed on a hash of the
+ * rounded integer coordinates in a typed open-addressing table instead of a string per vertex: several times faster, which matters because the
+ * whole village, camp and every tree are built with it at start-up.
+ */
+export function weldedOutlineNormals(geo: BufferGeometry): void {
+  const pos = geo.attributes.position!;
+  const nor = geo.attributes.normal!;
+  const n = pos.count;
+  const qx = new Int32Array(n);
+  const qy = new Int32Array(n);
+  const qz = new Int32Array(n);
+  let size = 16;
+  while (size < n * 2) size <<= 1;
+  const mask = size - 1;
+  const table = new Int32Array(size).fill(-1);
+  const rep = new Int32Array(n);
+  const acc = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const x = Math.round(pos.getX(i) * 2000);
+    const y = Math.round(pos.getY(i) * 2000);
+    const z = Math.round(pos.getZ(i) * 2000);
+    qx[i] = x;
+    qy[i] = y;
+    qz[i] = z;
+    let h = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) & mask;
+    let r = -1;
+    for (;;) {
+      const t = table[h]!;
+      if (t < 0) {
+        table[h] = i;
+        r = i;
+        break;
+      }
+      if (qx[t] === x && qy[t] === y && qz[t] === z) {
+        r = t;
+        break;
+      }
+      h = (h + 1) & mask;
+    }
+    rep[i] = r;
+    acc[r * 3] = acc[r * 3]! + nor.getX(i);
+    acc[r * 3 + 1] = acc[r * 3 + 1]! + nor.getY(i);
+    acc[r * 3 + 2] = acc[r * 3 + 2]! + nor.getZ(i);
+  }
+  const out = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const r = rep[i]! * 3;
+    const len = Math.hypot(acc[r]!, acc[r + 1]!, acc[r + 2]!) || 1;
+    out[i * 3] = acc[r]! / len;
+    out[i * 3 + 1] = acc[r + 1]! / len;
+    out[i * 3 + 2] = acc[r + 2]! / len;
+  }
+  geo.setAttribute("onormal", new BufferAttribute(out, 3));
 }
 
 // ---- colour helpers (all take palette hexes; results are linear working-space colours like everything else in three) --------------

@@ -20,6 +20,8 @@ import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
 import { crateParts } from "./objects.ts";
 import type { Lod } from "./flora.ts";
 import { FLAG_UV, MAP_UV, boardUv } from "./atlas.ts";
+import { villageBanners } from "./banners.ts";
+import { hqBanners, hqSolid } from "./hq.ts";
 import { gramophone, hammock, lanternFrames, mapTable, post, telescope, washLine } from "./camplife.ts";
 
 /**
@@ -416,6 +418,7 @@ export function buildLandmarks(world: CollisionWorld, lod: Lod): BufferGeometry 
   washLine(k, world, lod);
   hammock(k, world, lod);
   lanternFrames(k, world, lod);
+  hqSolid(k, world, lod);
   k.clearBase();
   return k.build();
 }
@@ -512,6 +515,15 @@ export function buildBanners(world: CollisionWorld): BufferGeometry | undefined 
     tri(q[0]!, q[2]!, q[1]!, [0, 1, 0], uvs[0]!, uvs[2]!, uvs[1]!, 0, 0, 0);
     tri(q[0]!, q[3]!, q[2]!, [0, 1, 0], uvs[0]!, uvs[3]!, uvs[2]!, 0, 0, 0);
   }
+  // the village's boards and dial, the HQ's heraldry and notice board: flat decals
+  const quad = (c: readonly [V3, V3, V3, V3], n: V3, rect: readonly [number, number, number, number], w: readonly [number, number, number, number] = [0, 0, 0, 0]): void => {
+    const [u0, v0, u1, v1] = rect;
+    const uv: [number, number][] = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    tri([...c[0]], [...c[1]], [...c[2]], n, uv[0]!, uv[1]!, uv[2]!, w[0], w[1], w[2]);
+    tri([...c[0]], [...c[2]], [...c[3]], n, uv[0]!, uv[2]!, uv[3]!, w[0], w[2], w[3]);
+  };
+  villageBanners(world, quad);
+  hqBanners(world, quad);
   if (pos.length === 0) return undefined;
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));

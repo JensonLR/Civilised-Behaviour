@@ -27,8 +27,8 @@ export const CAMP = {
   /** The ruined wall north of the camp. */
   wall: { x: 0, z: -12, hx: 6, hz: 0.4, height: 2.2 },
   /** The expedition's map table with the survey pinned to it, beside a lantern post. */
-  mapTable: { x: -2.4, z: -6.6, hx: 0.85, hz: 0.5, yaw: 0.15, height: 0.92 },
-  lanternPost: { x: -0.9, z: -7.3, r: 0.06, height: 2.1 },
+  mapTable: { x: -2.4, z: -7.0, hx: 0.85, hz: 0.5, yaw: 0.15, height: 0.92 },
+  lanternPost: { x: -0.9, z: -7.7, r: 0.06, height: 2.1 },
   /** A brass telescope on a tripod, trained on the Observatory (yaw is the collision convention: direction (cos, sin) in x/z). */
   scope: { x: 11.6, z: -6.6, r: 0.5, height: 1.5, yaw: -1.173 },
   /** A tea table bearing the gramophone. */
@@ -37,9 +37,15 @@ export const CAMP = {
   wash: { a: { x: -11.6, z: -5.8 }, b: { x: -11.4, z: 6.4 }, r: 0.07, height: 2.15 },
   /** Two posts and a hammock slung between them. */
   hammock: { a: { x: -9.4, z: 9.4 }, b: { x: -6.4, z: 11.4 }, r: 0.1, height: 1.95 },
+  /**
+   * The Expedition's HQ: a striped pavilion (the marquee) north-west of the fire, open at the front (local +x, which faces the camp), with a
+   * planning table and camp chairs inside, and outside its mouth a supply pyramid, stencilled crates, the notice board and two flagpoles
+   * flying the Society's arms. `hqPlan()` turns these local numbers into world positions; collision, looks and keep-outs all read that.
+   */
+  hq: { x: -3.35, z: -8.4, yaw: 0, hx: 3.45, hz: 2.6, wall: 2.3, ridge: 3.95 },
   /** Hanging lanterns (world x/z, y above the ground). They glow from dusk. */
   lanterns: [
-    { x: -0.58, y: 1.69, z: -7.3 },
+    { x: -0.58, y: 1.69, z: -7.7 },
     { x: -11.28, y: 1.74, z: -5.8 },
     { x: -11.08, y: 1.74, z: 6.4 },
     { x: -5.45, y: 1.75, z: 3.95 },
@@ -47,6 +53,80 @@ export const CAMP = {
     { x: -9.08, y: 1.54, z: 9.4 },
   ],
 } as const;
+
+export interface HqPiece {
+  /** World position and collision-convention yaw. */
+  x: number;
+  z: number;
+  yaw: number;
+}
+
+export interface HqPlan {
+  /** The pavilion: back and north sides are canvas, the front and the south side stand open (rolled up). */
+  marquee: HqPiece & { hx: number; hz: number; wall: number; ridge: number };
+  /** Camp chairs round the survey table (which is `CAMP.mapTable`, now under the ridge), and the strongbox at the back. */
+  chairs: (HqPiece & { r: number })[];
+  chest: HqPiece & { hx: number; hz: number; height: number };
+  /** The supply pyramid: tiers of crates (bottom row first), barrels beside it. */
+  pyramid: { tiers: (HqPiece & { hx: number; hz: number; y0: number; y1: number })[]; barrels: (HqPiece & { r: number; height: number })[] };
+  /** Stencilled crates about the marquee: `stencil` indexes STENCIL_TEXT. */
+  crates: (HqPiece & { half: number; height: number; stencil: number })[];
+  /** The notice board on two posts, facing the camp (`w` x `h` is the board itself, `y` its centre's height). */
+  notice: HqPiece & { hx: number; height: number; w: number; h: number; y: number };
+  /** Two flagpoles either side of the mouth, flying the Society's arms. */
+  poles: (HqPiece & { r: number; height: number })[];
+  /** Lamps hanging from the ridge (world x/z and height above the ground). */
+  lamps: { x: number; z: number; y: number }[];
+}
+
+/** Local (lx forward from the marquee's centre, lz to its right) -> world, with a yaw offset. */
+function hqAt(lx: number, lz: number, dyaw = 0): HqPiece {
+  const h = CAMP.hq;
+  const c = Math.cos(h.yaw);
+  const s = Math.sin(h.yaw);
+  return { x: h.x + lx * c - lz * s, z: h.z + lx * s + lz * c, yaw: h.yaw + dyaw };
+}
+
+let hqCached: HqPlan | undefined;
+export function hqPlan(): HqPlan {
+  if (hqCached) return hqCached;
+  const h = CAMP.hq;
+  const plan: HqPlan = {
+    marquee: { ...hqAt(0, 0), hx: h.hx, hz: h.hz, wall: h.wall, ridge: h.ridge },
+    chairs: [
+      { ...hqAt(-0.6, 1.5, 0.3), r: 0.3 },
+      { ...hqAt(1.35, 0.5, -0.5), r: 0.3 },
+      { ...hqAt(0.2, -0.75, 0.15), r: 0.3 },
+    ],
+    chest: { ...hqAt(-h.hx + 0.6, -h.hz + 0.75), hx: 0.55, hz: 0.32, height: 0.62 },
+    pyramid: {
+      tiers: [
+        { ...hqAt(-h.hx + 0.65, 1.55, Math.PI / 2 * 0), hx: 0.4, hz: 1.05, y0: 0, y1: 0.66 },
+        { ...hqAt(-h.hx + 0.65, 1.55), hx: 0.4, hz: 0.7, y0: 0.66, y1: 1.32 },
+        { ...hqAt(-h.hx + 0.65, 1.55), hx: 0.4, hz: 0.35, y0: 1.32, y1: 1.98 },
+      ],
+      barrels: [
+        { ...hqAt(-h.hx + 0.6, 0.35), r: 0.33, height: 0.9 },
+        { ...hqAt(-h.hx + 0.65, -0.4), r: 0.33, height: 0.9 },
+      ],
+    },
+    crates: [
+      { ...hqAt(3.9, 1.0, 0.25), half: 0.38, height: 0.7, stencil: 0 },
+      { ...hqAt(4.35, 1.9, -0.2), half: 0.4, height: 0.75, stencil: 1 },
+      { ...hqAt(-1.9, -h.hz + 0.6, 0.05), half: 0.4, height: 0.75, stencil: 3 },
+      { ...hqAt(-1.1, -h.hz + 0.55, 0.3), half: 0.34, height: 0.5, stencil: 2 },
+      { ...hqAt(-h.hx - 0.55, 0.6, 0.5), half: 0.36, height: 0.68, stencil: 1 },
+    ],
+    notice: { ...hqAt(7.0, -2.65, Math.PI / 2), hx: 1.0, height: 2.25, w: 1.9, h: 0.95, y: 1.5 },
+    poles: [
+      { ...hqAt(h.hx + 0.5, -h.hz + 0.35), r: 0.07, height: 4.7 },
+      { ...hqAt(h.hx + 0.5, h.hz - 0.35), r: 0.07, height: 4.7 },
+    ],
+    lamps: [{ ...hqAt(0.2, 0.2), y: 2.6 } as { x: number; z: number; y: number }],
+  };
+  hqCached = plan;
+  return plan;
+}
 
 /** The camp's collidable landmarks (tagged so the renderer knows what each one is). Deterministic, allocation only at build time. */
 export function campObstacles(terrain: Terrain): Obstacle[] {
@@ -93,6 +173,7 @@ export function campObstacles(terrain: Terrain): Obstacle[] {
   const hmx = (ha.x + hb.x) / 2;
   const hmz = (ha.z + hb.z) / 2;
   out.push({ kind: "box", tag: "hammock", x: hmx, z: hmz, hx: Math.hypot(hb.x - ha.x, hb.z - ha.z) / 2 - 0.35, hz: 0.42, yaw: Math.atan2(hb.z - ha.z, hb.x - ha.x), y0: ground(hmx, hmz) - 0.5, y1: ground(hmx, hmz) + 1.1 });
+  hqObstacles(out, ground);
   return out;
 }
 
@@ -114,4 +195,29 @@ export function inCampFootprint(x: number, z: number, margin: number): boolean {
   cachedCamp ??= campObstacles(flatTerrain);
   for (const o of cachedCamp) if (insideObstacle(o, x, z, margin)) return true;
   return false;
+}
+
+/** The HQ's solid parts: the marquee's back and north canvas (front and south stand open: walk in), chairs, the strongbox, the supply pyramid, crates, the notice board, the flagpoles. */
+function hqObstacles(out: Obstacle[], ground: (x: number, z: number) => number): void {
+  const p = hqPlan();
+  const m = p.marquee;
+  const g0 = ground(m.x, m.z);
+  const c = Math.cos(m.yaw);
+  const s = Math.sin(m.yaw);
+  const at = (lx: number, lz: number): { x: number; z: number } => ({ x: m.x + lx * c - lz * s, z: m.z + lx * s + lz * c });
+  const wallBox = (lx: number, lz: number, hx: number, hz: number): void => {
+    const w = at(lx, lz);
+    out.push({ kind: "box", tag: "marquee", x: w.x, z: w.z, hx, hz, yaw: m.yaw, y0: g0 - 0.6, y1: g0 + m.wall });
+  };
+  wallBox(-m.hx + 0.05, 0, 0.05, m.hz); // back
+  wallBox(0, -m.hz + 0.05, m.hx, 0.05); // north side
+  for (const q of p.poles) out.push({ kind: "circle", tag: "hq", x: q.x, z: q.z, r: q.r, y0: ground(q.x, q.z) - 1, y1: ground(q.x, q.z) + q.height });
+  for (const q of p.chairs) out.push({ kind: "circle", tag: "hq", x: q.x, z: q.z, r: q.r, y0: ground(q.x, q.z) - 0.5, y1: ground(q.x, q.z) + 0.45 });
+  const ch = p.chest;
+  out.push({ kind: "box", tag: "hq", x: ch.x, z: ch.z, hx: ch.hx, hz: ch.hz, yaw: ch.yaw, y0: ground(ch.x, ch.z) - 0.5, y1: ground(ch.x, ch.z) + ch.height });
+  for (const q of p.pyramid.tiers) out.push({ kind: "box", tag: "hq", x: q.x, z: q.z, hx: q.hx, hz: q.hz, yaw: q.yaw, y0: ground(q.x, q.z) - 0.5, y1: ground(q.x, q.z) + q.y1 });
+  for (const q of p.pyramid.barrels) out.push({ kind: "circle", tag: "hq", x: q.x, z: q.z, r: q.r, y0: ground(q.x, q.z) - 0.5, y1: ground(q.x, q.z) + q.height });
+  for (const q of p.crates) out.push({ kind: "box", tag: "hq", x: q.x, z: q.z, hx: q.half, hz: q.half, yaw: q.yaw, y0: ground(q.x, q.z) - 0.5, y1: ground(q.x, q.z) + q.height });
+  const n = p.notice;
+  out.push({ kind: "box", tag: "hq", x: n.x, z: n.z, hx: 0.08, hz: n.hx, yaw: n.yaw, y0: ground(n.x, n.z) - 1, y1: ground(n.x, n.z) + n.height });
 }
