@@ -8,7 +8,7 @@ Last updated: 2026-09-30 (Slice 1 integrated). Branch: `claude/civilised-behavio
 - **M1 Multiplayer movement: mostly done.** Working & verified: authoritative movement, prediction/reconciliation via Colyseus
   `Predict`, remote interpolation, KBM + gamepad input, join code/invite link, reconnect window, hostile-input sanitising.
 - **Slice 1 (D-033) is integrated and playable end to end in tests: HQ -> map room -> sail -> Kessar Reach -> one crossing scenario -> campaign state -> paper at HQ.**
-  See "Slice 1" below for exactly what is verified and what is placeholder. Nobody has played it as a human and the new art has not been looked at.
+  See "Slice 1" below for exactly what is verified and what is placeholder. Nobody has played it as a human. The fort, bridge, landing and the in-game arrival (orders card, rival timer, boat prompt) were looked at in software-GL renders and read well; not yet looked at: the map room, parley and paper sheets, the collapsed bridge. Seen and open: far NPC name plates clamp to the top of the screen on top of the compass; in the `showcase=world&region=kessar` views the four lineup figures render sunk to the chest (the real game does not; cause not found, showcase only).
 
 ## Milestone board
 | # | Milestone | Status | Notes |
