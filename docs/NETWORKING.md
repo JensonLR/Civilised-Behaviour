@@ -1,6 +1,6 @@
 # Networking
 
-Status: movement + join/reconnect implemented and tested. Combat lag-comp, bandwidth measurements and bad-network runs are M3/M12.
+Status: movement + join/reconnect implemented and tested; combat (M3) with bounded lag compensation implemented and tested against headless bots (see "Combat" below). Bandwidth measurements and bad-network runs are M12.
 
 ## Model
 Server-authoritative, Colyseus 0.18 over WebSocket (TCP, ordered - so `mode: "reliable"` inputs, no redundancy ring).
@@ -8,10 +8,10 @@ Server-authoritative, Colyseus 0.18 over WebSocket (TCP, ordered - so `mode: "re
 - Client: `Predict.reconciler` applies inputs immediately, keeps unacked inputs, and on each authoritative state rewinds and replays
   through the shared `stepCharacter`; errors are absorbed by a decaying visual offset (`smoothMs: 65`).
 - Remote players: `Predict.attachAll("players", ...)` with `lerp` and a 100 ms interpolation delay.
-- Lag compensation for hitscan will use Colyseus `allowRewindState` (renderTime stamps) - not yet enabled.
+- Lag compensation for shots uses Colyseus `allowRewindState` (renderTime stamps): enabled for `facing` and `flags` (held) and positions (interpolated), clamped to 250 ms. See "Combat".
 
 ## Wire input (MoveInput)
-`moveF:int8, moveR:int8, yaw:uint16, buttons:uint16` - delta-encoded by the framework, so idle frames are body-less.
+`moveF:int8, moveR:int8, yaw:uint16, buttons:uint16` - delta-encoded by the framework, so idle frames are body-less. Combat appended three fields (append-only, the movement step never reads them): `aimYaw:uint16`, `aimElev:int16` (1/20000 rad), `weapon:uint8` (0 = nothing, else id+1). `BUTTON` gained `AIM` (1<<4, a movement-step input: it sets `FLAG.AIMING` and turns the body toward the camera), `FIRE`, `RELOAD`, `MELEE` (1<<5..7) on top of the existing bits; all of these except AIM are acted on by the server on rising edges.
 
 ## Session lifecycle
 1. `client.create("world", {name})` -> server picks a seed and 5-char code, room is private.
@@ -129,3 +129,13 @@ in front of the holder and ignores player capsules. Client keyboard taps are lat
 campaign rule (creator's `JoinOptions.dismemberment`, ignored when joining; server default from `DISMEMBERMENT`). `Casualties.damage` rolls `severChance(amount, zoneLevel)`
 from the seeded room RNG for limb-zone blows, sets the bit, stamps a grievous wound on the zone and broadcasts `sever {id, limb, dx, dz, power}` after the `hit` event. The
 event is cosmetic (debris, spray, camera shake); a client that misses it still renders the stump from `missing`. Debug commands: `sever:<bit>`, `restore`.
+
+## Combat (M3; design and numbers in `docs/_notes/combat.md`)
+**Authority.** `apps/server/src/systems/Combat.ts` is the only writer of ammo, reload, weapon in hand, projectiles, hits, knock and explosions. Damage reaches players only through `Casualties.damage` (zone + direction + the weapon's `severBias`), so downing, revive and dismemberment behave exactly as before.
+**Replicated state (append-only).** `PlayerState`: `weapon` (0 none, else id+1), `weapons` (owned bit mask), `ammo`, `reserve`, `reload` (0..100), `shots` (uint8, wraps: seeds the shot pattern and keys remote recoil/swing), `aim` (int8, 1/80 rad elevation, cosmetic pose for remote figures). `FLAG` gained `AIMING` (1024, derived by the shared step from the AIM button, mirrored by the reconciler) and `OPERATING` (2048, server-set while working the cannon, like `REVIVING`). `WorldState`: `friendlyFire` (campaign rule; creator's `JoinOptions.friendlyFire`, server default `FRIENDLY_FIRE`, a server-side off wins) and `cannons` (map of `CannonState`: x y z, barrel yaw/elev, phase 0-3, progress, crew, shells, `fired`).
+**Events (cosmetic; state is authoritative).** `shot {id, w, x y z, dx dy dz, seed, spread, m?}` (one per trigger pull however many pellets; the pattern comes from `seed` via `shotDirection`), `impact {id, x y z, nx ny nz, s (SURFACE), w}` (capped per shot), `boom {x y z radius}`, `hitmark {zone, down, sever}` (to the shooter only), plus the existing `hit`/`sever`. A client that misses any of them still ends up with the right health, wounds, ammo and limbs.
+**Prediction.** The shooter draws his own flash and pellets the frame he presses FIRE, using `shotSeed(worldSeed, slot, (replicated shots + pending) & 255)`; the server's `shot` event confirms (no double flash for the shooter). Recoil is a camera kick and an animator pose, never an input, so the reconciler is untouched: measured worst correction 3.7e-7 m at 0 ms and 3.5e-7 m at 100 ms RTT while firing (`bots/combatNet.test.ts`).
+**Aim.** The client sends the direction from the eye to the point under the crosshair (a client-side world/body ray), as `aimYaw/aimElev`. The server clamps `aimYaw` to +-0.6 rad of the camera `yaw` (`COMBAT.aimYawSlack`) and `aimElev` to +-1.45 rad, and fires from the server's own eye height, never from a client position.
+**Lag compensation.** `rewind.attachAll(players, {fields: ["facing", "flags"], mode: "snapshot", interpolate: "step", maxRewindMs: 250})`; positions are interpolated linearly, `facing`/`flags` held. Hitscan and the first instants of a projectile ask `lastSeenBy(shooter)`; a projectile keeps that view for 0.3 s then fades to live over 0.1 s; melee uses the lag stored at the press. Cannon balls and blasts are live. `Predict.attachAll("players")` is required on the client so that what the shooter sees is what the rewind records. Trade-offs and measured hit rates (14/14 at 0 and 100 ms, 10/14 at 200 ms, 0/14 at 200 ms without compensation) are in `_notes/combat.md`.
+**Hostile input.** Refused and counted (`stats.refused`): weapons not owned or not carried, the cannon as a weapon, junk ids, FIRE on an empty gun (starts a reload instead), FIRE inside the cooldown or a reload, any action while DOWNED/CARRYING/DRAGGING/DRAGGED/REVIVING/OPERATING, weapon changes faster than `COMBAT.switchSeconds` (a change also carries the old cooldown forward, so swapping never launders it). Bounded: 128 live projectiles per room, prop impulses <= 14 m/s, a single knock <= 14 m/s, impacts per shot. The existing 120 msg/s cap and the input budget still apply.
+**QA debug commands (added).** `give:<weaponId>|all` (grant and fill), `tp:<x>:<z>[:<facing>]`, `nearCannon` (teleport beside the cannon).

@@ -116,6 +116,9 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
     return { room, ps: players, combat: combatOf(room) };
   }
 
+  /** The heading that faces back along bearing `dir` toward a shooter at the origin (a torso shot is only a torso shot from the front: from the side an arm is in the way). */
+  const faceBack = (dir: number) => Math.atan2(Math.cos(dir), Math.sin(dir));
+
   /** Puts a player somewhere, at rest, facing `facing`, on the ground. */
   const place = (p: PlayerStateType, x: number, z: number, facing = 0) => {
     p.x = x;
@@ -175,7 +178,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b] = ps as [Player, Player];
       const dir = openBearing(room, 40);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 30, Math.sin(dir) * 30, 0);
+      place(b.p, Math.cos(dir) * 30, Math.sin(dir) * 30, faceBack(dir));
       await settle();
       await equip(a, WEAPON.RIFLE);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -232,8 +235,8 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b, c] = ps as [Player, Player, Player];
       const dir = openBearing(room, 60);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 5, Math.sin(dir) * 5, 0);
-      place(c.p, Math.cos(dir) * 40, Math.sin(dir) * 40, 0);
+      place(b.p, Math.cos(dir) * 5, Math.sin(dir) * 5, faceBack(dir));
+      place(c.p, Math.cos(dir) * 40, Math.sin(dir) * 40, faceBack(dir));
       await settle();
       await equip(a, WEAPON.PISTOL);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -245,7 +248,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       // and at 25 m the same ball is weaker
       place(b.p, 0, 100); // out of the way
       b.p.health = 100;
-      place(c.p, Math.cos(dir) * 25, Math.sin(dir) * 25, 0);
+      place(c.p, Math.cos(dir) * 25, Math.sin(dir) * 25, faceBack(dir));
       await settle();
       await sleep(400);
       const at2 = aim(a.p, zonePoint(c.p, ZONE.TORSO));
@@ -261,8 +264,8 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b, c] = ps as [Player, Player, Player];
       const dir = openBearing(room, 30);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 10, Math.sin(dir) * 10, 0);
-      place(c.p, Math.cos(dir) * 20, Math.sin(dir) * 20, 0);
+      place(b.p, Math.cos(dir) * 10, Math.sin(dir) * 10, faceBack(dir));
+      place(c.p, Math.cos(dir) * 20, Math.sin(dir) * 20, faceBack(dir));
       room.damagePlayer(b.id, 1000, { zone: ZONE.TORSO }); // down
       const hb = b.p.health;
       await settle();
@@ -297,7 +300,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b] = ps as [Player, Player];
       const dir = openBearing(room, 40);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 3, Math.sin(dir) * 3, 0);
+      place(b.p, Math.cos(dir) * 3, Math.sin(dir) * 3, faceBack(dir));
       await settle();
       await equip(a, WEAPON.BLUNDERBUSS);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -312,7 +315,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       // far away: barely a scratch (if anything lands at all)
       b.p.health = 100;
       b.p.wounds = 0;
-      place(b.p, Math.cos(dir) * 26, Math.sin(dir) * 26, 0);
+      place(b.p, Math.cos(dir) * 26, Math.sin(dir) * 26, faceBack(dir));
       await settle();
       await sleep(500);
       const at2 = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -330,7 +333,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
         expect(room.state.friendlyFire).toBe(ff);
         const dir = openBearing(room, 20);
         place(a.p, 0, 0);
-        place(b.p, Math.cos(dir) * 12, Math.sin(dir) * 12, 0);
+        place(b.p, Math.cos(dir) * 12, Math.sin(dir) * 12, faceBack(dir));
         await settle();
         await equip(a, WEAPON.PISTOL);
         const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -373,7 +376,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b] = ps as [Player, Player];
       const dir = openBearing(room, 30);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 20, Math.sin(dir) * 20, 0);
+      place(b.p, Math.cos(dir) * 20, Math.sin(dir) * 20, faceBack(dir));
       await settle();
       await equip(a, WEAPON.PISTOL);
       const total0 = a.p.ammo + a.p.reserve;
@@ -448,7 +451,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b] = ps as [Player, Player];
       const dir = openBearing(room, 20);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 12, Math.sin(dir) * 12, 0);
+      place(b.p, Math.cos(dir) * 12, Math.sin(dir) * 12, faceBack(dir));
       await settle();
       await equip(a, WEAPON.PISTOL);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -489,12 +492,65 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       expect(fired).toBeLessThanOrEqual(Math.ceil(2 / pistol.cooldown) + 1);
     }, 30000);
 
+    it("the cooldown between shots is enforced on its own (a two-round magazine, so the reload cannot be what stops the second ball)", async () => {
+      const { room, ps } = await setup(2);
+      const [a, b] = ps as [Player, Player];
+      const dir = openBearing(room, 20);
+      place(a.p, 0, 0);
+      place(b.p, Math.cos(dir) * 12, Math.sin(dir) * 12, faceBack(dir));
+      await settle();
+      await equip(a, WEAPON.PISTOL);
+      const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
+      const first = a.p.shots;
+      await trigger(a, at.yaw, at.elev); // (takes about 140 ms: the pistol's cooldown is 350 ms)
+      expect(a.p.shots).toBe(first + 1);
+      expect(a.p.ammo).toBe(1);
+      frame(a, { buttons: BUTTON.AIM | BUTTON.FIRE, yaw: at.yaw, aimYaw: at.yaw, aimElev: at.elev });
+      await sleep(60);
+      frame(a, { buttons: BUTTON.AIM, yaw: at.yaw, aimYaw: at.yaw, aimElev: at.elev });
+      await sleep(60);
+      expect(a.p.shots).toBe(first + 1); // still cooling: the press is wasted, the round stays in the gun
+      expect(a.p.ammo).toBe(1);
+      await sleep(400);
+      await trigger(a, at.yaw, at.elev);
+      expect(a.p.shots).toBe(first + 2);
+    }, 30000);
+
+    it("every blow and ball carries its weapon's sever bias into the wound rule (umbrella none, sabre more than the plain rule)", async () => {
+      const { room, ps } = await setup(2);
+      const [a, b] = ps as [Player, Player];
+      const casualties = (room as unknown as { casualties: { damage: (id: string, amount: number, hit?: { severBias?: number }) => void } }).casualties;
+      const seen: number[] = [];
+      const real = casualties.damage.bind(casualties);
+      casualties.damage = (id, amount, hit) => {
+        seen.push(hit?.severBias ?? -1);
+        real(id, amount, hit);
+      };
+      place(a.p, 0, 0);
+      place(b.p, 0, -1.4, 0);
+      await settle();
+      for (const w of [WEAPON.UMBRELLA, WEAPON.SABRE]) {
+        seen.length = 0;
+        b.p.health = 100;
+        place(b.p, 0, -1.4, 0); // (the umbrella's shove sent him flying)
+        await settle();
+        await equip(a, w);
+        frame(a, { buttons: BUTTON.FIRE, yaw: 0, aimYaw: 0, aimElev: 0 });
+        await sleep(60);
+        frame(a, { buttons: 0 });
+        await until(() => seen.length > 0, 2000, "the blow lands");
+        expect(seen[0]).toBe(WEAPONS[w].severBias);
+      }
+      expect(WEAPONS[WEAPON.UMBRELLA].severBias).toBe(0);
+      expect(WEAPONS[WEAPON.SABRE].severBias).toBeGreaterThan(1);
+    }, 30000);
+
     it("nobody fires while downed, carrying, dragging or working a gun; taking a prop in hand holsters the intent", async () => {
       const { room, ps } = await setup(2);
       const [a, b] = ps as [Player, Player];
       const dir = openBearing(room, 20);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 10, Math.sin(dir) * 10, 0);
+      place(b.p, Math.cos(dir) * 10, Math.sin(dir) * 10, faceBack(dir));
       await settle();
       await equip(a, WEAPON.RIFLE);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));
@@ -859,7 +915,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const [a, b] = ps as [Player, Player];
       const dir = openBearing(room, 30);
       place(a.p, 0, 0);
-      place(b.p, Math.cos(dir) * 20, Math.sin(dir) * 20, 0);
+      place(b.p, Math.cos(dir) * 20, Math.sin(dir) * 20, faceBack(dir));
       await settle();
       await equip(a, WEAPON.PISTOL);
       const at = aim(a.p, zonePoint(b.p, ZONE.TORSO));

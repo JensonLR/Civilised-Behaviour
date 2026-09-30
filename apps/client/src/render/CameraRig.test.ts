@@ -215,3 +215,54 @@ describe("CameraRig views", () => {
     expect(camera.fov).toBeCloseTo(FIRST_PERSON.fov * FIRST_PERSON.aimFovScale, 1);
   });
 });
+
+describe("CameraRig aiming and recoil (third person)", () => {
+  it("aiming swings the view down the aim: the middle of the picture is what a shot will meet, and the wearer stands off to the left", () => {
+    const { r, camera } = rig();
+    r.yaw = 0.7;
+    r.pitch = 0.1;
+    run(r, 1.5, () => undefined, true);
+    const forward = new Vector3(-Math.sin(0.7) * Math.cos(0.1), -Math.sin(0.1), -Math.cos(0.7) * Math.cos(0.1));
+    // the camera axis is (nearly) the aim direction
+    expect(lookDir(camera).dot(forward)).toBeGreaterThan(0.995);
+    // and the wearer's head is left of the middle of the picture
+    const head = new Vector3(feet.x, feet.y + 1.6, feet.z).project(camera);
+    expect(head.x).toBeLessThan(-0.05);
+    expect(head.x).toBeGreaterThan(-0.9);
+  });
+
+  it("lowering the weapon eases back to looking at the wearer", () => {
+    const { r, camera } = rig();
+    run(r, 1.5, () => undefined, true);
+    run(r, 2, () => undefined, false);
+    const head = new Vector3(feet.x, feet.y + 1.35, feet.z).project(camera);
+    expect(Math.abs(head.x)).toBeLessThan(0.05);
+  });
+
+  it("a shot's kick lifts the lens and settles back; the aim itself is never touched", () => {
+    const { r, camera } = rig();
+    r.yaw = 0.3;
+    r.pitch = 0.2;
+    run(r, 1, () => undefined, true);
+    const before = lookDir(camera).clone();
+    r.settings.shake = 1;
+    r.addKick(0.06, 0.02);
+    r.update(feet, 1 / 60, true, undefined);
+    expect(lookDir(camera).distanceTo(before)).toBeGreaterThan(0.005);
+    expect(r.yaw).toBe(0.3);
+    expect(r.pitch).toBe(0.2);
+    run(r, 2, () => undefined, true);
+    expect(lookDir(camera).distanceTo(before)).toBeLessThan(1e-3);
+  });
+
+  it("the kick is bounded whatever is asked of it", () => {
+    const { r, camera } = rig();
+    run(r, 1, () => undefined, true);
+    const before = lookDir(camera).clone();
+    r.settings.shake = 1;
+    for (let i = 0; i < 50; i++) r.addKick(1, 1);
+    r.update(feet, 1 / 60, true, undefined);
+    expect(lookDir(camera).angleTo(before)).toBeLessThan(0.3);
+  });
+});
+

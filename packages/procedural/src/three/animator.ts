@@ -127,6 +127,8 @@ export class CharacterAnimator {
   private readonly armR: ArmAngles = { a: 0.9, b: 0.1, e: 0.9 };
   private readonly armL: ArmAngles = { a: 0.9, b: -0.1, e: 0.9 };
   private crewBlend = 0;
+  private readonly holdBody = { hw: 0, sy: 0, upper: 0, lower: 0, depth: 0 };
+  private readonly holdInput: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
   private readonly emptyWeapon: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
 
   constructor(private readonly rig: CharacterRig) {
@@ -543,8 +545,20 @@ export class CharacterAnimator {
       hold.left.w = 0;
       return;
     }
-    const body = { hw: P.shoulderHalfWidth, sy: this.shoulderBaseY, upper: P.armUpper, lower: P.armLower, depth: P.torsoDepth };
-    computeHold(w.hidden || busy >= 0.5 ? { ...w, id: -1, swing: -1 } : w, B, body, this.time, clamp(speed / 4.4, 0, 1.4), hold);
+    const body = this.holdBody;
+    body.hw = P.shoulderHalfWidth;
+    body.sy = this.shoulderBaseY;
+    body.upper = P.armUpper;
+    body.lower = P.armLower;
+    body.depth = P.torsoDepth;
+    let input = w;
+    if (w.hidden || busy >= 0.5) {
+      // (a scratch copy: the hot loop allocates nothing)
+      input = Object.assign(this.holdInput, w);
+      input.id = -1;
+      input.swing = -1;
+    }
+    computeHold(input, B, body, this.time, clamp(speed / 4.4, 0, 1.4), hold);
     // the blow twists the body and the shot rocks it back
     j.torso.rotation.y += hold.twist * B.hold;
     j.torso.rotation.x += hold.lean * B.hold;

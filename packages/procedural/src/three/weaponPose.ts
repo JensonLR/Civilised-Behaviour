@@ -345,8 +345,8 @@ export function computeHold(input: WeaponPoseInput, blend: HoldBlend, body: Hold
     alt.z = -0.05 - tmp.z;
     // first person: the aimed weapon slides toward the middle of the view and down so the barrel sits under the eye line
     if (input.fp > 0) {
-      alt.x -= 0.1 * input.fp;
-      alt.y -= 0.03 * input.fp;
+      alt.x -= 0.16 * input.fp;
+      alt.y += 0.22 * input.fp;
     }
     mix6(base, alt, aim);
     // recoil (applied after the reach fit below): the weapon slams back into the shoulder and the muzzle lifts
@@ -359,8 +359,8 @@ export function computeHold(input: WeaponPoseInput, blend: HoldBlend, body: Hold
     const ce = Math.cos(input.elev);
     set6(alt, shRx * 0.55, sy - 0.04 + Math.sin(input.elev) * reach, -ce * reach, input.elev, 0.12, 0);
     if (input.fp > 0) {
-      alt.x -= 0.14 * input.fp;
-      alt.y -= 0.05 * input.fp;
+      alt.x -= 0.2 * input.fp;
+      alt.y += 0.3 * input.fp;
     }
     mix6(base, alt, aim);
     out.lean = kick * 0.04;
@@ -470,6 +470,7 @@ function foreGrip(out: HoldOut, body: HoldBody, a: Anchors, o: { x: number; y: n
     placeLocal(out.px, out.py, out.pz, out.rx, out.ry, out.rz, a.left[0] * s, a.left[1] * s, a.left[2] * s, o);
     if (Math.hypot(o.x + body.hw, o.y - body.sy, o.z) <= reach) return;
   }
+  limitLeft(o, body, reach); // nowhere along the fore-end is in reach: hold the nearest point the arm allows
 }
 
 function mix6ToOut(out: HoldOut, w: number): void {
@@ -547,6 +548,19 @@ function reloadHand(u: number, id: number, a: Anchors, body: HoldBody, out: Hold
   o.x = lerp(tmpA.x, tmpB.x, t);
   o.y = lerp(tmpA.y, tmpB.y, t);
   o.z = lerp(tmpA.z, tmpB.z, t);
+  limitLeft(o, body, A * 0.98); // whatever the waypoints ask, the hand stays within the arm's length (short arms just reach less far)
+}
+
+/** Pulls a left-hand target in toward the left shoulder until it is no further than `max`. */
+function limitLeft(o: { x: number; y: number; z: number }, body: HoldBody, max: number): void {
+  const dx = o.x + body.hw;
+  const dy = o.y - body.sy;
+  const d = Math.hypot(dx, dy, o.z);
+  if (d <= max) return;
+  const k = max / d;
+  o.x = -body.hw + dx * k;
+  o.y = body.sy + dy * k;
+  o.z *= k;
 }
 
 const tmpA = { x: 0, y: 0, z: 0 };

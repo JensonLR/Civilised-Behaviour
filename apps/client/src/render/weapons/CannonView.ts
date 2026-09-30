@@ -47,9 +47,9 @@ function carriage(b: PartBuilder): void {
   }
   b.box(0.5, 0.14, 0.12, W.carriage, [0, 0.66, -0.3]);
   b.box(0.5, 0.14, 0.12, W.carriage, [0, 0.66, 0.8]);
-  b.box(0.2, 0.16, 1.3, W.carriage, [0, 0.42, 1.45], [-0.3, 0, 0]);
-  b.box(0.22, 0.05, 0.22, W.ironBand, [0, 0.06, 2.0]);
-  b.cylinder(0.02, 0.02, 0.9, W.walnut, [0, 0.62, 2.0], [0.9, 0, 0]);
+  b.box(0.2, 0.16, 1.35, W.carriage, [0, 0.37, 1.4], [0.45, 0, 0]); // the trail: from the cross-beam down to the shoe on the ground
+  b.box(0.22, 0.06, 0.24, W.ironBand, [0, 0.05, 2.02]);
+  b.cylinder(0.02, 0.02, 0.9, W.walnut, [0.18, 0.72, 1.55], [0.45, 0, 0]);
   // a powder keg and a lantern-less linstock stand: the keg strapped to the trail
   b.cylinder(0.14, 0.14, 0.26, W.walnut, [0.32, 0.3, 1.05]);
   b.torus(0.142, 0.012, W.ironBand, [0.32, 0.22, 1.05], [Math.PI / 2, 0, 0]);
