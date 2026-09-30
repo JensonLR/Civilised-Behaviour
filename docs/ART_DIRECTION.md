@@ -34,6 +34,20 @@ shadows, one ink line round everything, and faces that are designed rather than 
   tapered arched brow. The mouth is a shallow swept lip line that opens into a D-shaped cavity with teeth and a tongue.
 - Sweeps (`sweep.ts`) and lofts (`loft.ts`) are the two forming tools: cross-sections along a curve or a stack. Anything organic uses one of them.
 
+## Cloth, hands and fine detail on a character (second pass)
+- **Garments are cloth, not solids.** A cape, poncho or coat skirt is a two-layer sheet (`patch.ts` `thick` / `lining` / `rim`): an outer dye, a second lining colour that shows at the open
+  edges and from below, and a rolled rim. Capes and ponchos are open at the front with pointed panels; the part over the arm rides the arm bone and the torso piece stays clear of the
+  arms' swing (`drape.test.ts` proves it over the animator's real poses). A new garment must state where it clears the body and be added to that kind of test.
+- **Hands read at conversation range, not at 30 m.** Four fingers and a thumb, a grip from open to fist (`rig.setHandGrip`); the silhouette of a fist must stay compact. Gloves follow
+  the fingers, mitts are one mass with a thumb, gauntlets flare and stay put. Expression drives the grip (anger, triumph and pain clench; fear opens).
+- **Fine detail earns its place in the creator and in close-ups; it must never fight the silhouette.** Medals hang from a pin bar on a folded two-colour ribbon (four badge styles),
+  belt buckles come in five shapes, cuffs carry buttons, links or a buckled strap, boots lace or strap, coats can have breast, flap or pencil pockets, and hair takes a bow, a comb,
+  pins, a flower or a feather. Rules: every colour from `PALETTE` (`trim` group, append-only), pieces overlap what they sit on (the audit rejects floaters), nothing above the
+  hat crown (accessories drop behind the ear under a hat), nothing depends on gore, and small things are LOD0-only.
+- **Scars and eyepatches are history, not costume.** Their style (straight, jagged, stitched, forked; plain, skull, bandage, jewelled) is server-owned like the scar itself.
+- **Look at these with the switches** `close=0&ty=&tx=&cd=` (a tight camera on one person), `vary=<field>&voff=N`, `heads=1`, `frame=torso|hands|feet`, `elev=` / `orbit=`
+  (see the header of `showcase/Lineup.ts`); the creator's own poses (Turntable / Walk / Idle / Pain / Triumph) show a look moving.
+
 ## Reviewing art (always look at renders)
 ```
 node scripts/shot.mjs "?showcase=lineup&n=5&seed=3&heads=1&turn=0.2" out.png 1800x600          # a row of portraits

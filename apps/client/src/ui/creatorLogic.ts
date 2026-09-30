@@ -255,12 +255,12 @@ export const SECTIONS: Record<Exclude<Tab, "types">, { title: string; keys: read
     { title: "Features", keys: ["noseScale", "earScale", "jaw", "noseStyle", "earShape", "brows", "eyeShape", "eyeColor"] },
     { title: "Hair and whiskers", keys: ["hair", "greying", "moustache", "beard", "sideburns", "stubble"] },
     { title: "Complexion and marks", keys: ["age", "complexion", "mark", "facePaint", "tattoo"] },
-    { title: "Worn on the face", keys: ["eyewear", "earring"] },
+    { title: "Worn on the face", keys: ["eyewear", "earring", "hairAcc"] },
   ],
   clothes: [
     { title: "Headwear", keys: ["hat", "hatTrim"] },
-    { title: "Coat and shirt", keys: ["jacket", "coatTrim", "shirt", "neckwear", "epaulettes", "decoration", "medals", "sash", "gloves", "ring"] },
-    { title: "Trousers and boots", keys: ["trousers", "trouserTrim", "boots", "belt"] },
+    { title: "Coat and shirt", keys: ["jacket", "coatTrim", "shirt", "neckwear", "epaulettes", "decoration", "medals", "medalStyle", "pocket", "cuffDetail", "sash", "gloves", "ring"] },
+    { title: "Trousers and boots", keys: ["trousers", "trouserTrim", "boots", "laces", "belt", "buckle"] },
     { title: "Gear", keys: ["pack", "hipGear"] },
   ],
   colour: [

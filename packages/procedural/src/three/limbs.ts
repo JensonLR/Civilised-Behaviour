@@ -142,7 +142,7 @@ export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry 
 /** Extra cuff detail chosen in the creator: a row of buttons up the outer seam, gold links, or a buckled strap. In the forearm frame, outward = away from the body. */
 function cuffDetail(b: PartBuilder, c: BodyCtx, L: number, r: number, side: "L" | "R"): void {
   const style = c.spec.cuffDetail;
-  if (style === 0) return;
+  if (style === 0 || PartBuilder.lod > 0) return;
   const out = side === "L" ? -1 : 1;
   const bottom = -L - 0.005;
   const gold = c.accent;
@@ -571,13 +571,61 @@ export function buildLowerLeg(c: BodyCtx, wooden: boolean, side: "L" | "R" = "L"
     const cuffC = soil(tone(tc, 1.12), 0.3);
     b.loft([{ y: shaftTop + 0.075, rx: legR * 0.92, rz: legR * 0.9, color: cuffC }, { y: shaftTop + 0.06, rx: legR * 0.97, rz: legR * 0.95, color: cuffC }, { y: shaftTop - 0.015, rx: legR * 0.97, rz: legR * 0.95, color: tone(cuffC, 0.82), crease: true }], tc, undefined, undefined, undefined, { capBottom: false, capTop: false });
   }
-  if (kind.laces) {
+  if (kind.laces && spec.laces === 0) {
     // laces: little crossings up the front of the ankle (inside the shaft, never below the sole)
     const lace = singe(PALETTE.trim.ivory, burnt);
     const span = len * bootTop;
     for (let i = 0; i < 2; i++) {
       const y = shaftTop - span * (0.22 + 0.36 * i);
       for (const sx of [-1, 1]) b.box(legR * 0.42, 0.007, 0.007, lace, [sx * legR * 0.1, y, -legR * 0.87], [0, 0, sx * 0.55]);
+    }
+  }
+  if (spec.laces > 0 && PartBuilder.lod === 0 && !kind.rubber && !kind.soft && !kind.clog) {
+    // the creator's choice of fastening: laced up the front (crossed or bowed) or strapped across; follows the shaft's own sections
+    const rzAt = (y: number): number => {
+      const pts: [number, number][] = [[shaftTop + 0.012, 0.92], [shaftTop - 0.03, 0.86], [-len * (1 - bootTop * 0.4), 0.83], [-len + 0.02, 0.8]];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [y0, k0] = pts[i]!;
+        const [y1, k1] = pts[i + 1]!;
+        if (y <= y0 && y >= y1) return legR * (k0 + ((k1 - k0) * (y0 - y)) / (y0 - y1));
+      }
+      return legR * (y > pts[0]![0] ? pts[0]![1] : pts[3]![1]);
+    };
+    const span = len * bootTop;
+    const yTop = shaftTop - Math.min(kind.tall ? 0.04 : 0.012, span * 0.3);
+    const yBot = Math.min(yTop - 0.022, Math.max(shaftTop - span * 0.88, -len + 0.03));
+    const lace = singe(PALETTE.trim.ivory, burnt);
+    if (spec.laces === 3) {
+      const n = kind.tall ? 3 : 2;
+      const strap = tone(boot, 1.18);
+      for (let i = 0; i < n; i++) {
+        const y = yTop - ((yTop - yBot) * i) / (n - 1) - 0.004;
+        const kx = rzAt(y) / legR;
+        const ring = (yy: number, k: number): Ring => ({ y: yy, rx: legR * kx * k * 1.02, rz: rzAt(yy) * k * 1.02, color: strap });
+        b.loft([ring(y + 0.009, 1.0), ring(y - 0.009, 1.0)], strap, undefined, undefined, undefined, { capBottom: false, capTop: false, segments: 8 });
+        b.box(0.01, 0.024, 0.02, c.accent, [legR * kx * 1.03 * (side === "L" ? -1 : 1), y, -legR * 0.05]);
+      }
+    } else {
+      const n = Math.max(2, Math.min(6, Math.floor((yTop - yBot) / 0.022) + 1));
+      const step = n > 1 ? (yTop - yBot) / (n - 1) : 0;
+      b.box(legR * 0.34, yTop - yBot + 0.02, 0.006, tone(boot, 0.7), [0, (yTop + yBot) / 2, -rzAt((yTop + yBot) / 2) + 0.001]); // the tongue
+      for (let i = 0; i < n; i++) {
+        const y = yTop - step * i;
+        const z = -rzAt(y) - 0.003;
+        for (const sx of [-1, 1]) b.sphere(0.006, c.accent, [sx * legR * 0.2, y, z + 0.002], [1, 1, 0.6]); // eyelets
+        if (spec.laces === 1) {
+          if (i < n - 1) for (const sx of [-1, 1]) b.box(legR * 0.46, 0.006, 0.006, lace, [0, y - step / 2, z - 0.001], [0, 0, sx * Math.atan2(step, legR * 0.4)]);
+        } else b.box(legR * 0.42, 0.006, 0.006, lace, [0, y, z - 0.001]);
+      }
+      if (spec.laces === 2) {
+        // a bow at the top: two loops and two tails
+        const zt = -rzAt(yTop) - 0.008;
+        for (const sx of [-1, 1]) {
+          b.torus(0.013, 0.003, lace, [sx * 0.015, yTop + 0.006, zt], [0, 0, 0], [1, 1.2, 1]);
+          b.box(0.005, 0.03, 0.005, lace, [sx * 0.012, yTop - 0.016, zt], [0, 0, sx * 0.2]);
+        }
+        b.sphere(0.005, tone(lace, 0.9), [0, yTop + 0.002, zt]);
+      }
     }
   }
   if (kind.puttees) {

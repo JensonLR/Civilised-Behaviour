@@ -3,7 +3,7 @@ import * as K from "../catalog.ts";
 import { curve } from "./sweep.ts";
 import { torsoRibbon, type TorsoFrame } from "./gear.ts";
 import { frontZ, tone, type BodyCtx } from "./bodyKit.ts";
-import { singe, type V3 } from "./parts.ts";
+import { PartBuilder, singe, type V3 } from "./parts.ts";
 import { ringSurface } from "./bodyKit.ts";
 
 /** Belts, sashes and decorations: everything that is laid across the torso's own surface. */
@@ -189,26 +189,26 @@ export function addSash(f: TorsoFrame, c: BodyCtx): void {
 function medal(f: TorsoFrame, style: number, metal: number, ribbon: number, stripe: number, mx: number, my: number, sz: number): void {
   const { b } = f;
   const zz = sz - 0.012;
-  const by = my - 0.02; // the badge hangs lower than the old flat disc, under its ribbon
-  b.box(0.05, 0.008, 0.008, tone(metal, 0.85), [mx, my + 0.05, zz + 0.002]); // the pin bar
+  const by = my - 0.012; // the badge hangs under its ribbon (a row is 0.07 tall: pin, ribbon and badge all fit inside it)
+  b.box(0.046, 0.007, 0.008, tone(metal, 0.85), [mx, my + 0.03, zz + 0.002]); // the pin bar
   for (const sx of [-1, 1]) {
-    b.box(0.017, 0.058, 0.006, ribbon, [mx + sx * 0.009, my + 0.026, zz + 0.001], [0, 0, sx * 0.3]);
-    b.box(0.005, 0.058, 0.007, stripe, [mx + sx * 0.009, my + 0.026, zz - 0.001], [0, 0, sx * 0.3]);
+    b.box(0.016, 0.043, 0.006, ribbon, [mx + sx * 0.0085, my + 0.011, zz + 0.001], [0, 0, -sx * 0.3]);
+    b.box(0.005, 0.043, 0.007, stripe, [mx + sx * 0.0085, my + 0.011, zz - 0.001], [0, 0, -sx * 0.3]);
   }
   if (style === 1) {
-    b.cylinder(0.022, 0.022, 0.008, metal, [mx, by, zz], [Math.PI / 2, 0, 0]);
-    b.torus(0.015, 0.004, tone(metal, 0.7), [mx, by, zz - 0.006], [0, 0, 0]);
+    b.cylinder(0.02, 0.02, 0.008, metal, [mx, by, zz], [Math.PI / 2, 0, 0]);
+    b.torus(0.013, 0.004, tone(metal, 0.7), [mx, by, zz - 0.006], [0, 0, 0]);
   } else if (style === 2) {
-    b.box(0.044, 0.014, 0.008, metal, [mx, by, zz]);
-    b.box(0.014, 0.044, 0.008, metal, [mx, by, zz]);
-    for (const [dx, dy] of [[0.022, 0], [-0.022, 0], [0, 0.022], [0, -0.022]] as const) b.box(dy === 0 ? 0.01 : 0.022, dx === 0 ? 0.01 : 0.022, 0.008, tone(metal, 1.1), [mx + dx, by + dy, zz]);
+    b.box(0.04, 0.013, 0.008, metal, [mx, by, zz]);
+    b.box(0.013, 0.04, 0.008, metal, [mx, by, zz]);
+    for (const [dx, dy] of [[0.02, 0], [-0.02, 0], [0, 0.02], [0, -0.02]] as const) b.box(dy === 0 ? 0.009 : 0.02, dx === 0 ? 0.009 : 0.02, 0.008, tone(metal, 1.12), [mx + dx, by + dy, zz]);
     b.sphere(0.008, stripe, [mx, by, zz - 0.006], [1, 1, 0.6]);
   } else {
     for (let k = 0; k < 5; k++) {
       const a = (k / 5) * Math.PI * 2;
-      b.cone(0.011, 0.032, metal, [mx + Math.sin(a) * 0.014, by + Math.cos(a) * 0.014, zz], [0, 0, -a]);
+      b.cone(0.0105, 0.03, metal, [mx + Math.sin(a) * 0.013, by + Math.cos(a) * 0.013, zz], [0, 0, -a]);
     }
-    b.cylinder(0.013, 0.013, 0.009, tone(metal, 0.8), [mx, by, zz - 0.002], [Math.PI / 2, 0, 0]);
+    b.cylinder(0.012, 0.012, 0.009, tone(metal, 0.8), [mx, by, zz - 0.002], [Math.PI / 2, 0, 0]);
   }
 }
 
@@ -216,7 +216,7 @@ function medal(f: TorsoFrame, style: number, metal: number, ribbon: number, stri
 export function addPockets(f: TorsoFrame, c: BodyCtx): void {
   const { b, h, W, spec, burnt, accent } = f;
   const p = spec.pocket;
-  if (p === 0 || spec.jacket === 6 || spec.jacket === 7) return;
+  if (p === 0 || spec.jacket === 6 || spec.jacket === 7 || PartBuilder.lod > 0) return; // (a few centimetres of cloth: invisible beyond full detail)
   const z = (y: number, x: number): number => frontZ(f.at(y), x);
   const cloth = singe(spec.jacket === 0 ? c.shirtC : c.jacketC, burnt);
   const edge = tone(cloth, 0.62);
@@ -225,32 +225,33 @@ export function addPockets(f: TorsoFrame, c: BodyCtx): void {
   const sz = z(y, x) - 0.007;
   if (p === 1 || p === 2 || p === 4) {
     // a welted breast pocket: a patch a shade lighter than the coat, with a dark mouth
-    b.box(0.072, 0.056, 0.007, tone(cloth, 1.08), [x, y - 0.006, sz]);
-    b.box(0.076, 0.009, 0.01, edge, [x, y + 0.024, sz - 0.002]);
+    b.box(0.09, 0.07, 0.008, tone(cloth, 1.1), [x, y - 0.008, sz]);
+    b.box(0.096, 0.012, 0.012, edge, [x, y + 0.03, sz - 0.002]);
   }
   if (p === 2) {
     // a folded handkerchief: two points showing above the mouth
-    for (const sx of [-1, 1]) b.box(0.02, 0.04, 0.007, PALETTE.trim.ivory, [x + sx * 0.012, y + 0.038, sz - 0.001], [0, 0, sx * 0.26]);
-    b.box(0.012, 0.03, 0.008, singe(PALETTE.trim.ribbonRed, burnt), [x, y + 0.03, sz - 0.004]);
+    for (const sx of [-1, 1]) b.box(0.03, 0.058, 0.008, PALETTE.trim.ivory, [x + sx * 0.016, y + 0.05, sz - 0.001], [0, 0, -sx * 0.24]);
+    b.box(0.016, 0.04, 0.009, singe(PALETTE.trim.ribbonRed, burnt), [x, y + 0.042, sz - 0.005]);
   }
   if (p === 4) {
     const cols = [PALETTE.trim.pencil, PALETTE.trim.ribbonRed, PALETTE.trim.frame];
     for (let i = 0; i < 3; i++) {
       const tilt = (i - 1) * 0.16;
-      const px = x + (i - 1) * 0.017;
-      b.cylinder(0.006, 0.006, 0.062, singe(cols[i]!, burnt), [px, y + 0.045, sz - 0.003], [0, 0, -tilt]);
-      b.cone(0.006, 0.012, i === 0 ? PALETTE.trim.ivory : accent, [px - Math.sin(tilt) * 0.038, y + 0.082, sz - 0.003], [0, 0, -tilt]);
+      const px = x + (i - 1) * 0.021;
+      b.cylinder(0.0085, 0.0085, 0.08, singe(cols[i]!, burnt), [px, y + 0.05, sz - 0.004], [0, 0, -tilt]);
+      b.cone(0.0085, 0.016, i === 0 ? PALETTE.trim.ivory : accent, [px - Math.sin(tilt) * 0.048, y + 0.096, sz - 0.004], [0, 0, -tilt]);
     }
   }
   if (p === 3) {
     // a pair of flap pockets low on the front, each with a button
     for (const sx of [-1, 1]) {
       const fx = sx * W * 0.4;
-      const fy = h * 0.33;
-      const fz = z(fy, fx) - 0.007;
-      b.box(0.1, 0.008, 0.008, edge, [fx, fy + 0.02, fz]);
-      b.box(0.1, 0.034, 0.009, tone(cloth, 1.06), [fx, fy, fz - 0.001], [0, 0, sx * 0.12]);
-      b.sphere(0.008, accent, [fx, fy - 0.004, fz - 0.008], [1, 1, 0.6]);
+      const fy = h * 0.46;
+      const fz = z(fy, fx) - 0.018;
+      b.box(0.11, 0.05, 0.012, tone(cloth, 0.9), [fx, fy - 0.004, fz + 0.004]); // the pocket behind the flap
+      b.box(0.12, 0.012, 0.014, edge, [fx, fy + 0.026, fz - 0.002]);
+      b.box(0.11, 0.04, 0.014, tone(cloth, 1.08), [fx, fy + 0.004, fz - 0.004], [0, 0, sx * 0.1]);
+      b.sphere(0.011, accent, [fx, fy - 0.012, fz - 0.014], [1, 1, 0.6]);
     }
   }
 }

@@ -50,6 +50,8 @@ export class CameraRig {
   private readonly desired = new Vector3();
   private readonly thirdPos = new Vector3();
   private readonly thirdLook = new Vector3();
+  /** 0..1: how far the follow camera has swung from looking at the wearer to looking down the aim (so the crosshair, not the head, is the middle of the picture). */
+  private aimK = 0;
   private readonly fpPos = new Vector3();
   private readonly fpLook = new Vector3();
   private readonly lookBlend = new Vector3();
@@ -189,7 +191,7 @@ export class CameraRig {
     const sinY = Math.sin(this.yaw);
     const cosY = Math.cos(this.yaw);
     // Camera sits behind the look direction (look = -Z at yaw 0), offset to the right shoulder.
-    const shoulder = aiming ? 0.9 : 0.55;
+    const shoulder = aiming ? 1.15 : 0.55; // aiming: wide enough that the weapon clears the wearer's head and reads beside the crosshair
     this.desired.set(
       this.focus.x + sinY * cp * dist + cosY * shoulder,
       this.focus.y + 1.55 + Math.sin(pitch) * dist,
@@ -199,7 +201,15 @@ export class CameraRig {
     if (this.desired.y < floor) this.desired.y = floor;
 
     this.thirdPos.lerp(this.desired, 1 - Math.exp(-dt * 20));
-    this.thirdLook.set(this.focus.x, this.focus.y + 1.35, this.focus.z);
+    this.aimK += ((aiming ? 1 : 0) - this.aimK) * (1 - Math.exp(-dt * 12));
+    if (this.aimK < 1e-3) this.aimK = 0;
+    // aiming: look at a far point straight ahead of the wearer, so the picture's middle is what the shot will meet and the body sits to the side
+    const k = this.aimK * 30;
+    this.thirdLook.set(
+      this.focus.x - sinY * cp * k,
+      this.focus.y + 1.35 + 0.2 * this.aimK - Math.sin(pitch) * k,
+      this.focus.z - cosY * cp * k,
+    );
   }
 
   private updateFirst(feet: Vector3, dt: number, aiming: boolean, eye: EyeSample): void {

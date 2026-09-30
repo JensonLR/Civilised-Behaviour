@@ -71,3 +71,73 @@ New lineup switches: `frame=face`, `voff=N`, `hide=bone,...`, `lod=mix`.
 - Decals are 1 cm off the skin; from grazing angles and under the toon ramp a few pale ones (chalk, zinc) can look flat. Freckles on dark skin are subtle by design.
 - The audit's connectivity rule (1.2 cm) is a bounding-box test: it catches floaters, not a part that is merely visibly too far out on a curved surface.
 - Ragdoll started mid idle-act can overshoot the elbow limit by ~0.3 rad for a frame or two (the ragdoll test now runs the animator without ambient acts).
+
+---
+
+# Second pass: drapes, hands, rig cost, creator, fine cosmetics (2026-09-30)
+
+## What changed
+1. **Cape and poncho are draped garments (`three/drape.ts`, was in `garments.ts`).** Open at the front (cape: slit neck and a clasp; poncho: a slit neck and tassels), six pointed panels
+   at the hem, a two-layer cloth (`thick`/`lining`/`rim` in `patch.ts`; the lining is a second colour, visible from below and at the open edges). The torso piece is fitted to the body
+   with a clearance rule (`clearance()`: never wider than `shoulder - 1.5 x arm radius`, never inside the body + 2 cm) so the arms swing through free air; the part that
+   covers the upper arm is carried on the upper-arm bone (`dressArmDrape`, `drapeCover`) so it follows the arm instead of being cut by it. `drape.test.ts` walks the animator's real
+   pose envelope (every locomotion state x the extreme arm angles, portly and slim bodies) and asserts no arm/forearm vertex ends inside the cloth.
+2. **Sideburns 4-6 are tapered whiskers (`faceParts.ts` `Whisker`).** Wing (bushy), Piccadilly weepers (long, curling forward) and sculpted points, each a swept tube with its own taper.
+3. **Believable hands (`three/hand.ts`).** Palm, four fingers (two knuckle sections each) and a thumb, swept along skin-coloured tubes. `rig.setHandGrip(side, 0..1)` (0 open, 1 a fist)
+   drives **two relative morph targets** on the forearm mesh (no extra draw call, no extra triangles, Lagrange weights `4a(1-a)` and `a(2a-1)` so grip 0, 0.5 and 1 are exact). Gloves
+   follow the fingers (white cotton, leather, fingerless, fur mitts are one mass with a thumb, gauntlets flare at the wrist and stay put). `HandPoser` (`animatorExtras.ts`, used by
+   `CharacterActor` and `CreatorPreview`) picks the grip from expression / carrying / sprinting / held weapon and eases it (closing faster than opening). Crowd levels: one fist, no morphs.
+4. **Rig cost.** Face parts (eyes, lids, brows, mouth, teeth) are cached as shared geometry and materials (`faceRig.ts` `cachedGeo`/`cachedMat`) and built **lazily** (nothing at LOD2, on
+   first need at LOD0/1; `dispose()` never frees the shared ones; `clearCharacterCaches` clears them). Clone cost of a cached look, avg (Node, `scripts/char-bench.ts`, 60 seeds, ms):
+   LOD0 1.77 -> 0.4-0.6, LOD1 1.65 -> 0.4-0.5, LOD2 1.59 -> 0.15-0.2 (the range is machine noise: other agents share this box). LOD1 triangles avg 5.7k -> 4.55k.
+5. **Coat skirts** have a rolled hem, a thickness, and an inward-facing lining loft visible from below (`garments.ts` `dressSkirts`, `LoftOptions.inward`).
+6. **Decals** (chalk, zinc, soot) fade at the edge (`faceDecor.ts` per-vertex `soft` and an edge ring), so they no longer read as flat stickers at grazing angles.
+7. **Ragdoll hinge limits** were mirrored (knees folded forward, elbows backward). `HINGE_LIMITS` are now in the rig's own rotation convention (knee bends -x, elbow +x) and `seedPose()`
+   clamps the seeded animator pose into them, so a body knocked down mid idle-act no longer starts outside its limits. The `anim.autoBlink = false` workaround is gone from `Ragdoll.test.ts`;
+   two new tests (limit signs; every seeded pose is legal) and a mutation check guard it.
+8. **Tricorn and busby (`hatsGeo.ts`)** are real shapes now (three-cornered folded brim with a cockade loop; tall fur cap with a plume and a cord), and `hatHair.test.ts` audits every
+   hat x every hairstyle x beard/sideburns on small, average and big heads: a ray up from every hair vertex above the hat band must hit hat. This found and fixed curls pushing through
+   crowns (`hair.ts`: curls are capped at `hatSeat - 0.23`).
+9. **Creator (`apps/client/src/ui/CharacterCreator.ts` + pure `creatorLogic.ts`).** Sections inside each tab, "Shuffle" per section and "Randomise all" (campaign history and the
+   `HISTORY_KEYS` are never touched), undo/redo of 20 steps (drag of a slider is one step), copy/paste of the look code with validation errors in words (`explainCodeError`), a pose
+   picker (Turntable, Walk, Idle, Pain, Triumph; a `cb:creator-pose` window event, so creator and preview know nothing of each other), eight curated presets (`PRESETS`, all round-trip
+   through the wire format, none carries history), keyboard/PadNav/accessible (labelled controls, `aria-live` status, visible focus). 30+ tests in `creatorLogic.test.ts`.
+   `?showcase=lineup&presets=1` shows the presets.
+10. **Fine cosmetics (append-only batch 3, indices 64..71, salt `0x3c1e9b47`).** Fields: `medalStyle` (round / draped ribbons / crosses / stars), `buckle` (square / round disc / oval plate /
+    double prong / crest plate), `cuffDetail` (plain / button row / gold links / buckled strap), `laces` (standard / crossed / bowed / buckled straps), `pocket` (none / breast / pocket
+    square / flap pockets / pens and pencils), `hairAcc` (none / ribbon bow / tortoiseshell comb / hairpins / silk flower / feather pin), `patchStyle` (plain / skull badge / bandage /
+    jewelled) and `scarStyle` (straight / jagged / stitched / forked). The last two are the style of a campaign injury, so they are in `HISTORY_KEYS` (server-owned, never set by a client,
+    kept by `rerollAppearance`, 0 for every generated recruit). Eyewear 11-13 (owl specs, corded pince-nez, green visor) are appended to the existing list (the monocle already had its chain).
+    New palette entries (`trim`, append-only): `visorGlass, tortoise, bronze, blossom, pencil`. Code: `headExtras.ts` (accessories, patch badges, scar paths), `torsoTrim.ts` (`medal`,
+    `buckleAt`, `addPockets`), `limbs.ts` (`cuffDetail`, boot fastenings). Hair accessories sit on the right side of the head over the hair; **under a hat they drop low behind the ear**
+    (the feather hangs down) so nothing pokes through a crown (`hats.test.ts` asserts it for all 20 hats x 5 accessories). Pockets, cuff details and boot fastenings are LOD0-only.
+    Nothing here depends on gore (scars use `face.scar`, not the wound stains), so Gore Off changes nothing. All eight fields are in the audit (`NEEDS` gives each a base where it shows).
+
+## Numbers (Node, `scripts/char-bench.ts`, 60 seeds)
+| level | tris avg / max | meshes avg | cold build | clone (cached) |
+|---|---|---|---|---|
+| LOD0 | 11804 / 14274 | 25.8 | 39-53 ms | 0.43-0.68 ms |
+| LOD0 + hulls | 15522 / 19068 | 36.8 | 48-76 ms | 0.44-0.65 ms |
+| LOD1 | 4548 / 5719 | 19.8 | 15-22 ms | 0.38-0.47 ms |
+| LOD2 | 1368 / 1857 | 10.8 | 6-7 ms | 0.15-0.18 ms |
+Budget: LOD0 avg <= 12k and max <= 15k (both met, 196 tris and 726 tris of headroom left); LOD1 < 4.6k (tested); the 4.5k aim is missed by 1%.
+
+## Review commands (new lineup switches: `elev`, `orbit`, `arm=`, `grip=`, `ty`, `tx`, `presets=1`)
+```
+node scripts/shot.mjs "?showcase=lineup&n=4&same=0&frame=upper&sp=1&arm=..."                      # arm poses for the drape clip check
+node scripts/shot.mjs "?showcase=lineup&n=1&close=0&ty=0.68&tx=0.1&cd=0.7&cx=0&cyo=0&set=jacket:2,medals:5,medalStyle:1" out.png 640x420   # medals, close (tx>0 is the character's left)
+node scripts/shot.mjs "?showcase=lineup&n=5&same=0&heads=1&vary=hairAcc&voff=1&turn=0.9&set=hair:1,hat:0" out.png 1700x520                 # accessories
+node scripts/shot.mjs "?showcase=lineup&n=4&same=0&heads=1&vary=scarStyle&set=scars:5,eyepatch:0" out.png 1400x520                         # scar styles
+```
+(Only the FIRST `set=` is read; put every override in one.)
+
+## Weak spots after this pass (honest)
+- Fixed since the list above: capes/poncho closed bells and arm clipping, fist-only hands, per-instance face rebuild, decal flatness, ragdoll elbow overshoot, coat-skirt thickness.
+- Boot laces and cuff details are a few centimetres of geometry: at gameplay distance they read as a speck (they matter in the creator and in close-ups). Laces on ankle boots are
+  barely visible because the shaft is only ~4 cm; slippers, clogs and Wellingtons ignore the fastening choice (nothing to lace).
+- Pockets are not drawn under a cape or poncho (they cover the torso); flap pockets sit near the coat's own waist flaps on frock coats and can look doubled.
+- The ribbon bow, pins and feather are readable in profile and three-quarter view; from straight ahead they are hidden by the head. The comb is only visible from behind.
+- The medal `Crosses` bronze on a gold-toned coat has little contrast (the palette, not the shape).
+- Hand grip morphs are LOD0 only; at LOD1 a gripping crowd member shows a fist either way. The hand test bounds the fist size but does not check finger-finger penetration.
+- Only LOD0 is audited item by item; LOD1/2 are covered by triangle budgets, the finite-geometry sweep of 150 people and `lod.test.ts`.
+- `weaponPose.test.ts` (combat stream) currently fails on one reach-limit case; unrelated to this work.

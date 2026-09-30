@@ -6,6 +6,7 @@ import { buildBeard, buildEarrings, buildEars, buildMoustache, buildNose, buildS
 import type { V3 } from "./parts.ts";
 import { curve } from "./sweep.ts";
 import { buildHair } from "./hair.ts";
+import { buildHairAccessory, buildPatchDecor, scarPaths } from "./headExtras.ts";
 import { HAT_SEAT, buildHat } from "./hatsGeo.ts";
 import { buildFaceDecor } from "./faceDecor.ts";
 import { greyed } from "./look.ts";
@@ -104,6 +105,7 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   b.morphable = true; // hair, sideburns, beard and moustache ride the skin they grow from
   if (lod < 2) buildSideburns(fc);
   buildHair(fc, hatOn, coarse, seatY);
+  if (lod < 2) buildHairAccessory(fc, hatOn);
   buildBeard(fc);
   if (lod < 2) buildMoustache(fc);
   if (!hull && lod === 0) buildFaceDecor(fc);
@@ -227,24 +229,67 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
       strap(LEATHER, 0.8, 3.14, 0.6, 0.6, -1, 0.02, 0.05, [[-ex * 0.85 - r, gy, mid[2] + R * 0.02]]);
       break;
     }
+    case 11: { // owl specs: big round tortoiseshell rims, a heavy bridge
+      const r = eye.radius * 1.75;
+      const shell = PALETTE.trim.tortoise;
+      for (const sx of [-1, 1]) {
+        lens(sx, r, shell, 0.045);
+        strap(shell, 0.62, 1.42, 0.14, 0.14, sx < 0 ? -1 : 1, 0.018, 0.026, [[sx * (ex + r), ey, glassZ]]);
+      }
+      b.sweep(curve([[-(ex - r), ey + R * 0.02, glassZ], [-R * 0.05, ey + R * 0.05, bridgeZ], [R * 0.05, ey + R * 0.05, bridgeZ], [ex - r, ey + R * 0.02, glassZ]], 8), () => ({ rx: R * 0.03, rz: R * 0.026, pow: 2 }), shell, { side: [0, 1, 0], segments: 5 });
+      break;
+    }
+    case 12: { // corded pince-nez: gilt rims clipped on the nose, a black cord looping down to the collar
+      for (const sx of [-1, 1]) b.torus(R * 0.135, R * 0.016, accent, [sx * R * 0.2, ey - R * 0.03, shape.front(sx * R * 0.2, eye.y - R * 0.03)[2] - R * 0.05], [0, 0, 0]);
+      b.sweep(curve([[-R * 0.08, ey - R * 0.02, bridgeZ], [0, ey + R * 0.005, bridgeZ - R * 0.01], [R * 0.08, ey - R * 0.02, bridgeZ]], 6), () => ({ rx: R * 0.012, rz: R * 0.012, pow: 2 }), accent, { side: [0, 1, 0], segments: 5 });
+      const cord = [[R * 0.32, ey - R * 0.03, glassZ + R * 0.01], onSkin(fc, R * 0.48, -R * 0.2, R * 0.08), onSkin(fc, R * 0.62, -R * 0.65, R * 0.14), onSkin(fc, R * 0.55, -R * 1.02, R * 0.2)] as V3[];
+      b.sweep(curve(cord, 10), () => ({ rx: R * 0.01, rz: R * 0.01, pow: 2 }), PALETTE.trim.frame, { side: [0, 0, 1], segments: 4, round: "end" });
+      b.sphere(R * 0.04, accent, cord[3]!);
+      break;
+    }
+    case 13: { // green visor: an accountant's eyeshade on a band round the head
+      const pts: V3[] = [];
+      for (let k = 0; k <= 10; k++) {
+        const az = -1.2 + (2.4 * k) / 10;
+        const bill = Math.max(0, Math.cos(az * 0.85));
+        pts.push(skinDir(fc, Math.sin(az) * 0.93, 0.34, -Math.cos(az) * 0.93, R * (0.03 + 0.2 * bill * bill)));
+      }
+      b.sweep(curve(pts, 16), () => ({ rx: R * 0.13, rz: R * 0.016, pow: 2.6 }), PALETTE.trim.visorGlass, { side: [0, 1, 0], segments: 5, round: "both" });
+      const band: V3[] = [];
+      for (let k = 0; k <= 16; k++) {
+        const az = -Math.PI + (2 * Math.PI * k) / 16;
+        band.push(skinDir(fc, Math.sin(az) * 0.95, 0.38, -Math.cos(az) * 0.95, R * 0.03));
+      }
+      b.sweep(curve(band, 22), () => ({ rx: R * 0.028, rz: R * 0.02, pow: 2.2 }), LEATHER, { side: [0, 1, 0], segments: 5 });
+      break;
+    }
     default: break;
   }
   if (spec.eyepatch > 0) {
     const sx = spec.eyepatch === 1 ? -1 : 1;
-    b.sphere(eye.radius * 1.4, PALETTE.ink, [sx * ex, ey, eye.z - eye.radius * 0.7], [1, 1, 0.3]);
+    const wrap = spec.patchStyle === 2;
+    const patchC = wrap ? PALETTE.material.linen : PALETTE.ink;
+    b.sphere(eye.radius * 1.4, patchC, [sx * ex, ey, eye.z - eye.radius * 0.7], [1, 1, 0.3]);
     // The strap climbs from the patch over the ear, round the back of the head and to the other temple.
-    strap(PALETTE.ink, 0.6, 2 * Math.PI - 1.25, 0.12, 0.34, sx, 0.016, 0.03, [[sx * ex, ey, eye.z - eye.radius * 0.75]]);
+    strap(wrap ? tone(patchC, 0.88) : patchC, 0.6, 2 * Math.PI - 1.25, 0.12, 0.34, sx, 0.016, 0.03, [[sx * ex, ey, eye.z - eye.radius * 0.75]]);
+    buildPatchDecor(fc, sx, ex, ey, eye.z - eye.radius * 1.1, eye.radius);
   }
 
   // scars: thin raised welts swept along the skin
   const scarC = PALETTE.face.scar;
-  const welt = (pts: readonly (readonly [number, number])[]): void => {
+  const weltLine = (pts: readonly (readonly [number, number])[]): void => {
     b.sweep(
-      curve(pts.map(([x, y]) => onSkin(fc, x * R, y * R, R * 0.012)), 6),
+      curve(pts.map(([x, y]) => onSkin(fc, x * R, y * R, R * 0.012)), Math.max(6, pts.length + 2)),
       () => ({ rx: R * 0.02, rz: R * 0.014, pow: 2 }),
       scarC,
       { side: [0, 0, 1], segments: 5 },
     );
+  };
+  /** A scar in the spec's style: straight, jagged, stitched across, or forked. */
+  const welt = (pts: readonly (readonly [number, number])[]): void => {
+    const { welts, stitches } = scarPaths(spec.scarStyle, pts);
+    for (const w of welts) weltLine(w);
+    for (const s of stitches) b.box(R * 0.075, R * 0.011, R * 0.011, PALETTE.face.lash, onSkin(fc, s.at[0] * R, s.at[1] * R, R * 0.02), [0, 0, s.angle]);
   };
   const sc = spec.scars;
   if (sc & 1) welt([[0.5, -0.05], [0.58, -0.2], [0.6, -0.36]]);

@@ -31,7 +31,7 @@ const bare = (s: CharacterSpec): CharacterSpec => ({
   hat: 0, hair: 1, moustache: 0, beard: 0, sideburns: 0, eyewear: 0, jacket: 1, shirt: 0, trousers: 0, boots: 1, belt: 0, sash: 0, medals: 0, neckwear: 0,
   pack: 0, hipGear: 0, gloves: 0, scars: 0, teeth: 0, eyepatch: 0, burnt: 0, woodenLeg: 0, hook: 0, brows: 0, eyeShape: 0, eyeColor: 0, earShape: 0,
   stubble: 0, greying: 0, age: 0, complexion: 0, mark: 0, facePaint: 0, tattoo: 0, earring: 0, ring: 0, epaulettes: 0, decoration: 0, coatTrim: 0,
-  trouserTrim: 0, hatTrim: 0, shirtColor: 0, bootColor: 0, noseStyle: 0,
+  trouserTrim: 0, hatTrim: 0, shirtColor: 0, bootColor: 0, noseStyle: 0, medalStyle: 0, buckle: 0, cuffDetail: 0, laces: 0, pocket: 0, hairAcc: 0, patchStyle: 0, scarStyle: 0,
 });
 
 /** What an option needs around it to be visible at all. */
@@ -50,6 +50,14 @@ const NEEDS: Partial<Record<FieldKey, Partial<CharacterSpec>>> = {
   eyeColor: {},
   accentColor: { jacket: 2, medals: 2 },
   trousersColor: {},
+  medalStyle: { jacket: 2, medals: 3 },
+  buckle: { belt: 1, jacket: 2 },
+  cuffDetail: { jacket: 2 },
+  laces: { boots: 1 },
+  pocket: { jacket: 2 },
+  hairAcc: { hair: 1, hat: 0 },
+  patchStyle: { eyepatch: 1 },
+  scarStyle: { scars: 1 },
 };
 
 const digest = (rig: { root: Object3D }): string => {
