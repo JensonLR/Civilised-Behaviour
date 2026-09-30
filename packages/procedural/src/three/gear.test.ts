@@ -50,7 +50,7 @@ describe("expedition gear", () => {
           expect(box.min.y).toBeGreaterThan(-0.1); // never below the ground
           rig.dispose();
         }
-        const bone = key === "gloves" ? "foreArmL" : "torso";
+        const bone = key === "gloves" ? "handL" : "torso";
         const a = { ...generateCharacter(3), neckwear: 0, pack: 0, hipGear: 0, gloves: 0 };
         // (gloves recolour and reshape the hand - mitts fuse the fingers into one mass, so they may have FEWER triangles - so they must differ; the rest add geometry)
         if (key === "gloves") expect(boneDigest({ ...a, [key]: v } as CharacterSpec, bone)).not.toBe(boneDigest(a, bone));

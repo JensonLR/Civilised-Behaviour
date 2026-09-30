@@ -7,6 +7,7 @@ import { PartBuilder, singe } from "./parts.ts";
 import { dyeAt, frontZ, neckRadii, ringAt, ringSurface, tone, type BodyCtx } from "./bodyKit.ts";
 import { lerpColor, torsoRings, type TorsoView } from "./garments.ts";
 import { patchSurface, polySurface } from "./fit/surface.ts";
+import { curve } from "./sweep.ts";
 
 /**
  * Capes and ponchos: DRAPED cloth, not a bowl. Each is built from two kinds of piece:
@@ -19,11 +20,24 @@ import { patchSurface, polySurface } from "./fit/surface.ts";
  */
 
 /** Waves of folds round the garment. */
-const FOLDS = 6;
+const FOLDS = 5;
 /** Cloth thickness, metres. */
 const CLOTH = 0.009;
 
 const cosF = (phi: number, k: number, phase = 0): number => Math.cos(k * phi + phase);
+
+/** A pleat wave: crests at +1, valleys at -1, sharper than a cosine (cloth folds crease, it does not undulate). */
+const pleat = (phi: number, k: number, phase = 0): number => {
+  const c = Math.cos(k * phi + phase);
+  return Math.sign(c) * Math.abs(c) ** 0.7;
+};
+
+/**
+ * How deep (0 on a crest .. 1 in a valley) the cloth is folded in at azimuth phi and height y: two pleat waves of different sizes so the folds are not a regular corrugation, growing
+ * from nothing at the shoulder line (where the cloth lies on the body) to full depth low down (where it hangs free). Folds only ever go IN from the fitted section, never out, so the
+ * clearance the section keeps from the arms (`clearance()`) is a lower bound, not something a fold can spend.
+ */
+const foldDepth = (phi: number, y: number, h: number, k: number): number => (0.5 - 0.5 * (0.72 * pleat(phi, k) + 0.28 * pleat(phi, k * 2 + 1, 0.6))) * sstep(h * 0.9, -h * 0.08, y);
 
 /**
  * Height for the patch parameter t in 0..1 at azimuth phi: t = 0 IS the hem (whatever shape it has), t = 1 the top edge, and the rows in between run parallel to the hem
@@ -159,9 +173,9 @@ export function capeRings(P: Proportions, color: number): Ring[] {
     { y: h * 0.78, ...at(0.78, 0.032), pow: 2.3, color },
     { y: h * 0.5, rx: mid.rx, rz: mid.rz, cz: mid.cz, pow: 2.3, color },
     { y: h * 0.2, rx: low.rx, rz: low.rz, cz: low.cz, pow: 2.3, color },
-    { y: -0.04 * h, rx: hip.rx, rz: hip.rz, cz: hip.cz, pow: 2.3, color },
-    { y: -0.2 * h, rx: hip.rx, rz: hip.rz + 0.06, cz: hip.cz + 0.02, pow: 2.3, color },
-    { y: -0.36 * h, rx: hip.rx, rz: hip.rz + 0.09, cz: hip.cz + 0.05, pow: 2.3, color },
+    { y: -0.04 * h, rx: hip.rx, rz: hip.rz + 0.02, cz: hip.cz + 0.01, pow: 2.3, color },
+    { y: -0.2 * h, rx: hip.rx, rz: hip.rz + 0.11, cz: hip.cz + 0.05, pow: 2.3, color },
+    { y: -0.36 * h, rx: hip.rx, rz: hip.rz + 0.17, cz: hip.cz + 0.1, pow: 2.3, color },
   ];
 }
 
@@ -171,21 +185,60 @@ function capeCut(h: number): { open(y: number): number; hem(phi: number): number
     // shut at the clasp, then opening wider and wider down to a shoulder-to-hip gap
     open: (y) => -0.06 + 1.2 * sstep(h * 0.91, -h * 0.06, y) ** 0.8,
     // lowest at the back and the front tails, drawn up at the sides where the arms lift it
-    hem: (phi) => -0.32 * h + 0.2 * h * (1 - Math.cos(phi) ** 2) ** 0.9 + 0.016 * cosF(phi, FOLDS, 0.3),
-    // folds deepen from the shoulders down
-    fold: (phi, y) => 1 + 0.05 * sstep(h * 0.86, h * 0.02, y) * cosF(phi, FOLDS),
+    hem: (phi) => -0.34 * h + 0.235 * h * (1 - Math.cos(phi) ** 2) ** 0.8 + 0.03 * (pleat(phi, FOLDS) - 1) * 0.5 * Math.cos(phi) ** 2, // (the hem is wavy at the back and the front tails, straight where the arms swing under it)
+    // pleats: the cloth is folded IN between the crests, deeper the lower it hangs (3.5 cm at the hem); the shading and the colours below follow it
+    fold: (phi, y) => 1 - 0.25 * foldDepth(phi, y, h, FOLDS),
   };
 }
 
-/** The clasp at the throat: two brass studs joined by a chain. */
+/** The clasp at the throat: two brass plates joined by a toggle bar (a peg through a loop) and a short chain. */
 function clasp(v: TorsoView, y: number, zf: number): void {
   const { b, c } = v;
-  b.sphere(0.026, c.accent, [-0.05, y, zf - 0.004], [1, 1, 0.6]);
-  b.sphere(0.026, c.accent, [0.05, y, zf - 0.004], [1, 1, 0.6]);
-  b.sweep([[-0.05, y, zf - 0.008], [0, y - 0.028, zf - 0.014], [0.05, y, zf - 0.008]], () => ({ rx: 0.005, rz: 0.005 }), c.accent, { side: [0, 1, 0], segments: 4 });
+  for (const sx of [-1, 1]) {
+    b.box(0.05, 0.036, 0.011, c.accent, [sx * 0.045, y, zf - 0.006], [0, sx * -0.25, 0]);
+    b.sphere(0.011, tone(c.accent, 1.15), [sx * 0.045, y, zf - 0.015], [1, 1, 0.55]);
+  }
+  b.cylinder(0.0075, 0.0075, 0.1, tone(c.accent, 0.85), [0, y, zf - 0.02], [0, 0, Math.PI / 2]); // the toggle
+  b.sweep(curve([[-0.045, y - 0.016, zf - 0.012], [0, y - 0.05, zf - 0.02], [0.045, y - 0.016, zf - 0.012]], 7), () => ({ rx: 0.0045, rz: 0.0045 }), c.accent, { side: [0, 1, 0], segments: 4 });
 }
 
-/** The cape's torso piece: an open-fronted mantle with folds, a lining and a cut hem. */
+/** A rolled hem: a soft tube of cloth along the cut edge (the two halves' hems), so the edge has body from every angle instead of a paper-thin line. */
+function hemRoll(b: PartBuilder, points: readonly (readonly [number, number, number])[], radius: number, color: number): void {
+  if (PartBuilder.lod > 0 || points.length < 2) return;
+  b.sweep(points as [number, number, number][], (t) => ({ rx: radius * (0.85 + 0.15 * Math.sin(t * Math.PI)), rz: radius, pow: 2 }), color, { side: [0, 1, 0], segments: 5, round: "both" });
+}
+
+/** A standing collar round the neck, open at the front: a patch of the neck's own rings flaring out at the top, lined inside. `open` is the half-gap at the front (radians). */
+function neckCollar(v: TorsoView, y0: number, y1: number, cloth: number, lining: number, open: number): void {
+  const { b, c } = v;
+  if (PartBuilder.lod > 0) return; // (crowds: the mantle's top row is the collar)
+  const nk = neckRadii(c.P);
+  const rings: Ring[] = [
+    { y: y0, rx: nk.rx * 1.42 + 0.02, rz: nk.rz * 1.42 + 0.02, pow: 2 },
+    { y: (y0 + y1) / 2, rx: nk.rx * 1.36 + 0.012, rz: nk.rz * 1.36 + 0.012, pow: 2 },
+    { y: y1, rx: nk.rx * 1.52 + 0.015, rz: nk.rz * 1.52 + 0.015, pow: 2 },
+  ];
+  const surf = ringSurface(rings, undefined, (phi) => 1 - 0.035 * (0.5 - 0.5 * pleat(phi, 8)));
+  b.patch(
+    {
+      at: (phi, t, lift) => surf(phi, y0 + (y1 - y0) * t, lift),
+      u0: open,
+      u1: Math.PI * 2 - open,
+      v0: 0,
+      v1: 1,
+      nu: 22,
+      nv: 3,
+      lift: () => 0,
+      color: (phi, t) => tone(cloth, (0.9 + 0.14 * t) * (1 - 0.12 * (0.5 - 0.5 * pleat(phi, 8)))),
+      thick: 0.008,
+      lining,
+      rim: () => true,
+    },
+    true,
+  );
+}
+
+/** The cape's torso piece: an open-fronted mantle with pleats baked into its shading, a lining, a rolled hem, a standing collar and a brass toggle. */
 export function dressCape(v: TorsoView): void {
   const { b, c, h, neckY } = v;
   const P = c.P;
@@ -204,19 +257,32 @@ export function dressCape(v: TorsoView): void {
   const hemW = (w: number): number => cut.hem(openHem + w * (Math.PI - openHem));
   const ROWS = [0, 0.04, 0.14, 0.32, 0.55, 0.74, 0.87, 0.95, 1];
   const Y = rowsFromHem(hemW, top, ROWS);
+  const phiOf = (w: number, y: number): number => cut.open(y) + w * (Math.PI - cut.open(y));
   mirroredHalves(b, {
-    phiOf: (w, y) => cut.open(y) + w * (Math.PI - cut.open(y)),
+    phiOf,
     yOf: (w, t) => Y(w, t),
     surface,
     color: (phi, y) => {
       const k = sstep(h * 0.95, -0.12 * h, y);
-      const fold = 0.94 + 0.06 * cosF(phi, FOLDS); // a hint of the fold in the colour as well as the shading
-      return lerpColor(tone(cloth, 1.06 * fold), tone(cloth, 0.84 * fold), k);
+      // the pleats are in the colour too: valleys a shade darker (ambient occlusion), crests a touch lighter, so the folds read in the toon bands as well
+      const shade = 1 - 0.42 * foldDepth(phi, y, h, FOLDS) + 0.1 * (1 - foldDepth(phi, y, h, FOLDS)) * sstep(h * 0.9, 0, y);
+      return lerpColor(tone(cloth, 1.06 * shade), tone(cloth, 0.84 * shade), k);
     },
-    nu: 13,
+    nu: 20,
     nv: ROWS.length - 1,
     lining,
   });
+  // rolled hem along both halves (from the front tails round to the back centre)
+  for (const sg of [-1, 1]) {
+    const pts: [number, number, number][] = [];
+    for (let i = 0; i <= 12; i++) {
+      const w = i / 12;
+      const y0 = hemW(w);
+      pts.push(surface(sg * phiOf(w, y0), y0 + 0.002, 0).p);
+    }
+    hemRoll(b, pts, 0.0105, tone(lining, 0.95));
+  }
+  neckCollar(v, h * 0.955, neckY + 0.034, cloth, lining, 0.32);
   const s = surface(0, h * 0.935, 0.01).p;
   clasp(v, h * 0.935, s[2]);
 }
@@ -251,7 +317,7 @@ function ponchoCut(h: number): { hem(phi: number): number; slit(y: number): numb
   return {
     hem: (phi) => 0.62 * h + (0.1 * h - 0.62 * h) * tip(phi) ** 0.95 + 0.008 * cosF(phi, 5),
     slit: (y) => 0.3 * sstep(h * 0.76, h * 0.965, y),
-    fold: (phi, y) => 1 + 0.04 * sstep(h * 0.86, h * 0.08, y) * cosF(phi, 4),
+    fold: (phi, y) => 1 - 0.16 * foldDepth(phi, y, h, 4),
   };
 }
 
@@ -283,12 +349,34 @@ export function dressPoncho(v: TorsoView): void {
       const j = Math.round(t * NV);
       if (j <= 1) return stripe2;
       if (j <= 3) return stripe1;
-      return lerpColor(tone(cloth, 1.06), tone(cloth, 0.9), sstep(h * 0.9, h * 0.3, y));
+      const d = foldDepth(_phi, y, h, 4);
+      return lerpColor(tone(cloth, 1.06 * (1 - 0.4 * d)), tone(cloth, 0.9 * (1 - 0.4 * d)), sstep(h * 0.9, h * 0.3, y));
     },
-    nu: 13,
+    nu: 20,
     nv: NV,
     lining,
   });
+  if (PartBuilder.lod === 0) {
+    // the neck hole has a rolled edge (a collar of the same wool), and each panel's point a rolled hem
+    const nk = neckRadii(P);
+    const ry = neckY + 0.008;
+    const rr = 1.26;
+    const pts: [number, number, number][] = [];
+    for (let i = 0; i <= 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      pts.push([Math.sin(a) * nk.rx * rr, ry - 0.012 * (1 - Math.cos(a)) * 0.5, -Math.cos(a) * nk.rz * rr]);
+    }
+    b.sweep(pts, () => ({ rx: 0.016, rz: 0.016, pow: 2 }), tone(cloth, 0.8), { side: [0, 1, 0], segments: 5 });
+    for (const sg of [-1, 1]) {
+      const hp: [number, number, number][] = [];
+      for (let i = 0; i <= 12; i++) {
+        const w = i / 12;
+        const y0 = hemW(w);
+        hp.push(surface(sg * (cut.slit(y0) + w * (Math.PI - cut.slit(y0))), y0 + 0.002, 0).p);
+      }
+      hemRoll(b, hp, 0.0095, tone(stripe2, 0.9));
+    }
+  }
   if (PartBuilder.lod === 0) {
     // fringe: tassels hanging from the tips of the front and back panels
     for (const phi of [0, Math.PI]) {
@@ -324,11 +412,11 @@ function armRings(P: Proportions, jacket: number): Ring[] {
   const L = P.armUpper;
   const wide = jacket === 7 ? 1.32 : 1;
   return [
-    { y: r * 1.05, rx: r * 1.35 * wide + 0.015, rz: r * 1.3 * wide + 0.015, pow: 2.2 },
-    { y: 0, rx: r * 1.55 * wide + 0.02, rz: r * 1.5 * wide + 0.02, pow: 2.2 },
-    { y: -L * 0.3, rx: r * 1.7 * wide + 0.02, rz: r * 1.62 * wide + 0.02, pow: 2.2 },
-    { y: -L * 0.65, rx: r * 1.9 * wide + 0.025, rz: r * 1.78 * wide + 0.025, pow: 2.2 },
-    { y: -L * 0.9, rx: r * 2.05 * wide + 0.03, rz: r * 1.9 * wide + 0.03, pow: 2.2 },
+    { y: r * 0.72, rx: r * 1.18 * wide + 0.012, rz: r * 1.15 * wide + 0.012, pow: 2.2 },
+    { y: 0, rx: r * 1.5 * wide + 0.018, rz: r * 1.47 * wide + 0.018, pow: 2.2 },
+    { y: -L * 0.3, rx: r * 1.6 * wide + 0.018, rz: r * 1.54 * wide + 0.018, pow: 2.2 },
+    { y: -L * 0.65, rx: r * 1.7 * wide + 0.02, rz: r * 1.62 * wide + 0.02, pow: 2.2 },
+    { y: -L * 0.9, rx: r * 1.76 * wide + 0.022, rz: r * 1.68 * wide + 0.022, pow: 2.2 },
   ];
 }
 
@@ -350,7 +438,7 @@ export function dressArmDrape(b: PartBuilder, c: BodyCtx, side: "L" | "R"): void
   // the hem: a wavy line for the cape; a lappet pointing away from the body for the poncho (one of its four corners)
   const hem = (phi: number): number => {
     if (poncho) return -L * (cover - 0.12 + 0.36 * Math.max(0, Math.cos(phi - out)) ** 1.4);
-    return -L * (cover + 0.09 * Math.max(0, Math.cos(phi - out)) ** 1.5 + 0.03 * cosF(phi, 4, 0.5));
+    return -L * (cover - 0.07 + 0.27 * Math.max(0, Math.cos(phi - out)) ** 1.3 + 0.025 * (pleat(phi, 4, 0.5) - 1) * 0.5); // (a drape over the arm: high in front and behind, hanging lowest on the outside)
   };
   const fold = (phi: number, y: number): number => 1 + 0.06 * sstep(r * 0.5, -L * 0.6, y) * cosF(phi, 4, out);
   if (PartBuilder.lod >= 2) {
@@ -361,7 +449,7 @@ export function dressArmDrape(b: PartBuilder, c: BodyCtx, side: "L" | "R"): void
   }
   const surface = ringSurface(rings, undefined, fold);
   const NV = poncho ? 6 : 4;
-  const Y = poncho ? stripedFromHem(hem, r * 1.05, [0.03], NV) : upFromHem(hem, r * 1.05);
+  const Y = poncho ? stripedFromHem(hem, r * 0.72, [0.03], NV) : upFromHem(hem, r * 0.72);
   b.patch(
     {
       at: (phi, t, lift) => surface(phi, Y(phi, t), lift),

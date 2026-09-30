@@ -87,6 +87,14 @@ describe("art direction: the palette", () => {
       expect(contrast(iris, PALETTE.face.white)).toBeGreaterThan(2);
       expect(contrast(iris, PALETTE.face.pupil)).toBeGreaterThan(1.5);
     }
+    // the catch-light is the brightest thing on a face (brighter than the sclera) without being a pure white; the mouth reads as dark-on-light: cavity darker than the lip line, teeth and gums distinct
+    expect(luminance(PALETTE.face.glint)).toBeGreaterThan(luminance(PALETTE.face.white));
+    expect(PALETTE.face.glint).not.toBe(0xffffff);
+    expect(contrast(PALETTE.face.glint, PALETTE.face.pupil)).toBeGreaterThan(8);
+    expect(luminance(PALETTE.face.cavity)).toBeLessThan(luminance(PALETTE.face.mouth));
+    expect(contrast(PALETTE.trim.teeth, PALETTE.face.cavity)).toBeGreaterThan(5);
+    expect(contrast(PALETTE.trim.teeth, PALETTE.face.gum)).toBeGreaterThan(1.5);
+    for (const skin of PALETTE.skin) expect(contrast(PALETTE.face.lash, skin), cssHex(skin)).toBeGreaterThan(1.8); // the drawn lash line reads on every skin tone
   });
 
   it("weapons: the ink outline reads on every surface, steel is lighter than the browned barrel, and a flash is hotter than its smoke", () => {

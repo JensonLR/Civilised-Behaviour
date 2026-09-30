@@ -34,7 +34,17 @@ describe("CharacterActor first person", () => {
       }
     });
     expect(headMeshes).toBeGreaterThan(3);
-    for (const name of ["torso", "shoulderL", "shoulderR", "hipL", "hipR", "kneeL", "elbowR"]) expect(visibleInHierarchy(j![name]!)).toBe(true);
+    for (const name of ["torso", "shoulderL", "shoulderR", "hipL", "hipR", "kneeL", "elbowR", "wristL", "wristR"]) expect(visibleInHierarchy(j![name]!)).toBe(true);
+    // ... and it is ONLY the head that goes: the hands (their own bones, at the wrists) and every other body mesh are drawn
+    const handMeshes: string[] = [];
+    j!.root!.traverse((o) => {
+      if (!(o as { isMesh?: boolean }).isMesh || o.name === "head_shadow") return;
+      let underHead = false;
+      for (let n: Object3D | null = o; n; n = n.parent) if (n === head) underHead = true;
+      if (!underHead) expect(visibleInHierarchy(o), o.name).toBe(true);
+      if (/hand[LR]$/.test(o.name)) handMeshes.push(o.name);
+    });
+    expect(handMeshes.length).toBeGreaterThanOrEqual(2);
     a.setFirstPerson(false);
     expect(head.visible).toBe(true);
   });

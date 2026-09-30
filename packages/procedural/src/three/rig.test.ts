@@ -427,16 +427,16 @@ describe("CharacterAnimator", () => {
     const run = (e: ExpressionId) => {
       anim.setExpression(e);
       for (let i = 0; i < 60; i++) anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
-      return { brow: rig.face.browL.position.y, lid: rig.face.lidL.rotation.x, smile: rig.face.mouth.rotation.z };
+      return { brow: rig.face.browL.position.y, lid: rig.face.lidL.rotation.x, smile: rig.face.pose.mouthCurve };
     };
     const neutral = run("neutral");
     const fear = run("fear");
     const pain = run("pain");
     const triumph = run("triumph");
     expect(fear.brow).toBeGreaterThan(neutral.brow);
-    expect(pain.lid).toBeLessThan(neutral.lid - 0.5); // lid rotated toward closed
-    expect(triumph.smile).toBeCloseTo(Math.PI, 3);
-    expect(pain.smile).toBeCloseTo(0, 3); // frown
+    expect(pain.lid).toBeLessThan(fear.lid - 0.5); // lid rotated toward closed (a sleepy head's neutral face is already nearly shut: compare with the wide-eyed one)
+    expect(triumph.smile).toBeGreaterThan(0.9); // a grin
+    expect(pain.smile).toBeLessThan(-0.5); // a grimace
   });
 
 });

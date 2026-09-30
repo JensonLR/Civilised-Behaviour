@@ -10,7 +10,7 @@ afterAll(() => clearCharacterCaches());
 
 const arm = (rig: CharacterRig, side: "L" | "R"): Mesh => {
   let found: Mesh | undefined;
-  rig.root.traverse((o) => o instanceof Mesh && o.name === `mesh_foreArm${side}` && (found = o));
+  rig.root.traverse((o) => o instanceof Mesh && o.name === `mesh_hand${side}` && (found = o));
   return found!;
 };
 
@@ -86,7 +86,7 @@ describe("hands", () => {
       const open = posed(g, [0, 0]);
       const half = posed(g, [1, 0]);
       const fist = posed(g, [0, 1]);
-      const handTop = -rig.proportions.armLower; // the wrist
+      const handTop = 0; // the wrist (the hand bone's origin)
       const below = (a: Float32Array): Box3 => {
         // the hand: everything below the wrist
         const b = new Box3();
@@ -111,7 +111,7 @@ describe("hands", () => {
         else if (d < 1e-6) still++;
       }
       expect(moved).toBeGreaterThan(40);
-      expect(still).toBeGreaterThan(open.length / 3 / 2);
+      expect(still).toBeGreaterThan(open.length / 3 / 8); // (the palm and the ball of the wrist stay)
       // a fist stays a compact thing: no finger flies off (the whole hand is at most ~3 hand radii tall, ~2 wide)
       const hr = rig.proportions.handRadius;
       expect(bf.max.y - bf.min.y).toBeLessThan(hr * 2.9);
@@ -126,7 +126,7 @@ describe("hands", () => {
       clearCharacterCaches();
       PartBuilder.audit = [];
       const rig = buildCharacter(spec, { outline: false, lod });
-      const sweeps = PartBuilder.audit.filter((a) => a.tag === "foreArmR" && a.kind === "sweep").length;
+      const sweeps = PartBuilder.audit.filter((a) => a.tag === "handR" && a.kind === "sweep").length;
       PartBuilder.audit = undefined;
       rig.dispose();
       return sweeps;
@@ -152,7 +152,7 @@ describe("hands", () => {
       }
     }
     const hooked = buildCharacter(plain(11, { hook: 2 }), { outline: false });
-    expect(arm(hooked, "R").geometry.morphAttributes.position ?? []).toHaveLength(0);
+    expect(arm(hooked, "R")).toBeUndefined(); // (the hook replaces the hand: no hand bone mesh, and nothing to grip)
     expect(arm(hooked, "L").geometry.morphAttributes.position).toHaveLength(2);
     hooked.setHandGrip("R", 1); // (nothing to close: must not throw)
     hooked.dispose();
@@ -168,6 +168,88 @@ describe("hands", () => {
       if (o instanceof Mesh && o.morphTargetInfluences?.length === 2 && o.morphTargetInfluences[1]! > 0.99) ok = true;
     });
     expect(ok).toBe(true);
+    rig.dispose();
+  });
+});
+
+describe("the hand is its own bone", () => {
+  it("wristL and wristR hang from the elbows at the end of the forearm, carry the hand mesh (and its outline), and the hand turns with the wrist", () => {
+    const rig = buildCharacter(plain(5));
+    const P = rig.proportions;
+    for (const side of ["L", "R"] as const) {
+      const wrist = rig.joints[`wrist${side}`];
+      expect(wrist.parent).toBe(rig.joints[`elbow${side}`]);
+      expect(wrist.position.y).toBeCloseTo(-P.armLower, 9);
+      expect(arm(rig, side).parent).toBe(wrist);
+      let ink = 0;
+      wrist.traverse((o) => o instanceof Mesh && o.name === `outline_hand${side}` && ink++);
+      expect(ink).toBe(1);
+    }
+    // turning the wrist swings the hand (its fingertips) and leaves the forearm where it is
+    rig.root.updateMatrixWorld(true);
+    const tip = (): Vector3 => rig.joints.wristR.localToWorld(new Vector3(0, -P.handRadius * 1.5, 0));
+    const forearmEnd = (): Vector3 => rig.joints.elbowR.localToWorld(new Vector3(0, -P.armLower * 0.5, 0));
+    const t0 = tip();
+    const f0 = forearmEnd();
+    rig.joints.wristR.rotation.x = 0.9;
+    rig.root.updateMatrixWorld(true);
+    expect(tip().distanceTo(t0)).toBeGreaterThan(P.handRadius * 0.9);
+    expect(forearmEnd().distanceTo(f0)).toBeLessThan(1e-9);
+    rig.dispose();
+  });
+
+  it("a turned wrist never opens the sleeve: the palm's ball stays inside the sleeve's end (and the hand's own vertices stay within reach of the wrist joint) at every turn in range", () => {
+    for (const seed of [3, 9, 21]) {
+      const rig = buildCharacter(plain(seed), { outline: false });
+      const g = arm(rig, "R").geometry;
+      const pos = g.attributes.position!;
+      const P = rig.proportions;
+      // the ball: every hand vertex above the wrist joint lies within the wrist's radius of the joint (a sphere about the pivot is unchanged by any turn)
+      let above = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        if (y > 0.002) {
+          above++;
+          const d = Math.hypot(pos.getX(i), y, pos.getZ(i));
+          expect(d, `seed ${seed} vertex ${i}`).toBeLessThan(Math.max(P.handRadius * 0.5, P.armRadius * 0.9));
+        }
+      }
+      expect(above).toBeGreaterThan(4);
+      rig.dispose();
+    }
+  });
+
+  it("a lost arm takes its hand with it, a far level draws the fist on the forearm (no hand mesh), and coming back to full detail restores the hand", () => {
+    const rig = buildCharacter(plain(6), { outline: true });
+    const vis = (name: string): boolean => {
+      let v = false;
+      rig.root.traverse((o) => {
+        if (o.name === name) {
+          let on = true;
+          for (let n: typeof o | null = o; n; n = n.parent as typeof o | null) if (!n.visible) on = false;
+          v = on;
+        }
+      });
+      return v;
+    };
+    expect(vis("mesh_handL")).toBe(true);
+    rig.setMissing(LIMB.ARM_L);
+    expect(vis("mesh_handL")).toBe(false);
+    expect(vis("outline_handL")).toBe(false);
+    expect(vis("mesh_handR")).toBe(true);
+    rig.setMissing(0);
+    expect(vis("mesh_handL")).toBe(true);
+    expect(vis("outline_handL")).toBe(true);
+    rig.setLod(2);
+    expect(vis("mesh_handL")).toBe(false);
+    expect(vis("outline_handL")).toBe(false);
+    expect(vis("mesh_foreArmL")).toBe(true);
+    rig.setLod(1);
+    expect(vis("mesh_handL")).toBe(true);
+    rig.setLod(2);
+    rig.setLod(0);
+    expect(vis("mesh_handR")).toBe(true);
+    expect(arm(rig, "R").geometry.morphAttributes.position).toHaveLength(2);
     rig.dispose();
   });
 });

@@ -33,6 +33,13 @@ export interface Style {
   rz: number[];
 }
 
+const smooth = (a: number, b: number, x: number): number => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+/** How the nose swells along its length (0 root .. 1 tip) relative to the style's widths: a slim bridge growing into a rounded ball at the end. */
+export const noseSwell = (t: number): number => 0.66 + 0.34 * smooth(0.05, 0.7, t) + 0.3 * smooth(0.72, 0.98, t);
+
 const lerpAt = (arr: readonly number[], t: number): number => {
   const f = Math.max(0, Math.min(1, t)) * (arr.length - 1);
   const i = Math.min(arr.length - 2, Math.floor(f));
@@ -69,8 +76,8 @@ export function noseGeo(P: Proportions, shape: HeadShape, spec: CharacterSpec, c
     return [0, y + cy, z];
   });
   const spine = curve(pts, 9);
-  const rx = (t: number): number => lerpAt(st.rx, t) * R;
-  const rz = (t: number): number => lerpAt(st.rz, t) * R;
+  const rx = (t: number): number => lerpAt(st.rx, t) * R * noseSwell(t);
+  const rz = (t: number): number => lerpAt(st.rz, t) * R * noseSwell(t);
   const n = spine.length;
   const lookup = (y: number): { t: number; z: number } | undefined => {
     const yb = y + cy;

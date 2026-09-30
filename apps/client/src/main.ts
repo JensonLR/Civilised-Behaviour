@@ -19,6 +19,18 @@ if (params.get("showcase") === "lineup") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWeapons } = await import("./showcase/Weapons.ts");
   runWeapons(canvas, params);
+} else if (params.get("showcase") === "hud") {
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runHud } = await import("./showcase/Hud.ts");
+  runHud(canvas, params);
+} else if (params.get("showcase") === "fx") {
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runFx } = await import("./showcase/Fx.ts");
+  runFx(canvas, params);
+} else if (params.get("showcase") === "viewmodel") {
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runViewModel } = await import("./showcase/ViewModel.ts");
+  runViewModel(canvas, params);
 } else if (params.get("showcase") === "world") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWorld } = await import("./showcase/World.ts");

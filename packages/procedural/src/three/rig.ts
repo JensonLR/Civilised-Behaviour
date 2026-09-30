@@ -19,7 +19,7 @@ import { buildFace, clearFaceCaches, inertFace, irisColour, type FaceBuild, type
 import { outlineMaterial } from "./outline.ts";
 import { PartBuilder, singe, type Lod } from "./parts.ts";
 import { buildProsthesis } from "./prosthetics.ts";
-import { buildStump, buildForeArm, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
+import { buildStump, buildForeArm, buildHandBone, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
 import { buildWoundGeometry, type GoreLevel } from "./wounds.ts";
 
 export type { FaceParts } from "./faceRig.ts";
@@ -36,6 +36,12 @@ export interface Joints {
   shoulderR: Group;
   elbowL: Group;
   elbowR: Group;
+  /**
+   * The hand's own bone, a child of the elbow (the forearm) at the wrist: the hand turns here (weaponPose.ts `solveWrist` follows a weapon's grip, the animator adds a loose swing,
+   * the ragdoll lets it dangle). Its local Z is the hand's grip axis. Appended to the interface: code that only knows the older joints is unaffected.
+   */
+  wristL: Group;
+  wristR: Group;
   hipL: Group;
   hipR: Group;
   kneeL: Group;
@@ -89,7 +95,7 @@ export interface CharacterRig {
 
 // Bone geometry is cached by (bone, canonical spec, level of detail) so identical characters (crowds, clones) share GPU memory.
 const geometryCache = new Map<string, BufferGeometry | null>();
-const MAX_CACHE = 512; // main + outline hull per bone per live spec per level
+const MAX_CACHE = 1536; // main + outline hull per bone per live spec per level (22 villagers at three levels need ~800; a 512 cap made people rebuild as you crossed the village)
 let sharedMaterial: MeshToonMaterial | undefined;
 
 /** A 4-step lighting ramp: banded light and shadow give forms a graphic, illustrated read that flat PBR shading smears out. */
@@ -197,6 +203,8 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const shoulderR = mk("shoulderR", torso, P.shoulderHalfWidth, shoulderY, 0);
   const elbowL = mk("elbowL", shoulderL, 0, -P.armUpper, 0);
   const elbowR = mk("elbowR", shoulderR, 0, -P.armUpper, 0);
+  const wristL = mk("wristL", elbowL, 0, -P.armLower, 0);
+  const wristR = mk("wristR", elbowR, 0, -P.armLower, 0);
   const hipL = mk("hipL", pelvis, -P.hipWidth, 0, 0);
   const hipR = mk("hipR", pelvis, P.hipWidth, 0, 0);
   const kneeL = mk("kneeL", hipL, 0, -P.legUpper, 0);
@@ -222,26 +230,33 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (!hg) return;
     const o = new Mesh(hg, a.morphs && hg.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial());
     o.name = `outline_${a.bone}`;
-    o.visible = !hiddenBones.has(a.bone);
+    o.visible = !hiddenBones.has(a.bone) && !a.mesh.userData.lodOff;
     o.castShadow = false;
     a.parent.add(o);
     a.hull = o;
     outlines.push(o);
     if (a.morphs) a.mesh.userData.hull = o;
   };
-  const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined, morphs = false): void => {
-    const a: Attachment = { bone, parent, make, morphs };
-    attachments.push(a);
+  // A bone's mesh exists as soon as its builder gives geometry at the current level (the hand bone has none at the far level: the forearm draws the far fist). It is created the first
+  // time there is geometry, and hidden (not freed) at levels where there is none.
+  const ensureMesh = (a: Attachment): void => {
+    if (a.mesh) return;
     const geo = meshGeometry(a);
     if (!geo) return;
     const m = new Mesh(geo, material);
-    m.name = `mesh_${bone}`;
+    m.name = `mesh_${a.bone}`;
     m.castShadow = true;
     m.receiveShadow = false;
-    parent.add(m);
+    m.visible = !hiddenBones.has(a.bone);
+    a.parent.add(m);
     a.mesh = m;
     meshes.push(m);
     if (outlineOn) ensureHull(a);
+  };
+  const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined, morphs = false): void => {
+    const a: Attachment = { bone, parent, make, morphs };
+    attachments.push(a);
+    ensureMesh(a);
   };
 
   const body: BodyCtx = { spec, P, skin, jacketC, trouserC, shirtC, armC, accent, burnt, footH, leather: leatherC };
@@ -254,9 +269,10 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   attach("head", head, () => buildHead(spec, P, { skin, hairC, hatC, accent, burnt, morph: PartBuilder.lod === 0 }), true);
 
   // ---- arms ------------------------------------------------------------------------------------------------------
-  for (const [side, shoulder, elbow] of [["L", shoulderL, elbowL], ["R", shoulderR, elbowR]] as const) {
+  for (const [side, shoulder, elbow, wrist] of [["L", shoulderL, elbowL, wristL], ["R", shoulderR, elbowR, wristR]] as const) {
     attach(`upperArm${side}`, shoulder, () => buildUpperArm(body, side));
     attach(`foreArm${side}`, elbow, () => buildForeArm(body, side));
+    attach(`hand${side}`, wrist, () => buildHandBone(body, side)); // (the hand is its own bone: it turns at the wrist)
   }
 
   // ---- legs ---------------------------------------------------------------------------------------------------------
@@ -339,8 +355,8 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
 
   // ---- lost limbs: hide the limb's bone meshes, show a stump at the joint (and a prosthesis if the look says so) --------------------------
   const LIMB_BONES: Record<number, { bones: string[]; joint: Group; lower: Group; kind: "arm" | "leg"; side: "L" | "R"; prosthetic: boolean }> = {
-    [LIMB.ARM_L]: { bones: ["upperArmL", "foreArmL"], joint: shoulderL, lower: elbowL, kind: "arm", side: "L", prosthetic: spec.hook === 1 },
-    [LIMB.ARM_R]: { bones: ["upperArmR", "foreArmR"], joint: shoulderR, lower: elbowR, kind: "arm", side: "R", prosthetic: spec.hook === 2 },
+    [LIMB.ARM_L]: { bones: ["upperArmL", "foreArmL", "handL"], joint: shoulderL, lower: elbowL, kind: "arm", side: "L", prosthetic: spec.hook === 1 },
+    [LIMB.ARM_R]: { bones: ["upperArmR", "foreArmR", "handR"], joint: shoulderR, lower: elbowR, kind: "arm", side: "R", prosthetic: spec.hook === 2 },
     [LIMB.LEG_L]: { bones: ["upperLegL", "lowerLegL"], joint: hipL, lower: kneeL, kind: "leg", side: "L", prosthetic: spec.woodenLeg === 1 },
     [LIMB.LEG_R]: { bones: ["upperLegR", "lowerLegR"], joint: hipR, lower: kneeR, kind: "leg", side: "R", prosthetic: spec.woodenLeg === 2 },
   };
@@ -359,8 +375,8 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
         if (gone) hiddenBones.add(bone);
         else hiddenBones.delete(bone);
       }
-      for (const m of meshes) if (info.bones.includes(m.name.slice(5))) m.visible = !gone;
-      for (const o of outlines) if (info.bones.includes(o.name.slice(8))) o.visible = outlineOn && !gone;
+      for (const m of meshes) if (info.bones.includes(m.name.slice(5))) m.visible = !gone && !m.userData.lodOff;
+      for (const o of outlines) if (info.bones.includes(o.name.slice(8))) o.visible = outlineOn && !gone && !meshes.find((m) => m.name === `mesh_${o.name.slice(8)}`)?.userData.lodOff;
       let stump = stumpMeshes.get(limb);
       let prosthesis = prosthesisMeshes.get(limb);
       if (!gone) {
@@ -426,13 +442,13 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const setOutline = (on: boolean): void => {
     outlineOn = on;
     if (on) for (const a of attachments) ensureHull(a);
-    for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8));
+    for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8)) && !meshes.find((m) => m.name === `mesh_${o.name.slice(8)}`)?.userData.lodOff;
   };
 
   // ---- hands: one number per hand drives two morph targets (half a grip and a full grip) on the forearm mesh --------------------------------------------------
   const grip = { L: 0, R: 0 };
   const applyGrip = (side: "L" | "R"): void => {
-    const m = meshes.find((o) => o.name === `mesh_foreArm${side}`);
+    const m = meshes.find((o) => o.name === `mesh_hand${side}`);
     const inf = m?.morphTargetInfluences;
     if (!inf || inf.length < 2) return;
     const a = grip[side];
@@ -451,20 +467,24 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (next === lod) return;
     lod = next;
     for (const a of attachments) {
+      const g = meshGeometry(a);
       if (a.mesh) {
-        const g = meshGeometry(a);
+        const off = !g;
+        a.mesh.userData.lodOff = off;
         if (g) {
           a.mesh.geometry = g;
           a.mesh.updateMorphTargets();
         }
-      }
-      if (a.hull) {
-        const g = hullGeometry(a);
-        if (g) {
-          a.hull.geometry = g;
-          a.hull.material = a.morphs && g.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial();
+        a.mesh.visible = !off && !hiddenBones.has(a.bone);
+      } else if (g) ensureMesh(a);
+      if (a.hull && a.mesh) {
+        const h = g ? hullGeometry(a) : undefined;
+        if (h) {
+          a.hull.geometry = h;
+          a.hull.material = a.morphs && h.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial();
           a.hull.updateMorphTargets();
         }
+        a.hull.visible = outlineOn && !!h && !hiddenBones.has(a.bone);
       }
     }
     applyFaceLod();
@@ -479,7 +499,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
 
   return {
     root,
-    joints: { root, pelvis, torso, head, shoulderL, shoulderR, elbowL, elbowR, hipL, hipR, kneeL, kneeR },
+    joints: { root, pelvis, torso, head, shoulderL, shoulderR, elbowL, elbowR, wristL, wristR, hipL, hipR, kneeL, kneeR },
     face: faceParts,
     proportions: P,
     spec,

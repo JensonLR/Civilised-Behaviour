@@ -33,12 +33,14 @@ import type { Intent } from "../input/Controls.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import type { CameraRig } from "../render/CameraRig.ts";
+import type { ViewModel } from "../render/ViewModel.ts";
 import type { ActorCombat, CharacterActor } from "../render/CharacterActor.ts";
 import { Projectiles } from "../render/Projectiles.ts";
 import type { Stage } from "../render/Stage.ts";
 import { CannonView } from "../render/weapons/CannonView.ts";
 import { ShotFx } from "../render/weapons/ShotFx.ts";
 import { IMPACT_SOUND, REPORT, fx as sfx } from "../render/weapons/sfx.ts";
+import { getBindings, keyLabel } from "../input/bindings.ts";
 import { getGfx } from "../settings.ts";
 import { CombatHud } from "../ui/CombatHud.ts";
 
@@ -71,6 +73,8 @@ const bodyHit = newBodyHit();
  */
 export class CombatView {
   readonly fx: ShotFx;
+  /** The first-person hands and weapon, when there are any: the muzzle flash and smoke leave THEIR muzzle, and their recoil and blows play with the shot. */
+  viewmodel: ViewModel | undefined;
   private readonly projectiles: Projectiles;
   private readonly hud: CombatHud;
   private readonly cannons = new Map<string, CannonView>();
@@ -101,12 +105,19 @@ export class CombatView {
     const world = session.world;
     this.fx = new ShotFx(stage.scene, (x, z) => world.terrainHeight(x, z), FX_SCALE[getGfx()]);
     this.projectiles = new Projectiles(stage.scene, world, this.fx);
+    // a round that goes by your head: hairline streaks (ShotFx.nearMiss) and a small flick of the lens, scaled by your shake setting
+    this.fx.onNearMiss = (k) => this.rig.addShake(0.16 * k);
     this.hud = new CombatHud(hudRoot);
     const room = session.room;
     room.onMessage("shot", (e: ShotEvent) => this.onShot(e));
     room.onMessage("impact", (e: ImpactEvent) => this.onImpact(e));
     room.onMessage("boom", (e: BoomEvent) => this.onBoom(e));
     room.onMessage("hitmark", (e: HitMarkEvent) => this.hud.hitMarker(e.zone, e.down, e.sever));
+  }
+
+  /** The graphics preset changed: fewer or more puffs from now on. */
+  setPreset(): void {
+    this.fx.scale = FX_SCALE[getGfx()];
   }
 
   // ---- state helpers -------------------------------------------------------------------------------------------------------------------------
@@ -125,6 +136,11 @@ export class CombatView {
     const me = this.me;
     if (w < 0 || !me) return -1;
     return ((me.weapons ?? 0) & (1 << w)) !== 0 ? w : -1;
+  }
+
+  /** The weapon the player wants in hand (a `WEAPON` id) or -1: what the first-person viewmodel draws. */
+  get wishWeapon(): number {
+    return this.wish;
   }
 
   private eyeHeight(flags: number): number {
@@ -221,6 +237,7 @@ export class CombatView {
     this.lastCooldown = cooldown;
     this.pendingBlows++;
     a.body.swingWeapon(w, bash);
+    this.viewmodel?.swing(windup, bash);
     // the whoosh at the start; the server's timing of the hit is its own
     sfx.sound("sabre_swing", this.eyeOf(this.predicted!, tmp), bash ? 0.6 : 0.9);
     void windup;
@@ -244,6 +261,7 @@ export class CombatView {
     this.lastCooldown = r.cooldown;
     this.bloom = Math.min(0.06, this.bloom + r.recoil * 0.25);
     a.body.fireWeapon(w);
+    this.viewmodel?.fire(w);
     const eye = this.eyeOf(me, tmp);
     this.showShot(w, seed, spread, eye.x, eye.y, eye.z, this.aimYaw, this.aimElev, a.body, true);
     // recoil as a picture: the lens kicks, a little shake; the aim itself is never moved
@@ -261,15 +279,19 @@ export class CombatView {
     const def = WEAPONS[w as WeaponId];
     const r = def.ranged;
     if (!r) return;
-    const m = actor?.muzzleWorld(muzzle);
+    // your own shot in first person leaves the viewmodel's muzzle (where the gun is on the screen), not the hidden body's
+    const vm = own && this.viewmodel?.active ? this.viewmodel : undefined;
+    const fromVm = vm?.muzzleWorld(muzzle);
+    const m = fromVm ?? actor?.muzzleWorld(muzzle);
     const mx = m ? m.x : ox;
     const my = m ? m.y - (m ? 0 : 0.2) : oy - 0.2;
     const mz = m ? m.z : oz;
     let dx: number;
     let dy: number;
     let dz: number;
-    if (m && actor) {
-      actor.muzzleDirection(mdir);
+    if (m && (fromVm || actor)) {
+      if (fromVm) vm!.muzzleDirection(mdir);
+      else actor!.muzzleDirection(mdir);
       dx = mdir.x;
       dy = mdir.y;
       dz = mdir.z;
@@ -292,6 +314,7 @@ export class CombatView {
       const qz = oz + shotV.z * t;
       if (r.speed === 0) {
         this.fx.tracer(mx, my, mz, qx, qy, qz, w);
+        if (!own) this.fx.nearMiss(mx, my, mz, qx, qy, qz);
       } else {
         const vx = qx - mx;
         const vy = qy - my;
@@ -361,13 +384,18 @@ export class CombatView {
     const from = Math.atan2(e.dx, e.dz); // world heading of the direction TO the attacker, in the same yaw convention as the camera (0 = -Z)
     let rel = from - this.rig.yaw;
     rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-    this.hud.damageFrom(-rel); // (a positive yaw difference is to the LEFT of the view; the mark's rotation is clockwise)
+    this.hud.damageFrom(-rel, e.power); // (a positive yaw difference is to the LEFT of the view; the mark's rotation is clockwise)
   }
 
   // ---- per frame ------------------------------------------------------------------------------------------------------------------------------
 
   update(dt: number, gamepad: boolean): void {
     this.time += dt;
+    const cam = this.stage.camera.position;
+    this.fx.listener.x = cam.x;
+    this.fx.listener.y = cam.y;
+    this.fx.listener.z = cam.z;
+    this.fx.listener.valid = true;
     this.bloom = Math.max(0, this.bloom - dt * 0.09);
     // cannons: create views for the replicated fixtures, follow their state
     this.session.room.state.cannons?.forEach((st, id) => {
@@ -399,6 +427,7 @@ export class CombatView {
       reload: mine.reload ?? 0,
       wait: Math.min(1, wait),
       gamepad,
+      reloadKey: keyLabel(getBindings().reload[0]),
       busy,
     });
     // reload sounds: a click as it begins, the ram halfway, a click when the piece is charged

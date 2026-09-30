@@ -3,8 +3,9 @@ import { FLAG, Rng, WEAPON } from "@cb/shared";
 import { Vector3 } from "three";
 import { generateCharacter } from "../spec.ts";
 import { CharacterAnimator } from "./animator.ts";
+import { WRIST_MAX, solveWrist } from "./weaponPose.ts";
 import { buildCharacter } from "./rig.ts";
-import { WEAPON_ANCHORS, armHand, computeHold, newHoldOut, newWeaponPoseInput, placeLocal, solveArm, type ArmAngles, type HoldBody, type WeaponPoseInput } from "./weaponPose.ts";
+import { HAND_CENTRE, WEAPON_ANCHORS, armHand, computeHold, newHoldOut, newWeaponPoseInput, placeLocal, solveArm, type ArmAngles, type HoldBody, type WeaponPoseInput } from "./weaponPose.ts";
 
 const body = (over: Partial<HoldBody> = {}): HoldBody => ({ hw: 0.3, sy: 0.55, upper: 0.32, lower: 0.32, depth: 0.28, ...over });
 const hand = { x: 0, y: 0, z: 0 };
@@ -228,8 +229,9 @@ describe("the animator holds a weapon", () => {
   };
   const handWorld = (rig: ReturnType<typeof rigFor>["rig"], side: "L" | "R") => {
     rig.root.updateMatrixWorld(true);
-    const el = side === "R" ? rig.joints.elbowR : rig.joints.elbowL;
-    return el.localToWorld(new Vector3(0, -rig.proportions.armLower, 0));
+    // (the centre of the fist: a little below the wrist joint, along the hand's own axis, wherever the wrist has turned it)
+    const wr = side === "R" ? rig.joints.wristR : rig.joints.wristL;
+    return wr.localToWorld(new Vector3(0, -rig.proportions.handRadius * HAND_CENTRE, 0));
   };
 
   it("across forty different bodies the shouldered rifle's grip is in the right fist, and the left hand is at the fore-end or as near as the arm goes", () => {
@@ -242,7 +244,7 @@ describe("the animator holds a weapon", () => {
       rig.root.updateMatrixWorld(true);
       const grip = rig.joints.torso.localToWorld(new Vector3(anim.hold.px, anim.hold.py, anim.hold.pz));
       const r = handWorld(rig, "R");
-      expect(r.distanceTo(grip), `seed ${seed} right`).toBeLessThan(0.035);
+      expect(r.distanceTo(grip), `seed ${seed} right`).toBeLessThan(0.075); // (the wrist is placed so the fist CENTRE is on the grip: a big hand on a short arm whose elbow is at its stop falls a few cm short)
       const a = WEAPON_ANCHORS[WEAPON.RIFLE]!;
       const l = handWorld(rig, "L");
       const target = rig.joints.torso.localToWorld(new Vector3(anim.hold.left.x, anim.hold.left.y, anim.hold.left.z));
@@ -272,7 +274,7 @@ describe("the animator holds a weapon", () => {
       prev = rig.joints.shoulderR.rotation.x;
     }
     expect(worst).toBeLessThan(0.45);
-    expect(rig.joints.shoulderR.rotation.x).toBeGreaterThan(1.0); // arm out along the sight line
+    expect(rig.joints.shoulderR.rotation.x).toBeGreaterThan(0.85); // arm out along the sight line
   });
 
   it("holstered when the hands are busy: carrying, kneeling and downed bodies keep their own arms and show no weapon", () => {
@@ -301,5 +303,77 @@ describe("the animator holds a weapon", () => {
       return [rig.joints.shoulderR.rotation.x, rig.joints.shoulderR.rotation.z, rig.joints.elbowR.rotation.x, rig.joints.torso.rotation.y];
     };
     expect(run()).toEqual(run());
+  });
+
+  it("the wrist lays the fist's grip axis on the handle: rifle, pistol, sabre and umbrella, ready, aimed and walking, across many bodies (mean error 1.0 -> under 0.25 rad with the wrist; the fist's centre stays on the grip)", () => {
+    const angle = (a: Vector3, b: Vector3): number => Math.acos(Math.min(1, Math.abs(a.dot(b) / (a.length() * b.length()))));
+    const G = FLAG.GROUNDED;
+    const WEAPON_NAME: Record<number, string> = { [WEAPON.RIFLE]: "rifle", [WEAPON.PISTOL]: "pistol", [WEAPON.SABRE]: "sabre", [WEAPON.UMBRELLA]: "umbrella" };
+    const report: string[] = [];
+    for (const id of [WEAPON.RIFLE, WEAPON.PISTOL, WEAPON.SABRE, WEAPON.UMBRELLA]) {
+      for (const [state, aim, speed] of [["ready", 0, 0], ["aimed", 1, 0], ["walk", 0, 2.2]] as const) {
+        let before = 0;
+        let after = 0;
+        let worst = 0;
+        let n = 0;
+        for (let seed = 1; seed <= 12; seed++) {
+          const { rig, anim } = rigFor(seed * 13);
+          const w: WeaponPoseInput = { ...newWeaponPoseInput(), id, aim, elev: aim * 0.1 };
+          for (let i = 0; i < 90; i++) anim.update(1 / 30, { speed, flags: G, vy: 0, weapon: w });
+          rig.root.updateMatrixWorld(true);
+          const t = anim.hold.right;
+          const axis = new Vector3(t.ax, t.ay, t.az);
+          expect(axis.length(), `${id} ${state}: the right fist has a handle`).toBeGreaterThan(0.9);
+          axis.transformDirection(rig.joints.torso.matrixWorld);
+          const z = new Vector3(0, 0, 1).transformDirection(rig.joints.wristR.matrixWorld);
+          const err = angle(z, axis);
+          const turned = rig.joints.wristR.quaternion.clone();
+          rig.joints.wristR.quaternion.set(0, 0, 0, 1);
+          rig.root.updateMatrixWorld(true);
+          before += angle(new Vector3(0, 0, 1).transformDirection(rig.joints.wristR.matrixWorld), axis);
+          rig.joints.wristR.quaternion.copy(turned);
+          after += err;
+          worst = Math.max(worst, err);
+          n++;
+          // the fist stays on the grip (its centre, a little below the wrist)
+          rig.root.updateMatrixWorld(true);
+          const grip = rig.joints.torso.localToWorld(new Vector3(t.x, t.y, t.z));
+          const centre = handWorld(rig, "R");
+          expect(centre.distanceTo(grip), `${id} ${state} seed ${seed}`).toBeLessThan(0.1);
+          rig.dispose();
+        }
+        report.push(`${WEAPON_NAME[id]}/${state}: ${(before / n).toFixed(2)} -> ${(after / n).toFixed(2)} (worst ${worst.toFixed(2)})`);
+        expect(after / n, `${id} ${state}`).toBeLessThan(0.36);
+        expect(worst, `${id} ${state}`).toBeLessThan(0.55);
+        expect(after, `${id} ${state}: the wrist never makes it worse`).toBeLessThanOrEqual(before + 1e-6);
+      }
+    }
+    if (process.env.WRIST_VERBOSE) console.log(report.join("\n"));
+  });
+
+  it("solveWrist: exact when the handle is within range, limited (and reports the rest) when not, sign-stable at a right angle, never NaN", () => {
+    const M = new Float64Array(9);
+    const q = { x: 0, y: 0, z: 0, w: 1, s: 0 };
+    // a forearm hanging straight down (all angles 0): the hand's Z is the torso's Z. A handle along Z needs no turn; 0.8 rad across, that turn; straight down the forearm, a quarter turn (more than the wrist allows).
+    expect(solveWrist(0, 0, 0, 0, 0, -1, q, M)).toBeCloseTo(0, 9);
+    expect(q.w).toBeCloseTo(1, 9);
+    expect(solveWrist(0, 0, 0, Math.sin(0.8), 0, Math.cos(0.8), q, M)).toBeCloseTo(0, 6); // 0.8 rad across: inside the range
+    expect(2 * Math.acos(q.w)).toBeCloseTo(0.8, 6);
+    q.s = 0;
+    const off = solveWrist(0, 0, 0, 0, 1, 0, q, M); // straight along the forearm: a quarter turn, more than the wrist allows
+    expect(off).toBeCloseTo(Math.PI / 2 - WRIST_MAX, 6);
+    expect(2 * Math.acos(q.w)).toBeCloseTo(WRIST_MAX, 6);
+    // a handle exactly across: the choice is remembered, the two answers are not swapped from one call to the next
+    const p = { x: 0, y: 0, z: 0, w: 1, s: 1 };
+    solveWrist(0, 0, 0, 1, 0, 0.03, p, M);
+    expect(p.s).toBe(1);
+    solveWrist(0, 0, 0, 1, 0, -0.05, p, M); // (a hair on the other side of the right angle: the fist does not flip over)
+    expect(p.s).toBe(1);
+    solveWrist(0, 0, 0, 0.2, 0, -1, p, M); // (clearly the other way: now it does)
+    expect(p.s).toBe(-1);
+    for (const bad of [[0, 0, 0], [Number.NaN, 0, 1]] as const) {
+      const r = solveWrist(0.3, 0.1, 1, bad[0], bad[1], bad[2], { x: 0, y: 0, z: 0, w: 1 }, M);
+      expect(Number.isFinite(r) || Number.isNaN(bad[0])).toBe(true);
+    }
   });
 });

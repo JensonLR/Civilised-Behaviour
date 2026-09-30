@@ -1,38 +1,13 @@
+import { Quaternion } from "three";
 import { FLAG, ZONE, woundLevel } from "@cb/shared";
-import { jawPoint } from "./faceMorph.ts";
+import { FaceAnimator } from "./faceAnimate.ts";
+import type { ExpressionId } from "./expressions.ts";
 import type { CharacterRig } from "./rig.ts";
-import { armRestAbduction, kneeFlexLimit } from "./armClearance.ts";
-import { computeHold, newHoldOut, solveArm, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
+import { armRestAbduction, crouchObstruction, kneeFlexLimit } from "./armClearance.ts";
+import { HAND_CENTRE, applyMatrix, forearmMatrix, computeHold, newHoldOut, rotateByQuat, solveArm, solveWrist, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
 
-export type ExpressionId = "neutral" | "pain" | "fear" | "triumph" | "drunk" | "angry";
-
-interface FaceTarget {
-  /** -1 (lowered/furrowed) .. 1 (raised) */
-  brow: number;
-  /** Brow tilt: positive = inner ends down (angry), negative = inner ends up (worried). */
-  browTilt: number;
-  /** 0 closed .. 1 wide */
-  eyes: number;
-  /** -1 frown .. 1 smile */
-  mouthCurve: number;
-  /** 0 shut .. 1 gaping */
-  mouthOpen: number;
-  /** Cheeks pushed up under the eyes (a grin, a wince, a glare): 0..1 */
-  squint: number;
-  /** Pupil size multiplier (fear widens, triumph narrows). */
-  pupil: number;
-  /** One brow higher than the other (drunk, scornful): -1..1 */
-  asym: number;
-}
-
-const EXPRESSIONS: Record<ExpressionId, FaceTarget> = {
-  neutral: { brow: 0, browTilt: 0, eyes: 0.85, mouthCurve: 0.15, mouthOpen: 0, squint: 0, pupil: 1, asym: 0 },
-  pain: { brow: -0.2, browTilt: -0.7, eyes: 0.3, mouthCurve: -0.8, mouthOpen: 0.55, squint: 0.9, pupil: 0.9, asym: 0 },
-  fear: { brow: 1, browTilt: -0.6, eyes: 1.2, mouthCurve: -0.3, mouthOpen: 0.8, squint: 0, pupil: 1.5, asym: 0 },
-  triumph: { brow: 0.5, browTilt: 0.2, eyes: 0.9, mouthCurve: 1, mouthOpen: 0.5, squint: 0.55, pupil: 0.85, asym: 0 },
-  drunk: { brow: 0.1, browTilt: -0.2, eyes: 0.5, mouthCurve: 0.5, mouthOpen: 0.25, squint: 0.2, pupil: 1.15, asym: 0.7 },
-  angry: { brow: -0.5, browTilt: 0.9, eyes: 0.8, mouthCurve: -0.6, mouthOpen: 0.2, squint: 0.6, pupil: 0.8, asym: 0 },
-};
+// The expression set (ids, targets, per-expression face poses) lives in expressions.ts; the face itself is driven by faceAnimate.ts.
+export type { ExpressionId } from "./expressions.ts";
 
 /** Inputs the animator reads each frame; the game maps replicated state onto this. */
 export interface PoseInput {
@@ -65,8 +40,8 @@ const h01 = (n: number): number => {
   return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
 };
 
-/** Idle behaviours, each a few seconds long: nothing, a look round, a shrug, touching the hat, checking a watch, hands behind the back, a stretch, a weight shuffle. */
-const IDLE_ACTS = ["none", "look", "shrug", "hat", "watch", "behind", "stretch", "shuffle"] as const;
+/** Idle behaviours, each a few seconds long: nothing, a look round, a shrug, touching the hat, checking a watch, hands behind the back, a stretch, a weight shuffle, scratching the back of the head, looking up at the sky, tapping a foot, rocking from heel to toe. */
+const IDLE_ACTS = ["none", "look", "shrug", "hat", "watch", "behind", "stretch", "shuffle", "scratch", "lookUp", "tap", "sway"] as const;
 
 /**
  * Procedural animation for the rigid rig. Conventions (the rig faces -Z, +X is the character's right):
@@ -80,10 +55,9 @@ const IDLE_ACTS = ["none", "look", "shrug", "hat", "watch", "behind", "stretch",
 export class CharacterAnimator {
   private phase = 0;
   private time = 0;
-  private blinkTimer = 2;
-  private blink = 0;
   private expression: ExpressionId = "neutral";
-  private readonly face: FaceTarget = { ...EXPRESSIONS.neutral };
+  private expressionIntensity = 1;
+  private readonly faceAnim: FaceAnimator;
   private lean = 0;
   private crouch = 0;
   private air = 0;
@@ -117,12 +91,22 @@ export class CharacterAnimator {
   private readonly shoulderBaseY: number;
   /** Extra resting abduction of the arms (radians) that this body needs to hang clear of its own belly, hips and coat skirt (see armClearance.ts). */
   private readonly armExtra: number;
+  /** The same per arm (L, R) when hip gear hangs on that side: a holster or a canteen is something a hanging hand must clear too. */
+  private readonly armExtraSide: [number, number];
   /** The deepest knee bend (radians) at which this body's calf and thigh still clear each other (see armClearance.ts `kneeFlexLimit`). */
   private readonly kneeMax: number;
+  /** 0..1: how much of a belly (and coat skirt) this body has to fold its thighs against (the thigh cannot rise as far into a crouch or a kneel, the knees splay wider, the trunk leans less). */
+  private readonly bellyCrouch: number;
+  private readonly skirtCrouch: number;
   private idleAct = 0;
   private idleAmt = 0;
   private idleSlot = -1;
   private walkBlend = 0;
+  // starting and stopping
+  private prevSpeed = 0;
+  private speedKnown = false;
+  /** Smoothed acceleration (m/s^2, forward +): the body leans into a start and back into a stop. */
+  private accel = 0;
   /**
    * Where the weapon is and where the hands go (torso frame), refreshed every update; the actor puts the weapon model there. `hold.visible` is
    * false with empty hands or busy ones.
@@ -132,7 +116,25 @@ export class CharacterAnimator {
   private readonly armR: ArmAngles = { a: 0.9, b: 0.1, e: 0.9 };
   private readonly armL: ArmAngles = { a: 0.9, b: -0.1, e: 0.9 };
   private crewBlend = 0;
-  private readonly holdBody = { hw: 0, sy: 0, upper: 0, lower: 0, depth: 0 };
+  private readonly holdBody = { hw: 0, sy: 0, upper: 0, lower: 0, depth: 0, hand: 0 };
+  // ---- wrists: a loose swing behind the forearm, and the turn onto a weapon's grip ----
+  /** Forearm pitch (shoulder + elbow) last frame, per side (L, R), to find how fast the forearm swings. */
+  private readonly forePitch = [0, 0];
+  private forePitchKnown = false;
+  /** The hand's trailing bend behind the swinging forearm (radians, per side) and its sideways sway. */
+  private readonly wristLag = [0, 0];
+  private readonly wristSway = [0, 0];
+  private readonly wristQ = new Quaternion();
+  private readonly gripQs = [new Quaternion(), new Quaternion()];
+  /** Per side (L, R): the wrist rotation being solved, and the direction the fist took on the handle last time (kept across frames so it never flips over). */
+  private readonly gripScratch = [{ x: 0, y: 0, z: 0, w: 1, s: 0 }, { x: 0, y: 0, z: 0, w: 1, s: 0 }];
+  private readonly gripOff = { x: 0, y: 0, z: 0 };
+  private readonly gripRot = { x: 0, y: 0, z: 0 };
+  private readonly gripM = new Float64Array(9);
+  /** How hard the wrists are on a grip right now (0 free .. 1), per side: for tests and the ragdoll's blend. */
+  readonly wristGrip = [0, 0];
+  /** The axis error (radians) left after the wrist turned the fist onto the handle, per side (L, R); 0 when nothing is held. */
+  readonly gripError = [0, 0];
   private readonly holdInput: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
   private readonly emptyWeapon: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
 
@@ -141,12 +143,18 @@ export class CharacterAnimator {
     this.seed = (s.height * 31 + s.headScale * 17 + s.belly * 7 + s.hat * 131 + s.noseStyle * 53) | 0;
     this.shoulderBaseY = rig.joints.shoulderL.position.y;
     this.armExtra = Math.max(0, armRestAbduction(s, rig.proportions) - 0.08);
+    this.armExtraSide = [Math.max(this.armExtra, armRestAbduction(s, rig.proportions, 0.08, "L") - 0.08), Math.max(this.armExtra, armRestAbduction(s, rig.proportions, 0.08, "R") - 0.08)];
     this.kneeMax = kneeFlexLimit(s, rig.proportions);
-    this.blinkTimer = 1 + h01(this.seed) * 3;
+    const ob = crouchObstruction(s, rig.proportions);
+    this.bellyCrouch = ob.belly;
+    this.skirtCrouch = ob.skirt;
+    this.faceAnim = new FaceAnimator(this.seed);
   }
 
-  setExpression(id: ExpressionId): void {
+  /** Shows an expression at an intensity 0..1 (0 is the neutral face, 1 the full expression; a flinch and a scream are one expression at two strengths). */
+  setExpression(id: ExpressionId, intensity = 1): void {
     this.expression = id;
+    this.expressionIntensity = intensity;
   }
 
   get currentExpression(): ExpressionId {
@@ -176,6 +184,8 @@ export class CharacterAnimator {
     // The animator owns the WHOLE pose every frame. Channels it does not animate are zeroed so nothing else (a ragdoll that
     // just finished, a future dismemberment tween) can leave a stale rotation or offset behind.
     for (const bone of [j.hipL, j.hipR, j.kneeL, j.kneeR, j.shoulderL, j.shoulderR, j.elbowL, j.elbowR]) bone.rotation.set(0, 0, 0);
+    j.wristL.quaternion.set(0, 0, 0, 1);
+    j.wristR.quaternion.set(0, 0, 0, 1);
     j.pelvis.rotation.set(0, 0, 0);
     j.pelvis.position.x = 0;
     j.pelvis.position.z = 0;
@@ -183,6 +193,9 @@ export class CharacterAnimator {
     this.time += dt;
     this.breath += dt;
     const speed = Number.isFinite(pose.speed) ? Math.max(0, pose.speed) : 0;
+    this.accel = damp(this.accel, this.speedKnown ? clamp((speed - this.prevSpeed) / dt, -14, 14) : 0, 7, dt);
+    this.prevSpeed = speed;
+    this.speedKnown = true;
     const grounded = (pose.flags & FLAG.GROUNDED) !== 0;
     const crouching = (pose.flags & FLAG.CROUCHING) !== 0;
     const downed = (pose.flags & FLAG.DOWNED) !== 0;
@@ -298,11 +311,16 @@ export class CharacterAnimator {
     kL = lerp(kL, 1.0 * rising + 0.35 - falling * 0.2 - this.stretch * 0.8, airW);
     kR = lerp(kR, 0.55 * rising + 0.3 - falling * 0.2 - this.stretch * 0.8, airW);
     // crouch: thighs forward, shins back; a squat
-    const crouchW = clamp(this.crouch + m.fear * 0.2 + this.windup * 0.5 + land * 0.55, 0, 1.4) * (1 - this.down);
-    aL += crouchW * 1.05;
-    aR += crouchW * 1.05;
-    kL += crouchW * 1.9;
-    kR += crouchW * 1.9;
+    // stopping in a hurry: the knees give a little (and starting, a small dip before the push)
+    const braking = clamp(-this.accel * 0.02, 0, 0.16) * (1 - this.air) + clamp(this.accel * 0.006, 0, 0.05) * (1 - this.air);
+    const crouchW = clamp(this.crouch + m.fear * 0.2 + this.windup * 0.5 + land * 0.55 + braking, 0, 1.4) * (1 - this.down);
+    // (a paunch stops the thigh short of the height the belly is: less hip flexion, and the knee folds a little more to make up)
+    const bc = this.bellyCrouch;
+    const fc = Math.min(1.6, bc + 1.5 * this.skirtCrouch * (1 - bc * 0.5)); // (what stops the thigh: a belly, a skirt)
+    aL += crouchW * (1.05 - 0.4 * fc);
+    aR += crouchW * (1.05 - 0.4 * fc);
+    kL += crouchW * (1.9 - 0.25 * fc);
+    kR += crouchW * (1.9 - 0.25 * fc);
     // hunched, knock-kneed cowering and the drunk's bent knees
     aL += m.pain * 0.14 + m.drunk * 0.08;
     aR += m.pain * 0.14 + m.drunk * 0.08;
@@ -311,7 +329,7 @@ export class CharacterAnimator {
     // kneeling to a patient: the left knee goes down, the right foot stays planted ahead
     aL = lerp(aL, 0.0, this.kneel);
     kL = lerp(kL, 1.55, this.kneel);
-    aR = lerp(aR, 1.45, this.kneel);
+    aR = lerp(aR, 1.45 - 0.5 * fc, this.kneel);
     kR = lerp(kR, 1.45, this.kneel);
     // lying down: relaxed legs, one knee a little up
     aL = lerp(aL, 0.12, this.down);
@@ -329,8 +347,8 @@ export class CharacterAnimator {
     j.kneeL.rotation.x = -kL;
     j.kneeR.rotation.x = -kR;
     // legs splay a little for balance: wider in a crouch, out in the air, a stiff peg swings outward
-    j.hipL.rotation.z = -(0.03 + crouchW * 0.12 + airW * 0.12 + pegL * 0.16 * Math.max(0, s) * move + m.drunk * 0.06 + this.down * 0.1);
-    j.hipR.rotation.z = 0.03 + crouchW * 0.12 + airW * 0.12 + pegR * 0.16 * Math.max(0, sR) * move + m.drunk * 0.06 + this.down * 0.1;
+    j.hipL.rotation.z = -(0.03 + crouchW * (0.12 + 0.2 * bc) + airW * 0.12 + pegL * 0.16 * Math.max(0, s) * move + m.drunk * 0.06 + this.down * 0.1);
+    j.hipR.rotation.z = 0.03 + crouchW * (0.12 + 0.2 * bc) + airW * 0.12 + pegR * 0.16 * Math.max(0, sR) * move + m.drunk * 0.06 + this.down * 0.1;
 
     // Pelvis height: lower it until the lower foot is on the ground. Extent = how far the foot hangs below the hip.
     const foot = P.legLower + 0.05 * P.scale;
@@ -360,17 +378,19 @@ export class CharacterAnimator {
     j.pelvis.position.x = 0.022 * c * move * (1 + runW * 0.4) + m.drunk * 0.05 * Math.sin(this.time * 1.9) * (0.4 + move);
 
     // Torso: leans into speed and the turn, twists against the pelvis, breathes, and takes the mood.
-    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * 0.28 + this.kneel * 0.55 - this.haul * 0.3 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18;
+    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) - this.haul * 0.3 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
     this.lean = damp(this.lean, leanTarget, 8, dt);
     const moodLean = m.pain * 0.3 + m.angry * 0.14 + m.fear * -0.1 - m.triumph * 0.16 + m.drunk * 0.06;
     j.torso.rotation.x = -(P.lean + this.lean + moodLean * (1 - this.air)) - this.down * 0.15 + this.jolt[0]! * 0.6 + this.limp * 0.06 + m.drunk * 0.12 * Math.sin(this.time * 1.3);
-    const torsoTwist = (0.11 + 0.1) * s * twist;
+    const torsoTwist = (0.11 + 0.1) * s * twist - clamp(this.turn, -6, 6) * 0.03 * (1 - this.air); // (the shoulders lag the turn a little, the head leads it)
     j.torso.rotation.y = torsoTwist + m.drunk * 0.16 * Math.sin(this.time * 1.1);
     const bank = clamp(this.turn * speed * 0.018, -0.3, 0.3); // banking into a turn: the body leans toward the inside
     j.torso.rotation.z = this.jolt[1]! * 0.6 - this.limpSide * this.limp * 0.08 * onBad - roll * 0.7 - bank + m.drunk * 0.08 * Math.sin(this.time * 1.6 + 1);
     j.pelvis.rotation.z += bank * 0.3;
     const breathe = Math.sin(this.breath * (1.7 + m.pain * 1.4 + m.fear * 1.9)) * (0.012 + m.pain * 0.008 + m.fear * 0.01);
-    j.torso.scale.set(1 + breathe, 1 + breathe * 0.6, 1 + breathe);
+    // landing squash (and the take-off stretch): the trunk shortens and widens on touchdown, lengthens as it leaves the ground
+    const squash = clamp(land, 0, 1) * 0.07 - this.stretch * 0.04;
+    j.torso.scale.set(1 + breathe + squash * 0.5, 1 + breathe * 0.6 - squash, 1 + breathe + squash * 0.5);
     // the shoulders rise with the in-breath, and with tension
     const tense = m.pain * 0.02 + m.fear * 0.03 + m.angry * 0.02;
     j.shoulderL.position.y = j.shoulderR.position.y = this.shoulderBaseY + breathe * 0.35 + tense;
@@ -388,9 +408,10 @@ export class CharacterAnimator {
     let elL = eBase * move + (1 - move) * 0.14 + Math.max(0, -s) * eSwing * move * (1 - busy);
     let elR = eBase * move + (1 - move) * 0.14 + Math.max(0, -sR) * eSwing * move * (1 - busy);
     // (a wide body holds its arms further out; not while carrying, hauling or kneeling, when the arms are in front of it anyway)
-    const clear = this.armExtra * (1 - busy) * (1 - this.air * 0.5);
-    let szL = -0.08 - clear - this.air * 0.7 + this.carry * 0.55 + this.down * 0.6 - crouchW * 0.05;
-    let szR = 0.08 + clear + this.air * 0.7 - this.carry * 0.55 - this.down * 0.6 + crouchW * 0.05;
+    const clearK = (1 - busy) * (1 - this.air * 0.5);
+    const clear = this.armExtra * clearK;
+    let szL = -0.08 - this.armExtraSide[0] * clearK - this.air * 0.7 + this.carry * 0.55 + this.down * 0.6 - crouchW * 0.05;
+    let szR = 0.08 + this.armExtraSide[1] * clearK + this.air * 0.7 - this.carry * 0.55 - this.down * 0.6 + crouchW * 0.05;
     // kneeling: hands reach forward and down over the patient. hauling: arms trail BACK, gripping the body under the arms. carrying: cradle.
     shL += -this.carry * 0.0 + this.carry * 1.0 + this.kneel * 1.0 - this.haul * 0.9;
     shR += this.carry * 1.0 + this.kneel * 1.0 - this.haul * 0.9;
@@ -504,6 +525,33 @@ export class CharacterAnimator {
           j.torso.rotation.x += 0.16 * w; // arch back
           headPitch -= 0.25 * w;
           break;
+        case "scratch":
+          // the right hand goes up to the back of the head, the head tilts into it
+          shR = lerp(shR, 2.95, w);
+          elR = lerp(elR, 1.95, w);
+          szR = lerp(szR, 0.45, w);
+          headPitch += 0.05 * w;
+          headYaw += Math.sin(t * Math.PI * 8) * 0.06 * w;
+          break;
+        case "lookUp":
+          headPitch -= 0.4 * w;
+          j.torso.rotation.x += 0.09 * w; // (leans back to take in the sky)
+          shL = lerp(shL, shL + 0.2, w);
+          shR = lerp(shR, shR + 0.2, w);
+          break;
+        case "tap":
+          // a foot tapping, one hand on the hip
+          j.hipR.rotation.x += 0.16 * w * Math.max(0, Math.sin(t * Math.PI * 10));
+          j.kneeR.rotation.x -= 0.1 * w * Math.max(0, Math.sin(t * Math.PI * 10));
+          shL = lerp(shL, 0.25, w);
+          elL = lerp(elL, 1.7, w);
+          szL = lerp(szL, -0.5, w);
+          break;
+        case "sway":
+          j.pelvis.rotation.z += 0.05 * w * Math.sin(t * Math.PI * 4);
+          j.pelvis.position.x += 0.02 * w * Math.sin(t * Math.PI * 4);
+          j.torso.rotation.z -= 0.04 * w * Math.sin(t * Math.PI * 4);
+          break;
         case "shuffle":
           j.pelvis.rotation.z += 0.07 * w * Math.sin(t * Math.PI * 6);
           j.hipL.rotation.x += 0.18 * w * Math.max(0, Math.sin(t * Math.PI * 6));
@@ -518,9 +566,11 @@ export class CharacterAnimator {
     j.shoulderR.rotation.x = shR;
     j.shoulderL.rotation.z = szL;
     j.shoulderR.rotation.z = szR;
-    j.elbowL.rotation.x = elL;
-    j.elbowR.rotation.x = elR;
+    // (an elbow folds no further than the ragdoll's hinge lets it: a sprint's swing with a pained arm used to reach 2.56)
+    j.elbowL.rotation.x = clamp(elL, 0, 2.42);
+    j.elbowR.rotation.x = clamp(elR, 0, 2.42);
     this.applyHold(dt, pose, busy, speed);
+    this.applyWrists(dt);
 
     // ---- head: stays level against the torso, glances, leads the turn, takes the mood ---------------------------------------------------------
     j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1);
@@ -534,6 +584,30 @@ export class CharacterAnimator {
     j.root.position.y = this.down * (P.torsoDepth * 0.5 + 0.05);
 
     this.updateFace(dt);
+  }
+
+  /**
+   * The wrists. A hand that holds nothing trails a swinging forearm a little (a loose bend behind the swing, easing back when it stops), the way a real hand lags; a hand on a
+   * grip is turned by the wrist onto the handle (`applyHold` solved it), blended by how firmly it holds.
+   */
+  private applyWrists(dt: number): void {
+    const j = this.rig.joints;
+    for (const [i, sh, el, wrist] of [[0, j.shoulderL, j.elbowL, j.wristL], [1, j.shoulderR, j.elbowR, j.wristR]] as const) {
+      const pitch = sh.rotation.x + el.rotation.x;
+      const v = this.forePitchKnown ? (pitch - this.forePitch[i]!) / dt : 0;
+      this.forePitch[i] = pitch;
+      const free = 1 - this.wristGrip[i]!;
+      this.wristLag[i] = damp(this.wristLag[i]!, clamp(-0.05 * v, -0.55, 0.55) * free, 16, dt);
+      // ... and sways a touch outward with the arm's abduction
+      this.wristSway[i] = damp(this.wristSway[i]!, clamp(-sh.rotation.z * 0.25, -0.2, 0.2) * free, 10, dt);
+      wrist.rotation.set(this.wristLag[i]!, 0, this.wristSway[i]!);
+      const w = this.wristGrip[i]!;
+      if (w > 0.003) {
+        this.wristQ.copy(wrist.quaternion);
+        wrist.quaternion.copy(this.wristQ).slerp(this.gripQs[i]!, w);
+      }
+    }
+    this.forePitchKnown = true;
   }
 
   /**
@@ -565,6 +639,7 @@ export class CharacterAnimator {
     body.upper = P.armUpper;
     body.lower = P.armLower;
     body.depth = P.torsoDepth;
+    body.hand = P.handRadius;
     let input = w;
     if (w.hidden || busy >= 0.5) {
       // (a scratch copy: the hot loop allocates nothing)
@@ -577,18 +652,45 @@ export class CharacterAnimator {
     j.torso.rotation.y += hold.twist * B.hold;
     j.torso.rotation.x += hold.lean * B.hold;
     j.head.rotation.y -= hold.twist * B.hold * 0.7;
-    for (const [sh, el, side, tgt, ang] of [
-      [j.shoulderR, j.elbowR, 1, hold.right, this.armR],
-      [j.shoulderL, j.elbowL, -1, hold.left, this.armL],
+    // the fist's centre sits a little below the wrist joint: the wrist goes where the fist's centre must be
+    const dCentre = P.handRadius * HAND_CENTRE;
+    const M = this.gripM;
+    for (const [sh, el, side, tgt, ang, gi] of [
+      [j.shoulderR, j.elbowR, 1, hold.right, this.armR, 1],
+      [j.shoulderL, j.elbowL, -1, hold.left, this.armL, 0],
     ] as const) {
       const k = tgt.w * B.hold;
+      const gs = this.gripScratch[gi]!;
+      this.wristGrip[gi] = 0;
+      this.gripError[gi] = 0;
       if (k < 0.003) {
         ang.a = sh.rotation.x; // (warm start for the next time this hand is wanted)
         ang.b = sh.rotation.z;
         ang.e = el.rotation.x;
         continue;
       }
-      solveArm(P.armUpper, P.armLower, side, tgt.x - side * P.shoulderHalfWidth, tgt.y - this.shoulderBaseY, tgt.z, ang);
+      const tx = tgt.x - side * P.shoulderHalfWidth;
+      const ty = tgt.y - this.shoulderBaseY;
+      const tz = tgt.z;
+      solveArm(P.armUpper, P.armLower, side, tx, ty, tz, ang);
+      const handle = tgt.ax * tgt.ax + tgt.ay * tgt.ay + tgt.az * tgt.az > 0.25;
+      if (handle) {
+        // the wrist turns the fist's grip axis onto the handle, and the arm is re-solved for where that leaves the fist's centre (three times: the answer settles at once)
+        for (let it = 0; it < 3; it++) {
+          solveWrist(ang.a, ang.b, ang.e, tgt.ax, tgt.ay, tgt.az, gs, M);
+          rotateByQuat(gs, 0, -dCentre, 0, this.gripRot);
+          applyMatrix(M, this.gripRot.x, this.gripRot.y, this.gripRot.z, this.gripOff);
+          solveArm(P.armUpper, P.armLower, side, tx - this.gripOff.x, ty - this.gripOff.y, tz - this.gripOff.z, ang);
+        }
+        this.gripError[gi] = solveWrist(ang.a, ang.b, ang.e, tgt.ax, tgt.ay, tgt.az, gs, M);
+        this.gripQs[gi]!.set(gs.x, gs.y, gs.z, gs.w);
+        this.wristGrip[gi] = k;
+      } else {
+        // a hand with nothing to wrap round (a free hand, the reload's work): the fist hangs on from the forearm's line
+        forearmMatrix(ang.a, ang.b, ang.e, M);
+        applyMatrix(M, 0, -dCentre, 0, this.gripOff);
+        solveArm(P.armUpper, P.armLower, side, tx - this.gripOff.x, ty - this.gripOff.y, tz - this.gripOff.z, ang);
+      }
       sh.rotation.x = lerp(sh.rotation.x, ang.a, k);
       sh.rotation.z = lerp(sh.rotation.z, ang.b, k);
       el.rotation.x = lerp(el.rotation.x, ang.e, k);
@@ -602,6 +704,13 @@ export class CharacterAnimator {
         sh.rotation.x = lerp(sh.rotation.x, 1.15 + 0.35 * ram * (side === 1 ? 1 : -1), c);
         sh.rotation.z = lerp(sh.rotation.z, side * 0.18, c);
         el.rotation.x = lerp(el.rotation.x, 0.5 + 0.3 * ram, c);
+      }
+      // ... both fists wrapped round the rammer's staff, which runs straight ahead of the crew (the same wrist solve as a weapon's grip)
+      for (const [gi, sh, el] of [[0, j.shoulderL, j.elbowL], [1, j.shoulderR, j.elbowR]] as const) {
+        const gs = this.gripScratch[gi]!;
+        this.gripError[gi] = solveWrist(sh.rotation.x, sh.rotation.z, el.rotation.x, 0, 0, -1, gs, this.gripM);
+        this.gripQs[gi]!.set(gs.x, gs.y, gs.z, gs.w);
+        this.wristGrip[gi] = Math.max(this.wristGrip[gi]!, c);
       }
     }
   }
@@ -618,77 +727,6 @@ export class CharacterAnimator {
   }
 
   private updateFace(dt: number): void {
-    const { face } = this.rig;
-    if (!face.active) return; // a far-crowd rig has no face to move
-    const target = EXPRESSIONS[this.expression];
-    const r = 14;
-    const f = this.face;
-    f.brow = damp(f.brow, target.brow, r, dt);
-    f.browTilt = damp(f.browTilt, target.browTilt, r, dt);
-    f.eyes = damp(f.eyes, target.eyes, r, dt);
-    f.mouthCurve = damp(f.mouthCurve, target.mouthCurve, r, dt);
-    f.mouthOpen = damp(f.mouthOpen, target.mouthOpen, r, dt);
-    f.squint = damp(f.squint, target.squint, r, dt);
-    f.pupil = damp(f.pupil, target.pupil, 8, dt);
-    f.asym = damp(f.asym, target.asym, 6, dt);
-    const drunk = this.mood.drunk;
-
-    // Blink: brief closure every 2-5 s; drunk characters droop instead.
-    this.blinkTimer -= dt;
-    if (this.autoBlink && this.blinkTimer <= 0) {
-      this.blink = 1;
-      this.blinkTimer = 2 + h01(Math.floor(this.time * 10) + this.seed) * 3;
-    }
-    this.blink = Math.max(0, this.blink - dt * 9);
-    const closed = clamp(this.blink + (1 - Math.min(f.eyes, 1)) * 0.9 + face.lidBias + drunk * 0.1 * (0.5 + 0.5 * Math.sin(this.time * 1.4)), 0, 1);
-    const lidAngle = 0.5 + (-Math.PI / 2 - 0.5) * closed;
-    face.lidL.rotation.x = lidAngle;
-    face.lidR.rotation.x = lidAngle;
-    // The lower lid rises for a squint and meets the upper on a blink.
-    const low = Math.PI - 0.6 + face.lowerLidBase * 1.2 + f.squint * 0.95 + this.blink * 0.75;
-    face.lowerLidL.rotation.x = low;
-    face.lowerLidR.rotation.x = low;
-    const wide = Math.max(0, f.eyes - 1);
-    const sc = 1 + wide * 0.5;
-    face.eyeL.scale.set(face.eyeScale[0] * sc, face.eyeScale[1] * sc, sc);
-    face.eyeR.scale.set(face.eyeScale[0] * sc, face.eyeScale[1] * sc, sc);
-    face.coreL.scale.setScalar(f.pupil);
-    face.coreR.scale.setScalar(f.pupil);
-
-    // Brows: height + tilt (mirrored), one higher when asymmetric (drunk, scornful).
-    const R = this.rig.proportions.headRadius;
-    const by = face.browY + f.brow * R * 0.12;
-    face.browL.position.y = by + f.asym * R * 0.05;
-    face.browR.position.y = by - f.asym * R * 0.05;
-    face.browL.rotation.z = -f.browTilt * 0.5;
-    face.browR.rotation.z = f.browTilt * 0.5;
-
-    // Mouth: the skin itself moves (smile / frown / squint / jaw morphs); the lip line and the cavity follow it.
-    const curve = f.mouthCurve;
-    const open = f.mouthOpen;
-    face.setMorph("smile", clamp((curve - 0.15) * 1.15, 0, 1));
-    face.setMorph("frown", clamp(-curve, 0, 1));
-    face.setMorph("squint", f.squint);
-    face.setMorph("jaw", open * 0.95);
-    face.setMorph("puff", clamp(drunk * 0.3 * (0.5 + 0.5 * Math.sin(this.time * 0.9)), 0, 1));
-    // Lip line: an arch (frown) flipped into a smile; it fades out as the mouth opens into a D-shaped cavity.
-    face.mouth.rotation.z = curve >= 0.15 ? Math.PI : 0;
-    face.mouth.scale.set(1, 0.3 + Math.abs(curve) * 1.1, 1);
-    face.mouth.position.y = face.mouthY;
-    face.mouth.visible = open < 0.3;
-    // Cavity hangs from the upper lip line down to where the lower lip has gone with the jaw; corners widen a little with a grin.
-    const w = face.mouthWidth * 0.5 * (0.85 + 0.25 * Math.max(0, curve) + 0.1 * open);
-    face.mouthInterior.visible = open > 0.1;
-    const [jy] = jawPoint(R, open * 0.95, face.mouthY - R * 0.05, face.mouthZ);
-    const drop = Math.max(0.001, face.mouthY - R * 0.05 - jy);
-    face.mouthCavity.scale.set(w, drop + R * 0.02, R * 0.03);
-    face.mouthInterior.position.y = face.mouthY + R * 0.005;
-    if (face.teethLower) face.teethLower.position.y = -R * 0.09 - drop;
-    face.tongue.position.y = -0.98 + open * 0.05;
-
-    // Pupils wander when drunk.
-    const wobble = drunk * Math.sin(this.time * 2.1) * face.eyeRadius * 0.3;
-    face.pupilL.position.x = wobble;
-    face.pupilR.position.x = -wobble;
+    this.faceAnim.update(this.rig.face, this.rig.proportions.headRadius, dt, this.expression, this.expressionIntensity, this.mood.drunk, this.autoBlink);
   }
 }

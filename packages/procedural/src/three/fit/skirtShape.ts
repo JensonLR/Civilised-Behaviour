@@ -80,7 +80,7 @@ export function skirtRings(c: BodyCtx, o: SkirtOptions): Ring[] {
     // the belly and the waist: the coat drops straight from the widest point at the top and only eases in slowly (a paunch is not tucked away below the belt)
     const hang = 1 - 0.55 * sstep(0, total * 0.9, d);
     const ease = 0.014 + 0.035 * t;
-    const swing = (o.open ? 0.3 : 0.32) * d * 0.5;
+    const swing = (o.open ? 0.4 : 0.42) * d * 0.5;
     const pv = pelvis(y);
     const X = Math.max((t0.x + 0.012) * hang + tl.x * (1 - hang) * 0.5, lg.x + ease * 1.25, pv.x + ease);
     const F = Math.max((t0.f + 0.012) * hang, lg.f + ease + swing * 0.7, pv.f + ease);

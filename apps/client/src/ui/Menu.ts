@@ -1,10 +1,12 @@
 import { JOIN_CODE_LENGTH, isValidJoinCode } from "@cb/shared";
 
 export interface MenuHandlers {
-  onCreate(name: string, rules: { dismemberment: boolean }): Promise<void>;
-  onJoin(code: string, name: string): Promise<void>;
+  /** Found an expedition. `progress` names the stage reached ("Surveying the territory...") for the working card. */
+  onCreate(name: string, rules: { dismemberment: boolean }, progress: (step: string) => void): Promise<void>;
+  onJoin(code: string, name: string, progress: (step: string) => void): Promise<void>;
 }
 
+import { describeError, stepAt } from "./menuLogic.ts";
 import { startPadNav } from "./PadNav.ts";
 import { anyModalOpen } from "./modal.ts";
 import { openHowTo, hasSeenHowTo } from "./HowTo.ts";
@@ -14,6 +16,9 @@ import { GORE_LEVELS, getCampaignLimbLoss, getGore, onSettingChange, setCampaign
 declare const __APP_VERSION__: string | undefined;
 /** Shown on the front door and useful in bug reports. */
 export const versionLabel = (): string => `Pre-alpha ${typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev"}`;
+
+/** The compass of the working card: a brass dial whose needle swings (CSS; still under reduced motion) while the Society is consulted. */
+const DIAL = `<svg class="dial" viewBox="-50 -50 100 100" aria-hidden="true"><circle r="47" class="rim"/><circle r="41" class="face"/>${Array.from({ length: 16 }, (_, i) => `<line class="tk" x1="0" y1="-41" x2="0" y2="${i % 4 === 0 ? -32 : -36}" transform="rotate(${i * 22.5})"/>`).join("")}<text class="n" y="-22" text-anchor="middle">N</text><g class="needle"><path d="M0 -34 6 0 0 6-6 0z" class="n1"/><path d="M0 34-6 0 0-6 6 0z" class="n2"/></g><circle r="4" class="hub"/></svg>`;
 
 /** A compass rose for the letterhead: eight points, drawn in currentColor so it takes the brass of the rule beside it. */
 const COMPASS = `<svg viewBox="0 0 32 32" fill="currentColor"><path d="M16 1 19 13 31 16 19 19 16 31 13 19 1 16 13 13Z"/><circle cx="16" cy="16" r="2.4" fill="none" stroke="currentColor" stroke-width="1"/><path d="M16 7 17.6 14.4 25 16 17.6 17.6 16 25 14.4 17.6 7 16 14.4 14.4Z" fill="none" stroke="currentColor" stroke-width=".6" transform="rotate(45 16 16)"/></svg>`;
@@ -26,6 +31,14 @@ export class Menu {
   private readonly buttons: HTMLButtonElement[];
   /** Container the character creator renders into (right-hand side, next to the 3D preview). */
   readonly creatorHost: HTMLElement;
+  private readonly consult: HTMLElement;
+  private readonly consultHead: HTMLElement;
+  private readonly consultStep: HTMLElement;
+  private readonly consultActions: HTMLElement;
+  private stepOverride: string | undefined;
+  private workingSince = 0;
+  private workingTimer = 0;
+  private lastAction: (() => Promise<void>) | undefined;
 
   constructor(
     private readonly root: HTMLElement,
@@ -68,13 +81,32 @@ export class Menu {
         <p class="fine">Mature content: strong violence, coarse language and dark satire.</p>
         <p class="fine version">${versionLabel()}</p>
       </div>
-      <div class="panel" id="creator-host" aria-label="Character creator"></div>`;
+      <div class="panel" id="creator-host" aria-label="Character creator"></div>
+      <div class="consult" hidden>
+        <div class="card panel" role="alertdialog" aria-labelledby="consult-head" aria-describedby="consult-step" tabindex="-1">
+          ${DIAL}
+          <h2 id="consult-head">Consulting the Society...</h2>
+          <p id="consult-step" role="status" aria-live="polite"></p>
+          <div class="bar" aria-hidden="true"><div class="fill"></div></div>
+          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="back">Return to the door</button></div>
+        </div>
+      </div>`;
     this.creatorHost = root.querySelector<HTMLElement>("#creator-host")!;
     this.nameInput = root.querySelector<HTMLInputElement>("#name")!;
     this.codeInput = root.querySelector<HTMLInputElement>("#code")!;
     this.status = root.querySelector<HTMLElement>("#status")!;
     this.buttons = [...root.querySelectorAll<HTMLButtonElement>("#create, #join")];
-    root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name(), this.rules())));
+    this.consult = root.querySelector<HTMLElement>(".consult")!;
+    this.consultHead = root.querySelector<HTMLElement>("#consult-head")!;
+    this.consultStep = root.querySelector<HTMLElement>("#consult-step")!;
+    this.consultActions = root.querySelector<HTMLElement>(".consult .actions")!;
+    root.querySelector(".consult .retry")!.addEventListener("click", () => this.lastAction && void this.run(this.lastAction));
+    root.querySelector(".consult .back")!.addEventListener("click", () => this.closeConsult());
+    this.consult.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !this.consultActions.hidden) this.closeConsult();
+    });
+    root.addEventListener("padback", () => !this.consultActions.hidden && this.closeConsult());
+    root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t))));
     root.querySelector("#join")!.addEventListener("click", () => void this.join());
     root.querySelector<HTMLSelectElement>("#gore")!.addEventListener("change", (e) => setGore((e.target as HTMLSelectElement).value as (typeof GORE_LEVELS)[number]));
     const options = root.querySelector<HTMLButtonElement>("#options")!;
@@ -88,7 +120,7 @@ export class Menu {
     });
     this.codeInput.addEventListener("input", () => (this.codeInput.value = this.codeInput.value.toUpperCase()));
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
-    this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules())));
+    this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t))));
     startPadNav(root, () => !this.root.hidden && !anyModalOpen());
   }
 
@@ -114,18 +146,62 @@ export class Menu {
       this.setStatus("Codes are five characters, e.g. K7M2Q.", true);
       return;
     }
-    await this.run(() => this.handlers.onJoin(code, this.name()));
+    await this.run(() => this.handlers.onJoin(code, this.name(), (t) => this.progress(t)));
+  }
+
+  /** Names the stage the work has reached (the working card shows it instead of the patient phrases). */
+  progress(step: string): void {
+    this.stepOverride = step;
+    this.consultStep.textContent = step;
   }
 
   private async run(action: () => Promise<void>): Promise<void> {
+    this.lastAction = action;
     this.setBusy(true);
-    this.setStatus("Consulting the Society...", false);
+    this.setStatus("", false);
+    this.openConsult();
     try {
       await action();
+      this.closeConsult(true);
       this.hide();
     } catch (e) {
-      this.setStatus(e instanceof Error ? e.message : "The Society regrets to inform you of an error.", true);
+      this.showFailure(describeError(e));
       this.setBusy(false);
+    }
+  }
+
+  private openConsult(): void {
+    this.stepOverride = undefined;
+    this.workingSince = performance.now();
+    this.consult.hidden = false;
+    this.consult.dataset.state = "working";
+    this.consultHead.textContent = "Consulting the Society...";
+    this.consultStep.textContent = stepAt(0);
+    this.consultActions.hidden = true;
+    for (const p of this.root.querySelectorAll<HTMLElement>(".panel:not(.card)")) p.inert = true;
+    this.consult.querySelector<HTMLElement>(".card")!.focus();
+    window.clearInterval(this.workingTimer);
+    this.workingTimer = window.setInterval(() => {
+      if (this.consult.dataset.state === "working" && !this.stepOverride) this.consultStep.textContent = stepAt((performance.now() - this.workingSince) / 1000);
+    }, 1000);
+  }
+
+  private showFailure(message: string): void {
+    window.clearInterval(this.workingTimer);
+    this.consult.dataset.state = "error";
+    this.consultHead.textContent = "The Society regrets...";
+    this.consultStep.textContent = message;
+    this.consultActions.hidden = false;
+    this.consultActions.querySelector<HTMLElement>(".retry")!.focus();
+  }
+
+  private closeConsult(success = false): void {
+    window.clearInterval(this.workingTimer);
+    this.consult.hidden = true;
+    for (const p of this.root.querySelectorAll<HTMLElement>(".panel:not(.card)")) p.inert = false;
+    if (!success) {
+      this.setBusy(false);
+      this.root.querySelector<HTMLElement>("#create")?.focus();
     }
   }
 

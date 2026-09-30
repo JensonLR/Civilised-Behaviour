@@ -32,6 +32,8 @@ export class SettingsSheet {
   private pending: { action: ActionId; slot: Slot; code: string } | undefined;
   private conflictBar!: HTMLElement;
   private bindingButtons = new Map<string, HTMLButtonElement>();
+  private resetTimer = 0;
+  private disarmReset: () => void = () => undefined;
 
   constructor() {
     const { panel } = this.modal;
@@ -57,11 +59,29 @@ export class SettingsSheet {
     this.buildAccess(body);
     const done = h("button", { type: "button", class: "primary" }, "Done");
     done.addEventListener("click", () => this.close());
-    const reset = h("button", { type: "button" }, "Restore defaults");
+    // Restoring is destructive (volumes, bindings, everything), so it asks once: the first press arms the button for four seconds, the second does it.
+    const reset = h("button", { type: "button", class: "danger" }, "Restore defaults");
+    let armed = 0;
+    const disarm = (): void => {
+      armed = 0;
+      window.clearTimeout(this.resetTimer);
+      reset.textContent = "Restore defaults";
+      reset.removeAttribute("data-armed");
+    };
     reset.addEventListener("click", () => {
+      if (!armed) {
+        armed = 1;
+        reset.textContent = "Really restore? Press again";
+        reset.setAttribute("data-armed", "");
+        this.say("This puts every option, key and volume back. Press again to confirm.");
+        this.resetTimer = window.setTimeout(disarm, 4000);
+        return;
+      }
+      disarm();
       S.resetAllSettings();
       this.say("Every option is back to the Society's recommendation.");
     });
+    this.disarmReset = disarm;
     panel.append(
       h("p", { class: "society" }, "The Imperial Cartographic & Improvement Society"),
       h("h2", { id: "settings-title" }, "Standing Orders"),
@@ -78,6 +98,7 @@ export class SettingsSheet {
     S.onSettingChange(() => this.refresh());
     // However the sheet closes (Done, Escape, the backdrop, the pad's B) a half-finished key capture or conflict question is dropped.
     this.modal.onClose = () => {
+      this.disarmReset();
       this.cancelCapture();
       this.clearConflict();
     };

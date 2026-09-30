@@ -128,7 +128,7 @@ export function ringSurface(
 }
 
 /** Radius of a thigh before the trouser cut scales it (metres): the visual leg is fitted to the collision envelope, see proportions.ts. */
-export const legRadius = (c: BodyCtx): number => (c.spec.trousers === 3 ? 0.125 : c.spec.trousers === 4 ? 0.11 : 0.1) * c.P.scale + 0.02;
+export const legRadius = (c: BodyCtx): number => (c.spec.trousers === 3 ? 0.114 : c.spec.trousers === 4 ? 0.104 : 0.1) * c.P.scale + 0.02; // (baggy and plus-fours: full cuts, but not so full that a crouch drives them through a belly)
 
 /** Half-width of the waist: never much narrower than the shoulders it hangs from, or the figure reads as a wasp in a coat. */
 export const waistHalf = (P: Proportions): number => Math.max(P.torsoWidth / 2 + P.bellyRadius * 0.5, P.shoulderHalfWidth * 0.74);

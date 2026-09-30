@@ -13,7 +13,7 @@ import { orientOutward } from "./sweep.ts";
 
 type Vec = readonly [number, number, number];
 
-export type BrushTag = "brow" | "socket" | "cheek" | "forehead" | "lip" | "groove" | "chin" | "plain";
+export type BrushTag = "brow" | "socket" | "cheek" | "forehead" | "lip" | "groove" | "chin" | "fold" | "plain";
 
 interface Brush {
   /** Direction the brush is centred on (normalised at build). */
@@ -33,15 +33,30 @@ const BRUSHES: readonly Brush[] = [
   { c: [0.5, -0.38, -0.75], s: [0.24, 0.16, 0.24], amp: 0.05, mirror: true, tag: "cheek" },
   { c: [0, 0.6, -0.8], s: [0.42, 0.24, 0.3], amp: 0.035, mirror: false, tag: "forehead" },
   { c: [0.88, 0.22, -0.4], s: [0.12, 0.2, 0.25], amp: -0.03, mirror: true, tag: "plain" },
-  { c: [0, -0.44, -0.88], s: [0.3, 0.17, 0.26], amp: 0.055, mirror: false, tag: "plain" },
-  { c: [0, -0.42, -0.9], s: [0.17, 0.045, 0.14], amp: 0.03, mirror: false, tag: "lip" },
-  { c: [0, -0.56, -0.85], s: [0.16, 0.05, 0.14], amp: 0.038, mirror: false, tag: "lip" },
-  { c: [0, -0.485, -0.87], s: [0.24, 0.02, 0.16], amp: -0.035, mirror: false, tag: "groove" },
-  { c: [0, -0.37, -0.92], s: [0.035, 0.06, 0.1], amp: -0.012, mirror: false, tag: "plain" },
+  { c: [0, -0.44, -0.88], s: [0.3, 0.17, 0.26], amp: 0.05, mirror: false, tag: "plain" },
+  // upper lip: two soft lobes with a small tubercle between them (Cupid's bow), a philtrum groove above with a ridge either side
+  { c: [0.07, -0.42, -0.9], s: [0.09, 0.045, 0.14], amp: 0.026, mirror: true, tag: "lip" },
+  { c: [0, -0.43, -0.9], s: [0.045, 0.035, 0.12], amp: 0.014, mirror: false, tag: "lip" },
+  // lower lip: full, pillowy, wider than the upper
+  { c: [0, -0.565, -0.85], s: [0.19, 0.05, 0.15], amp: 0.046, mirror: false, tag: "lip" },
+  { c: [0, -0.487, -0.87], s: [0.25, 0.016, 0.16], amp: -0.036, mirror: false, tag: "groove" },
+  { c: [0, -0.36, -0.92], s: [0.028, 0.06, 0.1], amp: -0.016, mirror: false, tag: "plain" },
+  { c: [0.055, -0.37, -0.92], s: [0.03, 0.05, 0.09], amp: 0.009, mirror: true, tag: "plain" },
   { c: [0, -0.86, -0.48], s: [0.2, 0.14, 0.3], amp: 0.07, mirror: false, tag: "chin" },
-  { c: [0, -0.66, -0.75], s: [0.15, 0.03, 0.12], amp: -0.02, mirror: false, tag: "plain" },
-  { c: [0.3, -0.38, -0.88], s: [0.045, 0.13, 0.1], amp: -0.02, mirror: true, tag: "plain" },
+  // the groove under the lower lip, and the chin's own pad below it
+  { c: [0, -0.66, -0.75], s: [0.15, 0.032, 0.12], amp: -0.024, mirror: false, tag: "plain" },
+  // nasolabial folds: from the wing of the nose down and out to the corner of the mouth (a dent with the cheek pad bunching above it)
+  { c: [0.25, -0.33, -0.91], s: [0.045, 0.07, 0.1], amp: -0.018, mirror: true, tag: "fold" },
+  { c: [0.31, -0.43, -0.89], s: [0.04, 0.065, 0.1], amp: -0.02, mirror: true, tag: "fold" },
+  // the dimple at the corner of the mouth
+  { c: [0.3, -0.487, -0.87], s: [0.035, 0.03, 0.1], amp: -0.012, mirror: true, tag: "groove" },
   { c: [0, 0.05, -0.99], s: [0.06, 0.12, 0.1], amp: 0.03, mirror: false, tag: "plain" },
+  // the nose root: a dip between the brows and the bridge
+  { c: [0, 0.2, -0.97], s: [0.07, 0.05, 0.1], amp: -0.016, mirror: false, tag: "plain" },
+  // the tear trough under the eye and a soft pad of cheek below it
+  { c: [0.42, -0.17, -0.89], s: [0.13, 0.045, 0.14], amp: -0.012, mirror: true, tag: "socket" },
+  // the angle of the jaw (scaled by the jaw slider like the chin)
+  { c: [0.74, -0.58, -0.3], s: [0.2, 0.16, 0.3], amp: 0.03, mirror: true, tag: "chin" },
   { c: [0, 0.22, 0.92], s: [0.5, 0.4, 0.35], amp: 0.06, mirror: false, tag: "plain" },
   { c: [0, 0.85, -0.1], s: [0.5, 0.3, 0.5], amp: 0.03, mirror: false, tag: "plain" },
 ];
@@ -115,7 +130,7 @@ function makeShape(R: number, jaw: number): HeadShape {
   };
 
   const weights = (dx: number, dy: number, dz: number): Record<BrushTag, number> => {
-    const w: Record<BrushTag, number> = { brow: 0, socket: 0, cheek: 0, forehead: 0, lip: 0, groove: 0, chin: 0, plain: 0 };
+    const w: Record<BrushTag, number> = { brow: 0, socket: 0, cheek: 0, forehead: 0, lip: 0, groove: 0, chin: 0, fold: 0, plain: 0 };
     for (const b of brushes) {
       let g = gauss(dx, dy, dz, b.c, b.s);
       if (b.mirror) g += gauss(dx, dy, dz, b.c2, b.s);
@@ -208,7 +223,7 @@ export function skinRamp(skin: number): { skin: Color; blush: Color; shade: Colo
     skin: base,
     blush: shift(1.1, 0.8, 0.78),
     shade: shift(0.82, 0.72, 0.78),
-    lip: shift(0.98, 0.6, 0.62),
+    lip: shift(0.96, 0.52, 0.58),
   };
 }
 
@@ -225,17 +240,29 @@ function gridAngles(n: number, k: number, dense: number): number[] {
 /** The direction grid shared by the skull and every shell that follows it (hair, beard) so their vertices line up. */
 export type GridLevel = boolean | "mid" | "low";
 
-/** The grid for a level of detail: full 32x24, mid 18x13, low 14x10, hull (`true`) 18x12. */
+/** The grid for a level of detail: full 32x24, mid 18x13, low 14x10, hull (`true`) 24x15 (the ink line follows the silhouette, and a face in a close-up shows every facet of it). */
 export function gridLevel(lod: 0 | 1 | 2, hull: boolean): GridLevel {
   return hull ? true : lod === 1 ? "mid" : lod === 2 ? "low" : false;
 }
 
+/**
+ * The full-detail skull's rows (elevation angles, pole to pole). They are packed where the face has features: two rows a lip's height apart around the mouth seam (rows 8 and 9:
+ * the mouth band, which is what the jaw and the mouth interior open, see faceMorph.ts), the eye rows, the nose base and the chin. Above the brow and below the chin the rows are
+ * far apart (hair and a beard cover them). Still 24 rows, so the triangle count is what it was.
+ */
+export const FACE_THETAS: readonly number[] = [
+  -1.5708, -1.3, -1.07, -0.9, -0.775, -0.69, -0.62, -0.565, -0.515, -0.462, -0.41, -0.35, -0.285, -0.22, -0.15, -0.08, -0.01, 0.06, 0.13, 0.21, 0.32, 0.5, 0.8, 1.15, 1.5708,
+];
+/** The two rows that bound the mouth seam on the full-detail skull: the upper one stays with the skull, the lower one opens with the jaw. */
+export const MOUTH_BAND = { up: FACE_THETAS[9]!, lo: FACE_THETAS[8]!, rowUp: 9, rowLo: 8 } as const;
+
 export function skullGrid(coarse: GridLevel = false, shell = false): { cols: number; rows: number; phis: number[]; thetas: number[] } {
   // Shells (hair, beards) use the SAME grid as the skull: their vertices line up with it (no chord gaps for skin to poke through) and beard/hair
   // edges are clipped on a grid fine enough that the staircase disappears.
-  const cols = coarse === "mid" ? 18 : coarse === "low" ? 14 : coarse ? 18 : 32;
-  const rows = coarse === "mid" ? 13 : coarse === "low" ? 10 : coarse ? 12 : 24;
-  return { cols, rows, phis: gridAngles(cols, Math.PI, 0.35), thetas: gridAngles(rows, Math.PI / 2, 0.5) };
+  void shell;
+  const cols = coarse === "mid" ? 18 : coarse === "low" ? 14 : coarse ? 24 : 32;
+  const rows = coarse === "mid" ? 13 : coarse === "low" ? 10 : coarse ? 15 : 24;
+  return { cols, rows, phis: gridAngles(cols, Math.PI, coarse ? 0.35 : 0.3), thetas: coarse ? gridAngles(rows, Math.PI / 2, 0.5) : [...FACE_THETAS] };
 }
 
 export function buildSkull(shape: HeadShape, opts: SkullOptions): BufferGeometry {
@@ -260,8 +287,9 @@ export function buildSkull(shape: HeadShape, opts: SkullOptions): BufferGeometry
       c.copy(ramp.skin);
       c.lerp(ramp.blush, w.cheek * 0.55);
       c.lerp(ramp.shade, w.socket * 0.7);
-      c.lerp(ramp.lip, Math.max(0, w.lip - w.groove * 0.5) * 0.9);
+      c.lerp(ramp.lip, Math.min(1, Math.max(0, w.lip - w.groove * 0.35) * 1.15));
       c.lerp(ramp.shade, w.groove * 0.55);
+      c.lerp(ramp.shade, Math.min(1, w.fold) * 0.3);
       c.multiplyScalar(1 + 0.05 * w.forehead + 0.03 * w.brow);
       opts.paint?.(dx, dy, dz, c, w);
       if (dy < -0.72) c.multiplyScalar(1 - 0.16 * smooth(-0.72, -1, dy)); // under the jaw falls into shadow

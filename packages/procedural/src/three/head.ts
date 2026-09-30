@@ -19,6 +19,9 @@ import { tone } from "./bodyKit.ts";
 
 export { faceSurfaceZ };
 
+/** Above a hat's band by this much (x R, in direction space) the skull is entirely inside the hat's crown: those cells are not drawn (hats.test.ts proves it). */
+export const HAT_COVERS_ABOVE = 0.16;
+
 /** Height of a hat's band (x R above the head centre): the hat's own seat, or just above the ears when they are taller than that (a hat rests on top of tall ears, never through them). */
 export function hatSeat(fc: FaceCtx, hf: HeadFit): number {
   const base = HAT_SEAT[fc.spec.hat] ?? 0.5;
@@ -118,7 +121,11 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   // ---- the head itself: one sculpted skin, a neck, ears and a nose that grows out of it -----------------------------------------
   mark("skull");
   b.morphable = true;
-  b.add(buildSkull(shape, { skin, coarse, paint: skinPaint(spec, skin, hairC), omit: spec.hair !== 0 && !hull ? hairCoversFn(fc, hf, hatOn, seatY) : undefined }), skin, [0, cy, 0]);
+  // (skin the eye can never see is not drawn: under a full-thickness hair shell, and under a hat's crown above its band)
+  const underHair = spec.hair !== 0 && !hull ? hairCoversFn(fc, hf, hatOn, seatY) : undefined;
+  const underHat = hatOn && !hull ? HAT_COVERS_ABOVE + seatY : undefined;
+  const omit = underHair || underHat !== undefined ? (dx: number, dy: number, dz: number): boolean => (underHat !== undefined && dy > underHat) || underHair?.(dx, dy, dz) === true : undefined;
+  b.add(buildSkull(shape, { skin, coarse, paint: skinPaint(spec, skin, hairC), omit }), skin, [0, cy, 0]);
   b.morphable = false; // the neck, the ears and the nose stay put when the face moves
   mark("neck");
   b.loft(

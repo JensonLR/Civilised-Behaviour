@@ -212,7 +212,7 @@ export function familyRegions(bone: BoneName, layer: "skin" | "worn" = "worn"): 
   if (bone === "pelvis") return layer === "skin" ? ["pelvis", "upperLeg"] : ["pelvis", "upperLeg"]; // (a skirt or a trouser top clears the pelvis and the thighs; the torso above overlaps it by design)
   if (bone === "head") return layer === "skin" ? HEAD_SKIN : ["head", "neck", "torso"];
   if (bone.startsWith("upperArm")) return ["upperArm"];
-  if (bone.startsWith("foreArm")) return ["foreArm", "hand"];
+  if (bone.startsWith("foreArm") || bone.startsWith("hand")) return ["foreArm", "hand"];
   if (bone.startsWith("upperLeg")) return ["upperLeg"];
   return ["lowerLeg"];
 }
@@ -255,7 +255,14 @@ export function primMetrics(field: BodyField, p: FitPrim): PrimMetrics {
   // (things on the head - a beard, hair, a hat brim - are judged against the head and neck as skin, and against the head, neck and the coat as the worn surface)
   const fam = familyRegions(p.bone, "worn");
   const famSkin = familyRegions(p.bone, "skin");
+  // Two places where the flesh core is only an approximation of what is inside the piece, so the audit must not count them as clipping:
+  //  - a SHOE: the foot loft on the lower-leg bone is meant to cover the ankle and run up over it (its upper is as tall as the foot is long / 4), so below that height a lower-leg piece is not judged against the leg's core;
+  //  - a HAND: the palm/finger sweeps live inside a hand ellipsoid that is smaller than a mitten or a big-knuckled fist, so a finger may sit that much (a quarter of the hand's radius) inside it.
+  const P = field.P;
+  const shoeTop = p.bone.startsWith("lowerLeg") ? -P.legLower + Math.max(0.05 * P.scale * 1.6 + 0.04, P.footLength * 0.27) + 0.01 : -Infinity;
+  const handSlack = p.bone.startsWith("hand") ? P.handRadius * 0.25 : 0;
   const one = (x: number, y: number, z: number, verts: boolean, vi = -1): void => {
+    if (y < shoeTop) verts = false; // (a point on the shoe: it still counts for touching/floating, not for sinking into the leg)
     const r = field.toRig(p.bone, [x, y, z]);
     const w = field.sdf(r, "worn", CAP, fam);
     const s = field.sdf(r, "skin", CAP, famSkin);
@@ -279,8 +286,10 @@ export function primMetrics(field: BodyField, p: FitPrim): PrimMetrics {
   p3[0] = (p.min[0] + p.max[0]) / 2;
   p3[1] = (p.min[1] + p.max[1]) / 2;
   p3[2] = (p.min[2] + p.max[2]) / 2;
-  const centreWorn = field.sdf(field.toRig(p.bone, p3), "worn", CAP, fam);
+  const centreWorn = field.sdf(field.toRig(p.bone, p3), "worn", CAP, fam) + handSlack * 1.5; // (a ring is on a finger, which the hand ellipsoid swallows)
   const thickness = Math.min(p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]);
+  depthSkin = Math.max(0, depthSkin - handSlack);
+  depthWorn = Math.max(0, depthWorn - handSlack);
   return { depthSkin, depthWorn, at, gapWorn, gapSkin, centreWorn, thickness };
 }
 
@@ -463,6 +472,8 @@ export function poseRig(rig: CharacterRig, pose: PoseDef): ReturnType<typeof fra
   const reset: JointName[] = ["hipL", "hipR", "kneeL", "kneeR", "shoulderL", "shoulderR", "elbowL", "elbowR"];
   for (const n of reset) JOINT_OF(rig, n).rotation.set(0, 0, 0);
   j.pelvis.rotation.set(0, 0, 0);
+  j.wristL.quaternion.set(0, 0, 0, 1);
+  j.wristR.quaternion.set(0, 0, 0, 1);
   const lean = rig.proportions.lean;
   j.torso.rotation.set(-lean, 0, 0);
   if (pose.animate) {
@@ -484,8 +495,9 @@ const LIMB_REGIONS: readonly Region[] = ["upperArm", "foreArm", "hand", "upperLe
 const ARM_REGIONS: readonly Region[] = ["upperArm", "foreArm", "hand"];
 const LEG_REGIONS: readonly Region[] = ["upperLeg", "lowerLeg"];
 const TRUNK_REGIONS: readonly Region[] = ["torso", "pelvis"];
-const LIMB_BONES = new Set<BoneName>(["upperArmL", "upperArmR", "foreArmL", "foreArmR", "upperLegL", "upperLegR", "lowerLegL", "lowerLegR"]);
-const ARM_BONES = new Set<BoneName>(["upperArmL", "upperArmR", "foreArmL", "foreArmR"]);
+const LIMB_BONES = new Set<BoneName>(["upperArmL", "upperArmR", "foreArmL", "foreArmR", "handL", "handR", "upperLegL", "upperLegR", "lowerLegL", "lowerLegR"]);
+const LEG_BONES = new Set<BoneName>(["upperLegL", "upperLegR", "lowerLegL", "lowerLegR"]);
+const ARM_BONES = new Set<BoneName>(["upperArmL", "upperArmR", "foreArmL", "foreArmR", "handL", "handR"]);
 
 /**
  * How far the BARE limbs of a posed body overlap the bare trunk (arms and legs separately): a big belly under a "carry" pose has the forearms inside it whatever anyone wears. That is
@@ -525,7 +537,7 @@ export function judgePoseClip(m: Measured, tag: Tag, poses: readonly PoseDef[] =
     const d = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const r = m.field.toRig(p.bone, [p.local[i * 3]!, p.local[i * 3 + 1]!, p.local[i * 3 + 2]!]);
-      const s = m.field.sdf(r, layer, 0.05, against(p));
+      const s = m.field.sdf(r, LEG_BONES.has(p.bone) ? "skin" : layer, 0.05, against(p));
       d[i] = s < 0 ? -s : 0;
     }
     restDepth.set(p.id, d);
@@ -545,7 +557,9 @@ export function judgePoseClip(m: Measured, tag: Tag, poses: readonly PoseDef[] =
         const r = posed.toRig(p.bone, [p.local[i * 3]!, p.local[i * 3 + 1]!, p.local[i * 3 + 2]!]);
         let d: number;
         if (limb) {
-          const s = posed.sdf(r, layer, 0.05, TRUNK_REGIONS);
+          // A LEG against the trunk is judged against the flesh (belly, pelvis, buttock), not against the coat: a leg folded inside a closed coat skirt is hidden by the skirt (the skirt's own
+          // clipping into the legs is judged from the trunk side, below); only a leg through the body is a leg through the body. Arms stay judged against what is worn (a sleeve through a coat shows).
+          const s = posed.sdf(r, LEG_BONES.has(p.bone) ? "skin" : layer, 0.05, TRUNK_REGIONS);
           if (s >= 0) continue;
           d = -s - rest[i]! - (ARM_BONES.has(p.bone) ? own.arm : own.leg);
         } else {

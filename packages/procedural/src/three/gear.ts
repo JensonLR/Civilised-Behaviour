@@ -107,9 +107,21 @@ export function addNeckwear(f: TorsoFrame): void {
     return { y, rx: r.rx, rz: r.rz, color };
   };
   const zNeck = (y: number, gap = 0): number => -f.neck(y, gap).rz;
+  // A ring of neckwear is shaped from the neck AND the shoulders: the neck area is as wide as the trunk's top section at that height (a broad yoke under a thick neck), but an arm raised
+  // beside the neck passes at the shoulder joint's x less the sleeve, so no ring may reach further out than that; where the trunk is wider a ring rides higher up, on the neck, where it fits.
+  const capX = f.P.shoulderHalfWidth - 1.5 * f.P.armRadius - 0.006;
+  const fitRing = (y: number, gap: number, tube: number): { y: number; rx: number; rz: number } => {
+    let yy = y;
+    let r = f.neck(yy, gap);
+    while (r.rx + tube > capX && yy < neckY + 0.02) {
+      yy += 0.006;
+      r = f.neck(yy, gap);
+    }
+    return { y: yy, rx: Math.min(r.rx, capX - tube), rz: r.rz };
+  };
   if (spec.neckwear === 1) {
     // cravat: a soft roll round the collar, a knot, two tails down the front
-    b.loft([ring(neckY - 0.035, 0.012, f.tone(dye, 0.85)), { ...ring(neckY + 0.05, 0.008, dye), crease: true }], dye);
+    b.loft([ring(neckY - 0.035, 0.024, f.tone(dye, 0.85)), { ...ring(neckY + 0.05, 0.016, dye), crease: true }], dye);
     b.sphere(0.05 * sc, dye, [0, neckY - 0.012, zNeck(neckY - 0.012, 0.012) - 0.026 * sc], [1.15, 1, 0.8]);
     for (const sx of [-1, 1]) hangingStrip(b, f.s, sx * 0.032, neckY - 0.03, neckY - 0.03 - 0.19 * sc, 0.036 * sc, 0.007, sx > 0 ? f.tone(dye, 0.9) : dye, { base: f.layer });
   } else if (spec.neckwear === 2) {
@@ -117,43 +129,46 @@ export function addNeckwear(f: TorsoFrame): void {
     const z = zNeck(neckY - 0.012, 0.012) - 0.018;
     for (const sx of [-1, 1]) b.cone(0.055 * sc, 0.1 * sc, dye, [sx * 0.07 * sc, neckY - 0.012, z], [0, 0, (sx * Math.PI) / 2], [1, 1, 0.55]);
     b.sphere(0.028 * sc, f.tone(dye, 0.8), [0, neckY - 0.012, z - 0.004]);
-    b.loft([ring(neckY - 0.03, 0.004, f.tone(dye, 0.7)), ring(neckY + 0.005, 0.004, f.tone(dye, 0.7))], dye); // (the band it is tied on)
+    b.loft([ring(neckY - 0.03, 0.014, f.tone(dye, 0.7)), ring(neckY + 0.005, 0.01, f.tone(dye, 0.7))], dye); // (the band it is tied on)
   } else if (spec.neckwear === 3) {
     // scarf: two turns round the neck, a knot at the side, one long tail with a stripe and a fringe
-    const r1 = f.neck(neckY + 0.005, 0.048);
-    const r2 = f.neck(neckY - 0.045, 0.036);
-    b.torus(Math.max(r1.rx, r1.rz), 0.05, dye, [0, neckY + 0.005, 0], [Math.PI / 2, 0, 0], [r1.rx / Math.max(r1.rx, r1.rz), r1.rz / Math.max(r1.rx, r1.rz), 1]);
-    b.torus(Math.max(r2.rx, r2.rz), 0.038, f.tone(dye, 0.78), [0, neckY - 0.045, 0], [Math.PI / 2, 0, 0], [r2.rx / Math.max(r2.rx, r2.rz), r2.rz / Math.max(r2.rx, r2.rz), 1]);
+    const r1 = fitRing(neckY + 0.005, 0.048, 0.05);
+    const r2 = fitRing(neckY - 0.045, 0.036, 0.038);
+    b.torus(Math.max(r1.rx, r1.rz), 0.05, dye, [0, r1.y, 0], [Math.PI / 2, 0, 0], [r1.rx / Math.max(r1.rx, r1.rz), r1.rz / Math.max(r1.rx, r1.rz), 1]);
+    b.torus(Math.max(r2.rx, r2.rz), 0.038, f.tone(dye, 0.78), [0, r2.y, 0], [Math.PI / 2, 0, 0], [r2.rx / Math.max(r2.rx, r2.rz), r2.rz / Math.max(r2.rx, r2.rz), 1]);
     const x = -r2.rx * 0.8;
     b.sphere(0.06 * sc, dye, [x, neckY - 0.03, zNeck(neckY - 0.03, 0.05) - 0.01], [1, 1, 0.9]);
     hangingStrip(b, f.s, x, neckY - 0.06, neckY - 0.36 * sc, 0.05 * sc, 0.009, dye, { base: f.layer, colorAt: (t) => (t > 0.5 && t < 0.58 ? f.tone(dye, 0.7) : dye) });
     for (let i = 0; i < 4; i++) hangingStrip(b, f.s, x + (i - 1.5) * 0.02, neckY - 0.36 * sc + 0.01, neckY - 0.42 * sc, 0.005, 0.004, dye, { base: f.layer });
   } else if (spec.neckwear === 4) {
     // ascot: a broad silk band folded into the collar, a puffed cross-over at the throat and a pin
-    b.loft([ring(neckY - 0.045, 0.012, f.tone(dye, 0.85)), { ...ring(neckY + 0.045, 0.008, dye), crease: true }], dye);
+    b.loft([ring(neckY - 0.045, 0.024, f.tone(dye, 0.85)), { ...ring(neckY + 0.045, 0.016, dye), crease: true }], dye);
     const z = zNeck(neckY - 0.06, 0.012) - 0.026;
     for (const sx of [-1, 1]) b.sphere(0.06 * sc, sx > 0 ? f.tone(dye, 0.92) : dye, [sx * 0.035, neckY - 0.06, z], [0.85, 1.35, 0.6], [0, 0, sx * 0.4]);
     b.sphere(0.014, PALETTE.trim.pearl, [0, neckY - 0.055, z - 0.028]);
   } else if (spec.neckwear === 5) {
     // neckerchief: knotted at the front, the triangle hanging down the chest
-    b.loft([ring(neckY - 0.03, 0.012, f.tone(dye, 0.88)), { ...ring(neckY + 0.04, 0.008, dye), crease: true }], dye);
+    b.loft([ring(neckY - 0.03, 0.024, f.tone(dye, 0.88)), { ...ring(neckY + 0.04, 0.016, dye), crease: true }], dye);
     b.sphere(0.036 * sc, f.tone(dye, 0.85), [0, neckY - 0.01, zNeck(neckY - 0.01, 0.012) - 0.02], [1.2, 1, 0.8]);
     // the triangle lies on the chest: three strips narrowing downward
-    for (let i = 0; i < 3; i++) hangingStrip(b, f.s, 0, neckY - 0.03 - i * 0.045 * sc, neckY - 0.075 - i * 0.045 * sc, (0.085 - i * 0.028) * sc, 0.006, i % 2 ? f.tone(dye, 0.94) : dye, { base: f.layer, round: undefined });
+    for (let i = 0; i < 3; i++) hangingStrip(b, f.s, 0, neckY - 0.03 - i * 0.045 * sc, neckY - 0.075 - i * 0.045 * sc, (0.085 - i * 0.028) * sc, 0.006, i % 2 ? f.tone(dye, 0.94) : dye, { base: Math.max(f.layer, f.layerAt(0, neckY - 0.075 - i * 0.045 * sc), f.layerAt(0, neckY - 0.03 - i * 0.045 * sc)) + 0.004, round: undefined });
   } else if (spec.neckwear === 6) {
     // ruff: a wheel of pleated linen round the neck
     const linen = singe(CREAM, f.burnt);
-    const r1 = f.neck(neckY + 0.005, 0.03);
-    const R = Math.max(r1.rx, r1.rz) * 1.25;
-    b.torus(R, 0.032, linen, [0, neckY + 0.005, 0], [Math.PI / 2, 0, 0], [r1.rx / Math.max(r1.rx, r1.rz), r1.rz / Math.max(r1.rx, r1.rz), 1]);
-    const r2 = f.neck(neckY - 0.03, 0.026);
-    const R2 = Math.max(r2.rx, r2.rz) * 1.2;
-    b.torus(R2, 0.028, f.tone(linen, 0.9), [0, neckY - 0.03, 0], [Math.PI / 2, 0, 0], [r2.rx / Math.max(r2.rx, r2.rz), r2.rz / Math.max(r2.rx, r2.rz), 1]);
+    // (the ruff's pleats stand out from the collar as far as the raised arm allows: the wheel is flattened on the shoulder side rather than made to reach it)
+    const r1 = fitRing(neckY + 0.005, 0.03, 0.032);
+    const kx = Math.max(1.0, Math.min(1.25, (capX - 0.032) / Math.max(r1.rx, 0.01)));
+    const R = Math.max(r1.rx * kx, r1.rz * 1.25);
+    b.torus(R, 0.032, linen, [0, r1.y, 0], [Math.PI / 2, 0, 0], [(r1.rx * kx) / R, (r1.rz * 1.25) / R, 1]);
+    const r2 = fitRing(neckY - 0.03, 0.026, 0.028);
+    const kx2 = Math.max(1.0, Math.min(1.2, (capX - 0.028) / Math.max(r2.rx, 0.01)));
+    const R2 = Math.max(r2.rx * kx2, r2.rz * 1.2);
+    b.torus(R2, 0.028, f.tone(linen, 0.9), [0, r2.y, 0], [Math.PI / 2, 0, 0], [(r2.rx * kx2) / R2, (r2.rz * 1.2) / R2, 1]);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2;
-      b.sphere(0.034, i % 2 ? linen : f.tone(linen, 0.92), [Math.sin(a) * (r1.rx + 0.045), neckY + 0.005, Math.cos(a) * (r1.rz + 0.045)], [1, 0.7, 1]);
+      b.sphere(0.034, i % 2 ? linen : f.tone(linen, 0.92), [Math.sin(a) * Math.max(r1.rx + 0.045, Math.min(r1.rx * kx * 0.96 + 0.02, capX - 0.034)), r1.y, Math.cos(a) * (r1.rz + 0.045)], [1, 0.7, 1]);
     }
-    b.loft([ring(neckY - 0.04, 0.006, f.tone(linen, 0.8)), ring(neckY + 0.03, 0.006, linen)], linen);
+    b.loft([ring(neckY - 0.04, 0.022, f.tone(linen, 0.8)), ring(neckY + 0.03, 0.014, linen)], linen); // (a 10-sided loft over a 14-sided trunk: its flats dip inside the trunk unless it is lifted)
   } else if (spec.neckwear === 7) {
     // fur collar: a shaggy pelt standing up round the neck and hanging in two lobes down the front
     const fur = singe(PALETTE.material.fur, f.burnt);
@@ -166,12 +181,12 @@ export function addNeckwear(f: TorsoFrame): void {
   } else if (spec.neckwear === 8) {
     // muffler: a long knitted scarf, two turns and both ends hanging in front, banded in the cloth's own dye and cream
     const band = singe(CREAM, f.burnt);
-    const r1 = f.neck(neckY + 0.01, 0.05);
-    const r2 = f.neck(neckY - 0.05, 0.04);
+    const r1 = fitRing(neckY + 0.01, 0.05, 0.05);
+    const r2 = fitRing(neckY - 0.05, 0.04, 0.04);
     const m1 = Math.max(r1.rx, r1.rz);
     const m2 = Math.max(r2.rx, r2.rz);
-    b.torus(m1, 0.05, dye, [0, neckY + 0.01, 0], [Math.PI / 2, 0, 0], [r1.rx / m1, r1.rz / m1, 1]);
-    b.torus(m2, 0.04, f.tone(dye, 0.8), [0, neckY - 0.05, 0], [Math.PI / 2, 0, 0], [r2.rx / m2, r2.rz / m2, 1]);
+    b.torus(m1, 0.05, dye, [0, r1.y, 0], [Math.PI / 2, 0, 0], [r1.rx / m1, r1.rz / m1, 1]);
+    b.torus(m2, 0.04, f.tone(dye, 0.8), [0, r2.y, 0], [Math.PI / 2, 0, 0], [r2.rx / m2, r2.rz / m2, 1]);
     for (const [dx, len] of [[-0.05, 0.4], [0.06, 0.32]] as const) {
       hangingStrip(b, f.s, dx, neckY - 0.06, neckY - len * sc, 0.05, 0.009, dye, { base: f.layer, colorAt: (t) => (Math.sin(t * 24) > 0.2 ? band : dye) });
     }

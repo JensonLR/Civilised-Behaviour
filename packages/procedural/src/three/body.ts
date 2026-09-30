@@ -152,7 +152,7 @@ export function buildPelvis(c: BodyCtx): BufferGeometry | undefined {
 
 // ---- arms and legs live in limbs.ts (re-exported here for the dressings that follow their surfaces) -------------------------
 
-export { buildForeArm, buildLowerLeg, buildUpperArm, buildUpperLeg, handColor, legRadius, upperArmRings, upperLegRings } from "./limbs.ts";
+export { buildForeArm, buildHandBone, buildLowerLeg, buildUpperArm, buildUpperLeg, handColor, legRadius, upperArmRings, upperLegRings } from "./limbs.ts";
 
 // ---- stumps (where a limb used to be) ----------------------------------------------------------------------------------------
 

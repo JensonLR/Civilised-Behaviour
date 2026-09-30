@@ -68,6 +68,9 @@ export class CameraRig {
   private bobPhase = 0;
   private fpFovScale = 1;
   private shakeEnergy = 0;
+  /** 0..1: how far into the downed framing the follow camera is (eases in over ~1 s, out as quickly when helped up). */
+  private downedK = 0;
+  private clock = 0;
   /** Recoil picture: the lens rises and sways a little after a shot and settles back. Cosmetic only; the aim (`pitch`, `yaw`) is never touched. */
   private kickPitch = 0;
   private kickYaw = 0;
@@ -136,8 +139,11 @@ export class CameraRig {
    * `target` is the character's feet position; `dt` in seconds. `eye` (from CharacterActor.sampleEye) is required for first person: while
    * it is missing the camera simply stays in third person.
    */
-  update(target: Vector3, dt: number, aiming: boolean, eye?: EyeSample): void {
+  update(target: Vector3, dt: number, aiming: boolean, eye?: EyeSample, downed = false): void {
     dt = Math.max(0, dt); // the first frame's timestamp can precede the loop's `last`
+    this.clock += dt;
+    this.downedK = damp(this.downedK, downed ? 1 : 0, downed ? 2.2 : 3.5, dt);
+    if (this.downedK < 1e-3) this.downedK = 0;
     this.updateThird(target, dt, aiming);
 
     this.fp = transitionStep(this.fp, this.view === "first" && eye ? 1 : 0, dt);
@@ -185,8 +191,11 @@ export class CameraRig {
     this.focus.lerp(target, 1 - Math.exp(-dt * 18));
     if (this.focus.distanceToSquared(target) > 100) this.focus.copy(target);
 
-    const dist = aiming ? this.distance * 0.62 : this.distance;
-    const pitch = clamp(this.pitch, -0.35, 1.25); // first person may look further than the follow camera can
+    // Downed: no kill-cam and no cut, just the same camera settling closer and lower, looking a little up at the sky and the faces bending over you,
+    // with a slow unsteady drift (the player can still look around; this only moves the framing).
+    const dk = this.downedK;
+    const dist = (aiming ? this.distance * 0.62 : this.distance) * (1 - 0.32 * dk);
+    const pitch = clamp(this.pitch - 0.3 * dk, -0.35, 1.25); // first person may look further than the follow camera can
     const cp = Math.cos(pitch);
     const sinY = Math.sin(this.yaw);
     const cosY = Math.cos(this.yaw);
@@ -194,7 +203,7 @@ export class CameraRig {
     const shoulder = aiming ? 1.15 : 0.55; // aiming: wide enough that the weapon clears the wearer's head and reads beside the crosshair
     this.desired.set(
       this.focus.x + sinY * cp * dist + cosY * shoulder,
-      this.focus.y + 1.55 + Math.sin(pitch) * dist,
+      this.focus.y + 1.55 - 0.95 * dk + Math.sin(pitch) * dist,
       this.focus.z + cosY * cp * dist - sinY * shoulder,
     );
     const floor = this.world.terrainHeight(this.desired.x, this.desired.z) + 0.4;
@@ -206,8 +215,8 @@ export class CameraRig {
     // aiming: look at a far point straight ahead of the wearer, so the picture's middle is what the shot will meet and the body sits to the side
     const k = this.aimK * 30;
     this.thirdLook.set(
-      this.focus.x - sinY * cp * k,
-      this.focus.y + 1.35 + 0.2 * this.aimK - Math.sin(pitch) * k,
+      this.focus.x - sinY * cp * k + Math.sin(this.clock * 0.7) * 0.12 * dk,
+      this.focus.y + 1.35 - 0.7 * dk + 0.2 * this.aimK - Math.sin(pitch) * k + Math.sin(this.clock * 0.53 + 1) * 0.07 * dk,
       this.focus.z - cosY * cp * k,
     );
   }

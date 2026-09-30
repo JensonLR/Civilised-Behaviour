@@ -13,6 +13,8 @@ import { sleeveFull, upperLegRings } from "./limbRings.ts";
 
 const MARGIN = 0.025;
 const MAX = 0.5;
+/** An arm beside hip gear may stand out a little further (the body alone never asks for more than MAX). */
+const MAX_GEAR = 0.62;
 
 /** A minimal BodyCtx: enough for the ring tables that give the body's outline (colours do not matter). */
 function shapeCtx(spec: CharacterSpec, P: Proportions): BodyCtx {
@@ -24,8 +26,30 @@ export interface BodyOutline {
   halfWidth(depth: number): number;
 }
 
+/**
+ * Hip gear that hangs beside the body on one side: how far it stands out beyond the body's own outline, and over which torso-frame heights (gear.ts places each of these with the same
+ * numbers). A hand that hangs beside a holster, a canteen, a scabbard, a machete, a coil of rope, a satchel or a birdcage must clear THAT, so the arm on that side rests further out.
+ */
+function gearOnSide(spec: CharacterSpec, P: Proportions, side: "L" | "R"): { yLo: number; yHi: number; extra: number } | undefined {
+  const h = P.torsoHeight;
+  const u = Math.max(0.8, Math.min(1.18, h / 0.6));
+  const g = spec.hipGear;
+  const leg = P.legUpper + P.legLower;
+  if (side === "R") {
+    if (g === 1) return { yLo: h * 0.08 - 0.11 * u, yHi: h * 0.08 + 0.2 * u, extra: 0.03 + 0.068 * u };
+    if (g === 6) return { yLo: h * 0.04 - Math.min(0.44, leg * 0.5), yHi: h * 0.04 + 0.22, extra: 0.115 };
+    if (g === 7) return { yLo: h * 0.08 - 0.14 * u - 0.4, yHi: h * 0.08 + 0.14, extra: 0.118 + 0.06 * u };
+  } else {
+    if (g === 2) return { yLo: h * 0.06 - 0.105 * u, yHi: h * 0.06 + 0.2 * u, extra: 0.076 * u + 0.006 };
+    if (g === 5) return { yLo: h * 0.1 - Math.min(0.78, leg * 0.8 + h * 0.1), yHi: h * 0.1 + 0.19, extra: 0.09 };
+    if (spec.pack === 3) return { yLo: h * 0.02 - 0.125 * u, yHi: h * 0.02 + 0.2 * u, extra: 0.118 * u + 0.008 };
+    if (spec.pack === 8) return { yLo: h * 0.02 - 0.13 * u, yHi: h * 0.02 + 0.25 * u, extra: 0.212 * u + 0.012 };
+  }
+  return undefined;
+}
+
 /** The outline of the body seen from the front, by depth below the shoulder joint (metres). */
-export function bodyOutline(spec: CharacterSpec, P: Proportions): BodyOutline {
+export function bodyOutline(spec: CharacterSpec, P: Proportions, side?: "L" | "R"): BodyOutline {
   const c = shapeCtx(spec, P);
   const torso = torsoRings(P, 0, spec.jacket);
   const legs = upperLegRings(c);
@@ -35,6 +59,7 @@ export function bodyOutline(spec: CharacterSpec, P: Proportions): BodyOutline {
   const pelvisAbove = 0.04 * P.scale; // (the torso's origin sits this far above the pelvis's)
   const r = legRadius(c);
   void r;
+  const gear = side ? gearOnSide(spec, P, side) : undefined;
   return {
     halfWidth(depth: number): number {
       const yT = shoulderY - depth; // torso frame
@@ -45,14 +70,15 @@ export function bodyOutline(spec: CharacterSpec, P: Proportions): BodyOutline {
         w = Math.max(w, P.hipWidth + ringAt(legs, Math.min(yP, 0.04)).rx);
         if (skirt) w = Math.max(w, ringAt(skirt, yP).rx);
       }
+      if (gear && yT >= gear.yLo && yT <= gear.yHi) w += gear.extra;
       return w;
     },
   };
 }
 
 /** The resting arm abduction (radians, from the vertical) this body needs: never less than `base`. */
-export function armRestAbduction(spec: CharacterSpec, P: Proportions, base = 0.08): number {
-  const out = bodyOutline(spec, P);
+export function armRestAbduction(spec: CharacterSpec, P: Proportions, base = 0.08, side?: "L" | "R"): number {
+  const out = bodyOutline(spec, P, side);
   const f = sleeveFull(spec.jacket);
   const r = P.armRadius;
   // points along the arm: distance from the shoulder joint, and half-thickness of the arm (across the body) there
@@ -62,7 +88,8 @@ export function armRestAbduction(spec: CharacterSpec, P: Proportions, base = 0.0
   for (const t of [0.35, 0.6, 0.85, 1]) pts.push({ s: U * t, rad: r * 1.36 * f });
   for (const t of [0.15, 0.4, 0.7, 1]) pts.push({ s: U + L * t, rad: r * 1.02 * f });
   pts.push({ s: U + L + P.handRadius * 0.5, rad: P.handRadius * 0.42 });
-  for (let a = base; a <= MAX; a += 0.02) {
+  const limit = side && gearOnSide(spec, P, side) ? MAX_GEAR : MAX;
+  for (let a = base; a <= limit; a += 0.02) {
     const sa = Math.sin(a);
     const ca = Math.cos(a);
     let ok = true;
@@ -74,7 +101,7 @@ export function armRestAbduction(spec: CharacterSpec, P: Proportions, base = 0.0
     }
     if (ok) return a;
   }
-  return MAX;
+  return limit;
 }
 
 /**
@@ -87,4 +114,16 @@ export function kneeFlexLimit(spec: CharacterSpec, P: Proportions): number {
   const d = 0.75 * Math.min(P.legUpper, P.legLower);
   const ratio = Math.min(0.9, (r * thick + r * 0.95) / (2 * d));
   return Math.max(0.6, Math.PI - 2 * Math.asin(ratio));
+}
+
+/**
+ * What the body has in front of and around its thighs to fold them against, each 0..1: `belly` (a paunch sticks out further than the thigh is long) and `skirt` (a coat skirt that
+ * hangs over the knees: a rigid skirt cannot ride up, so a deep crouch drives the knees through it). The animator lifts the thigh less in a crouch or a kneel for either, and splays
+ * the knees wider and leans less for a belly only (a skirt hangs straight: wider knees would go through its sides).
+ */
+export function crouchObstruction(spec: CharacterSpec, P: Proportions): { belly: number; skirt: number } {
+  const belly = Math.max(0, Math.min(1, P.bellyForward / (0.55 * P.legUpper + 0.05)));
+  const sk = skirtSpec(spec, P);
+  const skirt = sk ? Math.max(0, Math.min(1, sk.len / (P.legUpper * 1.4))) : 0;
+  return { belly, skirt };
 }

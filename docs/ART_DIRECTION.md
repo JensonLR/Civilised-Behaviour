@@ -144,12 +144,21 @@ Nothing in the world is a plain PBR material or a texture, except the runtime ca
 - **Wildlife** (`shared/fauna.ts`, `world/animals.ts`, `world/ambient.ts`): ducks on the pond, deer (with a stag) at the forest edge, the village cat (naps by the granary, curled on its steps from 21:00 to 06:00), swallows over the
   village and pond, dragonflies over the stream. Scenery, not simulation: pure poses from the world clock. Each animal group is ONE instanced mesh holding every species (vertices of other species collapse in the shader) so five
   species cost the same four draws the two farm animals did. Swallows and dragonflies are extra instances of the bird and butterfly meshes.
+- **Hollowmere's folk** (`shared/villagers.ts` + `villagerNav.ts` + `villagerLines.ts`, `world/villagers.ts` + `villagerPose.ts` + `villagerProps.ts` + `villagerLooks.ts` + `villagerOverlay.ts`): 22 scenery people with a day (see docs/_notes/environment.md, Villagers).
+  Art rules: they wear the village's dyes (indigo, teal, ochre, sand, olive, rust; a red or green where a trade wants one) and the costume of their TRADE (a veiled pith helmet for the bees, an eyeshade for the
+  registrar, pushed-up goggles at the forge, a sou'wester on the pond, a nightcap on the night watch); skin tones are spread evenly over the eight of the palette by seat in the roster, never by trade, and no costume is drawn
+  from a real people's dress (no fez, poncho or top knot). Children are the same rig at 0.66-0.74 scale with big heads; the old are grey, stooped and carry a cane. Props are palette-only merged geometries with the
+  ink line at LOD0 (broom, hammer, rod, bell, lantern, book, cane, lamplighter's pole, umbrella, bucket, sack, baskets, the shared crate/bottle/chair). Speech is a telegram slip (`.folk-say`, paper/ink/stamp variables),
+  names the game's own luggage tag (`.nametag`). Poses are arm-IK hand targets (the broom's foot on the flags, the hammer over the anvil), so a fist is always on its handle.
 - **Review commands** (`?showcase=world`, real arena, deterministic):
 ```
 node scripts/shot.mjs "?showcase=world&view=game&time=13" out.png 1280x720 6000      # the view a player has at spawn, at noon
 node scripts/shot.mjs "?showcase=world&view=camp|tents|fire|flag|sign|wall|cart|luggage|crates|edge|hills|sky&time=dusk" out.png
 node scripts/shot.mjs "?showcase=world&view=table|scope|gramophone|wash|hammock|lanterns|ruin|tower|colonnade|aqueduct|ford|pond|source|meadow|trail|stump|log&figures=0&props=0" out.png 1000x600
 node scripts/shot.mjs "?showcase=world&view=well|pen|bridge|waypost|door|inside|dome|refractor|flock&time=13&figures=0&props=0" out.png   # the clearing's furniture and the Observatory's doorway, dark room and dome
+node scripts/shot.mjs "?showcase=world&view=folk|folkplaza|folkgate|folkmill|folkjetty|folkwell&time=9.5&tags=1&props=0" out.png 1400x760 16000   # the folk at the hour (weather=drizzle: rain)
+node scripts/shot.mjs "?showcase=world&who=smith|keeper|ferry|fisher|clockkeeper|laundress|gardener|baker|miller|pip|lamplighter|watch|beekeeper&time=9&folkbudget=review&wd=3&wa=0.5&wh=1.4&tags=1&props=0" out.png 900x640 14000   # one villager, followed (wa = angle round them)
+node scripts/shot.mjs "?showcase=world&view=folkcast&castFrom=0&castN=6&castGap=1.6&time=12&folkbudget=review&props=0" out.png 1500x700 14000   # the cast in a row in their trade's pose, full detail
 node scripts/shot.mjs "?showcase=world&view=game&weather=storm|drizzle|fog|dust|overcast&time=13" out.png   # forced weather (lightning in a storm); try time=19 and time=0.5
 node scripts/shot.mjs "?showcase=world&view=tree&i=3" out.png                          # also rock, snag; i picks which one
 node scripts/shot.mjs "?showcase=world&cam=13,0.8,22&at=14,0.25,20&push=14,20&figures=0" out.png   # a walker bending the grass

@@ -47,12 +47,17 @@ function pistol(b: PartBuilder): void {
   b.torus(0.028, 0.004, W.brass, [0, -0.028, 0.0], [0, Math.PI / 2, 0], [1, 1, 1], Math.PI);
 }
 
-function rifleLike(b: PartBuilder, o: { muzzle: number; forestock: number; long: boolean; brassBarrel: boolean; flare: boolean }): void {
+function rifleLike(b: PartBuilder, o: { muzzle: number; forestock: number; long: boolean; brassBarrel: boolean; flare: boolean; vm?: boolean }): void {
   const barrelCol = o.brassBarrel ? W.bronze : W.barrel;
   const bandCol = o.brassBarrel ? W.bronzeDark : W.brass;
-  // stock: the butt (raked), the wrist, the fore-end
-  b.box(0.05, 0.115, 0.3, W.walnut, [0, -0.05, 0.13], [0.09, 0, 0]);
-  b.box(0.052, 0.12, 0.014, W.brass, [0, -0.052, 0.283], [0.09, 0, 0]); // butt plate
+  // stock: the butt (raked), the wrist, the fore-end. The viewmodel's stops behind the wrist: a shooter's eye never sees the butt plate, and a butt that
+  // ended in front of the lens would be a wall of brass
+  if (o.vm) {
+    b.box(0.05, 0.115, 0.15, W.walnut, [0, -0.05, 0.055], [0.05, 0, 0]);
+  } else {
+    b.box(0.05, 0.115, 0.3, W.walnut, [0, -0.05, 0.13], [0.09, 0, 0]);
+    b.box(0.052, 0.12, 0.014, W.brass, [0, -0.052, 0.283], [0.09, 0, 0]); // butt plate
+  }
   b.box(0.046, 0.075, 0.12, W.walnutLight, [0, -0.028, -0.03]);
   b.box(0.042, 0.052, o.forestock, W.walnut, [0, -0.034, -0.09 - o.forestock / 2]);
   // barrel (or barrels), atop the fore-end
@@ -74,7 +79,7 @@ function rifleLike(b: PartBuilder, o: { muzzle: number; forestock: number; long:
   // the lock (percussion: plate, hammer, nipple) and the trigger guard
   for (const s of [1, -1]) b.box(0.012, 0.06, 0.13, W.steel, [0.028 * s, 0.006, -0.01]);
   b.box(0.012, 0.062, 0.024, W.steelDark, [0.036, 0.048, 0.05], [0.5, 0, 0]);
-  b.cone(0.007, 0.02, W.brass, [0, 0.05, -0.05]);
+  b.cone(0.007, 0.02, W.brass, [0.03, 0.045, -0.05]); // the percussion nipple, beside the sight line and under the hammer
   b.torus(0.04, 0.005, W.brass, [0, -0.074, 0.02], [0, Math.PI / 2, 0], [1, 1, 1], Math.PI);
   b.box(0.008, 0.028, 0.006, W.steelDark, [0, -0.052, 0.03]); // trigger
   // ramrod pipe under the barrel (the rod itself is a separate mesh so it can slide)
@@ -119,28 +124,30 @@ function umbrella(b: PartBuilder): void {
   b.cone(0.005, 0.03, W.brass, [0, 0, -0.935], [-Math.PI / 2, 0, 0]);
 }
 
-const BUILD: Record<number, (b: PartBuilder) => void> = {
+const BUILD: Record<number, (b: PartBuilder, vm: boolean) => void> = {
   [WEAPON.PISTOL]: pistol,
-  [WEAPON.RIFLE]: (b) => rifleLike(b, { muzzle: -1.0, forestock: 0.5, long: true, brassBarrel: false, flare: false }),
-  [WEAPON.BLUNDERBUSS]: (b) => rifleLike(b, { muzzle: -0.66, forestock: 0.28, long: false, brassBarrel: true, flare: true }),
+  [WEAPON.RIFLE]: (b, vm) => rifleLike(b, { muzzle: -1.0, forestock: 0.5, long: true, brassBarrel: false, flare: false, vm }),
+  [WEAPON.BLUNDERBUSS]: (b, vm) => rifleLike(b, { muzzle: -0.66, forestock: 0.28, long: false, brassBarrel: true, flare: true, vm }),
   [WEAPON.SABRE]: sabre,
   [WEAPON.UMBRELLA]: umbrella,
 };
 
+// keyed by weapon id, +100 for the first-person variant (same model, seen from behind: the butt is trimmed)
 const geometries = new Map<number, BufferGeometry>();
 let material: MeshToonMaterial | undefined;
 
-function geometryFor(id: number): BufferGeometry | undefined {
-  const hit = geometries.get(id);
+function geometryFor(id: number, vm = false): BufferGeometry | undefined {
+  const key = vm ? id + 100 : id;
+  const hit = geometries.get(key);
   if (hit) return hit;
   const make = BUILD[id];
   if (!make) return undefined;
   const b = new PartBuilder();
-  make(b);
+  make(b, vm);
   const geo = b.build();
   if (!geo) return undefined;
   addOutlineNormals(geo); // the inked hull reads the same geometry (its own `onormal`): guns are thin, so the hull filters of the characters are not used
-  geometries.set(id, geo);
+  geometries.set(key, geo);
   return geo;
 }
 
@@ -152,11 +159,14 @@ export class WeaponModel {
   /** Where the round leaves (weapon space marker; read its matrixWorld). */
   readonly muzzle = new Object3D();
   private readonly rod: Mesh | undefined;
-  private readonly hull: Mesh | undefined;
+  private hull: Mesh | undefined;
+  private readonly geo: BufferGeometry | undefined;
   private readonly rodBase: number;
 
-  constructor(readonly id: number, outline: boolean) {
-    const geo = geometryFor(id);
+  /** `firstPerson` builds the variant the viewmodel shows (the shooter's own view of a long gun has no butt plate). */
+  constructor(readonly id: number, outline: boolean, firstPerson = false) {
+    const geo = geometryFor(id, firstPerson);
+    this.geo = geo;
     this.group.name = `weapon_${id}`;
     const a = WEAPON_ANCHORS[id];
     if (geo) {
@@ -164,12 +174,7 @@ export class WeaponModel {
       m.castShadow = true;
       m.name = "weapon";
       this.group.add(m);
-      if (outline) {
-        this.hull = new Mesh(geo, outlineMaterial());
-        this.hull.name = "weapon_ink";
-        this.hull.castShadow = false;
-        this.group.add(this.hull);
-      }
+      this.setOutline(outline);
     }
     if (a) this.muzzle.position.set(a.muzzle[0], a.muzzle[1], a.muzzle[2]);
     this.group.add(this.muzzle);
@@ -187,6 +192,17 @@ export class WeaponModel {
       }
     }
     this.group.visible = false;
+  }
+
+  /** Ink line on or off (the graphics preset changes it live). The hull is made the first time it is wanted. */
+  setOutline(on: boolean): void {
+    if (on && !this.hull && this.geo) {
+      this.hull = new Mesh(this.geo, outlineMaterial());
+      this.hull.name = "weapon_ink";
+      this.hull.castShadow = false;
+      this.group.add(this.hull);
+    }
+    if (this.hull) this.hull.visible = on;
   }
 
   /** Slides the ramrod out of the barrel (metres drawn; 0 = seated, hidden). The rod sits in the pipe under the barrel. */

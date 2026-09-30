@@ -57,6 +57,7 @@ import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
 import { buildVillage } from "./village.ts";
+import { Villagers, folkBudget } from "./villagers.ts";
 import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 import { setRgb } from "./sky.ts";
 import { buildTerrain, groundDetailTexture, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
@@ -158,6 +159,7 @@ export class WorldView {
       this.addRain();
       this.addShafts(plan);
       this.addFlock();
+      this.addFolk();
     }
     this.count();
   }
@@ -470,6 +472,25 @@ export class WorldView {
     flock.update(0);
   }
 
+  // ---- Hollowmere's folk (scenery with a routine: docs/_notes/environment.md, Villagers) -----------------------------------------------------
+
+  private folk?: Villagers;
+  private readonly walkers: { x: number; z: number }[] = [];
+  private walkerCount = 0;
+  private lastT = -1;
+  private readonly folkFrame = { hours: 12, worldSec: 0, rain: 0, x: 0, y: 0, z: 0, walkers: this.walkers, walkerCount: 0 };
+
+  private addFolk(): void {
+    const budget = folkBudget(this.detail);
+    if (budget.count <= 0) return;
+    this.folk = new Villagers(this.scene, this.world, budget);
+  }
+
+  /** The people of the village: who is on stage, at what detail, and what it costs (for docs/PERFORMANCE.md and the review scene). */
+  get folkView(): Villagers | undefined {
+    return this.folk;
+  }
+
   // ---- the Observatory ---------------------------------------------------------------------------------------------------------
 
   private addRuin(): void {
@@ -638,6 +659,12 @@ export class WorldView {
 
   /** Up to four things the grass and flowers bend away from. Entries past `n` are cleared. */
   setPushers(list: readonly { x: number; z: number }[], n = list.length): void {
+    this.walkerCount = Math.min(n, list.length, MAX_PUSHERS);
+    for (let i = 0; i < this.walkerCount; i++) {
+      const w = (this.walkers[i] ??= { x: 0, z: 0 });
+      w.x = list[i]!.x;
+      w.z = list[i]!.z;
+    }
     for (let i = 0; i < MAX_PUSHERS; i++) {
       const u = pushers.value[i]!;
       if (i < n && i < list.length) u.set(list[i]!.x, list[i]!.z, 1.5, 1);
@@ -646,7 +673,7 @@ export class WorldView {
   }
 
   /** Wind, pennant, flame and glow. Cheap: it only writes a few numbers. */
-  update(t: number, camera?: { x: number; z: number }, worldSec = t): void {
+  update(t: number, camera?: { x: number; y?: number; z: number }, worldSec = t): void {
     worldTime.value = t;
     this.hillU.uSailAngle.value = t * 0.32;
     this.flock?.update(worldSec, this.hours);
@@ -660,9 +687,23 @@ export class WorldView {
     }
     if (this.glow) this.glow.opacity = (0.5 + 0.08 * Math.sin(t * 9.7) + 0.04 * Math.sin(t * 23.1)) * lit * (0.55 + 0.45 * this.fireLevel) + 0.08 * this.fireLevel;
     if (this.pool) this.pool.opacity = 0.34 * lit * this.fireLevel + 0.1;
+    if (this.folk && camera) {
+      const f = this.folkFrame;
+      f.hours = this.hours;
+      f.worldSec = worldSec;
+      f.rain = atmoUniforms.uRain.value;
+      f.x = camera.x;
+      f.y = camera.y ?? 0;
+      f.z = camera.z;
+      f.walkerCount = this.walkerCount;
+      this.folk.update(this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - this.lastT)), f);
+    }
+    this.lastT = t;
   }
 
   dispose(): void {
+    this.folk?.dispose();
+    this.folk = undefined;
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;

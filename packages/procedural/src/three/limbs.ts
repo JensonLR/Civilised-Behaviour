@@ -7,7 +7,7 @@ import { CREAM, LEATHER, PartBuilder, singe, type V3 } from "./parts.ts";
 import { dyeAt, legRadius, ringAt, soil, tone, type BodyCtx } from "./bodyKit.ts";
 import { JACKET } from "./garments.ts";
 import { dressArmDrape } from "./drape.ts";
-import { buildHand, handColor } from "./hand.ts";
+import { buildHand, handColor, handCuffs } from "./hand.ts";
 import { CUFF_HANG, TR, bootColour, shaftColour, foreArmRings, footDims, lowerLegPlan, shirtSleeved, sleeveFull, sleeveWrist, stockingColour, upperArmRings, upperLegRings, type BootKind, type FootDims, type LowerLegPlan } from "./limbRings.ts";
 import { tipAlong, bandOn, boxBetween, buttonOn, clothLift, limbSurface, mountOn, patchOn, stripOn } from "./limbKit.ts";
 export { handColor } from "./hand.ts";
@@ -37,24 +37,25 @@ function epaulette(b: PartBuilder, c: BodyCtx, side: "L" | "R", rings: readonly 
   const head = rings[0]!;
   const top = head.y;
   const yA = r * 0.34;
-  const halfW = Math.min(head.rx * 0.86, r * 0.72);
+  const halfW = Math.min(head.rx * 0.98, r * 1.0); // (broad enough to read at a glance from ten metres)
   // the pad's spine: down the front of the sleeve head, over the flat top, down the back; `lift` is how far its centre line stands off the sleeve
   const spine = (lift: number): V3[] => {
     const capY = top + lift;
     return [surf(0, yA, lift).p, surf(0, top - r * 0.06, lift).p, [0, capY, -head.rz * 0.72], [0, capY, 0], [0, capY, head.rz * 0.72], surf(Math.PI, top - r * 0.06, lift).p, surf(Math.PI, yA, lift).p];
   };
   if (kind === 1 || kind === 2 || kind === 3) {
-    b.sweep(spine(0.0035), () => ({ rx: halfW * 1.2, rz: 0.0055, pow: 2.6 }), gold, { side: [1, 0, 0], segments: 4 });
-    b.sweep(spine(0.0075), () => ({ rx: halfW * 0.86, rz: 0.0065, pow: 2.6 }), cloth, { side: [1, 0, 0], segments: 4 });
-    b.sphere(0.014, gold, [0, top + 0.0075 + 0.008, 0], [1, 0.8, 1]);
+    b.sweep(spine(0.0045), () => ({ rx: halfW * 1.2, rz: 0.0075, pow: 2.6 }), gold, { side: [1, 0, 0], segments: 4 });
+    b.sweep(spine(0.0105), () => ({ rx: halfW * 0.8, rz: 0.0085, pow: 2.6 }), tone(cloth, 0.7), { side: [1, 0, 0], segments: 4 });
+    b.sphere(0.02, gold, [0, top + 0.0105 + 0.01, 0], [1, 0.8, 1]);
   }
+  if (PartBuilder.lod > 0) return; // (crowds: the gold pad reads, the fringe, the bullion and the cords do not)
   if (kind === 2 || kind === 3) {
     // fringe (2) or thick bullion coils (3) hang off the outer end, along the slope of the sleeve head
     const n = kind === 3 ? 6 : 8;
     for (let i = 0; i < n; i++) {
       const phi = sx * (Math.PI / 2) + (i - (n - 1) / 2) * (kind === 3 ? 0.3 : 0.24);
-      if (kind === 3) boxBetween(b, surf(phi, top - r * 0.12, 0.004).p, surf(phi, top - r * 0.12 - 0.04, 0.004).p, 0.02, 0.02, tone(gold, i % 2 ? 0.85 : 1.1));
-      else boxBetween(b, surf(phi, top - r * 0.1, 0.002).p, surf(phi, top - r * 0.1 - 0.07, 0.002).p, 0.006, 0.006, gold);
+      if (kind === 3) boxBetween(b, surf(phi, top - r * 0.12, 0.004).p, surf(phi, top - r * 0.12 - 0.05, 0.004).p, 0.028, 0.028, tone(gold, i % 2 ? 0.85 : 1.1));
+      else boxBetween(b, surf(phi, top - r * 0.1, 0.002).p, surf(phi, top - r * 0.1 - 0.09, 0.002).p, 0.011, 0.011, gold);
     }
   }
   if (kind === 4) {
@@ -94,19 +95,29 @@ export function buildUpperArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry
 }
 
 /**
- * The forearm with its hand. At full detail it carries two morph targets, the hand at half a grip and at a full one (relative to the relaxed hand it is built in), so
- * `rig.setHandGrip` can close the fingers with one number and no extra draw call. The three builds have the same topology by construction (hand.ts).
+ * The forearm: the sleeve with its cuff (and a glove's gauntlet, or the hook that replaces the hand). The hand is its own bone below it (`buildHandBone`), so it can turn at the
+ * wrist to follow a grip.
  */
 export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry | undefined {
-  const base = foreArmAt(c, side, 0);
-  if (!base || PartBuilder.lod > 0 || PartBuilder.hullMode || c.spec.hook === (side === "L" ? 1 : 2)) return base;
+  return foreArmAt(c, side);
+}
+
+/**
+ * The hand, in the WRIST's frame (`rig.joints.wristL/R`; origin at the wrist joint). At full detail it carries two morph targets, the hand at half a grip and at a full one (relative to
+ * the relaxed hand it is built in), so `rig.setHandGrip` can close the fingers with one number and no extra draw call. The three builds have the same topology by construction
+ * (hand.ts). A hook replaces the hand: there is no hand bone geometry then.
+ */
+export function buildHandBone(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry | undefined {
+  if (c.spec.hook === (side === "L" ? 1 : 2) || PartBuilder.lod >= 2) return undefined; // (a hook replaces the hand; the far level draws a ball on the forearm)
+  const base = handAt(c, side, 0);
+  if (!base || PartBuilder.lod > 0 || PartBuilder.hullMode) return base;
   const audit = PartBuilder.audit;
   PartBuilder.audit = undefined; // (the two extra poses are not new parts)
   let half: BufferGeometry | undefined;
   let full: BufferGeometry | undefined;
   try {
-    half = foreArmAt(c, side, 0.5);
-    full = foreArmAt(c, side, 1);
+    half = handAt(c, side, 0.5);
+    full = handAt(c, side, 1);
   } finally {
     PartBuilder.audit = audit;
   }
@@ -130,6 +141,12 @@ export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry 
   half.dispose();
   full.dispose();
   return base;
+}
+
+function handAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | undefined {
+  const b = new PartBuilder();
+  buildHand(b, c, side, grip);
+  return b.build();
 }
 
 /** What a cuff looks like at a height: how far its outermost cloth stands off the sleeve (0 above the cuff), so a detail can sit on it. */
@@ -248,7 +265,7 @@ function cuffDetail(b: PartBuilder, c: BodyCtx, rings: readonly Ring[], L: numbe
   }
 }
 
-function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | undefined {
+function foreArmAt(c: BodyCtx, side: "L" | "R"): BufferGeometry | undefined {
   const { spec, P } = c;
   const b = new PartBuilder();
   const r = P.armRadius;
@@ -258,7 +275,7 @@ function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | 
   const f = sleeveFull(j);
   const rolled = shirtSleeved(j) && spec.shirt === 6; // work shirts are worn with the sleeves rolled to the elbow
   if (PartBuilder.lod >= 2) {
-    // far figure: a tapered sleeve and a ball for the hand
+    // far figure: a tapered sleeve and a ball for the hand (no hand bone mesh at this level: a distant crowd does not turn its wrists)
     const s = sleeveWrist(c);
     b.loft([{ y: r * 0.3, rx: r * f, rz: r * 0.98 * f, color: tone(sleeveC, 0.9) }, { y: -L * 0.5, rx: r * f, rz: r * f, color: sleeveC }, { y: -L, rx: s.rx, rz: s.rz, color: sleeveC }], sleeveC);
     b.sphere(P.handRadius * 0.95, handColor(c), [0, -L - P.handRadius * 0.55, -P.handRadius * 0.15]);
@@ -272,7 +289,7 @@ function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | 
     cuffDetail(b, c, rings, L, r, side, lift);
   }
   if (spec.hook === (side === "L" ? 1 : 2)) hookHand(b, c, L);
-  else buildHand(b, c, L, side, grip);
+  else handCuffs(b, c, L);
   return b.build();
 }
 

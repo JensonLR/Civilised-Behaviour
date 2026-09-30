@@ -1,7 +1,7 @@
 import type { Proportions } from "../../proportions.ts";
 import { computeProportions } from "../../proportions.ts";
 import type { CharacterSpec } from "../../spec.ts";
-import { ringSurface } from "../bodyKit.ts";
+import { ringAt, ringSurface } from "../bodyKit.ts";
 import type { Ring } from "../loft.ts";
 import { headShape, type HeadShape } from "../headShape.ts";
 import { torsoRings } from "./torsoShape.ts";
@@ -27,8 +27,8 @@ import { torsoRings } from "./torsoShape.ts";
 export type V3 = readonly [number, number, number];
 export type Mat16 = ArrayLike<number>;
 
-export type BoneName = "pelvis" | "torso" | "head" | "upperArmL" | "upperArmR" | "foreArmL" | "foreArmR" | "upperLegL" | "upperLegR" | "lowerLegL" | "lowerLegR";
-export const BONES: readonly BoneName[] = ["pelvis", "torso", "head", "upperArmL", "upperArmR", "foreArmL", "foreArmR", "upperLegL", "upperLegR", "lowerLegL", "lowerLegR"];
+export type BoneName = "pelvis" | "torso" | "head" | "upperArmL" | "upperArmR" | "foreArmL" | "foreArmR" | "handL" | "handR" | "upperLegL" | "upperLegR" | "lowerLegL" | "lowerLegR";
+export const BONES: readonly BoneName[] = ["pelvis", "torso", "head", "upperArmL", "upperArmR", "foreArmL", "foreArmR", "handL", "handR", "upperLegL", "upperLegR", "lowerLegL", "lowerLegR"];
 export type Region = "torso" | "pelvis" | "neck" | "head" | "upperArm" | "foreArm" | "hand" | "upperLeg" | "lowerLeg";
 export type LayerId = "skin" | "worn";
 
@@ -85,6 +85,8 @@ export function restFrames(P: Proportions): Record<BoneName, number[]> {
     upperArmR: shR,
     foreArmL: mul(shL, translate(0, -P.armUpper, 0)),
     foreArmR: mul(shR, translate(0, -P.armUpper, 0)),
+    handL: mul(mul(shL, translate(0, -P.armUpper, 0)), translate(0, -P.armLower, 0)),
+    handR: mul(mul(shR, translate(0, -P.armUpper, 0)), translate(0, -P.armLower, 0)),
     upperLegL: hipL,
     upperLegR: hipR,
     lowerLegL: mul(hipL, translate(0, -P.legUpper, 0)),
@@ -104,6 +106,8 @@ export function framesFromRig(rig: { joints: object }): Record<BoneName, number[
     upperArmR: m("shoulderR"),
     foreArmL: m("elbowL"),
     foreArmR: m("elbowR"),
+    handL: m("wristL"),
+    handR: m("wristR"),
     upperLegL: m("hipL"),
     upperLegR: m("hipR"),
     lowerLegL: m("kneeL"),
@@ -320,6 +324,8 @@ export interface WornRings {
   foreArm?: readonly Ring[];
   upperLeg?: readonly Ring[];
   lowerLeg?: readonly Ring[];
+  /** Under a closed coat skirt the thigh is slimmed to a core (limbRings.ts `upperLegRings`): the flesh core under it is then no bigger than the trouser that covers it (else the crease and stripe on it would be 'sunk in the leg'). */
+  slimLeg?: boolean;
 }
 
 export interface BodyField {
@@ -389,13 +395,14 @@ export function makeBodyField(spec: CharacterSpec, worn: WornRings = {}, P: Prop
     { y: -lF - 0.005, rx: r * 0.56, rz: r * 0.54 },
   ];
   const lU = P.legUpper;
-  const upperLeg: Ring[] = [
+  const upperLegFull: Ring[] = [
     { y: 0.02, rx: legR * 0.85, rz: legR * 0.85 },
     { y: -0.03, rx: legR * 1.0, rz: legR * 1.0 },
     { y: -lU * 0.3, rx: legR * 1.0, rz: legR * 0.98 },
     { y: -lU * 0.75, rx: legR * 0.86, rz: legR * 0.84 },
     { y: -lU - 0.02, rx: legR * 0.74, rz: legR * 0.74 },
   ];
+  const upperLeg: Ring[] = worn.slimLeg && worn.upperLeg ? upperLegFull.map((q) => { const w = ringAt(worn.upperLeg!, q.y); return { ...q, rx: Math.min(q.rx, w.rx * 0.94), rz: Math.min(q.rz, w.rz * 0.94) }; }) : upperLegFull;
   const lL = P.legLower;
   const lowerLeg: Ring[] = [
     { y: 0.02, rx: legR * 0.74, rz: legR * 0.74 },
@@ -428,20 +435,20 @@ export function makeBodyField(spec: CharacterSpec, worn: WornRings = {}, P: Prop
     loftPrim("head", "neck", neckLoft),
     headPrim(shape, R),
   ];
-  const handC: V3 = [0, -lF - P.handRadius * 0.85, -P.handRadius * 0.05];
+  const handC: V3 = [0, -P.handRadius * 0.85, -P.handRadius * 0.05]; // (the hand bone's frame: origin at the wrist)
   const handR: V3 = [P.handRadius * 0.6, P.handRadius * 0.95, P.handRadius * 0.65];
   for (const side of ["L", "R"] as const) {
     skin.push(
       loftPrim(`upperArm${side}`, "upperArm", upperArm),
       loftPrim(`foreArm${side}`, "foreArm", foreArm),
-      ellipsoidPrim(`foreArm${side}`, "hand", handC, handR),
+      ellipsoidPrim(`hand${side}`, "hand", handC, handR),
       loftPrim(`upperLeg${side}`, "upperLeg", upperLeg),
       loftPrim(`lowerLeg${side}`, "lowerLeg", lowerLeg),
     );
     wornPrims.push(
       loftPrim(`upperArm${side}`, "upperArm", worn.upperArm ?? core(upperArm, CLOTH_ALLOWANCE)),
       loftPrim(`foreArm${side}`, "foreArm", worn.foreArm ?? core(foreArm, CLOTH_ALLOWANCE)),
-      ellipsoidPrim(`foreArm${side}`, "hand", handC, handR),
+      ellipsoidPrim(`hand${side}`, "hand", handC, handR),
       loftPrim(`upperLeg${side}`, "upperLeg", worn.upperLeg ?? core(upperLeg, CLOTH_ALLOWANCE)),
       loftPrim(`lowerLeg${side}`, "lowerLeg", worn.lowerLeg ?? core(lowerLeg, CLOTH_ALLOWANCE)),
     );

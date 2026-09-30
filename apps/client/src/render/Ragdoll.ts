@@ -60,6 +60,15 @@ export const HINGE_LIMITS: Readonly<Partial<Record<BoneName, readonly [number, n
   kneeR: [-2.5, 0.1],
 };
 
+/**
+ * The hands. A hand is not a simulated body: the forearm's capsule already covers it, and a wrist joint would be twelve more solver rows per figure for a fist. While the body
+ * falls its wrist hangs loose instead: the hand swings to point down under gravity, at most this far (radians) from the forearm's line, easing there (`WRIST_EASE` per second), and
+ * eases back into the animator's wrist when the fall blends out. It starts from whatever the wrist was doing (a fist turned onto a rifle), so nothing pops.
+ */
+export const WRIST_DANGLE = 1.0;
+const WRIST_EASE = 9;
+const WRIST_BONES = ["elbowL", "elbowR"] as const;
+
 /** Which body takes the hardest shove for a hit zone. */
 const ZONE_BODY: Record<number, BoneName> = {
   [ZONE.HEAD]: "head",
@@ -89,6 +98,9 @@ const _q2 = new Quaternion();
 const _v = new Vector3();
 const _v2 = new Vector3();
 const _axisX = new Vector3(1, 0, 0);
+const _down = new Vector3(0, -1, 0);
+const _fingers = new Vector3(0, -1, 0);
+const _qa = new Quaternion();
 
 export class RagdollWorld {
   private readonly world: World;
@@ -170,6 +182,10 @@ export class Ragdoll {
   private anchorX = 0;
   private anchorZ = 0;
   private hasAnchor = false;
+  /** The wrists' own rotation (local, in the forearm's frame): the pose they had, then the dangle; and the snapshot the blend starts from. */
+  private readonly wristJoints: Group[];
+  private readonly wristQ = [new Quaternion(), new Quaternion()];
+  private readonly wristSnap = [new Quaternion(), new Quaternion()];
 
   constructor(
     private readonly owner: RagdollWorld,
@@ -181,6 +197,8 @@ export class Ragdoll {
     const j = rig.joints;
     this.root = j.root;
     this.joints = ORDER.map((n) => j[n]);
+    this.wristJoints = [j.wristL, j.wristR];
+    for (let i = 0; i < 2; i++) this.wristQ[i]!.copy(this.wristJoints[i]!.quaternion);
     this.build(launch);
   }
 
@@ -357,6 +375,7 @@ export class Ragdoll {
       this.root.position.set(0, 0, 0);
       this.root.rotation.set(0, 0, 0);
       this.writeWorldPose(this.worldQ, this.pelvisPos);
+      this.dangleWrists(dt);
       return;
     }
     if (this.phase !== "blend") return;
@@ -372,7 +391,29 @@ export class Ragdoll {
     this.joints[0]!.getWorldPosition(_v);
     this.pelvisPos.copy(this.snapPelvis).lerp(_v, k);
     this.writeWorldPose(qs, this.pelvisPos);
+    // the wrists ease from the dangle they ended the fall with into the animator's wrist (what is in the joint right now)
+    for (let i = 0; i < 2; i++) {
+      const w = this.wristJoints[i]!;
+      _qa.copy(w.quaternion);
+      w.quaternion.copy(this.wristSnap[i]!).slerp(_qa, k);
+    }
     if (this.blendT >= 1) this.finish();
+  }
+
+  /** While simulating: each hand hangs from its forearm, pointing as far toward the ground as the wrist allows (see WRIST_DANGLE). */
+  private dangleWrists(dt: number): void {
+    const rate = 1 - Math.exp(-WRIST_EASE * dt);
+    for (let i = 0; i < 2; i++) {
+      const fore = this.worldQ[INDEX[WRIST_BONES[i]!]]!;
+      // gravity in the forearm's frame; the hand's fingers point along -Y there
+      _v.copy(_down).applyQuaternion(_q.copy(fore).invert());
+      const cos = Math.max(-1, Math.min(1, _v.dot(_fingers)));
+      const angle = Math.acos(cos);
+      _q2.setFromUnitVectors(_fingers, _v);
+      if (angle > WRIST_DANGLE) _q2.set(_q2.x * Math.sin(WRIST_DANGLE / 2) / Math.sin(angle / 2), _q2.y * Math.sin(WRIST_DANGLE / 2) / Math.sin(angle / 2), _q2.z * Math.sin(WRIST_DANGLE / 2) / Math.sin(angle / 2), Math.cos(WRIST_DANGLE / 2)); // (the same turn, cut short at the limit)
+      this.wristQ[i]!.slerp(_q2, rate);
+      this.wristJoints[i]!.quaternion.copy(this.wristQ[i]!);
+    }
   }
 
   /** Stop simulating and ease back into the animated pose (also used when a teammate revives the body mid-fall). */
@@ -380,6 +421,7 @@ export class Ragdoll {
     if (this.phase !== "sim") return;
     this.readBodies();
     for (let i = 0; i < ORDER.length; i++) this.snapQ[i]!.copy(this.worldQ[i]!);
+    for (let i = 0; i < 2; i++) this.wristSnap[i]!.copy(this.wristQ[i]!);
     this.snapPelvis.copy(this.pelvisPos);
     this.phase = "blend";
     this.blendT = 0;

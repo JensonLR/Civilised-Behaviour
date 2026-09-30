@@ -16,6 +16,7 @@ import {
 } from "three";
 import { PALETTE, SURFACE, WEAPON, type SurfaceId } from "@cb/shared";
 import { sharedToonRamp } from "@cb/procedural/three";
+import { getAtmosphere } from "../world/atmosphere.ts";
 
 /**
  * Cosmetic shot effects: muzzle flashes, drifting powder smoke, tracer streaks, impact puffs by surface, the cannon's fireball and smoke column,
@@ -29,16 +30,38 @@ export const SHOTFX = {
   flashes: 28,
   streaks: 110,
   debris: 180,
-  rings: 6,
+  /** Flat rings on the ground: the cannon's shock ring and the low ring of dust a round throws up. */
+  rings: 14,
+  /** Scars a round leaves on the ground (a dent, a lip and cracks); the oldest is recycled. */
+  marks: 40,
+  /** Seconds a scar stays, the last quarter of it fading. */
+  markLife: 40,
 } as const;
 
 const FX = PALETTE.weaponFx;
 
-/** Slow, deterministic wind for the smoke (m/s): the same everywhere, drifting with the time. The environment's own wind is a shader-side effect and has no CPU value to read. */
+/** Slow, deterministic wind DIRECTION for the smoke (m/s at a gentle breeze): the same everywhere, drifting with the time. The environment publishes only the wind's strength (`getAtmosphere().wind`), not a heading. */
 export function windAt(t: number, out: { x: number; z: number }): void {
   out.x = 0.55 * Math.cos(t * 0.045 + 1.3) + 0.25 * Math.sin(t * 0.17);
   out.z = 0.4 * Math.sin(t * 0.038) + 0.2 * Math.cos(t * 0.13 + 0.7);
 }
+
+/** How much the weather's wind (0..1, `getAtmosphere().wind`) stretches the smoke's drift: half at a dead calm, more than three times in a gale. */
+export const windGain = (strength: number): number => 0.5 + 2.9 * Math.min(1, Math.max(0, Number.isFinite(strength) ? strength : 0.2));
+
+/** The wind the smoke drifts on at time `t` in weather of strength `strength`: `windAt`'s heading, scaled by `windGain`. Writes `out` (m/s). */
+export function smokeWind(t: number, strength: number, out: { x: number; z: number }): void {
+  windAt(t, out);
+  const g = windGain(strength);
+  out.x *= g;
+  out.z *= g;
+}
+
+/** Where a firearm's lock is behind its muzzle (metres along the barrel), for the percussion cap that flies from it. */
+const LOCK_BACK: Record<number, number> = { [WEAPON.PISTOL]: 0.3, [WEAPON.RIFLE]: 0.95, [WEAPON.BLUNDERBUSS]: 0.6 };
+
+/** How near (metres) a round must pass the listener to be heard and seen going by. */
+export const WHIZZ_RANGE = 3.2;
 
 const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
 const hex = (n: number): number => n;
@@ -76,14 +99,23 @@ const PUFF_FRAG = /* glsl */ `
     float r = length(q) * 2.0;
     float a = atan(q.y, q.x);
     // a lumpy edge (three overlapping wobbles per puff, different for each), then two toon bands: lit top-left, shaded bottom-right
-    float lump = 0.07 * sin(a * 3.0 + vSeed * 6.2831) + 0.05 * sin(a * 5.0 + vSeed * 17.0) + 0.03 * sin(a * 8.0 - vSeed * 9.0);
+    float lump = 0.05 * sin(a * 3.0 + vSeed * 6.2831) + 0.035 * sin(a * 5.0 + vSeed * 17.0) + 0.02 * sin(a * 8.0 - vSeed * 9.0);
     float edge = 1.0 - smoothstep(0.80 + lump, 0.90 + lump, r);
     if (edge < 0.02) discard;
     float lit = dot(normalize(q + 1e-5), vec2(-0.55, 0.83)) * (0.4 + r) ;
     float band = lit > 0.12 ? 1.0 : (lit > -0.35 ? 0.86 : 0.7);
     vec3 col = vCol.rgb * band;
+    // an illustrator's puff: a lighter heart, a darker ring at the edge, so a cloud of dust reads against ground of its own colour
+    float core = 1.0 - smoothstep(0.0, 0.62, r);
+    float rim = smoothstep(0.7, 0.86, r);
+    col = mix(col, col + (vec3(1.0) - col) * 0.5, core * 0.85);
+    col = mix(col, col * 0.66, rim);
     col = mix(col, uFogColor, vFog);
-    gl_FragColor = vec4(col, vCol.a * edge);
+    // soft inside, firm at the contour
+    gl_FragColor = vec4(col, vCol.a * edge * mix(0.74, 1.0, rim));
+    // (a raw shader writes linear light straight to an sRGB target: without these two lines every cloud is darker and more saturated than its palette colour)
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }`;
 
 const FLASH_FRAG = /* glsl */ `
@@ -253,8 +285,25 @@ export class ShotFx {
   private readonly ry = new Float32Array(SHOTFX.rings);
   private readonly rz = new Float32Array(SHOTFX.rings);
   private readonly rmax = new Float32Array(SHOTFX.rings);
+  private readonly ralpha = new Float32Array(SHOTFX.rings);
+  private readonly rlife = new Float32Array(SHOTFX.rings).fill(0.7);
   private readonly rage = new Float32Array(SHOTFX.rings).fill(9);
   private nextRing = 0;
+
+  // ground scars ------------------------------------------------------------------------------------------------------------------
+  private readonly marks: InstancedMesh;
+  private readonly mx = new Float32Array(SHOTFX.marks);
+  private readonly my = new Float32Array(SHOTFX.marks);
+  private readonly mz = new Float32Array(SHOTFX.marks);
+  private readonly msize = new Float32Array(SHOTFX.marks);
+  private readonly mage = new Float32Array(SHOTFX.marks).fill(Infinity);
+  private readonly mseed = new Float32Array(SHOTFX.marks);
+  private nextMark = 0;
+  /** Where the listener is (the camera), for near-miss cosmetics; set by the game each frame. */
+  readonly listener = { x: 0, y: 0, z: 0, valid: false };
+  private whizzCool = 0;
+  /** Told how close a round passed (0..1) so the game can flick the camera. */
+  onNearMiss: ((strength: number) => void) | undefined;
 
   private readonly fogU = { value: 0.0085 };
   private readonly fogColor = { value: new Color(PALETTE.sky.horizon) };
@@ -307,7 +356,16 @@ export class ShotFx {
       depthWrite: false,
       uniforms: { uColor: { value: new Color(FX.dust) } },
       vertexShader: /* glsl */ `varying vec2 vUv; varying float vA; attribute float aAlpha; void main(){ vUv = uv; vA = aAlpha; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
-      fragmentShader: /* glsl */ `varying vec2 vUv; varying float vA; uniform vec3 uColor; void main(){ float r = length(vUv - 0.5) * 2.0; float ring = smoothstep(0.62, 0.8, r) * (1.0 - smoothstep(0.86, 1.0, r)); if (ring < 0.03) discard; gl_FragColor = vec4(uColor, ring * vA); }`,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv; varying float vA; uniform vec3 uColor;
+        void main(){
+          float r = length(vUv - 0.5) * 2.0;
+          float ring = smoothstep(0.62, 0.8, r) * (1.0 - smoothstep(0.86, 1.0, r));
+          if (ring < 0.03) discard;
+          gl_FragColor = vec4(uColor, ring * vA);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
     }), SHOTFX.rings);
     this.ring.geometry.setAttribute("aAlpha", new InstancedBufferAttribute(new Float32Array(SHOTFX.rings).fill(0), 1).setUsage(DynamicDrawUsage));
     this.ring.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -315,6 +373,49 @@ export class ShotFx {
     this.ring.count = 0;
     this.ring.renderOrder = 11;
     scene.add(this.ring);
+
+    // the scar: a dark dent, a lighter lip, and cracks running out of it, drawn flat on the ground
+    const markGeo = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    markGeo.setAttribute("aAlpha", new InstancedBufferAttribute(new Float32Array(SHOTFX.marks), 1).setUsage(DynamicDrawUsage));
+    markGeo.setAttribute("aSeed", new InstancedBufferAttribute(new Float32Array(SHOTFX.marks), 1).setUsage(DynamicDrawUsage));
+    this.marks = new InstancedMesh(markGeo, new ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
+      uniforms: { uDark: { value: new Color(PALETTE.world.dirtDark) }, uLight: { value: new Color(PALETTE.world.dry) } },
+      vertexShader: /* glsl */ `varying vec2 vUv; varying float vA; varying float vS; attribute float aAlpha; attribute float aSeed; void main(){ vUv = uv; vA = aAlpha; vS = aSeed; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv; varying float vA; varying float vS; uniform vec3 uDark; uniform vec3 uLight;
+        void main(){
+          vec2 q = vUv - 0.5;
+          float r = length(q) * 2.0;
+          float a = atan(q.y, q.x);
+          float dent = 1.0 - smoothstep(0.26, 0.5, r);
+          float lip = smoothstep(0.44, 0.52, r) * (1.0 - smoothstep(0.6, 0.7, r));
+          float cr = 0.0;
+          for (int i = 0; i < 6; i++) {
+            float ang = float(i) * 1.0472 + vS * 6.2831 + sin(vS * 13.0 + float(i) * 4.1) * 0.3;
+            float d = abs(sin(a - ang)) * r;
+            float reach = 0.78 + 0.2 * sin(vS * 7.0 + float(i) * 2.3);
+            float along = smoothstep(0.3, 0.46, r) * (1.0 - smoothstep(reach - 0.12, reach, r)) * step(0.0, cos(a - ang));
+            cr = max(cr, along * (1.0 - smoothstep(0.012, 0.05, d)));
+          }
+          float dark = max(dent * 0.62, cr * 0.85);
+          float light = lip * 0.55;
+          float alpha = max(dark, light) * vA;
+          if (alpha < 0.02) discard;
+          gl_FragColor = vec4(mix(uLight, uDark, dark / max(dark + light, 1e-3)), alpha);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    }), SHOTFX.marks);
+    this.marks.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.marks.frustumCulled = false;
+    this.marks.count = 0;
+    this.marks.renderOrder = 10;
+    scene.add(this.marks);
   }
 
   // ---- emitters ----------------------------------------------------------------------------------------------------------------------
@@ -421,8 +522,17 @@ export class ShotFx {
     for (let k = 0; k < cloud; k++) {
       this.puff(x + rnd(-0.06, 0.06), y + rnd(-0.04, 0.08), z + rnd(-0.06, 0.06), dx * rnd(0.3, 1.2) + rnd(-0.25, 0.25), rnd(0.15, 0.5), dz * rnd(0.3, 1.2) + rnd(-0.25, 0.25), 0.22 * big, 0.95 * big, rnd(2.0, 3.4), FX.smokeLight, FX.smokeDark, 0.62, 0.7, 0.3);
     }
-    // the wad and a few sparks fly on
+    // powder haze: a few big thin puffs that hang for seconds and drift downwind (smokeWind: the weather's strength decides how fast)
+    const haze = this.n(weapon === WEAPON.CANNON ? 4 : weapon === WEAPON.BLUNDERBUSS ? 3 : weapon === WEAPON.RIFLE ? 2 : 1);
+    for (let k = 0; k < haze; k++) {
+      this.puff(x + dx * rnd(0.2, 0.6) + rnd(-0.1, 0.1), y + rnd(-0.05, 0.2), z + dz * rnd(0.2, 0.6) + rnd(-0.1, 0.1), dx * rnd(0.2, 0.8), rnd(0.1, 0.35), dz * rnd(0.2, 0.8), 0.5 * big, 1.9 * big, rnd(3.5, 5.5), FX.smokeLight, FX.smokeLight, 0.34, 0.6, 0.22);
+    }
+    // the percussion cap leaves the lock sideways and back (a flintlock has none, but the picture is the same small brass fleck), the wad and a few sparks fly on
     if (weapon !== WEAPON.CANNON) {
+      const back = LOCK_BACK[weapon] ?? 0.4;
+      const rx = -dz;
+      const rz = dx;
+      this.debris(x - dx * back + rx * 0.03, y - dy * back + 0.035, z - dz * back + rz * 0.03, rx * rnd(1.6, 3.2) - dx * rnd(0.3, 1.2), rnd(1.6, 3), rz * rnd(1.6, 3.2) - dz * rnd(0.3, 1.2), 0.012, 0.012, 0.018, PALETTE.weapons.brass, 1.6);
       this.debris(x + dx * 0.2, y, z + dz * 0.2, dx * rnd(6, 11), dy * 8 + rnd(0.5, 2), dz * rnd(6, 11), 0.03, 0.03, 0.03, PALETTE.material.cream, 0.7);
       for (let k = 0; k < this.n(3); k++) this.debris(x, y, z, dx * rnd(3, 8) + rnd(-1, 1), dy * 5 + rnd(0, 2), dz * rnd(3, 8) + rnd(-1, 1), 0.012, 0.012, 0.03, FX.spark, 0.28);
     }
@@ -468,6 +578,7 @@ export class ShotFx {
       case SURFACE.STONE: {
         this.puff(x, y, z, nx * 0.6, ny * 0.6 + 0.3, nz * 0.6, 0.14 * size, 0.55 * size, rnd(0.6, 0.9), FX.stone, FX.dust, 0.8, 2.2, 0.25);
         burst([FX.stone, PALETTE.world.rockPale, FX.spark], this.n(6), 0.03, 0.03, 0.03, 0.8, 0.8);
+        if (ny > 0.6) this.scar(x, y, z, 0.32 * size);
         break;
       }
       case SURFACE.CLOTH: {
@@ -475,9 +586,24 @@ export class ShotFx {
         break;
       }
       default: {
-        // earth (and anything unknown): a burst of dust and a few clods
-        for (let k = 0; k < this.n(3); k++) this.puff(x, y, z, nx * 1.2 + rnd(-0.5, 0.5), ny * 1.2 + rnd(0.2, 0.9), nz * 1.2 + rnd(-0.5, 0.5), 0.16 * size, 0.62 * size, rnd(0.7, 1.2), FX.dust, PALETTE.world.dust, 0.8, 2.0, 0.3);
-        burst([PALETTE.world.dirt, PALETTE.world.dirtDark, PALETTE.world.dry], this.n(5), 0.035, 0.03, 0.035, 0.9, 0.6);
+        // earth (and anything unknown): a plume that lifts, opens and hangs, a low ring of dust racing out along the ground, clods, and a scar
+        const ground = ny > 0.55;
+        const big = size;
+        // the plume: lighter than the ground it came from (dust is pale), with a darker contour (see PUFF_FRAG), big enough and slow enough to read
+        for (let k = 0; k < this.n(4); k++) {
+          this.puff(x, y + 0.04, z, nx * 1.1 + rnd(-0.55, 0.55), ny * 1.5 + rnd(0.5, 1.5), nz * 1.1 + rnd(-0.55, 0.55), 0.3 * big, 1.25 * big, rnd(1.1, 1.8), PALETTE.world.dust, FX.dust, 0.92, 1.9, 0.28);
+        }
+        if (ground) {
+          // the ring: little puffs flung out flat, and the ring itself
+          for (let k = 0; k < this.n(6); k++) {
+            const a = rnd(0, 6.28);
+            const sp = rnd(1.4, 2.8) * Math.sqrt(big);
+            this.puff(x, y + 0.05, z, Math.cos(a) * sp, rnd(0.05, 0.3), Math.sin(a) * sp, 0.12 * big, 0.45 * big, rnd(0.5, 0.9), PALETTE.world.dust, FX.dust, 0.75, 3.2, 0.1);
+          }
+          this.ringAt(x, y + 0.04, z, 0.7 * big, 0.5, 0.5);
+          this.scar(x, y, z, 0.7 * big);
+        }
+        burst([PALETTE.world.dirt, PALETTE.world.dirtDark, PALETTE.world.dry], this.n(6), 0.045, 0.04, 0.045, 1.0, 0.6);
       }
     }
   }
@@ -507,13 +633,32 @@ export class ShotFx {
       const sp = rnd(4, 13) * Math.sqrt(k);
       this.debris(x, y + 0.2, z, Math.cos(a) * sp, rnd(4, 12) * Math.sqrt(k), Math.sin(a) * sp, rnd(0.04, 0.12), rnd(0.03, 0.08), rnd(0.04, 0.12), i % 3 === 0 ? PALETTE.world.dirtDark : i % 3 === 1 ? PALETTE.world.dirt : FX.spark, rnd(0.9, 1.6));
     }
+    this.ringAt(x, y + 0.05, z, radius * 1.3, 0.55, 0.7);
+  }
+
+  /** A flat ring of dust racing out along the ground to `radius` metres in `life` seconds. */
+  private ringAt(x: number, y: number, z: number, radius: number, alpha: number, life: number): void {
     const ri = this.nextRing;
     this.nextRing = (this.nextRing + 1) % SHOTFX.rings;
     this.rx[ri] = x;
-    this.ry[ri] = y + 0.05;
+    this.ry[ri] = y;
     this.rz[ri] = z;
-    this.rmax[ri] = radius * 1.3;
+    this.rmax[ri] = radius;
+    this.ralpha[ri] = alpha;
+    this.rlife[ri] = life;
     this.rage[ri] = 0;
+  }
+
+  /** A scar on the ground: a dent, a lip and cracks, `size` metres across. */
+  private scar(x: number, y: number, z: number, size: number): void {
+    const i = this.nextMark;
+    this.nextMark = (this.nextMark + 1) % SHOTFX.marks;
+    this.mx[i] = x;
+    this.my[i] = y + 0.025;
+    this.mz[i] = z;
+    this.msize[i] = size;
+    this.mage[i] = 0;
+    this.mseed[i] = Math.random();
   }
 
   /** The cannon's fuse: a stream of sparks at the touch hole. */
@@ -522,12 +667,63 @@ export class ShotFx {
     if (Math.random() < 0.4) this.puff(x, y, z, rnd(-0.1, 0.1), rnd(0.4, 0.8), rnd(-0.1, 0.1), 0.05, 0.2, 0.7, FX.smokeLight, FX.smokeDark, 0.5, 1, 0.2);
   }
 
+  /**
+   * A blow landed on a body with gore turned down: a spray of dust off the coat (no blood at all, per the art direction), thrown along the push. `power` 0..1.
+   * Same soft puffs as an impact, so a hit is as readable with gore Off as with it on.
+   */
+  bodyDust(x: number, y: number, z: number, dx: number, dz: number, power: number): void {
+    const k = 0.6 + 0.8 * Math.min(1, Math.max(0, power));
+    for (let i = 0; i < this.n(3 + Math.round(power * 2)); i++) {
+      this.puff(x, y + rnd(-0.1, 0.1), z, dx * rnd(0.6, 2.2) + rnd(-0.4, 0.4), rnd(0.2, 0.9), dz * rnd(0.6, 2.2) + rnd(-0.4, 0.4), 0.12 * k, 0.5 * k, rnd(0.5, 0.9), FX.cloth, FX.dust, 0.8, 2.4, 0.2);
+    }
+  }
+
   /** A puff of coal-dark dust where a round has passed the shooter's feet, or where a cast fell: used sparingly by the game. */
   dust(x: number, y: number, z: number, size = 1): void {
     for (let k = 0; k < this.n(3); k++) this.puff(x, y + 0.1, z, rnd(-0.6, 0.6), rnd(0.2, 0.7), rnd(-0.6, 0.6), 0.14 * size, 0.55 * size, rnd(0.6, 1), FX.dust, PALETTE.world.dust, 0.7, 2.2, 0.2);
   }
 
+  /**
+   * A round went by the listener (hitscan tracer or flying ball, from `(ax,ay,az)` to `(bx,by,bz)`): if it passed within about three metres, and not so close
+   * that it is a hit or the listener's own shot, it leaves two hairline streaks through the air and a ripple of disturbed dust. Returns how close it was as
+   * 0..1 (0 = did not pass near), so the caller can flick the camera. Cheap: a distance test; rate limited.
+   */
+  nearMiss(ax: number, ay: number, az: number, bx: number, by: number, bz: number): number {
+    const L = this.listener;
+    if (!L.valid || this.whizzCool > 0) return 0;
+    const vx = bx - ax;
+    const vy = by - ay;
+    const vz = bz - az;
+    const len2 = vx * vx + vy * vy + vz * vz;
+    if (len2 < 1e-6) return 0;
+    const t = Math.max(0, Math.min(1, ((L.x - ax) * vx + (L.y - ay) * vy + (L.z - az) * vz) / len2));
+    const px = ax + vx * t;
+    const py = ay + vy * t;
+    const pz = az + vz * t;
+    const d = Math.hypot(px - L.x, py - L.y, pz - L.z);
+    if (d > WHIZZ_RANGE || d < 0.25) return 0;
+    if (Math.hypot(ax - L.x, ay - L.y, az - L.z) < 1.5) return 0; // it left your own gun
+    this.whizzCool = 0.12;
+    const l = Math.sqrt(len2);
+    const ux = vx / l;
+    const uy = vy / l;
+    const uz = vz / l;
+    this.streak(px - ux * 1.1, py - uy * 1.1, pz - uz * 1.1, px + ux * 1.1, py + uy * 1.1, pz + uz * 1.1, 0.012, 0.09, FX.flashCore);
+    this.streak(px - ux * 0.7 + 0.06, py - uy * 0.7 + 0.03, pz - uz * 0.7, px + ux * 0.9 + 0.06, py + uy * 0.9 + 0.03, pz + uz * 0.9, 0.006, 0.07, FX.tracer);
+    this.puff(px, py, pz, ux * 1.5, uy * 1.5 + 0.1, uz * 1.5, 0.08, 0.45, 0.4, FX.smokeLight, FX.smokeLight, 0.35, 3, 0);
+    const strength = 1 - d / WHIZZ_RANGE;
+    this.onNearMiss?.(strength);
+    return strength;
+  }
+
   // ---- per frame -------------------------------------------------------------------------------------------------------------------------
+
+  /** Scars currently on the ground (they outlive every other effect: `SHOTFX.markLife` seconds). */
+  get liveMarks(): number {
+    let n = 0;
+    for (let i = 0; i < SHOTFX.marks; i++) if (this.mage[i]! < SHOTFX.markLife) n++;
+    return n;
+  }
 
   /** Live particle counts (tests, the debug overlay). */
   get live(): { puffs: number; flashes: number; streaks: number; debris: number } {
@@ -545,7 +741,7 @@ export class ShotFx {
   update(dtReal: number): void {
     const dt = dtReal * this.slow;
     this.time += dt;
-    windAt(this.time, this.wind);
+    smokeWind(this.time, getAtmosphere().wind, this.wind);
     const fog = this.scene.fog;
     if (fog instanceof FogExp2) {
       this.fogU.value = fog.density;
@@ -662,27 +858,50 @@ export class ShotFx {
     let rn = 0;
     const alpha = this.ring.geometry.getAttribute("aAlpha") as InstancedBufferAttribute;
     for (let i = 0; i < SHOTFX.rings; i++) {
-      if (this.rage[i]! >= 0.7) continue;
+      if (this.rage[i]! >= this.rlife[i]!) continue;
       this.rage[i]! += dt;
-      const t = this.rage[i]! / 0.7;
+      const t = this.rage[i]! / this.rlife[i]!;
       const s = this.rmax[i]! * (1 - (1 - t) * (1 - t)) * 2;
       d.position.set(this.rx[i]!, this.ry[i]!, this.rz[i]!);
       d.rotation.set(0, 0, 0);
       d.scale.set(s, 1, s);
       d.updateMatrix();
       this.ring.setMatrixAt(rn, d.matrix);
-      alpha.setX(rn, 0.55 * (1 - t));
+      alpha.setX(rn, this.ralpha[i]! * (1 - t));
       rn++;
     }
     this.ring.count = rn;
     this.ring.instanceMatrix.needsUpdate = true;
     alpha.needsUpdate = true;
+
+    // ground scars: appear at once, hold, fade over the last quarter of their life
+    let mn = 0;
+    const ma = this.marks.geometry.getAttribute("aAlpha") as InstancedBufferAttribute;
+    const ms = this.marks.geometry.getAttribute("aSeed") as InstancedBufferAttribute;
+    for (let i = 0; i < SHOTFX.marks; i++) {
+      if (this.mage[i]! >= SHOTFX.markLife) continue;
+      this.mage[i]! += dt;
+      const a = this.mage[i]!;
+      d.position.set(this.mx[i]!, this.my[i]!, this.mz[i]!);
+      d.rotation.set(0, 0, 0);
+      d.scale.set(this.msize[i]!, 1, this.msize[i]!);
+      d.updateMatrix();
+      this.marks.setMatrixAt(mn, d.matrix);
+      ma.setX(mn, Math.min(1, a / 0.05) * Math.min(1, (SHOTFX.markLife - a) / (SHOTFX.markLife * 0.25)));
+      ms.setX(mn, this.mseed[i]!);
+      mn++;
+    }
+    this.marks.count = mn;
+    this.marks.instanceMatrix.needsUpdate = true;
+    ma.needsUpdate = true;
+    ms.needsUpdate = true;
+    this.whizzCool = Math.max(0, this.whizzCool - dt);
   }
 
   dispose(): void {
     this.puffs.dispose();
     this.flashes.dispose();
-    for (const m of [this.streaks, this.deb, this.ring]) {
+    for (const m of [this.streaks, this.deb, this.ring, this.marks]) {
       m.removeFromParent();
       m.geometry.dispose();
       (m.material as ShaderMaterial | MeshToonMaterial).dispose();

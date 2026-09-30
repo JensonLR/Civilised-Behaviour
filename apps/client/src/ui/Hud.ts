@@ -1,4 +1,7 @@
 import { CASUALTY, FLAG, LIMB_LIST, ZONE_COUNT, ZONE_NAMES, limbZone, woundLevel } from "@cb/shared";
+import { Compass } from "./Compass.ts";
+import { Telegrams } from "./Telegrams.ts";
+import { VITALS_LABEL, vitalsLevel } from "./vitals.ts";
 import { HATCH_DEFS, ZONE_CENTRES, cuePath } from "./woundCues.ts";
 
 const SEVERITY_WORDS = ["", "scratch", "gash", "grievous wound", "lost"] as const;
@@ -51,6 +54,10 @@ export interface HudView {
   wounds: number;
   /** Lost-limb mask (0 when the player has chosen not to see severed limbs: the injury then reads as its dressing). */
   missing?: number;
+  /** Where the camera looks and where the player stands, for the heading strip (camera yaw, world x and z). Absent = the strip keeps its last reading. */
+  yaw?: number;
+  x?: number;
+  z?: number;
 }
 
 /** The aiming dot shows in first person while the player can act; a downed player sees the mourning card and a sky, not a reticle. */
@@ -69,15 +76,19 @@ export class Hud {
   private readonly progressFill: HTMLElement;
   private readonly progressLabel: HTMLElement;
   private readonly downed: HTMLElement;
-  private readonly notice: HTMLElement;
   private readonly crosshair: HTMLElement;
   private readonly wounds: HTMLElement;
   private readonly woundParts: SVGElement[];
   /** Shape marks for the colour-blind-safe mode (hidden by CSS otherwise). */
   private readonly woundCues: SVGElement[];
   private readonly woundText: HTMLElement;
+  private readonly vitals: HTMLElement;
+  private readonly vitalsLabel: HTMLElement;
+  private readonly compass: Compass;
+  /** The telegram stack: notices queue here (`showNotice`). */
+  readonly telegrams: Telegrams;
   private shownWounds = -1;
-  private noticeTimer = 0;
+  private level = -1;
 
   constructor(private readonly root: HTMLElement) {
     this.health = el(root, "div", "health");
@@ -86,6 +97,7 @@ export class Hud {
     this.health.setAttribute("aria-valuemin", "0");
     this.health.setAttribute("aria-valuemax", "100");
     this.health.innerHTML = `${gaugeSvg()}<span class="label">Vitality</span>`;
+    this.vitalsLabel = this.health.querySelector<HTMLElement>(".label")!;
     this.needle = this.health.querySelector<SVGElement>(".needle")!;
     this.healthText = this.health.querySelector<SVGElement>(".num")!;
 
@@ -116,16 +128,16 @@ export class Hud {
 
     this.downed = el(root, "div", "downed");
     this.downed.hidden = true;
-    this.notice = el(root, "div", "notice");
-    this.notice.hidden = true;
+    this.vitals = el(root, "div", "vitals");
+    this.vitals.setAttribute("aria-hidden", "true");
+    this.vitals.dataset.level = "0";
+    this.compass = new Compass(root);
+    this.telegrams = new Telegrams(root);
   }
 
-  /** Transient banner (e.g. the rout announcement). */
-  showNotice(text: string, ms = 6000): void {
-    this.notice.textContent = text;
-    this.notice.hidden = false;
-    window.clearTimeout(this.noticeTimer);
-    this.noticeTimer = window.setTimeout(() => (this.notice.hidden = true), ms);
+  /** A telegram (the rout announcement, a comrade's news): queued, at most three on show, each for as long as it takes to read. */
+  showNotice(text: string, seconds?: number): void {
+    this.telegrams.push(text, seconds);
   }
 
   update(v: HudView): void {
@@ -138,6 +150,14 @@ export class Hud {
     this.healthText.textContent = `${pct}${state === "critical" ? " !" : state === "down" ? " ✚" : ""}`;
     this.health.setAttribute("aria-valuenow", String(pct));
     this.health.dataset.state = state;
+    const down_ = (v.flags & FLAG.DOWNED) !== 0;
+    const level = vitalsLevel(frac, down_ || pct === 0);
+    if (level !== this.level) {
+      this.level = level;
+      this.vitals.dataset.level = String(level);
+      this.vitalsLabel.textContent = VITALS_LABEL[level];
+    }
+    if (v.yaw !== undefined && v.x !== undefined && v.z !== undefined) this.compass.update(v.yaw, v.x, v.z);
 
     this.updateWounds(v.wounds, v.missing ?? 0);
 
@@ -193,8 +213,9 @@ export class Hud {
   }
 
   dispose(): void {
-    for (const e of [this.health, this.wounds, this.crosshair, this.prompt, this.progress, this.downed, this.notice]) e.remove();
-    window.clearTimeout(this.noticeTimer);
+    for (const e of [this.health, this.wounds, this.crosshair, this.prompt, this.progress, this.downed, this.vitals]) e.remove();
+    this.compass.dispose();
+    this.telegrams.dispose();
   }
 }
 

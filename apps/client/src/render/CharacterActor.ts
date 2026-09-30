@@ -4,6 +4,7 @@ import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig, type E
 import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
+import { ghostTree } from "./ghost.ts";
 import { WeaponRig } from "./weapons/WeaponRig.ts";
 
 /**
@@ -98,12 +99,14 @@ export class CharacterActor {
   private lastFlags = 0;
   private lastSpeed = 0;
   private headShadow: Mesh | undefined;
+  /** The first-person viewmodel draws this body's arms and weapon: here they cast their shadow and nothing else (render/ghost.ts). */
+  private viewmodelOn = false;
 
   constructor(
     private readonly scene: Scene,
     look: string | undefined,
     private readonly fallbackSeed: number,
-    private readonly outline = true,
+    private outline = true,
     /** Ragdoll physics, if loaded yet (it is fetched lazily; until then a knock-down uses the plain fall animation). */
     private readonly ragdolls: () => RagdollWorld | undefined = () => undefined,
   ) {
@@ -148,6 +151,15 @@ export class CharacterActor {
     this.currentLook = look ?? "";
     this.headShadow = undefined;
     this.applyHeadVisibility();
+    if (this.viewmodelOn) this.applyViewmodelGhost();
+  }
+
+  /** The graphics preset turned the ink line on or off: applies to the body and the weapon in its hands at once. */
+  setOutline(on: boolean): void {
+    if (on === this.outline) return;
+    this.outline = on;
+    this.rig.setOutline(on);
+    this.weapons.setOutline(on);
   }
 
   /** Body heading as drawn (the server's facing for everyone else; the view direction for the local body in first person). */
@@ -165,6 +177,24 @@ export class CharacterActor {
     if (on === this.firstPerson) return;
     this.firstPerson = on;
     this.applyHeadVisibility();
+  }
+
+  /**
+   * The viewmodel is drawing this (local) body's arms and weapon: stop drawing them here, but keep their shadow. Cheap to call every frame;
+   * takes effect at once. Also re-applied after every `update()` (a dressing or stump that appears later must be ghosted too).
+   */
+  setViewmodel(on: boolean): void {
+    if (on === this.viewmodelOn && !on) return;
+    this.viewmodelOn = on;
+    this.applyViewmodelGhost();
+  }
+
+  private applyViewmodelGhost(): void {
+    const j = this.rig.joints;
+    const on = this.viewmodelOn;
+    ghostTree(j.shoulderL, on);
+    ghostTree(j.shoulderR, on);
+    this.weapons.ghost(on);
   }
 
   private applyHeadVisibility(): void {
@@ -275,8 +305,9 @@ export class CharacterActor {
     this.weapons.apply(this.anim.hold);
     // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).
     const h = this.anim.hold;
-    this.heldGrip.R = h.visible && h.right.w > 0.3 ? 0.92 : undefined;
-    this.heldGrip.L = h.visible && h.left.w > 0.3 ? 0.88 : undefined;
+    const staff = (pose.flags & FLAG.OPERATING) !== 0 ? 0.85 : undefined; // (a cannon's crew has both fists round the rammer's staff)
+    this.heldGrip.R = h.visible && h.right.w > 0.3 ? 0.92 : staff;
+    this.heldGrip.L = h.visible && h.left.w > 0.3 ? 0.88 : staff;
     this.hands.update(dt, pose.flags, Math.hypot(pose.vx, pose.vz), this.anim.currentExpression, this.heldGrip.L, this.heldGrip.R);
     // The animator overwrites root.position.y each update with its own offset (e.g. lift when lying down);
     // the ground height is added afterwards.
@@ -284,6 +315,7 @@ export class CharacterActor {
     if (this.fpBlend > 0.002) this.poseFirstPersonArms(dt, pose);
     this.rig.setWounds(pose.wounds ?? 0, gore);
     this.rig.setMissing(showLimbs ? (pose.missing ?? 0) : 0, gore);
+    if (this.viewmodelOn) this.applyViewmodelGhost();
 
     const rd = this.ragdoll;
     if (rd) {

@@ -6,14 +6,17 @@ import { CameraRig } from "../render/CameraRig.ts";
 import { CharacterActor } from "../render/CharacterActor.ts";
 import { newEyeSample } from "../render/firstPerson.ts";
 import { HitFx } from "../render/HitFx.ts";
+import { ViewModel, modeFor, type ViewModelFrame } from "../render/ViewModel.ts";
 import { RagdollWorld } from "../render/Ragdoll.ts";
-import { BASE_SENSITIVITY, effectiveShake, getFov, getGore, getHeadBob, getHoldToSprint, getInvertY, getPadSensitivity, getSensitivity, getShowLimbs, getView, onSettingChange, setView } from "../settings.ts";
+import { BASE_SENSITIVITY, effectiveShake, getFov, getGore, getHeadBob, getReduceMotion, getHoldToSprint, getInvertY, getPadSensitivity, getSensitivity, getShowLimbs, getView, onSettingChange, setView } from "../settings.ts";
 import { playSfx, setListener } from "../audio/index.ts";
+import { getBindings, keyLabel } from "../input/bindings.ts";
 import { FIRST_PERSON } from "../render/firstPerson.ts";
 import { GameAudio } from "./GameAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
+import { noteFolk } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { Hud } from "../ui/Hud.ts";
 import { CombatView } from "./CombatView.ts";
@@ -48,6 +51,12 @@ export class Game {
   /** Weapons, shots, projectiles, impacts, the cannon and the gunnery interface (game/CombatView.ts). */
   private readonly combat: CombatView;
   private readonly debris: LimbDebris;
+  /** The first-person hands and weapon, drawn as a second pass over the world (render/ViewModel.ts). */
+  private readonly viewmodel: ViewModel;
+  private readonly vmFrame: ViewModelFrame = {
+    weapon: -1, aiming: false, sprinting: false, speed: 0, grounded: true, reload: 0, mode: 0, yaw: 0, pitch: 0, shown: false,
+    look: undefined, gore: "full", wounds: 0, missing: 0, userFov: 65, motion: 1, bob: 1,
+  };
   /** Loaded lazily (Rapier's WASM only ships once we are in a game); until then knock-downs use the plain fall animation. */
   private ragdolls: RagdollWorld | undefined;
   private last = performance.now();
@@ -76,7 +85,9 @@ export class Game {
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
+    this.viewmodel = new ViewModel(stage);
     this.combat = new CombatView(stage, session, controls, this.rig, () => this.actors, hud);
+    this.combat.viewmodel = this.viewmodel;
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
@@ -133,6 +144,7 @@ export class Game {
     this.audio.dispose();
     this.hud.dispose();
     this.combat.dispose();
+    this.viewmodel.dispose();
     this.hitFx.dispose();
     this.debris.dispose();
     this.disposed = true;
@@ -177,11 +189,48 @@ export class Game {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
       setListener(tmp, this.rig.yaw);
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
-      this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample));
+      this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample), ((this.session.predicted?.flags ?? 0) & FLAG.DOWNED) !== 0);
       this.stage.followShadow(tmp);
     }
+    this.updateViewmodel(dt, me !== undefined);
+    this.stage.renderer.info.reset(); // (two passes a frame: the overlay's counters cover both)
     this.stage.render();
+    this.viewmodel.render();
     this.overlay.frame(dt);
+  }
+
+  /** Feeds the first-person hands and weapon (after the camera has been placed for this frame), and lets the body's own arms give way to them. */
+  private updateViewmodel(dt: number, haveMe: boolean): void {
+    const mine = this.session.local;
+    const pred = this.session.predicted ?? mine;
+    const actor = this.actors.get(this.session.sessionId);
+    const vm = this.vmFrame;
+    const flags = pred?.flags ?? 0;
+    const body = actor?.body;
+    // on your feet, in first person: the hands are yours and the weapon in them. Downed or tumbling, the body's own arms are what you see lying there.
+    vm.shown = haveMe && !!mine && !!body && this.rig.headHidden && (flags & (FLAG.DOWNED | FLAG.DRAGGED)) === 0 && !body.ragdolled;
+    if (mine && pred) {
+      const w = this.combat.wishWeapon;
+      vm.weapon = w;
+      vm.aiming = (flags & FLAG.AIMING) !== 0;
+      vm.sprinting = (flags & FLAG.SPRINTING) !== 0;
+      vm.speed = Math.hypot(this.session.value(pred, "vx"), this.session.value(pred, "vz"));
+      vm.grounded = (flags & FLAG.GROUNDED) !== 0;
+      vm.reload = mine.weapon === w + 1 ? (mine.reload ?? 0) / 100 : 0;
+      vm.mode = modeFor((flags & FLAG.CARRYING) !== 0, (flags & FLAG.REVIVING) !== 0, (flags & FLAG.DRAGGING) !== 0, (flags & FLAG.OPERATING) !== 0);
+      vm.yaw = this.rig.yaw;
+      vm.pitch = this.rig.pitch;
+      vm.look = mine.look;
+      vm.gore = getGore();
+      vm.wounds = mine.wounds;
+      vm.missing = getShowLimbs() ? mine.missing : 0;
+    }
+    vm.userFov = getFov();
+    vm.motion = getReduceMotion() ? 0.3 : 1;
+    vm.bob = getHeadBob() ? 1 : 0;
+    if (vm.shown) this.viewmodel.update(dt, vm);
+    else if (this.viewmodel.active) this.viewmodel.update(dt, vm); // (lowers out of view, then stops drawing)
+    body?.setViewmodel(this.viewmodel.active);
   }
 
   /** HUD + contextual prompt, from the same shared rules the server enforces (the server still validates). */
@@ -190,8 +239,11 @@ export class Game {
     const mine = this.session.local;
     if (!me || !mine) return;
     const pad = this.controls.usingGamepad;
-    const use = pad ? "X" : "E";
-    const grab = pad ? "RB" : "F";
+    // the keys as the player has bound them (a rebind in the settings changes the prompts at once); the pad's layout is fixed
+    const keys = getBindings();
+    const use = pad ? "X" : keyLabel(keys.interact[0]);
+    const grab = pad ? "RB" : keyLabel(keys.grab[0]);
+    const throwKey = pad ? "LB" : keyLabel(keys.throw[0]);
     const players = this.session.room.state.players;
     const flags = me.flags;
     let prompt = "";
@@ -216,7 +268,7 @@ export class Game {
     } else if ((flags & FLAG.DRAGGING) !== 0) {
       prompt = `${grab}  Let go`;
     } else if ((flags & FLAG.CARRYING) !== 0) {
-      prompt = `${use}  Drop     ${pad ? "LB" : "G"}  Throw`;
+      prompt = `${use}  Drop     ${throwKey}  Throw`;
     } else if ((flags & FLAG.DOWNED) === 0) {
       const downedId = findDownedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
         players.forEach((o, id) => id !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
@@ -255,6 +307,9 @@ export class Game {
       armed: this.combat.sightShown,
       wounds: mine.wounds,
       missing: showLimbs ? mine.missing : 0,
+      yaw: this.rig.yaw,
+      x: this.session.value(me, "x"),
+      z: this.session.value(me, "z"),
     });
     this.audio.revive(byMe >= 0 ? byMe : mine.reviveProgress > 0 ? mine.reviveProgress : -1);
   }
@@ -273,6 +328,9 @@ export class Game {
     this.controls.settings.padSensitivity = getPadSensitivity();
     this.controls.settings.holdToSprint = getHoldToSprint();
     if (this.rig.mode !== getView()) this.rig.setView(getView());
+    // the graphics preset, live: effect density, and the ink line on the figures already standing in the scene
+    this.combat?.setPreset();
+    for (const a of this.actors.values()) a.body.setOutline(this.stage.outlines);
   }
 
   private syncActors(dt: number): void {
@@ -316,7 +374,10 @@ export class Game {
     this.stage.setPushers(walkers, walkerCount);
     this.audio.sweep();
     const clock = this.session.room.state; // the server-owned world clock: every player sees the same hour and the same weather
-    if (clock.worldMs !== undefined && clock.dayMinutes !== undefined) this.stage.syncWorldClock(clock.seed, clock.worldMs, clock.dayStartHour, clock.dayMinutes);
+    if (clock.worldMs !== undefined && clock.dayMinutes !== undefined) {
+      this.stage.syncWorldClock(clock.seed, clock.worldMs, clock.dayStartHour, clock.dayMinutes);
+      noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera); // Hollowmere's folk: their seed, their hours, and where name tags and speech go
+    }
     for (const [id, a] of this.actors) {
       if (!seen.has(id)) {
         this.removeActor(a);
@@ -333,6 +394,7 @@ export class Game {
     const h = a.body.height;
     const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;
     this.hitFx.burst(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power, getGore());
+    if (getGore() === "off") this.combat.fx.bodyDust(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power);
     this.audio.hurt(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), p.look, e.power, e.id === this.session.sessionId);
     a.body.hit(e, a.body.facing); // the heading as drawn: in first person the local body turns with the camera
     if (e.id === this.session.sessionId) this.rig.addShake(0.25 + e.power * 0.5);

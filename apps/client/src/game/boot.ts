@@ -1,10 +1,10 @@
 import { attachUiSounds, startAmbience, startMusic } from "../audio/index.ts";
-import { getBindings, keyLabel } from "../input/bindings.ts";
 import { Controls } from "../input/Controls.ts";
-import { applyDisplaySettings, getGfx, onSettingChange } from "../settings.ts";
+import { applyDisplaySettings, getGfx, getReduceMotion, onSettingChange } from "../settings.ts";
+import { motion, motionScale } from "../render/world/atmosphere.ts";
 import { Session } from "../net/Session.ts";
 import { Stage } from "../render/Stage.ts";
-import { CollisionWorld } from "@cb/shared";
+import { createArena } from "@cb/shared";
 import { decodeSpec, encodeSpec, generateCharacter } from "@cb/procedural";
 import { CreatorPreview } from "../render/CreatorPreview.ts";
 import { Captions } from "../ui/Captions.ts";
@@ -12,7 +12,9 @@ import { CharacterCreator } from "../ui/CharacterCreator.ts";
 import { openHowTo } from "../ui/HowTo.ts";
 import { anyModalOpen, onInputBlocked } from "../ui/modal.ts";
 import { Pause } from "../ui/Pause.ts";
+import { buildHudChrome } from "../ui/hudChrome.ts";
 import { Menu } from "../ui/Menu.ts";
+import { SoundPlaque } from "../ui/SoundPlaque.ts";
 import { Game } from "./Game.ts";
 
 /** Boots the networked game: stage, controls and the create/join menu. */
@@ -23,7 +25,12 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
 
   // Display options (UI scale, contrast, larger text, colour-blind marks, reduced motion) are attributes on <html>; the stylesheet does the rest.
   applyDisplaySettings();
-  onSettingChange(() => applyDisplaySettings());
+  // the motion preference (reduce motion in the settings) also scales the world's sway, birds and cloth, live
+  const applyMotion = (): void => void (motion.value = motionScale(params, getReduceMotion()));
+  onSettingChange(() => {
+    applyDisplaySettings();
+    applyMotion();
+  });
   const stage = new Stage(canvas, getGfx());
   onSettingChange((k) => {
     if (k === "gfx" || k === "all") stage.setPreset(getGfx());
@@ -40,7 +47,8 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       openHowTo();
     }
   });
-  stage.setTime(13); // the menu and the creator sit at a calm, fixed hour; a joined room's clock takes over (Game feeds it to the stage)
+  stage.setTime(17.2); // the front door sits at golden hour in the camp; a joined room's clock takes over (Game feeds it to the stage)
+  new SoundPlaque(document.body); // "Click anywhere to enable sound" until the audio context has had its gesture
 
   let game: Game | undefined;
   let session: Session | undefined;
@@ -65,34 +73,31 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   let look = loadLook();
   saveLook(look);
 
-  // Preview world: a flat field; replaced by the real arena once a session starts.
-  stage.buildWorld(new CollisionWorld({ height: () => 0 }, [], 100));
+  // The front door's backdrop is the real camp (arena seed 7). Building the world takes about a second, so the door is drawn first (the golden sky and the
+  // figure) and the camp is built after that first paint; a session that starts sooner simply builds its own world and this one is never made.
   const preview = new CreatorPreview(stage, canvas);
+  let backdropWanted = true;
+  const buildBackdrop = (): void => {
+    if (!backdropWanted) return;
+    const world = createArena(7);
+    stage.buildWorld(world);
+    preview.setGround((x, z) => world.terrainHeight(x, z));
+    canvas.dataset.backdrop = "ready";
+  };
+  requestAnimationFrame(() => setTimeout(buildBackdrop, 60));
 
+  let removeChrome: (() => void) | undefined;
   function showHud(s: Session): void {
     hud.hidden = false;
-    const link = `${location.origin}${location.pathname}?join=${s.code}`;
-    const bar = document.createElement("div");
-    bar.className = "codebar";
-    bar.innerHTML = `<span>Expedition No. <b>${s.code}</b></span><button type="button">Copy invite</button>`;
-    bar.querySelector("button")!.addEventListener("click", (e) => {
-      void navigator.clipboard?.writeText(link);
-      (e.target as HTMLButtonElement).textContent = "Copied";
-    });
-    hud.prepend(bar);
-    const help = document.createElement("div");
-    help.className = "help";
-    const k = (id: "forward" | "sprint" | "jump" | "crouch" | "view"): string => keyLabel(getBindings()[id][0]);
-    const writeHelp = (): void => {
-      const move = (["forward", "left", "back", "right"] as const).map((id) => keyLabel(getBindings()[id][0])).join("");
-      help.textContent = `Esc pause · F1 manual · ${move} move · ${k("sprint")} sprint · ${k("jump")} jump · ${k("crouch")} crouch · ${k("view")} view`;
-    };
-    writeHelp();
-    onSettingChange((key) => (key === "bindings" || key === "all") && writeHelp());
-    hud.append(help);
+    removeChrome?.();
+    removeChrome = buildHudChrome(hud, s.code, `${location.origin}${location.pathname}?join=${s.code}`);
   }
 
   async function enter(s: Session): Promise<void> {
+    backdropWanted = false;
+    menu.progress("Surveying the territory...");
+    // let the working card paint before the (synchronous) world build blocks the page
+    await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));
     preview.stop();
     session = s;
     game = new Game(stage, s, controls, hud, debugEl);
@@ -119,8 +124,18 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   });
 
   const menu = new Menu(menuEl, {
-    onCreate: async (name, rules) => enter(await Session.create(name, look, rules)),
-    onJoin: async (code, name) => enter(await Session.join(code, name, look)),
+    onCreate: async (name, rules, progress) => {
+      progress("Posting the telegram...");
+      const s = await Session.create(name, look, rules);
+      progress("Reply received. Packing the trunks...");
+      await enter(s);
+    },
+    onJoin: async (code, name, progress) => {
+      progress("Presenting your code...");
+      const s = await Session.join(code, name, look);
+      progress("Reply received. Packing the trunks...");
+      await enter(s);
+    },
   });
   const initial = decodeSpec(look)!;
   new CharacterCreator(menu.creatorHost, initial, (spec) => {

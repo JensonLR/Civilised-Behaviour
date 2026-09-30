@@ -106,9 +106,13 @@ export function buildShell(shape: HeadShape, spec: ShellSpec): BufferGeometry | 
     welded.set(key, id);
     pos.push(x, y, z);
     c.copy(base);
-    if (spec.tint && spec.tintColor !== undefined) c.lerp(tintCol.setHex(spec.tintColor), spec.tint(d));
+    const strand = spec.strands ? strandHash(Math.round(d.phi * 13), Math.round(d.y * 4)) : 0.5;
+    // greying is a mixture, not a wash: each strand is more or less grey than its neighbour, so the head goes salt-and-pepper before it goes silver
+    if (spec.tint && spec.tintColor !== undefined) c.lerp(tintCol.setHex(spec.tintColor), Math.min(1, spec.tint(d) * (spec.strands ? 0.55 + 0.9 * strand : 1)));
     c.multiplyScalar(0.9 + (spec.shine ?? 0.16) * smooth(-0.4, 0.9, d.y) + 0.1 * smooth(0, 0.36 * R, t));
-    if (spec.strands) c.multiplyScalar(0.93 + 0.14 * strandHash(Math.round(d.phi * 13), Math.round(d.y * 4)));
+    if (spec.strands) c.multiplyScalar(0.93 + 0.14 * strand);
+    // roots are darker than lengths: the hair is darkest where it leaves the scalp (the edge of the mask, the parting), and catches the light along a band over the crown
+    if (spec.strands) c.multiplyScalar(0.86 + 0.14 * smooth(ISO, ISO + 0.55, v.m) + 0.07 * Math.exp(-(((d.y - 0.62) / 0.2) ** 2)) * (0.6 + 0.4 * Math.cos(d.phi * 2)));
     col.push(c.r, c.g, c.b);
     return id;
   };

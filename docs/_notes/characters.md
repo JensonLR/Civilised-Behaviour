@@ -230,3 +230,53 @@ Principle: nothing is placed by an absolute offset. Everything asks the head (`h
 - Long-hair curtains are one smooth sheet with a ragged hem: from behind they read as a cloth, not as strands; the front locks of Long Lank are still simple ribbons.
 - Nightcap tail and busby bag are hung by heuristics and were reviewed on a few heads only. Hats are reviewed at 3 angles on tiny/huge/average heads; extreme ear + hat combinations are only covered by the numeric audit.
 - Screens were reviewed on the software renderer; toon shading of thin brims can flicker at grazing angles.
+
+---
+
+# Rig pass (agent R, 2026-09-30): the hand is a bone, draped cape and poncho, neckwear and hip gear that clear the arms, crouch shaping, animation polish
+
+## Hands (wrist bone)
+- `rig.joints.wristL/wristR` (new fields of `Joints`, appended): children of the elbows at the end of the forearm. The hand is its own bone mesh (`mesh_handL/R`, outline `outline_handL/R`, audit tag `handL/R`):
+  palm + fingers + thumb + the grip morph targets live on it now (`setHandGrip` drives `mesh_hand*`). The forearm keeps the sleeve, the cuff and a glove's gauntlet/band/fur cuff (`hand.ts handCuffs`); a hook replaces the
+  hand (no hand mesh). The palm's top is a BALL of the wrist's radius centred on the joint, so a turning wrist never opens the sleeve. LOD2 has no hand mesh (the forearm draws the far fist); `setMissing` hides it with the arm.
+- `weaponPose.ts`: `Anchors.grip` (the axis of the handle the right fist wraps: raked pistol grip, small of the stock, hilt, cane shaft) and `gripL` (fore-end), `HandTarget.ax/ay/az`, `solveWrist` (smallest turn that lays the
+  hand's local Z - the line its knuckles lie on - on the handle, limited to `WRIST_MAX` 1.3 rad, sign-stable so a handle at a right angle never flips the fist), `HAND_CENTRE` (the fist's centre is 0.55 hand radii below the wrist:
+  the animator places the WRIST so the fist's CENTRE is on the grip, three solve/re-solve passes). Crew working a cannon wrap the rammer's staff. The animator adds a loose hand: the wrist lags a swinging forearm and sways with the arm's abduction.
+- Ragdoll: the hand is not a simulated body; while falling the wrist dangles (points toward the ground, at most `WRIST_DANGLE` 1 rad off the forearm's line, eased) starting from the pose it had, and eases into the animator's wrist in the blend.
+- First person: only `joints.head` is hidden (`CharacterActor.test.ts` asserts every other mesh, hands included, is drawn).
+
+Grip-axis error, fist vs handle, mean over 12-30 bodies (radians, `WRIST_VERBOSE=1 vitest run weaponPose.test.ts`; "before" = the wrist forced to identity, i.e. the old rigid fist; my axis definitions, not the previous agent's
+1.04 measure, which I could not reproduce):
+| weapon / state | before | after |
+|---|---|---|
+| rifle ready / aimed / walk | 0.45 / 1.46 / 0.49 | 0.00 / 0.16 / 0.00 |
+| pistol ready / aimed / walk | 0.46 / 0.81 / 0.40 | 0.00 / 0.00 / 0.00 |
+| sabre ready / aimed / walk | 1.51 / 1.53 / 1.52 | 0.33 / 0.23 / 0.31 (the wrist limit; the blade lies along the forearm) |
+| umbrella ready / aimed / walk | 0.79 / 0.93 / 0.77 | 0.00 / 0.00 / 0.00 |
+The fist's centre stays on the grip (0-2 cm; up to 7 cm for big hands on short arms with the elbow at its stop in a shouldered rifle).
+
+## Cape and poncho (`drape.ts`)
+Pleats (`foldDepth`: two sharpened waves, folded IN from the fitted section, deeper toward the hem, so the clearance from the arms is a lower bound) are in the geometry AND baked into the vertex colours (valleys 0.6x, crests a touch
+lighter); a rolled hem tube (`hemRoll`) runs along each half's hem and the poncho's pointed panels; the cape has a standing collar open at the front (patch of the neck's rings, lined), a brass toggle clasp (plates, peg, chain),
+a longer tail that flares backward; the poncho has a rolled neck hole. The arm pieces are smaller (no more horizontal flaps) and hang lowest on the outside. The hem waves only at the back and front tails (arms swing under the sides).
+Limits: the pleats are subtle under the 4-step toon ramp at gameplay distance; the cape is a rigid shell (no sway), and the arm piece and torso piece still overlap a few cm at the shoulder when the arms are raised (audit: 6-8 cm).
+
+## Fit (`docs/_notes/fit.md` has the numbers), animator
+- Neckwear rings are capped by the shoulder joint's x less the sleeve and ride higher on the neck where the trunk is wider (`fitRing`); ruff pleats are flattened on the arm side; lofts lifted for the 10-sided vs 14-sided mismatch.
+- Hip gear: `armClearance.gearOnSide` - the arm on the side of a holster, canteen, scabbard, machete, rope, satchel or birdcage rests further out (up to 0.62 rad, only with gear; the body alone never asks more than 0.5).
+- Crouch/kneel: `crouchObstruction` (belly, coat skirt) lifts the thigh less, folds the knee more and (belly only) splays the knees and leans less; Baggy and plus-fours legs are thinner.
+- Animator polish: acceleration lean (forward into a start, back into a stop), knee dip when stopping hard, shoulders lag a turn, landing squash and take-off stretch of the trunk, four new idle acts (scratch, look up, foot tap, sway),
+  weapon breathing sway (hold), elbows clamped to 2.42 (a sprint with a pained arm reached 2.56, past the ragdoll's hinge).
+
+## Numbers (`scripts/char-bench.ts`, 60 seeds, Node)
+LOD0 avg 11972 / max 14086 tris (budget 12k / 15k), 27.8 meshes (hulls 16080 / 18978); LOD1 4549 / 5593 (hulls 8309 / 10440); LOD2 1365 / 1862. The hand bone adds 2 meshes (LOD0/1) and ~100 tris per character; the palm block is 8-sided.
+
+## Weak spots (honest)
+- Slopes and stairs are NOT adapted (the pose input has no ground normal): not cheap, left out.
+- A sabre held with the blade along the forearm still leaves 0.3 rad between the fist's axis and the hilt (wrist range).
+- Hip gear still touches a hanging or swinging hand on the extreme stubby-wide body (its arms are shorter than its hips: the rest abduction saturates); worst now 6.7 cm (sabre, walk).
+- The poncho/cape arm piece vs the torso piece overlap 6-8 cm with arms raised; epaulettes 5-6 cm when the arm is raised.
+- Skirts remain rigid: a long coat is clipped by knees in a sprint (3.5 cm) and a deep crouch extreme (6.8 cm).
+- Cuff buttons, boot laces and eyelets are still specks at gameplay distance (LOD0-only, left for the creator and close-ups); epaulettes were enlarged because they did not read at all.
+- Ruff front on a thin body under a shawl collar: 2 cm; neckerchief triangle 2 cm.
+

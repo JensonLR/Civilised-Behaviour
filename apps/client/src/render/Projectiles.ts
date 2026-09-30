@@ -104,6 +104,7 @@ export class Projectiles {
         done = true;
       }
       this.fx.trail(ox, oy, oz, ex, ey, ez, w === WEAPON.CANNON);
+      if (w !== WEAPON.CANNON) this.fx.nearMiss(ox, oy, oz, ex, ey, ez); // a ball going past the listener's head
       if (w === WEAPON.CANNON) {
         this.smoke[i]! -= dt;
         if (this.smoke[i]! <= 0) {

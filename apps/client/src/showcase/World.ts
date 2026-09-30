@@ -1,9 +1,10 @@
 import { Vector3 } from "three";
-import { CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
+import { standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
 import { Stage } from "../render/Stage.ts";
+import { folkHints } from "../render/world/villagers.ts";
 
 /**
  * World review scene (`?showcase=world`): the real arena (same seed -> same layout as the game) with a few figures for scale and
@@ -22,6 +23,8 @@ import { Stage } from "../render/Stage.ts";
  *   cam=x,y,z&at=x,y,z   explicit camera and target (metres)
  *   fov=N      vertical field of view (default 65 like the game)
  *   gfx=low|medium|high
+ *   view=folk|folkplaza|folkgate|folkmill|folkjetty|folkwell   HOLLOWMERE'S FOLK (the village at `time=`; try weather=drizzle). who=<id|trade> follows one villager (wd=metres away, wa=angle round them,
+ *     wh=camera height, wl=look-at height); tags=1 shows name tags and speech slips; drift=1 lets the day run; the four spawn figures are hidden in these views
  *   figures=0  hide the figures
  *   props=0    no props (world-only draw-call and triangle counts)
  *   propline=1 one crate, barrel, bottle and chair in a row at (0, -3) instead of the scatter
@@ -57,7 +60,8 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   syncProps();
 
   const anims: CharacterAnimator[] = [];
-  if (params.get("figures") !== "0") {
+  const folkView = (params.get("view") ?? "game").startsWith("folk") || params.get("who") !== null;
+  if (params.get("figures") !== "0" && !folkView) {
     for (let i = 0; i < 4; i++) {
       const rig = buildCharacter(generateCharacter(seed * 31 + i * 7919, i), { outline: stage.outlines });
       const sp = spawnPoint(i, 4);
@@ -135,6 +139,14 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   views.vmarket = [new Vector3(-21, 3.2, -49.5), new Vector3(-21, 1.2, -61)];
   views.vjetty = [new Vector3(vp.jetty.x0 + 6, 3.2, vp.jetty.z0 - 5), new Vector3(vp.jetty.x1, vp.jetty.waterY, vp.jetty.z1)];
   views.vweir = [new Vector3(vp.weir.x + 7, 2.6, vp.weir.z - 5), new Vector3(vp.weir.x, vp.weir.crestY, vp.weir.z)];
+  // Hollowmere's folk: the street and the plaza from the way in, the gate, the mill yard, the jetty, the well (the hour is `time=`)
+  views.folk = [new Vector3(9, 4.4, -35), new Vector3(-15, 1.0, -54)];
+  views.folkplaza = [new Vector3(-21, 3.4, -48.5), new Vector3(-21, 1.2, -58.5)];
+  views.folkgate = [new Vector3(13, 2.6, -40.5), new Vector3(3, 1.7, -45.5)];
+  views.folkmill = [new Vector3(-6.5, 2.6, -46), new Vector3(-1.5, 1.2, -41)];
+  views.folkjetty = [new Vector3(-27, 2.6, -37.5), new Vector3(-22.6, 0, -41)];
+  views.folkcast = [new Vector3(-21, 2.0, -52.6), new Vector3(-21, 1.0, -58.3)];
+  views.folkwell = [new Vector3(-13, 2.4, -50), new Vector3(-18.5, 1.0, -55)];
   const dist = Number(params.get("d") ?? 13);
   const ang = Number(params.get("a") ?? 0.35);
   for (const b of vp.buildings) {
@@ -168,6 +180,58 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   stage.camera.updateProjectionMatrix();
   stage.camera.lookAt(at);
 
+  // name tags and speech slips need a layer and the camera (the game hands over its HUD; here a bare full-screen layer)
+  if (params.get("tags") === "1" && typeof document !== "undefined") {
+    const layer = document.createElement("div");
+    layer.style.cssText = "position:fixed;inset:0;pointer-events:none;font-size:16px";
+    document.body.appendChild(layer);
+    folkHints.layer = layer;
+    folkHints.camera = stage.camera;
+  }
+  folkHints.seed = seed;
+  // view=folkcast: the whole cast in a row in the plaza in the pose of their trade, whatever the hour (castFrom / castN pick who, castGap the spacing)
+  const cast = params.get("view") === "folkcast";
+  if (cast) {
+    const from = Number(params.get("castFrom") ?? 0);
+    const count = Number(params.get("castN") ?? 8);
+    const gap = Number(params.get("castGap") ?? 1.5);
+    const SIGNATURE: Record<string, [string, string]> = {
+      guard: ["lean", "none"], miller: ["sack", "none"], smith: ["hammer", "none"], keeper: ["ring", "none"], ferryman: ["fish", "none"], seller: ["idle", "basket"], baker: ["idle", "loaves"],
+      elder: ["idle", "none"], clockkeeper: ["lookup", "none"], registrar: ["write", "book"], fisher: ["fish", "none"], gardener: ["tend", "none"], beekeeper: ["hive", "none"],
+      laundress: ["hang", "none"], lamplighter: ["lamp", "none"], watch: ["idle", "lantern"], child: ["play", "none"],
+    };
+    const folk = (stage["worldView"] as { folkView?: { cast: unknown } } | undefined)?.folkView;
+    if (folk) {
+      folk.cast = (i: number, out: import("@cb/shared").VillagerPose): boolean => {
+        if (i < from || i >= from + count) return false;
+        const k = i - from;
+        const x = -21 + (k - (count - 1) / 2) * gap;
+        const z = Number(params.get("castZ") ?? -58.3);
+        const people = folkOf();
+        const v = people?.folk.roster[i];
+        const sig = SIGNATURE[v?.occupation ?? "guard"] ?? ["idle", "none"];
+        out.x = x;
+        out.z = z;
+        out.y = world.terrainHeight(x, z);
+        out.facing = Math.PI + 0.12 * (k % 2 ? 1 : -1) * (Number(params.get("castTurn") ?? 1));
+        out.speed = 0;
+        out.act = (params.get("act") ?? sig[0]) as never;
+        out.carry = (params.get("carry") ?? sig[1]) as never;
+        out.partner = -1;
+        out.station = people ? people.folk.nav.index.get("plaza")! : 0;
+        return true;
+      };
+    }
+  }
+  const who = params.get("who");
+  const folkOf = (): { folk: import("@cb/shared").Folk; poses: readonly import("@cb/shared").VillagerPose[] } | undefined => (stage["worldView"] as { folkView?: { people?: { folk: import("@cb/shared").Folk; poses: readonly import("@cb/shared").VillagerPose[] } } } | undefined)?.folkView?.people;
+  const followId = (): number => {
+    const people = folkOf();
+    if (!people || who === null) return -1;
+    const n = Number(who);
+    if (Number.isInteger(n) && who.trim() !== "") return n;
+    return people.folk.roster.findIndex((v) => `${v.occupation} ${v.title} ${v.name}`.toLowerCase().includes(who.toLowerCase()));
+  };
   const walkers: { x: number; z: number }[] = anims.length ? [0, 1, 2, 3].map((i) => spawnPoint(i, 4)) : [];
   for (const chunk of (params.get("push") ?? "").split(";")) {
     const [px, pz] = chunk.split(",").map(Number);
@@ -177,6 +241,31 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   let frames = 0;
   const loop = (): void => {
     for (const a of anims) a.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+    const target = followId();
+    const people = target >= 0 ? folkOf() : undefined;
+    const pose = people?.poses[target];
+    if (pose) {
+      // follow one villager: `wa` radians round them from the front, `wd` metres away, camera `wh` up, looking at `wl`
+      // the camera stands at `wd` metres round them at angle `wa` from the front, or at the nearest angle where it is not inside a wall
+      const d0 = Number(params.get("wd") ?? 3.2);
+      const a0 = pose.facing + Number(params.get("wa") ?? 0.55);
+      let placed = false;
+      for (const dd of [1, 0.75, 0.55]) {
+        for (const off of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, 2.3, -2.3, Math.PI]) {
+          const a = a0 + off;
+          const cx = pose.x - Math.sin(a) * d0 * dd;
+          const cz = pose.z - Math.cos(a) * d0 * dd;
+          if (standingHeight(world, cx, cz, world.terrainHeight(cx, cz) + 0.3, 0.5) === undefined) continue;
+          cam.set(cx, pose.y + Number(params.get("wh") ?? 1.5), cz);
+          placed = true;
+          break;
+        }
+        if (placed) break;
+      }
+      at.set(pose.x, pose.y + Number(params.get("wl") ?? 1.05), pose.z);
+      stage.camera.position.copy(cam);
+      stage.camera.lookAt(at);
+    }
     stage.setPushers(walkers);
     stage.followShadow(new Vector3(cam.x * 0.5 + at.x * 0.5, 0, cam.z * 0.5 + at.z * 0.5));
     stage.render();
@@ -188,6 +277,6 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     get ready() {
       return frames > 2;
     },
-    stats: () => ({ calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries, world: stage.worldStats, camp: CAMP.fire }),
+    stats: () => ({ calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries, world: stage.worldStats, camp: CAMP.fire, folk: (stage["worldView"] as { folkView?: { stats: unknown } } | undefined)?.folkView?.stats }),
   };
 }

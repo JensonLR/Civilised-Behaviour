@@ -24,3 +24,6 @@ export * from "./limbs.ts";
 export * from "./injury.ts";
 export * from "./weapons.ts";
 export * from "./ballistics.ts";
+export * from "./villagerNav.ts";
+export * from "./villagerLines.ts";
+export * from "./villagers.ts";

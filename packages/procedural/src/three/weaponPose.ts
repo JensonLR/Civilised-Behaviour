@@ -24,14 +24,19 @@ export interface Anchors {
   butt: V3;
   /** How far the ramrod comes out of the muzzle end when drawn (0 for no rod). */
   rod: number;
+  /** Direction (weapon space) the RIGHT fist wraps round: the axis of the handle it holds (a raked pistol grip, the small of a stock, a hilt, a cane's shaft). The hand's local Z is laid on it. */
+  grip: V3;
+  /** Same for the left hand on the fore-end of a two-handed piece (undefined: the left hand holds nothing). */
+  gripL?: V3;
 }
 
 export const WEAPON_ANCHORS: Record<number, Anchors> = {
-  [WEAPON.PISTOL]: { left: [0, -0.02, -0.12], muzzle: [0, 0.035, -0.36], lock: [0, 0.055, -0.03], butt: [0, -0.1, 0.075], rod: 0.28 },
-  [WEAPON.RIFLE]: { left: [0, -0.05, -0.36], muzzle: [0, 0.03, -1.0], lock: [0, 0.06, -0.03], butt: [0, -0.02, 0.24], rod: 0.7 },
-  [WEAPON.BLUNDERBUSS]: { left: [0, -0.05, -0.27], muzzle: [0, 0.03, -0.66], lock: [0, 0.06, -0.03], butt: [0, -0.02, 0.24], rod: 0.4 },
-  [WEAPON.SABRE]: { left: [0, 0, 0.09], muzzle: [0, 0.02, -0.98], lock: [0, 0, 0], butt: [0, 0, 0.09], rod: 0 },
-  [WEAPON.UMBRELLA]: { left: [0, 0, 0.08], muzzle: [0, 0, -0.95], lock: [0, 0, 0], butt: [0, 0, 0.1], rod: 0 },
+  // (the pistol's walnut grip and the small of a stock lean back: the handle's axis rises and tilts forward; a hilt and a cane's shaft lie along the blade)
+  [WEAPON.PISTOL]: { left: [0, -0.02, -0.12], muzzle: [0, 0.035, -0.36], lock: [0, 0.055, -0.03], butt: [0, -0.1, 0.075], rod: 0.28, grip: [0, 0.95, -0.31] },
+  [WEAPON.RIFLE]: { left: [0, -0.05, -0.36], muzzle: [0, 0.03, -1.0], lock: [0, 0.06, -0.03], butt: [0, -0.02, 0.24], rod: 0.7, grip: [0, 0.94, -0.34], gripL: [0, 0, -1] },
+  [WEAPON.BLUNDERBUSS]: { left: [0, -0.05, -0.27], muzzle: [0, 0.03, -0.66], lock: [0, 0.06, -0.03], butt: [0, -0.02, 0.24], rod: 0.4, grip: [0, 0.94, -0.34], gripL: [0, 0, -1] },
+  [WEAPON.SABRE]: { left: [0, 0, 0.09], muzzle: [0, 0.02, -0.98], lock: [0, 0, 0], butt: [0, 0, 0.09], rod: 0, grip: [0, 0, -1] },
+  [WEAPON.UMBRELLA]: { left: [0, 0, 0.08], muzzle: [0, 0, -0.95], lock: [0, 0, 0], butt: [0, 0, 0.1], rod: 0, grip: [0, 0, -1] },
 };
 
 /** Per-frame combat input from the game. Everything is cosmetic. */
@@ -67,6 +72,8 @@ export interface HoldBody {
   upper: number;
   lower: number;
   depth: number;
+  /** Hand radius (metres): the fist's centre is a little below the wrist joint, and the wrist is placed so that the CENTRE of the fist is on the grip. Optional (default 0.08). */
+  hand?: number;
 }
 
 export interface HandTarget {
@@ -75,6 +82,10 @@ export interface HandTarget {
   z: number;
   /** 0..1 how firmly this hand is on the weapon (0 = the arm is free and keeps its gait). */
   w: number;
+  /** Unit direction (torso frame) of the handle this fist wraps round, or (0, 0, 0) when it holds nothing with an axis (a free hand, a bare fist, the reload's work). See `solveWrist`. */
+  ax: number;
+  ay: number;
+  az: number;
 }
 
 export interface HoldOut {
@@ -95,7 +106,7 @@ export interface HoldOut {
   rod: number;
 }
 
-export const newHoldOut = (): HoldOut => ({ visible: false, px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0, right: { x: 0, y: 0, z: 0, w: 0 }, left: { x: 0, y: 0, z: 0, w: 0 }, twist: 0, lean: 0, rod: 0 });
+export const newHoldOut = (): HoldOut => ({ visible: false, px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0, right: { x: 0, y: 0, z: 0, w: 0, ax: 0, ay: 0, az: 0 }, left: { x: 0, y: 0, z: 0, w: 0, ax: 0, ay: 0, az: 0 }, twist: 0, lean: 0, rod: 0 });
 
 // ---- small maths ------------------------------------------------------------------------------------------------------------------------
 
@@ -251,6 +262,108 @@ export function solveArm(upper: number, lower: number, side: 1 | -1, tx: number,
   return err;
 }
 
+// ---- the wrist ------------------------------------------------------------------------------------------------------------------------
+
+/** Row-major 3x3 of the forearm's orientation in the torso frame for shoulder angles (a, b) and elbow flexion e: Rx(a) Rz(b) Rx(e). */
+export function forearmMatrix(a: number, b: number, e: number, m: Float64Array): void {
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const cb = Math.cos(b);
+  const sb = Math.sin(b);
+  const ce = Math.cos(e);
+  const se = Math.sin(e);
+  // Rz(b) Rx(e)
+  const r00 = cb;
+  const r01 = -sb * ce;
+  const r02 = sb * se;
+  const r10 = sb;
+  const r11 = cb * ce;
+  const r12 = -cb * se;
+  const r20 = 0;
+  const r21 = se;
+  const r22 = ce;
+  // Rx(a) * that
+  m[0] = r00;
+  m[1] = r01;
+  m[2] = r02;
+  m[3] = ca * r10 - sa * r20;
+  m[4] = ca * r11 - sa * r21;
+  m[5] = ca * r12 - sa * r22;
+  m[6] = sa * r10 + ca * r20;
+  m[7] = sa * r11 + ca * r21;
+  m[8] = sa * r12 + ca * r22;
+}
+
+/** How far a wrist may turn the hand away from the forearm's line (radians): the wrist bends and the forearm rolls, in a caricature's generous range. */
+export const WRIST_MAX = 1.3;
+
+/** The hand's grip axis in its own frame: the line its knuckles lie on. */
+export const HAND_GRIP_AXIS: V3 = [0, 0, 1];
+
+/** How far below the wrist joint the fist's centre is, in hand radii (the palm's middle, where a rod passes through a closed hand). */
+export const HAND_CENTRE = 0.55;
+
+/**
+ * The wrist rotation (a quaternion x, y, z, w in the FOREARM's frame) that lays the hand's grip axis (its local Z, `HAND_GRIP_AXIS`) on the handle direction (ax, ay, az) given in the
+ * TORSO frame, for a forearm at (a, b, e) (see `forearmMatrix`). It is the smallest turn that does it (the axis has no sign: a fist wraps a rod either way, so the nearer of the two
+ * directions is used), limited to `WRIST_MAX`. Returns the axis error left over (radians, 0 when the wrist could do it all). `m` is scratch (9 numbers). Allocation-free.
+ * `out.s` is the direction the fist took last time (+1 the handle's own direction, -1 the opposite, 0 none yet): it is kept unless the other is clearly nearer (cos > 0.35), so a
+ * handle at a right angle to the forearm does not flip the hand over from one frame (or one iteration) to the next; the choice made is written back.
+ */
+export function solveWrist(a: number, b: number, e: number, ax: number, ay: number, az: number, out: { x: number; y: number; z: number; w: number; s?: number }, m: Float64Array): number {
+  const l = Math.hypot(ax, ay, az);
+  if (!(l > 1e-6)) {
+    out.x = out.y = out.z = 0;
+    out.w = 1;
+    return 0;
+  }
+  forearmMatrix(a, b, e, m);
+  // the handle in the forearm's frame: M^T v
+  let vx = (m[0]! * ax + m[3]! * ay + m[6]! * az) / l;
+  let vy = (m[1]! * ax + m[4]! * ay + m[7]! * az) / l;
+  let vz = (m[2]! * ax + m[5]! * ay + m[8]! * az) / l;
+  const prefer = out.s ?? 0;
+  const sign = prefer !== 0 && Math.abs(vz) < 0.35 ? prefer : vz < 0 ? -1 : 1;
+  out.s = sign;
+  if (sign < 0) {
+    vx = -vx;
+    vy = -vy;
+    vz = -vz;
+  }
+  // rotate (0, 0, 1) onto (vx, vy, vz): the axis is (0,0,1) x v = (-vy, vx, 0), the angle acos(vz)
+  const s = Math.hypot(vx, vy);
+  const full = Math.atan2(s, vz);
+  if (s < 1e-9) {
+    out.x = out.y = out.z = 0;
+    out.w = 1;
+    return 0;
+  }
+  const turn = Math.min(full, WRIST_MAX);
+  const k = Math.sin(turn / 2) / s;
+  out.x = -vy * k;
+  out.y = vx * k;
+  out.z = 0;
+  out.w = Math.cos(turn / 2);
+  return full - turn;
+}
+
+/** Rotates the vector (x, y, z) by the unit quaternion q and writes it to `o`. */
+export function rotateByQuat(q: { x: number; y: number; z: number; w: number }, x: number, y: number, z: number, o: { x: number; y: number; z: number }): void {
+  const tx = 2 * (q.y * z - q.z * y);
+  const ty = 2 * (q.z * x - q.x * z);
+  const tz = 2 * (q.x * y - q.y * x);
+  o.x = x + q.w * tx + (q.y * tz - q.z * ty);
+  o.y = y + q.w * ty + (q.z * tx - q.x * tz);
+  o.z = z + q.w * tz + (q.x * ty - q.y * tx);
+}
+
+/** The forearm's matrix times a vector: forearm frame -> torso frame. */
+export function applyMatrix(m: Float64Array, x: number, y: number, z: number, o: { x: number; y: number; z: number }): void {
+  o.x = m[0]! * x + m[1]! * y + m[2]! * z;
+  o.y = m[3]! * x + m[4]! * y + m[5]! * z;
+  o.z = m[6]! * x + m[7]! * y + m[8]! * z;
+}
+
 // ---- holds -------------------------------------------------------------------------------------------------------------------------------------
 
 type Kind = "pistol" | "long" | "blade" | "stick" | "hands";
@@ -311,6 +424,8 @@ export function computeHold(input: WeaponPoseInput, blend: HoldBlend, body: Hold
   const A = upper + lower;
   out.right.w = 0;
   out.left.w = 0;
+  out.right.ax = out.right.ay = out.right.az = 0;
+  out.left.ax = out.left.ay = out.left.az = 0;
   out.twist = 0;
   out.lean = 0;
   out.rod = 0;
@@ -372,6 +487,15 @@ export function computeHold(input: WeaponPoseInput, blend: HoldBlend, body: Hold
     set6(alt, shRx * 0.8, sy - 0.32 * A, -0.42 * A, cane ? -0.5 : 0.1 + input.elev * 0.3, cane ? 0.15 : 0.1, 0);
     mix6(base, alt, aim);
   }
+
+  // breathing: at the ready the piece rides the breath and shifts its weight a touch, aimed it wanders a hair round the sight line; walking or running hides both
+  const still = 1 - clamp(speed01 * 1.5, 0, 1);
+  const sway = (1 - aim * 0.65) * still;
+  base.y += 0.0045 * Math.sin(time * 1.9) * sway;
+  base.z += 0.004 * Math.sin(time * 1.3) * sway;
+  base.rx += 0.014 * Math.sin(time * 1.6) * sway;
+  base.ry += 0.008 * Math.sin(time * 0.8) * (0.4 + aim) * still;
+  base.rx += 0.006 * Math.sin(time * 1.1) * aim * still;
 
   // ---- reload: the piece comes up to the chest, muzzle high, while the free hand works --------------------------------------------------
   const rl = blend.reload;
@@ -443,12 +567,25 @@ export function computeHold(input: WeaponPoseInput, blend: HoldBlend, body: Hold
   }
 
   if (anchors && rl > 0.01) out.rod = anchors.rod * rodOut(input.reload);
+  // the handles the fists wrap round, in the torso frame (the weapon's own axes turned by its pose)
+  if (anchors) {
+    placeLocal(0, 0, 0, out.rx, out.ry, out.rz, anchors.grip[0], anchors.grip[1], anchors.grip[2], tmp);
+    out.right.ax = tmp.x;
+    out.right.ay = tmp.y;
+    out.right.az = tmp.z;
+    if (two && anchors.gripL && rl <= 0.01 && kind === "long") {
+      placeLocal(0, 0, 0, out.rx, out.ry, out.rz, anchors.gripL[0], anchors.gripL[1], anchors.gripL[2], tmp);
+      out.left.ax = tmp.x;
+      out.left.ay = tmp.y;
+      out.left.az = tmp.z;
+    }
+  }
   return out;
 }
 
 /** Brings the whole piece in toward the right shoulder if the grip is out of that arm's reach (by up to 0.35 m). */
 function fitRight(out: HoldOut, body: HoldBody): void {
-  const reach = (body.upper + body.lower) * 0.96;
+  const reach = (body.upper + body.lower) * 0.96 + (body.hand ?? 0.08) * HAND_CENTRE * 0.8; // (the wrist stops short of the grip by the fist's half depth)
   const dx = out.right.x - body.hw;
   const dy = out.right.y - body.sy;
   const dz = out.right.z;
@@ -465,7 +602,7 @@ function fitRight(out: HoldOut, body: HoldBody): void {
 
 /** The left hand's place on a two-handed piece: the fore-end, or as far along toward the grip as this arm (shoulder at -hw) can reach. */
 function foreGrip(out: HoldOut, body: HoldBody, a: Anchors, o: { x: number; y: number; z: number }): void {
-  const reach = (body.upper + body.lower) * 0.955;
+  const reach = (body.upper + body.lower) * 0.955 + (body.hand ?? 0.08) * HAND_CENTRE * 0.8;
   for (let s = 1; s >= 0.2; s -= 0.1) {
     placeLocal(out.px, out.py, out.pz, out.rx, out.ry, out.rz, a.left[0] * s, a.left[1] * s, a.left[2] * s, o);
     if (Math.hypot(o.x + body.hw, o.y - body.sy, o.z) <= reach) return;

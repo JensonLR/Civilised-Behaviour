@@ -53,17 +53,18 @@ const lerpAt = (arr: readonly number[], t: number): number => {
 
 // ---- nose ----------------------------------------------------------------------------------------------------------------
 
+/** How big the nostril wings are, by nose style (x the tip's width): button, hooked, bulb, long, flat, lump, snub, roman. */
+const ALAR = [0.5, 0.55, 0.85, 0.5, 1.05, 0.9, 0.62, 0.55] as const;
+
 /**
- * A nose is a swept form that rises out of the bridge of the face: narrow at the root, widening to a tip, with two nostrils
- * underneath. The style picks the spine (how it projects and droops) and the widths; `noseLength` (spec) sets the projection.
+ * A nose is a swept form that rises out of the bridge of the face: a slim bridge that swells into a rounded ball at the end (`noseSwell`), with a pair of nostril wings
+ * flaring at either side of the ball and two dark nostril openings under and in front of it. The style picks the spine (how it projects and droops) and the widths;
+ * `noseLength` (spec) sets the projection.
  */
 export function buildNose(c: FaceCtx): void {
   const { spec, P, b } = c;
   const R = P.headRadius;
   const ng = noseGeo(P, c.shape, spec, c.cy);
-  const st = ng.style;
-  const len = ng.len;
-  const pts = ng.pts;
   const ramp = skinRamp(c.skin);
   const tipTone = spec.facePaint === 1 ? PALETTE.trim.zinc : spec.noseStyle === 5 ? mix(c.skin, PALETTE.trim.blushHot, 0.65) : ramp.blush.getHex();
   const spine = ng.spine;
@@ -73,38 +74,38 @@ export function buildNose(c: FaceCtx): void {
   const noseSection = (t: number) => ({
     rx: ng.rx(t),
     rz: ng.rz(t),
-    pow: 2.4,
-    color: painted ? mix(c.skin, PALETTE.trim.zinc, 0.55 + 0.45 * smooth(0.05, 0.45, t)) : t > 0.75 ? mix(color, tipTone, Math.min(1, (t - 0.75) * 3)) : color,
+    pow: 2.3,
+    color: painted ? mix(c.skin, PALETTE.trim.zinc, 0.55 + 0.45 * smooth(0.05, 0.45, t)) : t > 0.72 ? mix(color, tipTone, Math.min(1, (t - 0.72) * 3.2)) : color,
   });
-  b.sweep(spine, noseSection, color, { side: [1, 0, 0], segments: 9, round: "end" });
+  b.sweep(spine, noseSection, color, { side: [1, 0, 0], segments: 8, round: "end" });
 
-  // Nostrils: two dark oval openings flush with the underside of the tip (a tiny tube sunk into the nose whose mouth lies on the surface),
-  // so they read as holes in the nose rather than beads stuck beside it.
   const last = spine.length - 1;
-  const iN = Math.max(1, Math.round(last * 0.9));
-  const at = spine[iN]!;
-  const prev = spine[iN - 1]!;
+  const at = spine[last]!;
+  const prev = spine[last - 1]!;
   const tan: V3 = norm3([at[0] - prev[0], at[1] - prev[1], at[2] - prev[2]]);
-  // "Down" for the tip: world down projected off the tangent; a nose pointing straight down faces its nostrils forward (-Z).
-  let under = norm3([0, -1, -0.25]);
+  const tip = noseSection(1);
+  // "Down and forward" for the tip: the way the nostrils face, projected off the tangent (a nose pointing straight down faces its nostrils forward).
+  let under = norm3([0, -0.75, -0.66]);
   const dot = under[0] * tan[0] + under[1] * tan[1] + under[2] * tan[2];
   under = norm3([under[0] - tan[0] * dot, under[1] - tan[1] * dot, under[2] - tan[2] * dot]);
   if (Math.hypot(under[0], under[1], under[2]) < 0.2) under = [0, 0, -1];
-  const secN = noseSection(iN / last);
-  const depth = Math.max(secN.rx, secN.rz);
-  const surfaceOff = secN.rz; // distance from the spine to the surface along `under` (the section's depth axis is the one facing down)
-  const holeC = mix(c.skin, PALETTE.face.nostril, 0.85);
+  // the nostril wings: two flattened lobes beside the ball and a little behind it, flowing back into the cheeks
+  const alarF = ALAR[spec.noseStyle] ?? 0.6;
+  const iA = Math.max(1, Math.round(last * 0.9));
+  const aPt = spine[iA]!;
+  const aSec = noseSection(iA / last);
+  const lobeR = Math.max(aSec.rx, aSec.rz) * 0.62 * (0.7 + 0.5 * alarF);
+  const lobeTone = mix(color, tipTone, 0.45);
   for (const sx of [-1, 1]) {
-    const cx = sx * secN.rx * 0.5;
-    const start: V3 = [at[0] + cx + under[0] * (surfaceOff + R * 0.004), at[1] + under[1] * (surfaceOff + R * 0.004), at[2] + under[2] * (surfaceOff + R * 0.004)];
-    const end: V3 = [start[0] - under[0] * depth * 0.9, start[1] - under[1] * depth * 0.9, start[2] - under[2] * depth * 0.9];
-    b.sweep([start, end], () => ({ rx: Math.min(secN.rx * 0.42, R * 0.045), rz: Math.min(secN.rx * 0.3, R * 0.03), pow: 2 }), holeC, { side: [1, 0, 0], segments: 7 });
+    b.sphere(lobeR, lobeTone, [aPt[0] + sx * aSec.rx * (0.62 + 0.3 * alarF), aPt[1] - aSec.rz * 0.32 + under[1] * lobeR * 0.15, aPt[2] + aSec.rz * 0.5], [1.0, 0.86, 0.95]);
   }
-  // alar wings: the nostril flare, only on the wider styles
-  const tip = pts[pts.length - 1]!;
-  const wide = lerpAt(st.rx, 1) * R;
-  if (spec.noseStyle === 2 || spec.noseStyle === 5 || spec.noseStyle === 4) {
-    for (const sx of [-1, 1]) b.sphere(R * 0.07, color, [sx * wide * 0.8, tip[1] + R * 0.03, tip[2] + len * 0.04 + R * 0.07], [1, 0.9, 0.9]);
+  // nostrils: dark, slightly sunk ovals on the underside of the ball, tilted a little outward (a flattened blob half buried in the surface reads as a hole)
+  const holeC = mix(c.skin, PALETTE.face.nostril, 0.88);
+  const off = Math.max(tip.rx, tip.rz) * 0.82;
+  const holeR = Math.max(R * 0.02, Math.min(tip.rx * 0.34, R * 0.05)) * (0.85 + 0.3 * alarF);
+  for (const sx of [-1, 1]) {
+    const p: V3 = [at[0] + sx * tip.rx * 0.42, at[1] + under[1] * off, at[2] + under[2] * off];
+    b.sphere(holeR, holeC, p, [1, 0.62, 1.15], [Math.atan2(under[1], -under[2]) * 0.0, 0, sx * 0.25]);
   }
 }
 
@@ -231,7 +232,7 @@ function stache(c: FaceCtx, pts: readonly (readonly [number, number])[], widths:
   );
   b.sweep(
     spine,
-    (t) => ({ rx: lerpAt(widths, t) * R * 0.55, rz: lerpAt(widths, t) * R * thick, pow: 2.2 }),
+    (t) => ({ rx: lerpAt(widths, t) * R * 0.55, rz: lerpAt(widths, t) * R * thick, pow: 2.2, color: strandTone(c, 0.86 + 0.26 * t, 0.5 + 0.3 * t, t) }),
     c.facialC,
     { side: [0, 1, 0], segments: 4, round: "end" },
   );
@@ -255,7 +256,7 @@ function bar(c: FaceCtx, half: readonly (readonly [number, number])[], widths: r
     return onSkin(c, x * R, y * R, lift0);
   });
   const spine = curve(pts, Math.max(9, N * 2));
-  addConformedSweep(b, headFit(c), spine, (t) => ({ rx: lerpAt(w, t) * R * 0.55, rz: lerpAt(w, t) * R * thick, pow: 2.2 }), c.facialC, { side: [0, 1, 0], segments: 4, round: "both" }, 0.002);
+  addConformedSweep(b, headFit(c), spine, (t) => ({ rx: lerpAt(w, t) * R * 0.55, rz: lerpAt(w, t) * R * thick, pow: 2.2, color: strandTone(c, 0.84 + 0.28 * Math.abs(2 * t - 1), 0.45 + 0.4 * Math.abs(2 * t - 1), Math.abs(2 * t - 1)) }), c.facialC, { side: [0, 1, 0], segments: 4, round: "both" }, 0.002);
 }
 
 export function buildMoustache(c: FaceCtx): void {
@@ -343,7 +344,75 @@ function lobe(c: FaceCtx, ptsIn: readonly (readonly [number, number, number])[],
     const g = lerpAt(depths, i / (all.length - 1)) * R * 0.75;
     return hf.bodyDist(p[0], p[1], p[2]) < g ? [p[0], p[1], -hf.clearRadius(0, p[1], -p[2], g, p[0])] as V3 : p;
   });
-  addConformedSweep(b, hf, spine, (t) => ({ rx: lerpAt(widths, t) * R, rz: lerpAt(depths, t) * R, pow: 2.3 }), c.facialC, { side: [1, 0, 0], segments: 6, round: "end" }, 0.002);
+  // the mass: root darker, tip lighter, so a beard has a grain and not one flat colour
+  addConformedSweep(b, hf, spine, (t) => ({ rx: lerpAt(widths, t) * R, rz: lerpAt(depths, t) * R, pow: 2.3, color: strandTone(c, 0.84 + 0.26 * smooth(0, 1, t), 0.5) }), c.facialC, { side: [1, 0, 0], segments: 6, round: "end" }, 0.002);
+  fringe(c, hf, spine, widths, depths);
+}
+
+/** Facial hair colour for one strand: the beard colour, scaled by `k`, and (if the character is greying) some strands greyer than others, chin and tips first. `h` in 0..1 picks the strand. */
+function strandTone(c: FaceCtx, k: number, h: number, tip = 0): number {
+  const grey = [0, 0.35, 0.55, 0.9][c.spec.greying] ?? 0;
+  const base = grey > 0 ? mix(c.facialC, PALETTE.hair[7]!, Math.min(1, grey * Math.max(0, h * 1.3 - 0.15 + tip * 0.3)) * 0.55) : c.facialC;
+  return tone(base, k);
+}
+
+/**
+ * A beard is a mass of hair, not a smooth cone: over the solid core of each lobe lie several overlapping locks that follow its spine at different lateral offsets and lengths, each
+ * tapering to its own point with a dark root and a light tip. Where the locks part, the darker core shows. Full-detail heads only (locks are 1-3 cm wide; the ink line follows the core).
+ */
+function fringe(c: FaceCtx, hf: ReturnType<typeof headFit>, spine: readonly V3[], widths: readonly number[], depths: readonly number[]): void {
+  if (PartBuilder.lod > 0 || PartBuilder.hullMode) return;
+  const { P, b } = c;
+  const R = P.headRadius;
+  const n = spine.length;
+  const last = spine[n - 1]!;
+  const first = spine[0]!;
+  const length = Math.hypot(last[0] - first[0], last[1] - first[1], last[2] - first[2]);
+  const wMax = Math.max(...widths) * R;
+  if (length < R * 0.45 || wMax < R * 0.1) return;
+  if (Math.abs(last[0] - first[0]) > length * 0.3) return; // (a lobe that runs diagonally across the chest, the forked beard, keeps its smooth form: locks laid over a bent, conformed tube fold)
+  const K = wMax > R * 0.36 ? 5 : wMax > R * 0.2 ? 4 : 3;
+  const prev = spine[Math.max(0, n - 3)]!;
+  const dir: V3 = [last[0] - prev[0], last[1] - prev[1], last[2] - prev[2]];
+  const dl = Math.hypot(...dir) || 1;
+  const spacing = 2 / K;
+  for (let k = 0; k < K; k++) {
+    const u = -1 + spacing * (k + 0.5);
+    const h = ((k * 37 + Math.round(length * 1000)) % 17) / 17;
+    const lenK = 0.8 + 0.3 * (((k * 5 + 2) % 7) / 6); // how far down the spine this lock runs (a little past the end for the longest)
+    const pts: V3[] = [];
+    for (let j = 0; j < 5; j++) {
+      const t = (j / 4) * lenK;
+      const f = Math.min(t, 1) * (n - 1);
+      const i0 = Math.min(n - 2, Math.floor(f));
+      const q0 = spine[i0]!;
+      const q1 = spine[i0 + 1]!;
+      const fr = f - i0;
+      const over = Math.max(0, t - 1);
+      const px = q0[0] + (q1[0] - q0[0]) * fr;
+      const py = q0[1] + (q1[1] - q0[1]) * fr;
+      const pz = q0[2] + (q1[2] - q0[2]) * fr;
+      const off = u * lerpAt(widths, Math.min(1, t)) * R * (1 - 0.12 * t);
+      const tx = q1[0] - q0[0];
+      const ty = q1[1] - q0[1];
+      const tl = Math.hypot(tx, ty) || 1;
+      // (the lock is displaced across the beard, perpendicular to its run, so a diagonal lobe gets diagonal locks and not sheared ones)
+      const lx = -ty / tl;
+      const ly = tx / tl;
+      pts.push([px + lx * off + (dir[0] / dl) * over * R * 1.2, py + ly * off + (dir[1] / dl) * over * R * 1.2, pz + (dir[2] / dl) * over * R * 1.2 - R * 0.012 - lerpAt(depths, Math.min(1, t)) * R * (0.5 + 0.25 * Math.abs(u)) * (1 - 0.5 * t)]);
+    }
+    const sp = curve(pts, 5);
+    const rx0 = ((wMax * 2) / K) * 0.62 * (0.85 + 0.3 * h);
+    addConformedSweep(
+      b,
+      hf,
+      sp,
+      (t) => ({ rx: Math.min(rx0, lerpAt(widths, Math.min(1, t * lenK)) * R * 0.9 + R * 0.01) * (1 - 0.94 * t ** 1.5) + R * 0.003, rz: lerpAt(depths, Math.min(1, t * lenK)) * R * 0.8 * (1 - 0.6 * t), pow: 2.3, color: strandTone(c, 0.8 + 0.36 * t ** 0.8 * (0.92 + 0.16 * h), h, t) }),
+      c.facialC,
+      { sideAt: (i) => { const a = sp[Math.max(0, i - 1)]!; const e = sp[Math.min(sp.length - 1, i + 1)]!; const l = Math.hypot(e[0] - a[0], e[1] - a[1]) || 1; return [-(e[1] - a[1]) / l, (e[0] - a[0]) / l, 0] as V3; }, segments: 4, caps: true },
+      0.014,
+    );
+  }
 }
 
 export function buildBeard(c: FaceCtx): void {
@@ -367,7 +436,7 @@ export function buildBeard(c: FaceCtx): void {
       break;
     case 6: // wizard: a long flowing mass
       lobe(c, [[0, -0.62, 0.03], [0, -0.95, 0.2], [0, -1.6, 0.26], [0, -2.5, 0.22], [0, -2.95, 0.15]], [0.5, 0.52, 0.42, 0.24, 0.02], [0.1, 0.17, 0.2, 0.15, 0.04]);
-      for (const s of [-1, 1]) lobe(c, [[s * 0.58, -0.05, 0.02], [s * 0.6, -0.5, 0.08], [s * 0.4, -0.9, 0.16]], [0.12, 0.2, 0.22], [0.06, 0.1, 0.14]);
+      for (const s of [-1, 1]) lobe(c, [[s * 0.6, -0.2, 0.02], [s * 0.6, -0.5, 0.08], [s * 0.4, -0.9, 0.16]], [0.12, 0.2, 0.22], [0.06, 0.1, 0.14]);
       break;
     case 7: { // neck fringe: a chinstrap along the jaw line
       const pts: [number, number, number][] = [];

@@ -1,4 +1,4 @@
-import { CARRIED, WEAPON, WEAPONS, ZONE_NAMES, type WeaponId } from "@cb/shared";
+import { CARRIED, WEAPON, WEAPONS, type WeaponId } from "@cb/shared";
 
 /**
  * The gunnery half of the interface, in the Society's stationery: a small armoury card (the hotbar of what is carried, the piece in hand, rounds in
@@ -14,6 +14,9 @@ const ICONS: Record<number, string> = {
   [WEAPON.SABRE]: `<path d="M4 20l4-4 3 1 1-2 3 1-2 3 3 2 36-13 4-1-1 3-38 16-4-1-5-3z"/>`,
   [WEAPON.UMBRELLA]: `<path d="M6 20a4 4 0 1 1 8 0v-3h2v3a6 6 0 1 0 5-6l32-9 1 2-31 9v2L52 8l-2 3-1 3-30 5v-1z"/>`,
 };
+
+/** Marks for blows taken: one per direction, up to this many at once. */
+const BEARINGS = 6;
 
 const el = (root: HTMLElement, tag: string, cls: string, html = ""): HTMLElement => {
   const e = document.createElement(tag);
@@ -36,6 +39,8 @@ export interface ArmsView {
   /** Cooldown remaining as a fraction 0..1 of the last shot's wait (a hint bar), 0 when ready. */
   wait: number;
   gamepad: boolean;
+  /** The label of the key that reloads (follows a rebind), for "Empty - press R". */
+  reloadKey?: string;
   /** Hands busy (carrying, dragging, downed...): the card dims. */
   busy: boolean;
 }
@@ -72,10 +77,12 @@ export class CombatHud {
   private readonly markText: HTMLElement;
   private readonly bearings: HTMLElement;
   private readonly bearingMarks: HTMLElement[] = [];
+  private readonly bearingAngle = new Float32Array(BEARINGS);
+  private readonly bearingPower = new Float32Array(BEARINGS);
   private readonly cannon: HTMLElement;
   private shown = "";
   private markTimer = 0;
-  private bearingTimers = [0, 0, 0, 0];
+  private readonly bearingTimers = new Float32Array(BEARINGS);
   private lastGap = -1;
 
   constructor(private readonly root: HTMLElement) {
@@ -103,8 +110,9 @@ export class CombatHud {
 
     this.bearings = el(root, "div", "bearings");
     this.bearings.setAttribute("aria-hidden", "true");
-    for (let i = 0; i < 4; i++) {
-      const b = el(this.bearings, "div", "bearing", `<svg viewBox="-24 -24 48 48"><path d="M-9 -20 0 -27 9 -20 4 -20 0 -22 -4 -20z" class="chev"/><path d="M-13 -15 0 -21 13 -15" class="arc"/></svg>`);
+    for (let i = 0; i < BEARINGS; i++) {
+      // a wedge of the ring round the sight (about 34 degrees of it) with an arrowhead outside it pointing at the attacker: a shape, in ink and paper as well as stamp red
+      const b = el(this.bearings, "div", "bearing", `<svg viewBox="-60 -60 120 120"><path class="wedge" d="M-16.2 -46.2A49 49 0 0 1 16.2 -46.2L12.6 -37.2A39.4 39.4 0 0 0-12.6 -37.2Z"/><path class="chev" d="M-8 -53 0 -63 8 -53 3 -53 0 -57 -3 -53z"/></svg>`);
       b.hidden = true;
       this.bearingMarks.push(b);
     }
@@ -118,7 +126,7 @@ export class CombatHud {
     const carrying = v.owned !== 0;
     this.arms.hidden = !carrying;
     if (!carrying) return;
-    const key = `${v.weapon}|${v.owned}|${v.ammo}|${v.reserve}|${v.reload}|${v.busy ? 1 : 0}|${v.gamepad ? 1 : 0}|${Math.round(v.wait * 8)}`;
+    const key = `${v.weapon}|${v.owned}|${v.ammo}|${v.reserve}|${v.reload}|${v.busy ? 1 : 0}|${v.gamepad ? 1 : 0}|${Math.round(v.wait * 8)}|${v.reloadKey ?? ""}`;
     if (key === this.shown) return;
     this.shown = key;
     this.arms.classList.toggle("busy", v.busy);
@@ -154,7 +162,7 @@ export class CombatHud {
       this.gauge.classList.remove("dry");
     } else if (empty) {
       this.gaugeFill.style.width = "0%";
-      this.gaugeText.textContent = v.reserve > 0 ? (v.gamepad ? "Empty – press X" : "Empty – press R") : "Out of powder and shot";
+      this.gaugeText.textContent = v.reserve > 0 ? (v.gamepad ? "Empty – press X" : `Empty – press ${v.reloadKey ?? "R"}`) : "Out of powder and shot";
       this.gauge.classList.toggle("dry", v.reserve === 0);
     }
   }
@@ -180,17 +188,35 @@ export class CombatHud {
     this.mark.classList.remove("pop");
     void this.mark.offsetWidth;
     this.mark.classList.add("pop");
-    void ZONE_NAMES;
   }
 
-  /** Someone hit YOU: a chevron on a ring round the sight, pointing toward where the blow came from. `rad` is the bearing relative to the view (0 = ahead, + = right). */
-  damageFrom(rad: number): void {
-    // one mark per quadrant: a new hit from the same side refreshes it
-    const idx = ((Math.round(rad / (Math.PI / 2)) % 4) + 4) % 4;
+  /**
+   * Someone hit YOU: a wedge on the ring round the sight with an arrowhead, pointing toward where the blow came from. `rad` is the bearing relative to
+   * the view (0 = ahead, + = right); `power` 0..1 sets how bold it is. A second blow from about the same direction refreshes the same mark (so a volley
+   * is one mark, not a ring of them); a blow from elsewhere takes a free mark, or the oldest.
+   */
+  damageFrom(rad: number, power = 0.5): void {
+    if (!Number.isFinite(rad)) return;
+    let idx = -1;
+    let oldest = 0;
+    for (let i = 0; i < BEARINGS; i++) {
+      if (this.bearingTimers[i]! > 0) {
+        const d = Math.abs(Math.atan2(Math.sin(rad - this.bearingAngle[i]!), Math.cos(rad - this.bearingAngle[i]!)));
+        if (d < 0.45) idx = i;
+        if (this.bearingTimers[i]! < this.bearingTimers[oldest]!) oldest = i;
+      } else if (idx < 0) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) idx = oldest;
     const b = this.bearingMarks[idx]!;
+    this.bearingAngle[idx] = rad;
+    this.bearingPower[idx] = 0.55 + 0.45 * Math.min(1, Math.max(0, power));
     b.style.transform = `translate(-50%, -50%) rotate(${rad}rad)`;
+    b.style.opacity = String(this.bearingPower[idx]);
     b.hidden = false;
-    this.bearingTimers[idx] = 1.6;
+    this.bearingTimers[idx] = 1.8;
   }
 
   updateCannon(v: CannonHud | undefined): void {
@@ -213,11 +239,11 @@ export class CombatHud {
       this.markTimer -= dt;
       if (this.markTimer <= 0) this.mark.hidden = true;
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < BEARINGS; i++) {
       if (this.bearingTimers[i]! > 0) {
         this.bearingTimers[i]! -= dt;
         const b = this.bearingMarks[i]!;
-        b.style.opacity = String(Math.min(1, this.bearingTimers[i]! / 0.6));
+        b.style.opacity = String(Math.min(1, this.bearingTimers[i]! / 0.7) * this.bearingPower[i]!);
         if (this.bearingTimers[i]! <= 0) b.hidden = true;
       }
     }

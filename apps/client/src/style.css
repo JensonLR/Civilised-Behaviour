@@ -505,3 +505,137 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 :root[data-contrast="high"] .creator .posebar button[aria-checked="true"], :root[data-contrast="high"] .creator .presets button[aria-pressed="true"] { border-width: 3px; }
 @media (max-width: 60rem) { #creator-host.creator { max-height: none; overflow: visible; } .creator .fields { overflow: visible; } }
 @media (max-width: 26rem) { .creator .presets { grid-template-columns: minmax(0, 1fr); } .creator .field { grid-template-columns: 6.6rem 1fr; } }
+
+/* ======================================================================================================================================
+   Interface pass (agent P, 2026-09-30): safe margins, the heading strip, the telegram stack, the vitals hatching, hit-direction wedges,
+   captions and the armoury card re-seated so nothing sits on anything else at 800 x 450 or at 1920 x 1080. Colours: palette variables only.
+   ====================================================================================================================================== */
+
+/* One margin for everything hugging a screen edge: at least 0.9 rem, and 2.4% of the short side on a big screen (television overscan, a curved
+   monitor), plus any notch or system bar the platform reports. */
+:root { --pad: max(0.9rem, 2.4vmin); }
+#hud { --edge-t: max(var(--pad), env(safe-area-inset-top, 0px)); --edge-r: max(var(--pad), env(safe-area-inset-right, 0px)); --edge-b: max(var(--pad), env(safe-area-inset-bottom, 0px)); --edge-l: max(var(--pad), env(safe-area-inset-left, 0px)); }
+.codebar { top: var(--edge-t); right: var(--edge-r); }
+.health { left: var(--edge-l); bottom: var(--edge-b); }
+.wounds { left: calc(var(--edge-l) + 7.7rem); bottom: var(--edge-b); }
+.help { right: var(--edge-r); bottom: var(--edge-b); }
+.arms { right: var(--edge-r); bottom: calc(var(--edge-b) + 2.3rem); }
+.cannoncard { right: var(--edge-r); top: calc(var(--edge-t) + 4rem); }
+@media (max-width: 62rem) { .arms { bottom: var(--edge-b); } }
+/* Captions sit on the left, above the gauge, where the picture is least busy and nothing else of ours is: the armoury card owns the right. */
+.captions { right: auto; left: max(var(--pad), env(safe-area-inset-left, 0px)); bottom: calc(max(var(--pad), env(safe-area-inset-bottom, 0px)) + 8.6rem); align-items: flex-start; width: min(92vw, 24rem); }
+.caption { border-left: 3px solid var(--brass); }
+@media (max-height: 34rem) { .captions { bottom: calc(max(var(--pad), env(safe-area-inset-bottom, 0px)) + 7.6rem); } }
+
+/* ---- the heading strip ---- */
+.compass { position: absolute; top: var(--edge-t); left: 50%; transform: translateX(-50%); width: clamp(9rem, 22vw, 27rem); height: 1.9rem; font-family: var(--display); color: var(--ink); pointer-events: none; }
+.compass .strip { position: absolute; inset: 0; overflow: hidden; border: 2px solid var(--brass-dark); border-radius: 3px; background: radial-gradient(ellipse at 50% 0%, transparent 60%, color-mix(in srgb, var(--brass-dark) 22%, transparent) 100%), linear-gradient(var(--paper), var(--paper-2)); box-shadow: var(--shadow), inset 0 0 0 2px color-mix(in srgb, var(--brass) 55%, transparent); }
+.compass .tick { position: absolute; bottom: 0; width: 1px; height: 0.4rem; background: var(--ink); transform: translateX(-50%); }
+.compass .tick.pt { height: 0.6rem; width: 1.5px; }
+.compass .tick.card { height: 0.75rem; width: 2px; }
+.compass .tick[data-label]::before { content: attr(data-label); position: absolute; left: 50%; bottom: 0.7rem; transform: translateX(-50%); font-size: 0.72rem; letter-spacing: 0.06em; line-height: 1; }
+.compass .tick.card::before { font-size: 0.86rem; font-weight: 700; }
+.compass .tick[data-n="1"]::before { color: var(--stamp); }
+.compass .readout { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; min-width: 5.2rem; padding: 0.02rem 0.5rem; text-align: center; white-space: nowrap; font: 0.9rem/1.35 var(--type); letter-spacing: 0.05em; background: var(--field); border: 2px solid var(--ink); border-radius: 2px; box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px var(--brass-dark); }
+.compass .readout::before, .compass .readout::after { content: ""; position: absolute; left: 50%; margin-left: -5px; border: 5px solid transparent; }
+.compass .readout::before { bottom: 100%; border-bottom-color: var(--ink); margin-bottom: -1px; }
+.compass .marks { position: absolute; left: 0; right: 0; top: 100%; height: 0; }
+.compass .mark { position: absolute; top: 0.35rem; display: flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.4rem 0.05rem 0.25rem; transform: translateX(-50%); white-space: nowrap; font-size: 0.72rem; letter-spacing: 0.06em; line-height: 1.2; background: var(--paper); border: 1.5px solid var(--brass-dark); border-radius: 2px; box-shadow: 0 2px 6px color-mix(in srgb, var(--scrim) 45%, transparent); }
+.compass .mark::before { content: ""; position: absolute; left: 50%; top: -0.36rem; height: 0.36rem; width: 0; margin-left: -1px; border-left: 2px solid var(--brass-dark); }
+.compass .mark svg { width: 0.95rem; height: 0.95rem; flex: none; fill: var(--ink); }
+.compass .mark svg .k { fill: none; stroke: var(--paper); stroke-width: 1.6; }
+.compass .mark .dist { font-family: var(--type); letter-spacing: 0; opacity: 0.85; }
+.compass .mark[data-row="1"] { top: 1.85rem; }
+.compass .mark[data-row="2"] { top: 3.35rem; }
+.compass .mark[data-row="1"]::before { height: 1.86rem; top: -1.86rem; }
+.compass .mark[data-row="2"]::before { height: 3.36rem; top: -3.36rem; }
+.compass .mark[data-edge] { opacity: 0.75; }
+.compass .mark[data-edge="l"] { transform: translateX(0); }
+.compass .mark[data-edge="r"] { transform: translateX(-100%); }
+.compass .mark[data-edge="l"] .name::before { content: "\2039  "; }
+.compass .mark[data-edge="r"] .dist::after { content: "  \203A"; }
+@media (max-width: 40rem) { .compass .mark .name { display: none; } }
+:root[data-contrast="high"] .compass .strip, :root[data-contrast="high"] .compass .mark { border-color: var(--ink); border-width: 3px; }
+
+/* ---- the telegram stack ---- */
+.telegrams { position: absolute; top: calc(var(--edge-t) + 4.6rem); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 0.5rem; width: min(90vw, 34rem); pointer-events: none; }
+.telegrams[hidden] { display: none; }
+.telegram { position: relative; padding: 1.35rem 1.3rem 0.6rem; font-family: var(--type); font-size: 0.95rem; line-height: 1.33; color: var(--ink); background: linear-gradient(var(--paper), var(--paper-2)); border-top: 3px double var(--ink); border-bottom: 3px double var(--ink); box-shadow: var(--shadow); animation: telegramIn 0.3s ease-out; transition: opacity 0.5s; }
+.telegram::before { content: "TELEGRAM"; position: absolute; left: 0; right: 0; top: 0.3rem; text-align: center; font-family: var(--display); font-size: 0.68rem; letter-spacing: 0.4em; color: var(--stamp); }
+.telegram.leaving { opacity: 0; }
+.telegram[data-more]:not([data-more=""])::after { content: "+" attr(data-more) " waiting"; position: absolute; right: 0.6rem; top: 0.25rem; padding: 0 0.5rem; font: 0.62rem var(--display); letter-spacing: 0.14em; color: var(--text); background: var(--ink); border-radius: 2px; }
+@keyframes telegramIn { from { opacity: 0; transform: translateY(-0.9rem) rotate(-0.6deg); } }
+:root[data-contrast="high"] .telegram { background: var(--field); border-color: var(--ink); }
+
+/* ---- vitals: ink hatching closes in from the edges as health falls (a pattern, so it does not rely on colour), harder when critical, heaviest when down ---- */
+.vitals { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s; z-index: -1; }
+.vitals::before, .vitals::after { content: ""; position: absolute; inset: 0; }
+.vitals::before { background: repeating-linear-gradient(135deg, var(--ink) 0 2px, transparent 2px 10px); -webkit-mask-image: radial-gradient(ellipse at 50% 50%, transparent 62%, black 108%); mask-image: radial-gradient(ellipse at 50% 50%, transparent 62%, black 108%); }
+.vitals::after { background: radial-gradient(ellipse at 50% 50%, transparent 55%, color-mix(in srgb, var(--stamp-dark) 55%, transparent) 115%); }
+.vitals[data-level="1"] { opacity: 0.4; }
+.vitals[data-level="2"] { opacity: 1; animation: heartbeat 1.1s ease-in-out infinite; }
+.vitals[data-level="3"] { opacity: 1; backdrop-filter: saturate(0.45) sepia(0.25); }
+.vitals[data-level="3"]::before { background: repeating-linear-gradient(135deg, var(--ink) 0 3px, transparent 3px 8px), repeating-linear-gradient(45deg, var(--ink) 0 2px, transparent 2px 12px); -webkit-mask-image: radial-gradient(ellipse at 50% 50%, transparent 52%, black 104%); mask-image: radial-gradient(ellipse at 50% 50%, transparent 52%, black 104%); }
+@keyframes heartbeat { 0%, 100% { opacity: 0.75; } 20% { opacity: 1; } 34% { opacity: 0.8; } 50% { opacity: 1; } }
+.health[data-state="critical"] .label, .health[data-state="down"] .label { color: var(--stamp); font-weight: 700; }
+
+/* ---- hit direction: a wedge of the ring round the sight with an arrowhead, in stamp red edged with paper and ink so it reads on any ground ---- */
+.bearing .wedge { fill: var(--stamp); stroke: var(--paper); stroke-width: 1.6; paint-order: stroke; stroke-linejoin: round; filter: drop-shadow(0 0 1.2px var(--ink)); }
+.bearing .chev { fill: var(--ink); stroke: var(--paper); stroke-width: 1.4; stroke-linejoin: round; paint-order: stroke; transform: none; }
+:root[data-cvd] .bearing .wedge { fill: var(--ink); }
+:root[data-contrast="high"] .bearing .wedge { fill: var(--ink); stroke-width: 2.4; }
+@media (max-height: 34rem) {
+  .telegrams { top: calc(var(--edge-t) + 4.1rem); }
+  .telegram { padding: 1.05rem 1rem 0.4rem; font-size: 0.84rem; line-height: 1.25; }
+  .telegram::before { top: 0.2rem; font-size: 0.6rem; }
+}
+@media (max-width: 62rem) {
+  .codebar { gap: 0.4rem; padding: 0.3rem 0.4rem 0.3rem 0.6rem; }
+  .codebar > span { font-size: 0.78rem; }
+  .codebar b { font-size: 1rem; letter-spacing: 0.16em; }
+  .codebar button { min-height: 1.7rem; padding: 0.1rem 0.5rem; font-size: 0.78rem; }
+}
+.downed { top: 36%; }
+
+/* ======================================================================================================================================
+   Front door pass (agent P): the working card ("Consulting the Society..."), its error state, the sound plaque, the title lockup.
+   ====================================================================================================================================== */
+.consult { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; pointer-events: auto; background: color-mix(in srgb, var(--scrim) 58%, transparent); backdrop-filter: blur(2px); }
+.consult[hidden] { display: none; }
+.consult .card { width: min(92vw, 25rem); display: grid; justify-items: center; gap: 0.6rem; padding: 1.3rem 1.6rem 1.2rem; text-align: center; outline: none; background: linear-gradient(var(--paper), var(--paper-2)); border: 9px solid var(--leather); border-radius: 5px; box-shadow: var(--shadow), 0 0 0 1.5px var(--brass-dark), inset 0 0 0 3px var(--paper), inset 0 0 0 4.5px color-mix(in srgb, var(--brass-dark) 80%, transparent); }
+.consult .dial { width: 5.2rem; height: 5.2rem; filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--scrim) 50%, transparent)); }
+.consult .dial .rim { fill: var(--brass); stroke: var(--brass-dark); stroke-width: 1.5; }
+.consult .dial .face { fill: var(--field); stroke: var(--brass-dark); stroke-width: 1; }
+.consult .dial .tk { stroke: var(--ink); stroke-width: 1.4; }
+.consult .dial .n { font: 700 11px var(--display); fill: var(--stamp); }
+.consult .dial .n1 { fill: var(--stamp); stroke: var(--ink); stroke-width: 1; }
+.consult .dial .n2 { fill: var(--ink); opacity: 0.85; }
+.consult .dial .hub { fill: var(--brass); stroke: var(--brass-dark); }
+.consult .dial .needle { transform-box: view-box; transform-origin: 0 0; animation: seek 2.6s cubic-bezier(0.45, 0, 0.2, 1) infinite; }
+@keyframes seek { 0% { transform: rotate(-70deg); } 18% { transform: rotate(40deg); } 34% { transform: rotate(-25deg); } 52% { transform: rotate(18deg); } 70% { transform: rotate(-8deg); } 100% { transform: rotate(0deg); } }
+.consult h2 { margin: 0.1rem 0 0; font: 400 1.45rem var(--display); letter-spacing: 0.06em; }
+.consult p { margin: 0; min-height: 2.6em; font-style: italic; font-size: 1.02rem; line-height: 1.3; }
+.consult .bar { position: relative; width: 100%; height: 0.7rem; overflow: hidden; background: var(--track); border: 1.5px solid var(--brass-dark); border-radius: 6px; }
+.consult .bar .fill { position: absolute; inset: 0 auto 0 0; width: 38%; background: repeating-linear-gradient(135deg, var(--ink) 0 5px, color-mix(in srgb, var(--ink) 75%, var(--paper)) 5px 8px); animation: sweep 1.7s ease-in-out infinite; }
+@keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(270%); } }
+.consult .actions { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin-top: 0.3rem; }
+.consult[data-state="error"] .bar { display: none; }
+.consult[data-state="error"] h2 { color: var(--stamp); }
+.consult[data-state="error"] .dial .needle { animation: none; transform: rotate(118deg); }
+.consult[data-state="error"] .card { border-top-color: var(--stamp-dark); }
+:root[data-motion="reduced"] .consult .dial .needle, :root[data-motion="reduced"] .consult .bar .fill { animation: none !important; }
+:root[data-motion="reduced"] .consult .bar .fill { width: 100%; opacity: 0.4; }
+
+/* the sound plaque */
+.soundplaque { position: fixed; left: 50%; bottom: max(0.9rem, 2.2vmin); transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 1rem 0.3rem 0.7rem; font: 0.95rem var(--display); letter-spacing: 0.08em; color: var(--ink); background: linear-gradient(var(--paper), var(--paper-2)); border: 1.5px solid var(--brass-dark); border-radius: 3px; box-shadow: var(--shadow), inset 0 0 0 2px var(--paper), inset 0 0 0 3px color-mix(in srgb, var(--brass) 55%, transparent); pointer-events: none; animation: plaque 2.4s ease-in-out infinite; }
+.soundplaque[hidden] { display: none; }
+.soundplaque svg { width: 1.3rem; height: 1.3rem; fill: var(--ink); }
+.soundplaque svg .w { fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; }
+@keyframes plaque { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
+
+/* the title lockup: a larger compass rose whose inner star turns very slowly */
+.panel.main .rule svg { width: 2.6rem; height: 2.6rem; }
+.panel.main .rule svg path:last-of-type { transform-box: fill-box; transform-origin: center; animation: rose 90s linear infinite; }
+@keyframes rose { to { transform: rotate(360deg); } }
+@media (max-height: 34rem) { .panel.main .rule svg { width: 1.5rem; height: 1.5rem; } }
+.consult .actions[hidden] { display: none; }

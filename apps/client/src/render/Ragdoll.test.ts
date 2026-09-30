@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CollisionWorld, FLAG } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, clearCharacterCaches, type CharacterRig } from "@cb/procedural/three";
-import { HINGE_LIMITS, RAGDOLL, RagdollWorld, type Ragdoll, type RagdollLaunch } from "./Ragdoll.ts";
+import { HINGE_LIMITS, RAGDOLL, RagdollWorld, WRIST_DANGLE, type Ragdoll, type RagdollLaunch } from "./Ragdoll.ts";
 
 const DT = 1 / 30;
 const flat = new CollisionWorld({ height: () => 0 }, [], 100);
@@ -196,7 +196,7 @@ describe("Ragdoll", () => {
     b.rig.root.updateMatrixWorld(true);
     const qa = new Quaternion();
     const qb = new Quaternion();
-    for (const name of ["pelvis", "torso", "head", "shoulderL", "elbowR", "hipL", "kneeR"] as const) {
+    for (const name of ["pelvis", "torso", "head", "shoulderL", "elbowR", "wristL", "wristR", "hipL", "kneeR"] as const) {
       a.rig.joints[name].getWorldQuaternion(qa);
       b.rig.joints[name].getWorldQuaternion(qb);
       expect(Math.abs(qa.dot(qb))).toBeGreaterThan(0.999);
@@ -208,6 +208,45 @@ describe("Ragdoll", () => {
     expect(pa.distanceTo(pb)).toBeLessThan(0.02);
     a.rig.dispose();
     b.rig.dispose();
+  });
+
+
+  it("the wrists dangle: the hands hang from the forearms, never bend past their limit and start from the pose they had (a fist on a grip); the blend test below proves they end on the animator's wrist", () => {
+    const { rig, anim } = standing(12);
+    // a fist turned hard onto a handle (as a rifle grip does) when the blow lands
+    rig.joints.wristR.quaternion.setFromAxisAngle(new Vector3(1, 0, 0), -0.9);
+    const before = rig.joints.wristR.quaternion.clone();
+    const rd = world.spawn(rig, launch({ power: 1, dx: 0.7, dz: 0.7 }))!;
+    const angle = (q: Quaternion): number => 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+    // the first frame of the fall changes the wrist by a small step, not a jump to the dangle
+    const first = new Quaternion();
+    rd.setAnchor(0, 0);
+    anim.update(DT, { speed: 0, flags: FLAG.GROUNDED | FLAG.DOWNED, vy: 0 });
+    rig.joints.wristR.quaternion.copy(before); // (what the actor's frame leaves in the joint: the animator's pose; here the grip)
+    world.step(DT);
+    rd.applyPose(DT);
+    first.copy(rig.joints.wristR.quaternion);
+    expect(first.angleTo(before)).toBeLessThan(0.7);
+    let worst = 0;
+    let frames = 0;
+    let prev = first.clone();
+    let step = 0;
+    while (rd.phase === "sim" && frames++ < 200) {
+      frame(anim, rd);
+      for (const w of [rig.joints.wristL, rig.joints.wristR]) {
+        expect(Number.isFinite(w.quaternion.x + w.quaternion.y + w.quaternion.z + w.quaternion.w)).toBe(true);
+        worst = Math.max(worst, angle(w.quaternion));
+      }
+      step = Math.max(step, prev.angleTo(rig.joints.wristR.quaternion));
+      prev.copy(rig.joints.wristR.quaternion);
+    }
+    expect(worst).toBeLessThanOrEqual(WRIST_DANGLE + 0.01);
+    expect(step).toBeLessThan(0.9); // (a loose hand swings, it does not snap)
+    // blend out: the wrists end exactly on the animator's
+    let g = 0;
+    while (rd.phase !== "done" && g++ < 300) frame(anim, rd);
+    expect(rd.phase).toBe("done");
+    rig.dispose();
   });
 
   it("never pops: the pose changes smoothly through the sim-to-blend hand-over and the blend", () => {

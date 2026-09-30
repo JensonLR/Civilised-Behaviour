@@ -317,9 +317,9 @@ export function earModel(c: FaceCtx, sx: 1 | -1): EarModel {
   const LAYERS: [number, number, number][] = [
     [Math.min(-0.12, skinO - 0.2), 0.78, 0.78],
     [skinO - 0.06, 1.0, 1.0],
-    [skinO + 0.55 * thickRim, 1.0, 0.98],
-    [skinO + 0.63 * thickRim, 0.8, 0.72],
-    [skinO + 0.42 * thickRim, 0.56, 0.48],
+    [skinO + 0.58 * thickRim, 1.0, 0.98],
+    [skinO + 0.7 * thickRim, 0.83, 0.75], // the helix: a proper rolled rim, thicker than the plate behind it
+    [skinO + 0.4 * thickRim, 0.6, 0.52],
   ];
   const layers: V3[][] = LAYERS.map(([o, sa, sb], li) => {
     const ring: V3[] = [];
@@ -340,10 +340,18 @@ export function earModel(c: FaceCtx, sx: 1 | -1): EarModel {
         fu *= 1 + lump;
         fw *= 1 + lump;
       }
+      // the lobe: the bottom of the ear is a soft rounded drop, a little narrower than the helix above it; inside the bowl the antihelix is a ridge that pinches the wall
+      const lobe = sstepE(-0.35, -1, pu);
+      if (li !== 4) {
+        fu += 0.1 * lobe;
+        fw *= 1 - 0.1 * lobe;
+      } else {
+        fu *= 1 + 0.3 * Math.max(0, Math.sin(th * 2 + 0.9)) * (pu > -0.3 ? 1 : 0.3);
+        fw *= 1 - 0.18 * sstepE(0.1, 0.9, Math.cos(th - 0.5));
+      }
       const u = A * sa * pu * fu;
       const w = B * sb * pw * fw + 0.12 * B * sb * pu; // the top leans back
       ring.push([-sx * u, o * es, w]);
-      void li;
     }
     return ring;
   });

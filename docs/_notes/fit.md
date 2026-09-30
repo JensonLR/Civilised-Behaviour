@@ -53,3 +53,28 @@ only (the rest pose hangs arms beside the thighs, which the animator never does)
 - Gear: packs stand on the back's most prominent point over their height, straps run back -> shoulder top (found by the section's half-width) -> chest; hip gear stands off `f.reach(y0, y1)` (torso, skirt, thighs over the item's whole span); tails and cords are `pushOut`-ed of that envelope.
 - The audit ignores hidden faces (normal into the body), fan centres of caps, torus centres, `PartBuilder.anchored` pieces (a collar's foot), and subtracts the bare body's own overlap in a pose (`bodyOverlap`): a coat is not blamed for a forearm inside a belly.
 - Ratchet groups: `trunk` / `limbs` / `head` by the bone a finding is on.
+
+## Rig pass (agent R, 2026-09-30): numbers and audit corrections
+Bones: `handL/handR` are audit bones now (frame = the wrist joint; `framesFromRig` reads `wristL/R`), the hand ellipsoid belongs to them and they are judged with the forearm's family.
+Audit-side corrections (honest numbers, not hidden ones):
+- Legs are judged against the trunk's FLESH (`skin`), not the coat: a leg folded inside a closed skirt is hidden by the skirt (the skirt's own clipping is judged from the trunk side); arms stay judged against what is worn.
+- A lower-leg piece below the shoe's top (ankle + `max(footH*1.6+0.04, footLength*0.27)`) is not counted as sinking into the leg core (the shoe is meant to cover the ankle).
+- A hand piece may sit a quarter of the hand radius inside the hand ellipsoid (mitts, big knuckles); rings likewise for the sink test.
+- Under a closed coat skirt the thigh's flesh core is no bigger than the slimmed trouser (`WornRings.slimLeg`).
+Before (start of the pass, FIT_SHAPES=2 default sweep) -> after, worst cm / count above tolerance:
+| group.metric | before | after |
+|---|---|---|
+| trunk.garmentPenetration | 2.9 / 5 | 2.2 / 1 |
+| trunk.accessoryPenetration | 3.5 / 12 | 2.0 / 11 |
+| trunk.accessorySink | 1.2 / 6 | 1.3 / 6 |
+| trunk.poseClip | 6.7 / 183 | 6.0 / 154 |
+| trunk.poseExtreme | 8.0 / 119 | 6.8 / 101 |
+| limbs.garmentPenetration | 5.5 / 152 | 1.6 / 2 |
+| limbs.accessorySink | 3.0 / 24 | 1.2 / 16 |
+| limbs.poseClip | 21.4 / 111 | 8.1 / 84 |
+| limbs.poseExtreme | 17.5 / 160 | 8.9 / 116 |
+| limbs.headPenetration | 2.9 / 22 | 0 / 0 |
+How much is real: the Baggy crouch 21.4 -> ~3 is mostly the audit correction (legs inside a coat skirt) plus thinner Baggy/plus-fours legs and the belly/skirt-aware crouch; neckwear poseExtreme 7.6 -> 3.7 and
+the garment/sink numbers on jackets (thigh core under skirts) are real fits or corrections as listed. Ratchets in `fit.test.ts` are lowered to the new actuals. `limbFit.test.ts` thresholds are unchanged.
+Remaining worst: hip gear vs swinging hand on the stubby-wide extreme (6.7), poncho/cape arm piece vs torso piece (8.1-8.9), birdcage 6.2, baggy skirt deep-crouch extreme 6.8.
+

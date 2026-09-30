@@ -5,7 +5,7 @@ import type { BodyCtx } from "../bodyKit.ts";
 import { foreArmRings, lowerLegPlan } from "../limbRings.ts";
 import { pelvisTopRings } from "./skirtShape.ts";
 import { ponchoRings, capeRings } from "../drape.ts";
-import { skirtRings, skirtSpec } from "../garments.ts";
+import { closedSkirtLength, skirtRings, skirtSpec } from "../garments.ts";
 import { upperArmRings, upperLegRings } from "../limbs.ts";
 import { makeBodyField, type BodyField, type WornRings } from "./bodyField.ts";
 import { torsoRings } from "./torsoShape.ts";
@@ -49,6 +49,7 @@ export function wornRings(spec: CharacterSpec): WornRings {
     foreArm: foreArmWorn(c),
     upperLeg: upperLegRings(c),
     lowerLeg: lowerLegWorn(c),
+    slimLeg: closedSkirtLength(spec, P) > 0,
   };
 }
 

@@ -1,6 +1,7 @@
 import { Vector3 } from "three";
 import { WEAPON, WEAPONS, type WeaponId } from "@cb/shared";
 import { newWeaponPoseInput, type CharacterAnimator, type CharacterRig, type HoldOut, type WeaponPoseInput } from "@cb/procedural/three";
+import { ghostTree } from "../ghost.ts";
 import { WeaponModel } from "./WeaponModels.ts";
 
 /** How long the recoil picture of a shot takes to settle, by weapon (seconds). */
@@ -43,8 +44,14 @@ export class WeaponRig {
   constructor(
     private readonly rig: CharacterRig,
     private readonly anim: CharacterAnimator,
-    private readonly outline: boolean,
+    private outline: boolean,
   ) {}
+
+  /** The graphics preset turned the ink line on or off. */
+  setOutline(on: boolean): void {
+    this.outline = on;
+    for (const m of this.models.values()) m.setOutline(on);
+  }
 
   get weaponId(): number {
     return this.input.id;
@@ -113,6 +120,11 @@ export class WeaponRig {
       }
     }
     this.model = m;
+  }
+
+  /** The first-person viewmodel draws the weapon: keep only its shadow on the body (see render/ghost.ts). */
+  ghost(on: boolean): void {
+    for (const m of this.models.values()) ghostTree(m.group, on);
   }
 
   /** After the animator has run: put the model where the hold says and show it only when the hands really carry it. */

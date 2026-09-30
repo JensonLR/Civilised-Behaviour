@@ -1,0 +1,18 @@
+import { Raycaster, Vector3, Mesh } from "three";
+import { generateCharacter } from "../../packages/procedural/src/spec.ts";
+import { buildCharacter } from "../../packages/procedural/src/three/rig.ts";
+import { CharacterAnimator } from "../../packages/procedural/src/three/animator.ts";
+const spec = { ...generateCharacter(3), hat: 0, eyewear: 0, eyepatch: 0, hair: 0 };
+const rig = buildCharacter(spec, { outline: false });
+const a = new CharacterAnimator(rig); a.autoBlink = false; a.setExpression("sleep");
+for (let i = 0; i < 60; i++) a.update(1/30, { speed: 0, flags: 1, vy: 0 });
+rig.root.updateMatrixWorld(true);
+const f = rig.face;
+const eyeC = f.eyeR.getWorldPosition(new Vector3());
+const rc = new Raycaster(eyeC.clone().add(new Vector3(0.0, 0.0, -1)), new Vector3(0, 0, 1));
+const names = new Map<any, string>([[f.lidR, "lid"], [f.lowerLidR, "lower"], [f.glintR, "glint"], [f.pupilR, "iris"], [f.coreR, "core"]]);
+const all: Mesh[] = [];
+rig.root.traverse((o) => { if (o instanceof Mesh) all.push(o); });
+const hits = rc.intersectObjects(all, false);
+console.log(hits.slice(0, 8).map((h) => `${names.get(h.object) ?? h.object.name ?? "other"} d=${h.distance.toFixed(4)}`));
+console.log("lid rotation", f.lidR.rotation.x, "lower", f.lowerLidR.rotation.x);

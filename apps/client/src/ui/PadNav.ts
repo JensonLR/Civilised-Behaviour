@@ -16,7 +16,7 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
 
   const focusables = (): HTMLElement[] =>
     [...root.querySelectorAll<HTMLElement>("input, select, button")].filter(
-      (el) => !(el as HTMLInputElement).disabled && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1",
+      (el) => !(el as HTMLInputElement).disabled && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1" && !el.closest("[inert]"),
     );
 
   const adjust = (el: HTMLElement, dir: number, fast: boolean): void => {

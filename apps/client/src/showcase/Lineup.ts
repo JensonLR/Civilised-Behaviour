@@ -130,6 +130,11 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
     rig.root.rotation.y = Math.PI + (turns.length ? turns[i % turns.length]! : params.get("turn") ? Number(params.get("turn")) : -0.3 + (i % 2) * 0.6);
     // hide=pelvis,upperLegL: switch bone meshes (and their outlines) off to see what lies underneath
     for (const name of (params.get("hide") ?? "").split(",").filter(Boolean)) rig.root.traverse((o) => (o.name === `mesh_${name}` || o.name === `outline_${name}`) && (o.visible = false));
+    // hideface=lid,lower,glint,core,iris,brow,mouth: switch face parts off (both eyes) to see what lies under a lid or behind a lip
+    for (const name of (params.get("hideface") ?? "").split(",").filter(Boolean)) {
+      const f = rig.face as unknown as Record<string, { visible: boolean } | undefined>;
+      for (const k of [name, `${name}L`, `${name}R`, `${name}LidL`, `${name}LidR`]) if (f[k]) f[k]!.visible = false;
+    }
     stage.scene.add(rig.root);
     const anim = new CharacterAnimator(rig);
     if (params.get("act") === "0") anim.autoBlink = false; // no idle acts (hat touch, stretch, watch ...): a plain standing pose for fit reviews

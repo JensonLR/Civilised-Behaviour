@@ -266,3 +266,31 @@ describe("CameraRig aiming and recoil (third person)", () => {
   });
 });
 
+
+describe("the downed camera (third person)", () => {
+  it("settles closer and lower, looks a little up, and eases back out when helped up; it never cuts", () => {
+    const { r, camera } = rig();
+    run(r, 1.5, () => undefined);
+    const stand = camera.position.clone();
+    const standDist = stand.distanceTo(feet);
+    let worstStep = 0;
+    let prev = camera.position.clone();
+    for (let i = 0; i < 120; i++) {
+      r.update(feet, 1 / 60, false, undefined, true);
+      worstStep = Math.max(worstStep, camera.position.distanceTo(prev));
+      prev = camera.position.clone();
+    }
+    expect(camera.position.distanceTo(feet)).toBeLessThan(standDist - 1);
+    expect(camera.position.y).toBeLessThan(stand.y - 0.7);
+    expect(worstStep).toBeLessThan(0.15); // a glide, not a jump
+    for (let i = 0; i < 150; i++) r.update(feet, 1 / 60, false, undefined, false);
+    expect(camera.position.distanceTo(stand)).toBeLessThan(0.15);
+  });
+
+  it("keeps the camera above the ground and looking at finite numbers", () => {
+    const { r, camera } = rig();
+    for (let i = 0; i < 600; i++) r.update(feet, 1 / 60, false, undefined, true);
+    expect(camera.position.y).toBeGreaterThan(0.3);
+    expect(Number.isFinite(camera.position.x + camera.position.y + camera.position.z)).toBe(true);
+  });
+});
