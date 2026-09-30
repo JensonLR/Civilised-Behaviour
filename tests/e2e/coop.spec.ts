@@ -305,6 +305,7 @@ test("wounds are server-owned and visible to everyone; a knock-down plays a ragd
 });
 
 test("a severed limb is server-owned: everyone sees the stump and a flying limb, unless they chose not to (two real browsers)", async ({ browser }) => {
+  test.setTimeout(360_000); // two software-rendered pages: 22 s alone, but it timed out at 180 s late in a busy full run
   const errors: string[] = [];
   const mk = async () => {
     const p = await (await browser.newContext()).newPage();
