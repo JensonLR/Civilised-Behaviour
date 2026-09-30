@@ -89,11 +89,13 @@ export function buildNose(c: FaceCtx): void {
   });
   const spine = curve(pts, 9);
   const color = spec.facePaint === 1 ? PALETTE.trim.zinc : spec.facePaint === 5 ? mix(c.skin, PALETTE.trim.blushHot, 0.45) : spec.noseStyle === 5 ? mix(c.skin, PALETTE.trim.blushHot, 0.35) : c.skin;
+  // Paint on a nose is thickest on the tip and thins toward the bridge (a stick of zinc dragged down the nose), so the paint never reads as a white nose stuck on a face.
+  const painted = spec.facePaint === 1;
   const noseSection = (t: number) => ({
     rx: lerpAt(st.rx, t) * R,
     rz: lerpAt(st.rz, t) * R,
     pow: 2.4,
-    color: t > 0.75 ? mix(color, tipTone, Math.min(1, (t - 0.75) * 3)) : color,
+    color: painted ? mix(c.skin, PALETTE.trim.zinc, 0.55 + 0.45 * smooth(0.05, 0.45, t)) : t > 0.75 ? mix(color, tipTone, Math.min(1, (t - 0.75) * 3)) : color,
   });
   b.sweep(spine, noseSection, color, { side: [1, 0, 0], segments: 9, round: "end" });
 
@@ -376,37 +378,64 @@ export function buildBeard(c: FaceCtx): void {
   }
 }
 
+/** One whisker of a sideburn: a spine laid on the skin as [height y (x R), azimuth in front of the ear (radians), extra lift off the skin (x R)], and its width and thickness (x R) along it. */
+interface Whisker {
+  path: readonly (readonly [number, number, number])[];
+  width: readonly number[];
+  depth: readonly number[];
+}
+
+/**
+ * Sideburns are SHAPED whiskers, not bands: each is a tapered mass that starts thin under the hairline, swells where the face is (fullest at the jaw for mutton chops, at the
+ * cheek for wings), and ends in a rounded lobe, a flick or a point. The width axis follows the skin (tangent plane, perpendicular to the spine), so a diagonal whisker is
+ * a diagonal mass and not a slanted plank; the colour deepens toward the root and lightens at the tip, so the mass has a grain instead of one flat brown.
+ */
 export function buildSideburns(c: FaceCtx): void {
-  const { spec, P, b } = c;
+  const { spec, P, b, shape } = c;
   const R = P.headRadius;
-  // [how far down the face they run (direction y), azimuth in front of the ear, extra reach forward toward the jaw, width in R]
-  const style = [null, { bottom: -0.16, az: 1.22, flare: 0.0, width: 0.1 }, { bottom: -0.5, az: 1.16, flare: 0.25, width: 0.115 }, { bottom: -0.68, az: 1.1, flare: 0.5, width: 0.14 }, { bottom: -0.55, az: 1.18, flare: 0.75, width: 0.19 }, { bottom: -1.05, az: 1.12, flare: 0.1, width: 0.09 }, { bottom: -0.42, az: 1.2, flare: 0.5, width: 0.1, points: true }][spec.sideburns] as
-    | { bottom: number; az: number; flare: number; width: number; points?: boolean }
-    | null
-    | undefined;
-  if (!style) return;
-  // A tapered tube laid along the skin just in front of the ear (a shell on the coarse hair grid broke into islands at this width).
-  const pts: V3[] = [];
-  const N = 6;
-  for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    const y = 0.3 + (style.bottom - 0.3) * t;
-    const az = style.az - style.flare * t;
-    const k = Math.sqrt(Math.max(0.05, 1 - y * y));
-    pts.push(skinDir(c, Math.sin(az) * k, y, -Math.cos(az) * k, R * 0.02));
-  }
-  const side: V3 = [Math.cos(style.az), 0, Math.sin(style.az)];
-  // sculpted points end in a needle; weepers hang free below the jaw
-  const taper = (t: number): number => (style.points ? 1 - 0.85 * t * t : 1 - 0.35 * t);
-  b.sweep(pts, (t) => ({ rx: R * style.width * taper(t) * (1 + style.flare * t), rz: R * 0.04 * (1 - 0.3 * t), pow: 2.6 }), c.facialC, { side, segments: 6, round: "end" });
-  b.sweep(pts.map((p): V3 => [-p[0], p[1], p[2]]), (t) => ({ rx: R * style.width * taper(t) * (1 + style.flare * t), rz: R * 0.04 * (1 - 0.3 * t), pow: 2.6 }), c.facialC, { side: [-side[0], 0, side[2]], segments: 6, round: "end" });
-  if (spec.sideburns === 5) {
-    // the weepers: a long thin fall hanging from the cheek down beside the neck
-    for (const s of [-1, 1]) {
-      const a = pts[pts.length - 1]!;
-      const drop: V3[] = [a, [a[0] + s * R * 0.03, a[1] - R * 0.5, a[2] + R * 0.02], [a[0] + s * R * 0.04, a[1] - R * 1.1, a[2] + R * 0.05]];
-      const sp = drop.map((p): V3 => [s > 0 ? Math.abs(p[0]) * 1 : -Math.abs(p[0]), p[1], p[2]]);
-      b.sweep(curve(sp, 6), (t) => ({ rx: R * 0.09 * (1 - 0.7 * t), rz: R * 0.05, pow: 2.4 }), c.facialC, { side: [1, 0, 0], segments: 5, round: "end" });
+  const styles: Record<number, Whisker[]> = {
+    // short: a neat strip in front of the ear
+    1: [{ path: [[0.32, 1.25, 0], [0.12, 1.23, 0], [-0.12, 1.2, 0]], width: [0.06, 0.1, 0.075], depth: [0.035, 0.05, 0.035] }],
+    // mutton chops (lamb-chops): thin at the temple, the fullest mass at the jaw, a rounded end that stops short of the mouth
+    2: [{ path: [[0.32, 1.22, 0], [0.05, 1.17, 0], [-0.3, 1.07, 0.01], [-0.58, 0.97, 0.02]], width: [0.05, 0.1, 0.19, 0.21, 0.12], depth: [0.035, 0.06, 0.1, 0.105, 0.065] }],
+    // flourishing: swept forward along the jaw toward the moustache, with the end flicked away from the face
+    3: [{ path: [[0.3, 1.2, 0], [0.0, 1.13, 0], [-0.32, 0.98, 0.01], [-0.62, 0.78, 0.05], [-0.8, 0.62, 0.16]], width: [0.055, 0.115, 0.18, 0.15, 0.075, 0.014], depth: [0.035, 0.06, 0.085, 0.075, 0.05, 0.02] }],
+    // bushy wings: a broad mass that stands off the cheek, with a second tuft flaring out behind it
+    4: [
+      { path: [[0.3, 1.22, 0], [0.0, 1.16, 0.03], [-0.3, 1.04, 0.08], [-0.55, 0.92, 0.1]], width: [0.09, 0.2, 0.28, 0.2, 0.08], depth: [0.06, 0.11, 0.15, 0.12, 0.06] },
+      { path: [[0.2, 1.3, 0.03], [-0.08, 1.27, 0.14], [-0.34, 1.2, 0.24]], width: [0.07, 0.17, 0.1, 0.012], depth: [0.04, 0.08, 0.05, 0.02] },
+    ],
+    // Piccadilly weepers: long narrow falls hanging past the jaw beside the neck
+    5: [
+      { path: [[0.3, 1.2, 0], [-0.1, 1.14, 0], [-0.6, 1.08, 0.02], [-1.05, 1.06, 0.07], [-1.4, 1.06, 0.12]], width: [0.055, 0.075, 0.08, 0.06, 0.035, 0.01], depth: [0.035, 0.05, 0.05, 0.035, 0.025, 0.01] },
+      { path: [[0.05, 1.22, 0.01], [-0.4, 1.16, 0.04], [-0.85, 1.12, 0.09], [-1.15, 1.14, 0.14]], width: [0.035, 0.055, 0.04, 0.01], depth: [0.025, 0.035, 0.026, 0.01] },
+    ],
+    // sculpted points: waxed into a spear that points down and forward
+    6: [{ path: [[0.3, 1.2, 0], [0.0, 1.12, 0.01], [-0.3, 0.98, 0.03], [-0.62, 0.82, 0.07]], width: [0.06, 0.11, 0.15, 0.09, 0.008], depth: [0.035, 0.06, 0.075, 0.05, 0.015] }],
+  };
+  const whiskers = styles[spec.sideburns];
+  if (!whiskers) return;
+  for (const w of whiskers) {
+    for (const sx of [-1, 1]) {
+      const pts: V3[] = w.path.map(([y, az, lift]) => {
+        const k = Math.sqrt(Math.max(0.05, 1 - y * y));
+        return skinDir(c, sx * Math.sin(az) * k, y, -Math.cos(az) * k, R * (0.02 + lift));
+      });
+      const spine = curve(pts, 8);
+      // the frame: the width axis lies in the skin's tangent plane, perpendicular to the spine
+      const sideAt = (i: number): V3 => {
+        const a = spine[Math.max(0, i - 1)]!;
+        const z = spine[Math.min(spine.length - 1, i + 1)]!;
+        const t: V3 = norm3([z[0] - a[0], z[1] - a[1], z[2] - a[2]]);
+        const n = shape.normal([spine[i]![0], spine[i]![1] - c.cy, spine[i]![2]]);
+        return norm3([t[1] * n[2] - t[2] * n[1], t[2] * n[0] - t[0] * n[2], t[0] * n[1] - t[1] * n[0]]);
+      };
+      b.sweep(
+        spine,
+        (t) => ({ rx: lerpAt(w.width, t) * R, rz: lerpAt(w.depth, t) * R, pow: 2.4, color: tone(c.facialC, 0.84 + 0.26 * smooth(0, 1, t)) }),
+        c.facialC,
+        { sideAt, segments: 6, round: "both" },
+      );
     }
   }
 }

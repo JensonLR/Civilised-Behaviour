@@ -2,6 +2,7 @@ import {
   AdditiveBlending,
   BufferGeometry,
   Color,
+  InstancedBufferAttribute,
   DoubleSide,
   Group,
   Matrix4,
@@ -16,8 +17,9 @@ import {
   type Scene,
   type Texture,
 } from "three";
-import { CAMP, PALETTE, classifyObstacle, smoothstep, type CollisionWorld, type DayState, type LandscapeTerrain } from "@cb/shared";
+import { PALETTE, autumnAt, buildFlock, classifyObstacle, smoothstep, type CollisionWorld, type DayState, type LandscapeTerrain } from "@cb/shared";
 import { sharedToonRamp, type WorldInkClass } from "@cb/procedural/three";
+import { atmoUniforms, motion } from "./atmosphere.ts";
 import { createAtlasTexture, createGlowTexture } from "./atlas.ts";
 import { createAmbientUniforms, buildBirds, buildButterflies, buildLanternGlow, buildMotes, buildSmoke, type AmbientUniforms, type SmokeSource } from "./ambient.ts";
 import {
@@ -28,7 +30,11 @@ import {
   bushGeometry,
   cupGeometry,
   daisyGeometry,
+  birchGeometry,
   fernGeometry,
+  flagstoneGeometry,
+  lilyGeometry,
+  pineGeometry,
   grassTuftGeometry,
   logGeometry,
   mushroomGeometry,
@@ -42,13 +48,16 @@ import {
 import { buildHills, buildSkirt, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "./horizon.ts";
 import { disposeTree } from "./kit.ts";
 import { buildBanners, buildFlame, buildLandmarks } from "./landmarks.ts";
-import { lanternGlass } from "./camplife.ts";
+import { buildCampCloth, lanternGlass, lanternSpots } from "./camplife.ts";
+import { buildRain } from "./rain.ts";
 import { buildRuins } from "./ruins.ts";
+import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
+import { buildClearing } from "./clearing.ts";
 import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 import { setRgb } from "./sky.ts";
 import { buildTerrain, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
 import { buildFalls, buildWaterMesh, type WaterUniforms } from "./water.ts";
-import { composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, toonMaterial, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
+import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, toonMaterial, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
 
 /** What a graphics preset decides about the world. */
 export interface WorldDetail {
@@ -65,6 +74,12 @@ export interface WorldDetail {
   butterflies: number;
   birds: number;
   smoke: number;
+  /** Rain streaks in the pool (0 builds none and no puddles: low keeps only the weather's tint and fog). */
+  rain: number;
+  /** Sheep and goats (0 builds none). */
+  flock: number;
+  /** Birch and pine as species of their own (each is one more instanced set); off = they stand as broadleaf and acacia. */
+  species: boolean;
 }
 
 const W = PALETTE.world;
@@ -87,6 +102,8 @@ interface SetOptions {
   wind?: WindKind;
   /** Skip frustum culling (one draw either way for a map-wide set). */
   noCull?: boolean;
+  /** Leaves take the region's autumn (the material must have `season: true`). */
+  season?: boolean;
 }
 
 /**
@@ -127,9 +144,13 @@ export class WorldView {
       this.addTimber(plan);
       this.addGroundCover(plan);
       this.addCamp();
+      this.addClearing(plan);
       this.addRuin();
+      this.lilies = this.detail.rain > 0 ? plan.lilies : []; // (low has no lily pads)
       this.addWater();
       this.addAmbient(plan);
+      this.addRain();
+      this.addFlock();
     }
     this.count();
   }
@@ -165,12 +186,12 @@ export class WorldView {
       const mask = this.track(trailMaskTexture());
       patch = trailOverlayPatch(mask);
     }
-    const terrain = new Mesh(ground, this.track(toonMaterial({ colourPatch: patch })));
+    const terrain = new Mesh(ground, this.track(toonMaterial({ colourPatch: patch, puddles: this.detail.rain > 0, wetDark: 1 })));
     terrain.name = "terrain";
     terrain.receiveShadow = true;
     this.root.add(terrain);
 
-    const skirt = new Mesh(this.track(buildSkirt()), this.track(toonMaterial({ fire: false })));
+    const skirt = new Mesh(this.track(buildSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1 })));
     skirt.name = "skirt";
     skirt.receiveShadow = false;
     this.root.add(skirt);
@@ -200,6 +221,17 @@ export class WorldView {
     const hull = ink ? this.track(build(0)) : undefined;
     const set = makeInstances(this.root, geo, material, mats, colours, { name, castShadow: o.shadow ?? false, outline: ink, ink: o.ink, wind: o.wind, hullGeometry: hull });
     if (set && o.noCull) set.mesh.frustumCulled = false;
+    if (set && o.season) {
+      const a = new Float32Array(items.length * 2);
+      const au = { amount: 0, hue: 0 };
+      items.forEach((it, i) => {
+        autumnAt(it.x, it.z, au);
+        // most leaves in a turned patch have turned; a few holdouts stay green
+        a[i * 2] = au.amount * (0.7 + 0.3 * fract(it.v * 3.7)) * (fract(it.v * 13.1) < 0.9 ? 1 : 0);
+        a[i * 2 + 1] = Math.min(0.999, au.hue * 0.75 + fract(it.v * 5.3) * 0.25);
+      });
+      set.mesh.geometry.setAttribute("aSeason", new InstancedBufferAttribute(a, 2));
+    }
     return set;
   }
 
@@ -211,20 +243,27 @@ export class WorldView {
   // ---- trees, rocks, timber, shrubs ----------------------------------------------------------------------------------------------
 
   private addTrees(p: ScatterPlan): void {
-    const treeMat = this.track(toonMaterial({ wind: "tree" }));
+    const treeMat = this.track(toonMaterial({ wind: "tree", season: true }));
+    const pineMat = this.track(toonMaterial({ wind: "tree" }));
     // Shrubs are not solid, so a camera can end up inside one. An ink hull seen from inside is a black screen, so shrubs carry no
     // hull (the shading and the toon ramp outline them well enough); double-sided so the inside of a bush is green, not a hole.
-    const bushMat = this.track(toonMaterial({ doubleSided: true }));
-    for (const kind of ["broadleaf", "acacia", "snag"] as const) {
-      const build = kind === "broadleaf" ? broadleafGeometry : kind === "acacia" ? acaciaGeometry : snagGeometry;
-      this.instanced(kind, build, treeMat, p[kind], p[kind].map((i) => this.varied(i.v, 0.16)), { shadow: true, ink: "large", wind: "tree" });
+    const bushMat = this.track(toonMaterial({ doubleSided: true, season: true }));
+    // (low keeps four instanced sets fewer: birch stands as broadleaf and pine as acacia)
+    const kinds: { key: "broadleaf" | "acacia" | "birch" | "pine" | "snag"; build: (lod: Lod) => BufferGeometry; items: Item[]; mat: MeshToonMaterial; season: boolean }[] = [
+      { key: "broadleaf", build: broadleafGeometry, items: this.detail.species ? p.broadleaf : [...p.broadleaf, ...p.birch], mat: treeMat, season: true },
+      { key: "acacia", build: acaciaGeometry, items: this.detail.species ? p.acacia : [...p.acacia, ...p.pine], mat: treeMat, season: true },
+      { key: "snag", build: snagGeometry, items: p.snag, mat: pineMat, season: false },
+    ];
+    if (this.detail.species) {
+      kinds.push({ key: "birch", build: birchGeometry, items: p.birch, mat: treeMat, season: true }, { key: "pine", build: pineGeometry, items: p.pine, mat: pineMat, season: false });
     }
-    this.instanced("bush", bushGeometry, bushMat, p.bushes, p.bushes.map((i) => this.varied(i.v, 0.2)));
-    this.instanced("berry-bush", berryBushGeometry, bushMat, p.berries, p.berries.map((i) => this.varied(i.v, 0.12)));
+    for (const k of kinds) this.instanced(k.key, k.build, k.mat, k.items, k.items.map((i) => this.varied(i.v, 0.16)), { shadow: true, ink: "large", wind: "tree", season: k.season });
+    this.instanced("bush", bushGeometry, bushMat, p.bushes, p.bushes.map((i) => this.varied(i.v, 0.2)), { season: true });
+    this.instanced("berry-bush", berryBushGeometry, bushMat, p.berries, p.berries.map((i) => this.varied(i.v, 0.12)), { season: true });
   }
 
   private addRocks(p: ScatterPlan): void {
-    const rockMat = this.track(toonMaterial());
+    const rockMat = this.track(toonMaterial({ wetDark: 1 }));
     this.instanced("rock", boulderGeometry, rockMat, p.rocks, p.rocks.map((i) => this.varied(i.v, 0.14)), { shadow: true, ink: "medium" });
     this.instanced("slab", slabGeometry, rockMat, p.slabs, p.slabs.map((i) => this.varied(i.v, 0.12)), { shadow: true, ink: "medium" });
     this.instanced("pebbles", () => pebbleGeometry(), rockMat, p.pebbles, p.pebbles.map((i) => this.varied(i.v, 0.3)));
@@ -282,9 +321,17 @@ export class WorldView {
       if (hull) this.track(hull);
       makeSolid(this.root, geo, this.track(toonMaterial()), { name: "camp", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
     }
+    // the washing, the hammock's canvas and the lanterns' chains and frames move in the wind: their own geometry, shadow and ink
+    const cloth = buildCampCloth(this.world, 1);
+    if (cloth) {
+      const clothHull = this.detail.outlines ? buildCampCloth(this.world, 0) : undefined;
+      this.track(cloth);
+      if (clothHull) this.track(clothHull);
+      makeSolid(this.root, cloth, this.track(toonMaterial({ wind: "cloth", doubleSided: true })), { name: "camp-cloth", outline: this.detail.outlines, ink: "small", hullGeometry: clothHull, castShadow: true, wind: "cloth" });
+    }
     const glass = lanternGlass(this.world);
     if (glass) {
-      this.lanternMat = this.track(new MeshBasicMaterial({ vertexColors: true, fog: true }));
+      this.lanternMat = this.track(clothBasicMaterial());
       const m = new Mesh(this.track(glass), this.lanternMat);
       m.name = "lantern-glass";
       this.root.add(m);
@@ -295,12 +342,13 @@ export class WorldView {
       const mat = this.track(new MeshToonMaterial({ map, alphaTest: 0.5, side: DoubleSide, gradientMap: sharedToonRamp() }));
       mat.onBeforeCompile = (shader): void => {
         shader.uniforms.uTime = worldTime;
+        shader.uniforms.uWindK = atmoUniforms.uWindK;
         shader.vertexShader = shader.vertexShader
-          .replace("#include <common>", "#include <common>\nattribute float wave;\nuniform float uTime;")
+          .replace("#include <common>", "#include <common>\nattribute float wave;\nuniform float uTime;\nuniform float uWindK;")
           .replace(
             "#include <begin_vertex>",
             `#include <begin_vertex>
-            float w = wave * wave;
+            float w = wave * wave * uWindK; // the wind (and the motion preference) sets how hard the pennant streams and flaps
             transformed.z += (sin(uTime * 3.2 - position.x * 2.6) * 0.16 + sin(uTime * 5.3 - position.x * 4.1) * 0.05) * w;
             transformed.y += sin(uTime * 2.4 - position.x * 2.0) * 0.06 * w - 0.05 * w;`,
           );
@@ -331,13 +379,50 @@ export class WorldView {
       sprite.scale.setScalar(3.4);
       this.root.add(sprite);
       this.pool = this.track(new MeshBasicMaterial({ map: tex, color: PALETTE.camp.glow, blending: AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: 0.32 }));
-      const pool = new Mesh(this.track(new PlaneGeometry(7, 7)), this.pool);
+      // the pool of firelight lies ON the ground (a flat plane would be clipped by every swell into a hard-edged ellipse)
+      const poolGeo = new PlaneGeometry(7, 7, 14, 14);
+      poolGeo.rotateX(-Math.PI / 2);
+      const pp = poolGeo.attributes.position!;
+      for (let i = 0; i < pp.count; i++) pp.setY(i, this.world.terrainHeight(o.x + pp.getX(i), o.z + pp.getZ(i)) - y + 0.07);
+      const pool = new Mesh(this.track(poolGeo), this.pool);
       pool.name = "fire-pool";
-      pool.rotation.x = -Math.PI / 2;
-      pool.position.set(o.x, y + 0.06, o.z);
+      pool.position.set(o.x, y, o.z);
       pool.renderOrder = 1;
       this.root.add(pool);
     }
+  }
+
+  // ---- the well, the pen, the signposts, the footbridge, the flagstones ---------------------------------------------------------------
+
+  private addClearing(p: ScatterPlan): void {
+    const geo = buildClearing(this.world, 1);
+    if (geo) {
+      const hull = this.detail.outlines ? buildClearing(this.world, 0) : undefined;
+      this.track(geo);
+      if (hull) this.track(hull);
+      makeSolid(this.root, geo, this.track(toonMaterial({ wetDark: 0.8 })), { name: "clearing", outline: this.detail.outlines, ink: "small", hullGeometry: hull, castShadow: true });
+    }
+    // flat stepping stones: in the ford and round the well
+    const stoneMat = this.track(toonMaterial({ wetDark: 1 }));
+    this.instanced("flagstones", () => flagstoneGeometry(), stoneMat, p.flagstones, p.flagstones.map((i) => this.varied(i.v, 0.16)), { noCull: true });
+  }
+
+  // ---- the flock -------------------------------------------------------------------------------------------------------------------------
+
+  private flock?: Flock;
+
+  private addFlock(): void {
+    if (this.detail.flock <= 0) return;
+    setAnimalGround(this.world);
+    const flock = buildAnimals(buildFlock(this.world), this.detail.outlines);
+    if (!flock) return;
+    for (const m of flock.meshes()) this.root.add(m);
+    for (const set of flock.sets) {
+      this.track(set.mesh.geometry);
+      this.track(set.mesh.material as unknown as { dispose(): void });
+    }
+    this.flock = flock;
+    flock.update(0);
   }
 
   // ---- the Observatory ---------------------------------------------------------------------------------------------------------
@@ -353,6 +438,8 @@ export class WorldView {
 
   // ---- water -------------------------------------------------------------------------------------------------------------------
 
+  private lilies: Item[] = [];
+
   private addWater(): void {
     const t = this.world.terrain as Partial<LandscapeTerrain>;
     if (typeof t.channelLevel !== "function") return;
@@ -361,6 +448,7 @@ export class WorldView {
     this.track(mesh.material as unknown as { dispose(): void });
     this.water = uniforms;
     this.root.add(mesh);
+    if (this.lilies.length > 0) this.instanced("lilies", () => lilyGeometry(), this.track(toonMaterial({ doubleSided: true, fire: false, wetDark: 0.3 })), this.lilies, this.lilies.map((i) => this.varied(i.v, 0.25)), { noCull: true });
     const falls = buildFalls(this.world.terrain as LandscapeTerrain);
     if (falls) {
       this.track(falls.geometry);
@@ -396,7 +484,21 @@ export class WorldView {
     }
     add(buildSmoke(sources, this.ambientU));
     // lantern glows (cheap; kept on every preset so the camp still lights up at dusk)
-    add(buildLanternGlow(CAMP.lanterns.map((l) => new Vector3(l.x, this.world.terrainHeight(l.x, l.z) + l.y, l.z)), this.ambientU));
+    const spots = lanternSpots(this.world);
+    add(buildLanternGlow(spots.map((l) => new Vector3(l.x, this.world.terrainHeight(l.x, l.z) + l.y, l.z)), this.ambientU, spots.map((_, i) => (i === spots.length - 1 ? 0.7 : 0))));
+  }
+
+  // ---- rain -----------------------------------------------------------------------------------------------------------------------
+
+  private rainMesh?: Mesh;
+
+  private addRain(): void {
+    const rain = buildRain(this.detail.rain, this.ambientU.uBaseY);
+    if (!rain) return;
+    this.track(rain.geometry);
+    this.track(rain.material as unknown as { dispose(): void });
+    this.root.add(rain);
+    this.rainMesh = rain;
   }
 
   // ---- the day and the walkers -------------------------------------------------------------------------------------------------
@@ -405,6 +507,7 @@ export class WorldView {
   applyDay(d: DayState): void {
     setRgb(this.hillU.uFog.value, d.horizon);
     this.hillU.uSunDir.value.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
+    this.hillU.uExtraFog.value = Math.max(0, d.fogDensity - 0.0105); // the weather's fog on top of the day's
     // one tint for everything not lit by the scene's lights: the light's colour, dimmed by how much sky is left
     setRgb(this.tint, d.sun);
     this.tint.lerp(WHITE, 0.4).multiplyScalar(0.42 + 0.58 * d.ambient);
@@ -414,7 +517,18 @@ export class WorldView {
       this.water.uSun.value = 1 - d.night;
       this.water.uSunDir.value.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
     }
-    this.ambientU.uDay.value = 1 - smoothstep(0.25, 0.85, d.night);
+    // Weather on the ground: puddles mirror the (already weathered) sky and glint with the light; the light is the sun's or the moon's
+    // colour, dimmed by the cloud, plus any lightning
+    setRgb(atmoUniforms.uSheen.value, d.mid);
+    atmoUniforms.uSheen.value.lerp(this.tint.set(1, 1, 1), 0.5 * d.flash).multiplyScalar(0.62 + 0.6 * d.flash);
+    atmoUniforms.uSunDirW.value.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
+    setRgb(atmoUniforms.uSunColW.value, d.sun).multiplyScalar(Math.min(1, d.sunIntensity / 3) * (1 - 0.8 * d.cover) + d.flash);
+    // recompute the shared tint (the sheen borrowed it above)
+    setRgb(this.tint, d.sun);
+    this.tint.lerp(WHITE, 0.4).multiplyScalar(0.42 + 0.58 * d.ambient);
+    // butterflies, birds and pollen stay in when it rains
+    const fine = 1 - Math.min(1, d.rain * 1.6 + Math.max(0, d.cover - 0.7));
+    this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
@@ -433,9 +547,12 @@ export class WorldView {
   }
 
   /** Wind, pennant, flame and glow. Cheap: it only writes a few numbers. */
-  update(t: number, camera?: { x: number; z: number }): void {
+  update(t: number, camera?: { x: number; z: number }, worldSec = t): void {
     worldTime.value = t;
+    this.flock?.update(worldSec);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
+    this.ambientU.uMotion.value = motion.value;
+    if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;
     const lit = 0.3 + 0.7 * this.fireLevel;
     if (this.flame) {
       this.flame.scale.set(1 + 0.06 * Math.sin(t * 11.3), 0.95 + 0.14 * Math.sin(t * 7.1) + 0.07 * Math.sin(t * 17.9), 1 + 0.06 * Math.cos(t * 9.2));

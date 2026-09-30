@@ -28,6 +28,7 @@ import {
   PlayerState,
   Rng,
   TICK_RATE,
+  WORLD_CLOCK,
   WorldState,
   createArena,
   createCharState,
@@ -42,6 +43,12 @@ import {
   type LimbId,
   type ZoneId,
   ZONE,
+  CANNON,
+  CANNON_SPOTS,
+  COMBAT,
+  CannonState,
+  WEAPON,
+  isCarried,
 } from "@cb/shared";
 import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
@@ -49,6 +56,7 @@ import { metrics } from "../metrics.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
 import { Casualties, type HitInfo } from "../systems/Casualties.ts";
+import { Combat } from "../systems/Combat.ts";
 
 /** Ticks of client silence/hitch the server tolerates (12 ticks = 400 ms). Used for BOTH the frame-budget burst and the idle threshold. */
 const HITCH_TOLERANCE_TICKS = 12;
@@ -72,6 +80,9 @@ const INPUT_BUDGET_MAX = HITCH_TOLERANCE_TICKS;
 
 /** Minimum gap between "you can't do that" notices to one player (a held key must not become a message flood). */
 const REFUSAL_NOTICE_MS = 2000;
+
+/** How often the world's age in the room state is refreshed (clients extrapolate in between; the clock and the weather are pure functions of it). */
+const CLOCK_SYNC_MS = 4000;
 
 /** How long a dropped player's slot is held for reconnection. */
 const RECONNECT_WINDOW_S = 45;
@@ -103,6 +114,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private world!: CollisionWorld;
   private physics!: PhysicsWorld;
   private casualties!: Casualties;
+  private combat!: Combat;
   /** Last buttons seen per player, for rising-edge detection (interact/throw). */
   private prevButtons = new Map<string, number>();
   /** sessionId -> prop id currently carried. */
@@ -116,6 +128,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private woodenLeg = new Map<string, number>();
   private lastRefusal = new Map<string, number>();
   private readonly mods = createInjuryMods();
+  /** Monotonic time the world was created, and the last time `state.worldMs` was refreshed. */
+  private bornAt = 0;
+  private lastClockSync = 0;
 
   override async onCreate(options: JoinOptions): Promise<void> {
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
@@ -123,6 +138,15 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.code = generateJoinCode();
     // Campaign rule: the server default, which the creator may switch off (never on when the server has it off).
     this.state.dismemberment = getRoomConfig().dismemberment && options?.dismemberment !== false;
+    // Same shape for friendly fire (GDD: default on, the host can disable): never on when the server has it off.
+    this.state.friendlyFire = getRoomConfig().friendlyFire && options?.friendlyFire !== false;
+    // The world clock: hour of day and weather are pure functions of the seed and how old the world is (see shared daycycle.ts / weather.ts).
+    // Clients learn the age from `worldMs`, refreshed every few seconds and on join, and extrapolate with their own monotonic clock.
+    const cfg = getRoomConfig();
+    this.state.dayStartHour = cfg.dayStartHour ?? WORLD_CLOCK.defaultStartHour;
+    this.state.dayMinutes = cfg.dayMinutes ?? WORLD_CLOCK.defaultDayMinutes;
+    this.bornAt = performance.now();
+    this.syncClock(true);
     this.world = createArena(seed);
     await initRapier();
     this.physics = new PhysicsWorld(this.world);
@@ -154,6 +178,41 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
+    // Field cannon(s): fixtures of the camp, replicated so every client can draw them, load them and watch the fuse.
+    CANNON_SPOTS.forEach((spot, i) => {
+      const cs = new CannonState();
+      cs.x = spot.x;
+      cs.z = spot.z;
+      cs.y = this.world.terrainHeight(spot.x, spot.z);
+      cs.yaw = spot.yaw;
+      cs.elev = 0.12;
+      cs.phase = 0;
+      cs.progress = 0;
+      cs.crew = 0;
+      cs.shells = CANNON.shells;
+      cs.fired = 0;
+      this.state.cannons.set(String(i), cs);
+    });
+    // Lag compensation (docs/_notes/combat.md): Colyseus records each player's pose as clients receive it and rewinds to the shooter's view.
+    // Position is interpolated between snapshots (as the clients draw it); heading and stance are held (they change in steps).
+    const rewind = this.allowRewindState({ maxRewindMs: COMBAT.rewindMaxMs });
+    rewind.attachAll(this.state.players, { fields: ["x", "y", "z"], mode: "snapshot", maxRewindMs: COMBAT.rewindMaxMs });
+    rewind.attachAll(this.state.players, { fields: ["facing", "flags"], mode: "snapshot", interpolate: "step", maxRewindMs: COMBAT.rewindMaxMs });
+    this.combat = new Combat({
+      players: this.state.players,
+      world: this.world,
+      physics: this.physics,
+      damage: (sid, amount, hit) => this.casualties.damage(sid, amount, hit),
+      rewind,
+      friendlyFire: () => this.state.friendlyFire,
+      worldSeed: seed,
+      rng: new Rng(seed ^ 0xc0ffee42),
+      cannons: this.state.cannons,
+      emitShot: (e) => this.broadcast("shot", e),
+      emitImpact: (e) => this.broadcast("impact", e),
+      emitBoom: (e) => this.broadcast("boom", e),
+      sendTo: (sid, e) => this.clients.getById(sid)?.send("hitmark", e),
+    });
     void this.setMetadata({ code: this.state.code });
     // Campaigns are friends-first: unlisted, reachable only via join code or direct room id.
     void this.setPrivate(true);
@@ -163,20 +222,23 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.setFixedTimestep((ctx) => {
       const t0 = performance.now();
       this.state.players.forEach((player, sessionId) => {
-        let frames = this.inputs.get(sessionId).drain();
+        // Frames are taken one at a time (not drained) so the lag-compensation stamp of each is the stamp of THAT frame (Rewind.lastSeenBy).
+        const acc = this.inputs.get(sessionId);
         const budget = Math.min(INPUT_BUDGET_MAX, (this.frameBudget.get(sessionId) ?? INPUT_BUDGET_MAX) + INPUT_BUDGET_REFILL);
         const allowed = Math.floor(budget);
-        if (frames.length > allowed) {
-          metrics.inputFramesDropped += frames.length - allowed;
-          frames = frames.slice(0, allowed);
-        }
-        this.frameBudget.set(sessionId, budget - frames.length);
-        if (frames.length > 0) {
+        const pending = acc.size;
+        const take = Math.min(pending, allowed);
+        if (pending > take) metrics.inputFramesDropped += pending - take;
+        this.frameBudget.set(sessionId, budget - take);
+        if (take > 0) {
           this.emptyTicks.set(sessionId, 0);
-          for (const cmd of frames) {
+          for (let i = 0; i < take; i++) {
+            const cmd = acc.next();
+            if (!cmd) break;
             stepCharacter(player, cmd, ctx.dt, this.world);
             this.handleInteraction(sessionId, player, cmd);
           }
+          if (pending > take) acc.take(pending - take); // over budget: consumed (the ack moves on) but never simulated
         } else {
           const empty = (this.emptyTicks.get(sessionId) ?? 0) + 1;
           this.emptyTicks.set(sessionId, empty);
@@ -197,7 +259,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
           }
         }
       });
+      this.syncClock(false);
       this.casualties.tick(ctx.dt);
+      this.combat.tick(ctx.dt);
       this.physics.step(ctx.dt);
       for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
       const ms = performance.now() - t0;
@@ -244,6 +308,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const c = createCharState(sp.x, sp.z, this.world);
     Object.assign(player, c);
     this.state.players.set(client.sessionId, player);
+    player.shots = 0; // numeric schema fields decode as undefined until first assigned
+    player.aim = 0;
+    this.combat.onJoin(client.sessionId, player);
+    this.syncClock(true); // a joiner's first state must carry a fresh world age
     metrics.players++;
     metrics.physicsBodies++;
     log.info("room.join", { roomId: this.roomId, sessionId: client.sessionId, slot, name: player.name });
@@ -267,6 +335,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       }
     }
     this.casualties.onLeave(client.sessionId);
+    this.combat.onLeave(client.sessionId);
     this.dropHeld(client.sessionId, player);
     this.physics.removePlayer(client.sessionId);
     metrics.physicsBodies--;
@@ -280,6 +349,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.players.delete(client.sessionId);
     metrics.players--;
     log.info("room.leave", { roomId: this.roomId, sessionId: client.sessionId, consented });
+  }
+
+  /** Refreshes `state.worldMs` (the world's age) at most every CLOCK_SYNC_MS unless forced. */
+  private syncClock(force: boolean): void {
+    const now = performance.now();
+    if (!force && now - this.lastClockSync < CLOCK_SYNC_MS) return;
+    this.lastClockSync = now;
+    this.state.worldMs = now - this.bornAt;
   }
 
   override onDispose(): void {
@@ -301,6 +378,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const pressed = cmd.buttons & ~prev;
     // Casualty rules run first: downed players may not use props, and reviving a teammate outranks picking things up.
     if (this.casualties.onFrame(sessionId, player, cmd.buttons, pressed)) return;
+    // Weapons, blows and the cannon crew (a crew takes the INTERACT press, so a prop beside the gun stays put).
+    if (this.combat.onFrame(sessionId, player, cmd, pressed)) return;
     if (pressed === 0) return;
     const held = this.carrying.get(sessionId);
 
@@ -388,6 +467,33 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     else if (cmd === "down") this.damagePlayer(client.sessionId, 1000, { zone: ZONE.TORSO }); // (a random zone at 1000 damage would take a limb)
     else if (cmd?.startsWith("sever:")) this.casualties.sever(client.sessionId, Number(cmd.slice(6)) as LimbId, -Math.sin(player.facing), -Math.cos(player.facing));
     else if (cmd === "restore") this.casualties.restoreLimbs(client.sessionId);
+    else if (cmd?.startsWith("give:")) {
+      // give:all | give:<weapon id> : owns it and refills its ammunition (QA; the campaign layer will grant weapons and crates of shot)
+      const arg = cmd.slice(5);
+      if (arg === "all") this.combat.give(client.sessionId);
+      else if (isCarried(Number(arg))) this.combat.give(client.sessionId, Number(arg) as never);
+    }
+    else if (cmd?.startsWith("tp:")) {
+      // tp:<x>:<z>[:<facing>] : stand somewhere (QA, screenshots)
+      const [, x, z, f] = cmd.split(":");
+      if (Number.isFinite(Number(x)) && Number.isFinite(Number(z))) {
+        player.x = Number(x);
+        player.z = Number(z);
+        player.y = this.world.terrainHeight(player.x, player.z);
+        player.facing = Number(f) || 0;
+        player.vx = player.vz = 0;
+      }
+    }
+    else if (cmd === "nearCannon") {
+      // Stand at the breech of the first cannon, looking down the barrel.
+      const c = this.state.cannons.get("0");
+      if (!c) return;
+      player.x = c.x - Math.sin(c.yaw) * -2.2;
+      player.z = c.z - Math.cos(c.yaw) * -2.2;
+      player.y = this.world.terrainHeight(player.x, player.z);
+      player.facing = c.yaw;
+      player.vx = player.vz = 0;
+    }
     else if (cmd?.startsWith("peg:")) {
       // peg:<0|1|2> fits a wooden leg (campaign history is server-owned; this stands in for the future campaign layer)
       const spec = decodeSpec(player.look);

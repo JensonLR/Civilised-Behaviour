@@ -9,6 +9,13 @@ export const MoveInput = schema({
   moveR: t.int8(),
   yaw: t.uint16(),
   buttons: t.uint16(),
+  // --- combat (append-only; the movement step never reads these) ---
+  /** Direction of a shot, same encoding as yaw (0..65535 = 0..2PI). Constrained server-side to within COMBAT.aimYawSlack of `yaw`. */
+  aimYaw: t.uint16(),
+  /** Elevation of a shot in 1/20000 rad (+ = up), see elevToWire. */
+  aimElev: t.int16(),
+  /** Weapon wanted in hand: 0 = nothing drawn, else weapon id + 1 (weaponToWire). The server only honours weapons the player owns. */
+  weapon: t.uint8(),
 });
 export type MoveInputType = SchemaType<typeof MoveInput>;
 
@@ -44,6 +51,20 @@ export const PlayerState = schema({
   dragger: t.string(),
   slot: t.uint8(),
   connected: t.boolean(),
+  // --- combat (server-owned, append-only) ---
+  /** The weapon in hand: 0 = none, else weapon id + 1. */
+  weapon: t.uint8(),
+  /** Bit i set = the player carries weapon id i. */
+  weapons: t.uint8(),
+  /** Rounds in the magazine of the weapon in hand, and spare rounds for it. */
+  ammo: t.uint8(),
+  reserve: t.uint8(),
+  /** 0..100 progress of a reload in progress, else 0. */
+  reload: t.uint8(),
+  /** Attacks made so far (wraps at 256): seeds the shot pattern (shotSeed) and lets remote clients play the recoil or the swing. */
+  shots: t.uint8(),
+  /** Aim elevation for the pose of remote figures, 1/80 rad (int8: +-1.58 rad). Cosmetic. */
+  aim: t.int8(),
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 
@@ -68,6 +89,26 @@ export const PropState = schema({
 });
 export type PropStateType = SchemaType<typeof PropState>;
 
+/** A crewed field cannon: a fixture of the camp. Position and rest yaw never change; the barrel slews, the round loads, the crew is counted. */
+export const CannonState = schema({
+  x: t.float32(),
+  y: t.float32(),
+  z: t.float32(),
+  /** Barrel heading (radians, 0 = -Z) and elevation (+ = up). */
+  yaw: t.float32(),
+  elev: t.float32(),
+  /** 0 empty, 1 loading, 2 loaded, 3 fuse lit. */
+  phase: t.uint8(),
+  /** 0..100: loading progress, or the fuse burning down. */
+  progress: t.uint8(),
+  /** People working it right now (loading or laying), and rounds left in its limber. */
+  crew: t.uint8(),
+  shells: t.uint8(),
+  /** Times fired (wraps): the recoil and the flash are keyed to it. */
+  fired: t.uint8(),
+});
+export type CannonStateType = SchemaType<typeof CannonState>;
+
 export const WorldState = schema({
   code: t.string(),
   seed: t.uint32(),
@@ -75,5 +116,16 @@ export const WorldState = schema({
   props: t.map(PropState),
   /** This campaign allows limbs to be severed (rules chosen at creation). Clients may still opt out of SEEING it. */
   dismemberment: t.boolean(),
+  // --- the world clock (append-only; see daycycle.ts `worldHours` and weather.ts `weatherAt`) ---
+  /** Milliseconds the world has been alive, as of the server's last sync (refreshed every few seconds and on every join). Clients extrapolate with their own monotonic clock. */
+  worldMs: t.float64(),
+  /** The clock hour the world started at (server config). */
+  dayStartHour: t.float32(),
+  /** Real minutes a full day takes (server config; 0 freezes the clock). */
+  dayMinutes: t.float32(),
+  // --- combat rules and fixtures (append-only) ---
+  /** Campaign rule: shots and blasts hurt comrades (weapon.ffScale applies). Default on; the creator may switch it off. */
+  friendlyFire: t.boolean(),
+  cannons: t.map(CannonState),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

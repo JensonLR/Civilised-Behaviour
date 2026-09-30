@@ -1,4 +1,4 @@
-import { SphereGeometry, type BufferGeometry } from "three";
+import { BufferAttribute, SphereGeometry, type BufferGeometry } from "three";
 import { PALETTE } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import { curve } from "./sweep.ts";
@@ -8,6 +8,9 @@ import { hookHand, pegShin } from "./prosthetics.ts";
 import { CREAM, LEATHER, PartBuilder, SOOT, WOOD, singe, type V3 } from "./parts.ts";
 import { legRadius, ringAt, soil, tone, type BodyCtx } from "./bodyKit.ts";
 import { JACKET, closedSkirtLength } from "./garments.ts";
+import { dressArmDrape } from "./drape.ts";
+import { buildHand, handColor } from "./hand.ts";
+export { handColor } from "./hand.ts";
 import { dyeAt } from "./bodyKit.ts";
 
 /** Arms, hands, legs and feet: sleeves with cuffs and folds, fingered hands, trouser cuts and boots. */
@@ -93,7 +96,47 @@ export function buildUpperArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry
     b.loft([{ y: -r * 0.05, rx: r * 1.44 * f, rz: r * 1.37 * f, color: tone(sleeveC, 0.72) }, { y: -r * 0.13, rx: r * 1.44 * f, rz: r * 1.37 * f, color: tone(sleeveC, 0.72) }], sleeveC, undefined, undefined, undefined, { capBottom: false, capTop: false });
   if (spec.jacket === JACKET.HUNTING || spec.jacket === JACKET.NORFOLK) b.box(r * 0.5, L * 0.25, r * 0.2, LEATHER, [0, -L * 0.98, r * 0.85]); // elbow patch (back of the arm)
   epaulette(b, c, side);
+  dressArmDrape(b, c, side); // (a cape's or poncho's cloth over the arm rides on the arm, so it can never be pierced by it)
   return b.build();
+}
+
+/**
+ * The forearm with its hand. At full detail it carries two morph targets, the hand at half a grip and at a full one (relative to the relaxed hand it is built in), so
+ * `rig.setHandGrip` can close the fingers with one number and no extra draw call. The three builds have the same topology by construction (hand.ts).
+ */
+export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry | undefined {
+  const base = foreArmAt(c, side, 0);
+  if (!base || PartBuilder.lod > 0 || PartBuilder.hullMode || c.spec.hook === (side === "L" ? 1 : 2)) return base;
+  const audit = PartBuilder.audit;
+  PartBuilder.audit = undefined; // (the two extra poses are not new parts)
+  let half: BufferGeometry | undefined;
+  let full: BufferGeometry | undefined;
+  try {
+    half = foreArmAt(c, side, 0.5);
+    full = foreArmAt(c, side, 1);
+  } finally {
+    PartBuilder.audit = audit;
+  }
+  if (!half || !full || half.attributes.position!.count !== base.attributes.position!.count || full.attributes.position!.count !== base.attributes.position!.count) {
+    half?.dispose();
+    full?.dispose();
+    return base;
+  }
+  const delta = (name: "position" | "normal", from: BufferGeometry): BufferAttribute => {
+    const a = base.attributes[name]!;
+    const b = from.attributes[name]!;
+    const out = new Float32Array(a.count * 3);
+    for (let i = 0; i < a.count * 3; i++) out[i] = (b.array[i] as number) - (a.array[i] as number);
+    return new BufferAttribute(out, 3);
+  };
+  base.morphAttributes.position = [delta("position", half), delta("position", full)];
+  base.morphAttributes.normal = [delta("normal", half), delta("normal", full)];
+  base.morphTargetsRelative = true;
+  base.userData.morphNames = ["gripHalf", "gripFull"];
+  base.computeBoundingSphere(); // (with the morph extremes included)
+  half.dispose();
+  full.dispose();
+  return base;
 }
 
 /** The cuff of a sleeve, in the forearm frame: `y0` = the wrist. */
@@ -148,7 +191,7 @@ function cuff(b: PartBuilder, c: BodyCtx, L: number, r: number): void {
   }
 }
 
-export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry | undefined {
+function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | undefined {
   const { spec, P } = c;
   const b = new PartBuilder();
   const r = P.armRadius;
@@ -196,115 +239,8 @@ export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry 
     cuff(b, c, L, r);
   }
   if (spec.hook === (side === "L" ? 1 : 2)) hookHand(b, c, L);
-  else buildHand(b, c, L, side);
+  else buildHand(b, c, L, side, grip);
   return b.build();
-}
-
-/** Colour of the hand: bare skin, or the glove. */
-export function handColor(c: BodyCtx): number {
-  const g = c.spec.gloves;
-  if (g === 1) return singe(CREAM, c.burnt);
-  if (g === 2) return singe(c.leather, c.burnt);
-  if (g === 4) return singe(tone(c.leather, 0.85), c.burnt);
-  if (g === 5) return singe(PALETTE.material.fur, c.burnt);
-  return c.skin;
-}
-
-/**
- * A fist: a palm block with four curled fingers (tapered tubes that run down the front of the palm and curl back under it, the middle one
- * longest, alternate fingers a touch lighter so they read as four), knuckle ridges, and a thumb wrapped across them. Gloves recolour it;
- * fingerless gloves leave the finger ends bare, gauntlets add a flared cuff, mitts fuse the fingers into a mass.
- */
-function buildHand(b: PartBuilder, c: BodyCtx, armLength: number, side: "L" | "R"): void {
-  const { P, spec } = c;
-  const skin = handColor(c);
-  const bare = c.skin;
-  const hr = P.handRadius;
-  const hy = -armLength - hr * 0.7;
-  const mitt = spec.gloves === 5;
-  const fingerless = spec.gloves === 3;
-  const tattooC = PALETTE.face.tattoo;
-  const knuckleBands = spec.tattoo === 4;
-  b.loft(
-    [
-      { y: hy + hr * 0.75, rx: hr * 0.62, rz: hr * 0.55, color: tone(skin, 0.9) },
-      { y: hy + hr * 0.2, rx: hr * 1.0, rz: hr * 0.72, pow: 2.8, color: skin },
-      { y: hy - hr * 0.05, rx: hr * 1.02, rz: hr * 0.76, pow: 3, color: knuckleBands && !spec.gloves ? tattooC : skin },
-      { y: hy - hr * 0.2, rx: hr * 1.02, rz: hr * 0.77, pow: 3, color: knuckleBands && !spec.gloves ? tattooC : skin },
-      { y: hy - hr * 0.6, rx: hr * 1.02, rz: hr * 0.78, pow: 3, color: skin },
-      { y: hy - hr * 0.95, rx: hr * 0.88, rz: hr * 0.62, pow: 2.8, color: tone(skin, 0.94) },
-    ],
-    skin,
-  );
-  const LEN = [0.86, 1.0, 0.94, 0.74];
-  const fingers = PartBuilder.lod === 0; // crowd levels keep the palm block and the knuckle ridge; the fingers are a few pixels
-  const ringOn = (side === "R" && (spec.ring === 1 || spec.ring === 2 || spec.ring === 4)) || (side === "L" && (spec.ring === 3 || spec.ring === 4));
-  for (let k = 0; fingers && k < 4; k++) {
-    const x = (k - 1.5) * hr * 0.5;
-    const l = LEN[k]!;
-    const pts: V3[] = [
-      [x, hy + hr * 0.08, -hr * 0.6],
-      [x, hy - hr * 0.5 * l, -hr * 0.9],
-      [x, hy - hr * 0.9 * l, -hr * 0.74],
-      [x, hy - hr * 0.92 * l, -hr * 0.36],
-    ];
-    const shade = k % 2 ? 0.92 : 1.02;
-    const base = tone(skin, shade);
-    const tipC = fingerless ? bare : tone(skin, shade * 1.06);
-    b.sweep(curve(pts, 3), (t) => ({ rx: hr * (0.22 - 0.03 * t) * (mitt ? 1.25 : 1), rz: hr * (0.2 - 0.03 * t), pow: 2.3, color: t > 0.62 ? tipC : t < 0.12 ? tone(base, 0.8) : base }), base, { side: [1, 0, 0], segments: 4, round: "end" });
-    // a ring on the finger nearest the thumb's far side (index 3 = little finger on the right hand, 2 = ring finger on the left)
-    if (ringOn && !spec.gloves && ((side === "R" && k === 3) || (side === "L" && k === 2))) {
-      const rp: V3 = [x, hy - hr * 0.2, -hr * 0.7];
-      const signet = side === "R";
-      b.torus(hr * 0.23, 0.007, c.accent, rp, [Math.PI / 2, 0, 0]);
-      if (signet && spec.ring !== 3) {
-        const gem = spec.ring === 2 || spec.ring === 4;
-        b.sphere(gem ? 0.014 : 0.017, gem ? PALETTE.trim.gemRed : c.accent, [rp[0], rp[1], rp[2] - hr * 0.24], gem ? [1, 1, 0.8] : [1, 0.7, 0.5]);
-      }
-    }
-  }
-  // thumb: across the front of the fingers
-  if (fingers) b.sweep(
-    curve([[hr * 0.05, hy + hr * 0.38, -hr * 0.5], [hr * 0.1, hy + hr * 0.02, -hr * 0.98], [hr * 0.02, hy - hr * 0.42, -hr * 1.02], [-hr * 0.2, hy - hr * 0.6, -hr * 0.9]], 4),
-    (t) => ({ rx: hr * (0.26 - 0.06 * t), rz: hr * (0.23 - 0.05 * t), pow: 2.3, color: t > 0.7 && fingerless ? bare : skin }),
-    skin,
-    { side: [1, 0, 0], segments: 5, round: "end" },
-  );
-  if (spec.tattoo === 2 && !spec.gloves) {
-    // an anchor on the back of the hand: shank, stock, arms and a ring
-    const z = hr * 0.74;
-    b.box(0.008, hr * 0.9, 0.005, tattooC, [0, hy - hr * 0.1, z]);
-    b.box(hr * 0.5, 0.008, 0.005, tattooC, [0, hy + hr * 0.15, z]);
-    b.torus(hr * 0.08, 0.004, tattooC, [0, hy + hr * 0.4, z]);
-    b.box(hr * 0.6, 0.008, 0.005, tattooC, [0, hy - hr * 0.45, z], [0, 0, 0.0]);
-  }
-  if (spec.gloves === 2 || spec.gloves === 4) {
-    // leather gauntlet: a flared cuff running up the wrist; gauntlets are longer and stiffer
-    const long = spec.gloves === 4;
-    const g = tone(skin, 1.12);
-    const r = P.armRadius;
-    b.loft(
-      [
-        { y: hy + hr * 0.95, rx: r * 0.95, rz: r * 0.92, color: tone(skin, 0.9) },
-        { y: hy + hr * (long ? 1.9 : 1.5), rx: r * (long ? 1.25 : 1.1), rz: r * (long ? 1.2 : 1.06), color: g },
-        { y: hy + hr * (long ? 2.7 : 2.0), rx: r * (long ? 1.42 : 1.16), rz: r * (long ? 1.36 : 1.12), color: g, crease: true },
-      ],
-      skin,
-      undefined,
-      undefined,
-      undefined,
-      { capTop: false },
-    );
-    if (long) b.torus(r * 1.3, 0.008, c.accent, [0, hy + hr * 2.2, 0], [Math.PI / 2, 0, 0]);
-  }
-  if (spec.gloves === 5) {
-    // fur mitts: a shaggy cuff round the wrist
-    const fur = singe(PALETTE.material.fur, c.burnt);
-    const r = P.armRadius;
-    b.loft([{ y: hy + hr * 0.95, rx: r * 1.15, rz: r * 1.1, color: tone(fur, 0.8) }, { y: hy + hr * 1.5, rx: r * 1.32, rz: r * 1.26, color: fur }, { y: hy + hr * 2.0, rx: r * 1.18, rz: r * 1.12, color: tone(fur, 1.1) }], fur, undefined, undefined, undefined, { capTop: false });
-  }
-  void SOOT;
-  void WOOD;
 }
 
 // ---- legs ---------------------------------------------------------------------------------------------------------------

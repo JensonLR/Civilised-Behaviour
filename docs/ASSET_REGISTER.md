@@ -4,7 +4,7 @@ Every external asset must be listed: filename, creator/source, licence, URL/sour
 
 | Filename | Source | Licence | URL | Modification | Attribution |
 |----------|--------|---------|-----|--------------|-------------|
-| _(none)_ | All art so far is generated procedurally in code. The world (terrain, sky, trees, rocks, camp, props) is built from primitives at runtime; the pennant, signboard lettering and fire glow are drawn on `<canvas>` at runtime (lettering in the bundled IM Fell English SC, see Fonts below) | n/a | n/a | n/a | n/a |
+| _(none)_ | **Audio: none.** Every sound effect, ambience bed and piece of music is synthesised at runtime by `apps/client/src/audio/` (Web Audio oscillators, filtered noise, generated convolution reverb); there are no audio files, samples or recordings, so nothing to license. Logged as AI-authored code in `AI_CONTENT_REGISTER.md`. Interface: no new fonts or images (the settings, pause and manual screens are CSS and inline SVG in the existing IM Fell / Special Elite faces). All art so far is generated procedurally in code. The world (terrain, sky, trees, rocks, camp, props) is built from primitives at runtime; the pennant, signboard lettering and fire glow are drawn on `<canvas>` at runtime (lettering in the bundled IM Fell English SC, see Fonts below) | n/a | n/a | n/a | n/a |
 
 Fonts: system serif stack only so far (Georgia / Iowan Old Style / Palatino). No web fonts are loaded.
 

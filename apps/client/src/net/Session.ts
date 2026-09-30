@@ -164,12 +164,18 @@ export class Session {
     return this.predict.tick(now);
   }
 
-  sendInput(moveF: number, moveR: number, yaw: number, buttons: number): void {
+  /** `aim` is the combat part of the frame: the shot direction (wire yaw, wire elevation) and the weapon wanted in hand (weaponToWire). */
+  sendInput(moveF: number, moveR: number, yaw: number, buttons: number, aim?: { yaw: number; elev: number; weapon: number }): void {
     const d = this.input.data;
     d.moveF = moveF;
     d.moveR = moveR;
     d.yaw = yaw;
     d.buttons = buttons;
+    if (aim) {
+      d.aimYaw = aim.yaw;
+      d.aimElev = aim.elev;
+      d.weapon = aim.weapon;
+    }
     this.input.send();
   }
 

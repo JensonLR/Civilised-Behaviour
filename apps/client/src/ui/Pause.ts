@@ -1,0 +1,123 @@
+import { playSfx } from "../audio/index.ts";
+import { h, Modal, anyModalOpen } from "./modal.ts";
+import { openHowTo } from "./HowTo.ts";
+import { openSettings } from "./Settings.ts";
+
+export interface PauseDeps {
+  canvas: HTMLCanvasElement;
+  /** The expedition code and invite link, or undefined before a session exists. */
+  invite(): { code: string; link: string; present: number } | undefined;
+  /** Leave the expedition (the page returns to the front door). */
+  leave(): void;
+}
+
+/**
+ * The pause sheet. The game does not stop (it is a shared world: others keep playing), so this is a "hands off" sheet: controls are held off,
+ * the pointer is released, and the player can resume, read the manual, change settings, copy the invite or leave. It opens on Escape, on a
+ * gamepad's Start, and whenever the browser takes the pointer back from the game view (which is what Escape does while the pointer is locked:
+ * the key press itself never reaches the page).
+ */
+export class Pause {
+  private readonly modal = new Modal("pause", "pause", "pause-title");
+  private readonly info = h("p", { class: "tag", id: "pause-info" });
+  private readonly copy = h("button", { type: "button" }, "Copy invite");
+  private readonly leaveBtn = h("button", { type: "button", class: "danger" }, "Leave expedition");
+  private enabled = false;
+  private wasLocked = false;
+  private confirmLeave = 0;
+  private startWas = false;
+  private raf = 0;
+
+  constructor(private readonly deps: PauseDeps) {
+    const resume = h("button", { type: "button", class: "primary", "data-autofocus": true }, "Resume");
+    resume.addEventListener("click", () => this.resume());
+    const how = h("button", { type: "button" }, "How to play");
+    how.addEventListener("click", () => openHowTo(how));
+    const opts = h("button", { type: "button" }, "Settings");
+    opts.addEventListener("click", () => openSettings(opts));
+    this.copy.addEventListener("click", () => this.copyInvite());
+    this.leaveBtn.addEventListener("click", () => this.leaveClicked());
+    this.modal.panel.append(
+      h("p", { class: "society" }, "The Imperial Cartographic & Improvement Society"),
+      h("h2", { id: "pause-title" }, "Expedition Halted"),
+      this.info,
+      h("div", { class: "menu" }, resume, how, opts, this.copy, this.leaveBtn),
+      h("p", { class: "fine" }, "The world does not wait for you. Your comrades are still on the march."),
+    );
+    this.modal.onClose = () => {
+      this.confirmLeave = 0;
+      this.leaveBtn.textContent = "Leave expedition";
+      // Handing the mouse back to the game: needs a user gesture, which the Resume click or the Escape key is.
+      if (this.enabled) this.deps.canvas.requestPointerLock?.();
+    };
+
+    window.addEventListener("keydown", (e) => {
+      if (e.code !== "Escape" || e.repeat || !this.enabled || anyModalOpen()) return;
+      if (isTyping(e.target)) return;
+      e.preventDefault();
+      this.open();
+    });
+    document.addEventListener("pointerlockchange", () => {
+      const locked = document.pointerLockElement === deps.canvas;
+      if (this.wasLocked && !locked && this.enabled && !anyModalOpen()) this.open();
+      this.wasLocked = locked;
+    });
+    const poll = (): void => {
+      this.raf = requestAnimationFrame(poll);
+      if (!this.enabled) return;
+      const pad = [...(navigator.getGamepads?.() ?? [])].find((p) => p?.connected && p.mapping === "standard");
+      const start = pad?.buttons[9]?.pressed ?? false;
+      if (start && !this.startWas && !anyModalOpen()) this.open();
+      this.startWas = start;
+    };
+    this.raf = requestAnimationFrame(poll);
+  }
+
+  /** Turn the pause sheet on once a session exists (before that Escape does nothing). */
+  set active(on: boolean) {
+    this.enabled = on;
+    if (!on) this.modal.close();
+  }
+
+  get isOpen(): boolean {
+    return this.modal.isOpen;
+  }
+
+  open(): void {
+    if (this.modal.isOpen) return;
+    const inv = this.deps.invite();
+    this.info.textContent = inv ? `Expedition No. ${inv.code} · ${inv.present} present` : "";
+    this.copy.hidden = !inv;
+    this.copy.textContent = "Copy invite";
+    playSfx("ui_click");
+    this.modal.open(null);
+  }
+
+  resume(): void {
+    this.modal.close();
+  }
+
+  private copyInvite(): void {
+    const inv = this.deps.invite();
+    if (!inv) return;
+    void navigator.clipboard?.writeText(inv.link);
+    this.copy.textContent = "Copied";
+  }
+
+  private leaveClicked(): void {
+    if (this.confirmLeave === 0) {
+      this.confirmLeave = 1;
+      this.leaveBtn.textContent = "Really leave? Press again";
+      window.setTimeout(() => {
+        if (this.confirmLeave === 1) {
+          this.confirmLeave = 0;
+          this.leaveBtn.textContent = "Leave expedition";
+        }
+      }, 4000);
+      return;
+    }
+    this.deps.leave();
+  }
+}
+
+const isTyping = (t: EventTarget | null): boolean => t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);

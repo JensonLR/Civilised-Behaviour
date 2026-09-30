@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, IcosahedronGeometry, OctahedronGeometry, SphereGeometry } from "three";
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry, OctahedronGeometry, SphereGeometry } from "three";
 import { PALETTE } from "@cb/shared";
 import { Vector3 } from "three";
 import { Kit, blend, shaded, topLit, type ColourFn, type V3 } from "./kit.ts";
@@ -18,7 +18,7 @@ const smooth = (a: number, b: number, v: number): number => {
 export type Lod = 0 | 1;
 
 /** Nominal height (metres, at instance scale 1) of each tree kind: instance scales are chosen relative to these. */
-export const TREE_HEIGHT = { broadleaf: 8, acacia: 6, snag: 5.4 } as const;
+export const TREE_HEIGHT = { broadleaf: 8, acacia: 6, snag: 5.4, birch: 7, pine: 8.6 } as const;
 /** Trunk base radius of the local frame: instance scale = collision radius / this. */
 export const TREE_BASE_RADIUS = 0.375;
 
@@ -77,6 +77,68 @@ export function acaciaGeometry(lod: Lod): BufferGeometry {
   return k.build()!;
 }
 
+/**
+ * Silver birch: a slender, leaning white trunk with black lenticel dashes, a few thin limbs, and a tall, airy crown of small pale-green
+ * lobes stacked like a feather. Local frame like the other trees (trunk base radius ~0.375 at scale 1, 7 m tall).
+ */
+export function birchGeometry(lod: Lod): BufferGeometry {
+  const k = new Kit();
+  const rad = lod ? 6 : 4;
+  const bark: ColourFn = (p, n, out) => {
+    const dash = Math.abs(Math.sin(Math.floor(p.y * 6.5) * 12.9898 + Math.atan2(p.z, p.x) * 3.1) * 43758.5453) % 1;
+    blend(out, W.birchBark, W.birchMark, dash > 0.8 ? 0.85 : dash > 0.7 ? 0.25 : 0);
+    if (p.y < 0.6) out.lerp(cMoss, 0.25);
+    void n;
+  };
+  const trunk: readonly (readonly [V3, number])[] = [
+    [[0, -0.3, 0], 0.3],
+    [[0.08, 1.7, 0.03], 0.21],
+    [[-0.04, 3.6, -0.04], 0.15],
+    [[0.1, 5.3, 0.02], 0.09],
+    [[0.02, 6.7, 0.0], 0.04],
+  ];
+  for (let i = 0; i + 1 < trunk.length; i++) k.limb(trunk[i]![0], trunk[i + 1]![0], trunk[i]![1], trunk[i + 1]![1], bark, rad);
+  k.limb([0.06, 3.0, 0], [0.9, 4.5, 0.3], 0.07, 0.03, bark, rad);
+  k.limb([0.0, 3.9, 0], [-0.8, 5.4, -0.3], 0.06, 0.03, bark, rad);
+  const leaf = (tone: number): ColourFn => shaded(topLit(W.crownDeep, W.birchLeaf, W.crownLight, 0.3), tone);
+  const seg = lod ? 1 : 0;
+  const fat = lod ? 1 : 1.035;
+  const l = (at: V3, s: V3, tone: number, seed: number): void => {
+    k.add(new IcosahedronGeometry(1, seg), { at, scale: [s[0] * fat, s[1] * fat, s[2] * fat], colour: leaf(tone), flat: true, jitter: 0.1, seed });
+  };
+  l([0.05, 6.0, 0], [0.95, 0.8, 0.9], 1.02, 111);
+  l([0.85, 4.7, 0.3], [0.8, 0.65, 0.75], 0.96, 112);
+  l([-0.75, 5.3, -0.3], [0.8, 0.65, 0.78], 1.05, 113);
+  l([0.1, 4.2, -0.6], [0.7, 0.55, 0.65], 0.9, 114);
+  l([0.0, 7.0, 0.05], [0.55, 0.55, 0.55], 1.1, 115);
+  return k.build()!;
+}
+
+/**
+ * Scots pine-ish: a straight, orange-brown trunk bare for a third of its height, then five tiers of dark, ragged cones getting smaller
+ * toward a pointed leader. Faceted, with a paler sunlit side. About 8.6 m tall.
+ */
+export function pineGeometry(lod: Lod): BufferGeometry {
+  const k = new Kit();
+  const rad = lod ? 6 : 4;
+  const bark: ColourFn = (p, _n, out) => {
+    blend(out, W.pineBark, W.trunk, 0.35 + 0.25 * Math.sin(p.y * 5 + Math.atan2(p.z, p.x) * 3));
+    if (p.y < 0.5) out.lerp(cMoss, 0.25);
+  };
+  k.limb([0, -0.3, 0], [0.05, 3.2, 0], 0.3, 0.2, bark, rad);
+  k.limb([0.05, 3.2, 0], [0, 8.4, 0.02], 0.2, 0.05, bark, rad);
+  const tier = (y: number, r: number, h: number, tone: number, seed: number): void => {
+    const c = new ConeGeometry(r * (lod ? 1 : 1.03), h, lod ? 7 : 5, 1, false);
+    k.add(c, { at: [0, y + h / 2, 0], colour: shaded(topLit(W.pine, W.pineLight, W.crownLight, 0.5), tone), flat: true, jitter: lod ? 0.08 : 0.06, seed });
+  };
+  tier(2.6, 1.7, 2.2, 0.92, 121);
+  tier(3.8, 1.45, 2.1, 1, 122);
+  tier(5.0, 1.15, 1.9, 0.96, 123);
+  tier(6.1, 0.85, 1.7, 1.04, 124);
+  tier(7.1, 0.55, 1.5, 1.08, 125);
+  return k.build()!;
+}
+
 /** A dead tree: bleached, cracked trunk broken off short, three bare limbs. */
 export function snagGeometry(lod: Lod): BufferGeometry {
   const k = new Kit();
@@ -113,6 +175,7 @@ const cStrata = new Color(W.rockStrata);
 const cLichen = new Color(W.lichen);
 const cBoulder = new Color(W.boulder);
 const cPale = new Color(W.rockPale);
+const cLichenO = new Color(W.lichenOrange);
 
 /**
  * Rock colour: sedimentary strata (bands that wobble with angle), a dark mossy foot, pale weathered upward facets, moss creeping up
@@ -131,6 +194,40 @@ const rockColour: ColourFn = (p, n, out) => {
   const h = Math.abs(Math.sin(Math.floor(p.x * 5) * 12.9898 + Math.floor(p.y * 5) * 78.233 + Math.floor(p.z * 5) * 37.719) * 43758.5453) % 1;
   if (n.y > 0.1 && n.y < 0.7 && h > 0.86) out.lerp(cLichen, 0.7);
   else if (n.y > 0.55 && h > 0.5) out.lerp(cMoss, 0.35);
+  // orange crust lichen in bigger rosettes on the sunny flanks (coarser hash cells than the speckle above)
+  const hl = Math.abs(Math.sin(Math.floor(p.x * 2.4) * 41.13 + Math.floor(p.y * 2.4) * 97.31 + Math.floor(p.z * 2.4) * 17.77) * 24634.6345) % 1;
+  if (n.y > -0.1 && n.y < 0.8 && p.y > 0.32 && hl > 0.9) out.lerp(cLichenO, 0.72);
+};
+
+/**
+ * The leaning slabs: a weathered sedimentary outcrop. Thin strata (each course its own tone, a dark seam between), vertical cracks where
+ * frost has got in, moss on every upward face and up from the foot in drips, orange lichen rosettes and a pale, sun-bleached top edge.
+ * A pure function of the vertex, so the ink hull (the same mesh) agrees.
+ */
+const slabColour: ColourFn = (p, n, out) => {
+  const layerF = (p.y + 0.02) * 5.2;
+  const layer = Math.floor(layerF);
+  const lt = Math.abs(Math.sin(layer * 12.9898 + 4.1) * 43758.5453) % 1;
+  out.copy(cBoulder).lerp(cStrata, layer % 2 === 0 ? 0.55 : 0.12);
+  if (lt > 0.72) out.lerp(cRockDark, 0.28 + lt * 0.2);
+  else if (lt < 0.22) out.lerp(cPale, 0.35);
+  const seam = layerF - layer;
+  if (seam < 0.14) out.lerp(cRockDark, 0.5);
+  // frost cracks: thin dark verticals that wander with height
+  const crack = Math.abs(((p.x + Math.sin(p.y * 3.1 + layer) * 0.05) * 2.6) % 1 - 0.5);
+  if (crack < 0.035 && n.y < 0.6) out.lerp(cRockDark, 0.6);
+  if (n.y > 0.5) {
+    out.lerp(cMoss, 0.62);
+    if (Math.abs(Math.sin(p.x * 17.0 + p.z * 11.0)) > 0.8) out.lerp(cPale, 0.25);
+  } else {
+    // moss drips down the faces from the top and creeps up from the foot
+    const h = Math.abs(Math.sin(Math.floor(p.x * 6) * 12.9898 + Math.floor(p.z * 6) * 78.233) * 43758.5453) % 1;
+    const drip = h > 0.55 ? smooth(0.55, 1.15, p.y) * 0.5 : 0;
+    const foot = 1 - smooth(-0.1, 0.5, p.y);
+    out.lerp(cMoss, Math.min(0.75, drip + foot * 0.6));
+  }
+  const hl = Math.abs(Math.sin(Math.floor(p.x * 2.6) * 41.13 + Math.floor(p.y * 3.4) * 97.31 + Math.floor(p.z * 2.6) * 17.77) * 24634.6345) % 1;
+  if (n.y > -0.2 && n.y < 0.6 && hl > 0.86) out.lerp(cLichenO, 0.75);
 };
 
 /**
@@ -150,14 +247,71 @@ export function boulderGeometry(lod: Lod): BufferGeometry {
   return k.build()!;
 }
 
-/** A leaning slab of layered stone (a standing stone / tilted outcrop). Local frame: x +-0.95, z +-0.5, about 1.2 tall, sits on y = 0. */
+/**
+ * A leaning slab of layered stone (a standing stone / tilted outcrop): a tall main plate, a shorter one propped against it, a fallen
+ * chunk at the foot and an overhanging, mossy capstone. Local frame: x +-0.95, z +-0.5, about 1.2 tall, sits on y = 0.
+ */
 export function slabGeometry(lod: Lod): BufferGeometry {
   const k = new Kit();
   void lod; // the hull is the same mesh: a fattened coarse hull shows as thick black slabs up close
-  k.add(new BoxGeometry(1.5, 1.25, 0.62, 2, 6, 1), { at: [0.05, 0.6, 0], rot: [0.06, 0.35, -0.16], colour: rockColour, perFace: true, jitter: 0.075, seed: 61 });
-  k.add(new BoxGeometry(0.9, 0.5, 0.7), { at: [-0.5, 0.2, 0.34], rot: [0.1, 0.8, 0.05], colour: rockColour, flat: true, jitter: 0.05, seed: 62 });
-  k.add(new IcosahedronGeometry(0.42, 0), { at: [0.62, 0.2, -0.32], colour: rockColour, flat: true, jitter: 0.08, seed: 63 });
+  k.add(new BoxGeometry(1.5, 1.2, 0.62, 2, 7, 1), { at: [0.05, 0.58, 0], rot: [0.06, 0.35, -0.16], colour: slabColour, perFace: true, jitter: 0.07, seed: 61 });
+  k.add(new BoxGeometry(1.0, 0.78, 0.4, 2, 5, 1), { at: [-0.62, 0.36, 0.42], rot: [-0.12, 0.85, 0.1], colour: slabColour, perFace: true, jitter: 0.05, seed: 64 });
+  k.add(new BoxGeometry(0.9, 0.46, 0.7), { at: [-0.5, 0.2, -0.36], rot: [0.1, 0.8, 0.05], colour: slabColour, flat: true, jitter: 0.05, seed: 62 });
+  k.add(new IcosahedronGeometry(0.42, 0), { at: [0.62, 0.2, -0.32], colour: slabColour, flat: true, jitter: 0.08, seed: 63 });
+  // the capstone: a broad, thin lid that overhangs its plate
+  k.add(new BoxGeometry(1.35, 0.15, 0.78, 2, 1, 1), { at: [0.12, 1.17, 0.03], rot: [0.06, 0.38, -0.2], colour: slabColour, perFace: true, jitter: 0.05, seed: 65 });
   return k.build()!;
+}
+
+/**
+ * A flat stepping stone: a thick slab with a worn, pale top and a dark rim, seven-sided and a little irregular. Local frame: radius 1,
+ * 0.2 tall, base at y = 0. Scaled by the instance (0.3 m stones); no ink (too flat and small to carry a line).
+ */
+export function flagstoneGeometry(): BufferGeometry {
+  const k = new Kit();
+  const g = new CylinderGeometry(1, 1.06, 0.2, 7, 1);
+  k.add(g, {
+    at: [0, 0.1, 0],
+    colour: (p, n, out) => {
+      if (n.y > 0.5) blend(out, W.rockPale, W.pebble, 0.2 + 0.5 * Math.abs(Math.sin(p.x * 9 + p.z * 7)));
+      else blend(out, W.rockDark, W.boulder, 0.4);
+      if (n.y > 0.5 && Math.abs(Math.sin(p.x * 21 + p.z * 13)) > 0.94) out.lerp(cMoss, 0.5);
+    },
+    flat: true,
+    jitter: 0.045,
+    seed: 91,
+  });
+  return k.build()!;
+}
+
+/**
+ * A lily pad: a flat, slightly cupped disc with a notch cut out, veined, with a small pink bud at its heart. Local frame: radius 1, on y = 0,
+ * about 20 triangles. Scaled 0.25-0.5 m by the instance and laid on the water.
+ */
+export function lilyGeometry(): BufferGeometry {
+  const s = new Soup();
+  const pad = new Color(W.lily);
+  const padLight = new Color(W.crownLight);
+  const rim = new Color(W.grassDeep);
+  const bud = new Color(W.lilyFlower);
+  const N = 9;
+  const notch = 0.5; // radians left open
+  for (let i = 0; i < N; i++) {
+    const a0 = notch / 2 + (i / N) * (Math.PI * 2 - notch);
+    const a1 = notch / 2 + ((i + 1) / N) * (Math.PI * 2 - notch);
+    const p0: V3 = [Math.cos(a0), 0.04, Math.sin(a0)];
+    const p1: V3 = [Math.cos(a1), 0.04, Math.sin(a1)];
+    const mid: V3 = [Math.cos((a0 + a1) / 2) * 0.55, 0.0, Math.sin((a0 + a1) / 2) * 0.55];
+    // an inner ring and an outer rim, so the pad has a cupped edge and a paler centre
+    s.tri([0, 0.01, 0], mid, [Math.cos(a0) * 0.55, 0.0, Math.sin(a0) * 0.55], padLight, [0, 1, 0]);
+    s.tri([Math.cos(a0) * 0.55, 0.0, Math.sin(a0) * 0.55], p0, p1, pad, [0, 1, 0], 0, rim, rim);
+    s.tri([Math.cos(a0) * 0.55, 0.0, Math.sin(a0) * 0.55], p1, mid, pad, [0, 1, 0], 0, rim, pad);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    s.tri([0, 0.02, 0], [Math.cos(a - 0.4) * 0.16, 0.05, Math.sin(a - 0.4) * 0.16], [Math.cos(a) * 0.05, 0.22, Math.sin(a) * 0.05], bud, [Math.cos(a), 0.5, Math.sin(a)]);
+  }
+  return s.build();
 }
 
 /** A pebble: twenty jittered facets, pale on top and dark underneath. No ink line (too small to carry one). */

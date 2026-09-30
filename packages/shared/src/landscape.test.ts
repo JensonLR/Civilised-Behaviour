@@ -239,7 +239,7 @@ describe("the Observatory and its hill", () => {
     expect(Math.hypot(last.x - RIVER.a.x, last.z - RIVER.a.z)).toBeLessThan(6); // the last arch spills the stream
     for (let i = 1; i < plan.piers.length; i++) expect(plan.piers[i]!.top).toBeLessThan(plan.piers[i - 1]!.top + 1e-9);
     const obs = ruinObstacles(w.terrain);
-    expect(obs.length).toBe(1 + plan.columns.length + plan.piers.length);
+    expect(obs.length).toBe(plan.tower.segments - 1 + 1 + plan.columns.length + 1 + plan.piers.length); // wall ring (minus the doorway), plinth, columns, the telescope's pier, piers
     for (const o of obs) {
       expect(o.tag).toBe("ruin");
       expect(Math.hypot(o.x, o.z)).toBeLessThan(ARENA_RADIUS);
@@ -248,6 +248,49 @@ describe("the Observatory and its hill", () => {
     // every ruin obstacle is in the arena's world too, and identical on a second build
     expect(w.obstacles.filter((o) => o.tag === "ruin").length).toBe(obs.length);
     expect(ruinObstacles(createArena(7).terrain)).toEqual(obs);
+  });
+
+  /** Walks a character from `from` straight at `to` for a while with the shared movement step. */
+  const walk = (w: ReturnType<typeof createArena>, from: { x: number; z: number }, to: { x: number; z: number }, steps = 240): { x: number; z: number } => {
+    const s = createCharState(from.x, from.z, w);
+    const yaw = yawToWire(Math.atan2(-(to.x - from.x), -(to.z - from.z)));
+    for (let i = 0; i < steps; i++) stepCharacter(s, { moveF: 127, moveR: 0, yaw, buttons: 0 }, STEP_DT, w);
+    return { x: s.x, z: s.z };
+  };
+
+  it("the tower has a doorway facing the camp that a walker can pass through, and solid wall everywhere else", () => {
+    const w = createArena(7);
+    const plan = ruinPlan(w.terrain);
+    const t = plan.tower;
+    const at = (angle: number, r: number): { x: number; z: number } => ({ x: t.x + Math.cos(plan.yaw + angle) * r, z: t.z + Math.sin(plan.yaw + angle) * r });
+    const centre = { x: t.x, z: t.z };
+    // through the door: from outside, straight at the middle of the room, ends up inside the walls (past the door, near the plinth)
+    const inside = walk(w, at(0, t.r + 3), centre);
+    expect(Math.hypot(inside.x - t.x, inside.z - t.z), "walked in through the door").toBeLessThan(t.rIn);
+    // and back out again
+    const out = walk(w, at(0.1, 1.6), at(0, t.r + 8));
+    expect(Math.hypot(out.x - t.x, out.z - t.z), "walked out").toBeGreaterThan(t.r);
+    // no other way in: from every other side the wall stops the walker outside
+    for (let i = 1; i < t.segments; i++) {
+      const a = (i / t.segments) * Math.PI * 2;
+      const end = walk(w, at(a, t.r + 2.5), centre, 200);
+      expect(Math.hypot(end.x - t.x, end.z - t.z), `wall segment ${i}`).toBeGreaterThan(t.r - 0.2);
+    }
+    // a walker can also circle the plinth inside (the room is usable): there is a clear ring between the plinth and the wall
+    expect(t.rIn - t.plinth).toBeGreaterThan(1.8);
+    // the doorway is wide enough for a person (character radius 0.4) with room to spare, and tall enough to stand in
+    expect(2 * t.rIn * Math.sin(t.doorHalf)).toBeGreaterThan(1.1);
+    expect(t.doorH).toBeGreaterThan(CHARACTER.height);
+  });
+
+  it("the telescope's pier is on the plateau, off the path in, and stands clear of the tower", () => {
+    const w = createArena(7);
+    const plan = ruinPlan(w.terrain);
+    const s = plan.telescope;
+    expect(Math.hypot(s.x - HILL.x, s.z - HILL.z)).toBeLessThan(HILL.plateau);
+    expect(Math.hypot(s.x - plan.tower.x, s.z - plan.tower.z)).toBeGreaterThan(plan.tower.r + s.r + 1.2);
+    for (const c of plan.columns) expect(Math.hypot(s.x - c.x, s.z - c.z)).toBeGreaterThan(s.r + c.r + 1);
+    expect(w.obstacles.some((o) => o.tag === "ruin" && o.kind === "circle" && o.x === s.x && o.z === s.z)).toBe(true);
   });
 
   it("felled timber is collidable and sized to its rule: stumps can be stepped onto, fallen logs must be jumped", () => {

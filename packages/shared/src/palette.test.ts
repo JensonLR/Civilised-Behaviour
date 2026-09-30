@@ -11,6 +11,8 @@ const worldColours: Record<string, readonly number[]> = {
   camp: Object.entries(PALETTE.camp).filter(([k]) => !isLight(k)).map(([, v]) => v),
   campLight: Object.entries(PALETTE.camp).filter(([k]) => isLight(k)).map(([, v]) => v),
   material: Object.values(PALETTE.material),
+  weapons: Object.values(PALETTE.weapons),
+  weaponFx: Object.values(PALETTE.weaponFx),
   trim: Object.values(PALETTE.trim),
   metal: PALETTE.metal,
   skin: PALETTE.skin,
@@ -35,7 +37,7 @@ describe("art direction: the palette", () => {
 
   it("world surfaces are dusty, not neon: chroma is capped per group", () => {
     // Chroma caps by group: terrain, props and cloth are muted; metals, hair and irises may be a little richer.
-    const caps: Record<string, number> = { world: 0.4, props: 0.4, camp: 0.4, campLight: 0.7, material: 0.3, trim: 0.5, metal: 0.6, skin: 0.4, hair: 0.55, cloth: 0.5, iris: 0.4 };
+    const caps: Record<string, number> = { world: 0.4, props: 0.4, camp: 0.4, campLight: 0.7, material: 0.3, weapons: 0.5, weaponFx: 0.7, trim: 0.5, metal: 0.6, skin: 0.4, hair: 0.55, cloth: 0.5, iris: 0.4 };
     for (const [group, colours] of Object.entries(worldColours)) {
       for (const c of colours) expect(chroma(c), `${group} ${cssHex(c)}`).toBeLessThanOrEqual(caps[group]!);
     }
@@ -85,6 +87,22 @@ describe("art direction: the palette", () => {
       expect(contrast(iris, PALETTE.face.white)).toBeGreaterThan(2);
       expect(contrast(iris, PALETTE.face.pupil)).toBeGreaterThan(1.5);
     }
+  });
+
+  it("weapons: the ink outline reads on every surface, steel is lighter than the browned barrel, and a flash is hotter than its smoke", () => {
+    const w = PALETTE.weapons;
+    for (const c of Object.values(w)) expect(contrast(PALETTE.ink, c), cssHex(c)).toBeGreaterThan(1.45);
+    expect(luminance(w.steel)).toBeGreaterThan(luminance(w.barrel));
+    expect(luminance(w.barrelLight)).toBeGreaterThan(luminance(w.barrel));
+    expect(luminance(w.brass)).toBeGreaterThan(luminance(w.brassDark));
+    expect(luminance(w.walnutLight)).toBeGreaterThan(luminance(w.walnut));
+    const fx = PALETTE.weaponFx;
+    expect(luminance(fx.flashCore)).toBeGreaterThan(luminance(fx.flashMid));
+    expect(luminance(fx.flashMid)).toBeGreaterThan(luminance(fx.flashOuter));
+    expect(luminance(fx.smokeLight)).toBeGreaterThan(luminance(fx.smokeDark));
+    for (const c of [fx.flashCore, fx.flashMid, fx.flashOuter, fx.spark]) expect(hsl(c)[0], cssHex(c)).toBeLessThan(50); // fire is warm
+    // (weapon effects carry no red of their own: blood belongs to the gore setting)
+    for (const c of Object.values(fx)) expect(hsl(c)[0] < 22 && hsl(c)[1] > 0.6 && luminance(c) < 0.2, cssHex(c)).toBe(false);
   });
 
   it("gore Off contains no red at all; Full and Reduced stains are red-family", () => {

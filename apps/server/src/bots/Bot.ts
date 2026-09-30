@@ -1,12 +1,15 @@
 import { Client, type Room } from "@colyseus/sdk";
 import { Predict } from "@colyseus/sdk/predict";
 import {
+  COMBAT,
   MoveInput,
   PREDICTED_FIELDS,
   ROOM_WORLD,
   WorldState,
   createArena,
+  elevToWire,
   stepCharacter,
+  weaponToWire,
   yawToWire,
   type CollisionWorld,
   type MoveCommand,
@@ -21,10 +24,14 @@ export interface BotFrame {
   /** Camera yaw in radians. */
   yaw: number;
   buttons: number;
+  /** Combat: the direction of a shot (defaults to the camera yaw / level), and the weapon wanted in hand (weapons.ts id; -1 or absent = none). */
+  aimYaw?: number;
+  aimElev?: number;
+  weapon?: number;
 }
 
-/** Decides what the bot does on a given local input tick. */
-export type Behaviour = (tick: number, self: PlayerStateType) => BotFrame;
+/** Decides what the bot does on a given local input tick. `bot` gives access to what THIS client displays (rendered positions of others). */
+export type Behaviour = (tick: number, self: PlayerStateType, bot: Bot) => BotFrame;
 
 interface MoveHandle {
   readonly data: MoveInputType;
@@ -71,6 +78,8 @@ export class Bot {
   ) {
     this.world = createArena(room.state.seed);
     this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
+    // Remote players are drawn interpolated 100 ms behind, exactly as in the browser (net/Session.ts): what a bot "sees" is what a player sees.
+    this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;
   }
 
@@ -91,6 +100,22 @@ export class Bot {
 
   get self(): PlayerStateType | undefined {
     return this.room.state.players.get(this.room.sessionId);
+  }
+
+  /**
+   * Where THIS client draws another player right now: the SDK's interpolated (lerp, 100 ms behind) value, i.e. exactly what a human
+   * would aim at. This is the reference for "hits land where the shooter saw them".
+   */
+  rendered(p: PlayerStateType): { x: number; y: number; z: number; facing: number } {
+    const v = (f: string) => this.predict.value(p as never, f as never) as number;
+    return { x: v("x"), y: v("y"), z: v("z"), facing: v("facing") };
+  }
+
+  /** The server-side ids and states of everyone else in the room. */
+  others(): [string, PlayerStateType][] {
+    const out: [string, PlayerStateType][] = [];
+    this.room.state.players.forEach((p, id) => id !== this.room.sessionId && out.push([id, p]));
+    return out;
   }
 
   /** Predicted (locally simulated) state, or undefined until the player exists. */
@@ -146,12 +171,15 @@ export class Bot {
     const now = performance.now();
     const steps = this.predict.tick(now);
     for (let i = 0; i < steps; i++) {
-      const f = this.behaviour(this.tickNo++, me);
+      const f = this.behaviour(this.tickNo++, me, this);
       const d = this.input.data;
       d.moveF = Math.round(Math.max(-1, Math.min(1, f.moveF)) * 127);
       d.moveR = Math.round(Math.max(-1, Math.min(1, f.moveR)) * 127);
       d.yaw = yawToWire(f.yaw);
       d.buttons = f.buttons;
+      d.aimYaw = yawToWire(f.aimYaw ?? f.yaw);
+      d.aimElev = elevToWire(f.aimElev ?? 0);
+      d.weapon = weaponToWire((f.weapon ?? -1) as never);
       this.input.send();
     }
     // Skip the first 2 s: the spawn snap (client starts at default state, server truth arrives) is expected.
@@ -202,5 +230,13 @@ export const wallBumper: Behaviour = (tick) => {
     buttons: phase === 2 ? 1 /* sprint */ : 0,
   };
 };
+
+/** Yaw and elevation that point from the eye of a body standing at (x, y, z) at a world point (the aim a human's crosshair would give). */
+export function aimAt(from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }): { aimYaw: number; aimElev: number } {
+  const eye = from.y + COMBAT.eyeHeight;
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  return { aimYaw: Math.atan2(-dx, -dz), aimElev: Math.atan2(to.y - eye, Math.hypot(dx, dz)) };
+}
 
 export { PREDICTED_FIELDS };

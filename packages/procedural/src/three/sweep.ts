@@ -22,6 +22,8 @@ export interface SweepOptions {
   caps?: boolean;
   /** Round off the start and/or end into a smooth dome instead of a flat cut (noses, tufts, beard tips). */
   round?: "start" | "end" | "both";
+  /** One dome ring instead of three (crowd levels: a tip a few pixels wide does not need a smooth cap). */
+  coarseDome?: boolean;
 }
 
 const c = new Color();
@@ -43,7 +45,7 @@ export function sweepGeometry(spineIn: readonly V3[], section: (t: number, i: nu
   const baseN = spine.length;
   const secs: SweepSection[] = spine.map((_, i) => section(i / (baseN - 1), i));
   const pts: V3[] = [...spine];
-  const DOME = [0.5, 0.86, 0.985];
+  const DOME = opts.coarseDome ? [0.87] : [0.5, 0.86, 0.985];
   const sideRefs: (V3 | undefined)[] = opts.sideAt ? spine.map((_, i) => opts.sideAt!(i)) : [];
   if (opts.round === "end" || opts.round === "both") {
     const a = pts[pts.length - 2]!;

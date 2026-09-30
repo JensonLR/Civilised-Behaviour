@@ -92,11 +92,16 @@ type Section = ReturnType<typeof ringAt>;
  * A patch surface over a stack of sections (torso, coat skirt, limb): u = azimuth phi (0 = front, +pi/2 = the character's right), v = height y.
  * The outward normal is taken numerically from the surface itself, so a patch shades exactly like the loft under it and no seam shows.
  */
-export function ringSurface(rings: readonly Ring[], scaleAt?: (y: number) => number): (phi: number, y: number, lift: number) => { p: [number, number, number]; n: [number, number, number] } {
+export function ringSurface(
+  rings: readonly Ring[],
+  scaleAt?: (y: number) => number,
+  /** Radial modulation by azimuth and height (folds, pleats, a wavy hem): multiplies the section's radii; normals follow it, so the folds shade. */
+  fold?: (phi: number, y: number) => number,
+): (phi: number, y: number, lift: number) => { p: [number, number, number]; n: [number, number, number] } {
   const sec = (y: number): Section => ringAt(rings, y);
   const pt = (phi: number, y: number, lift: number): [number, number, number] => {
     const s = sec(y);
-    const k = scaleAt ? scaleAt(y) : 1;
+    const k = (scaleAt ? scaleAt(y) : 1) * (fold ? fold(phi, y) : 1);
     return sectionPoint({ ...s, rx: s.rx * k, rz: s.rz * k, cx: s.cx, cz: s.cz }, y, phi, lift);
   };
   return (phi, y, lift) => {

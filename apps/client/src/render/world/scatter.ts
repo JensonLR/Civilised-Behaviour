@@ -1,6 +1,9 @@
 import {
   RIVER,
   Rng,
+  autumnAt,
+  WELL,
+  getFordStones,
   classifyObstacle,
   coverDensity,
   flowerPatch,
@@ -52,7 +55,11 @@ export interface ScatterDetail {
 export interface ScatterPlan {
   broadleaf: Item[];
   acacia: Item[];
+  birch: Item[];
+  pine: Item[];
   snag: Item[];
+  /** Lily pads on the pond and the slow stretches of the stream. */
+  lilies: Item[];
   bushes: Item[];
   berries: Item[];
   rocks: Item[];
@@ -66,6 +73,8 @@ export interface ScatterPlan {
   ferns: Item[];
   mushrooms: Item[];
   reeds: Item[];
+  /** Flat stepping stones: across the ford (`cls` 1: set into the water) and round the well and along its path (`cls` 0). */
+  flagstones: Item[];
   /** Flower positions the butterflies circle. */
   butterflies: { x: number; y: number; z: number }[];
 }
@@ -80,10 +89,12 @@ export const GRASS_MEADOW = 2;
 const h01 = (seed: number, a: number, b = 0): number => hash3(seed, Math.round(a * 100), Math.round(b * 100)) / 4294967296;
 
 export function emptyPlan(): ScatterPlan {
-  return { broadleaf: [], acacia: [], snag: [], bushes: [], berries: [], rocks: [], slabs: [], pebbles: [], stumps: [], logs: [], grass: [], daisies: [], cups: [], ferns: [], mushrooms: [], reeds: [], butterflies: [] };
+  return { broadleaf: [], acacia: [], birch: [], pine: [], snag: [], lilies: [], bushes: [], berries: [], rocks: [], slabs: [], pebbles: [], stumps: [], logs: [], grass: [], daisies: [], cups: [], ferns: [], mushrooms: [], reeds: [], flagstones: [], butterflies: [] };
 }
 
 const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: number, sz: number, cls = 0, v = 0, tiltX = 0, tiltZ = 0): Item => ({ x, y, z, yaw, sx, sy, sz, cls, v, tiltX, tiltZ });
+
+type TreeKind = "broadleaf" | "acacia" | "birch" | "pine";
 
 export function planScatter(world: CollisionWorld, detail: ScatterDetail): ScatterPlan {
   const plan = emptyPlan();
@@ -99,7 +110,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
   /** Free ground for a plant: no obstacle, no bare path, not in the water. */
   const freeGround = (x: number, z: number, margin: number): boolean => !blocked(x, z, margin) && !nearTrail(x, z, 0.25) && waterEdgeDistance(x, z) > 0.25;
   const rng = new Rng(0xb05e);
-  const trees: { x: number; z: number; r: number; kind: "broadleaf" | "acacia" }[] = [];
+  const trees: { x: number; z: number; r: number; kind: TreeKind }[] = [];
 
   // ---- trees, snags and the shrubs round them ---------------------------------------------------------------------------------
   const pushBush = (x: number, z: number): void => {
@@ -229,9 +240,9 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
     const z = Math.sin(a) * d;
     const hh = h(x, z);
     if (gr.next() > coverDensity(x, z, slopeAt(x, z, hh))) continue;
-    if (blocked(x, z, 0.35)) continue;
+    if (blocked(x, z, 0.35) || nearTrail(x, z, -0.05)) continue; // (a faded far path still has no grass on its bare middle)
     const s = 0.6 + gr.next() * 0.6;
-    const cls = inMeadow(x, z) ? GRASS_MEADOW : hh > 1.4 && gr.chance(0.7) ? GRASS_DRY : gr.chance(0.12) ? GRASS_DRY : GRASS_NORMAL;
+    const cls = inMeadow(x, z) ? GRASS_MEADOW : hh > 1.4 && gr.chance(0.7) ? GRASS_DRY : gr.chance(0.12) ? GRASS_DRY : autumnAt(x, z).amount > 0.5 && h01(50, x, z) < 0.65 ? GRASS_DRY : GRASS_NORMAL; // (a turned hillside dries its grass too)
     plan.grass.push(item(x, hh - 0.03, z, gr.next() * 6.28, s * (0.9 + gr.next() * 0.3), s * (0.8 + gr.next() * 0.6), s * (0.9 + gr.next() * 0.3), cls, gr.next()));
   }
   const fr = new Rng(0xf10e);
@@ -356,6 +367,67 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
     if (blocked(x, z, 0.2)) continue;
     const s = 0.8 + cr.next() * 0.7;
     plan.reeds.push(item(x, h(x, z) - 0.03, z, cr.next() * 6.28, s, s * cr.range(0.85, 1.3), s, 0, cr.next()));
+  }
+
+  // ---- lily pads on the still water ---------------------------------------------------------------------------------------------------
+  const lr = new Rng(0x1117);
+  const lilyCap = Math.round(46 * detail.clutter);
+  const lt0 = world.terrain as { waterDepth?: (x: number, z: number) => number };
+  for (let tries = 0; plan.lilies.length < lilyCap && tries < lilyCap * 40; tries++) {
+    // mostly in the pond, some in the slower stretch of the stream just above it
+    const pond = lr.next() < 0.72;
+    let x: number;
+    let z: number;
+    if (pond) {
+      const a = lr.range(0, Math.PI * 2);
+      const d = RIVER.pondRadius * Math.sqrt(lr.next()) * 0.93;
+      x = RIVER.b.x + Math.cos(a) * d;
+      z = RIVER.b.z + Math.sin(a) * d;
+    } else {
+      const s = lr.range(RIVER.length * 0.55, RIVER.length);
+      riverCentre(s, cpt);
+      const a = lr.range(0, Math.PI * 2);
+      const d = riverHalfWidth(s) * 0.6 * Math.sqrt(lr.next());
+      x = cpt.x + Math.cos(a) * d;
+      z = cpt.z + Math.sin(a) * d;
+    }
+    const depth = lt0.waterDepth?.(x, z) ?? 0;
+    if (depth < 0.2 || waterEdgeDistance(x, z) > -0.6) continue;
+    // clumps: a pad gathers others near it
+    const clump = h01(60, Math.floor(x / 2.4), Math.floor(z / 2.4));
+    if (lr.next() > 0.25 + clump * 0.75) continue;
+    if (plan.lilies.some((q) => (q.x - x) ** 2 + (q.z - z) ** 2 < 0.36)) continue;
+    const r = 0.26 + lr.next() * 0.22;
+    plan.lilies.push(item(x, h(x, z) + depth + 0.035, z, lr.next() * 6.28, r, 1, r, 0, lr.next()));
+  }
+
+  // ---- stepping stones ---------------------------------------------------------------------------------------------------------------
+  const lt = world.terrain as { waterDepth?: (x: number, z: number) => number };
+  for (const st of getFordStones()) {
+    const surface = h(st.x, st.z) + (lt.waterDepth?.(st.x, st.z) ?? 0);
+    // flat stones set into the stream: their tops a hand above the water
+    plan.flagstones.push(item(st.x, surface - 0.14, st.z, st.yaw, st.r, 1, st.r * (0.85 + h01(30, st.x, st.z) * 0.3), 1, h01(31, st.x, st.z)));
+  }
+  // a flagged apron round the well, and a stepping-stone path to it from the gramophone's corner of the camp
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + 0.2;
+    const d = WELL.r + 0.55 + h01(32, i) * 0.25;
+    const x = WELL.x + Math.cos(a) * d;
+    const z = WELL.z + Math.sin(a) * d;
+    if (blocked(x, z, 0.1)) continue;
+    const r = 0.3 + h01(33, i) * 0.14;
+    plan.flagstones.push(item(x, h(x, z) - 0.09, z, h01(34, i) * 6.28, r, 1, r * 0.9, 0, h01(35, i)));
+  }
+  const px0 = -1.6;
+  const pz0 = 11.9;
+  const plen = Math.hypot(WELL.x + 0.9 - px0, WELL.z - 1.4 - pz0);
+  for (let i = 0, n = Math.floor(plen / 0.85); i < n; i++) {
+    const t = (i + 0.5) / n;
+    const x = px0 + (WELL.x + 0.9 - px0) * t + (h01(36, i) - 0.5) * 0.3;
+    const z = pz0 + (WELL.z - 1.4 - pz0) * t + (h01(37, i) - 0.5) * 0.3;
+    if (blocked(x, z, 0.1)) continue;
+    const r = 0.28 + h01(38, i) * 0.14;
+    plan.flagstones.push(item(x, h(x, z) - 0.09, z, h01(39, i) * 6.28, r, 1, r * 0.9, 0, h01(40, i)));
   }
   return plan;
 }

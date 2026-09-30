@@ -58,6 +58,11 @@ export interface HitInfo {
   /** Horizontal direction the blow pushes the victim (need not be normalised). */
   dirX?: number;
   dirZ?: number;
+  /**
+   * Multiplies the damage used ONLY for the dismemberment roll (a sabre cuts limbs off more readily than its damage suggests; an umbrella
+   * never does). Default 1. The sever rules themselves (`severChance`) are untouched.
+   */
+  severBias?: number;
 }
 
 interface Revive {
@@ -121,7 +126,7 @@ export class Casualties {
     // so unrelated hits never consume randomness.
     const target = zoneLimb(zone);
     if (target !== undefined && this.host.dismemberment() && (p.missing & target) === 0) {
-      const chance = severChance(amount, levelBefore);
+      const chance = severChance(amount * Math.max(0, hit.severBias ?? 1), levelBefore);
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
     if (down) this.down(sessionId, p);

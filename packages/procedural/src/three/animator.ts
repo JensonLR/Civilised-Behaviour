@@ -1,6 +1,7 @@
 import { FLAG, ZONE, woundLevel } from "@cb/shared";
 import { jawPoint } from "./faceMorph.ts";
 import type { CharacterRig } from "./rig.ts";
+import { computeHold, newHoldOut, solveArm, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
 
 export type ExpressionId = "neutral" | "pain" | "fear" | "triumph" | "drunk" | "angry";
 
@@ -44,6 +45,8 @@ export interface PoseInput {
   wounds?: number;
   /** Turn rate, rad/s (positive = turning left). Optional: absent = derived from how the root's yaw changes between updates. */
   yawRate?: number;
+  /** What is in the hands and what they are doing (aim, recoil, reload, a blow, working a cannon). Optional: absent = empty hands. See weaponPose.ts. */
+  weapon?: WeaponPoseInput;
 }
 
 const damp = (current: number, target: number, rate: number, dt: number): number => current + (target - current) * (1 - Math.exp(-rate * dt));
@@ -115,6 +118,16 @@ export class CharacterAnimator {
   private idleAmt = 0;
   private idleSlot = -1;
   private walkBlend = 0;
+  /**
+   * Where the weapon is and where the hands go (torso frame), refreshed every update; the actor puts the weapon model there. `hold.visible` is
+   * false with empty hands or busy ones.
+   */
+  readonly hold: HoldOut = newHoldOut();
+  private readonly holdBlend: HoldBlend = { aim: 0, reload: 0, hold: 0, swing: 0 };
+  private readonly armR: ArmAngles = { a: 0.9, b: 0.1, e: 0.9 };
+  private readonly armL: ArmAngles = { a: 0.9, b: -0.1, e: 0.9 };
+  private crewBlend = 0;
+  private readonly emptyWeapon: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
 
   constructor(private readonly rig: CharacterRig) {
     const s = rig.spec;
@@ -491,6 +504,7 @@ export class CharacterAnimator {
     j.shoulderR.rotation.z = szR;
     j.elbowL.rotation.x = elL;
     j.elbowR.rotation.x = elR;
+    this.applyHold(dt, pose, busy, speed);
 
     // ---- head: stays level against the torso, glances, leads the turn, takes the mood ---------------------------------------------------------
     j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1);
@@ -504,6 +518,64 @@ export class CharacterAnimator {
     j.root.position.y = this.down * (P.torsoDepth * 0.5 + 0.05);
 
     this.updateFace(dt);
+  }
+
+  /**
+   * Weapons in the hands: the weapon's place and the hands' targets come from `computeHold` (weaponPose.ts); each arm's angles are then solved by IK
+   * and blended over the gait arms by how firmly that hand is on the weapon, so drawing, holstering and letting go never snap. A crew working a
+   * cannon leans into the work with both arms out, ramming.
+   */
+  private applyHold(dt: number, pose: PoseInput, busy: number, speed: number): void {
+    const { joints: j, proportions: P } = this.rig;
+    const w = pose.weapon ?? this.emptyWeapon;
+    const B = this.holdBlend;
+    const drawn = (w.id >= 0 || w.swing >= 0) && !w.hidden && busy < 0.5;
+    B.hold = damp(B.hold, drawn ? 1 : 0, 11, dt);
+    B.aim = damp(B.aim, drawn ? clamp(w.aim, 0, 1) : 0, 13, dt);
+    B.reload = damp(B.reload, drawn && w.reload > 0 ? 1 : 0, 9, dt);
+    B.swing = damp(B.swing, drawn && w.swing >= 0 ? 1 : 0, 26, dt);
+    this.crewBlend = damp(this.crewBlend, w.crew > 0 && !w.hidden ? clamp(w.crew, 0, 1) : 0, 8, dt);
+
+    const hold = this.hold;
+    if (B.hold < 0.003 && this.crewBlend < 0.003) {
+      hold.visible = false;
+      hold.right.w = 0;
+      hold.left.w = 0;
+      return;
+    }
+    const body = { hw: P.shoulderHalfWidth, sy: this.shoulderBaseY, upper: P.armUpper, lower: P.armLower, depth: P.torsoDepth };
+    computeHold(w.hidden || busy >= 0.5 ? { ...w, id: -1, swing: -1 } : w, B, body, this.time, clamp(speed / 4.4, 0, 1.4), hold);
+    // the blow twists the body and the shot rocks it back
+    j.torso.rotation.y += hold.twist * B.hold;
+    j.torso.rotation.x += hold.lean * B.hold;
+    j.head.rotation.y -= hold.twist * B.hold * 0.7;
+    for (const [sh, el, side, tgt, ang] of [
+      [j.shoulderR, j.elbowR, 1, hold.right, this.armR],
+      [j.shoulderL, j.elbowL, -1, hold.left, this.armL],
+    ] as const) {
+      const k = tgt.w * B.hold;
+      if (k < 0.003) {
+        ang.a = sh.rotation.x; // (warm start for the next time this hand is wanted)
+        ang.b = sh.rotation.z;
+        ang.e = el.rotation.x;
+        continue;
+      }
+      solveArm(P.armUpper, P.armLower, side, tgt.x - side * P.shoulderHalfWidth, tgt.y - this.shoulderBaseY, tgt.z, ang);
+      sh.rotation.x = lerp(sh.rotation.x, ang.a, k);
+      sh.rotation.z = lerp(sh.rotation.z, ang.b, k);
+      el.rotation.x = lerp(el.rotation.x, ang.e, k);
+    }
+    // working a cannon: lean into it, arms out and pumping (the rammer, the sponge)
+    const c = this.crewBlend;
+    if (c > 0.003) {
+      const ram = Math.sin(this.time * 5.2);
+      j.torso.rotation.x -= c * (0.32 + 0.1 * ram);
+      for (const [sh, el, side] of [[j.shoulderL, j.elbowL, -1], [j.shoulderR, j.elbowR, 1]] as const) {
+        sh.rotation.x = lerp(sh.rotation.x, 1.15 + 0.35 * ram * (side === 1 ? 1 : -1), c);
+        sh.rotation.z = lerp(sh.rotation.z, side * 0.18, c);
+        el.rotation.x = lerp(el.rotation.x, 0.5 + 0.3 * ram, c);
+      }
+    }
   }
 
   /** The expression drives the body too: each mood's weight eases toward 1 while it is on (and only while the character is standing free). */

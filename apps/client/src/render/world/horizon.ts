@@ -13,7 +13,7 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { ARENA_RADIUS, PALETTE, Rng, groundColour, valueNoise, type Rgb } from "@cb/shared";
+import { ARENA_RADIUS, PALETTE, Rng, autumnAt, groundColour, valueNoise, type Rgb } from "@cb/shared";
 import { composeInstance } from "./toon.ts";
 
 /**
@@ -55,22 +55,43 @@ export interface HillUniforms {
   uFog: { value: Color };
   uSunDir: { value: Vector3 };
   uTint: { value: Color };
+  /** Fog the WEATHER adds on top of the day's (a fog bank or a dust storm hides the hills; clear air leaves their painted haze). */
+  uExtraFog: { value: number };
+  /** Bark colour for the tree-line trunks. */
+  uTrunk: { value: Color };
 }
 
 export function createHillUniforms(sun: Vector3): HillUniforms {
-  return { uFog: { value: new Color() }, uSunDir: { value: sun.clone().normalize() }, uTint: { value: new Color(1, 1, 1) } };
+  return { uFog: { value: new Color() }, uSunDir: { value: sun.clone().normalize() }, uTint: { value: new Color(1, 1, 1) }, uExtraFog: { value: 0 }, uTrunk: { value: new Color(PALETTE.world.trunk) } };
 }
+
+/**
+ * Atmospheric perspective for the hills and their trees, shared by both shaders. Each vertex carries a painted haze (rings grow paler
+ * with distance, low slopes hazier than crests). Two corrections make it true to where you stand: near the camera the painted haze is
+ * capped by the real fog at that distance, so the foot of a hill that starts at the arena's edge is as clear as the meadow beside it
+ * (it used to be a flat grey band); and the weather's extra fog closes in on top, so a fog bank really does swallow them.
+ */
+const HAZE_GLSL = /* glsl */ `
+  uniform float uExtraFog;
+  float hillHaze(float painted, vec3 wp) {
+    float dist = length(wp - cameraPosition);
+    float real = 1.0 - exp(-pow(0.0088 * dist, 2.0));
+    float h = min(painted, real * 1.3 + 0.05);
+    return 1.0 - (1.0 - h) * exp(-pow(uExtraFog * dist, 2.0));
+  }
+`;
 
 const HILL_VERT = /* glsl */ `
   attribute vec3 aCol;
   attribute float aHaze;
   uniform vec3 uFog; uniform vec3 uSunDir; uniform vec3 uTint;
+  ${HAZE_GLSL}
   varying vec3 vCol;
   void main() {
     vec3 n = normal;
     float lit = clamp(dot(n, uSunDir), 0.0, 1.0);
     float stepK = lit > 0.62 ? 1.24 : (lit > 0.3 ? 1.0 : 0.78);
-    vCol = mix(aCol * stepK * uTint, uFog, aHaze);
+    vCol = mix(aCol * stepK * uTint, uFog, hillHaze(aHaze, position));
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }`;
 const HILL_FRAG = /* glsl */ `
@@ -104,9 +125,14 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
   const base = new Color();
   const tmp = new Color();
   const forest = new Color(PALETTE.world.crownDeep);
-  for (const ring of HILL_RINGS) {
+  const meadow = new Color(PALETTE.world.grass);
+  HILL_RINGS.forEach((ring, ringIndex) => {
     const rng = new Rng(ring.seed * 977);
     base.set(ring.colour);
+    // The innermost ring rises out of the meadow itself: its inner foot is at ground level and painted meadow green, so the arena's edge
+    // melts into the hills instead of meeting a wall of grey (the other rings start far below the ground, hidden behind it).
+    const meadowK = ringIndex === 0 ? [0.9, 0.35, 0, 0] : [0, 0, 0, 0];
+    const footY = ringIndex === 0 ? -0.1 : FOOT;
     const cols: { rows: [number, number, number][]; tint: number[] }[] = [];
     for (let k = 0; k < ring.segments; k++) {
       const theta = ((k + rng.range(-0.3, 0.3)) / ring.segments) * Math.PI * 2;
@@ -116,7 +142,7 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
       const cz = Math.sin(theta);
       // cross-section: inner foot, foothill shoulder, crest, outer foot (radius, y)
       const prof: [number, number][] = [
-        [ring.radius - ring.width, FOOT],
+        [ring.radius - ring.width, footY],
         [ring.radius - ring.width * rng.range(0.35, 0.6), foothill],
         [ring.radius + rng.range(-4, 4), H],
         [ring.radius + ring.width * 0.8, FOOT],
@@ -140,9 +166,12 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
           n.copy(b).sub(a).cross(c.clone().sub(a)).normalize();
           if (n.y < 0) n.negate(); // faces are seen from inside the ring: light them by their upward side
           let vi = 0;
+          const jj = tri.map((q) => j + (q >= 2 ? 1 : 0));
           for (const v of [a, b, c]) {
             const hazeY = ring.haze + (1 - Math.min(1, Math.max(0, (v.y - FOOT) / (ring.height * 0.6 - FOOT)))) * 0.42;
-            tmp.copy(base).lerp(forest, tints[vi++]!);
+            tmp.copy(base).lerp(forest, tints[vi]!);
+            tmp.lerp(meadow, meadowK[jj[vi]!]!);
+            vi++;
             pos.push(v.x, v.y, v.z);
             nor.push(n.x, n.y, n.z);
             col.push(tmp.r, tmp.g, tmp.b);
@@ -152,7 +181,7 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
         }
       }
     }
-  }
+  });
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute("normal", new BufferAttribute(new Float32Array(nor), 3));
@@ -164,29 +193,64 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
 
 // ---- the tree line -----------------------------------------------------------------------------------------------------------------
 
-/** A two-tier conifer, five-sided (10 triangles), height 1, radius ~0.28: normals point outward so the hill shader lights it. */
-export function coniferGeometry(): BufferGeometry {
-  const lower = new ConeGeometry(0.34, 0.62, 5, 1, true);
-  lower.translate(0, 0.31, 0);
-  const upper = new ConeGeometry(0.23, 0.56, 5, 1, true);
-  upper.translate(0, 0.72, 0);
-  const g = mergeGeometries([lower, upper].map((x) => (x.index ? x.toNonIndexed() : x)), false)!;
-  g.deleteAttribute("uv");
-  g.computeVertexNormals();
+/** Marks every vertex of a part as trunk (1) or crown (0): the shader paints trunks bark-brown whatever the crown's colour. */
+function markTrunk(g: BufferGeometry, v: 0 | 1): BufferGeometry {
+  g.setAttribute("aTrunk", new BufferAttribute(new Float32Array(g.attributes.position!.count).fill(v), 1));
   return g;
 }
 
-/** A far broadleaf: a short trunk under a faceted round crown (about 26 triangles), height 1. */
-export function roundCrownGeometry(): BufferGeometry {
-  const crown = new IcosahedronGeometry(0.42, 0).toNonIndexed();
-  crown.scale(1, 0.86, 1);
-  crown.translate(0, 0.62, 0);
-  const trunk = new ConeGeometry(0.07, 0.4, 3, 1, true).toNonIndexed();
-  trunk.translate(0, 0.2, 0);
-  const g = mergeGeometries([crown, trunk], false)!;
+/** Bakes a vertical shade into a tree geometry: dark under the crown, bright at the top (`aShade`), so a far tree has form, not just a flat facet. */
+function shadeByHeight(g: BufferGeometry, lo: number, hi: number): BufferGeometry {
+  const p = g.attributes.position!;
+  const shade = new Float32Array(p.count);
+  for (let i = 0; i < p.count; i++) shade[i] = lo + (hi - lo) * Math.min(1, Math.max(0, p.getY(i)));
+  g.setAttribute("aShade", new BufferAttribute(shade, 1));
+  return g;
+}
+
+/** A three-tier pine, six-sided (18 triangles), height 1, radius ~0.3: normals point outward so the hill shader lights it. */
+export function coniferGeometry(): BufferGeometry {
+  const tiers: [number, number, number, number][] = [
+    [0.36, 0.5, 0.24, 6],
+    [0.28, 0.46, 0.5, 6],
+    [0.19, 0.42, 0.76, 6],
+  ];
+  const parts = tiers.map(([r, h, y, seg]) => {
+    const c = new ConeGeometry(r, h, seg, 1, true);
+    c.translate(0, y, 0);
+    return markTrunk(c.toNonIndexed(), 0);
+  });
+  const trunk = new ConeGeometry(0.05, 0.3, 4, 1, true).toNonIndexed();
+  trunk.translate(0, 0.1, 0);
+  const g = mergeGeometries([...parts, markTrunk(trunk, 1)], false)!;
   g.deleteAttribute("uv");
   g.computeVertexNormals();
-  return g;
+  return shadeByHeight(g, 0.66, 1.08);
+}
+
+/**
+ * A far broadleaf: a sturdy trunk under a clustered, lumpy crown (four overlapping faceted lobes, about 90 triangles), height 1. One
+ * faceted hexagon in haze reads as a paper cut-out; overlapping lobes give the crown a cauliflower silhouette and shaded underside.
+ */
+export function roundCrownGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const lobe = (x: number, y: number, z: number, r: number, sy = 0.82): void => {
+    const g = new IcosahedronGeometry(r, 0); // polyhedra are already non-indexed
+    g.scale(1, sy, 1);
+    g.translate(x, y, z);
+    parts.push(markTrunk(g, 0));
+  };
+  lobe(0, 0.6, 0, 0.3);
+  lobe(0.24, 0.52, 0.06, 0.22);
+  lobe(-0.23, 0.55, -0.08, 0.23);
+  lobe(0.03, 0.83, 0.02, 0.2);
+  const trunk = new ConeGeometry(0.075, 0.5, 5, 1, true).toNonIndexed();
+  trunk.translate(0, 0.25, 0);
+  parts.push(markTrunk(trunk, 1));
+  const g = mergeGeometries(parts, false)!;
+  g.deleteAttribute("uv");
+  g.computeVertexNormals();
+  return shadeByHeight(g, 0.62, 1.1);
 }
 
 export interface TreeLine {
@@ -210,6 +274,9 @@ export function buildTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, 
   const rH: number[] = [];
   const deep = new Color(PALETTE.world.hillTree);
   const light = new Color(PALETTE.world.hillTreeLight);
+  const pine = new Color(PALETTE.world.pine);
+  const pineLight = new Color(PALETTE.world.pineLight);
+  const autumn = [new Color(PALETTE.world.autumnRed), new Color(PALETTE.world.autumnOrange), new Color(PALETTE.world.autumnGold)];
   const dry = new Color(PALETTE.world.hillTreeDry);
   const p = new Vector3();
   for (let tries = 0; cM.length + rM.length < count && tries < count * 6; tries++) {
@@ -232,7 +299,15 @@ export function buildTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, 
     const conifer = clump > 0.45 ? rng.next() < 0.78 : rng.next() < 0.3;
     const yaw = rng.range(0, Math.PI * 2);
     const w = h * (conifer ? 0.5 : 0.62) * rng.range(0.85, 1.2);
-    const colour = deep.clone().lerp(light, rng.next() * 0.7).lerp(dry, rng.next() < 0.08 ? 0.7 : 0);
+    // Conifers stay a dark pine. Broadleaves follow the season by REGION: whole hillsides turn autumn red, orange or gold together, and the
+    // rest stay green with the odd dry tree. (The same region idea colours the arena's own broadleaves; see scatter.ts.)
+    const season = autumnAt(p.x, p.z);
+    const turned = season.amount > 0.5;
+    const colour = conifer
+      ? pine.clone().lerp(pineLight, rng.next() * 0.75)
+      : turned
+        ? autumn[Math.min(2, Math.floor((season.hue * 0.6 + rng.next() * 0.4) * 3))]!.clone().lerp(dry, rng.next() * 0.3)
+        : deep.clone().lerp(light, rng.next() * 0.7).lerp(dry, rng.next() < 0.06 ? 0.55 : 0);
     const haze = Math.min(0.95, ring.haze + (1 - Math.min(1, Math.max(0, (p.y - FOOT) / (ring.height * 0.6 - FOOT)))) * 0.3 + 0.06);
     const m = composeInstance(new Matrix4(), p.x, p.y - h * 0.04, p.z, yaw, w, h, w);
     if (conifer) (cM.push(m), cC.push(colour), cH.push(haze));
@@ -255,14 +330,19 @@ export function buildTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, 
 
 const TREE_VERT = /* glsl */ `
   attribute float aHazeI;
+  attribute float aShade;
+  attribute float aTrunk;
+  uniform vec3 uTrunk;
   uniform vec3 uFog; uniform vec3 uSunDir; uniform vec3 uTint;
+  ${HAZE_GLSL}
   varying vec3 vCol;
   void main() {
     vec3 n = normalize(mat3(instanceMatrix) * normal);
     float lit = clamp(dot(n, uSunDir), 0.0, 1.0);
     float stepK = lit > 0.55 ? 1.22 : (lit > 0.25 ? 1.0 : 0.72);
-    vec3 base = instanceColor * stepK * uTint;
-    vCol = mix(base, uFog, aHazeI);
+    vec3 base = mix(instanceColor * aShade, uTrunk * (0.7 + 0.3 * aShade), aTrunk) * stepK * uTint;
+    vec3 wp = (instanceMatrix * vec4(position, 1.0)).xyz;
+    vCol = mix(base, uFog, hillHaze(aHazeI, wp));
     gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
   }`;
 

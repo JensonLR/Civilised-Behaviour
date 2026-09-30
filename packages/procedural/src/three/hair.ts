@@ -103,7 +103,7 @@ export function buildHair(c: FaceCtx, hatOn: boolean, coarse: GridLevel, hatSeat
       const curl = (p: V3, r: number, k = 1): void => void b.add(new SphereGeometry(r, 8, 5), tone(hairC, k), p, [0, 0, 0], [1, 0.9, 1]);
       for (let i = 0; i < 10; i++) {
         const az = 0.85 + (i / 9) * 4.55; // from the temple round the back to the other temple
-        const dy = Math.min(0.2 + (i % 3) * 0.16, hatOn ? hatSeat - 0.14 : 9);
+        const dy = Math.min(0.2 + (i % 3) * 0.16, hatOn ? hatSeat - 0.23 : 9); // (under a hat every curl stays below the band: a curl is 0.4 R across)
         curl(skinDir(c, Math.sin(az) * (1 - dy * 0.3), dy, -Math.cos(az) * (1 - dy * 0.3), R * 0.09), R * 0.2, i % 2 ? 1.1 : 0.92);
       }
       if (!hatOn) for (let i = 0; i < 5; i++) curl(skinDir(c, Math.cos(i * 1.26) * 0.45, 0.93, Math.sin(i * 1.26) * 0.45 + 0.1, R * 0.06), R * 0.22, i % 2 ? 1.08 : 0.94);

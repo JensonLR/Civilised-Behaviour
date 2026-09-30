@@ -1,4 +1,5 @@
-import { BUTTON, axisToWire, clamp } from "@cb/shared";
+import { BUTTON, CARRIED, axisToWire, clamp, type WeaponId } from "@cb/shared";
+import { actionForCode, heldButtons, isHeld, tapButtonFor } from "./bindings.ts";
 
 /** A sampled intent for one fixed simulation step. */
 export interface Intent {
@@ -9,20 +10,10 @@ export interface Intent {
 
 const DEADZONE = 0.18;
 
-/** Keyboard key that toggles first/third person (V is melee). */
+/** Default keyboard key that toggles first/third person (V is melee). The live key comes from the bindings (input/bindings.ts) and can be rebound. */
 export const VIEW_KEY = "KeyX";
 /** Standard-mapping gamepad button that toggles it: R3, the right stick click (Y is melee, and the face buttons and bumpers are all bound). */
 export const VIEW_PAD_BUTTON = 11;
-
-/** Keys whose press must never be lost between two fixed input samples. */
-const TAP_BUTTONS: Record<string, number> = {
-  Space: BUTTON.JUMP,
-  KeyE: BUTTON.INTERACT,
-  KeyR: BUTTON.RELOAD,
-  KeyV: BUTTON.MELEE,
-  KeyG: BUTTON.THROW,
-  KeyF: BUTTON.GRAB,
-};
 
 const isTextEntry = (t: EventTarget | null): boolean => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
@@ -58,6 +49,28 @@ export class Controls {
   /** Switch between first and third person. V is taken (melee), so the keyboard key is VIEW_KEY; on a pad it is a click of the right stick. */
   onToggleView: (() => void) | undefined;
   private viewPadWas = false;
+  private isBlocked = false;
+  /** The weapon the player wants in hand: a `WEAPON` id, or -1 for empty hands. Keys 1-5, the wheel and the d-pad change it; the game sends it with every input frame and the server has the final say. */
+  weaponWish: WeaponId | -1 = -1;
+  private padWas = 0;
+
+  /**
+   * While an overlay (pause, settings, how-to) is up the game keeps running for everyone else, but this player's hands are off the controls:
+   * no movement, no buttons, no look. Setting it also drops every held key so nothing is stuck when the overlay closes.
+   */
+  get blocked(): boolean {
+    return this.isBlocked;
+  }
+  set blocked(on: boolean) {
+    this.isBlocked = on;
+    if (on) {
+      this.keys.clear();
+      this.mouseButtons = 0;
+      this.lookX = 0;
+      this.lookY = 0;
+      this.latched = 0;
+    }
+  }
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -67,13 +80,15 @@ export class Controls {
       if (e.repeat) return;
       this.keys.add(e.code);
       this.usingGamepad = false;
-      this.latched |= TAP_BUTTONS[e.code] ?? 0;
+      this.latched |= tapButtonFor(e.code); // keys whose press must never be lost between two input samples (bindings.ts)
       if (e.code === "F3") {
         e.preventDefault();
         this.onToggleDebug?.();
       }
-      if (e.code === VIEW_KEY && !isTextEntry(e.target)) this.onToggleView?.();
-      if (e.code === "ShiftLeft" && !this.settings.holdToSprint) this.sprintToggled = !this.sprintToggled;
+      const action = actionForCode(e.code);
+      if (action === "view" && !isTextEntry(e.target)) this.onToggleView?.();
+      if (!this.isBlocked && !isTextEntry(e.target)) this.weaponKey(e.code);
+      if (action === "sprint" && !this.settings.holdToSprint) this.sprintToggled = !this.sprintToggled;
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => {
@@ -83,7 +98,17 @@ export class Controls {
     canvas.addEventListener("mousedown", (e) => {
       if (document.pointerLockElement !== canvas) void canvas.requestPointerLock?.();
       this.mouseButtons |= 1 << e.button;
+      if (e.button === 0 && !this.isBlocked) this.latched |= BUTTON.FIRE; // a click shorter than one input step must still be a shot
     });
+    canvas.addEventListener(
+      "wheel",
+      (e) => {
+        if (this.isBlocked || Math.abs(e.deltaY) < 1) return;
+        e.preventDefault();
+        this.cycleWeapon(e.deltaY > 0 ? 1 : -1);
+      },
+      { passive: false },
+    );
     window.addEventListener("mouseup", (e) => (this.mouseButtons &= ~(1 << e.button)));
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     window.addEventListener("mousemove", (e) => {
@@ -106,6 +131,7 @@ export class Controls {
     let dy = this.lookY;
     this.lookX = 0;
     this.lookY = 0;
+    if (this.isBlocked) return [0, 0];
     const p = this.pad();
     // Edge-triggered so holding the stick down toggles once.
     const viewNow = p?.buttons[VIEW_PAD_BUTTON]?.pressed ?? false;
@@ -114,6 +140,16 @@ export class Controls {
       this.onToggleView?.();
     }
     this.viewPadWas = viewNow;
+    if (p && !this.isBlocked) {
+      // d-pad: left / right cycle the weapons, up holsters (edge-triggered)
+      const bits = (p.buttons[14]?.pressed ? 1 : 0) | (p.buttons[15]?.pressed ? 2 : 0) | (p.buttons[12]?.pressed ? 4 : 0);
+      const fresh = bits & ~this.padWas;
+      this.padWas = bits;
+      if (fresh & 1) this.cycleWeapon(-1);
+      if (fresh & 2) this.cycleWeapon(1);
+      if (fresh & 4) this.weaponWish = -1;
+      if (fresh) this.usingGamepad = true;
+    }
     if (p) {
       const [rx, ry] = stick(p.axes[2] ?? 0, p.axes[3] ?? 0);
       if (rx || ry) this.usingGamepad = true;
@@ -127,19 +163,15 @@ export class Controls {
 
   sample(): Intent {
     const k = this.keys;
-    let f = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
-    let r = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
-    let buttons = 0;
-
-    const sprintKey = this.settings.holdToSprint ? k.has("ShiftLeft") : this.sprintToggled;
-    if (sprintKey) buttons |= BUTTON.SPRINT;
-    if (k.has("ControlLeft") || k.has("KeyC")) buttons |= BUTTON.CROUCH;
-    if (k.has("Space")) buttons |= BUTTON.JUMP;
-    if (k.has("KeyE")) buttons |= BUTTON.INTERACT;
-    if (k.has("KeyR")) buttons |= BUTTON.RELOAD;
-    if (k.has("KeyV")) buttons |= BUTTON.MELEE;
-    if (k.has("KeyG")) buttons |= BUTTON.THROW;
-    if (k.has("KeyF")) buttons |= BUTTON.GRAB;
+    if (this.blocked) {
+      this.latched = 0;
+      return { moveF: 0, moveR: 0, buttons: 0 };
+    }
+    let f = (isHeld(k, "forward") ? 1 : 0) - (isHeld(k, "back") ? 1 : 0);
+    let r = (isHeld(k, "right") ? 1 : 0) - (isHeld(k, "left") ? 1 : 0);
+    // Held keys -> wire buttons through the rebindable table (bindings.ts). Sprint may be a toggle instead of a hold.
+    let buttons = heldButtons(k) & ~BUTTON.SPRINT;
+    if (this.settings.holdToSprint ? isHeld(k, "sprint") : this.sprintToggled) buttons |= BUTTON.SPRINT;
     if (this.mouseButtons & 1) buttons |= BUTTON.FIRE;
     if (this.mouseButtons & 4) buttons |= BUTTON.AIM;
 
@@ -170,6 +202,22 @@ export class Controls {
       r /= m;
     }
     return { moveF: axisToWire(clamp(f, -1, 1)), moveR: axisToWire(clamp(r, -1, 1)), buttons };
+  }
+
+  private weaponKey(code: string): void {
+    const m = /^Digit([0-9])$/.exec(code);
+    if (m) {
+      const n = Number(m[1]);
+      if (n === 0) this.weaponWish = -1;
+      else if (n <= CARRIED.length) this.weaponWish = this.weaponWish === CARRIED[n - 1] ? -1 : CARRIED[n - 1]!; // pressing the drawn weapon's key puts it away
+    } else if (code === "Backquote") this.weaponWish = -1;
+  }
+
+  /** Next (+1) or previous (-1) weapon, with empty hands as one more stop. */
+  cycleWeapon(dir: 1 | -1): void {
+    const ring: (WeaponId | -1)[] = [-1, ...CARRIED];
+    const i = ring.indexOf(this.weaponWish);
+    this.weaponWish = ring[(i + dir + ring.length) % ring.length]!;
   }
 
   get aiming(): boolean {

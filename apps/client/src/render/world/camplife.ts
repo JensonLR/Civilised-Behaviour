@@ -1,5 +1,5 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, LatheGeometry, SphereGeometry, TorusGeometry, Vector2 } from "three";
-import { CAMP, PALETTE, hash3, type CollisionWorld } from "@cb/shared";
+import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, LatheGeometry, SphereGeometry, TorusGeometry, Vector2, type Vector3 } from "three";
+import { CAMP, PALETTE, hash3, ruinPlan, type CollisionWorld } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
 import type { Lod } from "./flora.ts";
 
@@ -99,7 +99,7 @@ export function gramophone(k: Kit, lod: Lod): void {
 // ---- the washing line --------------------------------------------------------------------------------------------------------------
 
 /** Rope and laundry between the two wash poles, in WORLD coordinates (call with the base cleared). */
-export function washLine(k: Kit, world: CollisionWorld, lod: Lod): void {
+export function washLine(k: Kit, world: CollisionWorld, lod: Lod, cloth?: Kit): void {
   const { a, b, height } = CAMP.wash;
   const ya = world.terrainHeight(a.x, a.z) + height - 0.06;
   const yb = world.terrainHeight(b.x, b.z) + height - 0.06;
@@ -119,31 +119,36 @@ export function washLine(k: Kit, world: CollisionWorld, lod: Lod): void {
     { t: 0.9, w: 0.32, h: 0.75, colour: linen, kind: "longs" },
   ];
   k.clearBase();
+  if (!cloth) return; // the laundry moves in the wind: it lives in the camp's cloth geometry (buildCampCloth)
+  const swayKit = cloth;
+  swayKit.clearBase();
   items.forEach((it, i) => {
     const p = pt(it.t);
     const sway = (f01(300, i) - 0.5) * 0.16;
-    k.setBase(p[0], p[1], p[2], yaw);
+    swayKit.setBase(p[0], p[1], p[2], yaw);
     const c: ColourFn = (q, _n, out) => blend(out, it.colour, PALETTE.material.soot, 0.06 + Math.abs(q.y) * 0.05);
     const hang = -it.h / 2 - 0.012;
+    // loose at the bottom hem, pinned at the line: weight 0 at the top edge, 1 at the hem
+    const loose = (h: number, hx = 0) => (v: Vector3): number => Math.max(0, 0.5 - v.y / h) * (0.85 + 0.15 * Math.sin(v.x * 9 + i)) + hx * 0.1;
     if (it.kind === "shirt") {
-      k.add(new BoxGeometry(it.w, it.h, 0.025), { at: [0, hang, 0], rot: [sway, 0, 0], colour: c, flat: true });
+      swayKit.add(new BoxGeometry(it.w, it.h, 0.025), { at: [0, hang, 0], rot: [sway, 0, 0], colour: c, flat: true, sway: loose(it.h) });
       // sleeves hang loose either side
-      for (const s of [-1, 1]) k.add(new BoxGeometry(0.16, 0.36, 0.022), { at: [s * (it.w / 2 + 0.06), hang + it.h * 0.15, 0], rot: [sway, 0, s * 0.15], colour: c, flat: true });
+      for (const s of [-1, 1]) swayKit.add(new BoxGeometry(0.16, 0.36, 0.022), { at: [s * (it.w / 2 + 0.06), hang + it.h * 0.15, 0], rot: [sway, 0, s * 0.15], colour: c, flat: true, sway: loose(0.36, 1) });
     } else if (it.kind === "longs") {
-      for (const s of [-1, 1]) k.add(new BoxGeometry(it.w * 0.46, it.h, 0.025), { at: [s * it.w * 0.26, hang, 0], rot: [sway, 0, 0], colour: c, flat: true });
-      k.add(new BoxGeometry(it.w, it.h * 0.22, 0.026), { at: [0, -it.h * 0.11, 0], rot: [sway, 0, 0], colour: c, flat: true });
+      for (const s of [-1, 1]) swayKit.add(new BoxGeometry(it.w * 0.46, it.h, 0.025), { at: [s * it.w * 0.26, hang, 0], rot: [sway, 0, 0], colour: c, flat: true, sway: loose(it.h) });
+      swayKit.add(new BoxGeometry(it.w, it.h * 0.22, 0.026), { at: [0, -it.h * 0.11, 0], rot: [sway, 0, 0], colour: c, flat: true, sway: 0.05 });
     } else {
-      k.add(new BoxGeometry(it.w, it.h, 0.02), { at: [0, hang, 0], rot: [sway * 0.5, 0, 0], colour: c, flat: true });
+      swayKit.add(new BoxGeometry(it.w, it.h, 0.02), { at: [0, hang, 0], rot: [sway * 0.5, 0, 0], colour: c, flat: true, sway: loose(it.h) });
     }
-    if (lod) for (const s of [-0.7, 0.7]) box(k, [0.026, 0.07, 0.04], [s * it.w * 0.4, 0.0, 0], C.signWood);
-    k.clearBase();
+    if (lod) for (const s of [-0.7, 0.7]) swayKit.add(new BoxGeometry(0.026, 0.07, 0.04), { at: [s * it.w * 0.4, 0.0, 0], colour: C.signWood, flat: true, sway: 0 });
+    swayKit.clearBase();
   });
 }
 
 // ---- the hammock -------------------------------------------------------------------------------------------------------------------
 
 /** Canvas hammock slung between the two hammock posts, with spreader bars, rope and a bolster; in WORLD coordinates. */
-export function hammock(k: Kit, world: CollisionWorld, lod: Lod): void {
+export function hammock(k: Kit, world: CollisionWorld, lod: Lod, cloth?: Kit): void {
   const { a, b, height } = CAMP.hammock;
   const ya = world.terrainHeight(a.x, a.z) + height - 0.4;
   const yb = world.terrainHeight(b.x, b.z) + height - 0.4;
@@ -153,8 +158,8 @@ export function hammock(k: Kit, world: CollisionWorld, lod: Lod): void {
   const mz = (a.z + b.z) / 2;
   const seg = 12;
   const inner = len - 0.7;
-  const cloth = new BoxGeometry(inner, 0.035, 0.82, seg, 1, 4);
-  const p = cloth.attributes.position as BufferAttribute;
+  const clothGeo = new BoxGeometry(inner, 0.035, 0.82, seg, 1, 4);
+  const p = clothGeo.attributes.position as BufferAttribute;
   const sag = 0.62;
   for (let i = 0; i < p.count; i++) {
     const t = (p.getX(i) + inner / 2) / inner; // 0 at post a, 1 at post b
@@ -163,7 +168,15 @@ export function hammock(k: Kit, world: CollisionWorld, lod: Lod): void {
   }
   const stripe: ColourFn = (q, _n, out) => blend(out, C.canvas, PALETTE.cloth[0]!, Math.floor((q.z + 0.5) * 5) % 2 === 0 ? 0.55 : 0.05);
   k.setBase(mx, (ya + yb) / 2, mz, yaw);
-  k.add(cloth, { colour: stripe, perFace: true });
+  // the canvas belly swings most in the middle and is held still at the spreader bars
+  const belly = (v: Vector3): number => {
+    const t = (v.x + inner / 2) / inner;
+    return Math.max(0, 1 - (2 * t - 1) ** 2) * 0.7;
+  };
+  if (cloth) {
+    cloth.setBase(mx, (ya + yb) / 2, mz, yaw);
+    cloth.add(clothGeo, { colour: stripe, perFace: true, sway: belly });
+  }
   // spreader bars and the ropes up to the posts
   for (const s of [-1, 1]) {
     const y = s < 0 ? ya : yb;
@@ -171,19 +184,21 @@ export function hammock(k: Kit, world: CollisionWorld, lod: Lod): void {
     box(k, [0.05, 0.05, 0.92], [s * (inner / 2 + 0.05), yl, 0], C.signWood);
     for (const z of [-0.42, 0.42]) k.limb([s * (inner / 2 + 0.05), yl, z], [s * (len / 2 - 0.06), yl + 0.34, 0], 0.011, 0.011, C.rope, 3);
   }
-  if (lod) {
+  if (lod && cloth) {
     // a bolster at the head end
     const sagAt = (t: number): number => (ya + (yb - ya) * t) - sag * 4 * t * (1 - t) - (ya + yb) / 2;
-    k.add(new CylinderGeometry(0.12, 0.12, 0.66, 8), { at: [-inner * 0.36, sagAt(0.14) + 0.14, 0], rot: [Math.PI / 2, 0, 0], colour: PALETTE.material.linen, flat: true });
+    cloth.add(new CylinderGeometry(0.12, 0.12, 0.66, 8), { at: [-inner * 0.36, sagAt(0.14) + 0.14, 0], rot: [Math.PI / 2, 0, 0], colour: PALETTE.material.linen, flat: true, sway: 0.25 });
   }
   k.clearBase();
+  cloth?.clearBase();
 }
 
 // ---- lanterns ----------------------------------------------------------------------------------------------------------------------
 
 /** Hook arms, chains and the brass frames of the hanging lanterns (world coordinates). Their glass is `lanternGlass`. */
-export function lanternFrames(k: Kit, world: CollisionWorld, lod: Lod): void {
+export function lanternFrames(k: Kit, world: CollisionWorld, lod: Lod, swing?: Kit): void {
   k.clearBase();
+  swing?.clearBase();
   for (const l of CAMP.lanterns) {
     const g = world.terrainHeight(l.x, l.z);
     const y = g + l.y;
@@ -191,23 +206,45 @@ export function lanternFrames(k: Kit, world: CollisionWorld, lod: Lod): void {
     const armY = y + 0.5;
     if (!hasPole) k.limb([l.x - 0.32, g - 0.3, l.z], [l.x - 0.32, armY + 0.04, l.z], 0.032, 0.026, C.signWood, 5);
     k.limb([l.x - 0.32, armY, l.z], [l.x, armY, l.z], 0.014, 0.012, C.iron, 4);
-    k.limb([l.x, armY, l.z], [l.x, y + 0.24, l.z], 0.005, 0.005, C.iron, 3);
-    k.add(new ConeGeometry(0.11, 0.1, 6), { at: [l.x, y + 0.2, l.z], colour: C.brass, flat: true });
-    k.add(new CylinderGeometry(0.085, 0.09, 0.03, 6), { at: [l.x, y - 0.155, l.z], colour: C.brass, flat: true });
+    // the lantern swings on its chain: the chain and the frame hang free below the hook (weight grows down the chain, full on the frame)
+    swing?.limb([l.x, armY, l.z], [l.x, y + 0.24, l.z], 0.005, 0.005, C.iron, 3, false, (t) => t * LANTERN_SWING);
+    swing?.add(new ConeGeometry(0.11, 0.1, 6), { at: [l.x, y + 0.2, l.z], colour: C.brass, flat: true, sway: LANTERN_SWING });
+    swing?.add(new CylinderGeometry(0.085, 0.09, 0.03, 6), { at: [l.x, y - 0.155, l.z], colour: C.brass, flat: true, sway: LANTERN_SWING });
     if (lod) for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
-      k.limb([l.x + Math.cos(a) * 0.09, y - 0.14, l.z + Math.sin(a) * 0.09], [l.x + Math.cos(a) * 0.085, y + 0.16, l.z + Math.sin(a) * 0.085], 0.006, 0.006, C.brass, 3);
+      swing?.limb([l.x + Math.cos(a) * 0.09, y - 0.14, l.z + Math.sin(a) * 0.09], [l.x + Math.cos(a) * 0.085, y + 0.16, l.z + Math.sin(a) * 0.085], 0.006, 0.006, C.brass, 3, false, LANTERN_SWING);
     }
   }
 }
 
-/** The lantern glass as a tiny unlit geometry (vertex colours; the material brightens with the lamp level). */
+/** How loose a hanging lantern is (the weight `aSway` gives its frame and glass; the glow point uses the same). */
+export const LANTERN_SWING = 0.5;
+
+/** Every hanging lantern in the world: the camp's, and the one in the Observatory's dark room (last). */
+export function lanternSpots(world: CollisionWorld): readonly { x: number; y: number; z: number }[] {
+  if (world.obstacles.length === 0) return [];
+  return [...CAMP.lanterns, ruinPlan(world.terrain).lantern];
+}
+
+/** The lantern glass as a tiny unlit geometry (vertex colours; the material brightens with the lamp level). Carries `aSway`: it swings with the frame. */
 export function lanternGlass(world: CollisionWorld): BufferGeometry | undefined {
-  const k = new Kit();
+  const k = new Kit({ sway: true });
   k.clearBase();
-  for (const l of CAMP.lanterns) {
+  for (const l of lanternSpots(world)) {
     const y = world.terrainHeight(l.x, l.z) + l.y;
-    k.add(new CylinderGeometry(0.078, 0.084, 0.28, 6), { at: [l.x, y, l.z], colour: (p, _n, out) => blend(out, C.glowLantern, C.flameCore, Math.max(0, 1 - Math.abs(p.y) * 6)), flat: true });
+    k.add(new CylinderGeometry(0.078, 0.084, 0.28, 6), { at: [l.x, y, l.z], colour: (p, _n, out) => blend(out, C.glowLantern, C.flameCore, Math.max(0, 1 - Math.abs(p.y) * 6)), flat: true, sway: LANTERN_SWING });
   }
   return k.build();
+}
+
+/** Everything in the camp that moves in the wind, as one geometry with `aSway` (the washing, the hammock's canvas, the lanterns' chains and frames). */
+export function buildCampCloth(world: CollisionWorld, lod: Lod): BufferGeometry | undefined {
+  const cloth = new Kit({ sway: true });
+  // the still parts (rope, hooks, posts, spreader bars) go into a throwaway kit here; `buildLandmarks` builds them for real
+  const still = new Kit();
+  washLine(still, world, lod, cloth);
+  hammock(still, world, lod, cloth);
+  lanternFrames(still, world, lod, cloth);
+  still.build()?.dispose();
+  return cloth.build();
 }

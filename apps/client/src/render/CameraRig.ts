@@ -66,6 +66,9 @@ export class CameraRig {
   private bobPhase = 0;
   private fpFovScale = 1;
   private shakeEnergy = 0;
+  /** Recoil picture: the lens rises and sways a little after a shot and settles back. Cosmetic only; the aim (`pitch`, `yaw`) is never touched. */
+  private kickPitch = 0;
+  private kickYaw = 0;
 
   constructor(
     private readonly camera: PerspectiveCamera,
@@ -120,6 +123,13 @@ export class CameraRig {
     this.shakeEnergy = Math.min(1, this.shakeEnergy + amount);
   }
 
+  /** A shot's recoil as a camera kick (radians): the lens rises `pitch` and turns `yaw`, then eases back. Scaled by the camera shake setting. */
+  addKick(pitch: number, yaw = 0): void {
+    const k = this.settings.shake;
+    this.kickPitch = Math.min(0.09, this.kickPitch + pitch * k);
+    this.kickYaw = Math.max(-0.05, Math.min(0.05, this.kickYaw + yaw * k));
+  }
+
   /**
    * `target` is the character's feet position; `dt` in seconds. `eye` (from CharacterActor.sampleEye) is required for first person: while
    * it is missing the camera simply stays in third person.
@@ -143,6 +153,13 @@ export class CameraRig {
       this.camera.lookAt(this.thirdLook);
     }
 
+    if (this.kickPitch !== 0 || this.kickYaw !== 0) {
+      this.camera.rotateX(this.kickPitch);
+      this.camera.rotateY(this.kickYaw);
+      const k = Math.exp(-dt * 8);
+      this.kickPitch = Math.abs(this.kickPitch) < 1e-4 ? 0 : this.kickPitch * k;
+      this.kickYaw = Math.abs(this.kickYaw) < 1e-4 ? 0 : this.kickYaw * k;
+    }
     this.shakeEnergy = Math.max(0, this.shakeEnergy - dt * 2.2);
     const shake = this.shakeEnergy * this.shakeEnergy * 0.12 * this.settings.shake;
     if (shake > 0) {

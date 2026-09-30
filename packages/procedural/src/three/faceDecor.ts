@@ -28,15 +28,23 @@ const h01 = (n: number): number => {
 
 const mix = (a: number, b: number, t: number): number => new Color(a).lerp(new Color(b), t).getHex();
 
-function decalGeometry(parts: { pos: number[]; nor: number[]; idx: number[] }, color: number): BufferGeometry | undefined {
+/**
+ * `soft[i]` (0..1) turns vertex i toward the skin colour: a painted or drawn mark is not a hard-edged sticker, its rim is thinner than its middle, so at a grazing angle,
+ * where a flat-coloured decal reads as a floating card, the mark fades into the skin's own shading instead.
+ */
+function decalGeometry(parts: { pos: number[]; nor: number[]; idx: number[]; soft?: number[] }, color: number, skin?: number): BufferGeometry | undefined {
   if (parts.idx.length === 0) return undefined;
   const c = new Color(color);
+  const sk = new Color(skin ?? color);
+  const mixed = new Color();
   const n = parts.pos.length / 3;
   const col = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    col[i * 3] = c.r;
-    col[i * 3 + 1] = c.g;
-    col[i * 3 + 2] = c.b;
+    const k = parts.soft?.[i] ?? 0;
+    mixed.copy(c).lerp(sk, k);
+    col[i * 3] = mixed.r;
+    col[i * 3 + 1] = mixed.g;
+    col[i * 3 + 2] = mixed.b;
   }
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(parts.pos), 3));
@@ -73,15 +81,16 @@ function skinProject(c: FaceCtx, lift: number): Project {
 }
 
 /** A filled polygon (outline in metres) projected onto the surface, as a fan around its centroid. */
-export function fan(c: FaceCtx, project: Project, outline: readonly Pt[], color: number, rings = 1): void {
-  const parts = { pos: [] as number[], nor: [] as number[], idx: [] as number[] };
+export function fan(c: FaceCtx, project: Project, outline: readonly Pt[], color: number, rings = 1, edge = 0.3): void {
+  const parts = { pos: [] as number[], nor: [] as number[], idx: [] as number[], soft: [] as number[] };
   const mu = outline.reduce((s, p) => s + p[0], 0) / outline.length;
   const mv = outline.reduce((s, p) => s + p[1], 0) / outline.length;
   const centre = project(mu, mv);
   if (!centre) return;
-  const push = (h: Hit): number => {
+  const push = (h: Hit, soft = 0): number => {
     parts.pos.push(...h.p);
     parts.nor.push(...h.n);
+    parts.soft.push(soft);
     return parts.pos.length / 3 - 1;
   };
   const ci = push(centre);
@@ -91,7 +100,7 @@ export function fan(c: FaceCtx, project: Project, outline: readonly Pt[], color:
     const k = r / rings;
     const hits = outline.map(([u, v]) => project(mu + (u - mu) * k, mv + (v - mv) * k));
     if (hits.some((h) => !h)) return;
-    const ids = hits.map((h) => push(h!));
+    const ids = hits.map((h) => push(h!, edge * k * k));
     for (let i = 0; i < ids.length; i++) {
       const j = (i + 1) % ids.length;
       if (!prev) pushTri(parts, ci, ids[i]!, ids[j]!);
@@ -102,12 +111,12 @@ export function fan(c: FaceCtx, project: Project, outline: readonly Pt[], color:
     }
     prev = ids;
   }
-  const g = decalGeometry(parts, color);
+  const g = decalGeometry(parts, color, c.skin);
   if (g) c.b.add(g, color);
 }
 
 /** A ribbon along a centre line (metres), `half` half-width (constant or by t), projected onto the surface. */
-export function strip(c: FaceCtx, project: Project, lineIn: readonly Pt[], half: number | ((t: number) => number), color: number): void {
+export function strip(c: FaceCtx, project: Project, lineIn: readonly Pt[], half: number | ((t: number) => number), color: number, edge = 0.3): void {
   if (lineIn.length < 2) return;
   // resample so consecutive rows are at most ~0.06 R apart (see `fan`)
   const step = c.P.headRadius * 0.06;
@@ -118,8 +127,8 @@ export function strip(c: FaceCtx, project: Project, lineIn: readonly Pt[], half:
     const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
     for (let k = 1; k <= n; k++) line.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
   }
-  const parts = { pos: [] as number[], nor: [] as number[], idx: [] as number[] };
-  const rows: [number, number][] = [];
+  const parts = { pos: [] as number[], nor: [] as number[], idx: [] as number[], soft: [] as number[] };
+  const rows: [number, number, number][] = [];
   for (let i = 0; i < line.length; i++) {
     const a = line[Math.max(0, i - 1)]!;
     const b = line[Math.min(line.length - 1, i + 1)]!;
@@ -130,20 +139,26 @@ export function strip(c: FaceCtx, project: Project, lineIn: readonly Pt[], half:
     tv /= l;
     const w = typeof half === "number" ? half : half(i / (line.length - 1));
     const l0 = project(line[i]![0] - tv * w, line[i]![1] + tu * w);
+    const lm = project(line[i]![0], line[i]![1]);
     const l1 = project(line[i]![0] + tv * w, line[i]![1] - tu * w);
-    if (!l0 || !l1) return;
+    if (!l0 || !l1 || !lm) return;
     const ia = parts.pos.length / 3;
-    parts.pos.push(...l0.p, ...l1.p);
-    parts.nor.push(...l0.n, ...l1.n);
-    rows.push([ia, ia + 1]);
+    // three vertices across: the rim fades toward the skin, the middle line is the full colour; the ends of the stroke fade too
+    const endFade = i === 0 || i === line.length - 1 ? 0.5 : 0;
+    parts.pos.push(...l0.p, ...lm.p, ...l1.p);
+    parts.nor.push(...l0.n, ...lm.n, ...l1.n);
+    parts.soft.push(Math.min(0.8, edge + endFade), endFade * 0.6, Math.min(0.8, edge + endFade));
+    rows.push([ia, ia + 1, ia + 2]);
   }
   for (let i = 0; i < rows.length - 1; i++) {
-    const [a0, a1] = rows[i]!;
-    const [b0, b1] = rows[i + 1]!;
+    const [a0, a1, a2] = rows[i]!;
+    const [b0, b1, b2] = rows[i + 1]!;
     pushTri(parts, a0, b0, a1);
     pushTri(parts, a1, b0, b1);
+    pushTri(parts, a1, b1, a2);
+    pushTri(parts, a2, b1, b2);
   }
-  const g = decalGeometry(parts, color);
+  const g = decalGeometry(parts, color, c.skin);
   if (g) c.b.add(g, color);
 }
 
@@ -188,7 +203,7 @@ export function buildFaceDecor(c: FaceCtx): void {
       const fy = h01(seed + i * 11 + 2);
       const x = side * (0.06 + fx * fx * 0.5) * R;
       const y = (0.1 - fy * 0.4) * R;
-      fan(c, front, blob(x, y, R * (0.013 + 0.014 * h01(seed + i * 3)), seed + i, 5, 0.3), speck);
+      fan(c, front, blob(x, y, R * (0.013 + 0.014 * h01(seed + i * 3)), seed + i, 5, 0.3), speck, 1, 0.15);
     }
   } else if (spec.complexion === 4) {
     // sun spots: larger, paler patches on the forehead and cheekbones
@@ -201,7 +216,7 @@ export function buildFaceDecor(c: FaceCtx): void {
   }
 
   // ---- skin marks -------------------------------------------------------------------------------------------------------------------------
-  if (spec.mark === 1) fan(c, front, blob(0.3 * R, -0.36 * R, R * 0.02, seed, 6, 0.1), PALETTE.material.soot); // a beauty spot beside the mouth
+  if (spec.mark === 1) fan(c, front, blob(0.3 * R, -0.36 * R, R * 0.02, seed, 6, 0.1), PALETTE.material.soot, 1, 0); // a beauty spot beside the mouth
   else if (spec.mark === 2) {
     // a mole on the cheek: dark, a little raised
     const m = skinProject(c, R * 0.02)(-0.52 * R, -0.2 * R);
@@ -240,11 +255,11 @@ export function buildFaceDecor(c: FaceCtx): void {
 
   // ---- tattoos ----------------------------------------------------------------------------------------------------------------------------
   const ink = PALETTE.face.tattoo;
-  if (spec.tattoo === 3) fan(c, front, star(0.6 * R, -0.16 * R, 0.13 * R), ink, 2); // a star on the cheek
+  if (spec.tattoo === 3) fan(c, front, star(0.6 * R, -0.16 * R, 0.13 * R), ink, 2, 0.12); // a star on the cheek
   else if (spec.tattoo === 5) {
     // a ribbon banner across the brow
-    strip(c, front, [[-0.5 * R, 0.55 * R], [-0.2 * R, 0.6 * R], [0.2 * R, 0.6 * R], [0.5 * R, 0.55 * R]], R * 0.045, ink);
-    strip(c, front, [[-0.5 * R, 0.55 * R], [-0.6 * R, 0.5 * R]], R * 0.03, ink);
+    strip(c, front, [[-0.5 * R, 0.55 * R], [-0.2 * R, 0.6 * R], [0.2 * R, 0.6 * R], [0.5 * R, 0.55 * R]], R * 0.045, ink, 0.12);
+    strip(c, front, [[-0.5 * R, 0.55 * R], [-0.6 * R, 0.5 * R]], R * 0.03, ink, 0.12);
   } else if (spec.tattoo === 1) {
     // swallows on the neck: a pair of little wings on each side, under the ear
     for (const sx of [-1, 1]) {
@@ -283,29 +298,29 @@ export function buildFaceDecor(c: FaceCtx): void {
       // forehead lines: shallow arcs above the brows, broken in the middle
       const y = (0.5 + k * 0.1) * R;
       const bow = 0.02 * R;
-      strip(c, front, [[-0.48 * R, y - bow], [-0.3 * R, y + bow * 0.4], [-0.1 * R, y + bow]], w, line);
-      strip(c, front, [[0.1 * R, y + bow], [0.3 * R, y + bow * 0.4], [0.48 * R, y - bow]], w, line);
+      strip(c, front, [[-0.48 * R, y - bow], [-0.3 * R, y + bow * 0.4], [-0.1 * R, y + bow]], w, line, 0.12);
+      strip(c, front, [[0.1 * R, y + bow], [0.3 * R, y + bow * 0.4], [0.48 * R, y - bow]], w, line, 0.12);
     }
     if (age > 70) {
       // the frown between the brows
-      for (const sx of [-1, 1]) strip(c, front, [[sx * 0.05 * R, 0.4 * R], [sx * 0.045 * R, 0.24 * R]], w, line);
+      for (const sx of [-1, 1]) strip(c, front, [[sx * 0.05 * R, 0.4 * R], [sx * 0.045 * R, 0.24 * R]], w, line, 0.12);
     }
     if (age > 100) {
       // laughter lines from the nose wings to the mouth corners
-      for (const sx of [-1, 1]) strip(c, front, [[sx * 0.2 * R, -0.24 * R], [sx * 0.3 * R, -0.36 * R], [sx * 0.32 * R, -0.5 * R]], w * 1.2, line);
+      for (const sx of [-1, 1]) strip(c, front, [[sx * 0.2 * R, -0.24 * R], [sx * 0.3 * R, -0.36 * R], [sx * 0.32 * R, -0.5 * R]], w * 1.2, line, 0.12);
     }
     if (age > 140) {
       // crow's feet at the outer corners of the eyes
-      for (const sx of [-1, 1]) for (const dy of [-0.07, 0, 0.07]) strip(c, front, [[sx * 0.66 * R, (0.1 + dy) * R], [sx * 0.8 * R, (0.1 + dy * 1.8) * R]], w * 0.8, line);
+      for (const sx of [-1, 1]) for (const dy of [-0.07, 0, 0.07]) strip(c, front, [[sx * 0.66 * R, (0.1 + dy) * R], [sx * 0.8 * R, (0.1 + dy * 1.8) * R]], w * 0.8, line, 0.12);
     }
     if (age > 180) {
       // bags under the eyes
-      for (const sx of [-1, 1]) strip(c, front, [[sx * 0.28 * R, -0.05 * R], [sx * 0.42 * R, -0.09 * R], [sx * 0.54 * R, -0.05 * R]], w, line);
+      for (const sx of [-1, 1]) strip(c, front, [[sx * 0.28 * R, -0.05 * R], [sx * 0.42 * R, -0.09 * R], [sx * 0.54 * R, -0.05 * R]], w, line, 0.12);
     }
   }
   if (spec.eyeShape === 5) {
     // the "bagged" eye set has its pouches drawn whatever the age
     const line = mix(c.skin, ramp.shade.getHex(), 0.7);
-    for (const sx of [-1, 1]) strip(c, front, [[sx * 0.26 * R, -0.06 * R], [sx * 0.4 * R, -0.1 * R], [sx * 0.55 * R, -0.06 * R]], R * 0.014, line);
+    for (const sx of [-1, 1]) strip(c, front, [[sx * 0.26 * R, -0.06 * R], [sx * 0.4 * R, -0.1 * R], [sx * 0.55 * R, -0.06 * R]], R * 0.014, line, 0.12);
   }
 }

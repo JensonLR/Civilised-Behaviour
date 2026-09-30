@@ -19,7 +19,7 @@ function clientIp(request: Request | undefined): string {
 
 export function createGameServer(config: ServerConfig): Server {
   const origins = createOriginPolicy(config.allowedOrigins);
-  setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment });
+  setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment, friendlyFire: config.friendlyFire, dayStartHour: config.dayStartHour, dayMinutes: config.dayMinutes });
   const health = createEndpoint("/health", { method: "GET" }, async (ctx) =>
     ctx.json({ ok: true, env: config.nodeEnv, uptimeS: Math.round(process.uptime()) }),
   );

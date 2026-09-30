@@ -9,7 +9,7 @@ import { LabStage } from "./LabStage.ts";
  * Character lineup / marketing showcase scene (`?showcase=lineup`). Deterministic: same URL -> same picture.
  *   seed=N        base seed for the row
  *   n=K           characters in the row (default: one per archetype)
- *   close=I       frame character I's head and shoulders (cd=1.2 for a tight face portrait; cx / cyo offset the camera sideways / up to look from an angle or from below)
+ *   close=I       (ty=metres sets the height looked at, tx sideways: hands are at ~0.8) frame character I's head and shoulders (cd=1.2 for a tight face portrait; cx / cyo offset the camera sideways / up to look from an angle or from below)
  *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry)
  *   pose=walk     walk|idle|carry|crouch|air|down
  *   look=<code>   show exactly one encoded character (from the creator) instead of the row
@@ -34,6 +34,10 @@ import { LabStage } from "./LabStage.ts";
  *   hide=pelvis,upperLegL   hide bone meshes (debugging: see what lies under a garment)
  *   voff=N        start `vary` at option N (so ?vary=hat&voff=11&n=10 shows hats 11..20)
  *   lod=0|1|2     build the rigs at that crowd level of detail (lod=mix cycles 0,1,2 across the row)
+ *   elev=40       raise the camera 40 degrees above the horizon (negative looks up from below), orbiting the framed target; orbit=90 swings it round the row (degrees)
+ *   arm=sh:2.7,sz:0.9,el:1.2   pose both arms after the animator (shoulder pitch, abduction, elbow flex; radians, mirrored for the left arm): clipping reviews at the extremes;
+ *                 arm=a|b|c poses figure i with entry i % count
+ *   grip=0|0.5|1  close both hands by that amount (0 open .. 1 fist), one value per figure (cycled)
  */
 export function runLineup(canvas: HTMLCanvasElement, params: URLSearchParams): void {
   void start(canvas, params);
@@ -126,7 +130,7 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
   const target = new Vector3(0, 1.0, 0);
   if (close !== null && rigs[Number(close)]) {
     const r = rigs[Number(close)]!.rig;
-    target.set(r.root.position.x, r.proportions.totalHeight * 0.82, 0);
+    target.set(r.root.position.x + Number(params.get("tx") ?? 0), params.get("ty") !== null ? Number(params.get("ty")) : r.proportions.totalHeight * 0.82, 0);
     camera.position.set(target.x + Number(params.get("cx") ?? 0.2), target.y + Number(params.get("cyo") ?? 0.1), Number(params.get("cd") ?? 2.6));
   } else {
     const zoom = Number(params.get("zoom") ?? 1);
@@ -157,12 +161,46 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
     target.set(0, yc, 0);
     camera.position.set(0, yc + 0.03, dist);
   }
+  const elev = Number(params.get("elev") ?? 0);
+  const orbit = Number(params.get("orbit") ?? 0);
+  if (elev !== 0 || orbit !== 0) {
+    // orbit the camera around the framed target: elevation first (about the horizontal axis), then yaw round the row
+    const off = camera.position.clone().sub(target);
+    const len = off.length();
+    const e0 = Math.asin(off.y / len) + (elev * Math.PI) / 180;
+    const yaw = Math.atan2(off.x, off.z) + (orbit * Math.PI) / 180;
+    camera.position.set(target.x + len * Math.cos(e0) * Math.sin(yaw), target.y + len * Math.sin(e0), target.z + len * Math.cos(e0) * Math.cos(yaw));
+  }
   camera.lookAt(target);
 
   const flags = pose === "walk" ? FLAG.GROUNDED : pose === "carry" ? FLAG.GROUNDED | FLAG.CARRYING : pose === "crouch" ? FLAG.GROUNDED | FLAG.CROUCHING : pose === "down" ? FLAG.GROUNDED | FLAG.DOWNED : pose === "air" ? 0 : FLAG.GROUNDED;
   const speed = pose === "walk" ? 3.6 : 0;
   // Step the animation to a settled, deterministic frame for stills, then keep animating for live viewing.
   for (let i = 0; i < 90; i++) for (const { anim } of rigs) anim.update(1 / 30, { speed, flags, vy: pose === "air" ? 2 : 0 });
+
+  // arm=sh:2.7,sz:0.9,el:1.2 and grip=0.5: fixed arm poses / hand closure for reviews (the still is posed once; live=1 animation would overwrite it)
+  const armPoses = (params.get("arm") ?? "").split("|").map((one) => Object.fromEntries(one.split(",").filter(Boolean).map((kv) => kv.split(":") as [string, string])));
+  const applyArm = (): void => {
+    if (!params.get("arm")) return;
+    rigs.forEach(({ rig }, i) => {
+      const armPose = armPoses[i % armPoses.length]!;
+      const j = rig.joints;
+      const sh = Number(armPose.sh ?? 0);
+      const sz = Number(armPose.sz ?? 0);
+      const el = Number(armPose.el ?? 0);
+      j.shoulderL.rotation.set(sh, 0, -sz);
+      j.shoulderR.rotation.set(sh, 0, sz);
+      j.elbowL.rotation.x = el;
+      j.elbowR.rotation.x = el;
+    });
+  };
+  applyArm();
+  // grip=0.5 or grip=0|0.5|1 (one per figure): the hands' closure
+  const grips = (params.get("grip") ?? "").split("|").filter(Boolean).map(Number);
+  if (grips.length) rigs.forEach(({ rig }, i) => {
+    rig.setHandGrip("L", grips[i % grips.length]!);
+    rig.setHandGrip("R", grips[i % grips.length]!);
+  });
 
   // Optional ragdoll review: knock every figure down at t=0 and run the physics to a chosen moment.
   const ragT = params.get("ragdoll");

@@ -13,10 +13,12 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { CLOCK, advanceClock, createDayState, dayState, parseClock, type CollisionWorld } from "@cb/shared";
+import { applyWeather, createDayState, dayState, hashFloat, parseClock, parseWeatherKind, type CollisionWorld } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
 import { WorldView } from "./world/WorldView.ts";
+import { atmoUniforms, motion, motionScale, setAtmosphere, windGain } from "./world/atmosphere.ts";
 import { applyDaySky, buildSky, fogColour, setRgb, type SkyUniforms } from "./world/sky.ts";
+import { SkyClock } from "./world/skyclock.ts";
 
 export interface GraphicsPreset {
   shadowMapSize: number;
@@ -41,12 +43,18 @@ export interface GraphicsPreset {
   butterflies: number;
   birds: number;
   smoke: number;
+  /** Rain streaks in the pool, and puddles on the ground. 0 = the weather is a tint and fog only. */
+  rain: number;
+  /** Sheep and goats (0 = none). */
+  flock: number;
+  /** Birch and pine as species of their own. */
+  species: boolean;
 }
 
 export const PRESETS: Record<"low" | "medium" | "high", GraphicsPreset> = {
-  low: { shadowMapSize: 1024, pixelRatioCap: 1, terrainSegments: 96, outlines: false, grassTufts: 1800, flowers: 300, bushes: 60, clutter: 0.4, treeLine: 260, trailOverlay: false, waterFx: false, motes: 0, butterflies: 0, birds: 0, smoke: 0 },
-  medium: { shadowMapSize: 2048, pixelRatioCap: 1.5, terrainSegments: 160, outlines: true, grassTufts: 5000, flowers: 900, bushes: 130, clutter: 1, treeLine: 900, trailOverlay: true, waterFx: true, motes: 700, butterflies: 12, birds: 6, smoke: 22 },
-  high: { shadowMapSize: 4096, pixelRatioCap: 2, terrainSegments: 200, outlines: true, grassTufts: 8000, flowers: 1500, bushes: 200, clutter: 1.5, treeLine: 1500, trailOverlay: true, waterFx: true, motes: 1400, butterflies: 16, birds: 9, smoke: 30 },
+  low: { shadowMapSize: 1024, pixelRatioCap: 1, terrainSegments: 96, outlines: false, grassTufts: 1800, flowers: 300, bushes: 60, clutter: 0.4, treeLine: 260, trailOverlay: false, waterFx: false, motes: 0, butterflies: 0, birds: 0, smoke: 0, rain: 0, flock: 0, species: false },
+  medium: { shadowMapSize: 2048, pixelRatioCap: 1.5, terrainSegments: 160, outlines: true, grassTufts: 5000, flowers: 900, bushes: 130, clutter: 1, treeLine: 900, trailOverlay: true, waterFx: true, motes: 700, butterflies: 12, birds: 6, smoke: 22, rain: 2000, flock: 1, species: true },
+  high: { shadowMapSize: 4096, pixelRatioCap: 2, terrainSegments: 200, outlines: true, grassTufts: 8000, flowers: 1500, bushes: 200, clutter: 1.5, treeLine: 1500, trailOverlay: true, waterFx: true, motes: 1400, butterflies: 16, birds: 9, smoke: 30, rain: 3600, flock: 1, species: true },
 };
 
 /**
@@ -67,9 +75,11 @@ export class Stage {
   private readonly haze = new Color();
   private readonly day = createDayState();
   private readonly lightDir = new Vector3(-0.55, 0.62, 0.42);
-  private hours: number;
-  private drift: boolean;
+  /** Which hour and which weather: from the URL, a pin, the room's clock or a local drift (see world/skyclock.ts). */
+  private readonly sky_ = new SkyClock();
   private lastFrame = 0;
+  /** Seconds since the world was born (the room's clock, or a local one): what the flock's positions are a function of. */
+  private worldSec = 0;
   private worldView?: WorldView;
   private preset: GraphicsPreset;
 
@@ -79,7 +89,7 @@ export class Stage {
 
   /** The current clock hour (0..24). */
   get clock(): number {
-    return this.hours;
+    return this.sky_.hours;
   }
 
   constructor(canvas: HTMLCanvasElement, presetName: keyof typeof PRESETS = "medium") {
@@ -91,11 +101,17 @@ export class Stage {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
 
-    // `?time=17.5` / `?time=dusk` fixes the hour (stills, review); without it the day drifts from the default start hour.
+    // `?time=17.5` / `?time=dusk` fixes the hour (stills, review); `&drift=1` keeps it running. `?weather=storm` forces a weather state at
+    // full strength; `?wms=N&wseed=S` sits the weather schedule at N ms. `?motion=0..1` overrides the motion preference (ambient sway).
     const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
-    const fixed = parseClock(params.get("time"));
-    this.hours = fixed ?? CLOCK.defaultStart;
-    this.drift = fixed === undefined || params.get("drift") === "1";
+    this.sky_ = new SkyClock({
+      urlHours: parseClock(params.get("time")),
+      drift: params.get("drift") === "1",
+      forcedWeather: parseWeatherKind(params.get("weather")),
+      startWorldMs: Number(params.get("wms") ?? 0) || 0,
+      localSeed: Number(params.get("wseed") ?? 7) || 7,
+    });
+    motion.value = motionScale(params); // ?motion=0..1 or prefers-reduced-motion
 
     // One colour of distance for fog, the sky's lowest band, the ground skirt and the far hills (world/sky.ts).
     fogColour(this.haze);
@@ -142,9 +158,28 @@ export class Stage {
 
   /** Builds the world (painted terrain, hills, trees, rocks, ground cover, the camp) from the same deterministic data the server simulates. */
   buildWorld(world: CollisionWorld): void {
+    this.builtFor = world;
     this.worldView?.dispose();
     this.worldView = new WorldView(this.scene, world, this.preset, this.lightDir);
     this.worldView.applyDay(this.day);
+  }
+
+  /** The world last passed to `buildWorld`, kept so the graphics preset can be changed live (settings screen). */
+  private builtFor?: CollisionWorld;
+
+  /**
+   * Switches graphics preset while running: shadow map size, pixel ratio and the whole world (ground cover, trees, water, ambient life) are
+   * rebuilt from the same deterministic data. Characters already on screen keep the outline choice they were made with.
+   */
+  setPreset(name: keyof typeof PRESETS): void {
+    const next = PRESETS[name];
+    if (!next || next === this.preset) return;
+    this.preset = next;
+    this.sun.shadow.map?.dispose();
+    this.sun.shadow.map = null;
+    this.sun.shadow.mapSize.set(next.shadowMapSize, next.shadowMapSize);
+    this.resize();
+    if (this.builtFor) this.buildWorld(this.builtFor);
   }
 
   /** Draw/triangle counts of the built world, for docs/PERFORMANCE.md. */
@@ -152,11 +187,27 @@ export class Stage {
     return this.worldView?.stats;
   }
 
-  /** Sets the time of day (clock hours) and stops it drifting unless `keepDrifting`. */
+  /**
+   * Pins the time of day (clock hours) and stops it drifting unless `keepDrifting`. The menu and the creator preview call this for a
+   * calm fixed hour; a joined room's clock (`syncWorldClock`) takes over from it. `?time=` in the URL always wins.
+   */
   setTime(hours: number, keepDrifting = false): void {
-    this.hours = ((hours % 24) + 24) % 24;
-    this.drift = keepDrifting;
+    this.sky_.pin(hours, keepDrifting);
     this.applyDay();
+  }
+
+  /**
+   * Feeds the server's world clock (the room state's `seed`, `worldMs`, `dayStartHour`, `dayMinutes`; call every frame, it is cheap). From
+   * then on the hour of day and the weather are pure functions of the world's age, so every player sees the same sky. The age is
+   * extrapolated with this machine's monotonic clock between the server's refreshes.
+   */
+  syncWorldClock(seed: number, worldMs: number, startHour: number, dayMinutes: number): void {
+    this.sky_.sync(seed, worldMs, startHour, dayMinutes, performance.now());
+  }
+
+  /** Leaves the room's clock (back to the menu): the sky is local again. */
+  leaveWorldClock(): void {
+    this.sky_.leave();
   }
 
   /** Up to four walkers grass and flowers bend away from (world x/z). Call once a frame; entries past `n` are cleared. */
@@ -164,19 +215,50 @@ export class Stage {
     this.worldView?.setPushers(list, n);
   }
 
-  /** Lights everything for `this.hours`. Allocation-free. */
+  /** Lights everything for `this.hours` and the current weather. Allocation-free. */
   private applyDay(): void {
-    const d = dayState(this.hours, this.day);
+    const d = dayState(this.sky_.hours, this.day);
+    const w = this.sky_.weather;
+    applyWeather(d, w, this.sky_.lightning.flash);
     setRgb(this.sun.color, d.sun);
     this.sun.intensity = d.sunIntensity;
+    // cloud takes the sun's shadows with it
+    this.sun.shadow.intensity = 0.72 * (1 - 0.85 * Math.max(0, (d.cover - 0.06) / 0.94));
     setRgb(this.hemi.color, d.hemiSky);
     setRgb(this.hemi.groundColor, d.hemiGround);
     this.hemi.intensity = d.hemiIntensity;
-    setRgb(this.haze, d.horizon); // background and fog share this Color object
+    setRgb(this.haze, d.horizon); // the background
+    this.fog.color.copy(this.haze); // FogExp2 keeps its own copy of the colour, so the fog must be told too (it stayed noon-cream all night before)
     this.fog.density = d.fogDensity;
     this.lightDir.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
     applyDaySky(this.skyUniforms, d);
+    atmoUniforms.uWindK.value = windGain(w.wind, motion.value);
+    atmoUniforms.uWet.value = w.wet;
+    atmoUniforms.uRain.value = w.rain;
     this.worldView?.applyDay(d);
+  }
+
+  /** Resolves this frame's hour, weather and lightning from the sky clock, and publishes the atmosphere (audio and shaders read it). */
+  private updateSky(nowPerfMs: number, dt: number): void {
+    const c = this.sky_;
+    c.update(nowPerfMs, dt);
+    this.worldSec = c.worldMs / 1000;
+    const l = c.lightning;
+    this.skyUniforms.uBolt.value.set(hashFloat(c.seed, Math.floor(l.lastStrikeMs) | 0, 0x77) * Math.PI * 2, l.flash > 0.35 ? 1 : 0, (l.lastStrikeMs % 1000) * 0.013);
+    const wx = c.weather;
+    setAtmosphere({
+      rain: wx.rain,
+      wind: wx.wind,
+      thunderAt: Number.isNaN(l.thunderMs) ? null : nowPerfMs / 1000 + (l.thunderMs - c.lightningMs) / 1000,
+      hour: c.hours,
+      wet: wx.wet,
+      fog: wx.fog,
+      overcast: wx.overcast,
+      storm: wx.storm,
+      dust: wx.dust,
+      flash: l.flash,
+      kind: wx.kind,
+    });
   }
 
   /** Keeps the shadow frustum centred on the action, snapped to texels to avoid shimmer, and along the current light (sun by day, moon by night). */
@@ -194,11 +276,9 @@ export class Stage {
     const now = performance.now() / 1000;
     const dt = this.lastFrame === 0 ? 0 : Math.min(0.25, now - this.lastFrame);
     this.lastFrame = now;
-    if (this.drift && dt > 0) {
-      this.hours = advanceClock(this.hours, dt);
-      this.applyDay();
-    }
-    this.worldView?.update(now, this.camera.position);
+    this.updateSky(performance.now(), dt);
+    this.applyDay();
+    this.worldView?.update(now, this.camera.position, this.worldSec);
     this.renderer.render(this.scene, this.camera);
   }
 }

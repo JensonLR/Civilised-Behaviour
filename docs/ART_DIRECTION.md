@@ -55,11 +55,21 @@ Nothing in the world is a plain PBR material or a texture, except the runtime ca
 - **Palette.** `PALETTE.world` (terrain, rocks, trees, blooms, hill rings, sky, water, the ruin, ambient life, and the **day-cycle keyframes** `morning*`, `dusk*`,
   `night*`), `PALETTE.props` and `PALETTE.camp` (canvas, rope, pennant, cart, luggage, fire, map table, lantern glass). Flames, embers and glows are the only
   saturated world colours. `palette.test.ts` covers all of it; `daycycle.test.ts` proves every keyframe mix stays inside the palette's chroma.
-- **Time of day** (`shared/daycycle.ts`, applied by `Stage`): a pure `dayState(hours)` gives sun/moon colour and direction, three sky bands, horizon glow, the
-  colour of distance (fog, skirt, far hills), hemisphere bounce, fog density, how strongly the fire and lanterns read, stars and moon. `?time=13|dusk|night|17.5|6:30`
-  fixes the hour (`&drift=1` keeps it running); without it the day drifts from 09:00, ~80 s per game hour, three times faster through the dark. The clock is cosmetic
-  and per client. The directional light IS the sun by day and the moon by night (blended through twilight), so `Stage.followShadow` casts correct shadows at every hour;
-  shadows are drawn at 72% strength (a toon ramp's darkest lit step is far brighter than raw hemisphere light, so full-strength shadows read as holes).
+- **Time of day** (`shared/daycycle.ts`, applied by `Stage` through `world/skyclock.ts`): a pure `dayState(hours)` gives sun/moon colour and direction, three sky bands, horizon glow, the
+  colour of distance (fog, skirt, far hills), hemisphere bounce, fog density, how strongly the fire and lanterns read, stars and moon. **The hour is owned by the server**: the room state carries
+  the world's age (`worldMs`, refreshed every 4 s and on join), the start hour and the day length (`DAY_START_HOUR`, `DAY_MINUTES`, default 09:00 and a 30 minute day, the dark hours passing three
+  times faster), and `worldHours(start, worldMs, dayMinutes)` is a pure function of them, so every player sees the same sky. `?time=13|dusk|night|17.5|6:30` still overrides locally (`&drift=1` runs
+  on from it), the menu and the creator preview are pinned to 13:00 (`stage.setTime(13)`) until a room's clock takes over. The directional light IS the sun by day and the moon by night (blended
+  through twilight), so `Stage.followShadow` casts correct shadows at every hour; shadows are drawn at 72% strength and fade with cloud (a toon ramp's darkest lit step is far brighter than raw
+  hemisphere light, so full-strength shadows read as holes).
+- **Weather** (`shared/weather.ts`, pure and server-agnostic: `weatherAt(seed, worldMs)`): six states (clear, overcast, drizzle, storm, fog banks, dusty wind) picked per 2.5 minute slot by a hash of
+  (world seed, slot), blended over 20-40 s into each new one; the world always starts clear. Server and clients agree without a single message. `applyWeather` bends the day (greys the sky, takes the
+  sun, thickens the colour of distance, darkens a storm); `lightningAt` rolls strikes while a storm is on (a flash that lights sky, hemisphere and sun, a bolt in the sky shader, thunder 1.4-7.9 s later).
+  Visuals: **rain** is one pooled instanced quad set in a box that follows the camera (medium 2000 / high 3600, none on low); **puddles** on flat terrain grow with wetness (crisp hashed pools, stepped
+  sky sheen, ring ripples while it falls; medium/high), all ground and stone darkens when wet (every preset); wind strength drives foliage and cloth sway; fog banks and dust are colour and density
+  (the hills see the extra fog too). Low = tint and fog only. `render/world/atmosphere.ts` `getAtmosphere()` publishes `{ rain, wind, thunderAt, hour }` (plus wet, fog, storm, flash...) for the
+  audio; `?weather=clear|overcast|rain|storm|fog|dust` forces a state for review, `?wms=` sits the schedule.
+- **Motion** (`atmosphere.ts` `motionScale`): `prefers-reduced-motion` scales wind sway, cloth, butterflies, birds and drifting motes to 30% (amplitude, not the wind itself); `?motion=0` freezes them, `?motion=1` forces full.
 - **Sky** (`world/sky.ts`): banded gradient, azimuth-aware horizon glow, sun disc with ring and halo, **two parallax toon cloud layers** (a low puffy deck lit on the
   side facing the sun, a high thin deck of streaks, different speeds), a gibbous moon with halo, ~150 twinkling stars. Clouds dim with the sky's exposure squared.
 - **Ground** (`worldgen.ts` `groundColour` + `landscape.ts`): two-tone grass, hard-edged meadow/shade/moss patches, hollows and rises, **footpaths** (`TRAILS`, Chaikin-smoothed:
@@ -69,17 +79,34 @@ Nothing in the world is a plain PBR material or a texture, except the runtime ca
 - **Water** (`world/water.ts`): the stream is carved into the shared terrain (`withLandscape`, a shallow ford, nothing to drown in, no obstacle) and drawn as one ribbon + pond
   at the shared channel level: three flat depth tones, crisp ripple highlights and streaks that travel downstream, sun glitter, foam hugging the banks; the source is a
   waterfall off the broken aqueduct (banded streaks running down, foam boil). Low draws flat bands.
-- **The Observatory** (`world/ruins.ts`, one plan `shared/ruins.ts` for collision and looks): a hill 69 m north-east of the camp crowned by a drum tower with the ribs of its dome,
-  a colonnade of standing and snapped columns under architraves, a kerbed plateau, and a broken aqueduct marching down the slope. A winding trail climbs to it.
-- **Hills:** three rings (150 / 236 / 332 m) with **tree-line silhouettes** (instanced conifers and broadleaf on the wooded shoulders, hazed with distance) lit by the current sun.
-- **Wind and walkers** (`world/toon.ts`): a gust field; tree crowns sway (trunks stiff, leaves flutter, the ink hull and the shadow sway with them); grass, flowers, ferns and reeds
-  sway from the root and bend away from up to four walkers (`Stage.setPushers`, a uniform array, no allocation).
-- **Vegetation** (`world/flora.ts`, placed by `world/scatter.ts`): broadleaf, acacia, snag, shrubs, berry bushes, stratified mossy boulders and leaning slabs (strata bands, dark seams,
-  moss and lichen), pebbles, **stumps and fallen logs (collidable: step on a stump, jump a log)**, wind-swept grass, **flower meadows** (noise patches with a dominant hue, daisies with eight
-  petals and cups with five, stems and leaves, five hues), ferns, toadstool rings under the broadleaf groves, cattail reeds at the water.
+- **The Observatory** (`world/ruins.ts`, one plan `shared/ruins.ts` for collision and looks): a hill 69 m north-east of the camp crowned by a **drum tower you can walk into**: courses of
+  tangent stone blocks in a running bond, cut by a doorway that faces the camp (a plank door hung open; the collision ring has the same gap), the crown snapped unevenly, and inside a dark round room
+  (painted-dark inner faces, a flagged floor, a plinth bearing a brass armillary sphere, one hanging lantern whose warm glow reads through the door even at noon). Over it a **broken copper dome**:
+  14 ribs, plates of verdigris and brown copper with overlapping courses, an observing slit, a fallen-in back and an open oculus. In the courtyard the Society's **Great Refractor** (a brass
+  and leather tube as long as a rowing boat, tilted at the sky on a stone pier, with a finder and a counterweight). A colonnade of standing and snapped columns under architraves (hung with vines),
+  a kerbed plateau, and a broken aqueduct marching down the slope. A winding trail climbs to it.
+- **Hills:** three rings (150 / 236 / 332 m). The innermost rises out of the meadow at ground level (its foot is painted meadow green), so the arena's edge melts into the hills instead of meeting a
+  grey wall; their painted haze is capped by the real fog at the distance you stand from them (clear near the camera, paler far off) and the weather's extra fog closes in on top. **Tree-line
+  trees** are proper silhouettes: three-tier pines and lumpy four-lobed broadleaves with a bark-brown trunk and a shaded underside, in whole autumn hillsides (`autumnAt`, the same region field
+  that turns the arena's trees).
+- **Wind and walkers** (`world/toon.ts`): a gust field scaled by the weather's wind and the motion preference (`uWindK`); tree crowns sway (trunks stiff, leaves flutter, the ink hull and the shadow
+  sway with them); grass, flowers, ferns and reeds sway from the root and bend away from up to four walkers (`Stage.setPushers`, a uniform array, no allocation). **Cloth** (`wind: "cloth"`, geometry
+  with an `aSway` weight per vertex): the washing swings from its line, the hammock's canvas belly rocks, the lanterns swing on their chains with their glass and glow, the pennant streams harder in a gale; mesh, shadow and ink sway together.
+- **Vegetation** (`world/flora.ts`, placed by `world/scatter.ts`): four tree species by region (`treeSpecies`: silver birch on the low ground with white bark and black dashes, broadleaf, acacia, dark
+  three-tier pine), snags, shrubs, berry bushes, **seasons by region** (`autumnAt`: whole patches of country turn red, orange or gold, on trees, shrubs and grass, and carry on into the hills),
+  stratified mossy boulders with orange crust lichen, **weathered leaning slabs** (thin strata each their own tone, dark seams, frost cracks, moss caps and drips, lichen rosettes, an overhanging capstone),
+  pebbles, **stumps and fallen logs (collidable: step on a stump, jump a log)**, wind-swept grass, **flower meadows** (noise patches with a dominant hue, daisies with eight petals and cups with five,
+  stems and leaves, five hues), ferns, toadstool rings under the broadleaf groves, cattail reeds and **lily pads** on the pond and the slow stretch of the stream, hanging **vines** on the ruin.
+- **The clearing's furniture** (`shared/clearing.ts` is the single source for collision and looks; `world/clearing.ts` draws it as one merged mesh): a **stone well** with a crank, bucket and gabled roof
+  (flagged apron of flat **stepping stones**, a stepping-stone path to it from the camp); a **sheep pen** of post-and-rail fence with its gate hung open (jump the rails, walk the gate); four
+  **signposts** with arrow boards where the paths part; a **plank footbridge** with handrails over the stream on its own short path (`footbridge`, ending at a fishing spot on the far bank; the deck is
+  a walkable obstacle a hand above the water); more flat stones set into the ford. The clearing's rim is a ragged ring of flattened dry grass with streaks where feet went.
+- **The flock** (`shared/fauna.ts`, `world/animals.ts`): 9 sheep (5 in the pen) and 3 goats as instanced toon animals with an ink hull each. Not simulated, not on the server, not collidable: each animal's route
+  is a chain of clear waypoints fixed by the world, and where it is on the route is a pure function of the world clock (turn on the spot, stroll, graze), so every player sees them in the same place. Legs swing, the body
+  bobs and the head dips in the vertex shader from three per-instance numbers. They stay in when it rains.
 - **The camp** (`camp.ts` is the single source for collision, visuals and prop keep-out): two bell tents, campfire with pot and steam, flagpole with pennant, signpost, trunks, cart, crates,
   ruined wall, and now the **survey table** (the map is drawn from the real trails, stream and hill), a **telescope** trained on the Observatory, a **gramophone** on a tea table,
-  a **washing line** with laundry, a **hammock**, and six **hanging lanterns** whose glass glows from dusk. Solid pieces merge into one geometry; lantern glass is a tiny unlit mesh.
+  a **washing line** with laundry, a **hammock**, and six **hanging lanterns** whose glass glows from dusk. Solid pieces merge into one geometry; the pieces that move in the wind (laundry, hammock canvas, lantern chains and frames) are a second, swaying geometry; lantern glass is a tiny unlit mesh.
 - **Props** (`world/objects.ts`): slatted crates with corner posts, braces and nails; staved barrels with iron hoops; glass bottles with neck, cork, paper label and a glint; bentwood cane-seat
   chairs. Each stays within ~5% of its physics box (a test enforces it). One instanced set per kind, with the medium scenery ink.
 - **Ambient life** (`world/ambient.ts`, all GPU-driven from the clock, one draw each, pooled by construction, capped by preset): pollen by day and fireflies at dusk, ~12 butterflies
@@ -89,9 +116,11 @@ Nothing in the world is a plain PBR material or a texture, except the runtime ca
 node scripts/shot.mjs "?showcase=world&view=game&time=13" out.png 1280x720 6000      # the view a player has at spawn, at noon
 node scripts/shot.mjs "?showcase=world&view=camp|tents|fire|flag|sign|wall|cart|luggage|crates|edge|hills|sky&time=dusk" out.png
 node scripts/shot.mjs "?showcase=world&view=table|scope|gramophone|wash|hammock|lanterns|ruin|tower|colonnade|aqueduct|ford|pond|source|meadow|trail|stump|log&figures=0&props=0" out.png 1000x600
+node scripts/shot.mjs "?showcase=world&view=well|pen|bridge|waypost|door|inside|dome|refractor|flock&time=13&figures=0&props=0" out.png   # the clearing's furniture and the Observatory's doorway, dark room and dome
+node scripts/shot.mjs "?showcase=world&view=game&weather=storm|drizzle|fog|dust|overcast&time=13" out.png   # forced weather (lightning in a storm); try time=19 and time=0.5
 node scripts/shot.mjs "?showcase=world&view=tree&i=3" out.png                          # also rock, snag; i picks which one
 node scripts/shot.mjs "?showcase=world&cam=13,0.8,22&at=14,0.25,20&push=14,20&figures=0" out.png   # a walker bending the grass
-node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png    # low preset (no ink, no ambient life, vertex-painted paths)
+node scripts/shot.mjs "?showcase=world&view=game&gfx=low&props=0&figures=0" out.png    # low preset (no ink, no ambient life, no rain or puddles, no flock, vertex-painted paths)
 ```
 
 ## Interface (D-024)

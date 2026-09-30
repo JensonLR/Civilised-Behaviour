@@ -9,9 +9,15 @@ export interface RoomConfig {
   routSeconds: number;
   /** Server default for the dismemberment campaign rule. */
   dismemberment: boolean;
+  /** Server default for the friendly-fire campaign rule (the creator may still switch it off for their campaign). */
+  friendlyFire: boolean;
+  /** Clock hour the world starts at (default 9). */
+  dayStartHour?: number;
+  /** Real minutes for a full day (default 30; 0 freezes the clock). */
+  dayMinutes?: number;
 }
 
-let current: RoomConfig = { debugCommands: false, routSeconds: 8, dismemberment: true };
+let current: RoomConfig = { debugCommands: false, routSeconds: 8, dismemberment: true, friendlyFire: true, dayStartHour: 9, dayMinutes: 30 };
 
 export const setRoomConfig = (c: RoomConfig): void => {
   current = c;

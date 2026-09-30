@@ -19,7 +19,7 @@ const tris = (rig: CharacterRig): number => {
 };
 
 describe("crowd levels of detail", () => {
-  it("each level fits its triangle budget (no outline hulls): LOD0 avg <= 12k, LOD1 avg <= 7k, LOD2 avg <= 1.8k and max <= 2.4k", () => {
+  it("each level fits its triangle budget (no outline hulls): LOD0 avg <= 12k, LOD1 avg <= 4.6k, LOD2 avg <= 1.8k and max <= 2.4k", () => {
     const N = 60;
     const stat = [0, 1, 2].map((lod) => {
       let sum = 0;
@@ -35,7 +35,7 @@ describe("crowd levels of detail", () => {
     });
     expect(stat[0]!.avg).toBeLessThan(12000);
     expect(stat[0]!.max).toBeLessThan(15000);
-    expect(stat[1]!.avg).toBeLessThan(7000);
+    expect(stat[1]!.avg).toBeLessThan(4600);
     expect(stat[2]!.avg).toBeLessThan(1800);
     expect(stat[2]!.max).toBeLessThan(2400);
     expect(stat[1]!.avg).toBeLessThan(stat[0]!.avg * 0.7);

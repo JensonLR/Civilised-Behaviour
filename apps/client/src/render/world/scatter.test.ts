@@ -91,4 +91,18 @@ describe("where things grow", () => {
     const empty = { obstacles: [], terrainHeight: () => 0, forEachNear: () => undefined, terrain: { height: () => 0 } } as unknown as CollisionWorld;
     expect(() => planScatter(empty, detail("low"))).not.toThrow();
   });
+
+  it("flat stepping stones lie in the ford and round the well, on the ground, clear of every obstacle", () => {
+    expect(plan.flagstones.length).toBeGreaterThanOrEqual(12);
+    const inWater = plan.flagstones.filter((s) => s.cls === 1 && waterEdgeDistance(s.x, s.z) < 0);
+    expect(inWater.length).toBeGreaterThanOrEqual(5);
+    const dry = plan.flagstones.filter((s) => waterEdgeDistance(s.x, s.z) >= 0);
+    expect(dry.length).toBeGreaterThanOrEqual(6);
+    for (const st of plan.flagstones) {
+      expect(Number.isFinite(st.y) && st.sx > 0.25 && st.sx < 0.6).toBe(true);
+      world.forEachNear(st.x, st.z, (o) => expect(inside(o, st.x, st.z, 0), `stone inside a ${o.tag}`).toBe(false));
+    }
+    // dry stones sit on the ground (their flat tops a hand above it), never floating or sunk
+    for (const st of dry) expect(Math.abs(st.y - world.terrainHeight(st.x, st.z)), `stone at ${st.x.toFixed(1)},${st.z.toFixed(1)}`).toBeLessThan(0.15);
+  });
 });

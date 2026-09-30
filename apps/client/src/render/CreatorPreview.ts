@@ -1,13 +1,19 @@
 import { Vector3 } from "three";
 import { FLAG } from "@cb/shared";
 import { generateCharacter, type CharacterSpec } from "@cb/procedural";
-import { CharacterAnimator, buildCharacter, type CharacterRig } from "@cb/procedural/three";
+import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig } from "@cb/procedural/three";
+import { POSE_EVENT, type PoseId } from "../ui/creatorLogic.ts";
 import type { Stage } from "./Stage.ts";
 
-/** Live 3D preview behind the menu: slow turntable, drag to rotate, idle animation and blinking. */
+/**
+ * Live 3D preview behind the menu: a slow turntable, drag to rotate, idle animation and blinking. The creator's pose picker (`POSE_EVENT` on window) switches
+ * it between a turntable, walking on the spot, standing still, and the pain and triumph poses (which also close the hands into fists).
+ */
 export class CreatorPreview {
   private rig: CharacterRig | undefined;
   private anim: CharacterAnimator | undefined;
+  private hands: HandPoser | undefined;
+  private pose: PoseId = "turntable";
   private yaw = Math.PI + 0.5;
   private raf = 0;
   private running = false;
@@ -34,12 +40,21 @@ export class CreatorPreview {
     const up = () => (this.dragging = false);
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
+    window.addEventListener(POSE_EVENT, (e) => this.setPose((e as CustomEvent<PoseId>).detail));
+  }
+
+  /** Chooses what the figure does (see the class comment). */
+  setPose(id: PoseId): void {
+    this.pose = id;
+    this.anim?.setExpression(id === "pain" ? "pain" : id === "triumph" ? "triumph" : "neutral");
   }
 
   setSpec(spec: CharacterSpec): void {
     this.rig?.dispose();
     this.rig = buildCharacter(spec ?? generateCharacter(1));
     this.anim = new CharacterAnimator(this.rig);
+    this.hands = new HandPoser(this.rig);
+    this.setPose(this.pose);
     this.stage.scene.add(this.rig.root);
     this.rig.root.rotation.y = this.yaw;
     // Frame the whole figure with room for hats; shift right so the form panels do not cover it.
@@ -60,10 +75,13 @@ export class CreatorPreview {
       if (!this.running) return;
       const dt = Math.min((now - this.last) / 1000, 0.1);
       this.last = now;
-      if (!this.dragging) this.yaw += dt * 0.35;
+      // the turntable (and a walk, so the gait can be judged from every side) turns; the other poses hold still unless dragged
+      if (!this.dragging && (this.pose === "turntable" || this.pose === "walk")) this.yaw += dt * (this.pose === "walk" ? 0.2 : 0.35);
       if (this.rig && this.anim) {
         this.rig.root.rotation.y = this.yaw;
-        this.anim.update(dt, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+        const speed = this.pose === "walk" ? 3.2 : 0;
+        this.anim.update(dt, { speed, flags: FLAG.GROUNDED, vy: 0 });
+        this.hands?.update(dt, FLAG.GROUNDED, speed, this.anim.currentExpression);
       }
       this.stage.followShadow(this.target);
       this.stage.render();
@@ -78,5 +96,6 @@ export class CreatorPreview {
     this.rig?.dispose();
     this.rig = undefined;
     this.anim = undefined;
+    this.hands = undefined;
   }
 }

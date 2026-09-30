@@ -30,6 +30,8 @@ export interface LoftOptions {
   /** Close the ends with fans. Default true. */
   capBottom?: boolean;
   capTop?: boolean;
+  /** Faces point INTO the form (a lining, the inside of a hem): the winding is reversed, so it is seen from inside and culled from outside. */
+  inward?: boolean;
 }
 
 const c = new Color();
@@ -41,7 +43,7 @@ const c = new Color();
 export function loftGeometry(rings: readonly Ring[], opts: LoftOptions): BufferGeometry {
   const seg = Math.max(4, opts.segments ?? 10);
   // Sections may be listed top-down (limbs hang from their joint): the winding follows the stacking direction so faces always point outward.
-  const down = rings.length > 1 && rings[0]!.y > rings[rings.length - 1]!.y;
+  const down = (rings.length > 1 && rings[0]!.y > rings[rings.length - 1]!.y) !== (opts.inward === true);
   const pos: number[] = [];
   const col: number[] = [];
   const index: number[] = [];
@@ -113,5 +115,6 @@ export function loftGeometry(rings: readonly Ring[], opts: LoftOptions): BufferG
   geo.setIndex(index);
   geo.computeVertexNormals();
   geo.setAttribute("uv", new BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+  if (opts.inward) geo.userData.inward = true;
   return geo;
 }

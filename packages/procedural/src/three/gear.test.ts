@@ -18,6 +18,20 @@ const boneTris = (spec: CharacterSpec, bone: string): number => {
   rig.dispose();
   return n;
 };
+/** A checksum of a bone's positions and colours: an option that draws something changes it. */
+const boneDigest = (spec: CharacterSpec, bone: string): number => {
+  const rig = buildCharacter(spec, { outline: false });
+  let h = 0;
+  rig.root.traverse((o) => {
+    if (!(o instanceof Mesh) || o.name !== `mesh_${bone}`) return;
+    for (const name of ["position", "color"] as const) {
+      const a = o.geometry.attributes[name]!.array;
+      for (let i = 0; i < a.length; i++) h = (h * 31 + Math.round((a[i] as number) * 1000)) | 0;
+    }
+  });
+  rig.dispose();
+  return h;
+};
 
 describe("expedition gear", () => {
   for (const [key, names] of options) {
@@ -38,7 +52,9 @@ describe("expedition gear", () => {
         }
         const bone = key === "gloves" ? "foreArmL" : "torso";
         const a = { ...generateCharacter(3), neckwear: 0, pack: 0, hipGear: 0, gloves: 0 };
-        expect(boneTris({ ...a, [key]: v } as CharacterSpec, bone)).toBeGreaterThanOrEqual(boneTris(a, bone));
+        // (gloves recolour and reshape the hand - mitts fuse the fingers into one mass, so they may have FEWER triangles - so they must differ; the rest add geometry)
+        if (key === "gloves") expect(boneDigest({ ...a, [key]: v } as CharacterSpec, bone)).not.toBe(boneDigest(a, bone));
+        else expect(boneTris({ ...a, [key]: v } as CharacterSpec, bone)).toBeGreaterThanOrEqual(boneTris(a, bone));
       });
     }
   }

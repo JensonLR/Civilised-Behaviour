@@ -3,7 +3,7 @@ import { CAMP, campObstacles, inCampFootprint, insideObstacle } from "./camp.ts"
 import { createArena, spawnPoint, ARENA_RADIUS } from "./arena.ts";
 import { chroma, PALETTE } from "./palette.ts";
 import { MAX_PLAYERS } from "./constants.ts";
-import { classifyObstacle, coverDensity, groundColour, inMeadow, treeSpecies, type Rgb } from "./worldgen.ts";
+import { autumnAt, classifyObstacle, coverDensity, groundColour, inMeadow, treeSpecies, type Rgb } from "./worldgen.ts";
 import { scatterProps } from "./props.ts";
 import { createTerrain } from "./terrain.ts";
 import type { Obstacle } from "./collision.ts";
@@ -12,12 +12,38 @@ const hex = (c: Rgb): number => (Math.round(c.r * 255) << 16) | (Math.round(c.g 
 const footprint = (o: Obstacle): number => (o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz));
 
 describe("tree species", () => {
-  it("is a pure function of position, and both species stand in the arena in real groves", () => {
+  it("is a pure function of position, and all four species stand in the arena in real groves", () => {
     expect(treeSpecies(12.3, -40.1)).toBe(treeSpecies(12.3, -40.1));
-    const w = createArena(7);
-    const kinds = w.obstacles.filter((o) => classifyObstacle(o) === "tree").map((o) => treeSpecies(o.x, o.z));
-    expect(kinds.filter((k) => k === "broadleaf").length).toBeGreaterThan(5);
-    expect(kinds.filter((k) => k === "acacia").length).toBeGreaterThan(5);
+    const counts: Record<string, number> = {};
+    for (const seed of [7, 8, 9, 10]) {
+      const w = createArena(seed);
+      for (const o of w.obstacles.filter((q) => classifyObstacle(q) === "tree")) counts[treeSpecies(o.x, o.z)] = (counts[treeSpecies(o.x, o.z)] ?? 0) + 1;
+    }
+    for (const k of ["broadleaf", "acacia", "birch", "pine"]) expect(counts[k] ?? 0, k).toBeGreaterThan(5);
+  });
+
+  it("the season turns by region: patches of autumn with a hue each, pure, and mostly summer", () => {
+    expect(autumnAt(12.3, -40.1)).toEqual(autumnAt(12.3, -40.1));
+    let turned = 0;
+    let n = 0;
+    for (let x = -300; x <= 300; x += 9) {
+      for (let z = -300; z <= 300; z += 9) {
+        const a = autumnAt(x, z);
+        expect(a.amount).toBeGreaterThanOrEqual(0);
+        expect(a.amount).toBeLessThanOrEqual(1);
+        expect(a.hue).toBeGreaterThanOrEqual(0);
+        expect(a.hue).toBeLessThanOrEqual(1);
+        n++;
+        if (a.amount > 0.5) turned++;
+      }
+    }
+    expect(turned / n).toBeGreaterThan(0.05);
+    expect(turned / n).toBeLessThan(0.4);
+    // a patch is a patch: neighbours a few metres apart agree
+    let same = 0;
+    let pairs = 0;
+    for (let x = -80; x <= 80; x += 5) for (let z = -80; z <= 80; z += 5) (pairs++, Math.abs(autumnAt(x, z).amount - autumnAt(x + 2, z + 2).amount) < 0.2 && same++);
+    expect(same / pairs).toBeGreaterThan(0.9);
   });
 
   it("groves are mostly one species: neighbours agree far more often than chance", () => {
@@ -29,7 +55,7 @@ describe("tree species", () => {
         if (treeSpecies(x, z) === treeSpecies(x + 3, z + 3)) agree++;
       }
     }
-    expect(agree / pairs).toBeGreaterThan(0.68); // 14% strays on each side bound this near 0.76; independent species would give 0.5
+    expect(agree / pairs).toBeGreaterThan(0.6); // 14% strays bound this near 0.7 (four species: independent would give ~0.3)
   });
 });
 

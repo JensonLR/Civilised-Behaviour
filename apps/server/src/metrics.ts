@@ -16,6 +16,9 @@ class Metrics {
   inputFramesDropped = 0;
   /** Live Rapier bodies (props + player capsules) across all rooms. */
   physicsBodies = 0;
+  /** Rounds fired and blows that found somebody, across rooms (combat, docs/NETWORKING.md). */
+  shotsFired = 0;
+  hitsLanded = 0;
   private ticks = new Float64Array(TICK_RING);
   private tickCount = 0;
 
@@ -49,6 +52,8 @@ class Metrics {
       saveFailures: this.saveFailures,
       inputFramesDropped: this.inputFramesDropped,
       physicsBodies: this.physicsBodies,
+      shotsFired: this.shotsFired,
+      hitsLanded: this.hitsLanded,
       tick: this.tickStats(),
       heapMB: Math.round(mem.heapUsed / 1048576),
       rssMB: Math.round(mem.rss / 1048576),

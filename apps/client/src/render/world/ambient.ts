@@ -15,7 +15,9 @@ import {
   Vector3,
 } from "three";
 import { PALETTE, Rng } from "@cb/shared";
-import { worldTime } from "./toon.ts";
+import { LANTERN_SWING } from "./camplife.ts";
+import { atmoUniforms } from "./atmosphere.ts";
+import { WIND_HEAD, worldTime } from "./toon.ts";
 
 /**
  * Ambient life, all of it driven by the GPU from the clock: pollen drifting by day and fireflies blinking at dusk (one Points draw
@@ -36,13 +38,15 @@ export interface AmbientUniforms {
   uLamp: { value: number };
   /** Light tint for unlit ambient things (butterflies, birds, smoke). */
   uLight: { value: Color };
+  /** Motion preference 0..1: scales flaps, orbits and drift (prefers-reduced-motion, `?motion=`). */
+  uMotion: { value: number };
 }
 
 export function createAmbientUniforms(): AmbientUniforms {
-  return { uDay: { value: 1 }, uFly: { value: 0 }, uBaseY: { value: 0 }, uLamp: { value: 0 }, uLight: { value: new Color(1, 1, 1) } };
+  return { uDay: { value: 1 }, uFly: { value: 0 }, uBaseY: { value: 0 }, uLamp: { value: 0 }, uLight: { value: new Color(1, 1, 1) }, uMotion: { value: 1 } };
 }
 
-const shared = (u: AmbientUniforms): Record<string, { value: unknown }> => ({ ...u, uTime: worldTime }) as unknown as Record<string, { value: unknown }>;
+const shared = (u: AmbientUniforms): Record<string, { value: unknown }> => ({ ...u, uTime: worldTime, uWindK: atmoUniforms.uWindK }) as unknown as Record<string, { value: unknown }>;
 
 // ---- pollen and fireflies -------------------------------------------------------------------------------------------------------
 
@@ -63,14 +67,14 @@ export function buildMotes(count: number, u: AmbientUniforms): Points | undefine
     uniforms: { ...shared(u), pollen: { value: new Color(PALETTE.world.pollen) }, fly: { value: new Color(PALETTE.world.firefly) } },
     vertexShader: /* glsl */ `
       attribute vec4 aSeed;
-      uniform float uTime; uniform float uDay; uniform float uFly; uniform float uBaseY;
+      uniform float uTime; uniform float uDay; uniform float uFly; uniform float uBaseY; uniform float uMotion;
       varying vec3 vCol; varying float vAlpha;
       uniform vec3 pollen; uniform vec3 fly;
       void main() {
         vec3 box = vec3(46.0, 5.0, 46.0);
         float isFly = step(0.62, aSeed.w);
         vec3 p0 = aSeed.xyz * box;
-        float t = uTime;
+        float t = uTime * (0.25 + 0.75 * uMotion);
         vec3 drift = vec3(t * 0.35 + sin(t * 0.21 + aSeed.x * 40.0) * 2.0, sin(t * (0.5 + aSeed.y) + aSeed.z * 30.0) * 0.5, t * 0.12 + cos(t * 0.17 + aSeed.z * 40.0) * 2.0);
         // fireflies wander in slow loops instead of streaming with the wind
         vec3 loop = vec3(cos(t * (0.3 + aSeed.x * 0.4) + aSeed.z * 20.0), sin(t * (0.5 + aSeed.y * 0.4) + aSeed.x * 20.0) * 0.5, sin(t * (0.3 + aSeed.z * 0.4) + aSeed.y * 20.0)) * 1.4;
@@ -148,7 +152,7 @@ export function buildButterflies(centres: readonly Vector3[], count: number, u: 
     vertexShader: /* glsl */ `
       attribute vec4 aCentre;
       attribute float aShade;
-      uniform float uTime; uniform float uDay; uniform vec3 uLight;
+      uniform float uTime; uniform float uDay; uniform vec3 uLight; uniform float uMotion;
       varying vec3 vCol;
       vec3 orbit(float a, float ph) {
         float r = 1.6 + 0.8 * sin(ph * 3.0);
@@ -157,12 +161,12 @@ export function buildButterflies(centres: readonly Vector3[], count: number, u: 
       void main() {
         float ph = aCentre.w;
         float sp = 0.42 + 0.12 * fract(ph);
-        float a = uTime * sp + ph;
+        float a = uTime * sp * (0.3 + 0.7 * uMotion) + ph;
         vec3 p1 = orbit(a, ph);
         vec3 p2 = orbit(a + 0.05, ph);
         vec3 f = normalize(vec3(p2.x - p1.x, 0.0, p2.z - p1.z) + vec3(1e-4));
         vec3 r = vec3(f.z, 0.0, -f.x);
-        float flap = sin(uTime * (17.0 + 5.0 * fract(ph * 1.7)) + ph) * 0.95;
+        float flap = sin(uTime * (17.0 + 5.0 * fract(ph * 1.7)) + ph) * (0.3 + 0.65 * uMotion);
         float lift = abs(position.x) * sin(flap);
         vec3 lp = r * position.x * cos(flap) + f * position.z + vec3(0.0, lift, 0.0);
         vec3 world = aCentre.xyz + p1 + lp;
@@ -222,7 +226,7 @@ export function buildBirds(count: number, u: AmbientUniforms): InstancedMesh | u
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
       attribute vec4 aCircle;
-      uniform float uTime; uniform float uDay;
+      uniform float uTime; uniform float uDay; uniform float uMotion;
       void main() {
         float ph = aCircle.w;
         float R = 22.0 + 10.0 * fract(ph * 3.1);
@@ -231,7 +235,7 @@ export function buildBirds(count: number, u: AmbientUniforms): InstancedMesh | u
         vec3 c = vec3(cos(ang) * R, sin(uTime * 0.2 + ph) * 3.0, sin(ang) * R);
         vec3 f = normalize(vec3(-sin(ang), 0.0, cos(ang)));
         vec3 r = vec3(f.z, 0.0, -f.x);
-        float flap = sin(uTime * 3.4 + ph * 7.0) * 0.55 * step(0.0, sin(uTime * 0.4 + ph));
+        float flap = sin(uTime * 3.4 + ph * 7.0) * 0.55 * (0.3 + 0.7 * uMotion) * step(0.0, sin(uTime * 0.4 + ph));
         float s = 1.25;
         vec3 lp = r * position.x * cos(flap) * s + f * position.z * s + vec3(0.0, abs(position.x) * sin(flap) * s, 0.0);
         vec3 world = aCircle.xyz + c + lp;
@@ -341,24 +345,28 @@ export function buildSmoke(sources: readonly SmokeSource[], u: AmbientUniforms):
 // ---- lantern glow -------------------------------------------------------------------------------------------------------------------
 
 /** Soft additive glows at the lanterns' positions; they brighten with `uLamp` (a candle by day, a lamp at dusk). */
-export function buildLanternGlow(positions: readonly Vector3[], u: AmbientUniforms): Points | undefined {
+export function buildLanternGlow(positions: readonly Vector3[], u: AmbientUniforms, lit: readonly number[] = []): Points | undefined {
   if (positions.length === 0) return undefined;
   const geo = new BufferGeometry();
   geo.setAttribute("position", new BufferAttribute(new Float32Array(positions.flatMap((p) => [p.x, p.y, p.z])), 3));
+  // `lit[i]` is a lantern's floor level (0..1): a lamp in a dark room burns bright even at noon
+  geo.setAttribute("aBase", new BufferAttribute(new Float32Array(positions.map((_, i) => lit[i] ?? 0)), 1));
   const mat = new ShaderMaterial({
     transparent: true,
     depthWrite: false,
     blending: AdditiveBlending,
     uniforms: { ...shared(u), glow: { value: new Color(PALETTE.camp.glowLantern) } },
     vertexShader: /* glsl */ `
-      uniform float uTime; uniform float uLamp;
+      ${WIND_HEAD}
+      attribute float aBase;
+      uniform float uLamp;
       varying float vA;
       void main() {
-        vec4 mv = viewMatrix * vec4(position, 1.0);
+        vec4 mv = viewMatrix * vec4(position + windCloth(position, ${LANTERN_SWING.toFixed(2)}), 1.0);
         gl_Position = projectionMatrix * mv;
         float flick = 0.94 + 0.06 * sin(uTime * 7.0 + position.x * 3.0 + position.z * 5.0);
-        vA = (0.14 + 0.86 * uLamp) * flick;
-        gl_PointSize = clamp((0.9 + 2.6 * uLamp) * 190.0 / max(-mv.z, 1.0), 4.0, 90.0);
+        vA = max(aBase, 0.14 + 0.86 * uLamp) * flick;
+        gl_PointSize = clamp((0.9 + 2.6 * max(uLamp, aBase * 0.7)) * 190.0 / max(-mv.z, 1.0), 4.0, 90.0);
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 glow; varying float vA;

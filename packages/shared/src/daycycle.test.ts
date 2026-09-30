@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE, chroma as hexChroma } from "./palette.ts";
-import { CLOCK, advanceClock, clockRate, createDayState, dayState, parseClock, sunElevation, wrapHours, type DayState, type Vec3 } from "./daycycle.ts";
+import { CLOCK, WORLD_CLOCK, advanceClock, clockRate, createDayState, dayState, hourOfPhase, parseClock, phaseOfHour, sanitizeDayMinutes, sunElevation, worldHours, wrapHours, type DayState, type Vec3 } from "./daycycle.ts";
 
 const HOURS = Array.from({ length: 24 * 8 }, (_, i) => i / 8);
 const colours = (d: DayState) => [d.sun, d.top, d.mid, d.horizon, d.glow, d.hemiSky, d.hemiGround];
@@ -155,3 +155,65 @@ describe("the clock", () => {
     expect(t).toBeLessThan(2000);
   });
 });
+
+describe("the world clock (server-owned)", () => {
+  it("phase and hour are inverses", () => {
+    for (let h = 0; h < 24; h += 0.05) {
+      const back = hourOfPhase(phaseOfHour(h));
+      const d = Math.abs(back - h);
+      expect(Math.min(d, 24 - d), `h ${h}`).toBeLessThan(1e-9);
+    }
+  });
+
+  it("starts at the start hour and comes round after exactly one day length", () => {
+    for (const start of [0, 5.2, 9, 13, 20.6, 23.9]) {
+      for (const minutes of [1, 30, 90]) {
+        expect(worldHours(start, 0, minutes)).toBeCloseTo(wrapHours(start), 9);
+        const full = worldHours(start, minutes * 60_000, minutes);
+        const d = Math.abs(full - wrapHours(start));
+        expect(Math.min(d, 24 - d), `${start}/${minutes}`).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it("only moves forward, continuously, and the dark hours go by three times faster", () => {
+    let prev = worldHours(9, 0, 30);
+    let dayTicks = 0;
+    let darkTicks = 0;
+    let travelled = 0;
+    for (let t = 1000; t <= 30 * 60_000; t += 1000) {
+      const h = worldHours(9, t, 30);
+      let dh = h - prev;
+      if (dh < -12) dh += 24;
+      expect(dh, `t ${t}`).toBeGreaterThan(0);
+      expect(dh, `t ${t}`).toBeLessThan(0.1);
+      travelled += dh;
+      const dark = prev < DARK_TO_TEST || prev > DARK_FROM_TEST;
+      if (dark) darkTicks += dh;
+      else dayTicks += dh;
+      prev = h;
+    }
+    expect(travelled).toBeCloseTo(24, 3);
+    expect(darkTicks + dayTicks).toBeCloseTo(24, 3);
+    // default day: ~98 s per daylight hour, ~33 s per dark hour
+    const dayRate = (worldHours(9, 60_000, 30) - 9) * 1; // hours advanced in one real minute of daylight
+    expect(dayRate).toBeGreaterThan(0.55);
+    expect(dayRate).toBeLessThan(0.7);
+  });
+
+  it("every client computes the same hour from the same world time (a pure function)", () => {
+    for (const t of [0, 1234, 999_999, 5_000_000]) expect(worldHours(WORLD_CLOCK.defaultStartHour, t, WORLD_CLOCK.defaultDayMinutes)).toBe(worldHours(WORLD_CLOCK.defaultStartHour, t, WORLD_CLOCK.defaultDayMinutes));
+  });
+
+  it("a zero, negative or broken day length freezes the clock; configured lengths are clamped", () => {
+    expect(worldHours(9, 1e9, 0)).toBe(9);
+    expect(worldHours(9, 1e9, -3)).toBe(9);
+    expect(worldHours(9, Number.NaN, 30)).toBe(9);
+    expect(sanitizeDayMinutes(0)).toBe(WORLD_CLOCK.minDayMinutes);
+    expect(sanitizeDayMinutes(1e9)).toBe(WORLD_CLOCK.maxDayMinutes);
+    expect(sanitizeDayMinutes(Number.NaN)).toBe(WORLD_CLOCK.defaultDayMinutes);
+  });
+});
+
+const DARK_TO_TEST = 5.2;
+const DARK_FROM_TEST = 20.6;

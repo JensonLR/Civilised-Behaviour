@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { CASUALTY, FLAG, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { BUTTON, CASUALTY, FLAG, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -7,12 +7,16 @@ import { CharacterActor } from "../render/CharacterActor.ts";
 import { newEyeSample } from "../render/firstPerson.ts";
 import { HitFx } from "../render/HitFx.ts";
 import { RagdollWorld } from "../render/Ragdoll.ts";
-import { getGore, getHeadBob, getShowLimbs, getView, setView } from "../settings.ts";
+import { BASE_SENSITIVITY, effectiveShake, getFov, getGore, getHeadBob, getHoldToSprint, getInvertY, getPadSensitivity, getSensitivity, getShowLimbs, getView, onSettingChange, setView } from "../settings.ts";
+import { playSfx, setListener } from "../audio/index.ts";
+import { FIRST_PERSON } from "../render/firstPerson.ts";
+import { GameAudio } from "./GameAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { Hud } from "../ui/Hud.ts";
+import { CombatView } from "./CombatView.ts";
 
 interface Actor {
   body: CharacterActor;
@@ -41,6 +45,8 @@ export class Game {
   private readonly props: PropViews;
   private readonly hud: Hud;
   private readonly hitFx: HitFx;
+  /** Weapons, shots, projectiles, impacts, the cannon and the gunnery interface (game/CombatView.ts). */
+  private readonly combat: CombatView;
   private readonly debris: LimbDebris;
   /** Loaded lazily (Rapier's WASM only ships once we are in a game); until then knock-downs use the plain fall animation. */
   private ragdolls: RagdollWorld | undefined;
@@ -49,6 +55,8 @@ export class Game {
   private running = false;
   private disposed = false;
   private pingTimer = 0;
+  private readonly audio: GameAudio;
+  private readonly offSettings: () => void;
 
   constructor(
     private readonly stage: Stage,
@@ -60,11 +68,15 @@ export class Game {
     this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1, headBob: getHeadBob() ? 1 : 0 });
     this.rig.setView(getView(), true);
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
+    this.audio = new GameAudio((x, z) => session.world.terrainHeight(x, z));
+    this.applySettings();
+    this.offSettings = onSettingChange(() => this.applySettings());
     this.tagLayer = hud;
     this.props = new PropViews(stage.scene, stage.outlines);
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
+    this.combat = new CombatView(stage, session, controls, this.rig, () => this.actors, hud);
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
@@ -88,7 +100,10 @@ export class Game {
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
 
-    session.room.onMessage("notice", (m: { text: string }) => this.hud.showNotice(m.text));
+    session.room.onMessage("notice", (m: { text: string }) => {
+      this.hud.showNotice(m.text);
+      playSfx("notice");
+    });
     session.room.onMessage("pong", (m: { t: number }) => {
       const rtt = performance.now() - m.t;
       session.rttMs = session.rttMs === 0 ? rtt : session.rttMs * 0.8 + rtt * 0.2;
@@ -114,7 +129,10 @@ export class Game {
     this.actors.clear();
     this.props.dispose();
     this.controls.onToggleView = undefined;
+    this.offSettings();
+    this.audio.dispose();
     this.hud.dispose();
+    this.combat.dispose();
     this.hitFx.dispose();
     this.debris.dispose();
     this.disposed = true;
@@ -133,9 +151,11 @@ export class Game {
     if (me) {
       const steps = this.session.tick(now);
       const yaw = yawToWire(this.rig.yaw);
+      this.combat.beginFrame();
       for (let i = 0; i < steps; i++) {
         const it = this.controls.sample();
-        this.session.sendInput(it.moveF, it.moveR, yaw, it.buttons);
+        this.combat.sendInput(it, yaw);
+        if ((it.buttons & BUTTON.THROW) !== 0) this.audio.localThrow();
       }
     }
 
@@ -149,11 +169,13 @@ export class Game {
     this.syncActors(dt);
     this.hitFx.update(dt);
     this.debris.update(dt);
+    this.combat.update(dt, this.controls.usingGamepad);
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
 
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
+      setListener(tmp, this.rig.yaw);
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
       this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample));
       this.stage.followShadow(tmp);
@@ -217,6 +239,7 @@ export class Game {
         }
       }
     }
+    if (prompt === "" && (flags & FLAG.DOWNED) === 0) prompt = this.combat.cannonPrompt(use);
     const showLimbs = getShowLimbs();
     this.hud.update({
       flags,
@@ -229,9 +252,27 @@ export class Game {
       dressing,
       usingGamepad: pad,
       firstPerson: this.rig.headHidden,
+      armed: this.combat.sightShown,
       wounds: mine.wounds,
       missing: showLimbs ? mine.missing : 0,
     });
+    this.audio.revive(byMe >= 0 ? byMe : mine.reviveProgress > 0 ? mine.reviveProgress : -1);
+  }
+
+  /** Live settings (settings screen): camera, sensitivity, shake, head bob, sprint mode. Also called once at start. */
+  private applySettings(): void {
+    const s = this.rig.settings;
+    const fov = getFov();
+    s.fov = fov;
+    s.firstPersonFov = FIRST_PERSON.fov + (fov - 65);
+    s.sensitivity = BASE_SENSITIVITY * getSensitivity();
+    s.invertY = getInvertY();
+    s.shake = effectiveShake();
+    s.headBob = getHeadBob() ? 1 : 0;
+    this.controls.settings.sensitivity = s.sensitivity;
+    this.controls.settings.padSensitivity = getPadSensitivity();
+    this.controls.settings.holdToSprint = getHoldToSprint();
+    if (this.rig.mode !== getView()) this.rig.setView(getView());
   }
 
   private syncActors(dt: number): void {
@@ -254,11 +295,12 @@ export class Game {
         walkers[walkerCount]!.x = x;
         walkers[walkerCount++]!.z = z;
       }
+      this.audio.actor(id, isMe, dt, x, y, z, this.session.value(p, "vx"), this.session.value(p, "vy"), this.session.value(p, "vz"), flags);
       a.body.setLook(p.look);
       if (isMe) a.body.setFirstPerson(this.rig.headHidden, this.rig.yaw); // own head, never the others'
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt) },
         getGore(),
         getShowLimbs(),
       );
@@ -272,6 +314,9 @@ export class Game {
       }
     });
     this.stage.setPushers(walkers, walkerCount);
+    this.audio.sweep();
+    const clock = this.session.room.state; // the server-owned world clock: every player sees the same hour and the same weather
+    if (clock.worldMs !== undefined && clock.dayMinutes !== undefined) this.stage.syncWorldClock(clock.seed, clock.worldMs, clock.dayStartHour, clock.dayMinutes);
     for (const [id, a] of this.actors) {
       if (!seen.has(id)) {
         this.removeActor(a);
@@ -288,8 +333,10 @@ export class Game {
     const h = a.body.height;
     const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;
     this.hitFx.burst(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power, getGore());
+    this.audio.hurt(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), p.look, e.power, e.id === this.session.sessionId);
     a.body.hit(e, a.body.facing); // the heading as drawn: in first person the local body turns with the camera
     if (e.id === this.session.sessionId) this.rig.addShake(0.25 + e.power * 0.5);
+    this.combat.onHit(e);
   }
 
   /**
@@ -300,6 +347,8 @@ export class Game {
   private onSever(e: SeverEvent): void {
     const a = this.actors.get(e.id);
     if (e.id === this.session.sessionId) this.rig.addShake(0.6 + e.power * 0.4);
+    const victim = this.session.room.state.players.get(e.id);
+    if (victim) this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
     if (!a || !getShowLimbs()) return;
     const piece = a.body.detachLimb(e.limb as LimbId);
     if (!piece) return;

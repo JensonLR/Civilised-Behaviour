@@ -64,6 +64,7 @@ function auditPrimitive(geo: BufferGeometry): PrimitiveAudit {
     area += Math.hypot(nx, ny, nz);
   }
   let outward = area > 0 ? sum / area : 0;
+  if (geo.userData.inward) outward = -outward; // (a lining: its faces are MEANT to point into the form)
   if (geo.userData.sheet) {
     // an open sheet (a patch of cloth on a body surface) has no inside to measure against: its faces must agree with the surface normals it carries
     const nrm = geo.attributes.normal!;
@@ -229,7 +230,7 @@ export class PartBuilder {
     return this.add(new ConeGeometry(r, r * 0.55, 5, 1), color, pos, rot);
   }
   /** A smooth lofted form through cross-sections (see loft.ts): coats, sleeves, trouser legs, boots. */
-  loft(ringsIn: readonly Ring[], color: number, pos?: V3, rot?: V3, scale?: V3, opts: { capBottom?: boolean; capTop?: boolean; segments?: number } = {}): this {
+  loft(ringsIn: readonly Ring[], color: number, pos?: V3, rot?: V3, scale?: V3, opts: { capBottom?: boolean; capTop?: boolean; segments?: number; inward?: boolean } = {}): this {
     let rings = ringsIn;
     PartBuilder.auditKind = "loft";
     const segments = opts.segments ?? (PartBuilder.hullMode ? 6 : [10, 8, 6][PartBuilder.lod]!);
@@ -244,8 +245,10 @@ export class PartBuilder {
   patch(spec: PatchSpec, silhouette = false): this {
     PartBuilder.auditKind = "patch";
     if ((PartBuilder.hullMode || PartBuilder.lod >= 2) && !silhouette) return this;
-    const k = PartBuilder.hullMode ? 0.6 : [1, 0.7, 0.5][PartBuilder.lod]!;
-    const g = buildPatch({ ...spec, nu: Math.max(2, Math.round(spec.nu * k)), nv: Math.max(2, Math.round(spec.nv * k)) });
+    const k = PartBuilder.hullMode ? 0.6 : [1, 0.6, 0.5][PartBuilder.lod]!;
+    // cloth thickness (lining layer + rim) is a full-detail feature: crowd levels and the outline hull draw the single sheet
+    const thick = PartBuilder.lod === 0 && !PartBuilder.hullMode ? spec.thick : 0;
+    const g = buildPatch({ ...spec, thick, nu: Math.max(2, Math.round(spec.nu * k)), nv: Math.max(2, Math.round(spec.nv * k)) });
     if (g) {
       g.userData.sheet = true;
       this.add(g, typeof spec.color === "number" ? spec.color : 0xffffff);
@@ -266,10 +269,10 @@ export class PartBuilder {
       if (2 * r < (PartBuilder.hullMode ? 0.04 : LOD_THIN[lod]!)) return this;
     }
     const want = opts.segments ?? [6, 5, 4][lod]!;
-    const segments = PartBuilder.hullMode ? Math.min(want, 5) : Math.min(want, [8, 6, 4][lod]!);
+    const segments = PartBuilder.hullMode ? Math.min(want, 5) : Math.min(want, [8, 5, 4][lod]!);
     // Far levels use half the spine points (the section function is evaluated over the reduced spine, so tapers stay right).
-    const pts = lod >= 2 && !opts.sideAt && spine.length > 6 ? spine.filter((_, i) => i % 2 === 0 || i === spine.length - 1) : spine;
-    return this.add(sweepGeometry(pts, section, { color, ...opts, segments }), color);
+    const pts = (lod >= 2 ? spine.length > 6 : spine.length > 7) && lod >= 1 && !opts.sideAt ? spine.filter((_, i) => i % 2 === 0 || i === spine.length - 1) : spine;
+    return this.add(sweepGeometry(pts, section, { color, ...opts, segments, ...(lod > 0 || PartBuilder.hullMode ? { coarseDome: true } : {}) }), color);
   }
   /** Capsule-like limb segment from (0,0,0) down to (0,-len,0): a stretched sphere pair via cylinder + caps. */
   limb(rTop: number, rBottom: number, len: number, color: number, pos: V3 = [0, 0, 0]): this {

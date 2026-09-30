@@ -1,9 +1,10 @@
-import { Mesh, MeshBasicMaterial, SphereGeometry, type Group, type Scene } from "three";
+import { Mesh, MeshBasicMaterial, SphereGeometry, type Group, type Scene, type Vector3 } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
-import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel } from "@cb/procedural/three";
-import { FLAG, type HitEvent, type LimbId } from "@cb/shared";
+import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel } from "@cb/procedural/three";
+import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
+import { WeaponRig } from "./weapons/WeaponRig.ts";
 
 /**
  * First-person arm pose, added on top of the animator for the local body only (nobody else sees it). A relaxed arm hangs far below the
@@ -51,6 +52,20 @@ export interface ActorPose {
   wounds?: number;
   /** Lost-limb mask (LIMB bits, server-owned). */
   missing?: number;
+  /** What is in the hands (replicated combat state). Absent = empty hands. */
+  combat?: ActorCombat;
+}
+
+/** The replicated combat state of one figure, as the actor needs it. */
+export interface ActorCombat {
+  /** `PlayerState.weapon`: 0 = nothing drawn, else weapon id + 1. */
+  weapon: number;
+  /** Aim elevation, radians (+ up). */
+  elev: number;
+  /** 0..100 reload progress (`PlayerState.reload`). */
+  reload: number;
+  /** Working a cannon (0..1). */
+  crew?: number;
 }
 
 /**
@@ -61,9 +76,15 @@ export interface ActorPose {
 export class CharacterActor {
   private rig!: CharacterRig;
   private anim!: CharacterAnimator;
+  /** Hand closure follows what the body is doing (a carried load, a clenched fist, a sprint) and what is held (see `heldGrip`). */
+  private hands!: HandPoser;
+  /** Grip forced by something in the hand (a weapon or tool sets these); undefined = empty hand. */
+  heldGrip: { L?: number | undefined; R?: number | undefined } = {};
   private currentLook = "";
   private painTimer = 0;
   private ragdoll: Ragdoll | undefined;
+  /** The weapon in the hands: model, recoil, blows (weapons/WeaponRig.ts). Rebuilt with the rig. */
+  private weapons!: WeaponRig;
   private lastVy = 0;
   private lastVx = 0;
   private lastVz = 0;
@@ -116,6 +137,9 @@ export class CharacterActor {
     this.rig?.dispose();
     this.rig = buildCharacter(spec, { outline: this.outline });
     this.anim = new CharacterAnimator(this.rig);
+    this.hands = new HandPoser(this.rig);
+    this.weapons?.dispose();
+    this.weapons = new WeaponRig(this.rig, this.anim, this.outline);
     if (prevPos) {
       this.rig.root.position.copy(prevPos);
       this.rig.root.rotation.y = prevYaw;
@@ -234,7 +258,26 @@ export class CharacterActor {
     this.lastVx = pose.vx;
     this.lastVy = pose.vy ?? 0;
     this.lastVz = pose.vz;
-    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds });
+    const c = pose.combat;
+    const weaponId = c && c.weapon > 0 ? c.weapon - 1 : -1;
+    // Hands that are busy (carrying, dragging, kneeling, lying) put the weapon away; a fall too.
+    const busy = (pose.flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DOWNED | FLAG.DRAGGED)) !== 0 || this.ragdoll !== undefined;
+    const wi = this.weapons.update(dt, {
+      weapon: weaponId,
+      aiming: (pose.flags & FLAG.AIMING) !== 0,
+      elev: c?.elev ?? 0,
+      reload: c && c.reload > 0 ? c.reload / 100 : 0,
+      hidden: busy,
+      crew: (pose.flags & FLAG.OPERATING) !== 0 ? Math.max(c?.crew ?? 0, 1) : 0,
+      fp: this.fpBlend,
+    });
+    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi });
+    this.weapons.apply(this.anim.hold);
+    // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).
+    const h = this.anim.hold;
+    this.heldGrip.R = h.visible && h.right.w > 0.3 ? 0.92 : undefined;
+    this.heldGrip.L = h.visible && h.left.w > 0.3 ? 0.88 : undefined;
+    this.hands.update(dt, pose.flags, Math.hypot(pose.vx, pose.vz), this.anim.currentExpression, this.heldGrip.L, this.heldGrip.R);
     // The animator overwrites root.position.y each update with its own offset (e.g. lift when lying down);
     // the ground height is added afterwards.
     this.rig.root.position.y += pose.y;
@@ -256,6 +299,9 @@ export class CharacterActor {
   /** Puts the arms where a first-person camera can see them (see FIRST_PERSON_ARMS). Runs after the animator; a ragdoll pose still overrides it. */
   private poseFirstPersonArms(dt: number, pose: ActorPose): void {
     const j = this.rig.joints;
+    const hold = this.anim.hold;
+    const wR = hold.visible || hold.right.w > 0.05 ? hold.right.w : 0; // an arm on a weapon is posed by the animator's IK, not the guard
+    const wL = hold.visible || hold.left.w > 0.05 ? hold.left.w : 0;
     const carrying = (pose.flags & FLAG.CARRYING) !== 0;
     const kneeling = (pose.flags & FLAG.REVIVING) !== 0;
     const other = (pose.flags & (FLAG.DRAGGING | FLAG.DOWNED)) !== 0;
@@ -264,10 +310,11 @@ export class CharacterActor {
     this.fpFree = damp(this.fpFree, carrying || kneeling || other ? 0 : 1, 10, dt);
     const k = this.fpBlend;
     const free = this.fpFree * k;
-    for (const [sh, el, side] of [[j.shoulderL, j.elbowL, 1], [j.shoulderR, j.elbowR, -1]] as const) {
-      sh.rotation.x += A.shoulder * free;
-      el.rotation.x += A.elbow * free;
-      sh.rotation.z += side * A.inward * free;
+    for (const [sh, el, side, armed] of [[j.shoulderL, j.elbowL, 1, wL], [j.shoulderR, j.elbowR, -1, wR]] as const) {
+      const f = free * (1 - armed);
+      sh.rotation.x += A.shoulder * f;
+      el.rotation.x += A.elbow * f;
+      sh.rotation.z += side * A.inward * f;
       if (carrying || kneeling) {
         const pose = carrying ? A.carry : A.kneel;
         sh.rotation.x += (pose.shoulder - sh.rotation.x) * k;
@@ -275,6 +322,34 @@ export class CharacterActor {
         sh.rotation.z += (side * pose.inward - sh.rotation.z) * k;
       }
     }
+  }
+
+  /** A shot left the barrel: play the recoil now (the local player's own shot is predicted; everyone else's arrives as an event). */
+  fireWeapon(weapon: number): void {
+    this.weapons.fire(weapon);
+  }
+
+  /** A blow begins: a swing of the blade, a butt-stroke, a punch. */
+  swingWeapon(weapon: number, bash: boolean): void {
+    this.weapons.swing(weapon, bash);
+  }
+
+  /** The muzzle of the weapon in hand in world space, or undefined when nothing is held. */
+  muzzleWorld(out: Vector3): Vector3 | undefined {
+    return this.weapons.muzzleWorld(out);
+  }
+
+  /** The unit direction the weapon in hand points. */
+  muzzleDirection(out: Vector3): Vector3 {
+    return this.weapons.muzzleDirection(out);
+  }
+
+  /** The weapon in hand (`WEAPON` id) and whether it is drawn on screen right now. */
+  get weaponId(): number {
+    return this.weapons.weaponId;
+  }
+  get weaponShown(): boolean {
+    return this.anim.hold.visible;
   }
 
   /** A free-standing copy of a limb in its current pose, to fly off as debris (see CharacterRig.detachLimb). */
@@ -289,6 +364,7 @@ export class CharacterActor {
   dispose(): void {
     this.ragdoll?.dispose();
     this.ragdoll = undefined;
+    this.weapons?.dispose();
     this.rig.dispose();
   }
 }

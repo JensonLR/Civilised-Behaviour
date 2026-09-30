@@ -18,7 +18,18 @@ const G = {
   PLAYER: groups(LAYER.PLAYER, LAYER.PROP),
   // Held props ignore players (they'd otherwise fight the holder) but still hit the world.
   HELD: groups(LAYER.PROP, LAYER.WORLD),
+  // A shot's ray sees free props and nothing else (held props are in a group with a WORLD-only filter, so they are skipped).
+  RAY_PROPS: groups(LAYER.PROP, LAYER.PROP),
 } as const;
+
+/** A ray's first prop: which one, how far, and the surface normal there. */
+export interface PropRayHit {
+  id: string;
+  t: number;
+  nx: number;
+  ny: number;
+  nz: number;
+}
 
 export interface PropBody {
   id: string;
@@ -38,6 +49,8 @@ export class PhysicsWorld {
   readonly props = new Map<string, PropBody>();
   private readonly players = new Map<string, RAPIER.RigidBody>();
   private nextPropId = 1;
+  /** Collider handle -> prop id, so a ray can name what it hit. */
+  private readonly propOfCollider = new Map<number, string>();
 
   constructor(private readonly terrainWorld: CollisionWorld) {
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -76,14 +89,48 @@ export class PhysicsWorld {
     );
     const pb: PropBody = { id, kind: spawn.kind, body, collider, holder: "" };
     this.props.set(id, pb);
+    this.propOfCollider.set(collider.handle, id);
     return pb;
   }
 
   removeProp(id: string): void {
     const p = this.props.get(id);
     if (!p) return;
+    this.propOfCollider.delete(p.collider.handle);
     this.world.removeRigidBody(p.body);
     this.props.delete(id);
+  }
+
+  /**
+   * First free (not carried) prop along a ray of unit direction, within `maxT` metres. Static geometry and people are ignored: the
+   * caller compares against the analytic world and the players' zones itself. Allocates a little (Rapier's ray object); it is called
+   * once per shot or projectile segment, never per frame.
+   */
+  raycastProp(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, out: PropRayHit): boolean {
+    const ray = new RAPIER.Ray({ x: ox, y: oy, z: oz }, { x: dx, y: dy, z: dz });
+    const hit = this.world.castRayAndGetNormal(ray, maxT, true, undefined, G.RAY_PROPS);
+    if (!hit) return false;
+    const id = this.propOfCollider.get(hit.collider.handle);
+    if (id === undefined) return false;
+    out.id = id;
+    out.t = hit.timeOfImpact;
+    out.nx = hit.normal.x;
+    out.ny = hit.normal.y;
+    out.nz = hit.normal.z;
+    return true;
+  }
+
+  /**
+   * Shoves a prop: `dvMax`-limited change of velocity (m/s) along (dx,dy,dz) (unit), applied at a point so it also spins. The impulse is
+   * scaled by the body's mass, so a bullet nudges a barrel and a cannon ball sends it flying, but nothing leaves the map.
+   */
+  shoveProp(id: string, dx: number, dy: number, dz: number, impulse: number, px: number, py: number, pz: number, maxSpeed: number): void {
+    const p = this.props.get(id);
+    if (!p || p.holder !== "" || !(impulse > 0)) return;
+    const mass = p.body.mass();
+    const dv = Math.min(maxSpeed, impulse / Math.max(mass, 0.05));
+    const j = dv * mass;
+    p.body.applyImpulseAtPoint({ x: dx * j, y: dy * j, z: dz * j }, { x: px, y: py, z: pz }, true);
   }
 
   /** Adds/updates the kinematic capsule that lets a player shove props around. */

@@ -18,16 +18,30 @@ export function classifyObstacle(o: Obstacle): ObstacleTag {
   return "wall";
 }
 
-export type TreeSpecies = "broadleaf" | "acacia";
+export type TreeSpecies = "broadleaf" | "acacia" | "birch" | "pine";
 
 /**
- * Groves are of one kind: the species follows a low-frequency noise field over the map, with a sprinkling of the other kind
- * (14%) so a grove is not a monoculture. Purely a function of position, so every client and every test agrees.
+ * Groves are of one kind: the species follows a low-frequency noise field over the map (birch on the low ground, then broadleaf,
+ * acacia and finally dark pine on the highest), with a sprinkling of a neighbouring kind (14%) so a grove is not a monoculture. Purely a
+ * function of position, so every client and every test agrees.
  */
 export function treeSpecies(x: number, z: number): TreeSpecies {
   const region = valueNoise(0x7ee, x / 38, z / 38);
   const stray = hashFloat(0x5eed, Math.round(x * 4), Math.round(z * 4)) < 0.14;
-  return (region < 0.55) !== stray ? "broadleaf" : "acacia";
+  const base: TreeSpecies = region < 0.3 ? "birch" : region < 0.56 ? "broadleaf" : region < 0.76 ? "acacia" : "pine";
+  if (!stray) return base;
+  return base === "birch" ? "broadleaf" : base === "broadleaf" ? "acacia" : base === "acacia" ? "broadleaf" : "acacia";
+}
+
+/**
+ * The season by REGION: whole patches of the country have turned. `amount` 0..1 is how far (leaves go red, orange or gold together and
+ * the grass dries), `hue` 0..1 picks the shade for the patch. One low-frequency field for everything (the arena's trees, shrubs and
+ * grass, and the hill tree line beyond it), so an autumn hillside carries on into the far hills.
+ */
+export function autumnAt(x: number, z: number, out: { amount: number; hue: number } = { amount: 0, hue: 0 }): { amount: number; hue: number } {
+  out.amount = smoothstep(0.6, 0.72, valueNoise(0xa07, x / 64, z / 64));
+  out.hue = valueNoise(0xa08, x / 23, z / 23);
+  return out;
 }
 
 // ---- painted ground -----------------------------------------------------------------------------------------------------------
@@ -145,6 +159,14 @@ export function groundColour(x: number, z: number, h: number, slope: number, out
   const camp = 1 - smoothstep(4.5, 13.5, d + (n2 - 0.5) * 4);
   mix(out, G.trampled, camp * 0.42 * (1 - hollow * 0.5));
   mix(out, G.dry, camp * smoothstep(0.34, 0.3, n1) * 0.22 * (1 - hollow));
+  // The clearing's rim: a ragged ring of flattened, dry grass where the beaten camp gives way to the meadow, with radial streaks where the
+  // blades lie the way feet went. (The tufts thin out over the same ring: `coverDensity`.)
+  const ang = Math.atan2(z, x);
+  const rimK = smoothstep(11.3, 13.4, d + (n2 - 0.5) * 3.4) * (1 - smoothstep(14.6, 17.6, d + (n3 - 0.5) * 2.6));
+  const streak = smoothstep(0.5, 0.62, valueNoise(47, ang * 16 + d * 0.05, d / 3.2));
+  mix(out, G.trampled, rimK * (0.42 + 0.3 * streak) * (1 - hollow * 0.5));
+  mix(out, G.dry, rimK * streak * 0.4 * (1 - hollow));
+  mix(out, G.deep, rimK * (1 - streak) * smoothstep(0.62, 0.75, n3) * 0.22); // the odd tuft left standing
   const ts = trailSample(x, z, tsScratch);
   mix(out, G.trampled, ts.shoulder * 0.55);
   mix(out, G.dirt, ts.wear * 0.85 * (1 - hollow * 0.4));

@@ -34,6 +34,14 @@ export interface SkyUniforms {
   uDusk: { value: number };
   uStars: { value: number };
   uMoon: { value: number };
+  /** Cloud cover 0..1 (weather). */
+  uCover: { value: number };
+  /** Lightning: flash brightness 0..1 and the bolt (azimuth in radians, on/off 0..1, seed). */
+  uFlash: { value: number };
+  uBolt: { value: Vector3 };
+  flashCol: { value: Color };
+  /** Rain curtain: greys the low sky. */
+  uRain: { value: number };
 }
 
 const tmp = new Color();
@@ -50,12 +58,24 @@ export function applyDaySky(u: SkyUniforms, d: DayState): void {
   u.uDusk.value = d.dusk;
   u.uStars.value = d.stars;
   u.uMoon.value = d.moon;
+  u.uCover.value = d.cover;
+  u.uFlash.value = d.flash;
+  u.uRain.value = d.rain;
   // clouds: lit by the sun's colour toward the horizon glow at dusk, shaded toward the sky's mid tone; both dim with the sky
   // clouds take the sky's exposure squared: at night they are dim, moon-blue shapes rather than grey slabs
   const k = Math.max(0.09, d.exposure * d.exposure);
   u.cloudLit.value.set(PALETTE.world.skyCloud).lerp(setRgb(tmp, d.glow), 0.35 + 0.35 * d.dusk + 0.3 * d.night).multiplyScalar(k);
   u.cloudShade.value.set(PALETTE.world.skyCloudShade).lerp(setRgb(tmp2, d.mid), 0.3 + 0.5 * d.night).multiplyScalar(k);
   u.cloudHigh.value.set(PALETTE.world.skyCloud).lerp(setRgb(tmp, d.horizon), 0.3 + 0.3 * d.dusk + 0.3 * d.night).multiplyScalar(k * 0.95);
+  // overcast: the deck goes a flat wet grey, lit from above rather than from the sun, and darker underneath the heavier it is
+  if (d.cover > 0.12) {
+    const c = Math.min(1, (d.cover - 0.12) / 0.7);
+    u.cloudLit.value.lerp(tmp.set(PALETTE.world.overcastHorizon).multiplyScalar(k), c * 0.75);
+    u.cloudShade.value.lerp(tmp2.set(PALETTE.world.stormMid).multiplyScalar(k), c * 0.8);
+    u.cloudHigh.value.lerp(tmp.set(PALETTE.world.overcastMid).multiplyScalar(k), c * 0.7);
+    // a thunderhead has no bright side
+    u.cloudLit.value.lerp(tmp.set(PALETTE.world.stormHorizon).multiplyScalar(k), d.rain * 0.55);
+  }
 }
 
 /**
@@ -84,6 +104,11 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
     uDusk: { value: 0 },
     uStars: { value: 0 },
     uMoon: { value: 0 },
+    uCover: { value: 0.06 },
+    uFlash: { value: 0 },
+    uBolt: { value: new Vector3(0, 0, 0) },
+    flashCol: c(PALETTE.world.flash),
+    uRain: { value: 0 },
   };
   const mat = new ShaderMaterial({
     side: BackSide,
@@ -98,6 +123,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
       uniform vec3 sunDisc; uniform vec3 sunRing; uniform vec3 moonCol; uniform vec3 starCol;
       uniform vec3 sunDir; uniform vec3 moonDir;
       uniform float uTime; uniform float uDusk; uniform float uStars; uniform float uMoon;
+      uniform float uCover; uniform float uFlash; uniform vec3 uBolt; uniform vec3 flashCol; uniform float uRain;
       float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
       float vnoise(vec2 p){
         vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -114,6 +140,7 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         col = mix(col, top, smoothstep(0.36, 1.0, g));
 
         float sunUp = smoothstep(-0.12, 0.08, sunDir.y);
+        float sunSee = sunUp * (1.0 - smoothstep(0.35, 0.8, uCover));
         vec2 az = normalize(d.xz + vec2(1e-5));
         vec2 saz = normalize(sunDir.xz + vec2(1e-5));
         float toSun = max(dot(az, saz), 0.0);
@@ -151,16 +178,16 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         // sun: disc with a ring and two halo bands
         float ang = acos(clamp(dot(d, normalize(sunDir)), -1.0, 1.0));
         float halo = 1.0 - smoothstep(0.0, 0.42, ang);
-        col = mix(col, sunRing, band(halo, 3.0) * 0.28 * sunUp);
+        col = mix(col, sunRing, band(halo, 3.0) * 0.28 * sunSee);
         float ring = smoothstep(0.060, 0.063, ang) * (1.0 - smoothstep(0.069, 0.072, ang));
-        col = mix(col, sunRing, ring * 0.85 * sunUp);
-        col = mix(col, sunDisc, (1.0 - smoothstep(0.032, 0.036, ang)) * sunUp);
+        col = mix(col, sunRing, ring * 0.85 * sunSee);
+        col = mix(col, sunDisc, (1.0 - smoothstep(0.032, 0.036, ang)) * sunSee);
 
         // high deck: thin stretched streaks, slow, banded in two tones
         vec2 huv = d.xz / (d.y + 0.16) * 0.5 + vec2(uTime * 0.0022, uTime * 0.0006);
         float hn = fbm(vec2(huv.x * 0.9, huv.y * 3.2) * 1.4 + 5.0);
         float hcover = smoothstep(0.03, 0.22, d.y) * (1.0 - smoothstep(0.7, 0.98, d.y));
-        float hbody = smoothstep(0.58, 0.60, hn) * hcover * 0.85;
+        float hbody = smoothstep(0.58 - uCover * 0.16, 0.60 - uCover * 0.16, hn) * hcover * 0.85;
         float hcore = smoothstep(0.66, 0.68, hn);
         vec3 hc = mix(cloudHigh * 0.9, cloudHigh, hcore);
         hc = mix(hc, glow, (1.0 - h) * toSun * 0.4 * (0.4 + uDusk));
@@ -171,12 +198,27 @@ export function buildSky(sunDir: Vector3): { mesh: Mesh; uniforms: SkyUniforms }
         float n = fbm(cuv * 1.5) + (vnoise(cuv * 6.0) - 0.5) * 0.06;
         float nl = fbm((cuv + saz * 0.05) * 1.5) + (vnoise((cuv + saz * 0.05) * 6.0) - 0.5) * 0.06;
         float cover = smoothstep(0.02, 0.2, d.y);
-        float body = smoothstep(0.555, 0.563, n) * cover;
-        float lit = step(0.012, n - nl) * sunUp;
-        float core = smoothstep(0.63, 0.638, n);
+        float thr = 0.555 - uCover * 0.24;
+        float body = smoothstep(thr, thr + 0.008 + uCover * 0.12, n) * mix(cover, smoothstep(-0.02, 0.1, d.y), uCover);
+        float lit = step(0.012, n - nl) * sunUp * (1.0 - uCover * 0.9);
+        float core = smoothstep(thr + 0.075, thr + 0.083, n);
         vec3 cc = mix(cloudShade, cloudLit, max(lit, core * 0.6));
         cc = mix(cc, glow, (1.0 - h) * toSun * (0.3 + 0.4 * uDusk) * sunUp);
         col = mix(col, cc, body);
+        // rain curtain: the low sky greys out
+        col = mix(col, horizon, uRain * (1.0 - smoothstep(0.0, 0.5, h)) * 0.55);
+        // lightning: a jagged bolt in the sky for the first instants, then the whole dome flares (clouds most)
+        if (uFlash > 0.02) {
+          float el = asin(clamp(d.y, -1.0, 1.0));
+          float az = atan(d.z, d.x);
+          float jag = sin(el * 23.0 + uBolt.z) * 0.012 + sin(el * 51.0 + uBolt.z * 2.3) * 0.006 + sin(el * 9.0 + uBolt.z * 0.7) * 0.02;
+          float da = abs(mod(az - uBolt.x - jag + 3.14159265, 6.2831853) - 3.14159265) * cos(el);
+          float fork = abs(mod(az - uBolt.x - jag - (el - 0.25) * 0.35 + 3.14159265, 6.2831853) - 3.14159265) * cos(el);
+          float bolt = (1.0 - smoothstep(0.0012, 0.0036, da)) * smoothstep(0.02, 0.09, el) * (1.0 - smoothstep(0.5, 0.62, el));
+          bolt = max(bolt, (1.0 - smoothstep(0.001, 0.0028, fork)) * smoothstep(0.27, 0.3, el) * (1.0 - smoothstep(0.36, 0.5, el)) * 0.8);
+          col = mix(col, flashCol, bolt * uBolt.y * smoothstep(0.25, 0.75, uFlash));
+          col = mix(col, flashCol, uFlash * (0.3 + 0.5 * body));
+        }
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

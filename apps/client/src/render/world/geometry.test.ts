@@ -1,9 +1,13 @@
-import { Box3, BufferGeometry, Vector3 } from "three";
+import { Box3, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { CAMP, PROP_DEFS, PropKind, createArena, type PropKindId } from "@cb/shared";
+import { CAMP, CollisionWorld, PROP_DEFS, PropKind, createArena, ruinPlan, type PropKindId } from "@cb/shared";
 import {
   acaciaGeometry,
   berryBushGeometry,
+  birchGeometry,
+  flagstoneGeometry,
+  lilyGeometry,
+  pineGeometry,
   boulderGeometry,
   broadleafGeometry,
   bushGeometry,
@@ -21,7 +25,10 @@ import {
   TREE_BASE_RADIUS,
 } from "./flora.ts";
 import { buildRuins } from "./ruins.ts";
+import { buildClearing } from "./clearing.ts";
+import { coniferGeometry, roundCrownGeometry } from "./horizon.ts";
 import { Kit } from "./kit.ts";
+import { buildCampCloth, lanternGlass } from "./camplife.ts";
 import { buildBanners, buildFlame, buildLandmarks, cart, luggage, tent } from "./landmarks.ts";
 import { crateParts, propGeometry } from "./objects.ts";
 import { PALETTE } from "@cb/shared";
@@ -30,6 +37,8 @@ import { IcosahedronGeometry } from "three";
 const builders: Record<string, (lod: 0 | 1) => BufferGeometry> = {
   broadleaf: broadleafGeometry,
   acacia: acaciaGeometry,
+  birch: birchGeometry,
+  pine: pineGeometry,
   snag: snagGeometry,
   bush: bushGeometry,
   berryBush: berryBushGeometry,
@@ -128,7 +137,7 @@ describe("scenery geometry", () => {
   });
 
   it("a tree's trunk base matches the collision radius contract and the crowns lift it to a readable height", () => {
-    for (const [name, build, lo, hi] of [["broadleaf", broadleafGeometry, 6.5, 9.5], ["acacia", acaciaGeometry, 5, 7.2], ["snag", snagGeometry, 4.4, 6]] as const) {
+    for (const [name, build, lo, hi] of [["broadleaf", broadleafGeometry, 6.5, 9.5], ["acacia", acaciaGeometry, 5, 7.2], ["snag", snagGeometry, 4.4, 6], ["birch", birchGeometry, 6.2, 8.4], ["pine", pineGeometry, 7.8, 10.2]] as const) {
       const g = build(1);
       g.computeBoundingBox();
       expect(g.boundingBox!.max.y, name).toBeGreaterThan(lo);
@@ -187,6 +196,128 @@ describe("scenery geometry", () => {
     // and it is deterministic
     const again = new Kit().add(new IcosahedronGeometry(1, 1), { colour: PALETTE.world.rock, flat: true, jitter: 0.2, seed: 9 }).build()!;
     expect(Array.from(again.attributes.position!.array)).toEqual(Array.from(g.attributes.position!.array));
+  });
+});
+
+describe("the newer scenery", () => {
+  it("the birch is pale-barked below and leafy above; the pine is dark, with a bare trunk under its tiers", () => {
+    const colourAt = (g: BufferGeometry, lo: number, hi: number): number => {
+      const p = g.attributes.position!;
+      const c = g.attributes.color!;
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < p.count; i++) {
+        if (p.getY(i) < lo || p.getY(i) > hi) continue;
+        sum += (c.getX(i) + c.getY(i) + c.getZ(i)) / 3;
+        n++;
+      }
+      return n ? sum / n : 0;
+    };
+    const birch = birchGeometry(1);
+    expect(colourAt(birch, 0, 3)).toBeGreaterThan(colourAt(birch, 5, 7) * 1.3); // white trunk against the green crown
+    const pine = pineGeometry(1);
+    expect(colourAt(pine, 3.5, 8)).toBeLessThan(0.2); // dark needles
+    // the pine has no foliage on its lower third
+    const p = pine.attributes.position!;
+    let lowRadius = 0;
+    for (let i = 0; i < p.count; i++) if (p.getY(i) < 2.3) lowRadius = Math.max(lowRadius, Math.hypot(p.getX(i), p.getZ(i)));
+    expect(lowRadius).toBeLessThan(0.5);
+  });
+
+  it("stepping stones and lily pads are flat, low and cheap; the lily lies on y = 0", () => {
+    const f = flagstoneGeometry();
+    f.computeBoundingBox();
+    expect(f.boundingBox!.max.y).toBeLessThan(0.25);
+    expect(f.boundingBox!.min.y).toBeGreaterThan(-0.05);
+    expect(Math.max(f.boundingBox!.max.x, f.boundingBox!.max.z)).toBeLessThan(1.25);
+    expect(tris(f)).toBeLessThan(40);
+    const l = lilyGeometry();
+    l.computeBoundingBox();
+    expect(l.boundingBox!.max.y).toBeLessThan(0.3);
+    expect(l.boundingBox!.min.y).toBeGreaterThanOrEqual(-0.001);
+    expect(tris(l)).toBeLessThan(50);
+    for (const a of ["position", "normal", "color"]) for (let i = 0; i < l.getAttribute(a).count; i++) expect(Number.isFinite(l.getAttribute(a).getX(i))).toBe(true);
+  });
+
+  it("the far trees on the hills are lumpy multi-lobed crowns, not a single hexagon, and cheap enough to plant by the hundred", () => {
+    const round = roundCrownGeometry();
+    const con = coniferGeometry();
+    expect(tris(round)).toBeGreaterThan(60);
+    expect(tris(round)).toBeLessThan(110);
+    expect(tris(con)).toBeLessThan(40);
+    for (const g of [round, con]) {
+      expect(g.getAttribute("aShade")).toBeDefined();
+      expect(g.getAttribute("aTrunk")).toBeDefined();
+      g.computeBoundingBox();
+      expect(g.boundingBox!.max.y).toBeGreaterThan(0.9);
+      expect(g.boundingBox!.max.y).toBeLessThan(1.15);
+    }
+    // the trunk is marked (brown in the shader), the crown is not
+    const trunkVerts = Array.from({ length: round.getAttribute("aTrunk").count }, (_, i) => round.getAttribute("aTrunk").getX(i)).filter((v) => v === 1).length;
+    expect(trunkVerts).toBeGreaterThan(5);
+    expect(trunkVerts).toBeLessThan(round.getAttribute("aTrunk").count / 2);
+  });
+
+  it("the clearing's furniture (well, fence, signposts, footbridge) is one finite merged geometry with a cheaper hull", () => {
+    const w = createArena(7);
+    const geo = buildClearing(w, 1)!;
+    const hull = buildClearing(w, 0)!;
+    expect(geo).toBeDefined();
+    expect(tris(hull)).toBeLessThanOrEqual(tris(geo));
+    expect(tris(geo)).toBeLessThan(14000);
+    for (const a of ["position", "normal", "color", "onormal"]) for (let i = 0; i < geo.getAttribute(a).count; i += 3) expect(Number.isFinite(geo.getAttribute(a).getX(i))).toBe(true);
+    expect(windingAgreement(geo)).toBeGreaterThan(0.97);
+    expect(buildClearing(new CollisionWorld({ height: () => 0 }, [], 100), 1)).toBeUndefined();
+    // it stands where the obstacles are: geometry near the well, the pen, every signpost and the bridge
+    geo.computeBoundingBox();
+    const near = (x: number, z: number, r: number): boolean => {
+      const p = geo.attributes.position!;
+      for (let i = 0; i < p.count; i += 3) if (Math.hypot(p.getX(i) - x, p.getZ(i) - z) < r) return true;
+      return false;
+    };
+    for (const o of w.obstacles.filter((q) => ["well", "fence", "waypost", "bridge"].includes(q.tag!))) expect(near(o.x, o.z, 1.8), `${o.tag} at ${o.x.toFixed(1)},${o.z.toFixed(1)}`).toBe(true);
+  });
+
+  it("the Observatory has an open doorway, a copper-green ribbed dome, a lantern room and a great telescope", () => {
+    const w = createArena(7);
+    const geo = buildRuins(w.terrain, 1)!;
+    const hull = buildRuins(w.terrain, 0)!;
+    expect(tris(hull)).toBeLessThan(tris(geo));
+    expect(tris(geo)).toBeLessThan(20000);
+    // the dome rises above the wall and a good share of its plates are verdigris (green beats red) while some stay brown copper
+    const p = geo.attributes.position!;
+    const c = geo.attributes.color!;
+    let above = 0;
+    let green = 0;
+    let brown = 0;
+    // (positions are world coordinates: the tower stands on the plateau, wall top 9.2 m above it)
+    const level = w.terrainHeight(34, -60);
+    for (let i = 0; i < p.count; i += 3) {
+      if (p.getY(i) < level + 9.4) continue;
+      above++;
+      if (c.getY(i) > c.getX(i) * 1.02) green++;
+      else if (c.getX(i) > c.getY(i) * 1.15) brown++;
+    }
+    expect(above).toBeGreaterThan(600);
+    expect(green / above).toBeGreaterThan(0.25);
+    expect(brown).toBeGreaterThan(20);
+    // The doorway is really open (the collision agrees, see shared landscape.test): rays from outside straight at the middle of the room, at
+    // several heights and a little either side of the axis, reach the plinth without meeting a stone; the same rays aimed through the wall elsewhere do.
+    const plan = ruinPlan(w.terrain);
+    const t = plan.tower;
+    const mesh = new Mesh(geo, new MeshBasicMaterial({ side: DoubleSide }));
+    mesh.updateMatrixWorld();
+    const ray = new Raycaster();
+    const shoot = (angle: number, height: number, side: number): number => {
+      const wa = plan.yaw + angle;
+      const from = new Vector3(t.x + Math.cos(wa) * (t.r + 3) - Math.sin(wa) * side, plan.level + height, t.z + Math.sin(wa) * (t.r + 3) + Math.cos(wa) * side);
+      ray.set(from, new Vector3(t.x - from.x, 0, t.z - from.z).normalize());
+      ray.far = t.r + 3 - 0.9; // stop short of the plinth
+      return ray.intersectObject(mesh).length;
+    };
+    for (const h of [0.5, 1.2, 1.9, 2.6]) for (const side of [-0.3, 0, 0.3]) expect(shoot(0, h, side), `through the door at ${h} m, ${side} aside`).toBe(0);
+    for (const a of [1.2, 2.4, Math.PI, 4.4, 5.4]) expect(shoot(a, 1.5, 0), `wall at angle ${a}`).toBeGreaterThan(0);
+    expect(shoot(0, 4.5, 0), "above the lintel is wall").toBeGreaterThan(0);
   });
 });
 
@@ -270,14 +401,44 @@ describe("camp landmarks", () => {
   it("the camp keeps every new piece inside its collision footprint", () => {
     const w = createArena(7);
     const geo = buildLandmarks(w, 1)!;
+    const cloth = buildCampCloth(w, 1)!;
     geo.computeBoundingBox();
-    // the map table, gramophone and telescope are drawn where their obstacles are: the merged bounds must reach them
+    // the map table, gramophone and telescope are drawn where their obstacles are: the merged bounds must reach them (the hammock's canvas is in the cloth)
     for (const o of w.obstacles.filter((q) => ["table", "scope", "pole", "hammock"].includes(q.tag!))) {
-      const p = geo.attributes.position!;
       let near = false;
-      for (let i = 0; i < p.count && !near; i += 3) near = Math.hypot(p.getX(i) - o.x, p.getZ(i) - o.z) < 1.2;
+      for (const g of [geo, cloth]) {
+        const p = g.attributes.position!;
+        for (let i = 0; i < p.count && !near; i += 3) near = Math.hypot(p.getX(i) - o.x, p.getZ(i) - o.z) < 1.2;
+      }
       expect(near, `${o.tag} at ${o.x},${o.z} has geometry`).toBe(true);
     }
+  });
+
+  it("the camp's washing, hammock canvas and lanterns are their own swaying geometry: aSway in 0..1, loose at the hem, still at the line", () => {
+    const w = createArena(7);
+    const cloth = buildCampCloth(w, 1)!;
+    const hull = buildCampCloth(w, 0)!;
+    const sway = cloth.getAttribute("aSway");
+    expect(sway).toBeDefined();
+    expect(sway.count).toBe(cloth.getAttribute("position").count);
+    let moving = 0;
+    let pinned = 0;
+    for (let i = 0; i < sway.count; i++) {
+      const v = sway.getX(i);
+      expect(Number.isFinite(v) && v >= 0 && v <= 1).toBe(true);
+      if (v > 0.15) moving++;
+      if (v === 0) pinned++;
+    }
+    expect(moving).toBeGreaterThan(200);
+    expect(pinned).toBeGreaterThan(20);
+    expect(tris(hull)).toBeLessThanOrEqual(tris(cloth));
+    expect(hull.getAttribute("aSway")).toBeDefined(); // the ink follows the cloth
+    expect(tris(cloth)).toBeLessThan(4000);
+    // the static camp has none of it: its geometry carries no aSway, and the washing is not in it
+    const camp = buildLandmarks(w, 1)!;
+    expect(camp.getAttribute("aSway")).toBeUndefined();
+    // the glass swings with its frame
+    expect(lanternGlass(w)!.getAttribute("aSway")).toBeDefined();
   });
 
   it("banners: the pennant and the board lettering have in-range UVs and waves, and only the pennant waves", () => {

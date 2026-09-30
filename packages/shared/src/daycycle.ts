@@ -49,6 +49,12 @@ export interface DayState {
   fire: number;
   /** Brightness multiplier for things not lit by scene lights (far hills, unlit foliage silhouettes). */
   ambient: number;
+  /** Cloud cover 0..1 the sky shader draws (weather.ts `applyWeather` raises it; the bare day cycle has a few fair-weather clouds). */
+  cover: number;
+  /** Rain 0..1 (set by `applyWeather`). */
+  rain: number;
+  /** Lightning flash 0..1 (set by `applyWeather`). */
+  flash: number;
 }
 
 interface Stop {
@@ -128,7 +134,7 @@ export function sunAzimuth(hours: number): number {
 export function createDayState(): DayState {
   const c = (): Rgb => ({ r: 0, g: 0, b: 0 });
   const v = (): Vec3 => ({ x: 0, y: 1, z: 0 });
-  return { hours: 0, sun: c(), top: c(), mid: c(), horizon: c(), glow: c(), hemiSky: c(), hemiGround: c(), lightDir: v(), sunDir: v(), moonDir: v(), sunIntensity: 0, hemiIntensity: 0, fogDensity: 0, night: 0, dusk: 0, stars: 0, moon: 0, exposure: 1, fire: 0, ambient: 1 };
+  return { hours: 0, sun: c(), top: c(), mid: c(), horizon: c(), glow: c(), hemiSky: c(), hemiGround: c(), lightDir: v(), sunDir: v(), moonDir: v(), sunIntensity: 0, hemiIntensity: 0, fogDensity: 0, night: 0, dusk: 0, stars: 0, moon: 0, exposure: 1, fire: 0, ambient: 1, cover: 0.06, rain: 0, flash: 0 };
 }
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -185,6 +191,9 @@ export function dayState(hoursIn: number, out: DayState): DayState {
   out.exposure = exposure;
   out.fire = lerp(a.fire, b.fire, k);
   out.ambient = lerp(a.ambient, b.ambient, k);
+  out.cover = 0.06;
+  out.rain = 0;
+  out.flash = 0;
 
   // sun and moon
   const el = sunElevation(hours);
@@ -246,6 +255,51 @@ export function clockRate(hours: number): number {
 export function advanceClock(hours: number, dt: number): number {
   return wrapHours(hours + clockRate(hours) * dt);
 }
+
+// ---- the world clock (server-owned) --------------------------------------------------------------------------------------------------
+
+/**
+ * The shared world clock: the hour of day is a pure function of (start hour, world time, day length), so a server that says "the world is
+ * this old" gives every player the same sky with no per-frame messages. The dark hours still pass `CLOCK.nightSpeedup` times faster; the
+ * mapping goes through a "phase" that advances at a constant rate (`phaseOfHour` / `hourOfPhase` are inverses).
+ */
+export const WORLD_CLOCK = { defaultStartHour: 9, defaultDayMinutes: 30, minDayMinutes: 1, maxDayMinutes: 24 * 60 };
+
+const DARK_FROM = 20.6;
+const DARK_TO = 5.2;
+const LIGHT_SPAN = DARK_FROM - DARK_TO;
+/** Length of one full day in phase units (hours of daylight-speed time). */
+const PHASE_DAY = LIGHT_SPAN + (24 - LIGHT_SPAN) / CLOCK.nightSpeedup;
+
+/** Clock hour -> phase in [0, PHASE_DAY). Phase 0 is dawn (05:12). */
+export function phaseOfHour(hours: number): number {
+  const h = wrapHours(hours);
+  if (h >= DARK_TO && h <= DARK_FROM) return h - DARK_TO;
+  const past = h > DARK_FROM ? h - DARK_FROM : h + 24 - DARK_FROM;
+  return LIGHT_SPAN + past / CLOCK.nightSpeedup;
+}
+
+/** Phase (any number, wrapped) -> clock hour in [0, 24). */
+export function hourOfPhase(phase: number): number {
+  const v = ((phase % PHASE_DAY) + PHASE_DAY) % PHASE_DAY;
+  if (v <= LIGHT_SPAN) return DARK_TO + v;
+  return wrapHours(DARK_FROM + (v - LIGHT_SPAN) * CLOCK.nightSpeedup);
+}
+
+/** Real seconds one full day takes, for a day length in minutes. */
+export const daySeconds = (dayMinutes: number): number => dayMinutes * 60;
+
+/**
+ * The clock hour `worldMs` milliseconds into the world's life, given the hour it started at and how many real minutes a full day takes.
+ * `dayMinutes <= 0` (or not finite) freezes the clock at the start hour.
+ */
+export function worldHours(startHour: number, worldMs: number, dayMinutes: number): number {
+  if (!(dayMinutes > 0) || !Number.isFinite(dayMinutes) || !Number.isFinite(worldMs)) return wrapHours(startHour);
+  return hourOfPhase(phaseOfHour(startHour) + (worldMs / 1000) * (PHASE_DAY / daySeconds(dayMinutes)));
+}
+
+/** Clamps a configured day length to something sane (used by the server config and by clients reading the room state). */
+export const sanitizeDayMinutes = (m: number): number => (Number.isFinite(m) ? Math.min(WORLD_CLOCK.maxDayMinutes, Math.max(WORLD_CLOCK.minDayMinutes, m)) : WORLD_CLOCK.defaultDayMinutes);
 
 const NAMED: Record<string, number> = { dawn: 6.2, morning: 8, noon: 13, day: 13, afternoon: 15.5, dusk: 18.6, sunset: 18.6, evening: 19.6, night: 23.5, midnight: 0 };
 

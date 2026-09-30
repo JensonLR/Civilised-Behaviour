@@ -8,7 +8,8 @@ import { stumpPost } from "./prosthetics.ts";
 import { addNeckwear, addHipGear, addPack, type TorsoFrame } from "./gear.ts";
 import type { Ring } from "./loft.ts";
 import { PartBuilder, SOOT, singe } from "./parts.ts";
-import { dressCape, dressPoncho, dressSkirts, dressTorso, torsoRings, type TorsoView } from "./garments.ts";
+import { dressSkirts, dressTorso, torsoRings, type TorsoView } from "./garments.ts";
+import { dressCape, dressPoncho } from "./drape.ts";
 import { addBelt, addDecorations, addSash } from "./torsoTrim.ts";
 import { legRadius, upperArmRings, upperLegRings } from "./limbs.ts";
 

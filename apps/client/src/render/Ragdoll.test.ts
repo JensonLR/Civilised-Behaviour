@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CollisionWorld, FLAG } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, clearCharacterCaches, type CharacterRig } from "@cb/procedural/three";
-import { RAGDOLL, RagdollWorld, type Ragdoll, type RagdollLaunch } from "./Ragdoll.ts";
+import { HINGE_LIMITS, RAGDOLL, RagdollWorld, type Ragdoll, type RagdollLaunch } from "./Ragdoll.ts";
 
 const DT = 1 / 30;
 const flat = new CollisionWorld({ height: () => 0 }, [], 100);
@@ -21,8 +21,7 @@ const launch = (over: Partial<RagdollLaunch> = {}): RagdollLaunch => ({ vx: 0, v
 /** A standing figure at (x, z) like the actor would pose it. */
 function standing(seed = 3, x = 0, z = 0) {
   const rig = buildCharacter(generateCharacter(seed), { outline: false });
-  const anim = new CharacterAnimator(rig);
-  anim.autoBlink = false; // ambient idle acts (a hand to the hat, a glance at a watch) would make every run start from a different pose
+  const anim = new CharacterAnimator(rig); // (ambient life stays ON: a body can be knocked down mid idle act, and the ragdoll must cope)
   rig.root.position.set(x, 0, z);
   for (let i = 0; i < 30; i++) anim.update(DT, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
   rig.root.position.set(x, 0, z);
@@ -124,11 +123,58 @@ describe("Ragdoll", () => {
       rd.dispose();
       rig.dispose();
     }
-    // Limits are soft in Rapier's solver: allow a small overshoot.
-    expect(kneeMin).toBeGreaterThan(-0.35);
-    expect(kneeMax).toBeLessThan(2.85);
-    expect(elbowMin).toBeGreaterThan(-2.85);
-    expect(elbowMax).toBeLessThan(0.35);
+    // Limits are soft in Rapier's solver: allow a small overshoot. In the rig's convention a knee bends BACKWARD with a negative x and an elbow bends FORWARD with a positive x.
+    expect(kneeMin).toBeGreaterThan(HINGE_LIMITS.kneeL![0] - 0.35);
+    expect(kneeMax).toBeLessThan(HINGE_LIMITS.kneeL![1] + 0.35);
+    expect(elbowMin).toBeGreaterThan(HINGE_LIMITS.elbowL![0] - 0.35);
+    expect(elbowMax).toBeLessThan(HINGE_LIMITS.elbowL![1] + 0.35);
+  });
+
+  it("the limits agree with the animator: knees bend the way the animator bends them, elbows too (a sign error once folded ragdoll knees forward)", () => {
+    const rig = buildCharacter(generateCharacter(3), { outline: false });
+    const anim = new CharacterAnimator(rig);
+    anim.setExpression("fear");
+    for (let i = 0; i < 40; i++) anim.update(DT, { speed: 0, flags: FLAG.GROUNDED | FLAG.CROUCHING, vy: 0 });
+    // the animator's own crouched, frightened pose lies inside every hinge limit
+    for (const k of ["kneeL", "kneeR", "elbowL", "elbowR"] as const) {
+      const x = rig.joints[k].rotation.x;
+      expect(x, k).toBeGreaterThanOrEqual(HINGE_LIMITS[k]![0]);
+      expect(x, k).toBeLessThanOrEqual(HINGE_LIMITS[k]![1]);
+    }
+    expect(rig.joints.kneeL.rotation.x).toBeLessThan(-0.5); // knees bend with a negative x
+    expect(rig.joints.elbowL.rotation.x).toBeGreaterThan(0.5); // elbows with a positive one
+    rig.dispose();
+  });
+
+  it("starts inside every limit whatever the character was doing: moods, crouch, carrying and every idle act (found: ~0.3 rad past the elbow limit mid-act)", () => {
+    const HINGES = ["torso", "head", "elbowL", "elbowR", "kneeL", "kneeR"] as const;
+    let checked = 0;
+    for (const expr of ["neutral", "pain", "fear", "angry", "triumph", "drunk"] as const) {
+      for (let s = 0; s < 14; s++) {
+        const rig = buildCharacter(generateCharacter(20 + s), { outline: false });
+        const anim = new CharacterAnimator(rig);
+        anim.setExpression(expr);
+        const flags = FLAG.GROUNDED | (s % 5 === 1 ? FLAG.CROUCHING : 0) | (s % 5 === 2 ? FLAG.CARRYING : 0);
+        // idle acts come round every ~9 s: sample the whole cycle at different moments
+        for (let i = 0; i < 40 + s * 37; i++) anim.update(DT, { speed: 0, flags, vy: 0 });
+        const rd = world.spawn(rig, launch({ power: 0.3 }))!;
+        for (const h of HINGES) {
+          const a = rd.hingeAngle(h);
+          expect(a, `${expr} #${s} ${h}`).toBeGreaterThanOrEqual(HINGE_LIMITS[h]![0] - 0.02);
+          expect(a, `${expr} #${s} ${h}`).toBeLessThanOrEqual(HINGE_LIMITS[h]![1] + 0.02);
+        }
+        for (let i = 0; i < 3; i++) frame(anim, rd); // ... and the first frames of the fall stay inside them (soft limits: a hair over)
+        for (const h of HINGES) {
+          const a = rd.hingeAngle(h);
+          expect(a, `${expr} #${s} ${h} after 3 frames`).toBeGreaterThanOrEqual(HINGE_LIMITS[h]![0] - 0.12);
+          expect(a, `${expr} #${s} ${h} after 3 frames`).toBeLessThanOrEqual(HINGE_LIMITS[h]![1] + 0.12);
+        }
+        rd.dispose();
+        rig.dispose();
+        checked++;
+      }
+    }
+    expect(checked).toBe(84);
   });
 
   it("blends back into exactly the animator's pose, in the animator's place", () => {

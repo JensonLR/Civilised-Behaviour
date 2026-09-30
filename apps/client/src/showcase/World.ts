@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { CAMP, FLAG, HILL, classifyObstacle, createArena, scatterProps, spawnPoint } from "@cb/shared";
+import { CAMP, FLAG, HILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
@@ -10,7 +10,10 @@ import { Stage } from "../render/Stage.ts";
  * the server's scattered props, seen from named vantage points. Deterministic stills; never a perf number (software GL).
  *   view=game|camp|tents|fire|flag|sign|wall|cart|luggage|crates|props|tree|rock|snag|edge|hills|sky   (default game)
  *   view=table|scope|gramophone|wash|hammock|lanterns|ruin|tower|colonnade|aqueduct|ford|pond|source|meadow|trail|stump|log|far   (the environment upgrade)
+ *   view=well|pen|bridge|waypost|door|inside|dome|refractor|flock   (the clearing's furniture, and the Observatory's doorway, dark room, dome and great telescope)
  *   time=13|dusk|night|17.5|...   the hour (see shared/daycycle.ts); without it the day drifts
+ *   weather=clear|overcast|rain|storm|fog|dust   force a weather state at full strength (lightning in a storm); wms=N&wseed=S sits the schedule at N ms
+ *   motion=0..1   the ambient-motion preference (0 = still trees and cloth); without it prefers-reduced-motion gives 0.3
  *   drift=1    keep the clock running after ?time=
  *   push=x,z;x,z   up to four invisible walkers the grass bends away from (the figures are pushers too)
  *   i=N        which tree/rock/snag for view=tree|rock|snag
@@ -77,6 +80,10 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     return list[Number(params.get("i") ?? 0) % Math.max(1, list.length)] ?? { x: 20, z: 20 };
   };
   const hy = world.terrainHeight(HILL.x, HILL.z);
+  const plan = ruinPlan(world.terrain);
+  const towerAt = (a: number, r: number, y: number): Vector3 => new Vector3(plan.tower.x + Math.cos(plan.yaw + a) * r, plan.level + y, plan.tower.z + Math.sin(plan.yaw + a) * r);
+  const bridgeMid = getBridge().segments[Math.floor(getBridge().segments.length / 2)]!;
+  const post = getWayposts()[0]!;
   const views: Record<string, [Vector3, Vector3]> = {
     game: [new Vector3(2.6, 3.4, 7.6), new Vector3(2.1, 2.7, -3)],
     camp: [new Vector3(3, 6.5, 19), new Vector3(0, 1.2, -2)],
@@ -110,6 +117,15 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     stump: [new Vector3(0, 2, 0), new Vector3(0, 0, -6)],
     log: [new Vector3(0, 2, 0), new Vector3(0, 0, -6)],
     far: [new Vector3(0, 2.5, 60), new Vector3(0, 8, 130)],
+    well: [new Vector3(WELL.x + 3.6, 2.2, WELL.z + 4.4), new Vector3(WELL.x, 0.9, WELL.z)],
+    pen: [new Vector3(PEN.x + 8.5, 3.0, PEN.z + 9.5), new Vector3(PEN.x, 0.6, PEN.z)],
+    bridge: [new Vector3(bridgeMid.x0 - 4, 2.6, bridgeMid.z0 + 6), new Vector3(bridgeMid.x0, -1.2, bridgeMid.z0)],
+    waypost: [new Vector3(post.x + 4, 1.9, post.z + 4), new Vector3(post.x, 1.6, post.z)],
+    door: [towerAt(0.3, plan.tower.r + 5, 1.7), towerAt(0, plan.tower.r, 1.5)],
+    inside: [towerAt(0.05, plan.tower.r + 1.2, 1.7), towerAt(Math.PI, 1.6, 2.2)],
+    dome: [towerAt(0.6, plan.tower.r + 9, 9), towerAt(0, 0, 11)],
+    refractor: [new Vector3(plan.telescope.x + 4.5, hy + 2, plan.telescope.z + 4.5), new Vector3(plan.telescope.x, hy + 3.5, plan.telescope.z)],
+    flock: [new Vector3(-9, 2.2, 27), new Vector3(-14, 0.5, 20)],
   };
   // stump / log views find the nearest of that tag to the camp
   for (const [tag, key] of [["stump", "stump"], ["log", "log"]] as const) {

@@ -223,7 +223,7 @@ function gridAngles(n: number, k: number, dense: number): number[] {
 /** The direction grid shared by the skull and every shell that follows it (hair, beard) so their vertices line up. */
 export type GridLevel = boolean | "mid" | "low";
 
-/** The grid for a level of detail: full 32x24, mid 22x16, low 14x10, hull (`true`) 18x12. */
+/** The grid for a level of detail: full 32x24, mid 18x13, low 14x10, hull (`true`) 18x12. */
 export function gridLevel(lod: 0 | 1 | 2, hull: boolean): GridLevel {
   return hull ? true : lod === 1 ? "mid" : lod === 2 ? "low" : false;
 }
@@ -231,8 +231,8 @@ export function gridLevel(lod: 0 | 1 | 2, hull: boolean): GridLevel {
 export function skullGrid(coarse: GridLevel = false, shell = false): { cols: number; rows: number; phis: number[]; thetas: number[] } {
   // Shells (hair, beards) use the SAME grid as the skull: their vertices line up with it (no chord gaps for skin to poke through) and beard/hair
   // edges are clipped on a grid fine enough that the staircase disappears.
-  const cols = coarse === "mid" ? 22 : coarse === "low" ? 14 : coarse ? 18 : 32;
-  const rows = coarse === "mid" ? 16 : coarse === "low" ? 10 : coarse ? 12 : 24;
+  const cols = coarse === "mid" ? 18 : coarse === "low" ? 14 : coarse ? 18 : 32;
+  const rows = coarse === "mid" ? 13 : coarse === "low" ? 10 : coarse ? 12 : 24;
   return { cols, rows, phis: gridAngles(cols, Math.PI, 0.35), thetas: gridAngles(rows, Math.PI / 2, 0.5) };
 }
 

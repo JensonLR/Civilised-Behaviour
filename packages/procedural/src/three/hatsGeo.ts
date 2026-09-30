@@ -2,7 +2,7 @@ import { SphereGeometry } from "three";
 import { PALETTE } from "@cb/shared";
 import type { CharacterSpec } from "../spec.ts";
 import { curve } from "./sweep.ts";
-import { sstep } from "./patch.ts";
+import { numericSurface, sstep } from "./patch.ts";
 import { PartBuilder, singe, type V3 } from "./parts.ts";
 import { tone, ringSurface } from "./bodyKit.ts";
 import type { HeadShape } from "./headShape.ts";
@@ -172,20 +172,44 @@ export function buildHat(h: HatCtx): void {
       );
       break;
     }
-    case 13: { // tricorn: a low crown in a broad brim whose edge is folded up in three straight walls, gold lace along each
+    case 13: { // tricorn: a low crown in a broad brim turned up along three straight walls; the corners (one ahead, two behind) stay flat and point outward
       const crownSy = domeH(rb * 1.02, 0.5);
       dome(rb * 1.02, crownSy, hy, hatC);
-      b.cylinder(rb * 1.6, rb * 1.58, R * 0.04, tone(hatC, 0.94), [0, hy - R * 0.01, 0]);
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * Math.PI * 2; // one wall dead ahead? no: a corner ahead, so the walls sit at 60, 180 and 300 degrees
-        const ang = a + Math.PI / 3;
-        const d = rb * 1.5;
-        const cx = Math.sin(ang) * d;
-        const cz = -Math.cos(ang) * d;
-        // a wall: a plate standing on the brim's edge, leaning outward, tangent to the crown
-        b.box(rb * 1.9, R * 0.34, R * 0.045, hatC, [cx, hy + R * 0.15, cz], [0.0, -ang, 0.0]);
-        b.box(rb * 1.94, R * 0.035, R * 0.06, accent, [cx + Math.sin(ang) * R * 0.02, hy + R * 0.33, cz - Math.cos(ang) * R * 0.02], [0, -ang, 0]);
+      const corner = (th: number): number => Math.max(0, Math.cos(3 * th)) ** 1.1; // 1 at the three corners, 0 half-way between them
+      const rOut = (th: number): number => rb * (1.2 + 0.85 * corner(th));
+      const wallH = (th: number): number => R * 0.5 * (1 - corner(th)) ** 1.25;
+      // (th, s): th round the hat from the front, s from the crown (0) out to the edge (1); the brim is flat out to s = 0.4 and folds up beyond it
+      const brim = numericSurface((th, s): V3 => {
+        const fold = sstep(0.4, 1, s);
+        const rho = rb * 1.0 + (rOut(th) - rb) * s * (1 - 0.12 * fold * (1 - corner(th)));
+        return [Math.sin(th) * rho, hy - R * 0.01 + wallH(th) * fold ** 1.5, -Math.cos(th) * rho];
+      });
+      b.patch(
+        {
+          at: (th, s, lift) => brim(th, s, lift),
+          u0: 0,
+          u1: Math.PI * 2,
+          v0: 0,
+          v1: 1,
+          nu: 36,
+          nv: 4,
+          wrap: true,
+          lift: () => 0,
+          color: (_th, s) => (s > 0.8 ? tone(hatC, 1.08) : tone(hatC, 0.96)),
+          thick: R * 0.03,
+          lining: tone(hatC, 0.78),
+          rim: (_th, s) => s > 0.9,
+        },
+        true,
+      );
+      // gold lace all round the edge (a thin tube along the rim, the top of each wall)
+      const lace: V3[] = [];
+      for (let i = 0; i <= 36; i++) {
+        const th = (i / 36) * Math.PI * 2;
+        const q = brim(th, 1, R * 0.012).p;
+        lace.push(q);
       }
+      b.sweep(lace, () => ({ rx: R * 0.02, rz: R * 0.02, pow: 2 }), accent, { side: [0, 1, 0], segments: 3 });
       b.torus(rb * 1.02, R * 0.03, accent, [0, hy + R * 0.02, 0], [Math.PI / 2, 0, 0]);
       break;
     }
@@ -231,24 +255,50 @@ export function buildHat(h: HatCtx): void {
       b.sphere(R * 0.13, tone(hatC, 1.3), [rb * 1.42, base + R * 0.6, R * 0.16]);
       break;
     }
-    case 18: { // busby: a tall fur cylinder with a cloth bag hanging from the top and a plume at the front
+    case 18: { // busby: a tall shaggy fur cylinder with a cloth bag falling from the top to one side, a plume at the front, gold cap-lines and a chin scale
       const bh = Math.max(R * 1.2, topH + R * 0.25);
-      b.loft(
-        [
-          { y: 0, rx: rb * 1.04, rz: rb * 1.04, color: furDark },
-          { y: bh * 0.5, rx: rb * 1.1, rz: rb * 1.1, color: fur },
-          { y: bh, rx: rb * 1.04, rz: rb * 1.04, color: tone(fur, 1.1), crease: false },
-        ],
-        fur,
-        [0, hy, 0],
-      );
-      b.sphere(rb * 1.02, tone(fur, 1.12), [0, hy + bh, 0], [1, 0.35, 1]); // the rounded top
-      b.sphere(rb * 0.3, hatC, [rb * 0.55, hy + bh * 0.95, 0], [1, 2.2, 1]); // the bag
-      b.cone(R * 0.06, R * 0.5, hatC, [rb * 0.95, hy + bh * 0.55, 0], [0, 0, -0.25]);
-      b.sphere(R * 0.04, accent, [rb * 0.9, hy + bh * 0.3, 0]);
+      const busbyFur = tone(furDark, 0.86); // (a busby is dark bearskin: the light fur colour is only for the shaggy tips)
+      const rr = (y: number, k: number): { y: number; rx: number; rz: number; pow: number; color: number } => ({ y: hy + y * bh, rx: rb * k, rz: rb * k, pow: 2.1, color: busbyFur });
+      const wall = [rr(1, 1.06), rr(0.55, 1.14), rr(0, 1.05)];
+      const surf = ringSurface(wall, undefined, (phi, y) => 1 + 0.05 * Math.cos(14 * phi) * (0.6 + 0.4 * Math.sin((y - hy) * 30)) + 0.03 * Math.cos(5 * phi + 1));
+      if (PartBuilder.hullMode || PartBuilder.lod >= 2) b.loft(wall.map((w) => ({ ...w, y: w.y - hy })), fur, [0, hy, 0], undefined, undefined, { capTop: false, capBottom: false });
+      else
+        b.patch(
+          {
+            at: (phi, y, lift) => surf(phi, y, lift),
+            u0: -Math.PI,
+            u1: Math.PI,
+            v0: hy,
+            v1: hy + bh,
+            nu: 28,
+            nv: 5,
+            wrap: true,
+            lift: () => 0,
+            color: (phi, y) => {
+              const streak = 0.5 + 0.5 * Math.cos(14 * phi);
+              const up = (y - hy) / bh;
+              return tone(streak > 0.55 ? furDark : busbyFur, 0.8 + 0.4 * up);
+            },
+          },
+          true,
+        );
+      // the rounded top, shaggy at its rim
+      b.sphere(rb * 1.04, tone(furDark, 1.1), [0, hy + bh, 0], [1, 0.32, 1]);
+      if (PartBuilder.lod === 0) for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + 0.2;
+        b.cone(R * 0.075, R * 0.2, i % 2 ? furDark : tone(furDark, 1.25), [Math.sin(a) * rb * 1.02, hy + bh * 1.0 + R * 0.01, -Math.cos(a) * rb * 1.02], [0, 0, 0], [1, 1, 1]);
+      }
+      // the bag: a cloth pouch from the crown falling down the right side, with a tassel
+      const bag = curve([[rb * 0.25, hy + bh * 1.02, R * 0.05], [rb * 0.85, hy + bh * 1.02, R * 0.06], [rb * 1.22, hy + bh * 0.6, R * 0.05], [rb * 1.26, hy + bh * 0.2, R * 0.02]], 6);
+      b.sweep(bag, (t) => ({ rx: R * (0.16 + 0.05 * Math.sin(Math.PI * Math.min(1, t * 1.1))), rz: R * (0.13 + 0.03 * Math.sin(Math.PI * t)), pow: 2.2, color: t > 0.9 ? tone(hatC, 0.8) : hatC }), hatC, { side: [0, 0, 1], segments: 6, round: "end" });
+      b.sphere(R * 0.05, accent, [rb * 1.27, hy + bh * 0.15, R * 0.02]);
       const plume = singe(PALETTE.trim.plume, burnt);
-      b.sweep(curve([[0, hy + bh * 0.9, -rb * 1.02], [0, hy + bh * 1.2, -rb * 1.0], [0, hy + bh * 1.5, -rb * 0.85]], 5), (t) => ({ rx: R * 0.05 * (1 - 0.4 * t), rz: R * 0.1 * (1 - 0.4 * t), pow: 2.2 }), plume, { side: [1, 0, 0], segments: 5, round: "end" });
-      b.torus(rb * 1.05, R * 0.025, accent, [0, hy + R * 0.1, 0], [Math.PI / 2, 0, 0]);
+      b.cylinder(R * 0.05, R * 0.07, R * 0.12, accent, [-rb * 0.42, hy + bh * 1.02, -rb * 0.7]);
+      b.sweep(curve([[-rb * 0.42, hy + bh * 1.04, -rb * 0.7], [-rb * 0.42, hy + bh * 1.32, -rb * 0.72], [-rb * 0.3, hy + bh * 1.62, -rb * 0.66], [-rb * 0.02, hy + bh * 1.72, -rb * 0.5]], 6), (t) => ({ rx: R * 0.14 * (1 - 0.5 * t), rz: R * 0.12 * (1 - 0.45 * t), pow: 2.2, color: t > 0.5 ? tone(plume, 1.12) : plume }), plume, { side: [1, 0, 0], segments: 5, round: "end" });
+      // cap-lines: a gold cord swagged across the front of the fur, and a band at the foot
+      b.sweep(curve([[-rb * 0.98, hy + bh * 0.92, -rb * 0.35], [-rb * 0.45, hy + bh * 0.55, -rb * 1.02], [rb * 0.45, hy + bh * 0.55, -rb * 1.02], [rb * 0.98, hy + bh * 0.92, -rb * 0.35]], 9), () => ({ rx: R * 0.018, rz: R * 0.018, pow: 2 }), accent, { side: [0, 1, 0], segments: 3 });
+      b.torus(rb * 1.08, R * 0.025, accent, [0, hy + R * 0.08, 0], [Math.PI / 2, 0, 0]);
+      b.box(R * 0.1, R * 0.12, R * 0.03, accent, [0, hy + bh * 0.4, -rb * 1.13]);
       break;
     }
     case 19: { // sou'wester: oilskin dome, a short brim in front and a long one behind sloping down over the neck

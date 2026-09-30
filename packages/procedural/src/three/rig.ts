@@ -15,7 +15,7 @@ import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
 import { buildHead } from "./head.ts";
 import { morphOutlineMaterial } from "./faceMorph.ts";
-import { buildFace, irisColour, type FaceParts } from "./faceRig.ts";
+import { buildFace, clearFaceCaches, inertFace, irisColour, type FaceBuild, type FaceParts } from "./faceRig.ts";
 import { outlineMaterial } from "./outline.ts";
 import { PartBuilder, singe, type Lod } from "./parts.ts";
 import { buildProsthesis } from "./prosthetics.ts";
@@ -57,6 +57,14 @@ export interface CharacterRig {
    * animator, the ragdoll or the actor hold stay valid; only the bone meshes swap (from the geometry cache, built once per spec and level).
    */
   setLod(lod: Lod): void;
+  /**
+   * Closes or opens a hand: 0 is the relaxed, open hand (fingers apart, a little curled), 1 a closed fist, anything between a smooth curl (a grip on a rod: 0.8). One
+   * number per hand, no extra draw call (a morph target on the forearm mesh). Only the full-detail level has fingers; the crowd levels keep a plain fist and ignore it.
+   * The value is remembered across `setLod`. Hands with a hook ignore it. Drive it from `updateHandGrips` (animatorExtras.ts) or from the weapon in the hand.
+   */
+  setHandGrip(side: "L" | "R", amount: number): void;
+  /** The grip last set for a hand (0 relaxed .. 1 fist). */
+  handGrip(side: "L" | "R"): number;
   /** Silhouette outline on/off (extra draw per bone). Cheap to toggle; the hulls are built the first time they are switched on. */
   setOutline(on: boolean): void;
   /**
@@ -113,6 +121,7 @@ function cached(key: string, make: () => BufferGeometry | undefined): BufferGeom
 export function clearCharacterCaches(): void {
   for (const g of geometryCache.values()) g?.dispose();
   geometryCache.clear();
+  clearFaceCaches();
 }
 
 /** Runs a builder in a given level of detail / hull mode (the PartBuilder statics are restored afterwards, whatever happens). */
@@ -260,14 +269,24 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const headAttachment = attachments.find((a) => a.bone === "head")!;
   const irisC = irisColour(spec);
   const faceCtx = { spec, P, skin, hairC, accent, irisC, ramp: toonRamp(), toonMaterial: material, headMesh: () => headAttachment.mesh };
-  PartBuilder.auditTag = "face";
-  let faceBuild = buildFace(faceCtx, head);
-  const faceParts: FaceParts = faceBuild.face;
-  const ownedGeos: BufferGeometry[] = [...faceBuild.geometries];
-  const ownedMats: Material[] = [...faceBuild.materials];
+  // The face parts are built the first time the figure is near enough to show them (a far-crowd rig never builds them); the FaceParts object is the same one
+  // throughout (filled in place), so references to `rig.face` stay valid. Their geometry and materials are shared between rigs (faceRig.ts).
+  const faceParts: FaceParts = inertFace();
+  let faceBuild: FaceBuild | undefined;
   const applyFaceLod = (): void => {
-    faceBuild.root.visible = lod < 2;
-    faceParts.active = lod < 2;
+    if (lod >= 2) {
+      if (faceBuild) faceBuild.root.visible = false;
+      faceParts.active = false;
+      return;
+    }
+    if (!faceBuild) {
+      PartBuilder.auditTag = "face";
+      faceBuild = buildFace(faceCtx, head);
+      Object.assign(faceParts, faceBuild.face);
+    }
+    faceBuild.root.visible = true;
+    faceBuild.setDetail(lod === 0 ? 0 : 1);
+    faceParts.active = true;
     // mid distance: drop the catch-lights, pupils and lower lids (a pixel or two), keep eyes, lids and brows
     for (const iris of [faceParts.pupilL, faceParts.pupilR]) for (const c of iris.children) c.visible = lod === 0;
     faceParts.lowerLidL.visible = faceParts.lowerLidR.visible = lod === 0;
@@ -396,6 +415,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       c.matrixAutoUpdate = false;
       c.matrix.multiplyMatrices(inv, m.matrixWorld);
       c.castShadow = m.castShadow;
+      if (m.morphTargetInfluences && c.morphTargetInfluences) for (let i = 0; i < m.morphTargetInfluences.length; i++) c.morphTargetInfluences[i] = m.morphTargetInfluences[i]!; // (a severed hand keeps its grip)
       pivot.add(c);
     };
     for (const m of meshes) if (info.bones.includes(m.name.slice(5))) copy(m);
@@ -407,6 +427,24 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     outlineOn = on;
     if (on) for (const a of attachments) ensureHull(a);
     for (const o of outlines) o.visible = on && !hiddenBones.has(o.name.slice(8));
+  };
+
+  // ---- hands: one number per hand drives two morph targets (half a grip and a full grip) on the forearm mesh --------------------------------------------------
+  const grip = { L: 0, R: 0 };
+  const applyGrip = (side: "L" | "R"): void => {
+    const m = meshes.find((o) => o.name === `mesh_foreArm${side}`);
+    const inf = m?.morphTargetInfluences;
+    if (!inf || inf.length < 2) return;
+    const a = grip[side];
+    // Lagrange weights through the poses at 0, 0.5 and 1 (relative targets): exact at those three grips, a smooth curl between
+    inf[0] = 4 * a * (1 - a);
+    inf[1] = a * (2 * a - 1);
+  };
+  const setHandGrip = (side: "L" | "R", amount: number): void => {
+    const a = Number.isFinite(amount) ? Math.max(0, Math.min(1, amount)) : 0;
+    if (a === grip[side]) return;
+    grip[side] = a;
+    applyGrip(side);
   };
 
   const setLod = (next: Lod): void => {
@@ -430,6 +468,8 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       }
     }
     applyFaceLod();
+    applyGrip("L");
+    applyGrip("R");
   };
 
   const isShown = (o: Mesh): boolean => {
@@ -457,11 +497,11 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     setOutline,
     setMissing,
     setLod,
+    setHandGrip,
+    handGrip: (side) => grip[side],
     detachLimb,
     dispose() {
-      // Bone geometry belongs to the shared cache; only per-instance face parts are freed here.
-      for (const g of new Set(ownedGeos)) g.dispose();
-      for (const m of ownedMats) m.dispose();
+      // Bone and face geometry and materials belong to the shared caches (freed by clearCharacterCaches); a rig owns only its scene-graph objects.
       root.removeFromParent();
     },
   };

@@ -4,6 +4,8 @@ import { Rng } from "./rng.ts";
 import { createTerrain } from "./terrain.ts";
 import { HILL, nearTrail, waterEdgeDistance, withLandscape } from "./landscape.ts";
 import { ruinObstacles } from "./ruins.ts";
+import { clearingObstacles } from "./clearing.ts";
+import { cannonObstacles } from "./weapons.ts";
 
 export const ARENA_RADIUS = 90;
 
@@ -17,8 +19,8 @@ export function createArena(seed: number): CollisionWorld {
   const terrain = withLandscape(createTerrain(seed));
   const rng = new Rng(seed ^ 0xa5a5a5a5);
   // The authored expedition camp (ruined wall, step-up crates, tents, fire, flag, signpost, luggage, cart, map table, washing...): camp.ts.
-  // The Observatory ruin and its aqueduct: ruins.ts.
-  const obstacles: Obstacle[] = [...campObstacles(terrain), ...ruinObstacles(terrain)];
+  // The Observatory ruin and its aqueduct: ruins.ts. The camp's field cannon: weapons.ts. The well, the pen, the signposts, the footbridge: clearing.ts.
+  const obstacles: Obstacle[] = [...campObstacles(terrain), ...ruinObstacles(terrain), ...cannonObstacles(terrain), ...clearingObstacles(terrain)];
 
   const MAX_D = ARENA_RADIUS - 4;
   const tooClose = (x: number, z: number, gap: number): boolean => {

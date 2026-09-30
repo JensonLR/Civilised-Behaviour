@@ -3,7 +3,7 @@ import { PALETTE, ZONE, type ZoneId } from "@cb/shared";
 import type { Proportions } from "../proportions.ts";
 import type { CharacterSpec } from "../spec.ts";
 import { frontZ, ringAt, upperArmRings, upperLegRings, type BodyCtx } from "./body.ts";
-import { outerTorsoRings } from "./garments.ts";
+import { drapeCover, outerTorsoRings } from "./drape.ts";
 import { faceSurfaceZ } from "./head.ts";
 import { PartBuilder } from "./parts.ts";
 
@@ -137,20 +137,23 @@ export function buildWoundGeometry(zone: ZoneId, severity: number, gore: GoreLev
       const sx = zone === ZONE.ARM_L ? -1 : 1;
       const len = P.armUpper;
       const armRings = upperArmRings(P, 0xffffff, spec.jacket);
+      // Under a cape's or poncho's arm drape the dressing goes on the bare sleeve below the hem: fractions are remapped into [cover, 1].
+      const cover = drapeCover(spec.jacket);
+      const F = (f: number): number => cover + f * (1 - cover);
       const rad = (f: number): number => {
-        const s = ringAt(armRings, -len * f);
+        const s = ringAt(armRings, -len * F(f));
         return (s.rx + s.rz) / 2;
       };
       if (sev === 1) {
-        plaster(sx * rad(0.5) * 0.35, -len * 0.5, -rad(0.5) - 0.01, 0.09, 0.05, 0.5);
+        plaster(sx * rad(0.5) * 0.35, -len * F(0.5), -rad(0.5) - 0.01, 0.09, 0.05, 0.5);
       } else {
-        wrapLimb(len, rad, sev === 2 ? 0.3 : 0.15, sev === 2 ? 0.7 : 0.85);
+        wrapLimb(len, (f) => rad((f - cover) / (1 - cover || 1)), F(sev === 2 ? 0.3 : 0.15), F(sev === 2 ? 0.7 : 0.85));
         const zf = -rad(0.5) - 0.02;
-        stain(sx * rad(0.5) * 0.25, -len * 0.5, zf, sev === 2 ? 0.04 : 0.065, sev === 2 ? 0.055 : 0.1);
-        stain(-sx * rad(0.5) * 0.1, -len * 0.45, rad(0.5) + 0.02, 0.04, 0.07, pal.old); // back of the arm
+        stain(sx * rad(0.5) * 0.25, -len * F(0.5), zf, sev === 2 ? 0.04 : 0.065, sev === 2 ? 0.055 : 0.1);
+        stain(-sx * rad(0.5) * 0.1, -len * F(0.45), rad(0.5) + 0.02, 0.04, 0.07, pal.old); // back of the arm
         if (sev === 3) {
-          tail(sx * (rad(0.5) + 0.012), -len * 0.82, 0.0, 0.16);
-          if (pal.drips) b.sphere(1, pal.drip, [sx * rad(0.8) * 0.2, -len * 0.9, zf + 0.004], [0.014, 0.09, 0.008]);
+          tail(sx * (rad(0.5) + 0.012), -len * F(0.82), 0.0, 0.16);
+          if (pal.drips) b.sphere(1, pal.drip, [sx * rad(0.8) * 0.2, -len * F(0.9), zf + 0.004], [0.014, 0.09, 0.008]);
         }
       }
       break;

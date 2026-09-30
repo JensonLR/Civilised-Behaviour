@@ -36,6 +36,8 @@ export const MOVEMENT = {
   dragFactor: 0.55,
   /** Crawl speed of a downed player. */
   crawlSpeed: 0.9,
+  /** Speed multiplier while aiming down a weapon (AIM held): a steadier, slower walk. Sprinting is not possible while aiming. */
+  aimFactor: 0.7,
 } as const;
 
 /** Bit flags packed into PlayerState.flags (uint16). */
@@ -55,6 +57,10 @@ export const FLAG = {
   DRAGGED: 256,
   /** Server-set: a wooden leg is fitted where a leg is missing (softens the hobble, see injury.ts). Predicted like every flag. */
   PEG_LEG: 512,
+  /** Derived by the step from the AIM button (predicted like every flag): the body is aiming down a weapon, so remote clients pose it that way. */
+  AIMING: 1024,
+  /** Server-set: this player is working a field cannon (loading, aiming); like REVIVING they hold their ground and lean into the work. */
+  OPERATING: 2048,
 } as const;
 
 /** Bit flags packed into MoveInput.buttons (uint16). */

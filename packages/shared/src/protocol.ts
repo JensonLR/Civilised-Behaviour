@@ -14,6 +14,8 @@ export interface JoinOptions {
   look?: string;
   /** Campaign rule chosen when creating: allow dismemberment (default true). Ignored when joining. */
   dismemberment?: boolean;
+  /** Campaign rule chosen when creating: comrades can be hurt by your shots (default true, server default from FRIENDLY_FIRE). Ignored when joining. */
+  friendlyFire?: boolean;
 }
 
 /** Client -> server messages other than the input stream. */
@@ -35,6 +37,65 @@ export interface ServerMessages {
   hit: HitEvent;
   /** A limb was severed (cosmetic companion of the authoritative PlayerState.missing bit). */
   sever: SeverEvent;
+  /** Someone fired (cosmetic: flash, smoke, tracers, sound). Direction is the aim; pellets and spread come from `seed` via weapons.ts. */
+  shot: ShotEvent;
+  /** A projectile or ray struck the world (cosmetic: dust, splinters, sparks, ricochet). */
+  impact: ImpactEvent;
+  /** An explosion (cosmetic: fireball, smoke column, shake). Damage and impulses were already applied by the server. */
+  boom: BoomEvent;
+  /** Sent only to the shooter: their shot found somebody. Drives the hit marker. */
+  hitmark: HitMarkEvent;
+}
+
+export interface ShotEvent {
+  /** Session id of the shooter, or `cannon:<id>`. */
+  id: string;
+  /** Weapon id. */
+  w: number;
+  /** Where the round left (world), and the unit aim direction. */
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  /** Pattern seed (weapons.ts shotSeed) for the pellet/spread directions. */
+  seed: number;
+  /** Spread half-angle the server used. */
+  spread: number;
+  /** This was a blow (a swing, a butt-stroke, a punch), not a discharge: `w` is the weapon in hand. */
+  m?: boolean;
+}
+
+export interface ImpactEvent {
+  /** Session id of the shooter (or `cannon:<n>`). */
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Surface normal (unit). */
+  nx: number;
+  ny: number;
+  nz: number;
+  /** SURFACE id. */
+  s: number;
+  /** Weapon id that made it (sizes the puff). */
+  w: number;
+}
+
+export interface BoomEvent {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+}
+
+export interface HitMarkEvent {
+  zone: number;
+  /** The blow put the victim down. */
+  down: boolean;
+  /** A limb was taken. */
+  sever: boolean;
 }
 
 /** Broadcast when a limb comes off. Direction and power drive the flying limb and the spray. */

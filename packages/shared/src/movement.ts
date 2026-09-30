@@ -37,6 +37,14 @@ export interface MoveCommand {
   /** Camera heading, 0..65535 mapping to 0..2PI. */
   yaw: number;
   buttons: number;
+  /**
+   * Combat aim (weapons.ts): the direction of a shot, which may differ a little from the camera yaw (the crosshair, not the muzzle, is
+   * where the player is looking), and the weapon they want in hand. Optional: the movement step never reads them, so replaying an input
+   * with or without them moves the body identically.
+   */
+  aimYaw?: number;
+  aimElev?: number;
+  weapon?: number;
 }
 
 export const yawFromWire = (w: number): number => (w / 65536) * TAU;
@@ -80,10 +88,12 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const carrying = (s.flags & FLAG.CARRYING) !== 0;
   const dragging = (s.flags & FLAG.DRAGGING) !== 0;
   const reviving = (s.flags & FLAG.REVIVING) !== 0;
+  const operating = (s.flags & FLAG.OPERATING) !== 0;
+  const aiming = !downed && (buttons & BUTTON.AIM) !== 0;
   // Injuries (server-owned wounds/missing, read as predicted inputs). A downed body only crawls, so they are moot there.
   injuryMods(s.wounds, s.missing, (s.flags & FLAG.PEG_LEG) !== 0, mods);
   const crouching = !downed && (buttons & BUTTON.CROUCH) !== 0;
-  const sprinting = !downed && !crouching && !carrying && !dragging && mods.sprintOk && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
+  const sprinting = !downed && !crouching && !carrying && !dragging && !aiming && mods.sprintOk && (buttons & BUTTON.SPRINT) !== 0 && f > 0.3;
   let topSpeed: number = MOVEMENT.runSpeed;
   if (downed) topSpeed = MOVEMENT.crawlSpeed;
   else if (crouching) topSpeed = MOVEMENT.crouchSpeed;
@@ -91,7 +101,8 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   if (!downed) topSpeed *= mods.speedMul;
   if (carrying) topSpeed *= MOVEMENT.carryFactor;
   if (dragging) topSpeed *= MOVEMENT.dragFactor;
-  if (reviving) topSpeed = 0; // kneeling over a teammate: hold position (turning still allowed)
+  if (aiming) topSpeed *= MOVEMENT.aimFactor;
+  if (reviving || operating) topSpeed = 0; // kneeling over a teammate or working a cannon: hold position (turning still allowed)
 
   // Camera-relative world direction. Yaw 0 looks down -Z; +R is camera-right.
   const sinY = Math.sin(camYaw);
@@ -119,7 +130,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const jumpHeld = (buttons & BUTTON.JUMP) !== 0;
   let flags = s.flags;
   if (!jumpHeld) flags &= ~FLAG.JUMP_LATCH;
-  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && !dragging && !reviving && mods.jumpOk && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
+  if (jumpHeld && wasGrounded && !downed && !crouching && !carrying && !dragging && !reviving && !operating && mods.jumpOk && (flags & FLAG.JUMP_LATCH) === 0 && s.stumble <= 0) {
     s.vy = MOVEMENT.jumpSpeed;
     flags |= FLAG.JUMP_LATCH;
     flags &= ~FLAG.GROUNDED;
@@ -196,14 +207,16 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
 
   // ---- facing --------------------------------------------------------------------------------------
   const speed = Math.hypot(s.vx, s.vz);
-  if ((buttons & BUTTON.AIM) !== 0 && !downed) {
-    s.facing = approachAngle(s.facing, Math.atan2(-sinY, -cosY), MOVEMENT.turnRate * dt);
+  // The body faces where the camera looks while aiming or attacking (a swing or a shot goes where the player is looking).
+  if ((buttons & (BUTTON.AIM | BUTTON.FIRE | BUTTON.MELEE)) !== 0 && !downed) {
+    s.facing = approachAngle(s.facing, Math.atan2(sinY, cosY), MOVEMENT.turnRate * dt); // (the camera looks along (-sin, -cos): facing = yaw)
   } else if (speed > 0.3) {
     s.facing = approachAngle(s.facing, Math.atan2(-s.vx, -s.vz), MOVEMENT.turnRate * dt);
   }
 
   flags = crouching ? flags | FLAG.CROUCHING : flags & ~FLAG.CROUCHING;
   flags = sprinting ? flags | FLAG.SPRINTING : flags & ~FLAG.SPRINTING;
+  flags = aiming ? flags | FLAG.AIMING : flags & ~FLAG.AIMING;
   s.flags = flags;
 }
 

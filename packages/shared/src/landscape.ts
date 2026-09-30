@@ -217,6 +217,8 @@ const TRAIL_DEFS: readonly TrailDef[] = [
       [-94, 14],
     ],
   },
+  // the footbridge path: on from the flag path, north across the stream (on a plank bridge) to a fishing spot on the far bank
+  { name: "footbridge", width: 1.15, wear: 0.8, pts: [[11, -14.5], [11.5, -19.5], [11.4, -25], [11.9, -29], [12.4, -33.5], [12.2, -38.6]] },
   // footpaths between the camp's features
   { name: "tent-fire-a", width: 1.05, wear: 0.85, pts: [[-5.8, 3.7], [-3, 2.2], [0.8, -1], [4.4, -3.6]] },
   { name: "tent-fire-b", width: 1.05, wear: 0.85, pts: [[-6.1, -4.5], [-2.6, -4.8], [1.5, -4.5], [4.4, -4.1]] },
@@ -259,6 +261,10 @@ export const WORN_PATCHES: readonly { x: number; z: number; r: number; wear: num
   { x: -6.2, z: -4.5, r: 1.5, wear: 0.8 },
   { x: CAMP.sign.x, z: CAMP.sign.z, r: 1.9, wear: 0.8 },
   { x: -2.4, z: -6.1, r: 1.6, wear: 0.7 },
+  { x: 12.2, z: -39, r: 1.7, wear: 0.75 },
+  // trodden ground at the well and at the pen's gate
+  { x: -4.2, z: 15.4, r: 2.1, wear: 0.72 },
+  { x: -11.6, z: 17.5, r: 1.7, wear: 0.7 },
 ];
 
 const EDGE_TAPER = 0.55;

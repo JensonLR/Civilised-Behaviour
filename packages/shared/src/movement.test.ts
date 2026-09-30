@@ -150,3 +150,45 @@ describe("stepCharacter", () => {
     expect(s.y).toBe(0);
   });
 });
+
+describe("stepCharacter: combat stance (weapons are cosmetic to movement except aiming)", () => {
+  const run = (cmd: MoveCommand, frames = 45, start?: Partial<ReturnType<typeof createCharState>>) => {
+    const w = flat();
+    const s = { ...createCharState(0, 0, w), ...start };
+    for (let i = 0; i < frames; i++) stepCharacter(s, cmd, STEP_DT, w);
+    return s;
+  };
+
+  it("aiming raises FLAG.AIMING, lowers it when released, slows the walk to aimFactor and forbids sprinting", () => {
+    const w = flat();
+    const s = createCharState(0, 0, w);
+    for (let i = 0; i < 40; i++) stepCharacter(s, fwd({ buttons: BUTTON.AIM | BUTTON.SPRINT }), STEP_DT, w);
+    expect(s.flags & FLAG.AIMING).toBeTruthy();
+    expect(s.flags & FLAG.SPRINTING).toBeFalsy();
+    expect(Math.hypot(s.vx, s.vz)).toBeCloseTo(4.4 * 0.7, 1);
+    for (let i = 0; i < 4; i++) stepCharacter(s, fwd(), STEP_DT, w);
+    expect(s.flags & FLAG.AIMING).toBeFalsy();
+  });
+
+  it("firing or striking turns the body to the camera even when walking backwards; a downed body never aims", () => {
+    for (const b of [BUTTON.FIRE, BUTTON.MELEE, BUTTON.AIM]) {
+      const s = run({ moveF: -127, moveR: 0, yaw: yawToWire(Math.PI / 2), buttons: b }, 40);
+      const want = Math.PI / 2; // looking -X at yaw pi/2
+      expect(Math.abs(Math.atan2(Math.sin(s.facing - want), Math.cos(s.facing - want)))).toBeLessThan(0.05);
+    }
+    const down = run(fwd({ buttons: BUTTON.AIM }), 10, { flags: FLAG.GROUNDED | FLAG.DOWNED });
+    expect(down.flags & FLAG.AIMING).toBeFalsy();
+  });
+
+  it("the shot direction and weapon request ride on the input but never change where the body goes (recoil is cosmetic, not a movement input)", () => {
+    const plain = run(fwd({ buttons: BUTTON.FIRE }), 60);
+    const aimed = run(fwd({ buttons: BUTTON.FIRE, aimYaw: 12345, aimElev: -9000, weapon: 3 }), 60);
+    expect(aimed).toEqual(plain);
+  });
+
+  it("working a cannon holds the body still (turning allowed) and forbids jumping, like kneeling over a patient", () => {
+    const s = run(fwd({ buttons: BUTTON.JUMP }), 30, { flags: FLAG.GROUNDED | FLAG.OPERATING });
+    expect(Math.hypot(s.vx, s.vz)).toBeLessThan(1e-9);
+    expect(s.y).toBe(0);
+  });
+});

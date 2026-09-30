@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Scene, Vector3 } from "three";
 import { CollisionWorld, createArena, createDayState, dayState } from "@cb/shared";
 import { MAX_PUSHERS, pushers, worldTime } from "./toon.ts";
@@ -27,7 +27,10 @@ describe("WorldView budget", () => {
       // Budget (docs/PERFORMANCE.md): was 45 draws / 280k tris before the environment upgrade added water, ruin, camp life,
       // ambient life and a dozen kinds of ground cover, each ONE instanced draw (+ one hull where it carries ink). Main pass only.
       expect(view.stats.meshes).toBeLessThanOrEqual(name === "low" ? 34 : 60);
-      expect(view.stats.triangles).toBeLessThan(name === "low" ? 150_000 : name === "medium" ? 300_000 : 380_000);
+      // (2026-09-30: 150k / 300k / 380k -> 160k / 330k / 440k. The Observatory is now a walk-in ruin of real stone courses with a ribbed copper dome
+      // (+8k), the hill tree line has proper lumpy crowns instead of paper hexagons (+~15k medium), the camp cloth is its own mesh, and rain is one
+      // pooled quad set (+4k medium, 7k high, vertex-culled when it is dry). See docs/PERFORMANCE.md.)
+      expect(view.stats.triangles).toBeLessThan(name === "low" ? 160_000 : name === "medium" ? 330_000 : 440_000);
       expect(view.stats.meshes).toBeGreaterThan(12);
       view.update(1.5); // animates without throwing or allocating scene objects
       view.dispose();
@@ -87,5 +90,25 @@ describe("WorldView budget", () => {
     expect(glow(19.5)).toBeGreaterThan(glow(13) + 0.2);
     expect(worldTime.value).toBe(1);
     view.dispose();
+  });
+});
+
+describe("three.js warnings", () => {
+  it("building, animating and disposing the world on every preset logs nothing", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const name of ["low", "medium", "high"] as const) {
+        const view = new WorldView(new Scene(), createArena(7), PRESETS[name], sun);
+        view.update(2);
+        view.dispose();
+      }
+      new WorldView(new Scene(), new CollisionWorld({ height: () => 0 }, [], 100), PRESETS.medium, sun).dispose();
+      expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([]);
+      expect(error.mock.calls.map((c) => String(c[0]))).toEqual([]);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 });

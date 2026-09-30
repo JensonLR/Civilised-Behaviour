@@ -59,8 +59,8 @@ export interface FaceParts {
 export interface FaceBuild {
   face: FaceParts;
   root: Group;
-  geometries: BufferGeometry[];
-  materials: Material[];
+  /** Level of detail of the face parts: 0 full (round eyeballs, catch-lights), 1 mid distance (coarser eyes, lids and brows). Cheap: swaps cached geometry. */
+  setDetail(level: 0 | 1): void;
 }
 
 export interface FaceCtx {
@@ -77,6 +77,49 @@ export interface FaceCtx {
 }
 
 const face = { white: PALETTE.face.white, pupil: PALETTE.face.pupil };
+
+// ---- shared parts --------------------------------------------------------------------------------------------------------------------------------
+// The eyes, lids, brows and mouth of a face are geometry that never changes shape (the animator only moves, turns and scales the MESHES), and materials that
+// never change colour: so both are cached across every rig (keyed by exactly what they depend on) and a clone of a look, or a crowd of similar heads, builds
+// only the small Mesh/Group objects. Nothing here belongs to a rig, so `dispose()` frees none of it; `clearCharacterCaches()` does.
+const sharedGeo = new Map<string, BufferGeometry>();
+const sharedMat = new Map<string, Material>();
+const MAX_SHARED = 700;
+
+/** Frees the cached face geometry and materials (rigs still showing them re-upload on their next draw). */
+export function clearFaceCaches(): void {
+  for (const g of sharedGeo.values()) g.dispose();
+  for (const m of sharedMat.values()) m.dispose();
+  sharedGeo.clear();
+  sharedMat.clear();
+}
+/** How many cached face geometries there are (for tests). */
+export const faceCacheSize = (): number => sharedGeo.size;
+
+const cachedGeo = (key: string, make: () => BufferGeometry): BufferGeometry => {
+  let g = sharedGeo.get(key);
+  if (!g) {
+    g = make();
+    sharedGeo.set(key, g);
+    if (sharedGeo.size > MAX_SHARED) {
+      const first = sharedGeo.keys().next().value as string | undefined;
+      if (first !== undefined) sharedGeo.delete(first); // (dropped from the table, not disposed: a live rig may still draw it)
+    }
+  }
+  return g;
+};
+const cachedMat = <T extends Material>(key: string, make: () => T): T => {
+  let m = sharedMat.get(key);
+  if (!m) {
+    m = make();
+    sharedMat.set(key, m);
+    if (sharedMat.size > MAX_SHARED) {
+      const first = sharedMat.keys().next().value as string | undefined;
+      if (first !== undefined) sharedMat.delete(first);
+    }
+  }
+  return m as T;
+};
 
 /** Eye shapes: upper-lid bias, lower-lid rest, tilt of the eye line (outer corner down), width/height scale, white tint. Indexed by K.EYE_SHAPES. */
 const EYE_SHAPE = [
@@ -154,14 +197,14 @@ const BROWS: readonly BrowStyle[] = [
   { pts: [[-0.16, 0, 0], [0, 0.01, 0], [0.16, 0, 0.01]], rx: () => 0.014, rz: 0.012, visible: false }, // shaved: only a faint ridge
 ];
 
-function buildBrowGeometry(style: BrowStyle, R: number, color: number): BufferGeometry {
+function buildBrowGeometry(style: BrowStyle, R: number, color: number, detail: 0 | 1 = 0): BufferGeometry {
   const b = new PartBuilder();
-  const spine = curve(style.pts.map((p): V3 => [p[0] * R, p[1] * R, p[2] * R]), 9);
-  b.sweep(spine, (t) => ({ rx: R * style.rx(t), rz: R * style.rz, pow: 2.2 }), color, { side: [0, 1, 0], segments: 6 });
+  const spine = curve(style.pts.map((p): V3 => [p[0] * R, p[1] * R, p[2] * R]), detail === 0 ? 9 : 5);
+  b.sweep(spine, (t) => ({ rx: R * style.rx(t), rz: R * style.rz, pow: 2.2 }), color, { side: [0, 1, 0], segments: detail === 0 ? 6 : 4 });
   if (style.fluff) {
     // a second, shorter tuft on top: the brow looks grown rather than drawn
-    const top = curve(style.pts.slice(1, 4).map((p): V3 => [p[0] * R * 0.95, (p[1] + 0.035) * R, p[2] * R - R * 0.005]), 6);
-    b.sweep(top, (t) => ({ rx: R * (0.04 + 0.03 * Math.sin(Math.PI * t)), rz: R * 0.05, pow: 2.2 }), color, { side: [0, 1, 0], segments: 5 });
+    const top = curve(style.pts.slice(1, 4).map((p): V3 => [p[0] * R * 0.95, (p[1] + 0.035) * R, p[2] * R - R * 0.005]), detail === 0 ? 6 : 4);
+    b.sweep(top, (t) => ({ rx: R * (0.04 + 0.03 * Math.sin(Math.PI * t)), rz: R * 0.05, pow: 2.2 }), color, { side: [0, 1, 0], segments: detail === 0 ? 5 : 4 });
   }
   return b.build() ?? sweepGeometry(spine, () => ({ rx: 0.01, rz: 0.01 }), { color });
 }
@@ -175,10 +218,10 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
   const R = P.headRadius;
   const shape = headShape(P);
   const shp = eyeShape(spec);
-  const geometries: BufferGeometry[] = [];
-  const materials: Material[] = [];
-  const mat = <T extends Material>(m: T): T => (materials.push(m), m);
-  const geo = <T extends BufferGeometry>(g: T): T => (geometries.push(g), g);
+  const hex = (c: number | Color): string => (typeof c === "number" ? c : c.getHex()).toString(16);
+  /** Geometry swaps for `setDetail`: [mesh, geometry at detail 0, geometry at detail 1]. */
+  const swaps: [Mesh, BufferGeometry, BufferGeometry][] = [];
+  const both = (m: Mesh, g0: BufferGeometry, g1: BufferGeometry): Mesh => (swaps.push([m, g0, g1]), m);
 
   const root = new Group();
   root.name = "faceRoot";
@@ -192,47 +235,70 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
   const bagTone = new Color(skin).lerp(ramps.shade, 0.6);
   const lashC = new Color(PALETTE.face.lash);
   const whiteTint = new Color(face.white).lerp(new Color(PALETTE.trim.blushHot), spec.complexion === 3 ? 0.12 : spec.eyeShape === 5 ? 0.06 : 0);
-  const whiteMat = mat(new MeshToonMaterial({ color: whiteTint, gradientMap: ramp }));
-  const irisMat = mat(new MeshToonMaterial({ vertexColors: true, gradientMap: ramp }));
-  const pupilMat = mat(new MeshToonMaterial({ color: face.pupil, gradientMap: ramp }));
-  const glintMat = mat(new MeshBasicMaterial({ color: 0xffffff }));
-  const browMat = mat(new MeshToonMaterial({ color: greyed(hairC, spec), gradientMap: ramp }));
-  const lidMat = mat(new MeshToonMaterial({ vertexColors: true, gradientMap: ramp }));
-  const mouthMat = mat(new MeshToonMaterial({ color: PALETTE.face.mouth, gradientMap: ramp }));
+  const toon = (key: string, color: number | Color): MeshToonMaterial => cachedMat(`toon|${key}|${hex(color)}`, () => new MeshToonMaterial({ color, gradientMap: ramp }));
+  const vertexToon = (key: string): MeshToonMaterial => cachedMat(`vtoon|${key}`, () => new MeshToonMaterial({ vertexColors: true, gradientMap: ramp }));
+  const whiteMat = toon("white", whiteTint);
+  const irisMat = vertexToon("iris");
+  const pupilMat = toon("pupil", face.pupil);
+  const glintMat = cachedMat("glint", () => new MeshBasicMaterial({ color: 0xffffff }));
+  const browMat = toon("brow", greyed(hairC, spec));
+  const lidMat = vertexToon("lid");
+  const mouthMat = toon("mouth", PALETTE.face.mouth);
+  const eK = eyeR.toFixed(5);
 
   const mkEye = (sx: number): { g: Group; iris: Mesh; core: Mesh; lid: Mesh; lower: Mesh } => {
+    const sign = Math.sign(sx || 1);
     const g = new Group();
     g.position.set(sx * eye.x, eye.y, eye.z);
     g.scale.set(shp.sx, shp.sy, 1);
     g.rotation.z = -sx * shp.tilt; // the outer corner drops for sleepy eyes and lifts for narrow ones
-    const white = new Mesh(geo(new SphereGeometry(eyeR, 12, 8)), whiteMat);
-    const irisGeo = geo(new SphereGeometry(eyeR * 0.56, 10, 6));
-    shadeIris(irisGeo, irisC);
-    const iris = new Mesh(irisGeo, irisMat);
+    const whiteGeo = (d: 0 | 1): BufferGeometry => cachedGeo(`white|${eK}|${d}`, () => new SphereGeometry(eyeR, d === 0 ? 12 : 8, d === 0 ? 8 : 5));
+    const white = both(new Mesh(whiteGeo(0), whiteMat), whiteGeo(0), whiteGeo(1));
+    const irisGeo = (d: 0 | 1): BufferGeometry =>
+      cachedGeo(`iris|${eK}|${hex(irisC)}|${d}`, () => {
+        const gi = new SphereGeometry(eyeR * 0.56, d === 0 ? 10 : 7, d === 0 ? 6 : 4);
+        shadeIris(gi, irisC);
+        return gi;
+      });
+    const iris = both(new Mesh(irisGeo(0), irisMat), irisGeo(0), irisGeo(1));
     iris.scale.set(1, 1, 0.5);
     iris.position.set(0, 0, -eyeR * 0.74);
-    const core = new Mesh(geo(new SphereGeometry(eyeR * 0.3, 8, 5)), pupilMat);
+    const core = new Mesh(cachedGeo(`core|${eK}`, () => new SphereGeometry(eyeR * 0.3, 8, 5)), pupilMat);
     core.position.set(0, 0, -eyeR * 0.3);
     // Two catch-lights, a big one and a small one on the other side, merged into one mesh: what makes an eye look alive.
-    const g1 = new SphereGeometry(eyeR * 0.14, 6, 4);
-    g1.translate(-eyeR * 0.2 * Math.sign(sx || 1), eyeR * 0.24, -eyeR * 0.5);
-    const g2 = new SphereGeometry(eyeR * 0.07, 5, 3);
-    g2.translate(eyeR * 0.16 * Math.sign(sx || 1), -eyeR * 0.16, -eyeR * 0.46);
-    const glintGeo = geo(mergeGeometries([g1, g2])!);
-    g1.dispose();
-    g2.dispose();
+    const glintGeo = cachedGeo(`glint|${eK}|${sign}`, () => {
+      const g1 = new SphereGeometry(eyeR * 0.14, 6, 4);
+      g1.translate(-eyeR * 0.2 * sign, eyeR * 0.24, -eyeR * 0.5);
+      const g2 = new SphereGeometry(eyeR * 0.07, 5, 3);
+      g2.translate(eyeR * 0.16 * sign, -eyeR * 0.16, -eyeR * 0.46);
+      const m = mergeGeometries([g1, g2])!;
+      g1.dispose();
+      g2.dispose();
+      return m;
+    });
     const glint = new Mesh(glintGeo, glintMat);
     iris.add(core, glint);
     // Upper lid: a shallow skin cap over the eyeball with a drawn lash line on its edge. Axis +Y at rest; the animator tilts it: 0.5 rad = retracted
     // up-and-back (eye open), -PI/2 = pointing forward over the pupil (eye closed / blink).
-    const lidGeo = geo(new SphereGeometry(eyeR * 1.07, 10, 4, 0, Math.PI * 2, 0, 1.15));
-    shadeLid(lidGeo, lidTone, lashC, 4);
-    const lid = new Mesh(lidGeo, lidMat);
+    const lidKey = `${eK}|${hex(lidTone)}|${hex(lashC)}`;
+    const lidGeo = (d: 0 | 1): BufferGeometry =>
+      cachedGeo(`lid|${lidKey}|${d}`, () => {
+        const gl = new SphereGeometry(eyeR * 1.07, d === 0 ? 10 : 8, d === 0 ? 4 : 3, 0, Math.PI * 2, 0, 1.15);
+        shadeLid(gl, lidTone, lashC, d === 0 ? 4 : 3);
+        return gl;
+      });
+    const lid = both(new Mesh(lidGeo(0), lidMat), lidGeo(0), lidGeo(1));
     lid.rotation.x = 0.5;
-    // Lower lid: a smaller cap opening downward; it rises for a squint. Pouches darken it.
-    const lowGeo = geo(new SphereGeometry(eyeR * 1.06, 10, 3, 0, Math.PI * 2, 0, 0.95));
-    shadeLid(lowGeo, shp.bag > 0 ? bagTone : lidTone, shp.bag > 0 ? bagTone : lidTone, 3);
-    const lower = new Mesh(lowGeo, lidMat);
+    // Lower lid: a smaller cap opening downward; it rises for a squint. Pouches darken it. (Hidden at the mid level of detail.)
+    const lowTone = shp.bag > 0 ? bagTone : lidTone;
+    const lower = new Mesh(
+      cachedGeo(`low|${eK}|${hex(lowTone)}|${shp.bag > 0 ? 1 : 0}`, () => {
+        const gl = new SphereGeometry(eyeR * 1.06, 10, 3, 0, Math.PI * 2, 0, 0.95);
+        shadeLid(gl, lowTone, shp.bag > 0 ? bagTone : lidTone, 3);
+        return gl;
+      }),
+      lidMat,
+    );
     lower.rotation.x = Math.PI - 0.6; // axis -Y, tilted back
     g.add(white, iris, lid, lower);
     root.add(g);
@@ -245,9 +311,10 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
   const browY = R * 0.37;
   const browZ = shape.front(eye.x, browY)[2] - R * 0.012;
   const style = BROWS[spec.brows] ?? BROWS[0]!;
-  const browGeo = geo(buildBrowGeometry(style, R, greyed(hairC, spec)));
-  const browL = new Mesh(browGeo, browMat);
-  const browR = new Mesh(browGeo, browMat);
+  const browColor = greyed(hairC, spec);
+  const browGeo = (d: 0 | 1): BufferGeometry => cachedGeo(`brow|${spec.brows}|${R.toFixed(5)}|${hex(browColor)}|${d}`, () => buildBrowGeometry(style, R, browColor, d));
+  const browL = both(new Mesh(browGeo(0), browMat), browGeo(0), browGeo(1));
+  const browR = both(new Mesh(browGeo(0), browMat), browGeo(0), browGeo(1));
   // Inner ends toward the nose: the left brow is mirrored so the thick end is always inner.
   browL.scale.x = -1;
   browL.position.set(-eye.x, browY, browZ);
@@ -258,47 +325,52 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
   // ---- mouth --------------------------------------------------------------------------------------------------------------------
   const mouthWidth = R * 0.56;
   const mp = mouthPlacement(P);
-  const lipSpine = curve([[-mouthWidth / 2, 0, 0], [-mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 2, 0, 0]], 9);
-  const mouth = new Mesh(
-    geo(sweepGeometry(lipSpine, (t) => ({ rx: R * 0.026 * (0.5 + 0.5 * Math.sin(Math.PI * t)), rz: R * 0.024, pow: 2 }), { color: PALETTE.face.mouth, segments: 5, side: [0, 1, 0] })),
-    mouthMat,
-  );
+  const lipGeo = (d: 0 | 1): BufferGeometry =>
+    cachedGeo(`lip|${R.toFixed(5)}|${d}`, () => {
+      const lipSpine = curve([[-mouthWidth / 2, 0, 0], [-mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 4, mouthWidth * 0.1, 0], [mouthWidth / 2, 0, 0]], d === 0 ? 9 : 6);
+      return sweepGeometry(lipSpine, (t) => ({ rx: R * 0.026 * (0.5 + 0.5 * Math.sin(Math.PI * t)), rz: R * 0.024, pow: 2 }), { color: PALETTE.face.mouth, segments: d === 0 ? 5 : 4, side: [0, 1, 0] });
+    });
+  const mouth = both(new Mesh(lipGeo(0), mouthMat), lipGeo(0), lipGeo(1));
   mouth.position.set(0, mp.y, mp.z);
   root.add(mouth);
   // Open mouth: a D-shaped cavity hanging from the upper lip line, upper teeth along its top edge, a tongue and the lower teeth riding the jaw.
   const mouthInterior = new Group();
   mouthInterior.position.set(0, mp.y, mp.z - R * 0.004);
   mouthInterior.visible = false;
-  const cavityMat = mat(new MeshToonMaterial({ color: PALETTE.face.cavity, gradientMap: ramp }));
-  const cavity = new Mesh(geo(new SphereGeometry(1, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)), cavityMat);
+  const cavityMat = toon("cavity", PALETTE.face.cavity);
+  const cavity = new Mesh(cachedGeo("cavity", () => new SphereGeometry(1, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)), cavityMat);
   cavity.scale.set(mouthWidth * 0.5, R * 0.01, R * 0.03);
-  const tongueMat = mat(new MeshToonMaterial({ color: PALETTE.face.tongue, gradientMap: ramp }));
-  const tongue = new Mesh(geo(new SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2)), tongueMat);
+  const tongueMat = toon("tongue", PALETTE.face.tongue);
+  const tongue = new Mesh(cachedGeo("tongue", () => new SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2)), tongueMat);
   tongue.scale.set(0.5, 0.38, 0.9);
   tongue.position.set(0, -0.98, 0.15);
   cavity.add(tongue);
   mouthInterior.add(cavity);
-  const upper = buildTeeth(spec, mouthWidth, R, accent, "upper");
-  const lower = buildTeeth(spec, mouthWidth, R, accent, "lower");
+  const teethKey = `${spec.teeth}|${mouthWidth.toFixed(5)}|${R.toFixed(5)}|${hex(accent)}`;
+  const upper = cachedTeeth(`teeth|up|${teethKey}`, () => buildTeeth(spec, mouthWidth, R, accent, "upper"));
+  const lower = cachedTeeth(`teeth|lo|${teethKey}`, () => buildTeeth(spec, mouthWidth, R, accent, "lower"));
   let teethUpper: Mesh | undefined;
   let teethLower: Mesh | undefined;
   if (upper) {
-    teethUpper = new Mesh(geo(upper), ctx.toonMaterial);
+    teethUpper = new Mesh(upper, ctx.toonMaterial);
     teethUpper.position.set(0, -R * 0.043, -R * 0.005);
     mouthInterior.add(teethUpper);
   }
   if (lower) {
-    teethLower = new Mesh(geo(lower), ctx.toonMaterial);
+    teethLower = new Mesh(lower, ctx.toonMaterial);
     teethLower.position.set(0, -R * 0.09, -R * 0.005);
     mouthInterior.add(teethLower);
   }
   root.add(mouthInterior);
   if (spec.teeth & K.TEETH_BITS.BUCK) {
     // Buck teeth: two big incisors that lie over the lower lip whether the mouth is open or shut.
-    const b = new PartBuilder();
-    const w = mouthWidth * 0.16;
-    for (const sx of [-1, 1]) b.box(w, R * 0.13, R * 0.04, PALETTE.trim.teeth, [sx * w * 0.52, 0, 0], [0.12, 0, sx * 0.03]);
-    const buck = new Mesh(geo(b.build()!), ctx.toonMaterial);
+    const buckGeo = cachedGeo(`buck|${mouthWidth.toFixed(5)}|${R.toFixed(5)}`, () => {
+      const b = new PartBuilder();
+      const w = mouthWidth * 0.16;
+      for (const sx of [-1, 1]) b.box(w, R * 0.13, R * 0.04, PALETTE.trim.teeth, [sx * w * 0.52, 0, 0], [0.12, 0, sx * 0.03]);
+      return b.build()!;
+    });
+    const buck = new Mesh(buckGeo, ctx.toonMaterial);
     buck.position.set(0, mp.y - R * 0.055, mp.z - R * 0.028);
     root.add(buck);
   }
@@ -341,7 +413,22 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
       if (i >= 0 && i < inf.length) inf[i] = value;
     },
   };
-  return { face: faceParts, root, geometries, materials };
+  const setDetail = (level: 0 | 1): void => {
+    for (const [m, g0, g1] of swaps) {
+      const g = level === 0 ? g0 : g1;
+      if (m.geometry !== g) m.geometry = g;
+    }
+  };
+  return { face: faceParts, root, setDetail };
+}
+
+/** A cached teeth row (undefined when every tooth is missing). */
+function cachedTeeth(key: string, make: () => BufferGeometry | undefined): BufferGeometry | undefined {
+  const hit = sharedGeo.get(key);
+  if (hit) return hit;
+  const g = make();
+  if (g) sharedGeo.set(key, g);
+  return g;
 }
 
 export { greyed } from "./look.ts";
@@ -366,4 +453,46 @@ function buildTeeth(spec: CharacterSpec, mouthWidth: number, R: number, gold: nu
     b.box(w * 0.92, h, R * 0.03, isGold ? gold : ivory, [(i - 2.5) * w, row === "upper" ? 0 : h * 0.1, crook * R * 0.03], [0, crook * 0.5, crook]);
   }
   return b.build();
+}
+
+
+const DUMMY_GROUP = new Group();
+const DUMMY_MESH = new Mesh();
+
+/**
+ * The face of a far-crowd figure before it ever needed one: the same object shape as a built face, with shared inert placeholders and `active: false`
+ * (the animator skips an inactive face). `buildFace` fills the SAME object in when the figure first comes close, so references to `rig.face` stay valid.
+ */
+export function inertFace(): FaceParts {
+  return {
+    eyeL: DUMMY_GROUP,
+    eyeR: DUMMY_GROUP,
+    pupilL: DUMMY_MESH,
+    pupilR: DUMMY_MESH,
+    coreL: DUMMY_MESH,
+    coreR: DUMMY_MESH,
+    browL: DUMMY_MESH,
+    browR: DUMMY_MESH,
+    mouth: DUMMY_MESH,
+    mouthInterior: DUMMY_GROUP,
+    mouthCavity: DUMMY_MESH,
+    tongue: DUMMY_MESH,
+    teethLower: undefined,
+    teethUpper: undefined,
+    mouthY: 0,
+    mouthZ: 0,
+    lidL: DUMMY_MESH,
+    lidR: DUMMY_MESH,
+    lowerLidL: DUMMY_MESH,
+    lowerLidR: DUMMY_MESH,
+    eyeRadius: 0,
+    mouthWidth: 0,
+    browY: 0,
+    lidBias: 0,
+    lowerLidBase: 0,
+    eyeTilt: 0,
+    eyeScale: [1, 1],
+    active: false,
+    setMorph() {},
+  };
 }

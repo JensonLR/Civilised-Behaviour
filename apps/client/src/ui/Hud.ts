@@ -1,4 +1,5 @@
 import { CASUALTY, FLAG, LIMB_LIST, ZONE_COUNT, ZONE_NAMES, limbZone, woundLevel } from "@cb/shared";
+import { HATCH_DEFS, ZONE_CENTRES, cuePath } from "./woundCues.ts";
 
 const SEVERITY_WORDS = ["", "scratch", "gash", "grievous wound", "lost"] as const;
 
@@ -44,6 +45,8 @@ export interface HudView {
   usingGamepad: boolean;
   /** First-person view is fully active: show the aiming dot. */
   firstPerson?: boolean;
+  /** A weapon is drawn: the combat sight (ui/CombatHud.ts) is the crosshair, so the plain dot is not drawn. */
+  armed?: boolean;
   /** Packed wound mask of the local player (see @cb/shared wounds.ts). */
   wounds: number;
   /** Lost-limb mask (0 when the player has chosen not to see severed limbs: the injury then reads as its dressing). */
@@ -70,6 +73,8 @@ export class Hud {
   private readonly crosshair: HTMLElement;
   private readonly wounds: HTMLElement;
   private readonly woundParts: SVGElement[];
+  /** Shape marks for the colour-blind-safe mode (hidden by CSS otherwise). */
+  private readonly woundCues: SVGElement[];
   private readonly woundText: HTMLElement;
   private shownWounds = -1;
   private noticeTimer = 0;
@@ -88,10 +93,11 @@ export class Hud {
     // never by colour alone.
     this.wounds = el(root, "div", "wounds");
     this.wounds.hidden = true;
-    this.wounds.innerHTML = `<svg viewBox="0 0 40 88" class="chart" role="img" aria-label="Injuries">
+    this.wounds.innerHTML = `<svg viewBox="0 0 40 88" class="chart" role="img" aria-label="Injuries">${HATCH_DEFS}
       <circle data-z="0" cx="20" cy="9" r="7"/><rect data-z="1" x="11" y="18" width="18" height="30" rx="4"/>
       <rect data-z="2" x="3" y="19" width="6" height="28" rx="3"/><rect data-z="3" x="31" y="19" width="6" height="28" rx="3"/>
-      <rect data-z="4" x="11" y="50" width="8" height="34" rx="3"/><rect data-z="5" x="21" y="50" width="8" height="34" rx="3"/></svg><span class="text"></span>`;
+      <rect data-z="4" x="11" y="50" width="8" height="34" rx="3"/><rect data-z="5" x="21" y="50" width="8" height="34" rx="3"/>${ZONE_CENTRES.map((_, z) => `<path class="cue" data-cue="${z}"/>`).join("")}</svg><span class="text"></span>`;
+    this.woundCues = [...this.wounds.querySelectorAll<SVGElement>("[data-cue]")];
     this.woundParts = [...this.wounds.querySelectorAll<SVGElement>("[data-z]")].sort((a, b) => Number(a.dataset.z) - Number(b.dataset.z));
     this.woundText = this.wounds.querySelector<HTMLElement>(".text")!;
 
@@ -136,7 +142,7 @@ export class Hud {
     this.updateWounds(v.wounds, v.missing ?? 0);
 
     const down = (v.flags & FLAG.DOWNED) !== 0;
-    this.crosshair.hidden = !crosshairVisible(v.firstPerson, v.flags);
+    this.crosshair.hidden = !crosshairVisible(v.firstPerson, v.flags) || v.armed === true;
     this.downed.hidden = !down;
     if (down) {
       const dragged = (v.flags & FLAG.DRAGGED) !== 0;
@@ -175,6 +181,8 @@ export class Hud {
     for (let z = 0; z < ZONE_COUNT; z++) {
       const sev = lostZones.has(z as never) ? 4 : woundLevel(mask, z);
       this.woundParts[z]?.setAttribute("data-sev", String(sev));
+      const c = ZONE_CENTRES[z]!;
+      this.woundCues[z]?.setAttribute("d", cuePath(sev, c[0], c[1]));
       if (sev > 0) found.push({ name: ZONE_NAMES[z]!, sev });
     }
     this.wounds.hidden = found.length === 0;

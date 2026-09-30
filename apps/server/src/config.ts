@@ -1,3 +1,5 @@
+import { WORLD_CLOCK } from "@cb/shared";
+
 /** Environment validation. Fails fast with a readable message rather than half-booting. */
 export interface ServerConfig {
   nodeEnv: "development" | "production" | "test";
@@ -13,6 +15,12 @@ export interface ServerConfig {
   routSeconds: number;
   /** Server-wide default for the campaign rule "dismemberment" (creators can still switch it off for their campaign). */
   dismemberment: boolean;
+  /** Server-wide default for the campaign rule "friendly fire" (default on, GDD: creators can switch it off for their campaign). */
+  friendlyFire: boolean;
+  /** The clock hour a new world starts at (0..24). Env DAY_START_HOUR, default 9. */
+  dayStartHour: number;
+  /** Real minutes a full day takes; 0 freezes the clock. Env DAY_MINUTES, default 30. */
+  dayMinutes: number;
   /** Artificial round-trip latency in ms for bad-network testing. Never set in production. */
   simulatedLatencyMs: number;
 }
@@ -36,8 +44,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (nodeEnv === "production" && debugCommands) errors.push("DEBUG_COMMANDS must not be enabled in production");
 
   const dismemberment = env.DISMEMBERMENT ? env.DISMEMBERMENT !== "0" : true;
+  const friendlyFire = env.FRIENDLY_FIRE ? env.FRIENDLY_FIRE !== "0" : true;
   const routSeconds = Number(env.ROUT_SECONDS ?? 8);
   if (!Number.isFinite(routSeconds) || routSeconds < 0.5 || routSeconds > 120) errors.push("ROUT_SECONDS must be 0.5-120");
+
+  const dayStartHour = Number(env.DAY_START_HOUR ?? WORLD_CLOCK.defaultStartHour);
+  if (!Number.isFinite(dayStartHour) || dayStartHour < 0 || dayStartHour >= 24) errors.push("DAY_START_HOUR must be 0-24 (exclusive)");
+  const dayMinutes = Number(env.DAY_MINUTES ?? WORLD_CLOCK.defaultDayMinutes);
+  if (!Number.isFinite(dayMinutes) || (dayMinutes !== 0 && (dayMinutes < WORLD_CLOCK.minDayMinutes || dayMinutes > WORLD_CLOCK.maxDayMinutes))) errors.push(`DAY_MINUTES must be 0 (frozen) or ${WORLD_CLOCK.minDayMinutes}-${WORLD_CLOCK.maxDayMinutes}`);
 
   const allowedOrigins = (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   if (nodeEnv === "production" && allowedOrigins.length === 0) errors.push("ALLOWED_ORIGINS required in production");
@@ -46,5 +60,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const databaseUrl = env.DATABASE_URL || undefined;
 
   if (errors.length) throw new Error(`Invalid server configuration:\n - ${errors.join("\n - ")}`);
-  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, simulatedLatencyMs };
+  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs };
 }

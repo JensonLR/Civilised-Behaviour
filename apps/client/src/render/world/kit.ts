@@ -22,6 +22,8 @@ export interface AddOptions {
   /** Displace vertices by up to this many local units, hashed from position so coincident vertices move together. */
   jitter?: number;
   seed?: number;
+  /** In a Kit built with `{ sway: true }`: how loose the piece hangs in the wind, 0..1, constant or a function of the vertex's local position. */
+  sway?: number | ((p: Vector3) => number);
 }
 
 const m4 = new Matrix4();
@@ -44,6 +46,9 @@ const dir = new Vector3();
 export class Kit {
   private readonly parts: BufferGeometry[] = [];
   private readonly baseMatrix = new Matrix4();
+
+  /** `sway: true` gives every piece an `aSway` attribute (0 unless the piece says otherwise): the geometry of things that move in the wind. */
+  constructor(private readonly opts: { sway?: boolean } = {}) {}
 
   /** Places subsequent primitives at (x, y, z) turned by `yaw` (collision convention: local +x = (cos yaw, sin yaw); three rotation.y = -yaw). */
   setBase(x: number, y: number, z: number, yaw = 0): this {
@@ -113,6 +118,12 @@ export class Kit {
       }
     }
     g.setAttribute("color", new BufferAttribute(colours, 3));
+    if (this.opts.sway) {
+      const sway = new Float32Array(p.count);
+      const sf = o.sway;
+      for (let i = 0; i < p.count; i++) sway[i] = typeof sf === "function" ? Math.min(1, Math.max(0, sf(tmpP.set(p.getX(i), p.getY(i), p.getZ(i))))) : (sf ?? 0);
+      g.setAttribute("aSway", new BufferAttribute(sway, 1));
+    }
     const at = o.at ?? [0, 0, 0];
     const sc = o.scale ?? [1, 1, 1];
     m4.compose(pos.set(at[0], at[1], at[2]), q, scl.set(sc[0], sc[1], sc[2]));
@@ -123,7 +134,7 @@ export class Kit {
   }
 
   /** A tapered tube between two points (trunks, branches, poles, ropes). Open-ended: joints are hidden by the next segment or a blob. */
-  limb(a: V3, b: V3, rA: number, rB: number, colour: number | ColourFn, radial = 7, capped = false): this {
+  limb(a: V3, b: V3, rA: number, rB: number, colour: number | ColourFn, radial = 7, capped = false, sway?: number | ((t: number) => number)): this {
     dir.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     const len = dir.length();
     if (len < 1e-6) return this;
@@ -135,6 +146,8 @@ export class Kit {
       at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2],
       rot: [eul.x, eul.y, eul.z],
       colour,
+      // `sway` as a function of how far along the limb (0 at a, 1 at b)
+      sway: typeof sway === "function" ? (p: Vector3): number => sway(p.y / len + 0.5) : sway,
     });
   }
 

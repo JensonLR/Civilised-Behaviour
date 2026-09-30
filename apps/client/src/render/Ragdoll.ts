@@ -46,6 +46,20 @@ type BoneName = (typeof ORDER)[number];
 const PARENT: Record<BoneName, number> = { pelvis: -1, torso: 0, head: 1, shoulderL: 1, elbowL: 3, shoulderR: 1, elbowR: 5, hipL: 0, kneeL: 7, hipR: 0, kneeR: 9 };
 const INDEX = Object.fromEntries(ORDER.map((n, i) => [n, i])) as Record<BoneName, number>;
 
+/**
+ * Hinge limits, radians of the child's rotation about X relative to its parent, in the rig's own convention (the animator's): a limb that hangs down swings
+ * FORWARD with +x, so the torso leans back with +x, a knee bends BACKWARD (shin swings behind) with -x and an elbow bends forward with +x.
+ * (These were once written the other way round: the knees folded forward and the elbows backward, and the seeded animator pose started ~1.8 rad outside them.)
+ */
+export const HINGE_LIMITS: Readonly<Partial<Record<BoneName, readonly [number, number]>>> = {
+  torso: [-0.7, 0.7],
+  head: [-0.9, 0.9],
+  elbowL: [-0.1, 2.5],
+  elbowR: [-0.1, 2.5],
+  kneeL: [-2.5, 0.1],
+  kneeR: [-2.5, 0.1],
+};
+
 /** Which body takes the hardest shove for a hit zone. */
 const ZONE_BODY: Record<number, BoneName> = {
   [ZONE.HEAD]: "head",
@@ -74,6 +88,7 @@ const _q = new Quaternion();
 const _q2 = new Quaternion();
 const _v = new Vector3();
 const _v2 = new Vector3();
+const _axisX = new Vector3(1, 0, 0);
 
 export class RagdollWorld {
   private readonly world: World;
@@ -196,15 +211,14 @@ export class Ragdoll {
       }
     };
 
-    const wp = new Vector3();
-    const wq = new Quaternion();
+    const seed = this.seedPose();
     const dirLen = Math.hypot(launch.dx, launch.dz) || 1;
     const push = 1.0 + launch.power * 3.2;
     const hitBody = ZONE_BODY[launch.zone] ?? "torso";
     for (let i = 0; i < ORDER.length; i++) {
       const name = ORDER[i]!;
-      this.joints[i]!.getWorldPosition(wp);
-      this.joints[i]!.getWorldQuaternion(wq);
+      const wp = seed.pos[i]!;
+      const wq = seed.quat[i]!;
       const body = this.world.createRigidBody(
         R.RigidBodyDesc.dynamic()
           .setTranslation(wp.x, wp.y, wp.z)
@@ -235,7 +249,8 @@ export class Ragdoll {
     };
     const zero = { x: 0, y: 0, z: 0 };
     const axisX = { x: 1, y: 0, z: 0 };
-    const hinge = (child: BoneName, min: number, max: number): void => {
+    const hinge = (child: BoneName): void => {
+      const [min, max] = HINGE_LIMITS[child]!;
       const joint = this.world.createImpulseJoint(R.JointData.revolute(anchor(child), zero, axisX), this.bodies[PARENT[child]]!, this.bodies[INDEX[child]]!, true);
       // Limits MUST be set on the created joint: assigning JointData.limitsEnabled/limits is silently ignored in rapier 0.21
       // (found the hard way: torsos folded to -1.3 rad against a 0.7 limit). The ragdoll tests assert the limits hold.
@@ -244,18 +259,45 @@ export class Ragdoll {
     const ball = (child: BoneName): void => {
       this.world.createImpulseJoint(R.JointData.spherical(anchor(child), zero), this.bodies[PARENT[child]]!, this.bodies[INDEX[child]]!, true);
     };
-    // Rotation.x conventions of the rig: torso/head lean back = +x, knees bend = +x, elbows bend = -x.
-    hinge("torso", -0.7, 0.7);
-    hinge("head", -0.9, 0.9);
+    hinge("torso");
+    hinge("head");
     ball("shoulderL");
     ball("shoulderR");
-    hinge("elbowL", -2.5, 0.1);
-    hinge("elbowR", -2.5, 0.1);
+    hinge("elbowL");
+    hinge("elbowR");
     ball("hipL");
     ball("hipR");
-    hinge("kneeL", -0.1, 2.5);
-    hinge("kneeR", -0.1, 2.5);
+    hinge("kneeL");
+    hinge("kneeR");
     this.readBodies();
+  }
+
+  /**
+   * The pose the bodies start in: the rig's CURRENT pose, made legal. A hinge child keeps only its swing about X, clamped into the hinge's limits (a body
+   * knocked down mid idle-act, mid fear-crouch or mid triumph-pump would otherwise start outside a limit and the solver would throw the joint across its
+   * whole range to get back in), and every body is placed from its parent's legal pose, so nothing is left displaced from its joint. Ball joints keep their
+   * animated rotation. The pelvis takes the rig's world transform as it is.
+   */
+  private seedPose(): { pos: Vector3[]; quat: Quaternion[] } {
+    const pos = ORDER.map(() => new Vector3());
+    const quat = ORDER.map(() => new Quaternion());
+    this.joints[0]!.getWorldPosition(pos[0]!);
+    this.joints[0]!.getWorldQuaternion(quat[0]!);
+    for (let i = 1; i < ORDER.length; i++) {
+      const name = ORDER[i]!;
+      const parent = PARENT[name];
+      const local = _q.copy(this.joints[i]!.quaternion);
+      const lim = HINGE_LIMITS[name];
+      if (lim) {
+        if (local.w < 0) local.set(-local.x, -local.y, -local.z, -local.w); // (the same rotation, the short way round)
+        const angle = 2 * Math.atan2(local.x, local.w); // swing about X (the twist and bank a torso or head carries are dropped: a hinge has neither)
+        const wrapped = angle;
+        local.setFromAxisAngle(_axisX, Math.max(lim[0], Math.min(lim[1], wrapped)));
+      }
+      quat[i]!.copy(quat[parent]!).multiply(local);
+      pos[i]!.copy(this.joints[i]!.position).applyQuaternion(quat[parent]!).add(pos[parent]!);
+    }
+    return { pos, quat };
   }
 
   /** Copies body transforms into `worldQ` / `pelvisPos`. */

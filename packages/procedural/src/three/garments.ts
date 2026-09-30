@@ -5,7 +5,7 @@ import { curve } from "./sweep.ts";
 import type { Ring } from "./loft.ts";
 import { sstep } from "./patch.ts";
 import { CREAM, LEATHER, PartBuilder, singe, type V3 } from "./parts.ts";
-import { backZ, frontZ, legRadius, neckRadii, waistHalf, ringAt, ringSurface, soil, tone, type BodyCtx } from "./bodyKit.ts";
+import { backZ, dyeAt, frontZ, legRadius, neckRadii, waistHalf, ringAt, ringSurface, soil, tone, type BodyCtx } from "./bodyKit.ts";
 
 /**
  * Coats. Every jacket has its own silhouette (`JACKET_CUT`: how the torso is cut), its own collar, front and skirt. Fronts, lapels, waistcoat
@@ -396,94 +396,6 @@ export function dressTorso(v: TorsoView): void {
   void frontZ;
 }
 
-// ---- capes and ponchos (torso bone) -----------------------------------------------------------------------------------------------------------
-
-/** The cape's sections (torso frame): a bell of cloth from the collar to the hip that clears whatever it hangs over. */
-export function capeRings(P: Proportions, cloth: number, lining: number): Ring[] {
-  const h = P.torsoHeight;
-  const D = P.torsoDepth / 2;
-  const SH = P.shoulderHalfWidth;
-  const ar = P.armRadius;
-  const nk = neckRadii(P);
-  const neckY = h * 0.985;
-  const hemY = -0.1 * h;
-  const base = torsoRings(P, cloth, 0);
-  const rx = (k: number): number => SH + ar * k;
-  // the cape must clear the body under it (a belly or a pack would otherwise poke through)
-  const rzAt = (y: number, k: number): number => {
-    const s = ringAt(base, y);
-    return Math.max(D * k, s.rz * 1.14 + Math.abs(s.cz) + 0.03);
-  };
-  return [
-    { y: neckY + 0.02, rx: nk.rx * 1.14, rz: nk.rz * 1.14, color: tone(cloth, 1.05) },
-    { y: neckY - 0.03, rx: nk.rx * 1.5, rz: nk.rz * 1.5, color: cloth },
-    { y: h * 0.9, rx: rx(1.3), rz: rzAt(h * 0.9, 1.05), pow: 2.3, color: cloth },
-    { y: h * 0.62, rx: rx(1.8), rz: rzAt(h * 0.62, 1.25), pow: 2.2, color: cloth },
-    { y: h * 0.28, rx: rx(2.15), rz: rzAt(h * 0.28, 1.38), pow: 2.2, color: tone(cloth, 0.94) },
-    { y: hemY, rx: rx(2.4), rz: rzAt(h * 0.05, 1.48), pow: 2.2, color: tone(cloth, 0.88) },
-    { y: hemY, rx: rx(2.4), rz: rzAt(h * 0.05, 1.48), pow: 2.2, color: lining, crease: true },
-    { y: hemY - 0.03, rx: rx(2.42), rz: rzAt(h * 0.05, 1.5), pow: 2.2, color: lining },
-  ];
-}
-
-/** The cape: a bell of cloth from the collar to the hip that covers the arms, with a lining band at the hem and a clasp at the throat. */
-export function dressCape(v: TorsoView): void {
-  const { b, c, neckY } = v;
-  b.loft(capeRings(c.P, v.coat, v.facing), v.coat, undefined, undefined, undefined, { capTop: false, capBottom: false });
-  // the clasp: two brass studs joined by a chain, and the seam down the front
-  const zf = frontZ(v.at(neckY - 0.06), 0);
-  b.sphere(0.026, c.accent, [-0.05, neckY - 0.05, zf - 0.035], [1, 1, 0.6]);
-  b.sphere(0.026, c.accent, [0.05, neckY - 0.05, zf - 0.035], [1, 1, 0.6]);
-  b.sweep([[-0.05, neckY - 0.05, zf - 0.04], [0, neckY - 0.075, zf - 0.05], [0.05, neckY - 0.05, zf - 0.04]], () => ({ rx: 0.005, rz: 0.005 }), c.accent, { side: [0, 1, 0], segments: 4 });
-}
-
-/** The poncho's sections (torso frame): a blanket with a hole for the head and four points, striped near the hem. */
-export function ponchoRings(P: Proportions, cloth: number, stripe1: number, stripe2: number): Ring[] {
-  const h = P.torsoHeight;
-  const D = P.torsoDepth / 2;
-  const SH = P.shoulderHalfWidth;
-  const ar = P.armRadius;
-  const nk = neckRadii(P);
-  const neckY = h * 0.985;
-  const hemY = h * 0.34;
-  const rx = (k: number): number => SH + ar * k;
-  const ring = (y: number, kx: number, kz: number, color: number, crease = false): Ring => ({ y, rx: rx(kx), rz: D * kz, pow: 1.75, color, crease });
-  return [
-    { y: neckY + 0.02, rx: nk.rx * 1.2, rz: nk.rz * 1.2, pow: 2, color: tone(cloth, 1.1) },
-    { y: neckY - 0.03, rx: nk.rx * 1.55, rz: nk.rz * 1.55, pow: 2, color: cloth },
-    ring(h * 0.93, 1.1, 1.05, cloth),
-    ring(h * 0.78, 1.9, 1.7, cloth),
-    ring(h * 0.7, 2.25, 1.95, stripe1),
-    ring(h * 0.62, 2.55, 2.15, stripe1),
-    ring(h * 0.56, 2.75, 2.28, cloth),
-    ring(hemY + 0.05, 3.0, 2.45, stripe2),
-    ring(hemY + 0.02, 3.05, 2.5, stripe2),
-    ring(hemY, 3.1, 2.55, tone(cloth, 0.75), true),
-    ring(hemY - 0.03, 3.12, 2.56, tone(cloth, 0.7)),
-  ];
-}
-
-/** The poncho: a blanket with a hole for the head, four points (front, back and over each arm), stripes and a fringe. */
-export function dressPoncho(v: TorsoView): void {
-  const { b, c, h, D, SH } = v;
-  const ar = c.P.armRadius;
-  const cloth = v.coat;
-  const hemY = h * 0.34;
-  b.loft(ponchoRings(c.P, cloth, v.trim, tone(v.facing, 1.3)), cloth, undefined, undefined, undefined, { capTop: false, capBottom: false });
-  // fringe: short tassels round the hem
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    b.box(0.014, 0.06, 0.014, tone(cloth, 0.65), [Math.sin(a) * (SH + ar * 3.1) * 0.72, hemY - 0.06, -Math.cos(a) * D * 2.55 * 0.72]);
-  }
-}
-
-/** The outermost torso surface for dressings that must lie on what a player sees: the cape or poncho when one is worn, else the torso. */
-export function outerTorsoRings(P: Proportions, color: number, jacket: number): Ring[] {
-  if (jacket === JACKET.CAPE) return capeRings(P, color, color);
-  if (jacket === JACKET.PONCHO) return ponchoRings(P, color, color, color);
-  return torsoRings(P, color, jacket);
-}
-
 // ---- coat skirts (pelvis bone) -------------------------------------------------------------------------------------------------------------
 
 /** Pelvis-frame sections of a coat skirt hanging from the waist to `len` below it. */
@@ -534,8 +446,30 @@ export function dressSkirts(b: PartBuilder, c: BodyCtx): void {
   const coat = c.jacketC;
   const hemC = soil(tone(coat, 0.7), 0.22);
   const sc = P.scale;
+  // the lining: a contrast silk, seen from below, through the vent and along every free edge
+  const lining = tone(singe(dyeAt(PALETTE.cloth, spec.jacketColor + 4), c.burnt), 0.9);
   const closed = (len: number, flare: number): void => {
-    b.loft(skirtRings(c, len, flare, coat, hemC), coat, undefined, undefined, undefined, { capTop: false });
+    const rings = skirtRings(c, len, flare, coat, hemC);
+    if (PartBuilder.lod > 0) {
+      b.loft(rings, coat, undefined, undefined, undefined, { capTop: false });
+      return;
+    }
+    // Open at the hem, not capped: the outer cloth rolls under into a thick edge, and inside is the lining (its faces point in), so from below a skirt is a
+    // hollow bell of silk, not a flat black disc.
+    const hem = rings[rings.length - 1]!;
+    const roll = rings.slice(0, -2);
+    const last = roll[roll.length - 1]!;
+    roll.push(
+      { ...last, y: -len - 0.006, rx: last.rx * 1.012, rz: last.rz * 1.012, color: hemC },
+      { ...last, y: -len - 0.022, rx: last.rx * 1.008, rz: last.rz * 1.008, color: hemC },
+      { ...hem, y: -len - 0.03, rx: hem.rx * 0.992, rz: hem.rz * 0.992, color: hemC },
+    );
+    b.loft(roll, coat, undefined, undefined, undefined, { capTop: false, capBottom: false });
+    const inner = (k: number, y: number, col: number): Ring => {
+      const s = ringAt(rings, y);
+      return { y, rx: s.rx * k, rz: s.rz * k, cx: s.cx, cz: s.cz, pow: s.pow, color: col };
+    };
+    b.loft([inner(0.97, -len - 0.028, tone(lining, 0.85)), inner(0.965, -len * 0.7, lining), inner(0.965, -len * 0.3, tone(lining, 0.9)), inner(0.96, 0.01, tone(lining, 0.8))], lining, undefined, undefined, undefined, { capTop: false, capBottom: false, inward: true });
   };
   const cut = (len: number, flare: number, frontCut: (y: number) => number, vent: (y: number) => number): void => {
     const rings = skirtRings(c, len, flare, coat, hemC);
@@ -556,6 +490,10 @@ export function dressSkirts(b: PartBuilder, c: BodyCtx): void {
         },
         lift: () => 0.0,
         color: (_phi, y) => (y < -len ? hemC : lerpColor(tone(coat, 0.94), tone(coat, 0.88), sstep(top, -len, y))),
+        // a two-layer skirt: the lining shows from below and through the vent, and every free edge has a rolled rim (LOD0 only)
+        thick: 0.008,
+        lining,
+        rim: (_phi, y) => y < top - 0.02,
       },
       true,
     );

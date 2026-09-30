@@ -6,7 +6,14 @@ export interface MenuHandlers {
 }
 
 import { startPadNav } from "./PadNav.ts";
-import { GORE_LEVELS, getCampaignLimbLoss, getGore, getHeadBob, getShowLimbs, getView, setCampaignLimbLoss, setGore, setHeadBob, setShowLimbs, setView, type ViewMode } from "../settings.ts";
+import { anyModalOpen } from "./modal.ts";
+import { openHowTo, hasSeenHowTo } from "./HowTo.ts";
+import { openSettings } from "./Settings.ts";
+import { GORE_LEVELS, getCampaignLimbLoss, getGore, onSettingChange, setCampaignLimbLoss, setGore } from "../settings.ts";
+
+declare const __APP_VERSION__: string | undefined;
+/** Shown on the front door and useful in bug reports. */
+export const versionLabel = (): string => `Pre-alpha ${typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev"}`;
 
 /** A compass rose for the letterhead: eight points, drawn in currentColor so it takes the brass of the rule beside it. */
 const COMPASS = `<svg viewBox="0 0 32 32" fill="currentColor"><path d="M16 1 19 13 31 16 19 19 16 31 13 19 1 16 13 13Z"/><circle cx="16" cy="16" r="2.4" fill="none" stroke="currentColor" stroke-width="1"/><path d="M16 7 17.6 14.4 25 16 17.6 17.6 16 25 14.4 17.6 7 16 14.4 14.4Z" fill="none" stroke="currentColor" stroke-width=".6" transform="rotate(45 16 16)"/></svg>`;
@@ -49,40 +56,40 @@ export class Menu {
           <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
           <button id="join">Join</button>
         </div>
+        <div class="row aux">
+          <button id="options" class="quiet">Options</button>
+          <button id="howto" class="quiet${hasSeenHowTo() ? "" : " new"}">How to play</button>
+        </div>
         <label class="opt">Sensibilities: gore
           <select id="gore" aria-describedby="gore-note">${GORE_LEVELS.map((g) => `<option value="${g}"${g === getGore() ? " selected" : ""}>${g[0]!.toUpperCase()}${g.slice(1)}</option>`).join("")}</select>
         </label>
         <p id="gore-note" class="fine">Off replaces all blood with bandages and iodine. Wounds stay just as readable.</p>
-        <label class="opt">Severed limbs
-          <select id="limbs" aria-describedby="limbs-note"><option value="1"${getShowLimbs() ? " selected" : ""}>Shown</option><option value="0"${getShowLimbs() ? "" : " selected"}>Hidden</option></select>
-        </label>
-        <p id="limbs-note" class="fine">Hidden shows the same injuries as ordinary dressings. It only changes what you see, never what happens.</p>
-        <label class="opt">Camera
-          <select id="view" aria-describedby="view-note"><option value="third"${getView() === "third" ? " selected" : ""}>Third person</option><option value="first"${getView() === "first" ? " selected" : ""}>First person</option></select>
-        </label>
-        <p id="view-note" class="fine">Press X in the field (right stick click on a pad) to switch at any time. Other players always see your whole figure.</p>
-        <label class="opt">Head bob (first person)
-          <select id="bob"><option value="1"${getHeadBob() ? " selected" : ""}>On</option><option value="0"${getHeadBob() ? "" : " selected"}>Off</option></select>
-        </label>
         <p id="status" role="status" aria-live="polite"></p>
         <p class="fine">Mature content: strong violence, coarse language and dark satire.</p>
+        <p class="fine version">${versionLabel()}</p>
       </div>
       <div class="panel" id="creator-host" aria-label="Character creator"></div>`;
     this.creatorHost = root.querySelector<HTMLElement>("#creator-host")!;
     this.nameInput = root.querySelector<HTMLInputElement>("#name")!;
     this.codeInput = root.querySelector<HTMLInputElement>("#code")!;
     this.status = root.querySelector<HTMLElement>("#status")!;
-    this.buttons = [...root.querySelectorAll<HTMLButtonElement>(".main button")];
+    this.buttons = [...root.querySelectorAll<HTMLButtonElement>("#create, #join")];
     root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name(), this.rules())));
     root.querySelector("#join")!.addEventListener("click", () => void this.join());
     root.querySelector<HTMLSelectElement>("#gore")!.addEventListener("change", (e) => setGore((e.target as HTMLSelectElement).value as (typeof GORE_LEVELS)[number]));
-    root.querySelector<HTMLSelectElement>("#limbs")!.addEventListener("change", (e) => setShowLimbs((e.target as HTMLSelectElement).value === "1"));
-    root.querySelector<HTMLSelectElement>("#view")!.addEventListener("change", (e) => setView((e.target as HTMLSelectElement).value as ViewMode));
-    root.querySelector<HTMLSelectElement>("#bob")!.addEventListener("change", (e) => setHeadBob((e.target as HTMLSelectElement).value === "1"));
+    const options = root.querySelector<HTMLButtonElement>("#options")!;
+    const howto = root.querySelector<HTMLButtonElement>("#howto")!;
+    options.addEventListener("click", () => openSettings(options));
+    howto.addEventListener("click", () => openHowTo(howto));
+    // The gore choice is shared with the settings screen: follow it if it changes there.
+    onSettingChange(() => {
+      root.querySelector<HTMLSelectElement>("#gore")!.value = getGore();
+      howto.classList.toggle("new", !hasSeenHowTo());
+    });
     this.codeInput.addEventListener("input", () => (this.codeInput.value = this.codeInput.value.toUpperCase()));
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
     this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules())));
-    startPadNav(root, () => !this.root.hidden);
+    startPadNav(root, () => !this.root.hidden && !anyModalOpen());
   }
 
   private rules(): { dismemberment: boolean } {
