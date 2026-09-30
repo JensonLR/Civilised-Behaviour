@@ -232,6 +232,7 @@ test("a downed player is revived by a teammate holding interact, then dragged to
 });
 
 test("wounds are server-owned and visible to everyone; a knock-down plays a ragdoll that ends in the lying pose (two real browsers)", async ({ browser }) => {
+  test.setTimeout(360_000); // two software-rendered pages, a full world and a ragdoll: 1.7 min alone, and it has to survive a busy full run
   const errors: string[] = [];
   const mk = async () => {
     const p = await (await browser.newContext()).newPage();

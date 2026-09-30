@@ -1,6 +1,6 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-09-29. Branch: `claude/civilised-behaviour-architecture-jtce2l`.
+Last updated: 2026-09-30. Branch: `claude/civilised-behaviour-architecture-jtce2l`.
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
@@ -14,8 +14,8 @@ Last updated: 2026-09-29. Branch: `claude/civilised-behaviour-architecture-jtce2
 |---|-----------|--------|-------|
 | M0 | Foundation | DONE | monorepo, CI, docs, client/server boot, basic Three scene, room connection |
 | M1 | Multiplayer movement | IN PROGRESS | see below |
-| M2 | Character sandbox | IN PROGRESS | see M2 detail |
-| M3 | Combat | TODO | firearms, melee, cannon, damage zones, gore, friendly fire, downed/revive, Rewind lag comp |
+| M2 | Character sandbox | DONE (art judged on software GL only) | see M2 detail |
+| M3 | Combat | FIRST PASS DONE (unplayed; no NPC AI) | firearms, melee, cannon, damage zones, gore, friendly fire, downed/revive, Rewind lag comp |
 | M4 | First region | TODO | terrain streaming, vegetation, village, HQ, weather, faction NPCs |
 | M5 | Expedition | TODO | loadout, followers + command wheel, horse, wagon, boat, region travel |
 | M6 | Factions + negotiation | TODO | relationship sim, leaders, offers, consequences, rival expedition |
@@ -110,6 +110,8 @@ water, wind, ambient life, landmarks and paths; first-person view (X). Unit test
 Known weak spots (details in docs/_notes/*.md): cape/poncho read as bowls from above and clip at extreme arm swings; sideburns 4-6 read as dark curtains; hands are still fists;
 LOD1 is heavier than aimed (5.7k); face parts rebuild per instance (crowds need them cached); ragdoll from a mid idle-act pose can overshoot an elbow limit for a frame; first-person arms
 only show when looking down; day clock is per client; nothing grants wooden legs in the campaign yet; no weather, no sound.
+Done + verified (M3 combat, audio/settings, world clock and weather, character polish, 2026-09-30; D-030..D-032): weapons and authoritative combat with lag compensation (unit 226 shared, 148 server incl. 9 mutation checks and bot-measured hit rates); synthesized audio engine and settings/pause/how-to screens with accessibility options; server-synced day clock and deterministic weather; observatory, clearing, flock and vegetation; drapes, hands with grip, LOD costs, creator with presets/undo/paste, batch-3 cosmetics; ragdoll hinge limits fixed at the root. Unit tests: shared 226, procedural 512, client 320, server 148.
+Known weak spots (details in docs/_notes/*.md): audio never heard by a human; combat balance never played; first-person aimed weapon sits low; dust impacts read weakly; NPC combat AI does not exist; the shared clock IS verified live (two real browsers agree within 0.2 s and match the server's formula) but weather has only been checked by tests and stills; puddle/rain/animal shaders unmeasured on a real GPU; tiny cosmetics (laces, cuffs) read as specks at distance; the free Render server tier is too slow for real sessions (tick ~100 ms vs 33 ms budget); the browser cannot be driven against the Render deployment from this sandbox (WebSocket 404), only through the Node SDK.
 Not done in M2 (next):
 - Wounds have no gameplay effect yet (limp is animation only; a real slow-down needs `wounds` as a predicted input of the shared step). No bleed-out or
   medical supplies (M5). Dirt/mud accumulation and blood on clothing beyond the dressings. Outline rollout to NPC crowds (LOD).
