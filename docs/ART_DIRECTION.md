@@ -30,8 +30,21 @@ shadows, one ink line round everything, and faces that are designed rather than 
   here" for everything that attaches. Vertex colours bake the blush, socket shade and lips.
 - Things that grow out of it: `faceParts.ts` (nose as a tapered sweep, cupped ears, swept moustaches, beard lobes, sideburns),
   `shell.ts` (hair, jaw beards, sideburns as skin-hugging shells clipped at a smooth iso-line), `hair.ts` (the ten hairstyles).
-- Eyes (`rig.ts`): white, iris, pupil and a **catch-light** (what makes an eye look alive), a skin-toned lid that matches the socket shade, and a
-  tapered arched brow. The mouth is a shallow swept lip line that opens into a D-shaped cavity with teeth and a tongue.
+- **The face grid is packed where the face has features** (`headShape.ts` `FACE_THETAS`): still 32x24, but two rows a lip's height apart bound the mouth seam (`MOUTH_BAND`), the eye rows are dense, and the rows
+  above the brow and under the chin are far apart. The jaw and every mouth part are defined against those two rows (`faceMorph.ts` `jawWeight`). The outline hull uses its own 24x15 grid so the ink line
+  is not a polygon in a close-up.
+- **Expressions are data** (`expressions.ts`: neutral, pain, fear, triumph, drunk, angry, smug, disgust, surprise, laugh, sleep; `setExpression(id, intensity 0..1)`), eased and applied by `faceAnimate.ts`:
+  brow height / tilt / arch / knit (a morph target set on the brow itself), upper-lid height and slant, lower-lid squint, gaze, pupil size, and twelve morph targets on the skin
+  (jaw, smile, frown, squint, puff, pucker, stretch, snarl, smirkL, smirkR, browUp, browKnit). Append-only: new expressions and new targets go at the END.
+- **Eyes** (`faceRig.ts`): a shaded sclera (lid shadow, pink inner corner), a domed iris with a bright inner ring, a hard dark limbal ring and radial streaks, a pupil disc that dilates, two catch-lights that stay
+  put when the eye turns, an upper lid with a fold and a drawn lash-line ribbon, a lower lid with a wet edge. The lids close to a lash line just below the middle of the eye and meet there.
+- **Brows** are a tapered body with a fan of pointed hairs (per-hair length, angle, tone), seated on the brow ridge by a depth table so they follow the skin as they rise, fall and draw together.
+- **The mouth** (`mouthGeo.ts`) is ONE small mesh laid on the strip of skin between the two mouth rows: the lip seam, the dark opening, gums, six upper and six lower teeth (gold, missing, buck and crooked
+  variants), a tongue. Shut, it has no area; it opens with the jaw morph and moves with every other morph because it is built from the same deformation function as the skin. Teeth cannot leave the lips.
+- Hair and facial hair are **clumps, not sheets**: long hair is a dark under-layer plus two or three layers of tapering strand clumps that fall along the body-clearing profile (`hair.ts` `clump`), the ponytail
+  is a bundle, beards carry overlapping locks with dark roots and light tips over a core (`faceParts.ts` `fringe`), greying is per strand (mottled, tips and chin first) and roots are darker than lengths.
+- Things that grow out of the skin: `faceParts.ts` (nose: a slim bridge swelling into a ball, nostril wings and dark nostrils; dished ears with a helix, lobe and antihelix; swept moustaches; beard lobes; sideburns),
+  `shell.ts` (hair, jaw beards, sideburns as skin-hugging shells clipped at a smooth iso-line), `hair.ts` (the hairstyles).
 - Sweeps (`sweep.ts`) and lofts (`loft.ts`) are the two forming tools: cross-sections along a curve or a stack. Anything organic uses one of them.
 
 ## Cloth, hands and fine detail on a character (second pass)
@@ -53,7 +66,8 @@ shadows, one ink line round everything, and faces that are designed rather than 
 node scripts/shot.mjs "?showcase=lineup&n=5&seed=3&heads=1&turn=0.2" out.png 1800x600          # a row of portraits
 node scripts/shot.mjs "?showcase=lineup&n=4&seed=3&close=1&cd=1.25&turn=0.35&set=hat:0" out.png # one face, tight
 node scripts/shot.mjs "?showcase=lineup&n=8&heads=1&vary=beard&set=hair:0,moustache:0,hat:0" out.png
-node scripts/shot.mjs "?showcase=lineup&n=4&close=1&cd=1.25&expr=triumph|pain|fear|angry|drunk" out.png
+node scripts/shot.mjs "?showcase=lineup&n=4&close=1&cd=1.25&expr=triumph|pain|fear|angry|drunk|smug|disgust|surprise|laugh|sleep" out.png
+node scripts/shot.mjs "?showcase=lineup&n=1&close=0&cd=1.8&expr=laugh&hideface=lid,lowerLid,glint&set=hat:0" out.png   # hideface= switches face parts off to see what lies under a lid
 ```
 Checklist for a new feature: reads at distance? sits on the sculpt (no float/sink)? uses only palette colours? survives Gore Off? fits the triangle
 budget in `docs/PERFORMANCE.md`?
@@ -173,3 +187,14 @@ The interface is the Society's stationery, not a game HUD skin: paper, brass, in
 variables (which come from `PALETTE.ui`); meaning is never colour alone (gauge = needle + number + "!", injuries = fill + outline weight + hatching + words); type is IM Fell
 English (text), IM Fell English SC (labels, buttons), Special Elite (codes and telegrams); ornament is CSS/inline SVG only; nothing animates with `prefers-reduced-motion`.
 Review with `node scripts/shot.mjs "?x=1" out.png 1440x800 4000` (menu) and a scratch Playwright session for the in-game HUD (enter a campaign, send `debug` `hit:0:50`, `down`, `sever:4`).
+
+### Interface, second pass (2026-09-30)
+- **Edges and order.** One margin (`--pad`: at least 0.9 rem, 2.4% of the short side, plus the platform's safe area) for everything hugging an edge. Top: the heading strip (centre), the expedition
+  plaque (right), the telegram stack below the strip. Bottom-left: vitality gauge and surgeon's tag; bottom-right: armoury card over the key line; centre-low: the prompt ticket. Captions sit left above the gauge.
+- **The heading strip** is a brass ruler with ink ticks, N in stamp red, a cartouche for the reading and luggage-tag chips for the camp, Hollowmere and the Observatory (shape + word + metres, never colour).
+- **Telegrams** queue (three at a time); **vitals** are ink hatching from the edges of the picture, heavier as health falls, so the warning is a pattern and a word on the gauge, not only red.
+- **Hit direction** is a wedge with an arrowhead on a ring round the sight, stamp red edged in paper and ink (ink alone in colour-blind and high-contrast modes).
+- **Front door**: the camp at golden hour behind the charter and the creator's panel, the figure lit by the low sun with a warm rim and a cool fill; waiting is a brass compass whose needle seeks, failing is
+  "The Society regrets..." in stamp red with the real reason; a small sound plaque says when the browser is waiting for a click.
+- **First-person hands** are drawn with the same toon ramp, palette and ink as the body (the player's own sleeves and gloves); see `docs/_notes/firstperson.md`.
+- **Effects** follow the palette and the tone curve: shader-written clouds now go through tonemapping and the output colour space (before, they were darker and more saturated than their palette colour).

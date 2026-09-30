@@ -12,7 +12,7 @@ import { LabStage } from "./LabStage.ts";
  *   seed=N        base seed for the row
  *   n=K           characters in the row (default: one per archetype)
  *   close=I       (ty=metres sets the height looked at, tx sideways: hands are at ~0.8) frame character I's head and shoulders (cd=1.2 for a tight face portrait; cx / cyo offset the camera sideways / up to look from an angle or from below)
- *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry)
+ *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry|smug|disgust|surprise|laugh|sleep); hideface=lid,lowerLid,glint,core,pupil,brow,mouth switches face parts off
  *   pose=walk     walk|idle|carry|crouch|air|down|run|sprint|kneel|haul|aim|pistol|sabre|cannon (aim/pistol/sabre/cannon pose the arms for a weapon and draw it; sw=0.4 sets a blow's progress);
  *   wield=rifle   rifle|blunderbuss|pistol|sabre|umbrella in the hands (any pose), aimw=1 aiming it, sw=0.4 a blow in flight
  *                 steps=N settles the animator for N frames (default 90) so different gait phases can be reviewed

@@ -280,3 +280,46 @@ LOD0 avg 11972 / max 14086 tris (budget 12k / 15k), 27.8 meshes (hulls 16080 / 1
 - Cuff buttons, boot laces and eyelets are still specks at gameplay distance (LOD0-only, left for the creator and close-ups); epaulettes were enlarged because they did not read at all.
 - Ruff front on a thin body under a shawl collar: 2 cm; neckerchief triangle 2 cm.
 
+
+
+---
+
+# Fourth pass, agent F: faces and hair (2026-09-30)
+
+Goal: faces charming and expressive at close range, still reading at 30 m. Everything in `packages/procedural/src/three` unless noted. Review sheets (before / after) are in `/tmp/claude-0/F/{before,after,s1,hair0}`.
+
+## What changed
+- **Skin sculpt and grid** (`headShape.ts`): new brushes (upper lip as two lobes with a tubercle and a philtrum groove/ridges, fuller lower lip, mentolabial groove, nasolabial folds, mouth-corner dimples, nose-root dip, tear trough, jaw
+  angle), a `fold` colour tag, stronger lip colour. `FACE_THETAS`: same 24 rows, packed at the mouth (rows 8 and 9 = `MOUTH_BAND`), eyes and chin; columns denser at the face. Hull grid 24x15 (was 18x12).
+- **Morph targets** (`faceMorph.ts`): `faceDeltas(x, y, z)` is the one deformation function; 12 skin targets (5 old + pucker, stretch, snarl, smirkL/R, browUp, browKnit). The jaw weight is a step over the mouth band with the
+  commissure held back, so the opening is a D.
+- **Mouth** (`mouthGeo.ts`, new): seam, opening, gums, individual teeth, tongue as one morph-driven mesh on the mouth band (see ART_DIRECTION). Replaces the cavity / teeth boxes / lip sweep. Crowd LOD1 swaps to the seam alone.
+- **Eyes, lids, brows** (`faceRig.ts`, rewritten): see ART_DIRECTION. Bugs found on the way and fixed: catch-lights were floating 0.03 m in front of the eye (a floor of 0.01 in a squared-metres `max`), and a faceted lid shell sagged
+  under the glints and the iris (lids are 1.11 x and 1.085 x the eyeball now, the glints 1.048 x).
+- **Expressions** (`expressions.ts`, `faceAnimate.ts`, new; `animator.ts` only re-exports the type, holds a `FaceAnimator` and forwards `setExpression(id, intensity = 1)`): 11 expressions. `FaceParts` lost `mouthInterior`,
+  `mouthCavity`, `tongue`, `teethUpper/Lower`, `mouthY/Z`; gained `glintL/R`, `browX`, `browZ(x, y)` and `pose` (the live pose). The old `mouth.rotation.z` smile flag is gone (`rig.test.ts` reads `face.pose.mouthCurve`).
+  Idle life: blinking and small deterministic glances (off with `autoBlink = false`).
+- **Nose** (`faceParts.ts`, `noseShape.ts`): `noseSwell` (slim bridge into a ball, shared with the spectacle fit), eight nostril-wing sizes, dark nostril ovals on the front-underside of the ball.
+- **Ears** (`headFit.ts` `earModel`): thicker helix, lobe drop, antihelix pinch in the bowl.
+- **Hair** (`hair.ts`, `shell.ts`): `clump()`; long lank and shaggy mane rebuilt from strand clumps over a darker under-layer (LOD0; crowd levels keep the curtain), ponytail bundle, locks darker at the root and lighter at the tip with
+  pointed ends, roots darker than lengths and a crown sheen baked into the shells, natural mottled greying (`shell.ts`, `look`-style per strand in beards and moustaches: `strandTone`). Beards: locks over the core (`fringe`;
+  skipped on diagonal lobes such as the forked beard, where they folded), root-to-tip colour ramps, wizard cheek whiskers start at the ear. Clumps are left out of the outline hull (the ink follows the under-layer).
+- **Budgets**: skin under a hat above its band is not drawn (`HAT_COVERS_ABOVE`, proven by `skullUnderHat.test.ts`, about -100 tris per head); face parts got cheaper (sclera is a 10x4 cap, 12-gon lids). Palette: `face.glint`
+  appended (`palette.test.ts` covers it and the mouth colours).
+- **Tests** (new): `faceExpressions.test.ts` (5 heads x 11 expressions x 5 intensities: mouth parts within +0.05 R / -0.065 R of the deformed skin, eyeballs seated, brows on the ridge; measured worst 0.031 R out, 0.013 R in),
+  `mouthGeo.test.ts`, `skullUnderHat.test.ts`; `headShape.test.ts` / `rig.test.ts` adjusted.
+- `showcase/Lineup.ts`: `hideface=lid,lowerLid,glint,core,pupil,brow,mouth`.
+
+## Numbers (Node, `scripts/char-bench.ts`, 60 seeds)
+LOD0 11905 avg / 14038 max (limit 12000 / 15000, was 11782 / 13871 before this pass but other agents added ~400 in the same window), LOD1 4522 avg (limit 4600), LOD2 1361. Face parts 1097 tris (was ~1320). Head
+geometry avg 4835 by `auditHead` (hats included; 4727 before). Hair styles: long lank 1210 (was 1202), shaggy mane 1656 (1815), ponytail 804 (716).
+
+## Weak spots (honest)
+- Hair has no sway (static geometry); the clumps are placed so a `sway` uniform could be added later. Fringe locks on short styles are still single ribbons with colour ramps, not clumps.
+- No new catalog entries (moustache / brow / nose styles): those are wire-format and outside this pass. Existing moustache shapes got colour and taper only.
+- The mouth band is one lip-height tall, so lip shape is carried by the two rows either side; closed lips read through colour more than silhouette. Tongue-out is visible only with the mouth open.
+- The nose bridge still draws a strong ink line down its flank (the hull), which reads as style but is heavy on a long nose in 3/4 view.
+- Closed eyes are round lid bumps with a lash line, not almond shapes; the bump is polygonal (12-gon) at extreme close range.
+- The body mood (`updateMood`) only knows the original five; laugh / smug / disgust / surprise move the face, not the torso. The animator's shared pose code is agent R's.
+- Skin folds are sculpted (nasolabial, corner dimple) but do not deepen with the smile morph beyond the cheek bunching; age lines are still decals.
+- The expression test's tolerances are measured, not derived; teeth of a huge jaw-slider head at full gape stand 0.03 R off the lips.

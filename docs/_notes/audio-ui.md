@@ -151,3 +151,53 @@ accessibility attributes, scale, rebinding with conflict, the manual, the real a
 - The gamepad cannot rebind (layout is fixed and shown); keyboard rebinding is two slots per action and does not cover mouse buttons.
 - Graphics preset changes rebuild the world (a visible hitch); characters already spawned keep their old outline/LOD choices until the next session.
 - `tests/e2e/settings.spec.ts` ran once at the end of the session: 8/8 passed (including the pause sheet in a real expedition). The audio graph was checked in a real headless Chromium `AudioContext` (starts on a click, bakes 125 buffers, plays, no errors) but not through speakers.
+
+---
+
+# Update 2026-09-30 (agent P): interface pass, front door, settings
+
+## In the field (`ui/Hud.ts`, `Compass.ts`, `Telegrams.ts`, `vitals.ts`, `hudChrome.ts`, `CombatHud.ts`; review scene `?showcase=hud`)
+- **Heading strip** (`Compass`, maths in `compassLogic.ts`): a brass ruler at the top centre with ticks every 15 degrees, N in stamp red, a cartouche with the 16-point name and degrees
+  ("NNW 337"), and a chip for each place the expedition knows (camp = the fire, Hollowmere = the middle of the village, the Observatory) with its distance in metres. Positions come
+  from the shared landscape data and the camera yaw: nothing from the server. Chips are a shape + a word (tent / house / dome), off-strip ones pin to the edge with an arrow,
+  overlapping chips are stacked in up to three rows (`stackRows`).
+- **Telegram stack** (`Telegrams`, `telegramQueue.ts`): notices queue, three at a time (two on a short window), each for its reading time (4-11 s), repeats of the same news within
+  1.5 s merged, the rest "+N waiting" on the first slip. `Hud.showNotice(text, seconds?)` feeds it.
+- **Vitals**: ink hatching from the screen edges (shaken 55%, critical 35% pulsing, down heaviest and desaturating) and the gauge label (Vitality / Critical! / Down +).
+- **Key hints follow rebinds**: the help line (`hudChrome.ts`), the prompts (`Game.updatePrompt` reads `interact` / `grab` / `throw`) and the armoury card's "Empty - press R". The pad's
+  glyphs are fixed.
+- **Layout**: one edge margin `--pad` = max(0.9 rem, 2.4% of the short side, the platform's safe-area inset); the armoury card sits above the key line (or at the corner when the line is
+  hidden under 62 rem), captions moved to the left above the gauge, telegrams below the strip, the downed card lower. Checked at 800x450 and 1440x800; 1920x1080 was only
+  checked on the front door.
+- Colour-blind and high-contrast variants of every new element use the existing `data-cvd` / `data-contrast` hooks (ink instead of stamp red, thicker borders); the strip,
+  telegrams and cards all carry words.
+
+## Front door (`game/boot.ts`, `render/CreatorPreview.ts`, `ui/Menu.ts`, `ui/menuLogic.ts`, `ui/SoundPlaque.ts`)
+- The door is drawn first (golden sky + the figure, `stage.setTime(17.2)`), and the camp (arena seed 7, about a second of synchronous work) is built after the first paint on a
+  `requestAnimationFrame` + 60 ms timer; a session started sooner cancels it. NOT measured on a real machine: on this software renderer the page is interactive at once and the camp appears a second or two later.
+- `CreatorPreview` stands the creator's figure in the camp (fire, pavilion, Observatory and falls behind), grass bent away with the walkers' push, a slow camera drift (angle, distance,
+  height; scaled by the motion preference, zero at 0), a warm rim and cool fill, and a contact shadow. Pose picker unchanged (default Turntable; Idle / Walk / Pain / Triumph).
+  `stop()` hands the scene to the game; `dispose()` releases the listeners.
+- **Working card** ("Consulting the Society..."): a brass compass whose needle swings, a step line (named stages from the handlers: "Posting the telegram...", "Reply received. Packing the trunks...",
+  "Surveying the territory..."; patient phrases if a stage takes long), an indeterminate hatched bar; reduced motion stills it. **Error state**: "The Society regrets..." with the real reason
+  (network failures become "The telegraph line is down", bad codes and full parties keep their words), Try again / Return to the door, focus on Try again, Escape and pad B go back.
+  The panels behind are `inert` while the card is up.
+- **Sound plaque**: "Click anywhere to enable sound" at the foot of the door while the audio context waits for a gesture; gone when running; never blocks.
+- Title lockup: a larger compass rose whose inner star turns once in 90 s (off under reduced motion).
+
+## Settings: what was wrong and what now applies live
+Audit of every setting in `settings.ts` against its consumer. Already live: volumes, mute when unfocused, UI scale, larger text, contrast, colour-blind, captions, FOV, view, head bob, gore,
+show limbs, sensitivities, invert Y, sprint hold/toggle, shake, bindings. **Fixed:** *Reduce motion* only set the stylesheet attribute; the world's sway / birds / cloth scale (`motion.value`)
+ignored it until reload - it now follows (`boot.ts`, unless `?motion=` is given). *Graphics preset* rebuilt the world but left effect density and the characters' ink line on their old choice:
+`CombatView.setPreset` and `CharacterActor.setOutline` / `WeaponRig` / `WeaponModel.setOutline` apply them at once (the hull is made the first time it is wanted). **Restore defaults** now asks
+(first press arms it for four seconds: "Really restore? Press again"). Still a hitch: switching the preset rebuilds the world; characters keep their LOD choice.
+
+## Tests added
+`ui/interface.test.ts` (strip maths, queue, vitals, door words), `ui/lifecycle.test.ts` (happy-dom: HUD / combat HUD / plaque / chrome built and removed three times with no DOM, timer or listener left;
+telegrams; founding, failing, retrying and returning; key hints follow a rebind; the pause sheet), `ui/padflow.test.ts` (happy-dom, fake gamepad: title -> New campaign by D-pad and A, error card by pad,
+settings by A / bumpers / B, Start opens pause), `render/CreatorPreview.test.ts`, `render/ViewModel.test.ts`, `render/viewPose.test.ts`, `render/weapons/shotfx.test.ts`. `happy-dom` was added to
+`apps/client` devDependencies (per-file `// @vitest-environment happy-dom`; every other test stays in node).
+## Weak spots
+- Nobody has played any of it; HUD, strip and door are judged from stills at 800x450 / 1440x800 (1920x1080 for the door).
+- The lifecycle test covers the interface, not the 3D scene; no Playwright run of menu -> play -> leave was done (no server allowed).
+- A rebind of the view key etc. does not rewrite the pause sheet's static text.

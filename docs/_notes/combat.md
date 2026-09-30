@@ -107,3 +107,29 @@ seconds before judging puffs.
 - Balance is a first pass: nothing has been played by humans. Rifle 70 damage with head x2.2 downs a full-health man with one headshot by design; the cannon kills at its centre and the rim is gentle.
 - The reload is a client picture keyed to the replicated progress (0..100); a dropped patch shows a stall, never a wrong ammo count.
 - Bots shoot in tests (`BotFrame` combat fields); there is no combat AI for NPCs yet (D: utility AI is later).
+
+---
+
+# Update 2026-09-30 (agent P): impact effects
+
+`render/weapons/ShotFx.ts`, `render/HitFx.ts` users, `game/CombatView.ts`, `showcase/Fx.ts` (`?showcase=fx&fx=impact|muzzle|hit|explosion&w= s= t= n= wind=`).
+- **Dust reads on pale earth.** The puff shader (`PUFF_FRAG`) gets a lighter heart and a darker contour ring; and the raw shader materials (puffs, ring, scars) now include
+  `tonemapping_fragment` + `colorspace_fragment`: before, palette colours were written as linear light straight to an sRGB target, so every cloud was darker and more saturated
+  than its palette colour (the main reason dust looked like brown blobs on brown ground). Earth impacts: a lifted plume (bigger, longer, `PALETTE.world.dust` to `FX.dust`),
+  a low ring of dust racing outward (`ringAt`; the ring pool is now 14, with per-ring alpha/life), flung clods, and a **ground scar** (`scar`: dent, lip, six cracks in a
+  shader; pool of 40, 40 s, fades over the last quarter; stone floors get one too; walls none).
+- **Wind.** `smokeWind(t, getAtmosphere().wind)`: the deterministic heading of `windAt`, scaled by `windGain` (0.5x calm to 3.4x gale). Muzzle smoke also leaves 1-4 big thin
+  **powder haze** puffs that hang 3.5-5.5 s and drift downwind.
+- **Debris.** A brass **percussion cap** flies from the lock (derived behind the muzzle: `LOCK_BACK`), beside the existing wad and sparks.
+- **Bullet whizz.** `ShotFx.nearMiss` (hitscan tracers of other players, and flying balls via `Projectiles`): a round passing within 3.2 m but not through you and not from your
+  own muzzle leaves two hairline streaks and a ripple, rate-limited to one per 0.12 s (a blunderbuss is one whizz), and flicks the camera (scaled by the shake setting). No
+  sound was added (sound recipes are the audio agent's).
+- **Gore Off** hits also throw soft dust (`bodyDust`) in addition to the pale sparks.
+- **Hit direction** (`CombatHud.damageFrom`): up to six exact-bearing wedges-with-arrowheads on a ring round the sight (was four quadrant slots), a repeat hit from about the
+  same direction refreshes its mark, bold by damage; colour-blind and high-contrast modes draw it in ink.
+- **Low health**: `.vitals` hatching closes in from the screen edges (a pattern, not just red) at 55%, harder and pulsing at 35%, heaviest with a desaturating sepia when
+  down; the gauge label says Critical! / Down, never colour alone.
+- **Downed camera** (`CameraRig.update(..., downed)`): the follow camera settles 32% closer and ~1 m lower, looks a little up, with a slow unsteady drift; eases out on revive.
+  No cut, no kill-cam. First person already lay down (`downedPitch`).
+Tests: `weapons/shotfx.test.ts` (wind scaling, scars pooled and expiring, cap/haze, whizz rules, disposal), `CameraRig.test.ts` (downed framing), `ui/interface.test.ts`.
+Weak spots: dust/puff look is judged from stills; scars are flat quads (they float on steep slopes); the flash is in the world pass so the viewmodel barrel can cover part of it.
