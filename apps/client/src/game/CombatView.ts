@@ -102,9 +102,8 @@ export class CombatView {
     private readonly actors: () => Map<string, ActorLike>,
     hudRoot: HTMLElement,
   ) {
-    const world = session.world;
-    this.fx = new ShotFx(stage.scene, (x, z) => world.terrainHeight(x, z), FX_SCALE[getGfx()]);
-    this.projectiles = new Projectiles(stage.scene, world, this.fx);
+    this.fx = new ShotFx(stage.scene, (x, z) => session.world.terrainHeight(x, z), FX_SCALE[getGfx()]);
+    this.projectiles = new Projectiles(stage.scene, session.world, this.fx);
     // a round that goes by your head: hairline streaks (ShotFx.nearMiss) and a small flick of the lens, scaled by your shake setting
     this.fx.onNearMiss = (k) => this.rig.addShake(0.16 * k);
     this.hud = new CombatHud(hudRoot);
@@ -113,6 +112,11 @@ export class CombatView {
     room.onMessage("impact", (e: ImpactEvent) => this.onImpact(e));
     room.onMessage("boom", (e: BoomEvent) => this.onBoom(e));
     room.onMessage("hitmark", (e: HitMarkEvent) => this.hud.hitMarker(e.zone, e.down, e.sever));
+  }
+
+  /** The region changed (sailing, or the bridge fell): rounds stop at the new ground. */
+  setWorld(): void {
+    this.projectiles.setWorld(this.session.world);
   }
 
   /** The graphics preset changed: fewer or more puffs from now on. */
@@ -406,6 +410,15 @@ export class CombatView {
       }
       v.update(dt, st);
     });
+    // a region without the field gun (Kessar Reach): its views go with it
+    if (this.cannons.size > (this.session.room.state.cannons?.size ?? 0)) {
+      for (const [id, v] of this.cannons) {
+        if (!this.session.room.state.cannons?.has(id)) {
+          v.dispose();
+          this.cannons.delete(id);
+        }
+      }
+    }
     this.projectiles.update(dt);
     this.fx.update(dt);
     this.hud.tick(dt);

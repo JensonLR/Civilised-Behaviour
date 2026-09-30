@@ -65,6 +65,9 @@ export const PlayerState = schema({
   shots: t.uint8(),
   /** Aim elevation for the pose of remote figures, 1/80 rad (int8: +-1.58 rad). Cosmetic. */
   aim: t.int8(),
+  // --- campaign cast (append-only) ---
+  /** 0 = a real player; else NPC.* (a garrison/rival row keyed `npc:<id>`, slot 16+, driven by the server through the same step). */
+  npc: t.uint8(),
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 
@@ -127,5 +130,21 @@ export const WorldState = schema({
   /** Campaign rule: shots and blasts hurt comrades (weapon.ffScale applies). Default on; the creator may switch it off. */
   friendlyFire: t.boolean(),
   cannons: t.map(CannonState),
+  // --- the campaign (append-only) ---
+  /** The active region (RegionId). One room holds one active region; sailing swaps it. */
+  region: t.string(),
+  /** Sailing: 0 idle, 1 proposed, 2 sailing, 3 arriving (clients build the new world, then send regionReady). */
+  travelPhase: t.uint8(),
+  travelTo: t.string(),
+  /** Bitmask of slots that said yes (phase 1) or have arrived (phase 3). */
+  travelReady: t.uint8(),
+  /** Whole seconds left in the current travel phase. */
+  travelLeft: t.uint8(),
+  /** CampaignState JSON (server-owned, parsed by parseCampaign) and its revision. */
+  campaign: t.string(),
+  campaignRev: t.uint16(),
+  /** ScenarioView JSON ("" outside a scenario) and its revision. */
+  scenario: t.string(),
+  scenarioRev: t.uint16(),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

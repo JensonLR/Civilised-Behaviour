@@ -246,12 +246,31 @@ export class Combat {
   readonly lagLog: number[] = [];
 
   constructor(private readonly host: CombatHost) {
+    this.rebuildCannons();
+  }
+
+  /** Re-reads the room's cannon fixtures (the room swaps regions: Hollowmere has a field gun, Kessar Reach none this slice). */
+  rebuildCannons(): void {
+    for (const c of this.cannons) for (const id of c.operating) { const p = this.host.players.get(id); if (p) p.flags &= ~FLAG.OPERATING; }
+    this.cannons.length = 0;
     let i = 0;
-    host.cannons.forEach((st) => {
+    this.host.cannons.forEach((st) => {
       const spot = CANNON_SPOTS[i]!;
       this.cannons.push({ id: `cannon:${i}`, st, x: st.x, y: st.y, z: st.z, restYaw: spot.yaw, load: 0, fuse: 0, lighter: "", operating: new Set(), shotNo: 0 });
       i++;
     });
+  }
+
+  /**
+   * Who a blow may land on. The party and the garrison are at war whenever either side strikes; the garrison never harms itself; and the
+   * party's own shots reach comrades only under the campaign's friendly-fire rule. (A shooter with no row, the cannon or a scripted charge, counts as the party.)
+   */
+  private hittable(shooter: string, t: PlayerStateType): boolean {
+    const s = this.host.players.get(shooter);
+    const sn = s !== undefined && !!s.npc;
+    const tn = !!t.npc;
+    if (sn && tn) return false;
+    return sn !== tn || this.host.friendlyFire();
   }
 
   // ---- lifecycle -----------------------------------------------------------------------------------------------------------------
@@ -457,6 +476,7 @@ export class Combat {
 
   private viewOf(sessionId: string): RewindView | undefined {
     const rw = this.host.rewind;
+    if (this.host.players.get(sessionId)?.npc) return undefined; // an NPC sees the world as it is: nothing is rewound for it
     return rw && this.lagCompensation ? rw.lastSeenBy(sessionId) : undefined;
   }
 
@@ -513,9 +533,10 @@ export class Combat {
       c.surface = SURFACE.WOOD;
     }
     // Comrades are only a target when friendly fire is on (otherwise rounds pass through them: nobody ever blocks a shot they cannot be hurt by).
-    if (this.host.friendlyFire()) {
+    // The garrison and the party are always targets for each other.
+    {
       this.host.players.forEach((t, id) => {
-        if (id === shooter || (t.flags & FLAG.DOWNED) !== 0 || !t.connected) return;
+        if (id === shooter || (t.flags & FLAG.DOWNED) !== 0 || !t.connected || !this.hittable(shooter, t)) return;
         const pose = this.poseOf(t, view);
         if (rayBody(pose, ox, oy, oz, dx, dy, dz, best, radius, this.bodyHit) && this.bodyHit.t < best) {
           best = this.bodyHit.t;
@@ -588,7 +609,7 @@ export class Combat {
   private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number): void {
     const t = this.host.players.get(target);
     if (!t || !(damage > 0)) return;
-    const k = key * 8 + (t.slot & 7);
+    const k = key * 32 + (t.slot & 31); // (NPC rows take slots 16+, so every victim of one blast keeps its own entry)
     let h = this.pending.get(k);
     if (!h) {
       h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, point: { x, y, z } };
@@ -627,9 +648,10 @@ export class Combat {
       dirX /= len;
       dirZ /= len;
       const self = h.shooter === h.target;
-      const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : def.ffScale);
+      // ffScale softens a comrade's hit; the garrison is an enemy and takes the whole blow.
+      const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : t.npc ? 1 : def.ffScale);
       const before = t.missing;
-      this.host.damage(h.target, damage, { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias });
+      this.host.damage(h.target, damage, { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter });
       this.knock(t, dirX, dirZ, h.knock, h.stumble, 0);
       this.stats.hits++;
       metrics.hitsLanded++;
@@ -757,9 +779,9 @@ export class Combat {
     const oy = p.y + (crouch ? 0.8 : 1.2);
     let struck = 0;
     const hits: { id: string; t: number; zone: number; x: number; y: number; z: number }[] = [];
-    if (this.host.friendlyFire()) {
+    {
       this.host.players.forEach((t, id) => {
-        if (id === sessionId || (t.flags & FLAG.DOWNED) !== 0 || !t.connected) return;
+        if (id === sessionId || (t.flags & FLAG.DOWNED) !== 0 || !t.connected || !this.hittable(sessionId, t)) return;
         const pose = this.poseOf(t, view);
         if (!meleeFan(pose, ox, oy, oz, s.yaw, s.elev, m.reach, m.arcHalf, 0.08, this.bodyHit)) return;
         // A wall between the blade and the man stops it.
@@ -807,13 +829,12 @@ export class Combat {
     this.stats.blasts++;
     this.host.emitBoom({ x, y, z, radius: b.radius });
     this.host.noise?.(x, z, WEAPONS[weapon].noise, owner);
-    const ff = this.host.friendlyFire();
     const centre = { x: 0, y: 0, z: 0 };
     const key = this.shotCounter++ >>> 0;
     this.host.players.forEach((t, id) => {
       if (id === direct || (t.flags & FLAG.DOWNED) !== 0 || !t.connected) return;
       const self = id === owner;
-      if (!self && !ff) return;
+      if (!self && !this.hittable(owner, t)) return;
       const pose = this.poseOf(t, undefined);
       const d = blastDistance(pose, x, y, z);
       let f = blastFalloff(d, b.radius);

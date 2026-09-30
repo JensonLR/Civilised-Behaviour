@@ -52,13 +52,17 @@ export class PhysicsWorld {
   /** Collider handle -> prop id, so a ray can name what it hit. */
   private readonly propOfCollider = new Map<number, string>();
 
-  constructor(private readonly terrainWorld: CollisionWorld) {
+  private statics: RAPIER.Collider[] = [];
+
+  constructor(terrainWorld: CollisionWorld) {
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-    this.buildStatic();
+    this.statics = buildStaticWorld(this.world, terrainWorld);
   }
 
-  private buildStatic(): void {
-    buildStaticWorld(this.world, this.terrainWorld);
+  /** Swaps the static geometry in place (a bridge fell): props and player capsules stay, the old terrain and obstacles go. */
+  replaceStatic(terrainWorld: CollisionWorld): void {
+    for (const c of this.statics) this.world.removeCollider(c, true);
+    this.statics = buildStaticWorld(this.world, terrainWorld);
   }
 
   get propCount(): number {

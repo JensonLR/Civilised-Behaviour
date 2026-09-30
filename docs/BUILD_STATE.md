@@ -1,13 +1,14 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-09-30. Branch: `claude/civilised-behaviour-architecture-jtce2l`.
+Last updated: 2026-09-30 (Slice 1 integrated). Branch: `claude/civilised-behaviour-architecture-jtce2l`.
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
 - **M0 Foundation: done** except items listed under "Open".
 - **M1 Multiplayer movement: mostly done.** Working & verified: authoritative movement, prediction/reconciliation via Colyseus
   `Predict`, remote interpolation, KBM + gamepad input, join code/invite link, reconnect window, hostile-input sanitising.
-- Next: finish M1 (interaction primitive, bad-network verification, drift tuning), then M2 character sandbox.
+- **Slice 1 (D-033) is integrated and playable end to end in tests: HQ -> map room -> sail -> Kessar Reach -> one crossing scenario -> campaign state -> paper at HQ.**
+  See "Slice 1" below for exactly what is verified and what is placeholder. Nobody has played it as a human and the new art has not been looked at.
 
 ## Milestone board
 | # | Milestone | Status | Notes |
@@ -15,11 +16,11 @@ Last updated: 2026-09-30. Branch: `claude/civilised-behaviour-architecture-jtce2
 | M0 | Foundation | DONE | monorepo, CI, docs, client/server boot, basic Three scene, room connection |
 | M1 | Multiplayer movement | IN PROGRESS | see below |
 | M2 | Character sandbox | DONE (art judged on software GL only) | see M2 detail |
-| M3 | Combat | FIRST PASS DONE (unplayed; no NPC AI) | firearms, melee, cannon, damage zones, gore, friendly fire, downed/revive, Rewind lag comp |
-| M4 | First region | TODO | terrain streaming, vegetation, village, HQ, weather, faction NPCs |
-| M5 | Expedition | TODO | loadout, followers + command wheel, horse, wagon, boat, region travel |
-| M6 | Factions + negotiation | TODO | relationship sim, leaders, offers, consequences, rival expedition |
-| M7 | Missions + chaos | TODO | objective nodes, >=12 scenario templates, chaos director |
+| M3 | Combat | FIRST PASS DONE (unplayed; NPC AI is a first pass from Slice 1, see below) | firearms, melee, cannon, damage zones, gore, friendly fire, downed/revive, Rewind lag comp |
+| M4 | First region | PARTLY (Hollowmere HQ + Kessar Reach slice) | Hollowmere is the HQ hub; Kessar Reach is the first colony region; no terrain streaming |
+| M5 | Expedition | PARTLY | region travel is a sailing card (no loadout, followers, horse, wagon, playable boat) |
+| M6 | Factions + negotiation | FIRST PASS | one local power (the Ward of the Nine Lamps) + one rival syndicate, parley, consequences; unplayed |
+| M7 | Missions + chaos | FIRST PASS | ONE scenario template ("secure the crossing") with 7 resolutions; no chaos director beyond early-rival/rain rules |
 | M8 | Settlement + campaign | TODO | outposts, evolution, infrastructure, campaign map, tech, newspaper/history |
 | M9 | Full content | TODO | 4 regions, factions, balancing |
 | M10 | Persistence | TODO | Postgres + Drizzle, identity abstraction, saves, migrations, recovery |
@@ -42,6 +43,26 @@ Not done in M1:
 - Player-vs-player collision (deliberately deferred: needs prediction-aware design).
 - Pad remapping, settings UI, UI scale (M11).
 - Real character art: `Puppet` is an M1 stand-in only.
+
+## Slice 1: the core loop (D-033; integrated 2026-09-30; spec `docs/_notes/slice.md`)
+What exists. One Colyseus room holds one active region; `WorldRoom.enterRegion` swaps world, Rapier, props, cannons, NPCs and scenario. Schema/protocol additions are append-only
+(`WorldState.region/travel*/campaign*/scenario*`, `PlayerState.npc`, `JoinOptions.region`, `travelPropose/travelReady/travelCancel/regionReady/parleyPick/parleyClose`, `station`, `parley`).
+Server: `systems/Travel.ts` (pure machine in `shared/travel.ts`), `systems/Scenario.ts` (pure reducer in `shared/scenario.ts`), NPC rows (`npc:<id>`) stepped by the same `stepCharacter` + `Combat.onFrame`;
+`Combat.hittable` makes the party and the garrison always enemies (friendly fire only governs party-vs-party; NPC-vs-NPC never), `Casualties` scans see only the real party, `HitInfo.by` names the attacker.
+Client: `Game` follows the room (sailing card + input held, rebuild of world/ragdolls/camera on region change or a fallen bridge, `regionReady`), map room (table or dock), parley sheet, broadsheet at the notice board
+(`generatePaper(parseCampaign(state.campaign))` on the client), objective tracker, prompts from `findStation`. `?region=kessar` founds a campaign already at Kessar.
+Verified by running code: shared 389, client 468, server 186, procedural 554 unit/integration tests; new server integration `rooms/campaign.test.ts` (6: HQ map table -> sail -> land -> Warden parley -> pay -> sail home -> paper differs;
+hostile messages; two-player vote waits for the slowest client; force; sabotage with a real barrel, pier and fuse; a real pistol shot hurts a sentry with friendly fire off), `bots/travelNet.test.ts` (2: a prediction bot sails, lands, walks Kessar's road and stays
+within 0.5 m of the server; a late joiner lands in Kessar) and one Playwright run (`tests/e2e/kessar.spec.ts`: a real browser founded at Kessar shows the orders, sails home, rebuilds its world and sends `regionReady`, no page errors).
+Judged only by unit tests / reading: the Kessar look (draw and triangle budgets are asserted, the scene was built headlessly under `gfx=test`, but nobody has LOOKED at it: run
+`node scripts/shot.mjs "?showcase=world&region=kessar&view=landing"`, also `bridge`, `gate`, `camp`), the map room, parley sheet and newspaper layouts (DOM unit tests only; never opened in a browser), the Sailing card's look, the fallen-bridge rebuild in a browser (logic + server world verified),
+the `paper` and `map` station prompts in the HUD, all new copy (registered in `AI_CONTENT_REGISTER.md`, pending developer review), garrison balance (a lone player was put down in about two seconds by rifles and a pistol in a test: expect retuning).
+Review pass: a downed player cannot propose a sailing, proposals are rate-limited (1.5 s, room-wide), and a client already standing in the new region at landfall (late join, reconnect) now sends `regionReady` instead of making the party wait out the 30 s timeout (client change run through `kessar.spec.ts` only). Known gaps from review: sailing away from Kessar mid-scenario commits nothing (kills and broken promises are forgotten), the lit-charge blast only hurts the party when friendly fire is on, and a scripted explosion has no owner.
+Placeholder / not done: sailing is a full-screen card, not a voyage; NPCs walk in straight lines (no pathfinding; they can snag), aim flat, and use first-pass utility scores; wall cannons are display only; the gate door is a closed collider with no opening; Kessar's hill rings
+reuse the Hollowmere ring (its windmill shows); no audio for any new content; ONE scenario template; no loadout, inventory, horses, wagons or outposts; campaign state lives in the room and is lost on a server restart (M10); revisiting Kessar with a collapsed bridge starts the scenario
+resolved (unit-tested, not driven through a room); a reconnect during the sailing is handled by the machine (dropped slots stop counting) but has no integration test; the hostile-message fuzz covers the obvious forged payloads, not every field of every message; p95 tick with 12 NPCs + 4 players was not measured;
+per-NPC cost in `Scenario.runCast` is O(NPC x players) each tick (fine at 12 x 4). Deviation from the spec: NPC rows take slots 16+ (not 255) so every victim of one blast keeps its own entry in Combat's pending-hit map; `Stance`/`Station` in `campaignTypes.ts` were renamed `FactionStance`/`UseStation`
+because `@cb/shared` already exports `Stance` (weapons) and `Station` (villagers).
 
 ## Deployment (see DEPLOYMENT.md)
 Render free-tier test deploy is live: client https://cb-client-42gz.onrender.com, server https://cb-server-86wx.onrender.com.
@@ -130,8 +151,8 @@ Not done in M2 (next):
 - Final title / trademark clearance search: not done (must happen before store page).
 - Steam wrapper choice open (D-010).
 
-## Test results (last full run 2026-09-30)
-`pnpm typecheck` clean; shared 259, procedural 554, client 432 pass; server 148/148 (files run serially); Playwright 15/16 in one full run and the 16th (severed limb, two browsers) passed alone and in sequence after a timeout under load, now given a longer budget. Render client + server live on 0fbb0a9. Everything visual judged on software GL only.
+## Test results (last full run 2026-09-30, after Slice 1)
+`pnpm typecheck` clean; shared 389, procedural 554, client 468 pass; server 186 in 19 files (run serially) pass (`combatNet` 200 ms RTT hitscan failed once while the client suite ran beside it and passed alone: its margin is thin, run it alone); Playwright: only the new `kessar.spec.ts` was run this pass (passes); the earlier suite was 15/16 in one full run and the 16th (severed limb, two browsers) passed alone and in sequence after a timeout under load, now given a longer budget. Render client + server live on 0fbb0a9. Everything visual judged on software GL only.
 
 ## Conventions reminder
 See CLAUDE.md. Keep this file current: completed / in progress / next / blockers / test results.

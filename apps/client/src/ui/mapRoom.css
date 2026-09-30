@@ -1,0 +1,48 @@
+/* The map room sheet and the Sailing card. Colours come from the :root palette variables only. */
+.panel.sheet.maproom { width: min(94vw, 44rem); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.maproom .society { margin: 0; text-align: center; font-family: var(--display); font-size: 0.8rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--stamp); }
+.maproom .chartwrap { margin: 0.4rem 0 0.2rem; border: 2px solid var(--ink); background: var(--field); box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--brass-dark); }
+.maproom .chartwrap svg { display: block; width: 100%; height: auto; max-height: 13rem; }
+.maproom .chartwrap .sea { fill: color-mix(in srgb, var(--track) 70%, var(--paper)); }
+.maproom .chartwrap .land { fill: var(--paper-2); stroke: var(--ink); stroke-width: 1.5; }
+.maproom .chartwrap .wave { fill: none; stroke: var(--brass-dark); stroke-width: 1.2; opacity: 0.6; }
+.maproom .chartwrap .route { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; opacity: 0.45; }
+.maproom .chartwrap .route.active { stroke: var(--stamp); opacity: 1; stroke-width: 2.6; }
+.maproom .chartwrap .mark circle { fill: var(--field); stroke: var(--ink); stroke-width: 1.8; }
+.maproom .chartwrap .mark path { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.maproom .chartwrap .mark text { font-family: var(--display); font-size: 12px; letter-spacing: 0.08em; fill: var(--ink); }
+.maproom .chartwrap .mark.sel circle { fill: var(--stamp); stroke: var(--stamp-dark); }
+.maproom .chartwrap .mark.sel path { stroke: var(--text); }
+.maproom .chartwrap .mark.here circle { stroke-width: 3; stroke: var(--brass-dark); }
+.maproom .dests { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.5rem 0 0; }
+.maproom .dest { display: grid; grid-template-columns: 1.4rem 1fr; column-gap: 0.5rem; row-gap: 0.1rem; padding: 0.45rem 0.6rem; border: 1.5px solid var(--brass-dark); background: linear-gradient(var(--field), var(--paper-2)); cursor: pointer; }
+.maproom .dest input { grid-row: 1 / span 3; align-self: start; margin: 0.25rem 0 0; accent-color: var(--stamp); width: 1.1rem; height: 1.1rem; }
+.maproom .dest:has(input:checked) { outline: 3px solid var(--stamp); outline-offset: -1px; }
+.maproom .dest:has(input:focus-visible) { outline: 3px solid var(--stamp); outline-offset: 2px; }
+.maproom .dest:has(input:disabled) { opacity: 0.6; cursor: default; }
+.maproom .dest .name { font-family: var(--display); font-size: 1.2rem; letter-spacing: 0.05em; color: var(--ink); }
+.maproom .dest .badge { margin-left: 0.6rem; font-family: var(--type); font-style: normal; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text); background: var(--leather); padding: 0.05rem 0.4rem; }
+.maproom .dest .blurb { font-size: 0.95rem; line-height: 1.3; }
+.maproom .dest .note { font-family: var(--type); font-size: 0.82rem; color: var(--stamp); }
+.maproom .crew { list-style: none; margin: 0.2rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.maproom .crew li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.95rem; }
+.maproom .crew .state { font-family: var(--type); font-size: 0.78rem; letter-spacing: 0.06em; }
+.maproom .crew li.yes .state::before { content: "\2612 "; color: var(--stamp); }
+.maproom .crew li.no .state::before { content: "\2610 "; }
+.maproom .actions { align-items: center; }
+.maproom .actions .acts { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+.maproom button[hidden] { display: none; }
+.maproom button[aria-pressed="true"] { background: var(--leather); color: var(--text); }
+
+.sailing { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--backdrop); color: var(--text); font-family: var(--serif); text-align: center; }
+.sailing[hidden] { display: none; }
+.sailing .card { width: min(92vw, 30rem); padding: 1.6rem 1.4rem 1rem; border: 2px solid var(--brass); box-shadow: var(--shadow); background: color-mix(in srgb, var(--scrim) 70%, var(--backdrop)); overflow: hidden; }
+.sailing h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.4rem; letter-spacing: 0.12em; color: var(--brass); }
+.sailing .where { margin: 0.5rem 0 0; font-family: var(--display); font-size: 1.4rem; letter-spacing: 0.05em; }
+.sailing .clock { margin: 0.3rem 0 0; font-family: var(--type); font-size: 1rem; letter-spacing: 0.06em; }
+.sailing .line { margin: 0.9rem 0 0.4rem; min-height: 2.6em; font-style: italic; opacity: 0.9; }
+.sailing .waves { height: 2.2rem; margin: 0.6rem -1.4rem -1rem; background: repeating-linear-gradient(90deg, var(--brass-dark) 0 2px, transparent 2px 22px), linear-gradient(transparent 40%, color-mix(in srgb, var(--brass-dark) 40%, transparent)); background-size: 44px 100%, 100% 100%; animation: sailWaves 2.4s linear infinite; }
+.sailing.arriving .waves { animation-duration: 6s; }
+@keyframes sailWaves { to { background-position: -44px 0, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sailing .waves { animation: none; } }
+:root[data-motion="reduced"] .sailing .waves { animation: none; }

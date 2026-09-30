@@ -29,7 +29,8 @@ export const HEIGHTFIELD_STEP = 1;
  * character controller uses. Server and client build the SAME geometry from the same shared description, so a ragdoll
  * that lands on the client agrees with where the server thinks the ground is.
  */
-export function buildStaticWorld(world: RAPIER.World, terrainWorld: CollisionWorld): void {
+export function buildStaticWorld(world: RAPIER.World, terrainWorld: CollisionWorld): RAPIER.Collider[] {
+  const made: RAPIER.Collider[] = [];
   const r = terrainWorld.boundsRadius;
   const n = Math.floor((2 * r) / HEIGHTFIELD_STEP) + 1; // samples per side
   // Rapier heightfield: nrows x ncols, column-major, scale = full extent in x/z and a y multiplier.
@@ -41,7 +42,7 @@ export function buildStaticWorld(world: RAPIER.World, terrainWorld: CollisionWor
       heights[col * n + row] = terrainWorld.terrainHeight(x, z);
     }
   }
-  world.createCollider(RAPIER.ColliderDesc.heightfield(n - 1, n - 1, heights, { x: 2 * r, y: 1, z: 2 * r }).setCollisionGroups(WORLD_GROUPS));
+  made.push(world.createCollider(RAPIER.ColliderDesc.heightfield(n - 1, n - 1, heights, { x: 2 * r, y: 1, z: 2 * r }).setCollisionGroups(WORLD_GROUPS)));
 
   for (const o of terrainWorld.obstacles) {
     const hy = (o.y1 - o.y0) / 2;
@@ -50,6 +51,7 @@ export function buildStaticWorld(world: RAPIER.World, terrainWorld: CollisionWor
       o.kind === "circle"
         ? RAPIER.ColliderDesc.cylinder(hy, o.r).setTranslation(o.x, cy, o.z)
         : RAPIER.ColliderDesc.cuboid(o.hx, hy, o.hz).setTranslation(o.x, cy, o.z).setRotation(yawQuat(-o.yaw));
-    world.createCollider(desc.setCollisionGroups(WORLD_GROUPS));
+    made.push(world.createCollider(desc.setCollisionGroups(WORLD_GROUPS)));
   }
+  return made;
 }

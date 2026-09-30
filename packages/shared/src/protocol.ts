@@ -1,4 +1,6 @@
 /** Room names and JSON-ish message contracts shared by client and server. */
+import type { ParleyView, RegionId } from "./campaignTypes.ts";
+
 export const ROOM_WORLD = "world";
 
 export interface JoinOptions {
@@ -16,6 +18,8 @@ export interface JoinOptions {
   dismemberment?: boolean;
   /** Campaign rule chosen when creating: comrades can be hurt by your shots (default true, server default from FRIENDLY_FIRE). Ignored when joining. */
   friendlyFire?: boolean;
+  /** Region the campaign starts in (create only; default hollowmere; validated server-side). Dev, tests and screenshots: in play the party sails. */
+  region?: RegionId;
 }
 
 /** Client -> server messages other than the input stream. */
@@ -24,6 +28,14 @@ export interface ClientMessages {
   setName: { name: string };
   /** Change appearance (HQ/creator). Rate limited; history fields are ignored. */
   setLook: { look: string };
+  /** Sailing (validated by the server's travel machine; out-of-phase or stale messages are ignored). */
+  travelPropose: { to: RegionId };
+  travelReady: { ready: boolean };
+  travelCancel: Record<string, never>;
+  regionReady: { region: RegionId };
+  /** Parley with the Lamp-Warden: pick option `option` of the open view / walk away. Only the session that owns the parley is heard. */
+  parleyPick: { option: number };
+  parleyClose: Record<string, never>;
 }
 
 /** Minimum gap between accepted setLook messages per client. */
@@ -45,6 +57,10 @@ export interface ServerMessages {
   boom: BoomEvent;
   /** Sent only to the shooter: their shot found somebody. Drives the hit marker. */
   hitmark: HitMarkEvent;
+  /** Open a station UI for this player (the map room, or the paper at the notice board). */
+  station: { kind: "map" | "paper" };
+  /** The parley's state for its owner: a new view, or it closed (with the closing line). */
+  parley: { view?: ParleyView; line?: string; closed?: boolean };
 }
 
 export interface ShotEvent {

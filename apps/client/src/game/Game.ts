@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { BUTTON, CASUALTY, FLAG, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { BUTTON, CASUALTY, FLAG, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, isRegionId, newCampaign, parseCampaign, PropKind, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -19,6 +19,14 @@ import type { Stage } from "../render/Stage.ts";
 import { noteFolk } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { Hud } from "../ui/Hud.ts";
+import { MapRoom } from "../ui/MapRoom.ts";
+import { NewspaperView } from "../ui/Newspaper.ts";
+import { ObjectiveTracker } from "../ui/ObjectiveTracker.ts";
+import { Parley } from "../ui/Parley.ts";
+import { Sailing } from "../ui/Sailing.ts";
+import { holdInput } from "../ui/modal.ts";
+import { Session as NetSession } from "../net/Session.ts";
+import { mapRoomView } from "./campaignView.ts";
 import { CombatView } from "./CombatView.ts";
 
 interface Actor {
@@ -66,6 +74,26 @@ export class Game {
   private pingTimer = 0;
   private readonly audio: GameAudio;
   private readonly offSettings: () => void;
+  // --- the campaign layer: map room, sailing, parley, the paper, the orders of the day ---
+  private readonly mapRoom: MapRoom;
+  private readonly sailing: Sailing;
+  private readonly parley: Parley;
+  private readonly paper: NewspaperView;
+  private readonly tracker: ObjectiveTracker;
+  private builtRegion: RegionId;
+  private builtBridge: string;
+  private building = false;
+  /** `regionReady` has been sent for the landfall in progress (reset when the sailing machine leaves the arriving phase). */
+  private arrivalSent = false;
+  private sailRelease: (() => void) | undefined;
+  private travelSig = "";
+  private mapSig = "";
+  private campaign: CampaignState | undefined;
+  private campaignRev = -1;
+  private scenarioRev = -1;
+  private lastWorldMs = 0;
+  private lastWorldPerf = 0;
+  private trackerClock = 0;
 
   constructor(
     private readonly stage: Stage,
@@ -78,6 +106,8 @@ export class Game {
     this.rig.setView(getView(), true);
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.audio = new GameAudio((x, z) => session.world.terrainHeight(x, z));
+    this.builtRegion = session.region;
+    this.builtBridge = NetSession.bridgeOf(session.room.state.campaign);
     this.applySettings();
     this.offSettings = onSettingChange(() => this.applySettings());
     this.tagLayer = hud;
@@ -99,15 +129,18 @@ export class Game {
     });
     controls.onToggleDebug = () => this.overlay.toggle();
     controls.onToggleView = () => setView(this.rig.toggleView());
-    stage.buildWorld(session.world);
-
-    RagdollWorld.create(session.world).then(
-      (w) => {
-        if (this.disposed) w.dispose();
-        else this.ragdolls = w;
-      },
-      (err) => console.warn("ragdoll physics unavailable; knock-downs will use the plain fall animation", err),
-    );
+    stage.buildWorld(session.world, session.region);
+    this.loadRagdolls();
+    this.mapRoom = new MapRoom(document.body);
+    this.sailing = new Sailing(document.body);
+    this.parley = new Parley(document.body);
+    this.paper = new NewspaperView(document.body);
+    this.tracker = new ObjectiveTracker(hud);
+    session.room.onMessage("station", (m: { kind?: string }) => {
+      if (m?.kind === "map") this.openMap();
+      else if (m?.kind === "paper") this.openPaper();
+    });
+    session.room.onMessage("parley", (m: { view?: ParleyView; line?: string; closed?: boolean }) => this.onParley(m));
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
 
@@ -119,6 +152,141 @@ export class Game {
       const rtt = performance.now() - m.t;
       session.rttMs = session.rttMs === 0 ? rtt : session.rttMs * 0.8 + rtt * 0.2;
     });
+  }
+
+  /** Loads (or reloads, after a region change) the ragdoll physics world for the ground the local player stands on. */
+  private loadRagdolls(): void {
+    const old = this.ragdolls;
+    this.ragdolls = undefined;
+    old?.dispose();
+    RagdollWorld.create(this.session.world).then(
+      (w) => {
+        if (this.disposed || this.ragdolls) w.dispose();
+        else this.ragdolls = w;
+      },
+      (err) => console.warn("ragdoll physics unavailable; knock-downs will use the plain fall animation", err),
+    );
+  }
+
+  // ---- the campaign layer -----------------------------------------------------------------------------------------------------------------
+
+  private get worldNowMs(): number {
+    return this.lastWorldMs + (performance.now() - this.lastWorldPerf);
+  }
+
+  private openMap(): void {
+    const st = this.session.room.state;
+    const room = this.session.room;
+    this.mapRoom.open(mapRoomView(st, this.campaign, this.session.local?.slot), {
+      propose: (to) => room.send("travelPropose", { to }),
+      ready: (on) => room.send("travelReady", { ready: on }),
+      cancel: () => room.send("travelCancel", {}),
+      close: () => {},
+    });
+  }
+
+  private openPaper(): void {
+    const c = this.campaign ?? newCampaign(this.session.room.state.seed);
+    this.paper.show(generatePaper(c, this.session.room.state.seed), () => {});
+  }
+
+  private onParley(m: { view?: ParleyView; line?: string; closed?: boolean }): void {
+    const room = this.session.room;
+    if (m?.closed) {
+      this.parley.closeUi();
+      if (m.line) this.hud.showNotice(m.line);
+      return;
+    }
+    if (!m?.view) return;
+    if (this.parley.isOpen) this.parley.update(m.view);
+    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}));
+  }
+
+  /** Follows the room's campaign fields: the sailing card, a new region or a fallen bridge (rebuild the world), the orders of the day, the map room. */
+  private syncCampaign(now: number): void {
+    const st = this.session.room.state;
+    if (st.worldMs !== this.lastWorldMs) {
+      this.lastWorldMs = st.worldMs ?? 0;
+      this.lastWorldPerf = now;
+    }
+    if ((st.campaignRev ?? 0) !== this.campaignRev) {
+      this.campaignRev = st.campaignRev ?? 0;
+      this.campaign = st.campaign ? parseCampaign(st.campaign) : undefined;
+    }
+    if ((st.scenarioRev ?? 0) !== this.scenarioRev) {
+      this.scenarioRev = st.scenarioRev ?? 0;
+      let view: ScenarioView | undefined;
+      try {
+        view = st.scenario ? (JSON.parse(st.scenario) as ScenarioView) : undefined;
+      } catch {
+        view = undefined;
+      }
+      this.tracker.update(view);
+    }
+    this.trackerClock -= 1;
+    if (this.trackerClock <= 0) {
+      this.trackerClock = 8; // (~4 Hz at 30 fps)
+      this.tracker.tick(this.worldNowMs);
+    }
+    // the sailing: the card, the controls held off, the old sheets closed
+    const phase = st.travelPhase ?? 0;
+    const sig = `${phase}|${st.travelTo}|${Math.ceil(st.travelLeft ?? 0)}`;
+    if (sig !== this.travelSig) {
+      this.travelSig = sig;
+      if (phase >= 2) {
+        this.sailRelease ??= holdInput();
+        this.parley.closeUi();
+        this.paper.hide();
+        if (phase === 2) this.sailing.show(st.travelTo, st.travelLeft ?? 0);
+        else this.sailing.arriving();
+      } else if (this.sailRelease) {
+        this.sailRelease();
+        this.sailRelease = undefined;
+        this.sailing.hide();
+      }
+    }
+    // landfall (or a bridge that fell): the ground under us is a different one
+    const bridge = NetSession.bridgeOf(st.campaign);
+    const region = this.session.region;
+    if (!this.building && (region !== this.builtRegion || bridge !== this.builtBridge)) void this.rebuildWorld();
+    // a client that is already standing in the new region when the landing is announced (it joined or came back mid-landfall) has nothing to build: say so, or everyone waits out the timeout
+    if (phase !== 3) this.arrivalSent = false;
+    else if (!this.building && !this.arrivalSent && region === this.builtRegion && isRegionId(st.region)) this.sendArrival(st.region);
+    // the map room follows the vote
+    if (this.mapRoom.isOpen) {
+      const v = mapRoomView(st, this.campaign, this.session.local?.slot);
+      const msig = JSON.stringify([v.phase, v.to, v.ready, v.regions.map((r) => r.here)]);
+      if (msig !== this.mapSig) {
+        this.mapSig = msig;
+        this.mapRoom.update(v);
+      }
+    }
+  }
+
+  private sendArrival(region: RegionId): void {
+    this.arrivalSent = true;
+    this.session.room.send("regionReady", { region });
+  }
+
+  /** New region or a fallen bridge: build the local world and scenery, link the shaders, then (if we were sailing) tell the server we are ashore. */
+  private async rebuildWorld(): Promise<void> {
+    this.building = true;
+    try {
+      await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30))); // let the card paint before the synchronous build
+      const st = this.session.room.state;
+      const region = this.session.region;
+      const world = this.session.refreshWorld();
+      this.rig.setWorld(world);
+      this.combat.setWorld();
+      this.stage.buildWorld(world, region);
+      this.builtRegion = region;
+      this.builtBridge = NetSession.bridgeOf(st.campaign);
+      this.loadRagdolls();
+      await this.stage.precompile();
+      if ((st.travelPhase ?? 0) === 3 && isRegionId(st.region)) this.sendArrival(st.region);
+    } finally {
+      this.building = false;
+    }
   }
 
   start(): void {
@@ -150,6 +318,13 @@ export class Game {
     this.disposed = true;
     this.ragdolls?.dispose();
     this.ragdolls = undefined;
+    this.sailRelease?.();
+    this.sailRelease = undefined;
+    this.mapRoom.dispose();
+    this.sailing.dispose();
+    this.parley.dispose();
+    this.paper.dispose();
+    this.tracker.dispose();
   }
 
   private frame(now: number): void {
@@ -184,6 +359,7 @@ export class Game {
     this.combat.update(dt, this.controls.usingGamepad);
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
+    this.syncCampaign(now);
 
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
@@ -268,7 +444,10 @@ export class Game {
     } else if ((flags & FLAG.DRAGGING) !== 0) {
       prompt = `${grab}  Let go`;
     } else if ((flags & FLAG.CARRYING) !== 0) {
-      prompt = `${use}  Drop     ${throwKey}  Throw`;
+      // a barrel at the pier is a fuse waiting to be lit (the server checks the barrel and the range; this only says what the key will do)
+      const spot = this.builtRegion === "kessar" ? findStation("kessar", this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
+      const heldKind = this.heldKind();
+      prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : `${use}  Drop     ${throwKey}  Throw`;
     } else if ((flags & FLAG.DOWNED) === 0) {
       const downedId = findDownedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
         players.forEach((o, id) => id !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
@@ -292,6 +471,11 @@ export class Game {
       }
     }
     if (prompt === "" && (flags & FLAG.DOWNED) === 0) prompt = this.combat.cannonPrompt(use);
+    if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
+      // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks)
+      const st = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);
+      if (st && st.kind !== "pier") prompt = `${use}  ${st.prompt}`;
+    }
     const showLimbs = getShowLimbs();
     this.hud.update({
       flags,
@@ -312,6 +496,15 @@ export class Game {
       z: this.session.value(me, "z"),
     });
     this.audio.revive(byMe >= 0 ? byMe : mine.reviveProgress > 0 ? mine.reviveProgress : -1);
+  }
+
+  /** The kind of prop the local player is holding, if any. */
+  private heldKind(): number | undefined {
+    let kind: number | undefined;
+    this.session.room.state.props.forEach((p) => {
+      if (p.holder === this.session.sessionId) kind = p.kind;
+    });
+    return kind;
   }
 
   /** Live settings (settings screen): camera, sensitivity, shake, head bob, sprint mode. Also called once at start. */
@@ -349,7 +542,7 @@ export class Game {
       const x = this.session.value(p, "x");
       const y = this.session.value(p, "y");
       const z = this.session.value(p, "z");
-      if (walkerCount < walkers.length && (p.flags & FLAG.DOWNED) === 0) {
+      if (walkerCount < walkers.length && !p.npc && (p.flags & FLAG.DOWNED) === 0) {
         walkers[walkerCount]!.x = x;
         walkers[walkerCount++]!.z = z;
       }
@@ -376,7 +569,7 @@ export class Game {
     const clock = this.session.room.state; // the server-owned world clock: every player sees the same hour and the same weather
     if (clock.worldMs !== undefined && clock.dayMinutes !== undefined) {
       this.stage.syncWorldClock(clock.seed, clock.worldMs, clock.dayStartHour, clock.dayMinutes);
-      noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera); // Hollowmere's folk: their seed, their hours, and where name tags and speech go
+      if (this.builtRegion === "hollowmere") noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera); // Hollowmere's folk: their seed, their hours, and where name tags and speech go
     }
     for (const [id, a] of this.actors) {
       if (!seen.has(id)) {

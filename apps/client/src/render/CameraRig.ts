@@ -77,9 +77,14 @@ export class CameraRig {
 
   constructor(
     private readonly camera: PerspectiveCamera,
-    private readonly world: CollisionWorld,
+    private world: CollisionWorld,
     readonly settings: CameraSettings,
   ) {}
+
+  /** The region changed: the ground the camera keeps above is the new one. */
+  setWorld(world: CollisionWorld): void {
+    this.world = world;
+  }
 
   get mode(): ViewMode {
     return this.view;

@@ -4,7 +4,7 @@ import { applyDisplaySettings, getGfx, getReduceMotion, onSettingChange } from "
 import { motion, motionScale } from "../render/world/atmosphere.ts";
 import { Session } from "../net/Session.ts";
 import { Stage } from "../render/Stage.ts";
-import { createArena } from "@cb/shared";
+import { createArena, isRegionId, type RegionId } from "@cb/shared";
 import { decodeSpec, encodeSpec, generateCharacter } from "@cb/procedural";
 import { CreatorPreview } from "../render/CreatorPreview.ts";
 import { Captions } from "../ui/Captions.ts";
@@ -78,6 +78,15 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       /* ignore */
     }
   };
+  // `?region=kessar` founds the expedition already at that shore (dev, tests, screenshots); in play the party sails from the map room
+  const startRegion: RegionId | undefined = isRegionId(params.get("region")) ? (params.get("region") as RegionId) : undefined;
+  const realPlayers = (s: Session): number => {
+    let n = 0;
+    s.room.state.players.forEach((p) => {
+      if (!p.npc) n++;
+    });
+    return n;
+  };
   let look = loadLook();
   saveLook(look);
 
@@ -102,7 +111,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     stage.setTime(17.2); // the front door sits at golden hour in the camp; a joined room's clock takes over (Game feeds it to the stage)
     pause = new Pause({
       canvas,
-      invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: session.room.state.players.size } : undefined),
+      invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: realPlayers(session) } : undefined),
       leave: () => {
         session?.leave();
         location.assign(location.pathname); // back to the front door with a clean slate (the world, sockets and audio all restart)
@@ -162,7 +171,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     onCreate: async (name, rules, progress) => {
       backdropWanted = false; // (from the click, not from the session: the camp behind the door is not worth building now)
       progress("Posting the telegram...");
-      const s = await Session.create(name, look, rules);
+      const s = await Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}) });
       progress("Reply received. Packing the trunks...");
       await enter(s);
     },

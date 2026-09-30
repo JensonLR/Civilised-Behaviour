@@ -63,6 +63,8 @@ export interface HitInfo {
    * never does). Default 1. The sever rules themselves (`severChance`) are untouched.
    */
   severBias?: number;
+  /** Who dealt it (a session id or an `npc:` row key), when known: the campaign layer reads it to tell a declaration of war from an accident. */
+  by?: string;
 }
 
 interface Revive {

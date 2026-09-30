@@ -13,9 +13,9 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld } from "@cb/shared";
+import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld, type RegionId } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
-import { WorldView } from "./world/WorldView.ts";
+import { createRegionView, type RegionView } from "./world/regionView.ts";
 import { setToonLite } from "./world/toon.ts";
 import { atmoUniforms, atmosphereForWriting, motion, motionScale, windGain } from "./world/atmosphere.ts";
 import { applyDaySky, buildSky, fogColour, setRgb, type SkyDetail, type SkyUniforms } from "./world/sky.ts";
@@ -113,7 +113,7 @@ export class Stage {
   private lastFrame = 0;
   /** Seconds since the world was born (the room's clock, or a local one): what the flock's positions are a function of. */
   private worldSec = 0;
-  private worldView?: WorldView;
+  private worldView?: RegionView;
   private preset: GraphicsPreset;
 
   get outlines(): boolean {
@@ -208,11 +208,12 @@ export class Stage {
   }
 
   /** Builds the world (painted terrain, hills, trees, rocks, ground cover, the camp) from the same deterministic data the server simulates. */
-  buildWorld(world: CollisionWorld): void {
+  buildWorld(world: CollisionWorld, region: RegionId = "hollowmere"): void {
     this.builtFor = world;
+    this.builtRegion = region;
     // (the new world first, then the old one goes: programs both use stay linked instead of being destroyed and compiled again)
     const old = this.worldView;
-    this.worldView = new WorldView(this.scene, world, this.preset, this.lightDir);
+    this.worldView = createRegionView(region, this.scene, world, this.preset, this.lightDir);
     old?.dispose();
     this.worldView.applyDay(this.day);
   }
@@ -228,9 +229,9 @@ export class Stage {
   }
 
   /** `buildWorld`, then reveal it once its shaders are linked (the world is hidden until then so the frames in between never stall on a compile). */
-  async buildWorldAsync(world: CollisionWorld, wanted: () => boolean = () => true): Promise<void> {
+  async buildWorldAsync(world: CollisionWorld, wanted: () => boolean = () => true, region: RegionId = "hollowmere"): Promise<void> {
     if (!wanted()) return;
-    this.buildWorld(world);
+    this.buildWorld(world, region);
     const view = this.worldView;
     if (!view) return;
     view.root.visible = false;
@@ -240,6 +241,7 @@ export class Stage {
 
   /** The world last passed to `buildWorld`, kept so the graphics preset can be changed live (settings screen). */
   private builtFor?: CollisionWorld;
+  private builtRegion: RegionId = "hollowmere";
 
   /**
    * Switches graphics preset while running: shadow map size, pixel ratio and the whole world (ground cover, trees, water, ambient life) are
@@ -275,7 +277,7 @@ export class Stage {
       const m = (o as Mesh).material as { needsUpdate: boolean } | { needsUpdate: boolean }[] | undefined; // programs differ with and without shadow sampling
       for (const x of Array.isArray(m) ? m : m ? [m] : []) x.needsUpdate = true;
     });
-    if (this.builtFor) this.buildWorld(this.builtFor);
+    if (this.builtFor) this.buildWorld(this.builtFor, this.builtRegion);
   }
 
   /** Draw/triangle counts of the built world, for docs/PERFORMANCE.md. */

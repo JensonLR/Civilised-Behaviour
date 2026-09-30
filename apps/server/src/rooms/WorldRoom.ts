@@ -30,7 +30,6 @@ import {
   TICK_RATE,
   WORLD_CLOCK,
   WorldState,
-  createArena,
   createCharState,
   sanitizeDisplayName,
   spawnPoint,
@@ -49,14 +48,40 @@ import {
   CannonState,
   WEAPON,
   isCarried,
+  NPC_CAP,
+  WEAPONS,
+  applyOutcome,
+  askingToll,
+  answerParley,
+  consequenceLines,
+  createRegionWorld,
+  findStation,
+  isNpcKey,
+  isRegionId,
+  leverageOf,
+  newCampaign,
+  npcKey,
+  openParley,
+  regionProps,
+  regionSpawn,
+  serializeCampaign,
+  stationsFor,
+  type BridgeState,
+  type CampaignState,
+  type NpcSpec,
+  type RegionId,
+  type ScenarioOutcome,
+  type ScenarioView,
 } from "@cb/shared";
-import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, specFromUntrusted } from "@cb/procedural";
+import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, generateCharacter, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
 import { Casualties, type HitInfo } from "../systems/Casualties.ts";
 import { Combat } from "../systems/Combat.ts";
+import { Scenario } from "../systems/Scenario.ts";
+import { Travel } from "../systems/Travel.ts";
 
 /** Ticks of client silence/hitch the server tolerates (12 ticks = 400 ms). Used for BOTH the frame-budget burst and the idle threshold. */
 const HITCH_TOLERANCE_TICKS = 12;
@@ -86,6 +111,15 @@ const CLOCK_SYNC_MS = 4000;
 
 /** How long a dropped player's slot is held for reconnection. */
 const RECONNECT_WINDOW_S = 45;
+
+/** A downed NPC stays where it fell this long, then is taken away (the dead do not pile up; the tally already counted them). */
+const NPC_DOWNED_LINGER_S = 30;
+/** NPC rows take slots from here up, so they never collide with a player's slot (0..MAX_PLAYERS-1) or each other. */
+const NPC_SLOT_BASE = 16;
+/** How near a map table or dock a player must stand to put a sailing to the vote. */
+const MAP_REACH_SLACK = 4;
+/** Minimum gap between accepted sailing proposals (any player): each one is announced to the whole room. */
+const PROPOSE_COOLDOWN_MS = 1500;
 
 function generateJoinCode(): string {
   const rng = new Rng((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
@@ -131,6 +165,20 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** Monotonic time the world was created, and the last time `state.worldMs` was refreshed. */
   private bornAt = 0;
   private lastClockSync = 0;
+  // --- the campaign (slice 1: docs/_notes/slice.md) ---
+  private campaign!: CampaignState;
+  private travel!: Travel;
+  private scenario: Scenario | undefined;
+  /** The last fixed step (s), and simulated seconds since the room began: NPC steps and the downed-NPC clock use them. */
+  private tickDt = 1 / TICK_RATE;
+  private simT = 0;
+  private readonly npcDownedAt = new Map<string, number>();
+  private lastPropose = -Infinity;
+  /** The real party only (no NPC rows): what revive scans, the whole-party-down rout and the scenario count. `get` still finds any row. */
+  private readonly party = {
+    forEach: (cb: (p: PlayerStateType, id: string) => void): void => this.state.players.forEach((p, id) => { if (!p.npc) cb(p, id); }),
+    get: (id: string): PlayerStateType | undefined => this.state.players.get(id),
+  };
 
   override async onCreate(options: JoinOptions): Promise<void> {
     const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
@@ -147,28 +195,44 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.dayMinutes = cfg.dayMinutes ?? WORLD_CLOCK.defaultDayMinutes;
     this.bornAt = performance.now();
     this.syncClock(true);
-    this.world = createArena(seed);
+    // The campaign is server-owned state: one per room, mutated only by scenario outcomes (commitOutcome).
+    this.campaign = newCampaign(seed);
+    const region: RegionId = isRegionId(options?.region) ? options.region : "hollowmere";
     await initRapier();
-    this.physics = new PhysicsWorld(this.world);
-    for (const spawn of scatterProps(seed, this.world.terrain, 14)) {
-      const body = this.physics.spawnProp(spawn, this.world.terrainHeight(spawn.x, spawn.z));
-      if (!body) continue;
-      const ps = new PropState();
-      ps.kind = spawn.kind;
-      ps.holder = "";
-      this.state.props.set(body.id, ps);
-      this.writeProp(body.id, true);
-    }
-    metrics.physicsBodies += this.physics.props.size;
+    this.state.region = region;
+    this.state.travelPhase = 0;
+    this.state.travelTo = region;
+    this.state.travelReady = 0;
+    this.state.travelLeft = 0;
+    this.state.campaign = serializeCampaign(this.campaign);
+    this.state.campaignRev = 0;
+    this.state.scenario = "";
+    this.state.scenarioRev = 0;
+    this.buildRegion(region);
+    this.travel = new Travel({
+      connectedSlots: () => this.connectedSlots(),
+      current: () => this.state.region as RegionId,
+      enterRegion: (to) => this.enterRegion(to),
+      notice: (text) => this.broadcast("notice", { text }),
+      sync: (st) => {
+        this.state.travelPhase = st.phase;
+        this.state.travelTo = st.to;
+        this.state.travelReady = st.ready & 0xff;
+        this.state.travelLeft = Math.min(255, Math.max(0, Math.ceil(st.left)));
+      },
+    });
+    const room = this;
     this.casualties = new Casualties(
       {
-        players: this.state.players,
-        world: this.world,
+        players: this.party,
+        get world() {
+          return room.world;
+        },
         dropHeldProp: (sid) => {
           const p = this.state.players.get(sid);
           if (p) this.dropHeld(sid, p);
         },
-        routSpawn: (slot) => spawnPoint(slot, MAX_PLAYERS),
+        routSpawn: (slot) => regionSpawn(this.state.region as RegionId, slot, MAX_PLAYERS),
         notify: (text) => this.broadcast("notice", { text }),
         rng: new Rng(seed ^ 0x5eed_c0de),
         emitHit: (e) => this.broadcast("hit", e),
@@ -178,21 +242,6 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
-    // Field cannon(s): fixtures of the camp, replicated so every client can draw them, load them and watch the fuse.
-    CANNON_SPOTS.forEach((spot, i) => {
-      const cs = new CannonState();
-      cs.x = spot.x;
-      cs.z = spot.z;
-      cs.y = this.world.terrainHeight(spot.x, spot.z);
-      cs.yaw = spot.yaw;
-      cs.elev = 0.12;
-      cs.phase = 0;
-      cs.progress = 0;
-      cs.crew = 0;
-      cs.shells = CANNON.shells;
-      cs.fired = 0;
-      this.state.cannons.set(String(i), cs);
-    });
     // Lag compensation (docs/_notes/combat.md): Colyseus records each player's pose as clients receive it and rewinds to the shooter's view.
     // Position is interpolated between snapshots (as the clients draw it); heading and stance are held (they change in steps).
     const rewind = this.allowRewindState({ maxRewindMs: COMBAT.rewindMaxMs });
@@ -200,9 +249,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     rewind.attachAll(this.state.players, { fields: ["facing", "flags"], mode: "snapshot", interpolate: "step", maxRewindMs: COMBAT.rewindMaxMs });
     this.combat = new Combat({
       players: this.state.players,
-      world: this.world,
-      physics: this.physics,
-      damage: (sid, amount, hit) => this.casualties.damage(sid, amount, hit),
+      get world() {
+        return room.world;
+      },
+      get physics() {
+        return room.physics;
+      },
+      damage: (sid, amount, hit) => this.damagePlayer(sid, amount, hit),
       rewind,
       friendlyFire: () => this.state.friendlyFire,
       worldSeed: seed,
@@ -213,6 +266,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       emitBoom: (e) => this.broadcast("boom", e),
       sendTo: (sid, e) => this.clients.getById(sid)?.send("hitmark", e),
     });
+    this.startScenario(region);
     void this.setMetadata({ code: this.state.code });
     // Campaigns are friends-first: unlisted, reachable only via join code or direct room id.
     void this.setPrivate(true);
@@ -221,7 +275,17 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
     this.setFixedTimestep((ctx) => {
       const t0 = performance.now();
+      this.tickDt = ctx.dt;
+      this.simT += ctx.dt;
+      const sailing = this.travel.busy;
       this.state.players.forEach((player, sessionId) => {
+        if (player.npc) return; // NPC rows are stepped by the scenario, through the same step a player uses
+        if (sailing) {
+          // Sailing and landfall: nobody moves or acts, and what the client sent meanwhile was for the old world (never queued for the new one).
+          const n = this.inputs.get(sessionId).size;
+          if (n > 0) this.inputs.get(sessionId).take(n);
+          return;
+        }
         // Frames are taken one at a time (not drained) so the lag-compensation stamp of each is the stamp of THAT frame (Rewind.lastSeenBy).
         const acc = this.inputs.get(sessionId);
         const budget = Math.min(INPUT_BUDGET_MAX, (this.frameBudget.get(sessionId) ?? INPUT_BUDGET_MAX) + INPUT_BUDGET_REFILL);
@@ -260,10 +324,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         }
       });
       this.syncClock(false);
+      if (!sailing) this.scenario?.tick(ctx.dt);
+      this.reapNpcs();
       this.casualties.tick(ctx.dt);
       this.combat.tick(ctx.dt);
       this.physics.step(ctx.dt);
       for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
+      this.travel.tick(ctx.dt); // last: a landfall swaps the world, which nothing above may still be holding
       const ms = performance.now() - t0;
       metrics.recordTick(ms);
       if (ms > ctx.dtMs) {
@@ -278,6 +345,29 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     }
 
     this.onMessage("setLook", (client, msg: { look?: unknown }) => this.handleSetLook(client, msg?.look));
+
+    // Sailing and the parley. Every payload is hostile until the machine that owns it accepts it (out-of-phase, stale and forged messages are ignored there).
+    this.onMessage("travelPropose", (client, msg: { to?: unknown }) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || p.npc || (p.flags & FLAG.DOWNED) !== 0 || !this.atMapRoom(p)) return; // a downed comrade cannot put the party to sea
+      const now = performance.now();
+      if (now - this.lastPropose < PROPOSE_COOLDOWN_MS) return; // propose/cancel is a broadcast: not a thing to loop
+      this.lastPropose = now;
+      this.travel.propose(client.sessionId, p.slot, msg?.to);
+    });
+    this.onMessage("travelReady", (client, msg: { ready?: unknown }) => {
+      const p = this.state.players.get(client.sessionId);
+      if (p) this.travel.ready(p.slot, msg?.ready);
+    });
+    this.onMessage("travelCancel", () => this.travel.cancel());
+    this.onMessage("regionReady", (client, msg: { region?: unknown }) => {
+      const p = this.state.players.get(client.sessionId);
+      if (p && isRegionId(msg?.region)) this.travel.regionReady(p.slot, msg.region);
+    });
+    this.onMessage("parleyPick", (client, msg: { option?: unknown }) => {
+      if (typeof msg?.option === "number") this.scenario?.onPick(client.sessionId, msg.option);
+    });
+    this.onMessage("parleyClose", (client) => this.scenario?.onParleyClose(client.sessionId));
 
     this.onMessage("ping", (client, msg: { t?: number }) => {
       client.send("pong", { t: typeof msg?.t === "number" ? msg.t : 0, serverTime: Date.now() });
@@ -304,12 +394,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.reviveProgress = 0;
     player.reviver = "";
     player.dragger = "";
-    const sp = spawnPoint(slot, MAX_PLAYERS);
+    const sp = regionSpawn(this.state.region as RegionId, slot, MAX_PLAYERS);
     const c = createCharState(sp.x, sp.z, this.world);
     Object.assign(player, c);
     this.state.players.set(client.sessionId, player);
     player.shots = 0; // numeric schema fields decode as undefined until first assigned
     player.aim = 0;
+    player.npc = 0;
     this.combat.onJoin(client.sessionId, player);
     this.syncClock(true); // a joiner's first state must carry a fresh world age
     metrics.players++;
@@ -323,6 +414,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const consented = code === CloseCode.CONSENTED;
     if (!consented) {
       player.connected = false;
+      this.travel.onLeave(player.slot); // a vote this player was blocking, or a landfall they were holding up, may now be complete
       try {
         await this.allowReconnection(client, RECONNECT_WINDOW_S);
         player.connected = true;
@@ -347,6 +439,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.woodenLeg.delete(client.sessionId);
     this.lastRefusal.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
+    this.travel.onLeave(player.slot);
     metrics.players--;
     log.info("room.leave", { roomId: this.roomId, sessionId: client.sessionId, consented });
   }
@@ -360,6 +453,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   }
 
   override onDispose(): void {
+    this.scenario?.dispose();
+    this.scenario = undefined;
     metrics.rooms--;
     if (this.physics) {
       metrics.physicsBodies -= this.physics.props.size; // player capsules are released in onLeave
@@ -382,6 +477,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (this.combat.onFrame(sessionId, player, cmd, pressed)) return;
     if (pressed === 0) return;
     const held = this.carrying.get(sessionId);
+    // The places you can USE come before props: the Warden and the pier (scenario), then the map table, notice board and dock.
+    if ((pressed & BUTTON.INTERACT) !== 0 && this.useStation(sessionId, player, held)) return;
 
     if (held) {
       if (pressed & (BUTTON.INTERACT | BUTTON.THROW)) {
@@ -421,6 +518,258 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     }
   }
 
+  /** INTERACT at a station. Returns true when the press was taken. The scenario checks its own ranges; the map/paper/dock come from the shared station table. */
+  private useStation(sessionId: string, player: PlayerStateType, held: string | undefined): boolean {
+    if (this.travel.busy) return true;
+    if (this.scenario?.onInteract(sessionId, player, held)) return true;
+    if (held) return false; // arms full: a carried prop is dropped or thrown, never "used" on a table
+    const st = findStation(this.state.region as RegionId, player.x, player.z, player.facing);
+    if (!st) return false;
+    if (st.kind === "map" || st.kind === "dock") this.clients.getById(sessionId)?.send("station", { kind: "map" });
+    else if (st.kind === "paper") this.clients.getById(sessionId)?.send("station", { kind: "paper" });
+    else return false; // pier / warden belong to the scenario
+    return true;
+  }
+
+  /** A sailing may only be put to the vote from the map table or the dock (the client offers it there; the server does not take its word for it). */
+  private atMapRoom(p: PlayerStateType): boolean {
+    for (const st of stationsFor(this.state.region as RegionId)) {
+      if ((st.kind === "map" || st.kind === "dock") && Math.hypot(p.x - st.x, p.z - st.z) <= st.r + MAP_REACH_SLACK) return true;
+    }
+    return false;
+  }
+
+  /** Bitmask of the real slots currently in the room (NPCs and dropped connections are not). */
+  private connectedSlots(): number {
+    let m = 0;
+    this.state.players.forEach((p) => {
+      if (!p.npc && p.connected) m |= 1 << p.slot;
+    });
+    return m;
+  }
+
+  // ---- regions ---------------------------------------------------------------------------------------------------------------------------
+
+  /** Builds the world, physics, props and fixtures of `id` (the room holds exactly one active region). Callers have already torn down the old one. */
+  private buildRegion(id: RegionId): void {
+    const seed = this.state.seed;
+    const bridge = this.campaign.crossing.bridge;
+    this.world = createRegionWorld(id, seed, { bridge });
+    this.physics = new PhysicsWorld(this.world);
+    this.state.props.clear();
+    for (const spawn of regionProps(id, seed, this.world)) {
+      const body = this.physics.spawnProp(spawn, this.world.terrainHeight(spawn.x, spawn.z));
+      if (!body) continue;
+      const ps = new PropState();
+      ps.kind = spawn.kind;
+      ps.holder = "";
+      this.state.props.set(body.id, ps);
+      this.writeProp(body.id, true);
+    }
+    metrics.physicsBodies += this.physics.props.size;
+    // Field cannon(s): fixtures of the Hollowmere camp, replicated so every client can draw them, load them and watch the fuse. Kessar's wall guns are display only.
+    this.state.cannons.clear();
+    if (id === "hollowmere") {
+      CANNON_SPOTS.forEach((spot, i) => {
+        const cs = new CannonState();
+        cs.x = spot.x;
+        cs.z = spot.z;
+        cs.y = this.world.terrainHeight(spot.x, spot.z);
+        cs.yaw = spot.yaw;
+        cs.elev = 0.12;
+        cs.phase = 0;
+        cs.progress = 0;
+        cs.crew = 0;
+        cs.shells = CANNON.shells;
+        cs.fired = 0;
+        this.state.cannons.set(String(i), cs);
+      });
+    }
+    this.combat?.rebuildCannons();
+  }
+
+  /** Kessar Reach carries the crossing scenario; Hollowmere has none. Called once the room's systems exist (the cast is spawned through them). */
+  private startScenario(id: RegionId): void {
+    if (id !== "kessar") return;
+    this.scenario = new Scenario(this.scenarioHost());
+    this.scenario.start();
+  }
+
+  /** The sailing has finished: tear the old region down, stand the new one up, put everybody on its landing. Runs at the end of a server tick. */
+  private enterRegion(to: RegionId): void {
+    this.scenario?.dispose();
+    this.scenario = undefined;
+    this.npcDownedAt.clear();
+    this.publishScenario("");
+    // Nobody carries anything across the water; a revive or drag in progress is over.
+    this.carrying.clear();
+    this.state.players.forEach((p, sid) => {
+      if (p.npc) return;
+      p.flags &= ~(FLAG.CARRYING | FLAG.OPERATING);
+      this.casualties.onLeave(sid);
+      this.prevButtons.delete(sid);
+      this.emptyTicks.set(sid, 0);
+    });
+    const old = this.physics;
+    metrics.physicsBodies -= old.props.size;
+    old.dispose();
+    this.state.region = to;
+    this.buildRegion(to);
+    this.startScenario(to);
+    // Everyone lands on the arrival ring at rest. (The client snaps its prediction when the region changes; see net/Session.ts.)
+    this.state.players.forEach((p) => {
+      if (p.npc) return;
+      const at = regionSpawn(to, p.slot, MAX_PLAYERS);
+      const c = createCharState(at.x, at.z, this.world);
+      p.x = c.x;
+      p.y = c.y;
+      p.z = c.z;
+      p.vx = 0;
+      p.vy = 0;
+      p.vz = 0;
+      p.stumble = 0;
+      p.facing = 0;
+    });
+    log.info("room.region", { roomId: this.roomId, region: to });
+  }
+
+  // ---- the campaign: outcomes, scenario host, NPC rows -------------------------------------------------------------------------------------
+
+  private publishScenario(json: string): void {
+    if (this.state.scenario === json) return;
+    this.state.scenario = json;
+    this.state.scenarioRev = (this.state.scenarioRev + 1) & 0xffff;
+  }
+
+  /** A scenario resolved: the campaign changes (one rules table in shared/factions.ts), everyone is told what the Ward made of it. */
+  private commitOutcome(o: ScenarioOutcome): void {
+    const before = this.campaign;
+    this.campaign = applyOutcome(before, o);
+    this.state.campaign = serializeCampaign(this.campaign);
+    this.state.campaignRev = (this.state.campaignRev + 1) & 0xffff;
+    for (const line of consequenceLines(before, this.campaign).slice(0, 3)) this.broadcast("notice", { text: line });
+    log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
+  }
+
+  private scenarioHost(): ConstructorParameters<typeof Scenario>[0] {
+    return {
+      players: this.party,
+      worldMs: () => performance.now() - this.bornAt,
+      campaign: () => this.campaign,
+      commit: (o) => this.commitOutcome(o),
+      spawnNpc: (spec) => this.spawnNpc(spec),
+      removeNpc: (key) => this.removeNpc(key),
+      stepNpc: (key, cmd) => this.stepNpc(key, cmd),
+      explode: (x, y, z, radius) => {
+        const b = WEAPONS[WEAPON.CANNON].ranged!.blast!;
+        this.combat.explode("", WEAPON.CANNON, { ...b, radius }, x, y, z, "");
+      },
+      consumeProp: (id) => this.consumeProp(id),
+      propKind: (id) => this.state.props.get(id)?.kind,
+      rebuildBridge: (b) => this.rebuildBridge(b),
+      publish: (v: ScenarioView) => this.publishScenario(JSON.stringify(v)),
+      send: (sid, type, msg) => this.clients.getById(sid)?.send(type, msg),
+      negotiation: { askingToll, leverageOf, openParley, answerParley },
+      seed: this.state.seed,
+      groundY: (x, z) => this.world.terrainHeight(x, z),
+    };
+  }
+
+  /** The charge brought the bridge down: new analytic world (what people walk on) and new static colliders (what props land on). */
+  private rebuildBridge(bridge: BridgeState): void {
+    this.world = createRegionWorld(this.state.region as RegionId, this.state.seed, { bridge });
+    this.physics.replaceStatic(this.world);
+  }
+
+  private consumeProp(id: string): void {
+    const ps = this.state.props.get(id);
+    if (!ps) return;
+    const holder = ps.holder;
+    if (holder) {
+      this.carrying.delete(holder);
+      const hp = this.state.players.get(holder);
+      if (hp) hp.flags &= ~FLAG.CARRYING;
+      this.physics.release(id, 0, 0, 0);
+    }
+    this.physics.removeProp(id);
+    this.state.props.delete(id);
+    metrics.physicsBodies--;
+  }
+
+  private spawnNpc(spec: NpcSpec): boolean {
+    const key = npcKey(spec.id);
+    if (this.state.players.has(key)) return false;
+    let count = 0;
+    const used = new Set<number>();
+    this.state.players.forEach((p) => {
+      if (!p.npc) return;
+      count++;
+      used.add(p.slot);
+    });
+    if (count >= NPC_CAP) return false;
+    let slot = NPC_SLOT_BASE;
+    while (used.has(slot)) slot++;
+    const p = new PlayerState();
+    p.name = spec.name;
+    p.slot = slot;
+    p.connected = true;
+    p.look = encodeSpec(generateCharacter(spec.lookSeed));
+    p.title = "";
+    p.health = CASUALTY.maxHealth;
+    p.reviveProgress = 0;
+    p.reviver = "";
+    p.dragger = "";
+    const c = createCharState(spec.post.x, spec.post.z, this.world);
+    Object.assign(p, c);
+    p.facing = Math.PI; // facing the bridge from the north bank, the Syndicate from the south: near enough; npcDecide turns them
+    p.npc = spec.role;
+    this.state.players.set(key, p);
+    p.shots = 0;
+    p.aim = 0;
+    this.combat.onJoin(key, p);
+    return true;
+  }
+
+  private removeNpc(key: string): void {
+    const p = this.state.players.get(key);
+    if (!p) return;
+    this.casualties.onLeave(key);
+    this.combat.onLeave(key);
+    this.physics.removePlayer(key);
+    this.prevButtons.delete(key);
+    this.npcDownedAt.delete(key);
+    this.state.players.delete(key);
+  }
+
+  /** One step of an NPC: the SAME movement step and combat path a player's input frame takes. */
+  private stepNpc(key: string, cmd: MoveCommand): void {
+    const p = this.state.players.get(key);
+    if (!p || !p.npc) return;
+    stepCharacter(p, cmd, this.tickDt, this.world);
+    const prev = this.prevButtons.get(key) ?? 0;
+    this.prevButtons.set(key, cmd.buttons);
+    this.combat.onFrame(key, p, cmd, cmd.buttons & ~prev);
+    this.physics.syncPlayer(key, p.x, p.y, p.z, (p.flags & (FLAG.CROUCHING | FLAG.DOWNED)) !== 0);
+  }
+
+  /** A downed NPC stays down (it is never revived) and is taken away after NPC_DOWNED_LINGER_S. */
+  private reapNpcs(): void {
+    let any = false;
+    this.state.players.forEach((p) => {
+      if (p.npc) any = true;
+    });
+    if (!any) return;
+    const gone: string[] = [];
+    this.state.players.forEach((p, id) => {
+      if (!p.npc) return;
+      if ((p.flags & FLAG.DOWNED) === 0) return;
+      const at = this.npcDownedAt.get(id);
+      if (at === undefined) this.npcDownedAt.set(id, this.simT);
+      else if (this.simT - at >= NPC_DOWNED_LINGER_S) gone.push(id);
+    });
+    for (const id of gone) this.removeNpc(id);
+  }
+
   /** Tells one player why the server said no. Rate limited: it is a courtesy, not a channel. */
   private refuse(sessionId: string, text: string): void {
     const now = Date.now();
@@ -456,7 +805,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
   /** The single entry point for harm (weapons, explosions, friendly fire, debug). Health 0 puts a player down, never out. */
   damagePlayer(sessionId: string, amount: number, hit?: HitInfo): void {
+    const p = this.state.players.get(sessionId);
+    const wasDown = p !== undefined && (p.flags & FLAG.DOWNED) !== 0;
     this.casualties.damage(sessionId, amount, hit);
+    if (p && !wasDown) this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, (p.flags & FLAG.DOWNED) !== 0);
   }
 
   /** QA-only commands (see docs/NETWORKING.md). Registered only when config.debugCommands is true. */

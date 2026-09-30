@@ -34,7 +34,7 @@ export class Projectiles {
 
   constructor(
     scene: Scene,
-    private readonly world: CollisionWorld,
+    private world: CollisionWorld,
     private readonly fx: ShotFx,
   ) {
     this.mesh = new InstancedMesh(new SphereGeometry(1, 8, 6), new MeshToonMaterial({ color: PALETTE.weapons.shell, gradientMap: sharedToonRamp() }), PROJECTILES.cap);
@@ -42,6 +42,11 @@ export class Projectiles {
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
     scene.add(this.mesh);
+  }
+
+  /** The region changed: rounds stop at the new static world. */
+  setWorld(world: CollisionWorld): void {
+    this.world = world;
   }
 
   get live(): number {

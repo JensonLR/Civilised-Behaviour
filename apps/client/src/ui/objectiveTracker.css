@@ -1,0 +1,25 @@
+/* The objective tracker: a paper card, top left, under the heading strip. Colours come from the :root palette variables only. */
+.objectives { position: absolute; top: calc(var(--edge-t, 1rem) + 4.6rem); left: var(--edge-l, 1rem); width: min(19rem, 40vw); padding: 0.6rem 0.8rem 0.7rem; font-family: var(--serif); font-size: 0.92rem; line-height: 1.3; color: var(--ink); background: linear-gradient(var(--paper), var(--paper-2)); border: 2px solid var(--ink); box-shadow: var(--shadow); pointer-events: none; }
+.objectives[hidden] { display: none; }
+.objectives h2 { margin: 0 0 0.35rem; font-family: var(--display); font-size: 0.78rem; font-weight: normal; letter-spacing: 0.22em; text-transform: uppercase; color: var(--stamp); border-bottom: 1px solid var(--ink); padding-bottom: 0.2rem; }
+.objectives ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.objectives li { display: flex; gap: 0.45rem; align-items: baseline; transition: opacity 0.3s; }
+.objectives li .mark::before { content: "\2610"; font-family: var(--type); }
+.objectives li.done .mark::before { content: "\2612"; color: var(--stamp); }
+.objectives li.done .text { text-decoration: line-through; text-decoration-thickness: 1.5px; opacity: 0.7; }
+.objectives li.optional .text { font-style: italic; }
+.objectives li.optional:not(.done) { opacity: 0.85; }
+.objectives .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.objectives .hint { margin: 0.45rem 0 0; font-size: 0.82rem; opacity: 0.85; border-top: 1px dotted var(--ink); padding-top: 0.35rem; }
+.objectives .hint[hidden] { display: none; }
+.objectives .timer { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-top: 0.45rem; padding: 0.15rem 0.45rem; font-family: var(--type); font-size: 0.85rem; color: var(--text); background: var(--leather); }
+.objectives .timer[hidden] { display: none; }
+.objectives .timer .label { letter-spacing: 0.06em; }
+.objectives .timer .clock { font-variant-numeric: tabular-nums; }
+.objectives .timer.urgent { background: var(--stamp); }
+.objectives .timer.urgent .clock { font-weight: bold; animation: objTick 1s steps(2, jump-none) infinite; }
+@keyframes objTick { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .objectives li { transition: none; } .objectives .timer.urgent .clock { animation: none; } }
+:root[data-motion="reduced"] .objectives li { transition: none; }
+:root[data-motion="reduced"] .objectives .timer.urgent .clock { animation: none; }
+@media (max-width: 62rem) { .objectives { width: min(17rem, 46vw); font-size: 0.86rem; } }

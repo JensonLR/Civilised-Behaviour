@@ -1,0 +1,156 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { MapRoom, type MapRoomCallbacks, type MapRoomView } from "./MapRoom.ts";
+import { Sailing } from "./Sailing.ts";
+
+const view = (o: Partial<MapRoomView> = {}): MapRoomView => ({
+  regions: [
+    { id: "hollowmere", name: "Hollowmere Depot", blurb: "Home.", note: "", here: true },
+    { id: "kessar", name: "Kessar Reach", blurb: "A bridge with opinions.", note: "Crossing: the bridge stands. Toll: 40 pounds.", here: false },
+  ],
+  ready: [
+    { slot: 0, name: "Colonel", ready: false },
+    { slot: 1, name: "Miss Pym", ready: false },
+  ],
+  phase: 0,
+  you: 0,
+  ...o,
+});
+
+const cbs = () => ({ propose: vi.fn(), ready: vi.fn(), cancel: vi.fn(), close: vi.fn() }) satisfies MapRoomCallbacks;
+
+// (happy-dom's import.meta.url is not a file URL, so find the stylesheet from the package root, which is where vitest runs)
+const css = readFileSync(["src/ui/mapRoom.css", "apps/client/src/ui/mapRoom.css"].map((p) => join(process.cwd(), p)).find((p) => existsSync(p))!, "utf8");
+
+let host: HTMLElement;
+beforeEach(() => {
+  host = document.createElement("div");
+  document.body.appendChild(host);
+});
+afterEach(() => {
+  document.body.innerHTML = "";
+});
+
+const radios = (): HTMLInputElement[] => [...document.querySelectorAll<HTMLInputElement>("input[type=radio]")];
+const button = (text: RegExp): HTMLButtonElement => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => text.test(b.textContent ?? ""))!;
+
+describe("MapRoom", () => {
+  it("opens on the far shore, lists every region with its note, and marks where you are", () => {
+    const room = new MapRoom(host);
+    room.open(view(), cbs());
+    expect(room.isOpen).toBe(true);
+    expect(radios().map((r) => r.value)).toEqual(["hollowmere", "kessar"]);
+    expect(radios().find((r) => r.checked)?.value).toBe("kessar");
+    expect(document.querySelector(".dest.here .badge")?.textContent).toBe("you are here");
+    expect(document.body.textContent).toContain("Toll: 40 pounds");
+    expect(document.querySelector("[role=radiogroup]")).not.toBeNull();
+    expect(document.querySelector("[role=dialog]")?.getAttribute("aria-labelledby")).toBe("maproom-title");
+    room.dispose();
+  });
+
+  it("proposing sends the chosen region; choosing home disables it with a reason", () => {
+    const room = new MapRoom(host);
+    const cb = cbs();
+    room.open(view(), cb);
+    button(/Propose sailing/).click();
+    expect(cb.propose).toHaveBeenCalledWith("kessar");
+    const home = radios()[0]!;
+    home.checked = true;
+    home.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(button(/Propose sailing/).disabled).toBe(true);
+    expect(document.querySelector(".status")?.textContent).toMatch(/already at Hollowmere Depot/);
+    button(/Propose sailing/).click();
+    expect(cb.propose).toHaveBeenCalledTimes(1);
+    room.dispose();
+  });
+
+  it("a proposal shows the vote, locks the destination, and offers ready and cancel", () => {
+    const room = new MapRoom(host);
+    const cb = cbs();
+    room.open(view(), cb);
+    room.update(view({ phase: 1, to: "kessar", ready: [{ slot: 0, name: "Colonel", ready: true }, { slot: 1, name: "Miss Pym", ready: false }] }));
+    expect(button(/Propose sailing/).hidden).toBe(true);
+    expect(button(/Ready to sail/).hidden).toBe(false);
+    expect(button(/Ready to sail/).getAttribute("aria-pressed")).toBe("true"); // the server says slot 0 (you) is ready
+    expect(button(/Call it off/).hidden).toBe(false);
+    expect(radios().find((r) => r.value === "hollowmere")!.disabled).toBe(true);
+    expect(document.querySelector(".status")?.textContent).toMatch(/1 of 2 ready/);
+    expect([...document.querySelectorAll(".crew .state")].map((e) => e.textContent)).toEqual(["ready", "waiting"]); // (words, not colour)
+    button(/Call it off/).click();
+    expect(cb.cancel).toHaveBeenCalled();
+    room.update(view({ phase: 1, to: "kessar" }));
+    button(/Ready to sail/).click();
+    expect(cb.ready).toHaveBeenCalledWith(true);
+    room.dispose();
+  });
+
+  it("a sailing under way closes the room without calling close; Escape and Close do", () => {
+    const room = new MapRoom(host);
+    const cb = cbs();
+    room.open(view(), cb);
+    room.update(view({ phase: 2, to: "kessar" }));
+    expect(room.isOpen).toBe(false);
+    expect(cb.close).not.toHaveBeenCalled();
+    room.open(view(), cb);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(room.isOpen).toBe(false);
+    expect(cb.close).toHaveBeenCalledTimes(1);
+    room.open(view(), cb);
+    button(/^Close$/).click();
+    expect(cb.close).toHaveBeenCalledTimes(2);
+    room.dispose();
+  });
+
+  it("everything from the wire is text, never markup", () => {
+    const room = new MapRoom(host);
+    room.open(view({ regions: [{ id: "kessar", name: "<img src=x onerror=alert(1)>", blurb: "<b>bold</b>", note: "<script>1</script>", here: false }], ready: [{ slot: 0, name: "<i>x</i>", ready: false }] }), cbs());
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector("script")).toBeNull();
+    expect(document.querySelector(".dest b")).toBeNull();
+    expect(document.querySelector(".crew i")).toBeNull();
+    room.dispose();
+  });
+
+  it("dispose leaves nothing behind and is safe to repeat", () => {
+    const before = document.body.querySelectorAll("*").length;
+    const room = new MapRoom(host);
+    room.open(view(), cbs());
+    room.dispose();
+    room.dispose();
+    expect(document.body.querySelectorAll("*").length).toBe(before);
+  });
+
+  it("the stylesheet uses palette variables only and respects reduced motion and larger text", () => {
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(css).not.toMatch(/\brgba?\(/);
+    expect(css).toMatch(/prefers-reduced-motion/);
+    expect(css).toMatch(/data-motion="reduced"/);
+    expect(css).toMatch(/rem/); // sizes in rem: the interface scale (larger text) multiplies them
+  });
+});
+
+describe("Sailing", () => {
+  it("shows the destination and the seconds, changes its line, then the arrival card, then goes away", () => {
+    const s = new Sailing(host);
+    expect(s.visible).toBe(false);
+    s.show("kessar", 5.2);
+    expect(s.visible).toBe(true);
+    expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Kessar Reach");
+    expect(document.querySelector(".sailing .clock")?.textContent).toBe("Landfall in 6 seconds");
+    s.show("Somewhere <b>else</b>", 1);
+    expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Somewhere <b>else</b>");
+    expect(document.querySelector(".sailing b")).toBeNull();
+    expect(document.querySelector(".sailing .clock")?.textContent).toBe("Landfall in 1 second");
+    s.arriving();
+    expect(document.querySelector(".sailing")?.classList.contains("arriving")).toBe(true);
+    expect(document.querySelector(".sailing .clock")?.textContent).toMatch(/Unloading/);
+    s.hide();
+    expect(s.visible).toBe(false);
+    s.show("hollowmere", Number.NaN);
+    expect(document.querySelector(".sailing .clock")?.textContent).toBe("Landfall");
+    s.dispose();
+    expect(document.querySelector(".sailing")).toBeNull();
+  });
+});

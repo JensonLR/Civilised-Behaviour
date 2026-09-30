@@ -6,8 +6,12 @@ import {
   PREDICTED_FIELDS,
   ROOM_WORLD,
   WorldState,
-  createArena,
+  createRegionWorld,
+  isRegionId,
+  parseCampaign,
   stepCharacter,
+  type BridgeState,
+  type RegionId,
   type JoinOptions,
   type MoveCommand,
   type MoveInputType,
@@ -65,7 +69,8 @@ export interface LocalPrediction {
 }
 
 export class Session {
-  readonly world: CollisionWorld;
+  /** The analytic world the local player walks on: the region's, with the crossing as the campaign has it. Swapped on landfall and when a bridge falls. */
+  world: CollisionWorld;
   readonly predict: Predict<WorldStateType>;
   private readonly input: MoveHandle;
   private reconciler: ReturnType<Predict<WorldStateType>["reconciler"]> | undefined;
@@ -75,11 +80,30 @@ export class Session {
   private constructor(
     readonly room: Room<WorldStateType>,
   ) {
-    this.world = createArena(room.state.seed);
+    this.world = Session.worldFor(room.state.region, room.state.seed, Session.bridgeOf(room.state.campaign));
     this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.predict.attachAll("props", { x: "lerp", y: "lerp", z: "lerp", qx: "lerp", qy: "lerp", qz: "lerp", qw: "lerp" } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;
+  }
+
+  /** The region the server says we are in (Hollowmere until told otherwise). */
+  get region(): RegionId {
+    return isRegionId(this.room.state.region) ? this.room.state.region : "hollowmere";
+  }
+
+  static bridgeOf(campaignJson: string | undefined): BridgeState {
+    return (campaignJson ? parseCampaign(campaignJson)?.crossing.bridge : undefined) ?? "intact";
+  }
+
+  static worldFor(region: string | undefined, seed: number, bridge: BridgeState): CollisionWorld {
+    return createRegionWorld(isRegionId(region) ? region : "hollowmere", seed, { bridge });
+  }
+
+  /** Rebuilds the local world for the current region and crossing (landfall, or the bridge came down). The reconciler's step reads `this.world` each time. */
+  refreshWorld(): CollisionWorld {
+    this.world = Session.worldFor(this.room.state.region, this.room.state.seed, Session.bridgeOf(this.room.state.campaign));
+    return this.world;
   }
 
   /** Resolves once the first full state (seed, code, existing players) has been decoded. */
@@ -94,9 +118,15 @@ export class Session {
     });
   }
 
-  static async create(name: string, look?: string, rules: { dismemberment?: boolean } = {}): Promise<Session> {
+  static async create(name: string, look?: string, rules: { dismemberment?: boolean; region?: RegionId } = {}): Promise<Session> {
     const client = new Client(serverUrl());
-    const options: JoinOptions = { name, token: identityToken(), ...(look ? { look } : {}), ...(rules.dismemberment === undefined ? {} : { dismemberment: rules.dismemberment }) };
+    const options: JoinOptions = {
+      name,
+      token: identityToken(),
+      ...(look ? { look } : {}),
+      ...(rules.dismemberment === undefined ? {} : { dismemberment: rules.dismemberment }),
+      ...(rules.region ? { region: rules.region } : {}),
+    };
     const room = await client.create<WorldStateType>(ROOM_WORLD, options, WorldState as never);
     await Session.stateReady(room);
     return new Session(room);

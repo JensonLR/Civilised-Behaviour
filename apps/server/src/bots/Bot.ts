@@ -6,8 +6,11 @@ import {
   PREDICTED_FIELDS,
   ROOM_WORLD,
   WorldState,
-  createArena,
+  createRegionWorld,
   elevToWire,
+  isRegionId,
+  parseCampaign,
+  type JoinOptions,
   stepCharacter,
   weaponToWire,
   yawToWire,
@@ -59,7 +62,9 @@ export interface BotStats {
  * because it is test/ops tooling, never shipped to players.
  */
 export class Bot {
-  readonly world: CollisionWorld;
+  /** The region's world with the crossing as the campaign has it: follows the room through sailing and a fallen bridge, as the browser does. */
+  world: CollisionWorld;
+  private worldKey = "";
   private readonly predict: Predict<WorldStateType>;
   private readonly input: MoveHandle;
   private readonly pops: number[] = [];
@@ -76,15 +81,15 @@ export class Bot {
     readonly room: Room<WorldStateType>,
     private readonly behaviour: Behaviour,
   ) {
-    this.world = createArena(room.state.seed);
+    this.world = this.freshWorld();
     this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
     // Remote players are drawn interpolated 100 ms behind, exactly as in the browser (net/Session.ts): what a bot "sees" is what a player sees.
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;
   }
 
-  static async create(url: string, name: string, behaviour: Behaviour): Promise<Bot> {
-    const room = await new Client(url).create<WorldStateType>(ROOM_WORLD, { name }, WorldState as never);
+  static async create(url: string, name: string, behaviour: Behaviour, extra: Partial<JoinOptions> = {}): Promise<Bot> {
+    const room = await new Client(url).create<WorldStateType>(ROOM_WORLD, { name, ...extra }, WorldState as never);
     return Bot.ready(room, behaviour);
   }
 
@@ -96,6 +101,22 @@ export class Bot {
   private static async ready(room: Room<WorldStateType>, behaviour: Behaviour): Promise<Bot> {
     if (!room.state.code) await new Promise<void>((r) => room.onStateChange.once(() => r()));
     return new Bot(room, behaviour);
+  }
+
+  private freshWorld(): CollisionWorld {
+    const st = this.room.state;
+    const bridge = (st.campaign ? parseCampaign(st.campaign)?.crossing.bridge : undefined) ?? "intact";
+    const region = isRegionId(st.region) ? st.region : "hollowmere";
+    this.worldKey = `${region}|${bridge}`;
+    return createRegionWorld(region, st.seed, { bridge });
+  }
+
+  /** Rebuilds the world when the region or the crossing changed (the reconciler's step reads `this.world` each time). */
+  private syncWorld(): void {
+    const st = this.room.state;
+    const bridge = (st.campaign ? parseCampaign(st.campaign)?.crossing.bridge : undefined) ?? "intact";
+    const region = isRegionId(st.region) ? st.region : "hollowmere";
+    if (`${region}|${bridge}` !== this.worldKey) this.world = this.freshWorld();
   }
 
   get self(): PlayerStateType | undefined {
@@ -168,6 +189,7 @@ export class Bot {
         warnOnDivergence: 1e9,
       } as never);
     }
+    this.syncWorld();
     const now = performance.now();
     const steps = this.predict.tick(now);
     for (let i = 0; i < steps; i++) {
