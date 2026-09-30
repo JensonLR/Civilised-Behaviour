@@ -18,7 +18,7 @@ const hook = (page: Page) => page.evaluate(() => {
 
 async function start(page: Page, name: string, code?: string, extra = "") {
   await page.goto(code ? `/?join=${code}&gfx=low${extra}` : `/?gfx=low${extra}`); // low preset: fewer pixels/shadows for the software rasteriser
-  await page.waitForSelector("#name", { timeout: 60_000 }); // the game boots via dynamic import after `load`
+  await page.waitForSelector("#name", { timeout: 120_000 }); // the game boots via dynamic import after `load` (2-3 s idle; software GL under load can take much longer)
   await page.fill("#name", name);
   await page.click(code ? "#join" : "#create");
   await page.waitForFunction(() => Boolean((window as unknown as { __cb?: unknown }).__cb));
