@@ -278,6 +278,12 @@ export const PALETTE = {
     pearl: 0xe6e0d0,
     // stockings and puttees
     puttee: 0x7a7448,
+    // fine cosmetics: medals, visors, combs, blossoms, pencils
+    visorGlass: 0x4f8a5a,
+    tortoise: 0x6a4a2a,
+    bronze: 0xa4703a,
+    blossom: 0xc4707a,
+    pencil: 0xb89a4a,
   },
 
   /** Metalwork colours (the spec's "accent" field). */

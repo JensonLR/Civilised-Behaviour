@@ -139,8 +139,41 @@ export function buildForeArm(c: BodyCtx, side: "L" | "R" = "L"): BufferGeometry 
   return base;
 }
 
+/** Extra cuff detail chosen in the creator: a row of buttons up the outer seam, gold links, or a buckled strap. In the forearm frame, outward = away from the body. */
+function cuffDetail(b: PartBuilder, c: BodyCtx, L: number, r: number, side: "L" | "R"): void {
+  const style = c.spec.cuffDetail;
+  if (style === 0) return;
+  const out = side === "L" ? -1 : 1;
+  const bottom = -L - 0.005;
+  const gold = c.accent;
+  const rr = r * 0.98;
+  if (style === 1) {
+    for (let i = 0; i < 4; i++) b.sphere(0.0115, gold, [out * (rr + 0.002), bottom + 0.024 + i * 0.021, -r * 0.05], [0.55, 1, 1]);
+  } else if (style === 2) {
+    const y = bottom + 0.045;
+    b.cylinder(0.0035, 0.0035, rr * 2 + 0.01, tone(gold, 0.8), [0, y, 0], [0, 0, Math.PI / 2]); // (the bar through the cuff)
+    for (const sx of [-1, 1]) {
+      b.cylinder(0.014, 0.014, 0.006, gold, [sx * (rr + 0.004), y, 0], [0, 0, Math.PI / 2]);
+      b.sphere(0.006, sx === out ? PALETTE.trim.gemRed : PALETTE.trim.pearl, [sx * (rr + 0.009), y, 0], [0.5, 1, 1]);
+    }
+  } else {
+    const y = bottom + 0.05;
+    const strap = tone(c.leather, 1.02);
+    const ring = (yy: number, k: number, color: number): Ring => ({ y: yy, rx: r * k, rz: r * k * 0.97, color });
+    b.loft([ring(y + 0.012, 1.02, tone(strap, 1.1)), ring(y - 0.012, 1.02, tone(strap, 0.85))], strap, undefined, undefined, undefined, { capBottom: false, capTop: false, segments: 8 });
+    b.box(0.008, 0.032, 0.026, gold, [out * (r * 1.04), y, 0]); // the buckle
+    b.box(0.006, 0.012, 0.018, tone(gold, 0.7), [out * (r * 1.06), y, 0]);
+    b.box(0.006, 0.01, 0.03, tone(strap, 0.9), [out * (r * 1.05), y - 0.024, 0]); // the loose tail
+  }
+}
+
 /** The cuff of a sleeve, in the forearm frame: `y0` = the wrist. */
-function cuff(b: PartBuilder, c: BodyCtx, L: number, r: number): void {
+function cuff(b: PartBuilder, c: BodyCtx, L: number, r: number, side: "L" | "R" = "L"): void {
+  cuffBase(b, c, L, r);
+  cuffDetail(b, c, L, r, side);
+}
+
+function cuffBase(b: PartBuilder, c: BodyCtx, L: number, r: number): void {
   const j = c.spec.jacket;
   const contrast = contrastCloth(c);
   const burnt = c.burnt;
@@ -236,7 +269,7 @@ function foreArmAt(c: BodyCtx, side: "L" | "R", grip: number): BufferGeometry | 
     b.loft(rl, sleeveC);
   } else {
     b.loft(rings, sleeveC);
-    cuff(b, c, L, r);
+    cuff(b, c, L, r, side);
   }
   if (spec.hook === (side === "L" ? 1 : 2)) hookHand(b, c, L);
   else buildHand(b, c, L, side, grip);

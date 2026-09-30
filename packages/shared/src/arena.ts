@@ -19,8 +19,8 @@ export function createArena(seed: number): CollisionWorld {
   const terrain = withLandscape(createTerrain(seed));
   const rng = new Rng(seed ^ 0xa5a5a5a5);
   // The authored expedition camp (ruined wall, step-up crates, tents, fire, flag, signpost, luggage, cart, map table, washing...): camp.ts.
-  // The Observatory ruin and its aqueduct: ruins.ts. The camp's field cannon: weapons.ts. The well, the pen, the signposts, the footbridge: clearing.ts.
-  const obstacles: Obstacle[] = [...campObstacles(terrain), ...ruinObstacles(terrain), ...cannonObstacles(terrain), ...clearingObstacles(terrain)];
+  // The Observatory ruin and its aqueduct: ruins.ts. The camp's field cannon: weapons.ts.
+  const obstacles: Obstacle[] = [...campObstacles(terrain), ...ruinObstacles(terrain), ...cannonObstacles(terrain)];
 
   const MAX_D = ARENA_RADIUS - 4;
   const tooClose = (x: number, z: number, gap: number): boolean => {
@@ -116,7 +116,17 @@ export function createArena(seed: number): CollisionWorld {
     }
     made++;
   }
-  return new CollisionWorld(terrain, obstacles, ARENA_RADIUS);
+  // The country's furniture (the well, the pen, the signposts, the footbridge: clearing.ts) goes in LAST: nothing above consumes randomness
+  // differently for it, so every tree, rock and stump keeps the place it always had; the few that would stand inside a fence or a well are
+  // simply not there. (Moving the whole forest whenever a signpost is authored would break every test that fires along a fixed line.)
+  const furniture = clearingObstacles(terrain);
+  const clashes = (o: Obstacle): boolean =>
+    furniture.some((f) => {
+      const reach = (o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz)) + (f.kind === "circle" ? f.r : Math.hypot(f.hx, f.hz)) + 0.6;
+      return (o.x - f.x) ** 2 + (o.z - f.z) ** 2 < reach * reach;
+    });
+  const kept = obstacles.filter((o) => !(["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && clashes(o)));
+  return new CollisionWorld(terrain, [...kept, ...furniture], ARENA_RADIUS);
 }
 
 /** Deterministic spawn ring around the origin for up to `count` players. */

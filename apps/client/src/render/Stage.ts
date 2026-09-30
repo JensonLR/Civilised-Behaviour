@@ -16,7 +16,7 @@ import {
 import { applyWeather, createDayState, dayState, hashFloat, parseClock, parseWeatherKind, type CollisionWorld } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
 import { WorldView } from "./world/WorldView.ts";
-import { atmoUniforms, motion, motionScale, setAtmosphere, windGain } from "./world/atmosphere.ts";
+import { atmoUniforms, atmosphereForWriting, motion, motionScale, windGain } from "./world/atmosphere.ts";
 import { applyDaySky, buildSky, fogColour, setRgb, type SkyUniforms } from "./world/sky.ts";
 import { SkyClock } from "./world/skyclock.ts";
 
@@ -58,10 +58,11 @@ export const PRESETS: Record<"low" | "medium" | "high", GraphicsPreset> = {
 };
 
 /**
- * Owns the WebGL renderer, scene lighting, sky and static world dressing, and the time of day. The clock (`?time=` fixes it, otherwise it
- * drifts slowly; see `CLOCK` in shared/daycycle.ts) is pure client-side scenery: it moves no gameplay state, so two clients at different
- * hours still play the same game. Each frame `dayState` fills one preallocated record that lights everything: sun, hemisphere, fog,
- * background, sky, hills, water, ambient life and the fire. Kept behind this small surface so a WebGPU renderer can be swapped in later.
+ * Owns the WebGL renderer, scene lighting, sky and static world dressing, and the time of day and weather. In a room the hour and the
+ * weather are pure functions of the server's world age (`SkyClock`, fed by `syncWorldClock`), so every player sees the same sky; `?time=`
+ * and `?weather=` override it locally. Each frame `dayState` + `applyWeather` fill one preallocated record that lights everything: sun,
+ * hemisphere, fog, background, sky, hills, water, rain, ambient life and the fire. Kept behind this small surface so a WebGPU renderer can
+ * be swapped in later.
  */
 export class Stage {
   readonly renderer: WebGLRenderer;
@@ -215,7 +216,7 @@ export class Stage {
     this.worldView?.setPushers(list, n);
   }
 
-  /** Lights everything for `this.hours` and the current weather. Allocation-free. */
+  /** Lights everything for the sky clock's hour and weather. Allocation-free. */
   private applyDay(): void {
     const d = dayState(this.sky_.hours, this.day);
     const w = this.sky_.weather;
@@ -246,19 +247,18 @@ export class Stage {
     const l = c.lightning;
     this.skyUniforms.uBolt.value.set(hashFloat(c.seed, Math.floor(l.lastStrikeMs) | 0, 0x77) * Math.PI * 2, l.flash > 0.35 ? 1 : 0, (l.lastStrikeMs % 1000) * 0.013);
     const wx = c.weather;
-    setAtmosphere({
-      rain: wx.rain,
-      wind: wx.wind,
-      thunderAt: Number.isNaN(l.thunderMs) ? null : nowPerfMs / 1000 + (l.thunderMs - c.lightningMs) / 1000,
-      hour: c.hours,
-      wet: wx.wet,
-      fog: wx.fog,
-      overcast: wx.overcast,
-      storm: wx.storm,
-      dust: wx.dust,
-      flash: l.flash,
-      kind: wx.kind,
-    });
+    const at = atmosphereForWriting();
+    at.rain = wx.rain;
+    at.wind = wx.wind;
+    at.thunderAt = Number.isNaN(l.thunderMs) ? null : nowPerfMs / 1000 + (l.thunderMs - c.lightningMs) / 1000;
+    at.hour = c.hours;
+    at.wet = wx.wet;
+    at.fog = wx.fog;
+    at.overcast = wx.overcast;
+    at.storm = wx.storm;
+    at.dust = wx.dust;
+    at.flash = l.flash;
+    at.kind = wx.kind;
   }
 
   /** Keeps the shadow frustum centred on the action, snapped to texels to avoid shimmer, and along the current light (sun by day, moon by night). */

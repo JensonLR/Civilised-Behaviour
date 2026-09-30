@@ -14,7 +14,7 @@ export const SHIRTS = ["Plain", "Striped", "Checked", "Collarless", "Wing Collar
 export const TROUSERS = ["Plain", "Striped", "Breeches", "Baggy", "Plus-Fours", "Jodhpurs", "Tropical Shorts"] as const;
 export const BOOTS = ["Tall Riding", "Ankle", "Spats", "Hobnailed", "Puttees", "Wellingtons", "Slippers", "Spurred", "Clogs"] as const;
 export const BELTS = ["None", "Leather", "Cummerbund", "Rope", "Ammunition Belt", "Cross Belts", "Bandolier"] as const;
-export const EYEWEAR = ["None", "Monocle", "Spectacles", "Goggles", "Pince-nez", "Smoked Glasses", "Snow Goggles", "Jeweller's Loupe", "Half-Moons", "Left Monocle", "Pushed-Up Goggles"] as const;
+export const EYEWEAR = ["None", "Monocle", "Spectacles", "Goggles", "Pince-nez", "Smoked Glasses", "Snow Goggles", "Jeweller's Loupe", "Half-Moons", "Left Monocle", "Pushed-Up Goggles", "Owl Specs", "Corded Pince-nez", "Green Visor"] as const;
 export const SASHES = ["None", "Diagonal", "Waist", "Cross Sashes", "Tasselled Waist", "Order Ribbon"] as const;
 export const NECKWEAR = ["None", "Cravat", "Bow Tie", "Scarf", "Ascot", "Neckerchief", "Ruff", "Fur Collar", "Muffler"] as const;
 export const PACKS = ["None", "Rucksack", "Bedroll", "Satchel", "Specimen Case", "Tin Trunk", "Rifle", "Easel", "Birdcage", "Umbrella"] as const;
@@ -42,6 +42,15 @@ export const COAT_TRIMS = ["None", "Frogging", "Contrast Cuffs", "Fur Trim", "Br
 export const TROUSER_TRIMS = ["None", "Knee Patches", "Patched and Mended", "Muddy Knees", "Side Stripe"] as const;
 export const HAT_TRIMS = ["None", "Goggles on Brim", "Feather", "Badge", "Cockade", "Ribbon Tails"] as const;
 export const HOOKS = ["None", "Left", "Right"] as const;
+// ---- batch 3: fine cosmetics (the wire format only ever grows at the end; index 0 of each is the look that shipped before it existed) ----
+export const MEDAL_STYLES = ["Round Medals", "Draped Ribbons", "Crosses", "Stars"] as const;
+export const BUCKLES = ["Square Plate", "Round Disc", "Oval Plate", "Double Prong", "Crest Plate"] as const;
+export const CUFF_DETAILS = ["Plain", "Button Row", "Gold Links", "Buckled Strap"] as const;
+export const BOOT_LACES = ["Standard", "Crossed Laces", "Bowed Laces", "Buckled Straps"] as const;
+export const POCKETS = ["None", "Breast Pocket", "Pocket Square", "Flap Pockets", "Pens and Pencils"] as const;
+export const HAIR_ACCESSORIES = ["None", "Ribbon Bow", "Tortoiseshell Comb", "Hairpins", "Silk Flower", "Feather Pin"] as const;
+export const EYEPATCH_STYLES = ["Plain", "Skull Badge", "Bandage", "Jewelled"] as const;
+export const SCAR_STYLES = ["Straight", "Jagged", "Stitched", "Forked"] as const;
 
 /** Shirt cloth: cream first (the original shirt), then linen, then the twelve cloth dyes. */
 export const SHIRT_COLORS: readonly number[] = [PALETTE.material.cream, PALETTE.material.linen, ...PALETTE.cloth];

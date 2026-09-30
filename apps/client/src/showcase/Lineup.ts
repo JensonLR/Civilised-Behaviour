@@ -3,6 +3,7 @@ import { CollisionWorld, FLAG, ZONE_COUNT, setWound } from "@cb/shared";
 import { ARCHETYPES, FIELDS, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId } from "@cb/procedural/three";
 import { RagdollWorld } from "../render/Ragdoll.ts";
+import { PRESETS } from "../ui/creatorLogic.ts";
 import { LabStage } from "./LabStage.ts";
 
 /**
@@ -13,6 +14,7 @@ import { LabStage } from "./LabStage.ts";
  *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry)
  *   pose=walk     walk|idle|carry|crouch|air|down
  *   look=<code>   show exactly one encoded character (from the creator) instead of the row
+ *   presets=1     the creator's curated archetype presets, in order (n and seed are ignored)
  *   marks=1       add campaign history marks (scars, gold tooth, eyepatch, wooden leg, medals)
  *   set=hat:9,hair:8   force spec fields on every character (field names from @cb/procedural FIELDS)
  *   vary=hat      cycle that field's options across the row (one option per character, in catalog order)
@@ -62,6 +64,7 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
   const specs: CharacterSpec[] = [];
   const decoded = single ? decodeSpec(single) : undefined;
   if (decoded) specs.push(decoded);
+  else if (params.get("presets") === "1") for (const p of PRESETS) specs.push({ ...p.spec });
   else {
     const n = Number(params.get("n") ?? ARCHETYPES.length);
     for (let i = 0; i < n; i++) specs.push(generateCharacter(seed + i * 7919, i % ARCHETYPES.length));

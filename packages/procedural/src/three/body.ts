@@ -10,7 +10,7 @@ import type { Ring } from "./loft.ts";
 import { PartBuilder, SOOT, singe } from "./parts.ts";
 import { dressSkirts, dressTorso, torsoRings, type TorsoView } from "./garments.ts";
 import { dressCape, dressPoncho } from "./drape.ts";
-import { addBelt, addDecorations, addSash } from "./torsoTrim.ts";
+import { addBelt, addDecorations, addPockets, addSash } from "./torsoTrim.ts";
 import { legRadius, upperArmRings, upperLegRings } from "./limbs.ts";
 
 /** Half-width of the waist: never much narrower than the shoulders it hangs from, or the figure reads as a wasp in a coat. */
@@ -84,6 +84,7 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   addBelt(frame, c);
   addSash(frame, c);
   addDecorations(frame, c);
+  addPockets(frame, c);
   if (spec.neckwear) addNeckwear(frame);
   if (spec.pack) addPack(frame);
   if (spec.hipGear) addHipGear(frame);

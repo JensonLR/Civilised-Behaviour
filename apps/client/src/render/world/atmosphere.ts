@@ -37,6 +37,11 @@ export function setAtmosphere(next: Partial<Atmosphere>): void {
   Object.assign(state, next);
 }
 
+/** For `Stage`, once a frame: the live object to write in place (no per-frame object literal). Everyone else reads `getAtmosphere`. */
+export function atmosphereForWriting(): Atmosphere {
+  return state;
+}
+
 // ---- motion preference --------------------------------------------------------------------------------------------------------------
 
 /**

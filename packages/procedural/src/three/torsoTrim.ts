@@ -24,10 +24,37 @@ function band(f: TorsoFrame, y: number, halfH: number, k: number, color: number,
     undefined,
     { capBottom: false, capTop: false },
   );
-  if (buckle !== undefined) {
-    const z = frontZ({ ...s, rz: s.rz * k }, 0) - 0.012;
-    f.b.box(0.07, halfH * 2.3, 0.03, buckle, [0, h * y, z]);
-    f.b.box(0.045, halfH * 1.2, 0.034, tone(buckle, 0.7), [0, h * y, z - 0.002]);
+  if (buckle !== undefined) buckleAt(f, buckle, frontZ({ ...s, rz: s.rz * k }, 0) - 0.012, h * y, halfH);
+}
+
+/** The belt buckle in the spec's shape (index 0 is the square plate every belt had before the others existed), centred at height y with its face at z. */
+function buckleAt(f: TorsoFrame, color: number, z: number, y: number, halfH: number): void {
+  const { b } = f;
+  const dark = tone(color, 0.7);
+  switch (f.spec.buckle) {
+    case 1: // a round disc with a raised boss
+      b.cylinder(0.036, 0.036, 0.016, color, [0, y, z], [Math.PI / 2, 0, 0]);
+      b.cylinder(0.024, 0.024, 0.02, dark, [0, y, z - 0.003], [Math.PI / 2, 0, 0]);
+      b.sphere(0.011, color, [0, y, z - 0.014], [1, 1, 0.6]);
+      break;
+    case 2: // an oval plate, wider than tall, with an inset
+      b.sphere(1, color, [0, y, z], [0.05, 0.034, 0.011]);
+      b.sphere(1, dark, [0, y, z - 0.004], [0.036, 0.021, 0.011]);
+      break;
+    case 3: // a double-ring frame with a central bar and prong
+      for (const sx of [-1, 1]) b.torus(0.026, 0.006, color, [sx * 0.026, y, z], [0, 0, 0]);
+      b.box(0.012, halfH * 2.6, 0.014, color, [0, y, z]);
+      b.box(0.05, 0.008, 0.01, dark, [0, y, z - 0.008]);
+      break;
+    case 4: // a crest plate: a shield with a red stone
+      b.box(0.064, 0.048, 0.014, color, [0, y + 0.004, z]);
+      b.cone(0.045, 0.03, color, [0, y - 0.03, z], [Math.PI / 2, Math.PI / 4, Math.PI]);
+      b.box(0.04, 0.03, 0.016, dark, [0, y + 0.004, z - 0.003]);
+      b.sphere(0.013, PALETTE.trim.gemRed, [0, y + 0.004, z - 0.012], [1, 1, 0.6]);
+      break;
+    default: // 0: the square plate
+      b.box(0.07, halfH * 2.3, 0.03, color, [0, y, z]);
+      b.box(0.045, halfH * 1.2, 0.034, dark, [0, y, z - 0.002]);
   }
 }
 
@@ -155,16 +182,94 @@ export function addSash(f: TorsoFrame, c: BodyCtx): void {
   }
 }
 
+/**
+ * One hanging medal (style 1 ribbon drape, 2 cross, 3 star): a pin bar, a ribbon of two colours folded into a V, and the badge below it,
+ * lying on the coat at (mx, my) with the surface at sz. Everything overlaps its neighbour, so the whole thing is one connected piece.
+ */
+function medal(f: TorsoFrame, style: number, metal: number, ribbon: number, stripe: number, mx: number, my: number, sz: number): void {
+  const { b } = f;
+  const zz = sz - 0.012;
+  const by = my - 0.02; // the badge hangs lower than the old flat disc, under its ribbon
+  b.box(0.05, 0.008, 0.008, tone(metal, 0.85), [mx, my + 0.05, zz + 0.002]); // the pin bar
+  for (const sx of [-1, 1]) {
+    b.box(0.017, 0.058, 0.006, ribbon, [mx + sx * 0.009, my + 0.026, zz + 0.001], [0, 0, sx * 0.3]);
+    b.box(0.005, 0.058, 0.007, stripe, [mx + sx * 0.009, my + 0.026, zz - 0.001], [0, 0, sx * 0.3]);
+  }
+  if (style === 1) {
+    b.cylinder(0.022, 0.022, 0.008, metal, [mx, by, zz], [Math.PI / 2, 0, 0]);
+    b.torus(0.015, 0.004, tone(metal, 0.7), [mx, by, zz - 0.006], [0, 0, 0]);
+  } else if (style === 2) {
+    b.box(0.044, 0.014, 0.008, metal, [mx, by, zz]);
+    b.box(0.014, 0.044, 0.008, metal, [mx, by, zz]);
+    for (const [dx, dy] of [[0.022, 0], [-0.022, 0], [0, 0.022], [0, -0.022]] as const) b.box(dy === 0 ? 0.01 : 0.022, dx === 0 ? 0.01 : 0.022, 0.008, tone(metal, 1.1), [mx + dx, by + dy, zz]);
+    b.sphere(0.008, stripe, [mx, by, zz - 0.006], [1, 1, 0.6]);
+  } else {
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      b.cone(0.011, 0.032, metal, [mx + Math.sin(a) * 0.014, by + Math.cos(a) * 0.014, zz], [0, 0, -a]);
+    }
+    b.cylinder(0.013, 0.013, 0.009, tone(metal, 0.8), [mx, by, zz - 0.002], [Math.PI / 2, 0, 0]);
+  }
+}
+
+/** Pockets, on the front of the coat (not under a cape or poncho, which cover the torso). */
+export function addPockets(f: TorsoFrame, c: BodyCtx): void {
+  const { b, h, W, spec, burnt, accent } = f;
+  const p = spec.pocket;
+  if (p === 0 || spec.jacket === 6 || spec.jacket === 7) return;
+  const z = (y: number, x: number): number => frontZ(f.at(y), x);
+  const cloth = singe(spec.jacket === 0 ? c.shirtC : c.jacketC, burnt);
+  const edge = tone(cloth, 0.62);
+  const x = -W * 0.46;
+  const y = h * 0.58;
+  const sz = z(y, x) - 0.007;
+  if (p === 1 || p === 2 || p === 4) {
+    // a welted breast pocket: a patch a shade lighter than the coat, with a dark mouth
+    b.box(0.072, 0.056, 0.007, tone(cloth, 1.08), [x, y - 0.006, sz]);
+    b.box(0.076, 0.009, 0.01, edge, [x, y + 0.024, sz - 0.002]);
+  }
+  if (p === 2) {
+    // a folded handkerchief: two points showing above the mouth
+    for (const sx of [-1, 1]) b.box(0.02, 0.04, 0.007, PALETTE.trim.ivory, [x + sx * 0.012, y + 0.038, sz - 0.001], [0, 0, sx * 0.26]);
+    b.box(0.012, 0.03, 0.008, singe(PALETTE.trim.ribbonRed, burnt), [x, y + 0.03, sz - 0.004]);
+  }
+  if (p === 4) {
+    const cols = [PALETTE.trim.pencil, PALETTE.trim.ribbonRed, PALETTE.trim.frame];
+    for (let i = 0; i < 3; i++) {
+      const tilt = (i - 1) * 0.16;
+      const px = x + (i - 1) * 0.017;
+      b.cylinder(0.006, 0.006, 0.062, singe(cols[i]!, burnt), [px, y + 0.045, sz - 0.003], [0, 0, -tilt]);
+      b.cone(0.006, 0.012, i === 0 ? PALETTE.trim.ivory : accent, [px - Math.sin(tilt) * 0.038, y + 0.082, sz - 0.003], [0, 0, -tilt]);
+    }
+  }
+  if (p === 3) {
+    // a pair of flap pockets low on the front, each with a button
+    for (const sx of [-1, 1]) {
+      const fx = sx * W * 0.4;
+      const fy = h * 0.33;
+      const fz = z(fy, fx) - 0.007;
+      b.box(0.1, 0.008, 0.008, edge, [fx, fy + 0.02, fz]);
+      b.box(0.1, 0.034, 0.009, tone(cloth, 1.06), [fx, fy, fz - 0.001], [0, 0, sx * 0.12]);
+      b.sphere(0.008, accent, [fx, fy - 0.004, fz - 0.008], [1, 1, 0.6]);
+    }
+  }
+}
+
 export function addDecorations(f: TorsoFrame, _c: BodyCtx): void {
   const { b, h, W, spec, burnt, accent } = f;
   const z = (y: number, x: number): number => frontZ(f.at(y), x);
   // medals on the left breast (-X), pinned to the surface
+  const ribbons = [PALETTE.trim.ribbonRed, PALETTE.trim.ribbonBlue, PALETTE.trim.ribbonGreen, PALETTE.trim.ribbonPurple];
   for (let i = 0; i < spec.medals; i++) {
     const mx = -W * 0.5 + (i % 3) * 0.055;
     const my = h * 0.74 - Math.floor(i / 3) * 0.07;
     const sz = z(my, mx);
-    b.cylinder(0.026, 0.026, 0.008, i % 2 ? K.ACCENT_COLORS[1]! : accent, [mx, my, sz - 0.012], [Math.PI / 2, 0, 0]);
-    b.box(0.02, 0.05, 0.006, i % 2 ? PALETTE.trim.ribbonBlue : PALETTE.trim.ribbonRed, [mx, my + 0.04, sz - 0.008]);
+    if (spec.medalStyle === 0) {
+      b.cylinder(0.026, 0.026, 0.008, i % 2 ? K.ACCENT_COLORS[1]! : accent, [mx, my, sz - 0.012], [Math.PI / 2, 0, 0]);
+      b.box(0.02, 0.05, 0.006, i % 2 ? PALETTE.trim.ribbonBlue : PALETTE.trim.ribbonRed, [mx, my + 0.04, sz - 0.008]);
+      continue;
+    }
+    medal(f, spec.medalStyle, [K.ACCENT_COLORS[i % 3 === 1 ? 1 : 0]!, PALETTE.trim.bronze, accent][i % 3]!, singe(ribbons[i % 4]!, burnt), singe(ribbons[(i + 1) % 4]!, burnt), mx, my, sz);
   }
   const d = spec.decoration;
   if (d === 1) {

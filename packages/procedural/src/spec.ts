@@ -94,6 +94,15 @@ export const FIELDS = [
   colour("bootColor", "Leather", C.LEATHER_COLORS.length),
   choice("hatTrim", "Hat trim", C.HAT_TRIMS, "clothes"),
   choice("hook", "Hook hand", C.HOOKS, "history"),
+  // ---- batch 3 (starts at index 64): fine cosmetics ----
+  choice("medalStyle", "Medal style", C.MEDAL_STYLES, "clothes"),
+  choice("buckle", "Belt buckle", C.BUCKLES, "clothes"),
+  choice("cuffDetail", "Cuff detail", C.CUFF_DETAILS, "clothes"),
+  choice("laces", "Boot fastening", C.BOOT_LACES, "clothes"),
+  choice("pocket", "Pockets", C.POCKETS, "clothes"),
+  choice("hairAcc", "Hair accessory", C.HAIR_ACCESSORIES, "face"),
+  choice("patchStyle", "Eyepatch style", C.EYEPATCH_STYLES, "history"),
+  choice("scarStyle", "Scar style", C.SCAR_STYLES, "history"),
 ] as const;
 
 /** How many fields the wire format had before the append-only additions; shorter strings from older saves still decode. */
@@ -107,6 +116,7 @@ export const LEGACY_FIELD_COUNT = 39;
 export const FIELD_BATCHES: readonly { start: number; salt: number }[] = [
   { start: LEGACY_FIELD_COUNT, salt: 0x51ed270b },
   { start: 43, salt: 0x7f4a7c15 },
+  { start: 64, salt: 0x3c1e9b47 },
 ];
 
 /**
@@ -123,6 +133,7 @@ const NOVELTY_ODDS: Readonly<Record<string, number>> = { hat: 0.34, hair: 0.34, 
 const EXTRA_ODDS: Readonly<Record<string, number>> = {
   eyeColor: 0.5, earShape: 0.25, stubble: 0.5, greying: 0.3, complexion: 0.5, mark: 0.14, facePaint: 0.06, tattoo: 0.1, earring: 0.13, ring: 0.16,
   epaulettes: 0.18, decoration: 0.22, coatTrim: 0.3, trouserTrim: 0.3, shirtColor: 0.45, bootColor: 0.6, hatTrim: 0.28, hook: 0, brows: 0.6, eyeShape: 0.6,
+  medalStyle: 0.5, buckle: 0.4, cuffDetail: 0.3, laces: 0.35, pocket: 0.35, hairAcc: 0.1, patchStyle: 0, scarStyle: 0,
 };
 
 /** Colour palettes for the colour fields (UI swatches). */
@@ -285,6 +296,8 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
   spec.burnt = 0;
   spec.woodenLeg = 0;
   spec.hook = 0;
+  spec.patchStyle = 0;
+  spec.scarStyle = 0;
   spec.medals = rng.chance(0.5) ? rng.int(0, 3) : 0;
   spec.posture = clampInt(rng.range(70, 200), 255);
   // Avoid clashing hat/jacket colours by construction: hat and jacket palette indices differ.
@@ -304,7 +317,7 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
  * Fields the CAMPAIGN owns (they record what happened to the character). Clients may never set them:
  * otherwise anyone could claim a veteran's scars or a wooden leg. The server keeps its own copy.
  */
-export const HISTORY_KEYS = ["scars", "teeth", "eyepatch", "burnt", "woodenLeg", "hook"] as const satisfies readonly FieldKey[];
+export const HISTORY_KEYS = ["scars", "teeth", "eyepatch", "burnt", "woodenLeg", "hook", "patchStyle", "scarStyle"] as const satisfies readonly FieldKey[];
 
 /** Applies a client-submitted look on top of the server's record: appearance from the client, history from the server. */
 export function applyClientAppearance(current: CharacterSpec, incoming: CharacterSpec): CharacterSpec {
@@ -316,5 +329,5 @@ export function applyClientAppearance(current: CharacterSpec, incoming: Characte
 /** Randomise while keeping campaign history (scars, teeth...) intact: used by the creator's dice button. */
 export function rerollAppearance(spec: CharacterSpec, seed: number): CharacterSpec {
   const fresh = generateCharacter(seed);
-  return { ...fresh, scars: spec.scars, teeth: spec.teeth, eyepatch: spec.eyepatch, burnt: spec.burnt, woodenLeg: spec.woodenLeg, hook: spec.hook };
+  return { ...fresh, scars: spec.scars, teeth: spec.teeth, eyepatch: spec.eyepatch, burnt: spec.burnt, woodenLeg: spec.woodenLeg, hook: spec.hook, patchStyle: spec.patchStyle, scarStyle: spec.scarStyle };
 }
