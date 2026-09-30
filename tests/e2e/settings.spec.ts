@@ -81,7 +81,9 @@ test("accessibility options change the whole interface at once and persist", asy
 
   // Restore defaults undoes every one of them
   await page.click("#options");
-  await page.getByRole("button", { name: "Restore defaults" }).click();
+  const reset = page.getByRole("button", { name: /Restore defaults|Really restore/ });
+  await reset.click(); // the first press asks "Really restore? Press again"
+  await reset.click();
   const off = await root();
   expect(off.contrast).toBeUndefined();
   expect(off.cvd).toBeUndefined();

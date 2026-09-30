@@ -78,7 +78,8 @@ test("joining a bad code shows a friendly error", async ({ page }) => {
   await page.fill("#name", "Nobody");
   await page.fill("#code", "ZZZZZ");
   await page.click("#join");
-  await expect(page.locator("#status")).toContainText(/No campaign/);
+  // the failure now shows on the "The Society regrets..." card
+  await expect(page.locator("#consult-step")).toContainText(/No campaign/);
 });
 
 test("a player walks up to a prop, picks it up, and throws it (real browser, server-authoritative)", async ({ page }) => {
