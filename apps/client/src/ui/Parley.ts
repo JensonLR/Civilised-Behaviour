@@ -1,6 +1,7 @@
 import { REGION_COPY, type ParleyView, type RegionId } from "@cb/shared";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
+import { sheetHints } from "./sheetHints.ts";
 import "./parley.css";
 
 /**
@@ -32,7 +33,7 @@ export class Parley {
 
   constructor(root: HTMLElement) {
     root.appendChild(this.modal.root);
-    this.modal.panel.append(this.society, this.speaker, this.line, this.meta, this.options);
+    this.modal.panel.append(this.society, this.speaker, this.line, this.meta, this.options, sheetHints({ choose: "Choose", close: "Walk away" }).el);
     this.modal.onClose = () => {
       if (!this.quiet) this.close?.();
       this.quiet = false;
@@ -97,7 +98,7 @@ export class Parley {
       const b = h(
         "button",
         { type: "button", class: "opt", "data-i": String(i) },
-        h("span", { class: "key", "aria-hidden": "true" }, String(i + 1)),
+        h("span", { class: "key kb-only", "aria-hidden": "true" }, String(i + 1)), // (the number keys are a keyboard thing: a pad moves focus and presses the confirm control)
         h("span", { class: "label" }, String(o.label ?? "")),
         Number(o.cost) > 0 ? h("span", { class: "cost" }, `£${Math.round(Number(o.cost))}`) : null,
         h("span", { class: "hint" }, String(o.hint ?? "")),

@@ -16,6 +16,7 @@ export function collarKind(spec: CharacterSpec): CollarKind {
   const j = spec.jacket;
   if (j === 0 || j === 3) return spec.shirt === 3 ? "stand" : spec.shirt === 4 ? "high" : "shirt";
   if (j === 9) return "fall";
+  if (j === 12) return "high"; // lamp robe: a tall stand collar
   if (j === 1 || j === 4 || j === 8) return "fall";
   return "stand"; // tunic, hunting, Norfolk, cape, poncho
 }

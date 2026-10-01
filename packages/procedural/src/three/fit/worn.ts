@@ -9,6 +9,7 @@ import { closedSkirtLength, skirtRings, skirtSpec } from "../garments.ts";
 import { upperArmRings, upperLegRings } from "../limbs.ts";
 import { makeBodyField, type BodyField, type WornRings } from "./bodyField.ts";
 import { torsoRings } from "./torsoShape.ts";
+import { hairBlockers } from "./hairBlockers.ts";
 
 /**
  * The worn layer of the body field: the outermost body-following surface of the spec (sleeves, trouser legs, the coat skirt, the poncho's panel), built from the
@@ -37,11 +38,12 @@ const foreArmWorn = (c: BodyCtx): Ring[] => foreArmRings(c);
 const lowerLegWorn = (c: BodyCtx): Ring[] => lowerLegPlan(c).surface;
 
 /** The worn rings of every region for a spec. */
-export function wornRings(spec: CharacterSpec): WornRings {
+export function wornRings(spec: CharacterSpec, forHair = false): WornRings {
   const c = shapeCtx(spec);
   const { P } = c;
   const j = spec.jacket;
   return {
+    ...(forHair ? { drape: hairBlockers(spec, P) } : {}),
     // a poncho's panel is what a player sees on the trunk; a cape's mantle only covers the shoulders and back, so the trunk keeps its own cut
     torso: j === 7 ? ponchoRings(P, 0) : torsoRings(P, 0, j === 6 ? 0 : j),
     pelvis: pelvisWorn(c),

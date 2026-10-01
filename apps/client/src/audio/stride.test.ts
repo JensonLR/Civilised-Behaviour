@@ -1,7 +1,7 @@
 import { HILL, RIVER, riverCentre } from "@cb/shared";
 import { describe, expect, it } from "vitest";
 import { Stride, stepLength, stepVolume } from "./stride.ts";
-import { surfaceAt } from "./surface.ts";
+import { regionSurface, surfaceAt } from "./surface.ts";
 
 describe("footstep cadence", () => {
   const run = (speed: number, seconds: number, grounded = true, dt = 1 / 60): number => {
@@ -64,5 +64,18 @@ describe("what the foot lands on", () => {
     for (let x = -12; x <= 12; x += 1) for (let z = -12; z <= 12; z += 1) seen.add(surfaceAt(x, z));
     expect(seen.has("dirt")).toBe(true);
     expect(seen.has("grass")).toBe(true);
+  });
+});
+
+describe("the ground by region (D-038)", () => {
+  it("Kessar is sand, the Saltmarket mud, Vesper stone; water, wood and the home meadow keep their own", () => {
+    expect(regionSurface("kessar", "grass")).toBe("sand");
+    expect(regionSurface("saltmarket", "dirt")).toBe("mud");
+    expect(regionSurface("vesper", "grass")).toBe("stone");
+    expect(regionSurface("hollowmere", "grass")).toBe("grass");
+    for (const r of ["kessar", "saltmarket", "vesper", "highmark"]) {
+      expect(regionSurface(r, "water")).toBe("water");
+      expect(regionSurface(r, "wood")).toBe("wood");
+    }
   });
 });

@@ -18,6 +18,7 @@ const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > 
 
 /** Loose-sleeved coats hang wider; fitted ones hug. */
 export function sleeveFull(jacket: number): number {
+  if (jacket >= 11) return jacket === 13 || jacket === 16 ? 1.03 : 1; // (the fictional peoples' garments)
   return jacket === JACKET.GREATCOAT ? 1.14 : jacket === JACKET.NORFOLK || jacket === JACKET.HUNTING ? 1.06 : jacket === JACKET.FROCK || jacket === JACKET.NAVAL ? 0.97 : 1;
 }
 
@@ -231,6 +232,10 @@ export interface BootKind {
   soft?: boolean;
   clog?: boolean;
   spurs?: boolean;
+  /** Woven reed sandals (the Mereborn and the Brinefolk): a flat straw sole and crossed straps. */
+  reed?: boolean;
+  /** Mud pattens (the Brinefolk): a shoe on a wooden platform sole with two cross-bars, for the silt. */
+  patten?: boolean;
 }
 export const BOOTS: readonly BootKind[] = [
   { top: 0.36, tall: true },
@@ -242,6 +247,8 @@ export const BOOTS: readonly BootKind[] = [
   { top: 0.045, soft: true },
   { top: 0.36, tall: true, spurs: true },
   { top: 0.05, clog: true },
+  { top: 0.045, soft: true, reed: true },
+  { top: 0.06, soft: true, patten: true },
 ];
 
 /** Everything the lower leg is built from, in the knee frame (hanging down): the trouser (or stocking, or skin) shin, the boot's shaft, and the two together as one surface. */
@@ -355,6 +362,7 @@ export function stockingColour(c: BodyCtx): number {
 export function bootColour(c: BodyCtx, k: BootKind): number {
   if (k.rubber) return singe(PALETTE.material.rubber, c.burnt);
   if (k.clog) return singe(WOOD, c.burnt);
+  if (k.reed) return singe(tone(PALETTE.trim.straw, 0.92), c.burnt);
   if (k.soft) return singe(tone(dyeAt(PALETTE.cloth, c.spec.trousersColor + 8), 0.9), c.burnt);
   return c.leather;
 }

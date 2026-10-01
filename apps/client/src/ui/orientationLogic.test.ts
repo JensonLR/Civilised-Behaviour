@@ -3,7 +3,8 @@ import vm from "node:vm";
 import { CAMP } from "@cb/shared";
 import { describe, expect, it } from "vitest";
 import { ALL_DONE, ORIENT_BARS, ORIENT_STEPS, OrientationSampler, currentStep, doneCount, isActive, isDone, newOrientation, orientationStep, parseOrientation, serializeOrientation, skipOrientation, type Device, type OrientStep, type OrientationSample, type OrientationState } from "./orientationLogic.ts";
-import { ORIENT_HINT, ORIENT_STEP_NAME, ORIENT_TEXT, fillKeys } from "./orientationCopy.ts";
+import { promptPlain } from "../input/glyphDom.ts";
+import { ORIENT_HINT, ORIENT_STEP_NAME, ORIENT_TEXT } from "./orientationCopy.ts";
 import { yawTo } from "./compassLogic.ts";
 import * as copy from "./orientationCopy.ts";
 
@@ -110,11 +111,18 @@ describe("the orientation machine", () => {
       for (const d of ["keyboard", "pad"] as Device[]) expect(ORIENT_TEXT[id][d].length, `${id}/${d}`).toBeGreaterThan(20);
     }
     for (const d of ["keyboard", "pad"] as Device[]) expect(ORIENT_HINT[d].length).toBeGreaterThan(10);
-    const filled = fillKeys(ORIENT_TEXT.move.keyboard, { move: "W A S D", use: "E" });
+    // the copy is written with prompt tokens, and each device fills them with its own glyph words
+    const filled = promptPlain(ORIENT_TEXT.move.keyboard, "keyboard");
     expect(filled).toContain("W A S D");
     expect(filled).not.toContain("{");
-    expect(fillKeys(ORIENT_TEXT.board.keyboard, { move: "x", use: "F" })).toContain("(F)");
-    for (const id of ORIENT_STEPS) expect(ORIENT_TEXT[id].pad).not.toMatch(/\{|Mouse|mouse|\bE\b/); // the pad never reads a keyboard word
+    expect(promptPlain(ORIENT_TEXT.board.keyboard, "keyboard")).toContain("(E)");
+    expect(promptPlain(ORIENT_TEXT.board.pad, "playstation")).toContain("(□)");
+    expect(promptPlain(ORIENT_TEXT.board.pad, "xbox")).toContain("(X)");
+    for (const id of ORIENT_STEPS) {
+      expect(ORIENT_TEXT[id].pad).not.toMatch(/Mouse|mouse|\bE\b/); // the pad never reads a keyboard word
+      for (const dev of ["keyboard", "xbox", "playstation"] as const) expect(promptPlain(ORIENT_TEXT[id][dev === "keyboard" ? "keyboard" : "pad"], dev), `${id}/${dev}`).not.toContain("{");
+    }
+    expect(promptPlain(ORIENT_HINT.pad, "playstation")).toContain("Share");
   });
 });
 

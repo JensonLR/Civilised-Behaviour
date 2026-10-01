@@ -1,5 +1,6 @@
 import { Vector3, type PerspectiveCamera } from "three";
-import { clamp, type CollisionWorld } from "@cb/shared";
+import { clamp, newWorldHit, rayWorld, type CollisionWorld } from "@cb/shared";
+import { AIM, blendAim, type V3 } from "../input/aim.ts";
 import {
   FIRST_PERSON,
   advanceBob,
@@ -31,6 +32,12 @@ export type ViewMode = "third" | "first";
 
 const UP = { x: 0, y: 1, z: 0 };
 const _bob = { y: 0, side: 0 };
+const _wall = newWorldHit();
+/** The hip-fire shoulder offset (m) and the head height the follow camera orbits; the aim camera blends from the first to `AIM.camera.shoulder`. */
+const HIP_SHOULDER = 0.55;
+const HEAD_Y = 1.55;
+/** The follow camera never comes closer to the head than this when a wall squeezes it (the head is about 0.2 m across; this keeps the lens clear of it and of the neck). */
+const MIN_FOLLOW = 0.85;
 
 /**
  * The player's camera. Two views share one yaw/pitch (the input stream reports yaw so the shared movement step stays camera-relative):
@@ -55,8 +62,12 @@ export class CameraRig {
   private readonly desired = new Vector3();
   private readonly thirdPos = new Vector3();
   private readonly thirdLook = new Vector3();
-  /** 0..1: how far the follow camera has swung from looking at the wearer to looking down the aim (so the crosshair, not the head, is the middle of the picture). */
+  /** 0..1: how far the follow camera has gone from the hip view to the over-the-shoulder aim view (closer, tighter lens, shoulder out, looking down the aim). `blendAim`: exponential, never snaps. */
   private aimK = 0;
+  private readonly dirTmp = new Vector3();
+  private readonly look3 = new Vector3();
+  /** Metres the follow camera was pulled in by a wall this frame (0 = free); for tests and the HUD. */
+  wallPull = 0;
   private readonly fpPos = new Vector3();
   private readonly fpLook = new Vector3();
   private readonly lookBlend = new Vector3();
@@ -95,6 +106,25 @@ export class CameraRig {
     return this.view;
   }
 
+  /** 0..1 how far the over-the-shoulder aim view is in (0 = hip, 1 = aimed). The HUD reads it to swap the hip circle for the aimed dot. */
+  get aimAmount(): number {
+    return this.aimK;
+  }
+
+  /**
+   * The ray through the middle of the picture (where the crosshair is), from the lens: `origin` and unit `dir`. Call after `update`. This is what the shot is solved against (`aimSolve` in
+   * input/aim.ts): what is under the crosshair is what the round meets, in third person and in first.
+   */
+  crosshairRay(origin: V3, dir: V3): void {
+    origin.x = this.camera.position.x;
+    origin.y = this.camera.position.y;
+    origin.z = this.camera.position.z;
+    this.camera.getWorldDirection(this.dirTmp);
+    dir.x = this.dirTmp.x;
+    dir.y = this.dirTmp.y;
+    dir.z = this.dirTmp.z;
+  }
+
   /** 0..1 blend between the views (for tests and UI). */
   get firstPersonAmount(): number {
     return this.fp;
@@ -126,6 +156,13 @@ export class CameraRig {
   look(dx: number, dy: number): void {
     this.yaw -= dx * this.settings.sensitivity;
     this.pitch += dy * this.settings.sensitivity * (this.settings.invertY ? -1 : 1);
+    this.clampPitch();
+  }
+
+  /** Moves the view by an angle (radians; `dElev` up is positive, as the shot's elevation): the pad's aim assist pulls the aim this way, never the mouse's. */
+  nudge(dYaw: number, dElev: number): void {
+    this.yaw += dYaw;
+    this.pitch -= dElev;
     this.clampPitch();
   }
 
@@ -188,7 +225,10 @@ export class CameraRig {
     }
 
     const fpFov = (this.settings.firstPersonFov ?? FIRST_PERSON.fov) * this.fpFovScale;
-    const fov = this.settings.fov + this.mountCam.fov * (1 - e) + (fpFov - this.settings.fov) * e;
+    // the aim lens: a tighter field of view while aiming over the shoulder (the target under the crosshair grows), fading out as the first-person lens takes over
+    const smoothAim = this.aimK * this.aimK * (3 - 2 * this.aimK);
+    const lens = 1 - (1 - AIM.camera.fovScale) * smoothAim * (1 - e);
+    const fov = (this.settings.fov + this.mountCam.fov * (1 - e)) * lens + (fpFov - this.settings.fov) * e;
     const near = this.fp > 0 ? FIRST_PERSON.near : FIRST_PERSON.nearThird;
     if (Math.abs(this.camera.fov - fov) > 1e-3 || this.camera.near !== near) {
       this.camera.fov = fov;
@@ -197,7 +237,11 @@ export class CameraRig {
     }
   }
 
-  /** The follow camera: unchanged behaviour, tracked every frame so a switch back has no pop. */
+  /**
+   * The follow camera, tracked every frame so a switch back has no pop. Aiming blends (`blendAim`) the shoulder out to `AIM.camera.shoulder`, the distance in to `distanceScale`, and
+   * turns the view to look straight down the aim (the picture's middle is what the shot meets and the body sits to the side); the lens tightens in `update`. A wall behind the character
+   * pulls the camera in along its own line (never closer than `MIN_FOLLOW`, never inside the head), with `AIM.camera.wallClearance` to spare.
+   */
   private updateThird(target: Vector3, dt: number, aiming: boolean): void {
     this.focus.lerp(target, 1 - Math.exp(-dt * 18));
     if (this.focus.distanceToSquared(target) > 100) this.focus.copy(target);
@@ -205,31 +249,56 @@ export class CameraRig {
     // Downed: no kill-cam and no cut, just the same camera settling closer and lower, looking a little up at the sky and the faces bending over you,
     // with a slow unsteady drift (the player can still look around; this only moves the framing).
     const dk = this.downedK;
-    const dist = ((aiming ? this.distance * 0.62 : this.distance) + this.mountCam.pull) * (1 - 0.32 * dk);
+    this.aimK = blendAim(this.aimK, aiming && dk < 0.5, dt);
+    const ak = this.aimK * this.aimK * (3 - 2 * this.aimK); // smoothstep of the exponential approach: it starts from rest as well as ending at rest
+    const dist = (this.distance * (1 - (1 - AIM.camera.distanceScale) * ak) + this.mountCam.pull) * (1 - 0.32 * dk);
     const pitch = clamp(this.pitch - 0.3 * dk, -0.35, 1.25); // first person may look further than the follow camera can
     const cp = Math.cos(pitch);
     const sinY = Math.sin(this.yaw);
     const cosY = Math.cos(this.yaw);
     // Camera sits behind the look direction (look = -Z at yaw 0), offset to the right shoulder.
-    const shoulder = aiming ? 1.15 : 0.55; // aiming: wide enough that the weapon clears the wearer's head and reads beside the crosshair
+    const shoulder = HIP_SHOULDER + (AIM.camera.shoulder - HIP_SHOULDER) * ak;
+    const hy = this.focus.y + HEAD_Y + this.mountCam.rise - 0.95 * dk;
     this.desired.set(
       this.focus.x + sinY * cp * dist + cosY * shoulder,
-      this.focus.y + 1.55 + this.mountCam.rise - 0.95 * dk + Math.sin(pitch) * dist,
+      hy + Math.sin(pitch) * dist,
       this.focus.z + cosY * cp * dist - sinY * shoulder,
     );
     const floor = this.world.terrainHeight(this.desired.x, this.desired.z) + 0.4;
     if (this.desired.y < floor) this.desired.y = floor;
 
+    // Walls: from the head toward the wanted camera spot; the first solid on that line pulls the camera in front of it.
+    this.wallPull = 0;
+    const hx = this.focus.x;
+    const hz = this.focus.z;
+    const wx = this.desired.x - hx;
+    const wy = this.desired.y - hy;
+    const wz = this.desired.z - hz;
+    const wl = Math.hypot(wx, wy, wz);
+    if (wl > MIN_FOLLOW && rayWorld(this.world, hx, hy, hz, wx / wl, wy / wl, wz / wl, wl, _wall)) {
+      const keep = clamp(_wall.t - AIM.camera.wallClearance, MIN_FOLLOW, wl);
+      this.wallPull = wl - keep;
+      const k = keep / wl;
+      this.desired.set(hx + wx * k, hy + wy * k, hz + wz * k);
+    }
+
+    // follow quickly; a wall pull-in is taken at once (a camera lerping through a wall for a few frames is the ugly part)
     this.thirdPos.lerp(this.desired, 1 - Math.exp(-dt * 20));
-    this.aimK += ((aiming ? 1 : 0) - this.aimK) * (1 - Math.exp(-dt * 12));
-    if (this.aimK < 1e-3) this.aimK = 0;
-    // aiming: look at a far point straight ahead of the wearer, so the picture's middle is what the shot will meet and the body sits to the side
-    const k = this.aimK * 30;
-    this.thirdLook.set(
-      this.focus.x - sinY * cp * k + Math.sin(this.clock * 0.7) * 0.12 * dk,
-      this.focus.y + 1.35 - 0.7 * dk + 0.2 * this.aimK - Math.sin(pitch) * k + Math.sin(this.clock * 0.53 + 1) * 0.07 * dk,
-      this.focus.z - cosY * cp * k,
+    if (this.wallPull > 0) {
+      const away = this.thirdPos.distanceTo(this.focus) - this.desired.distanceTo(this.focus);
+      if (away > 0) this.thirdPos.copy(this.desired);
+    }
+    // hip: look at the wearer's chest; aimed: look exactly down the aim (parallel to yaw/pitch), so the crosshair ray IS the aim direction and a shot solved against it never drifts
+    this.look3.set(
+      this.focus.x + Math.sin(this.clock * 0.7) * 0.12 * dk,
+      this.focus.y + 1.35 - 0.7 * dk + Math.sin(this.clock * 0.53 + 1) * 0.07 * dk,
+      this.focus.z,
     );
+    if (ak > 0) {
+      const far = 30;
+      this.thirdLook.set(this.thirdPos.x - sinY * cp * far, this.thirdPos.y - Math.sin(pitch) * far, this.thirdPos.z - cosY * cp * far);
+      this.thirdLook.lerpVectors(this.look3, this.thirdLook, ak);
+    } else this.thirdLook.copy(this.look3);
   }
 
   private updateFirst(feet: Vector3, dt: number, aiming: boolean, eye: EyeSample): void {

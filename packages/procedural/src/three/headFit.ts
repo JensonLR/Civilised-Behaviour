@@ -169,12 +169,12 @@ export function headFit(c: FaceCtx): HeadFit {
     const key = c.spec as object;
     let f = fieldCache.get(key);
     if (!f) {
-      f = makeBodyField(c.spec, wornRings(c.spec), P);
+      f = makeBodyField(c.spec, wornRings(c.spec, true), P);
       fieldCache.set(key, f);
     }
     return (field = f);
   };
-  const bodyRegions = ["torso", "neck", "upperArm"] as const;
+  const bodyRegions = ["torso", "neck", "upperArm", "drape"] as const;
   const fit: HeadFit = {
     c,
     shape,

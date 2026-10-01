@@ -183,7 +183,9 @@ describe("followerThink: follow", () => {
       worst = Math.max(worst, dist(r, r.leader.x, r.leader.z));
       expect(w.resolveXZ({ x: r.s.x, z: r.s.z }, 0, 0.4, 1.7)).toBe(false);
     });
-    expect(wp).toBeGreaterThan(0);
+    // (D-038 straightened the road from the landing to the toll bar: the nav's route may now be a single leg, so "the leader walked" is asked of where he is, not of how many bends he passed)
+    expect(wp > 0 || route.n === 1).toBe(true);
+    expect(r.leader.z, "the leader really walked up the road").toBeLessThan(A.landing.z - 20);
     runFor(r, w, 10);
     expect(dist(r, r.leader.x, r.leader.z)).toBeLessThan(FOLLOW.far + 1);
     expect(worst).toBeLessThan(25); // never lost him

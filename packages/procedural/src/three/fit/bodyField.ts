@@ -29,7 +29,7 @@ export type Mat16 = ArrayLike<number>;
 
 export type BoneName = "pelvis" | "torso" | "head" | "upperArmL" | "upperArmR" | "foreArmL" | "foreArmR" | "handL" | "handR" | "upperLegL" | "upperLegR" | "lowerLegL" | "lowerLegR";
 export const BONES: readonly BoneName[] = ["pelvis", "torso", "head", "upperArmL", "upperArmR", "foreArmL", "foreArmR", "handL", "handR", "upperLegL", "upperLegR", "lowerLegL", "lowerLegR"];
-export type Region = "torso" | "pelvis" | "neck" | "head" | "upperArm" | "foreArm" | "hand" | "upperLeg" | "lowerLeg";
+export type Region = "torso" | "pelvis" | "neck" | "head" | "upperArm" | "foreArm" | "hand" | "upperLeg" | "lowerLeg" | "drape";
 export type LayerId = "skin" | "worn";
 
 /** Sides of the torso loft at full detail (surface.ts torsoSegments): the worn torso is measured as the polygon that is drawn. */
@@ -326,6 +326,8 @@ export interface WornRings {
   lowerLeg?: readonly Ring[];
   /** Under a closed coat skirt the thigh is slimmed to a core (limbRings.ts `upperLegRings`): the flesh core under it is then no bigger than the trouser that covers it (else the crease and stripe on it would be 'sunk in the leg'). */
   slimLeg?: boolean;
+  /** Extra obstacles for what HANGS from the head (hair, a veil, a beard): torso-frame ring stacks (collar, neckwear, cape, pack slab, yokes; hairBlockers.ts). Region "drape": no wearable's own audit asks for it. */
+  drape?: readonly (readonly Ring[])[];
 }
 
 export interface BodyField {
@@ -435,6 +437,7 @@ export function makeBodyField(spec: CharacterSpec, worn: WornRings = {}, P: Prop
     loftPrim("head", "neck", neckLoft),
     headPrim(shape, R),
   ];
+  for (const rings of worn.drape ?? []) wornPrims.push(loftPrim("torso", "drape", rings));
   const handC: V3 = [0, -P.handRadius * 0.85, -P.handRadius * 0.05]; // (the hand bone's frame: origin at the wrist)
   const handR: V3 = [P.handRadius * 0.6, P.handRadius * 0.95, P.handRadius * 0.65];
   for (const side of ["L", "R"] as const) {

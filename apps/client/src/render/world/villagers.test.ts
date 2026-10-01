@@ -2,8 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { Scene } from "three";
 import * as v8 from "node:v8";
 import * as vm from "node:vm";
-import { createArena, buildFolk, type CollisionWorld } from "@cb/shared";
-import { sanitizeSpec, encodeSpec, SKIN_TONES, HATS } from "@cb/procedural";
+import { createArena, buildFolk, peopleForVillager, type CollisionWorld } from "@cb/shared";
+import { sanitizeSpec, encodeSpec, SKIN_TONES, HATS, JACKETS, NATIVE_FROM } from "@cb/procedural";
 import { clearCharacterCaches } from "@cb/procedural/three";
 import { FOLK_BUDGETS, FOLK_TRIS, Villagers, folkBudget, planLods, type FolkFrame } from "./villagers.ts";
 import { folkSpec, COSTUME_TITLES } from "./villagerLooks.ts";
@@ -98,8 +98,9 @@ describe("how they dress", () => {
         expect(folkSpec(v)).toEqual(spec); // deterministic
         codes.add(encodeSpec(spec));
         skins.add(spec.skin);
-        // a villager has no campaign history and no vanity paint
-        for (const k of ["scars", "teeth", "eyepatch", "burnt", "woodenLeg", "hook", "tattoo", "facePaint"] as const) expect(spec[k], `${v.name} ${k}`).toBe(0);
+        // a villager has no campaign history and no vanity paint (the only paint is a native people's own: lime dabs, tide lines ...)
+        for (const k of ["scars", "teeth", "eyepatch", "burnt", "woodenLeg", "hook", "tattoo"] as const) expect(spec[k], `${v.name} ${k}`).toBe(0);
+        expect(spec.facePaint === 0 || spec.facePaint >= NATIVE_FROM.facePaint!, `${v.name} paint`).toBe(true);
         // the costume never borrows a real people's dress
         expect(["Fez", "Top Knot"]).not.toContain(HATS[spec.hat]);
         expect(spec.hair).not.toBe(6);
@@ -118,7 +119,7 @@ describe("how they dress", () => {
     const titles = new Set(folk.roster.map((v) => v.title));
     for (const t of COSTUME_TITLES) expect(titles.has(t), `no villager is a ${t}`).toBe(true);
     const by = (t: string) => folkSpec(folk.roster.find((v) => v.title === t)!);
-    expect(HATS[by("Beekeeper").hat]).toBe("Veiled Pith");
+    expect(HATS[by("Beekeeper").hat]).toBe("Net Cap"); // (a Mereborn beekeeper: the colonial veiled pith is not theirs)
     expect(HATS[by("Ferryman").hat]).toBe("Sou'wester");
     expect(HATS[by("Registrar of Non-Events").hat]).toBe("Bowler");
     for (const v of folk.roster.filter((q) => q.age === "child")) {
@@ -126,6 +127,35 @@ describe("how they dress", () => {
       expect(folkSpec(v).age).toBe(0);
     }
     for (const v of folk.roster.filter((q) => q.age === "elder")) expect(folkSpec(v).greying).toBeGreaterThan(0);
+  });
+});
+
+describe("who they are (D-038: the colonised do not look like us)", () => {
+  it("everybody but the Society's own staff is a person of a fictional people: native dress, no Society gear; the staff keep the colonial look", () => {
+    for (const seed of [1, 7, 42]) {
+      const folk = buildFolk(createArena(seed), seed);
+      for (const v of folk.roster) {
+        const spec = folkSpec(v);
+        const people = peopleForVillager(v.title);
+        const nativeHat = spec.hat >= NATIVE_FROM.hat!;
+        const nativeCoat = spec.jacket >= NATIVE_FROM.jacket!;
+        if (people === "colonial") {
+          expect(nativeHat || nativeCoat, `${v.title} is the Society's own`).toBe(false);
+        } else if (v.age !== "child") {
+          expect(nativeHat || nativeCoat || spec.neckwear >= NATIVE_FROM.neckwear! || spec.hair >= NATIVE_FROM.hair! || spec.boots >= NATIVE_FROM.boots!, `${v.title} wears nothing of their people's: ${HATS[spec.hat]} / ${JACKETS[spec.jacket]}`).toBe(true);
+          expect([1, 4].includes(spec.coatTrim), `${v.title} coat trim`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("the Keeper of the Hours wears the Mereborn grand dress, and the Mereborn trades keep what says the trade (goggles at the forge, a sou'wester on the pond)", () => {
+    const folk = buildFolk(world, 7);
+    const by = (t: string) => folkSpec(folk.roster.find((v) => v.title === t)!);
+    expect(HATS[by("Keeper of the Hours").hat]).toBe("Tiered Hat");
+    expect(JACKETS[by("Keeper of the Hours").jacket]).toBe("Court Cloak");
+    expect(by("Smith & Farrier").gloves).toBeGreaterThan(0);
+    expect(HATS[by("Fishmonger").hat]).toBe("Sou'wester");
   });
 });
 

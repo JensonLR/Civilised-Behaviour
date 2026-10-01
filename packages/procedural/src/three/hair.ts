@@ -126,15 +126,21 @@ function planFor(c: FaceCtx, hf: HeadFit, hatOn: boolean, hatSeat: number, hi: n
     });
   };
   /** A curtain of hair from azimuth az0 to az1 hanging from bone height yTop, its hem at bottom(az): a patch on the falling profile, hugging the back of the head and lying on the neck and shoulders. */
-  const curtain = (az0: number, az1: number, yTop: number, bottom: (az: number) => number, opts: { nu?: number; nv?: number; gap?: number; thick?: number; wave?: number; color?: number } = {}): void => {
+  const curtain = (az0: number, az1: number, yTop: number, bottomIn: (az: number) => number, opts: { nu?: number; nv?: number; gap?: number; thick?: number; wave?: number; color?: number; locks?: { n: number; depth: number; phase?: number; tone?: number } } = {}): void => {
+    // LOCKS: the hem is cut into rounded-pointed locks (a scallop, pinched between neighbours), each its own tone, so a sheet reads as hair and not as cloth
+    const lk = opts.locks;
+    const lockAt = (u: number): number => ((((u - az0) / (az1 - az0)) * (lk?.n ?? 1) + (lk?.phase ?? 0)) % 1 + 1) % 1;
+    const lockId = (u: number): number => Math.floor(((u - az0) / (az1 - az0)) * (lk?.n ?? 1) + (lk?.phase ?? 0) + 1000);
+    const lockHash = (i: number): number => { const v = Math.sin(i * 91.7 + 12.3) * 437.585; return v - Math.floor(v); };
+    const bottom = lk ? (u: number): number => bottomIn(u) - lk.depth * R * Math.sin(Math.PI * lockAt(u)) ** 0.85 * (0.5 + 0.5 * lockHash(lockId(u))) : bottomIn;
     // the profile is computed on a FIXED grid whatever the level of detail (the tessellation only decides how finely it is sampled), so every level has the same silhouette
-    const NU = 12;
+    const NU = 20;
     const NV = 10;
-    const nu = opts.nu ?? (PartBuilder.lod > 0 ? 8 : 12);
-    const nv = opts.nv ?? (PartBuilder.lod > 0 ? 4 : 7);
+    const nu = opts.nu ?? (PartBuilder.lod > 0 ? 8 : lk ? 26 : 12);
+    const nv = opts.nv ?? (PartBuilder.lod > 0 ? 4 : lk ? 8 : 7);
     const gap = opts.gap ?? R * 0.06 + 0.012;
     let lowest = yTop;
-    for (let i = 0; i <= 12; i++) lowest = Math.min(lowest, bottom(az0 + ((az1 - az0) * i) / 12));
+    for (let i = 0; i <= 64; i++) lowest = Math.min(lowest, bottom(az0 + ((az1 - az0) * i) / 64));
     const ys = Array.from({ length: NV + 1 }, (_, j) => yTop + ((lowest - yTop) * j) / NV);
     const cols: number[][] = [];
     const lands: number[] = [];
@@ -146,7 +152,8 @@ function planFor(c: FaceCtx, hf: HeadFit, hatOn: boolean, hatSeat: number, hi: n
     const landAt = (u: number): number => {
       const fu = Math.max(0, Math.min(NU, ((u - az0) / (az1 - az0)) * NU));
       const i = Math.min(NU - 1, Math.floor(fu));
-      return Math.max(lands[i]!, lands[i + 1]!);
+      // (dilated by a column each side: a column that lands on a pack or a cape's rim takes its neighbours' edge with it, so the sheet never slopes across the corner of what it lands on)
+      return Math.max(lands[Math.max(0, i - 1)]!, lands[i]!, lands[i + 1]!, lands[Math.min(NU, i + 2)]!);
     };
     const base = opts.color ?? hairC;
     const wave = opts.wave ?? 0.012;
@@ -181,7 +188,7 @@ function planFor(c: FaceCtx, hf: HeadFit, hatOn: boolean, hatSeat: number, hi: n
         nv,
         inside: (u, y) => Math.min((y - Math.max(bottom(u), landAt(u))) * 6, Math.min(u - az0, az1 - u) * 6 + 0.4, (yTop - y) * 4 + 0.4),
         lift: () => 0.002,
-        color: (u, y) => tone(base, stripe(u) * (0.92 + 0.14 * smooth(lowest, yTop, y))),
+        color: (u, y) => tone(base, stripe(u) * (0.9 + 0.16 * (1 - smooth(lowest, yTop, y))) * (lk ? ((lk.tone ?? 0.3) * (lockHash(lockId(u)) - 0.5) + 1) * (0.9 + 0.1 * Math.abs(Math.sin(u * 53 + lockId(u)))) * (0.88 + 0.12 * Math.sqrt(Math.sin(Math.PI * lockAt(u)))) : 1)),
         thick: opts.thick ?? R * 0.06,
         lining: tone(base, 0.7),
         rim: () => true,
@@ -216,7 +223,7 @@ function planFor(c: FaceCtx, hf: HeadFit, hatOn: boolean, hatSeat: number, hi: n
       }),
       base,
       { sideAt: (i) => { const a = phi + (o.sway ?? 0) * Math.sin((i / (sp.length - 1)) * 5.5) * (i / (sp.length - 1)); return [Math.cos(a), 0, Math.sin(a)] as V3; }, segments: 4, caps: true },
-      0.002,
+      0.0045,
     );
   };
 
@@ -330,18 +337,13 @@ function planFor(c: FaceCtx, hf: HeadFit, hatOn: boolean, hatSeat: number, hi: n
           const end = headBottom - R * 1.05;
           const span = Math.PI - ea.back;
           const hem = (az: number): number => end + R * 0.75 * (Math.abs(az - Math.PI) / span) ** 2 - R * 0.14 * Math.abs(Math.sin(az * 3.1));
-          // the under-layer: a plain, darker sheet that only has to hide the neck between the clumps (crowd levels keep it as the whole back)
-          curtain(ea.back, Math.PI * 2 - ea.back, yTop, PartBuilder.lod > 0 ? hem : (az) => hem(az) + R * 0.38, { gap: R * 0.05 + 0.01, thick: PartBuilder.lod > 0 ? R * 0.03 : 0, color: tone(hairC, 0.78), nu: 8, nv: PartBuilder.lod > 0 ? 4 : 5 });
-          if (PartBuilder.lod === 0) {
-            const layers = [{ n: 6, gap: R * 0.085 + 0.012, up: 0, w: 0.24, c: hairC, hi: hi }, { n: 5, gap: R * 0.13 + 0.014, up: R * 0.16, w: 0.22, c: tone(hairC, 1.06), hi: tone(hairC, 1.22) }];
-            layers.forEach((L, li) => {
-              for (let i = 0; i < L.n; i++) {
-                const u = (i + (li ? 0.5 : 0.15) + 0.2 * Math.sin(i * 2.7 + li)) / L.n;
-                const phi = ea.back + (Math.PI * 2 - 2 * ea.back) * u;
-                clump(phi, yTop - R * (0.02 + 0.06 * li), hem(phi) + L.up - R * 0.12 * Math.abs(Math.sin(i * 1.9 + li * 4)), { w: L.w * (0.85 + 0.3 * Math.abs(Math.sin(i * 3.3))), d: 0.05, gap: L.gap, color: L.c, hi: L.hi, seed: i + li * 11, sway: 0.05 * Math.sin(i * 2.1) });
-              }
-            });
-          }
+          // the under-layer: a plain, dark sheet that only has to hide the neck; over it three layers of LOCKS, each cut into rounded-pointed locks with its own tone, the hems staggered like shingles
+          curtain(ea.back, Math.PI * 2 - ea.back, yTop, (az) => hem(az) + R * 0.42, { gap: R * 0.05 + 0.01, thick: PartBuilder.lod > 0 ? 0 : R * 0.03, color: tone(hairC, 0.7), nu: 8, nv: PartBuilder.lod > 0 ? 4 : 5 });
+          const layers = [{ n: 8, gap: R * 0.085 + 0.012, up: R * 0.04, c: tone(hairC, 0.92) }, { n: 7, gap: R * 0.125 + 0.014, up: R * 0.3, c: tone(hairC, 1.06) }];
+          layers.forEach((L, li) => {
+            if (PartBuilder.lod > 0 && li > 0) return;
+            curtain(ea.back + 0.05 * li, Math.PI * 2 - ea.back - 0.05 * li, yTop - R * 0.04 * li, (az) => hem(az) + L.up, { gap: L.gap, thick: 0, color: L.c, locks: { n: L.n, depth: 0.5 - 0.06 * li, phase: li * 0.37, tone: 0.34 } });
+          });
           for (const s of [-1, 1]) {
             const phi = s * (ea.front - 0.12);
             clump(phi, cy + R * 0.34, headBottom - R * 0.55, { w: 0.11, d: 0.075, gap: R * 0.05, kick: R * 0.03, color: hairC, hi: hi, seed: s + 3 });
@@ -450,6 +452,145 @@ function planFor(c: FaceCtx, hf: HeadFit, hatOn: boolean, hatSeat: number, hi: n
         shine: 0.1,
       });
       return { shells, extras: () => { for (let i = 0; i < 8; i++) lock([[-0.6 + i * 0.16, 0.86], [-0.55 + i * 0.15, 0.55], [-0.5 + i * 0.14, 0.26 + (i % 2) * 0.03]], 0.13, 0.07, 0.03, i % 2 ? hi : lo, 0.5); } };
+    // ---- the fictional peoples' hair (D-038): LONG hair that drapes, lies on the shoulders and goes AROUND collars and packs (the blockers in HeadFit.hangProfile), never through them ----
+    case 17: { // draped fall: a centre-parted fall of locks to the shoulder blades and two drapes forward over the shoulders
+      sh({ mask: cap(0.44, 0.0, -0.45), thick: (d) => 0.065 - 0.03 * Math.exp(-((d.phi / 0.07) ** 2)) * smooth(0.5, 0.9, d.y) });
+      return {
+        shells,
+        extras: () => {
+          const ea = earAz();
+          const yTop = cy + R * 0.3;
+          const end = headBottom - R * 0.8;
+          const span = Math.PI - ea.back;
+          const hem = (az: number): number => end + R * 0.55 * (Math.abs(az - Math.PI) / span) ** 2;
+          curtain(ea.back, Math.PI * 2 - ea.back, yTop, (az) => hem(az) + R * 0.3, { gap: R * 0.05 + 0.01, thick: PartBuilder.lod > 0 ? 0 : R * 0.03, color: tone(hairC, 0.72), nu: 8, nv: PartBuilder.lod > 0 ? 4 : 5 });
+          for (let li = 0; li < 2; li++) {
+            if (PartBuilder.lod > 0 && li > 0) continue;
+            curtain(ea.back + 0.06 * li, Math.PI * 2 - ea.back - 0.06 * li, yTop - R * 0.04 * li, (az) => hem(az) + R * 0.32 * li, { gap: R * (0.085 + 0.04 * li) + 0.012, thick: 0, color: tone(hairC, 0.95 + 0.14 * li), locks: { n: 7 - li, depth: 0.42, phase: li * 0.43, tone: 0.3 } });
+          }
+          for (const sx of [-1, 1]) {
+            const phi = sx * (ea.front - 0.1);
+            clump(phi, cy + R * 0.34, headBottom - R * 0.7, { w: 0.2, d: 0.075, gap: R * 0.05, kick: R * 0.04, color: hairC, hi: hi, seed: sx + 5, blunt: true });
+          }
+        },
+      };
+    }
+    case 18: { // braid crown: the plaits wound round the head like a crown (a ring of woven rope over a plain cap), the ends tucked in behind
+      sh({ mask: cap(0.44, 0.04, -0.5), thick: () => 0.055 });
+      return {
+        shells,
+        extras: () => {
+          if (PartBuilder.lod > 1) return;
+          const y0 = hatOn ? Math.min(0.55, hatSeat - 0.34) : 0.58;
+          const dirs: V3[] = [];
+          for (let i = 0; i <= 28; i++) {
+            const az = (i / 28) * Math.PI * 2;
+            dirs.push(dirAt(az, y0 + 0.07 * Math.cos(az * 2 - 0.4) - (az > 2.2 && az < 4.1 ? 0.06 : 0)));
+          }
+          const spine = dirs.map((v) => skinDir(c, v[0], v[1], v[2], R * 0.13));
+          const lumps = PartBuilder.lod > 0 ? 0 : 1;
+          b.sweep(spine, (t, i) => ({ rx: R * (0.11 + 0.02 * lumps * Math.sin(i * 1.9)), rz: R * (0.11 + 0.02 * lumps * Math.sin(i * 1.9)), pow: 2.2, color: lumps && Math.sin(i * 1.9) > 0 ? hi : lo }), hairC, { side: [0, 1, 0], segments: 5 });
+          if (PartBuilder.lod === 0) {
+            // the second turn of the braid, a hand's breadth higher and a little to the side, so the crown reads as two coils
+            const d2: V3[] = [];
+            for (let i = 0; i <= 28; i++) d2.push(dirAt((i / 28) * Math.PI * 2 + 0.22, y0 + 0.2 + 0.05 * Math.cos(i * 0.9)));
+            if (!hatOn) b.sweep(d2.map((v) => skinDir(c, v[0], v[1], v[2], R * 0.1)), (t, i) => ({ rx: R * (0.09 + 0.018 * Math.sin(i * 1.9 + 1)), rz: R * (0.09 + 0.018 * Math.sin(i * 1.9 + 1)), pow: 2.2, color: Math.sin(i * 1.9 + 1) > 0 ? hi : lo }), hairC, { side: [0, 1, 0], segments: 5 });
+          }
+        },
+      };
+    }
+    case 19: { // salt locks: thick ropy locks of salt-stiff hair hanging at all heights round the head, tied with cord, ending between the shoulder blades
+      sh({ mask: cap(0.46, 0.04, -0.5), thick: () => 0.06 });
+      return {
+        shells,
+        extras: () => {
+          if (PartBuilder.lod > 1) return;
+          const ea = earAz();
+          const n = PartBuilder.lod > 0 ? 6 : 10;
+          const cord = PALETTE.material.rope;
+          for (let i = 0; i < n; i++) {
+            const u = (i + 0.5) / n;
+            const phi = ea.back - 0.35 + (Math.PI * 2 - 2 * (ea.back - 0.35)) * u;
+            const yy = cy + R * (0.36 - 0.18 * (i % 3));
+            const y1 = headBottom - R * (0.15 + 0.55 * Math.abs(Math.sin(i * 2.3 + 0.7)));
+            const path = hangPath(phi, yy, y1, 7, R * (0.045 + 0.02 * (i % 3)), R * 0.06, 0.04 * Math.sin(i * 1.7));
+            if (path.length < 3) continue;
+            const sp = curve(path, 5);
+            addConformedSweep(b, hf, sp, (t, k) => ({ rx: R * (0.075 - 0.025 * t * t + 0.012 * Math.sin(k * 1.3 + i)), rz: R * (0.075 - 0.025 * t * t), pow: 2.2, color: shade(i % 2 ? hi : hairC, 0.84 + 0.28 * t) }), hairC, { side: [1, 0, 0], segments: 4, round: "end" }, 0.002);
+            if (PartBuilder.lod === 0 && i % 2 === 0) {
+              const k = Math.max(1, Math.floor(sp.length * 0.45));
+              const q = sp[k]!;
+              const tan: V3 = [sp[k + 1]![0] - sp[k - 1]![0], sp[k + 1]![1] - sp[k - 1]![1], sp[k + 1]![2] - sp[k - 1]![2]];
+              b.torus(R * 0.08, R * 0.018, cord, hf.pushOut(q, R * 0.1), orient(tan));
+            }
+          }
+        },
+      };
+    }
+    case 20: { // wrapped plait: one thick plait wound with cord, brought forward over the right shoulder and left to hang on the chest
+      sh({ mask: cap(0.44, 0.04, -0.5), thick: () => 0.055 });
+      return {
+        shells,
+        extras: () => {
+          const phi = Math.PI * 0.62;
+          const path = hangPath(phi, cy - R * 0.05, headBottom - R * 1.0, 11, R * 0.06, R * 0.16);
+          if (path.length < 3) return;
+          const sp = curve(path, 14);
+          const lumps = PartBuilder.lod > 0 ? 0 : 1;
+          addConformedSweep(b, hf, sp, (t, i) => ({ rx: R * (0.115 - 0.04 * t + 0.02 * lumps * Math.sin(i * 1.7)), rz: R * (0.115 - 0.04 * t + 0.02 * lumps * Math.sin(i * 1.7)), pow: 2.2, color: lumps && Math.sin(i * 1.7) > 0 ? hi : lo }), hairC, { side: [1, 0, 0], segments: 5, round: "end" }, 0.002);
+          if (PartBuilder.lod === 0) {
+            for (let k = 1; k <= 3; k++) {
+              const j = Math.min(sp.length - 3, Math.round((sp.length * k) / 4.2));
+              const q = sp[j]!;
+              const tan: V3 = [sp[j + 1]![0] - sp[j - 1]![0], sp[j + 1]![1] - sp[j - 1]![1], sp[j + 1]![2] - sp[j - 1]![2]];
+              b.torus(R * (0.125 - 0.012 * k), R * 0.026, k === 2 ? c.accent : PALETTE.trim.ribbonRed, hf.pushOut(q, R * 0.155), orient(tan));
+            }
+          }
+          const end = sp[sp.length - 1]!;
+          b.sphere(R * 0.05, c.accent, hf.pushOut([end[0], end[1] - R * 0.03, end[2]], R * 0.06));
+        },
+      };
+    }
+    case 21: { // shoulder curtain: a straight-cut bob of heavy hair to the shoulder line, a fringe, the ears covered by the curtains at the sides
+      sh({ mask: cap(0.46, 0.0, -0.45), thick: () => 0.075 });
+      return {
+        shells,
+        extras: () => {
+          const a0 = earAz().back - 0.1;
+          const yTop = cy + R * 0.34;
+          const hem = (az: number): number => headBottom - R * 0.2 + R * 0.12 * (Math.abs(az - Math.PI) / (Math.PI - a0)) ** 2;
+          curtain(a0, Math.PI * 2 - a0, yTop, (az) => hem(az) + R * 0.1, { gap: R * 0.05 + 0.01, thick: PartBuilder.lod > 0 ? 0 : R * 0.03, color: tone(hairC, 0.72), nu: 8, nv: PartBuilder.lod > 0 ? 4 : 5 });
+          curtain(a0 + 0.05, Math.PI * 2 - a0 - 0.05, yTop - R * 0.04, hem, { gap: R * 0.095 + 0.012, thick: 0, color: hairC, locks: { n: 9, depth: 0.12, phase: 0.2, tone: 0.2 } });
+          if (!hatOn) for (let i = 0; i < 7; i++) lock([[-0.62 + i * 0.2, 0.86], [-0.6 + i * 0.19, 0.58], [-0.58 + i * 0.18, 0.3 + (i % 2) * 0.03]], 0.12, 0.08, 0.03, i % 2 ? hi : lo, 0.5);
+        },
+      };
+    }
+    case 22: { // tied tail: a high tail tied at the crown with a cord, arching out and falling in a fan of locks down the back
+      sh({ mask: cap(0.5, 0.1, -0.35), thick: (d) => 0.045 + 0.02 * d.y, shine: 0.22 });
+      return {
+        shells,
+        extras: () => {
+          if (hatOn) return;
+          const y0 = cy + R * 0.78;
+          const p0 = skinDir(c, 0, 0.8, 0.6, R * 0.02);
+          const out = hangPath(Math.PI, cy + R * 0.2, headBottom - R * 0.7, 10, R * 0.07, R * 0.55);
+          if (out.length < 3) return;
+          const arc: V3[] = [[p0[0], y0, p0[2]], [p0[0], y0 + R * 0.22, p0[2] + R * 0.35], [out[0]![0], out[0]![1] + R * 0.1, out[0]![2] + R * 0.22], ...out.slice(1)];
+          const sp = curve(arc, 16);
+          addConformedSweep(b, hf, sp, (t) => ({ rx: R * (0.15 + 0.05 * Math.sin(Math.PI * Math.min(1, t * 1.4)) - 0.1 * t * t), rz: R * (0.12 + 0.04 * Math.sin(Math.PI * Math.min(1, t * 1.4)) - 0.08 * t * t), pow: 2.3, color: shade(t > 0.5 ? hi : hairC, 0.86 + 0.3 * t) }), hairC, { side: [1, 0, 0], segments: 6, round: "end" }, 0.002);
+          if (PartBuilder.lod === 0) {
+            for (let k = 0; k < 3; k++) {
+              const off = (k - 1) * 0.16;
+              const sp2 = curve(hangPath(Math.PI + off, cy + R * 0.2, headBottom - R * (0.4 + 0.35 * k), 8, R * 0.075, R * 0.5, off * 1.6), 7);
+              addConformedSweep(b, hf, sp2, (t) => ({ rx: R * (0.08 - 0.07 * t ** 1.2), rz: R * (0.07 - 0.06 * t), pow: 2.3, color: shade(k % 2 ? hi : hairC, 0.86 + 0.3 * t) }), hairC, { side: [1, 0, 0], segments: 4, round: "end" }, 0.002);
+            }
+          }
+          const tie = sp[3]!;
+          const tan: V3 = [sp[5]![0] - sp[1]![0], sp[5]![1] - sp[1]![1], sp[5]![2] - sp[1]![2]];
+          b.torus(R * 0.14, R * 0.03, c.accent, tie, orient(tan));
+        },
+      };
+    }
     default:
       return { shells, extras: none };
   }

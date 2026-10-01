@@ -98,6 +98,8 @@ export function crossStrap(f: TorsoFrame, color: number, half: number, o: { sign
   ribbon(f.b, s, color, stops, half, o.thick ?? STRAP, { base: f.layer, round: o.front === false ? "end" : o.back === false ? "start" : "both" });
 }
 
+const brassOf = (f: TorsoFrame): number => f.accent;
+
 export function addNeckwear(f: TorsoFrame): void {
   const { b, spec, neckY } = f;
   const sc = clamp(f.h / 0.6, 0.85, 1.15);
@@ -189,6 +191,73 @@ export function addNeckwear(f: TorsoFrame): void {
     b.torus(m2, 0.04, f.tone(dye, 0.8), [0, r2.y, 0], [Math.PI / 2, 0, 0], [r2.rx / m2, r2.rz / m2, 1]);
     for (const [dx, len] of [[-0.05, 0.4], [0.06, 0.32]] as const) {
       hangingStrip(b, f.s, dx, neckY - 0.06, neckY - len * sc, 0.05, 0.009, dye, { base: f.layer, colorAt: (t) => (Math.sin(t * 24) > 0.2 ? band : dye) });
+    }
+  } else if (spec.neckwear >= 9) {
+    // the fictional peoples' ornaments (D-038): strings of beads, a bell collar, a float cord, a lamp chain, memorial beads. Every one hangs on the chest surface (`f.s.atX`).
+    const xw = Math.min(f.neck(neckY, 0.012).rx, capX - 0.02);
+    /** A beaded strand draped from the neck over the chest: lowest at the centre (`drop`), `lumps` beads, alternating two colours. */
+    const strand = (drop: number, lumps: number, ca: number, cb: number, r: number, spread = 1): void => {
+      const pts: V3[] = [];
+      const N = PartBuilder.lod > 0 ? 6 : 12;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const th = (t - 0.5) * Math.PI * 0.96;
+        const x = Math.sin(th) * xw * spread;
+        const y = neckY - 0.012 - drop * Math.cos(th) ** 1.3;
+        pts.push(f.s.atX(x, y, r * 0.9 + f.layerAt(x, y)).p);
+      }
+      b.sweep(pts, (t, i) => ({ rx: r * (1 + 0.32 * Math.sin(t * lumps * Math.PI * 2)), rz: r * (1 + 0.32 * Math.sin(t * lumps * Math.PI * 2)), pow: 2, color: i % 2 ? ca : cb }), ca, { side: [0, 0, 1], segments: 4, round: "both" });
+    };
+    if (spec.neckwear === 9) {
+      // bead strings: three strands of different drops, glass and bone
+      const glass = singe(PALETTE.trim.visorGlass, f.burnt);
+      const bone = singe(CREAM, f.burnt);
+      strand(0.07 * sc, 9, glass, bone, 0.011 * sc);
+      strand(0.12 * sc, 11, f.tone(f.dye, 1.1), bone, 0.011 * sc, 1.0);
+      strand(0.18 * sc, 13, singe(PALETTE.trim.bronze, f.burnt), glass, 0.011 * sc, 1.0);
+    } else if (spec.neckwear === 10) {
+      // bell collar: a stiff leather band at the throat and five small brass bells hanging from it (so the herds know where their keeper is)
+      const leather = singe(LEATHER, f.burnt);
+      const r1 = fitRing(neckY - 0.01, 0.034, 0.02);
+      const m1 = Math.max(r1.rx, r1.rz);
+      b.torus(m1, 0.02, leather, [0, r1.y, 0], [Math.PI / 2, 0, 0], [r1.rx / m1, r1.rz / m1, 1]);
+      for (let i = 0; i < 5; i++) {
+        const x = (i - 2) * xw * 0.34;
+        const y = neckY - 0.035 - 0.014 * (i % 2);
+        const sp = f.s.atX(x, y, 0);
+        const q: V3 = [sp.p[0] + sp.n[0] * (0.0125 + f.layerAt(x, y)), sp.p[1] + sp.n[1] * (0.0125 + f.layerAt(x, y)), sp.p[2] + sp.n[2] * (0.0125 + f.layerAt(x, y))];
+        b.sphere(0.0155 * sc, brassOf(f), q, [1, 1.1, 1]);
+        b.sphere(0.0055, f.tone(brassOf(f), 0.6), [q[0], q[1] - 0.016, q[2]]);
+      }
+    } else if (spec.neckwear === 11) {
+      // float cord: a loop of tarred rope round the neck with three glass floats knotted on it
+      const rope = singe(PALETTE.material.rope, f.burnt);
+      const float = singe(PALETTE.trim.visorGlass, f.burnt);
+      const r1 = fitRing(neckY - 0.01, 0.034, 0.016);
+      const m1 = Math.max(r1.rx, r1.rz);
+      b.torus(m1, 0.014, rope, [0, r1.y, 0], [Math.PI / 2, 0, 0], [r1.rx / m1, r1.rz / m1, 1]);
+      strand(0.1 * sc, 0, rope, rope, 0.011 * sc);
+      for (const [x, d] of [[-0.4, 0.09], [0, 0.1], [0.4, 0.09]] as const) {
+        const y = neckY - 0.012 - d * sc * Math.cos(x * 0.9) ** 1.3;
+        const p = f.s.atX(x * xw, y, 0.034 * sc + f.layerAt(x * xw, y)).p;
+        b.sphere(0.03 * sc, float, [p[0], p[1] - 0.012, p[2] - 0.006], [1, 1.12, 1]);
+      }
+    } else if (spec.neckwear === 12) {
+      // lamp chain: a fine brass chain from shoulder to shoulder, hanging to the breastbone, with a small lamp on it
+      const brass = brassOf(f);
+      strand(0.17 * sc, 0, brass, brass, 0.0065 * sc, 1.0);
+      const y = neckY - 0.012 - 0.17 * sc;
+      const p = f.s.atX(0, y, 0.016 + f.layerAt(0, y)).p;
+      b.cylinder(0.014 * sc, 0.017 * sc, 0.03 * sc, brass, [p[0], p[1] - 0.022 * sc, p[2] - 0.006]);
+      b.sphere(0.017 * sc, singe(PALETTE.trim.sashGold, f.burnt), [p[0], p[1] - 0.046 * sc, p[2] - 0.006]);
+      b.cone(0.016 * sc, 0.022 * sc, brass, [p[0], p[1] - 0.003, p[2] - 0.006]);
+    } else {
+      // memorial beads: one long strand of copper beads, a bead for every funeral, hanging to the belt, with a dark tag at its foot
+      const cu = singe(PALETTE.trim.bronze, f.burnt);
+      strand(0.34 * sc, 21, cu, f.tone(cu, 0.62), 0.0105 * sc, 0.9);
+      const y = neckY - 0.012 - 0.34 * sc;
+      const p = f.s.atX(0, y, 0.012 + f.layerAt(0, y)).p;
+      b.box(0.022, 0.034, 0.008, singe(PALETTE.material.soot, f.burnt), [p[0], p[1] - 0.02, p[2] - 0.004]);
     }
   }
 }
@@ -581,6 +650,61 @@ export function addHipGear(f: TorsoFrame): void {
       b.sphere(0.012, brass, c(0.057 * u), [1, 1, 0.6]);
     }
     belt();
+  } else if (spec.hipGear >= 10) {
+    // the fictional peoples' belt gear (D-038): a small lamp, a herd bell, a tally cord, a net bag. Each hangs off the belt like the rest (beltHang) and is placed off `reach`.
+    const rope = singe(PALETTE.material.rope, f.burnt);
+    if (spec.hipGear === 10) {
+      // small lamp on the left hip: a brass base, a glass chimney with a warm light in it, a cap and a carrying ring (the Kessarine never go anywhere unlit)
+      const y = h * 0.06;
+      const rc = f.reach(y - 0.12 * u, y + 0.1 * u);
+      const x = -(rc.x + 0.035 * u + 0.012);
+      const zc = (rc.b - rc.f) / 2 + 0.02;
+      b.cylinder(0.034 * u, 0.04 * u, 0.025 * u, brass, [x, y - 0.06 * u, zc]);
+      b.cylinder(0.03 * u, 0.034 * u, 0.075 * u, singe(PALETTE.trim.sashGold, f.burnt), [x, y - 0.0075 * u, zc]);
+      b.sphere(0.02 * u, f.tone(singe(PALETTE.trim.sashGold, f.burnt), 1.25), [x, y - 0.01 * u, zc]);
+      b.cone(0.036 * u, 0.04 * u, brass, [x, y + 0.05 * u, zc]);
+      b.torus(0.022 * u, 0.006, brass, [x, y + 0.085 * u, zc], [0, Math.PI / 2, 0]);
+      beltHang(f, [x, y + 0.095 * u, zc]);
+      belt();
+    } else if (spec.hipGear === 11) {
+      // herd bell on the right hip: a flared brass bell on a leather strap with a wooden clapper
+      const y = h * 0.17 - 0.1 * u;
+      const rc = f.reach(y - 0.1 * u, h * 0.17);
+      const x = rc.x + 0.03 + 0.045 * u;
+      const zc = (rc.b - rc.f) / 2 + 0.03;
+      b.cone(0.052 * u, 0.085 * u, brass, [x, y - 0.03 * u, zc], [Math.PI, 0, 0]);
+      b.torus(0.052 * u, 0.008, f.tone(brass, 0.85), [x, y - 0.0725 * u, zc], [Math.PI / 2, 0, 0]);
+      b.sphere(0.014 * u, WOOD, [x, y - 0.08 * u, zc]);
+      b.cylinder(0.01, 0.01, 0.03, leather, [x, y + 0.025 * u, zc]);
+      beltHang(f, [x, y + 0.04 * u, zc]);
+      belt();
+    } else if (spec.hipGear === 12) {
+      // tally cord: a knotted cord hanging from the belt at the left hip beside the body, a knot for every head of the House's count, ending in a tassel
+      const y0 = h * 0.15;
+      const len = Math.min(0.3, (f.P.legUpper + f.P.legLower) * 0.34);
+      const rc = f.reach(y0 - len, y0);
+      const x = -(rc.x + 0.03);
+      const zc = (rc.b - rc.f) / 2 + 0.01;
+      const pts: V3[] = [];
+      for (let i = 0; i <= 4; i++) pts.push([x - 0.006 * Math.sin(i * 1.7), y0 - (len * i) / 4, zc + 0.012 * Math.sin(i * 1.3)]);
+      b.sweep(curve(pts, 8), () => ({ rx: 0.009, rz: 0.009, pow: 2 }), rope, { side: [1, 0, 0], segments: 4, round: "both" });
+      for (let i = 1; i <= 3; i++) b.sphere(0.0125, f.tone(rope, i % 2 ? 0.8 : 1.1), pts[i]!);
+      b.cylinder(0.014, 0.008, 0.05, f.tone(rope, 0.7), [x, y0 - len - 0.025, zc]);
+      beltHang(f, [x, y0 + 0.01, zc]);
+      belt();
+    } else {
+      // net bag on the right hip: a drawstring bag of knotted rope net, gathered at the neck
+      const y = h * 0.06;
+      const rc = f.reach(y - 0.14 * u, y + 0.08 * u);
+      const x = rc.x + 0.03 + 0.07 * u;
+      const zc = (rc.b - rc.f) / 2 + 0.03;
+      b.sphere(0.085 * u, f.tone(rope, 0.82), [x, y - 0.04 * u, zc], [0.85, 1.15, 0.85]);
+      b.torus(0.083 * u, 0.007, rope, [x, y - 0.03 * u, zc], [Math.PI / 2, 0, 0]);
+      b.torus(0.07 * u, 0.007, rope, [x, y - 0.075 * u, zc], [Math.PI / 2, 0, 0]);
+      b.cylinder(0.018, 0.03, 0.04 * u, rope, [x, y + 0.085 * u, zc]);
+      beltHang(f, [x, y + 0.1 * u, zc]);
+      belt();
+    }
   }
   void buttonOn;
   void ringAt;

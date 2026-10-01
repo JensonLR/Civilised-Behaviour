@@ -64,7 +64,7 @@ describe("the merged village crowd (D-036): draws, equivalence, memory", () => {
     }
     expect(l1Tris).toBe(l1Plain);
     expect(l1Tris / folk.roster.length).toBeLessThan(FOLK_TRIS.lod1 * 1.15);
-  });
+  }, 60_000); // (CPU-bound: it builds every roster person six ways; the native peoples' layered hair made each build dearer, and a loaded machine is slower still. A time limit, not a budget.)
 
   it("a posed merged person is the unmerged person to 1e-4: idle, walk and sit, as the village drives them", () => {
     const scene = new Scene();

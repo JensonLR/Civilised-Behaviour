@@ -238,7 +238,8 @@ export function buildEyewear(fc: FaceCtx, hf: HeadFit, eye: EyeSpot, o: EyewearO
       b.sweep(curve(bridgeSpine(r, ey + oy + R * 0.01, ey + oy + R * 0.03), 8), () => ({ rx: R * 0.012, rz: R * 0.012, pow: 2 }), accent, { side: [0, 1, 0], segments: 5 });
       break;
     }
-    case 10: { // pushed-up goggles: aviator goggles resting on the forehead, brass rims, glass, a strap round the head at the hairline
+    case 10: { // pushed-up goggles: aviator goggles resting on the forehead, brass rims, glass, a strap round the head at the hairline (under a hat they ride on the hat: hatsGeo.ts)
+      if (o.hatOn) break;
       const r = glassR(1.5);
       gz = zFor(r);
       const gy = o.hatOn ? Math.min(eyeR + 0.62, o.seatY - 0.16) : eyeR + 0.62;
@@ -264,7 +265,8 @@ export function buildEyewear(fc: FaceCtx, hf: HeadFit, eye: EyeSpot, o: EyewearO
       pads(r, shell);
       break;
     }
-    case 13: { // green visor: an accountant's eyeshade on a band round the head
+    case 13: { // green visor: an accountant's eyeshade on a band round the head (a hat takes its place: a visor under a brim is a hat's job)
+      if (o.hatOn) break;
       const yBand = o.hatOn ? Math.min(0.34, o.seatY - 0.14) : 0.36;
       const pts: V3[] = [];
       for (let k = 0; k <= 10; k++) {

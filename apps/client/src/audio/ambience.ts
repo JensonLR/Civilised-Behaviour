@@ -1,6 +1,7 @@
-import { CAMP, Rng } from "@cb/shared";
+import { CAMP, Rng, type RegionId } from "@cb/shared";
 import { engine } from "./engine.ts";
-import { ambienceTargets, newTargets, type AmbienceTargets } from "./ambienceMix.ts";
+import { ambienceTargets, daylight, newTargets, type AmbienceTargets } from "./ambienceMix.ts";
+import { RegionSchedule, stepRegionAmbience } from "./ambienceRegion.ts";
 import { readAtmosphere } from "./atmosphereSource.ts";
 import { noiseBuffers, type NoiseKind } from "./dsp.ts";
 import type { Listener } from "./spatial.ts";
@@ -206,6 +207,20 @@ class AmbiencePlayer {
   private snapIn = 3;
   private lastThunder: number | null = null;
   private last = 0;
+  private region: RegionId = "hollowmere";
+  private schedule: RegionSchedule | undefined;
+
+  /** The region the listener is in: its landmark beds and its own voices (ambienceRegion.ts) follow. */
+  setRegion(region: RegionId): void {
+    if (region === this.region && this.schedule) return;
+    this.region = region;
+    this.schedule = new RegionSchedule(region, rng);
+  }
+
+  private readonly emit = (sound: string, key: string, az: number, dist: number, height: number, volume: number): void => {
+    const l = engine.listener;
+    engine.play(sound, { x: l.x + Math.cos(az) * dist, y: l.y + height, z: l.z + Math.sin(az) * dist, volume, key: key === "" ? undefined : key, seed: Math.floor(rng.next() * 6) });
+  };
 
   start(): void {
     if (this.wanted) return;
@@ -249,7 +264,7 @@ class AmbiencePlayer {
     const dt = Math.min(0.5, (now - this.last) / 1000);
     this.last = now;
     const a = readAtmosphere();
-    ambienceTargets(engine.listener, a, targets);
+    ambienceTargets(engine.listener, a, targets, this.region);
     this.beds.apply(targets, ctx.currentTime, immediate);
 
     const l: Listener = engine.listener;
@@ -264,6 +279,9 @@ class AmbiencePlayer {
         engine.play("bird", { x: l.x + Math.cos(az) * d, y: l.y + 4 + rng.next() * 6, z: l.z + Math.sin(az) * d, volume: 0.7 + rng.next() * 0.3, seed: Math.floor(rng.next() * 8) });
       }
     }
+    // The region's own voices: surf, lamp chains, herd bells, drips, a wind-pump, frogs...
+    this.schedule ??= new RegionSchedule(this.region, rng);
+    stepRegionAmbience(this.schedule, dt, daylight(a.hour), a.rain, rng, this.emit);
     // The fire: pops and the odd snap, only when close enough to matter.
     if (targets.fire.gain > 0.02) {
       const f = CAMP.fire;

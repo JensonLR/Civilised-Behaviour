@@ -1,4 +1,4 @@
-import { COMBAT, MOVEMENT, clamp, wrapAngle } from "@cb/shared";
+import { COMBAT, MOVEMENT, clamp, newBodyHit, newWorldHit, rayBody, rayWorld, wrapAngle, type BodyPose, type CollisionWorld } from "@cb/shared";
 
 /**
  * THE THIRD-PERSON AIM CONTRACT (D-038, docs/_notes/polish2.md section 5). The player's report: third person is hard to aim and shoot, first person is great. The causes (read from
@@ -11,6 +11,11 @@ import { COMBAT, MOVEMENT, clamp, wrapAngle } from "@cb/shared";
  *  - `blendAim`: the over-the-shoulder transition is an exponential approach (no snap, no overshoot), the same shape in and out.
  *  - `assistLook` / `AIM.assist`: pad-only soft help, client-side, bounded to a fraction of the server's `aimYawSlack` so the server never has to know about it.
  *  - `reticleRadiusPx`: the hip-fire circle is the real spread cone, projected, so it tells the truth (and shrinks when you stand still and aim).
+ *
+ * INTEGRATOR WIRING (Game.ts, per frame, after `rig.update(...)`): `rig.crosshairRay(o, d)`; `hit = crosshairDistance(world, o, d, otherBodies)` (poses of everyone but the local player);
+ * `s = aimSolve(eyeNow, o, d, hit)`; send `aimYaw: s.yaw, aimElev: s.elev` beside the camera `yaw`. Pad only: `controls.assistOn` -> `assistLook(eye, yaw, elev, hostileRows, true, out)`, then
+ * `rig.yaw += out.dYaw * dt`, `rig.pitch -= out.dElev * dt` (clamped so the total drift stays under `AIM.assist.maxPull`), `controls.lookSlow = out.slow`. Set `controls.canInteract` /
+ * `controls.holdInteract` from the same rules as the prompt; `controls.rumble("shot" | "hit" | "hurt" | "blast")` on those events; reticle `gap = reticleRadiusPx(spread, fov, h, rig.aimAmount > 0.5)`.
  */
 
 export type AimMode = "hip" | "aim";
@@ -165,4 +170,21 @@ export function reticleRadiusPx(spread: number, fovDeg: number, heightPx: number
   const half = Math.tan((clamp(fovDeg, 20, 120) * Math.PI) / 360);
   const px = (Math.tan(clamp(spread, 0, 0.6)) / half) * (heightPx / 2);
   return clamp(px, AIM.reticle.hipMinPx, AIM.reticle.hipMaxPx);
+}
+
+const _wh = newWorldHit();
+const _bh = newBodyHit();
+
+/**
+ * How far along the crosshair ray (`o`, unit `d`) the first thing is: the nearest solid in the collision world (walls, rocks, trees, the ground) or a body from `bodies` (everyone but the
+ * local player, as poses), whichever is closer; `AIM.convergence.far` when the ray meets nothing. This is the `hitDist` of `aimSolve`: with it a target at 5 m is hit where the crosshair is,
+ * not where a wall 40 m behind it would put the shot. `inflate` is the bodies' forgiveness (m). Allocation-free.
+ */
+export function crosshairDistance(world: CollisionWorld, o: V3, d: V3, bodies: readonly BodyPose[] = [], maxT: number = AIM.convergence.far, inflate = 0.08): number {
+  let best = maxT;
+  if (rayWorld(world, o.x, o.y, o.z, d.x, d.y, d.z, maxT, _wh) && _wh.t < best) best = _wh.t;
+  for (let i = 0; i < bodies.length; i++) {
+    if (rayBody(bodies[i]!, o.x, o.y, o.z, d.x, d.y, d.z, best, inflate, _bh) && _bh.t < best) best = _bh.t;
+  }
+  return best;
 }

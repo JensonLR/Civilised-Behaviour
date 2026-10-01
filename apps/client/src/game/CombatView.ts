@@ -11,15 +11,15 @@ import {
   aimDirection,
   bodyCentre,
   elevToWire,
-  newBodyHit,
   newWorldHit,
-  rayBody,
   rayWorld,
   shotDirection,
   shotSeed,
   spreadFor,
+  wrapAngle,
   weaponToWire,
   yawToWire,
+  type BodyPose,
   type BoomEvent,
   type CannonStateType,
   type HitEvent,
@@ -40,8 +40,9 @@ import type { Stage } from "../render/Stage.ts";
 import { CannonView } from "../render/weapons/CannonView.ts";
 import { ShotFx } from "../render/weapons/ShotFx.ts";
 import { IMPACT_SOUND, REPORT, fx as sfx } from "../render/weapons/sfx.ts";
-import { getBindings, keyLabel } from "../input/bindings.ts";
+import { aimSolve, crosshairDistance, reticleRadiusPx } from "../input/aim.ts";
 import { getGfx } from "../settings.ts";
+import type { GameAudio, ImpactMaterial } from "./GameAudio.ts";
 import { CombatHud } from "../ui/CombatHud.ts";
 
 /** Fewer or more effects by graphics preset. */
@@ -56,10 +57,28 @@ interface ActorLike {
 const tmp = new Vector3();
 const muzzle = new Vector3();
 const mdir = new Vector3();
-const camDir = new Vector3();
 const shotV = { x: 0, y: 0, z: 0 };
 const worldHit = newWorldHit();
-const bodyHit = newBodyHit();
+const rayO = { x: 0, y: 0, z: 0 };
+const rayD = { x: 0, y: 0, z: 0 };
+/** Poses of the bodies the crosshair ray may meet (everyone standing but the local player); the array and its objects are reused every frame. */
+const rayBodies: BodyPose[] = [];
+
+/** The `WEAPON` ids in a carried mask, memoised (a mask is a handful of bits: the table is tiny and `actorCombat` allocates nothing after the first sight of a mask). */
+const carriedCache = new Map<number, readonly number[]>();
+export function carriedOf(mask: number): readonly number[] {
+  let c = carriedCache.get(mask);
+  if (!c) {
+    c = CARRIED.filter((id) => (mask & (1 << id)) !== 0);
+    carriedCache.set(mask, c);
+  }
+  return c;
+}
+
+/** The surface a round struck, as the audio's material words (cloth is a coat or a canvas: soft earth). */
+const MATERIAL: readonly ImpactMaterial[] = ["earth", "wood", "metal", "stone", "earth", "flesh"];
+/** How hard a weapon strikes 0..1, for the impact's weight. */
+const WEAPON_POWER: Readonly<Record<number, number>> = { [WEAPON.PISTOL]: 0.4, [WEAPON.RIFLE]: 0.7, [WEAPON.BLUNDERBUSS]: 1, [WEAPON.CANNON]: 1 };
 
 /**
  * Everything the player sees and feels of combat, in one place, so the frame loop only calls five methods:
@@ -75,6 +94,13 @@ export class CombatView {
   readonly fx: ShotFx;
   /** The first-person hands and weapon, when there are any: the muzzle flash and smoke leave THEIR muzzle, and their recoil and blows play with the shot. */
   viewmodel: ViewModel | undefined;
+  /** The audio of the frame loop (D-038): impacts by material, foley of handling the piece, blasts with their tails; absent = the plain weapon sounds. */
+  audio: GameAudio | undefined;
+  private lastWish = -2;
+  /** Blasts heard lately as (x, z, time) triples (soot on bodies near them): a short ring, newest last. */
+  private readonly blasts: number[] = [];
+  /** Told once for every blast (x, z): the battlefield's ledger keeps its place (game/battleLedger.ts). */
+  onBlast: ((x: number, z: number) => void) | undefined;
   private readonly projectiles: Projectiles;
   private readonly hud: CombatHud;
   private readonly cannons = new Map<string, CannonView>();
@@ -111,7 +137,10 @@ export class CombatView {
     room.onMessage("shot", (e: ShotEvent) => this.onShot(e));
     room.onMessage("impact", (e: ImpactEvent) => this.onImpact(e));
     room.onMessage("boom", (e: BoomEvent) => this.onBoom(e));
-    room.onMessage("hitmark", (e: HitMarkEvent) => this.hud.hitMarker(e.zone, e.down, e.sever));
+    room.onMessage("hitmark", (e: HitMarkEvent) => {
+      this.hud.hitMarker(e.zone, e.down, e.sever);
+      this.controls.rumble("hit", e.down ? 1 : 0.6);
+    });
   }
 
   /** The region changed (sailing, or the bridge fell): rounds stop at the new ground. */
@@ -142,6 +171,18 @@ export class CombatView {
     return ((me.weapons ?? 0) & (1 << w)) !== 0 ? w : -1;
   }
 
+  /** 0..1 how much a blast lately and nearby has sooted the air at (x, z): the nearest blast of the last 45 s, fading with distance (14 m) and with age. */
+  blastNear(x: number, z: number): number {
+    let k = 0;
+    for (let i = 0; i < this.blasts.length; i += 3) {
+      const age = this.time - this.blasts[i + 2]!;
+      if (age > 45) continue;
+      const d = Math.hypot(x - this.blasts[i]!, z - this.blasts[i + 1]!);
+      k = Math.max(k, (1 - d / 14) * (1 - age / 45));
+    }
+    return k > 0 ? k : 0;
+  }
+
   /** The weapon the player wants in hand (a `WEAPON` id) or -1: what the first-person viewmodel draws. */
   get wishWeapon(): number {
     return this.wish;
@@ -164,48 +205,41 @@ export class CombatView {
       elev = prev + (elev - prev) * (1 - Math.exp(-dt * 14));
       this.elevSmooth.set(id, elev);
     }
-    return { weapon, elev, reload: p.reload ?? 0 };
+    return { weapon, elev, reload: p.reload ?? 0, carried: carriedOf(p.weapons ?? 0) };
   }
 
   // ---- aim ----------------------------------------------------------------------------------------------------------------------------------
 
-  /** Finds what the crosshair is on (world, or a player) and the direction from the player's eye to it. Call once a frame, before the input steps. */
+  /**
+   * Finds what the crosshair is on (the first solid or body along the ray through the middle of the picture) and solves the shot from the player's own eye through that point
+   * (`aimSolve`, input/aim.ts): what is under the crosshair is what the round meets at any range, in third person (the camera sits beside the head) and in first. Call once a frame, before
+   * the input steps. The result is kept inside the server's yaw slack around the CURRENT view yaw, so the server never has to clamp it.
+   */
   beginFrame(): void {
     const me = this.predicted;
     if (!me) return;
-    const cam = this.stage.camera;
-    cam.getWorldDirection(camDir);
-    const ox = cam.position.x;
-    const oy = cam.position.y;
-    const oz = cam.position.z;
-    const range = 260;
-    let t = range;
-    if (rayWorld(this.session.world, ox, oy, oz, camDir.x, camDir.y, camDir.z, range, worldHit)) t = worldHit.t;
+    this.rig.crosshairRay(rayO, rayD);
     const selfId = this.session.sessionId;
+    let n = 0;
     this.session.room.state.players.forEach((p, id) => {
       if (id === selfId || (p.flags & FLAG.DOWNED) !== 0) return;
-      const pose = { x: this.session.value(p, "x"), y: this.session.value(p, "y"), z: this.session.value(p, "z"), facing: this.session.value(p, "facing"), flags: p.flags };
-      if (rayBody(pose, ox, oy, oz, camDir.x, camDir.y, camDir.z, t, 0.03, bodyHit) && bodyHit.t < t) t = bodyHit.t;
+      const pose = (rayBodies[n] ??= { x: 0, y: 0, z: 0, facing: 0, flags: 0 });
+      pose.x = this.session.value(p, "x");
+      pose.y = this.session.value(p, "y");
+      pose.z = this.session.value(p, "z");
+      pose.facing = this.session.value(p, "facing");
+      pose.flags = p.flags;
+      n++;
     });
-    const px = ox + camDir.x * t;
-    const py = oy + camDir.y * t;
-    const pz = oz + camDir.z * t;
-    const ex = this.session.value(me, "x");
-    const ey = this.session.value(me, "y") + this.eyeHeight(me.flags);
-    const ez = this.session.value(me, "z");
-    const dx = px - ex;
-    const dy = py - ey;
-    const dz = pz - ez;
-    const h = Math.hypot(dx, dz);
-    if (h < 1.2) {
-      // the point is at the player's feet (looking straight down, or against a wall): fall back to the camera's own direction
-      this.aimYaw = Math.atan2(-camDir.x, -camDir.z);
-      this.aimElev = Math.asin(Math.max(-1, Math.min(1, camDir.y)));
-    } else {
-      this.aimYaw = Math.atan2(-dx, -dz);
-      this.aimElev = Math.atan2(dy, h);
-    }
-    this.aimDist = Math.hypot(dx, dy, dz);
+    rayBodies.length = n;
+    const t = crosshairDistance(this.session.world, rayO, rayD, rayBodies, 260, 0.03);
+    tmp.set(this.session.value(me, "x"), this.session.value(me, "y") + this.eyeHeight(me.flags), this.session.value(me, "z"));
+    const s = aimSolve(tmp, rayO, rayD, t);
+    const off = wrapAngle(s.yaw - this.rig.yaw);
+    const max = COMBAT.aimYawSlack * 0.98;
+    this.aimYaw = Math.abs(off) > max ? wrapAngle(this.rig.yaw + Math.sign(off) * max) : s.yaw;
+    this.aimElev = s.elev;
+    this.aimDist = Math.hypot(s.point.x - tmp.x, s.point.y - tmp.y, s.point.z - tmp.z);
     this.aimSeen = true;
   }
 
@@ -247,6 +281,13 @@ export class CombatView {
     void windup;
   }
 
+  /** A handling sound at the local player's hands: `foley_<name>` when the audio is wired, else the old click. */
+  private handle(name: "holster" | "draw" | "powder" | "ramrod" | "cock", me: PlayerStateType, volume: number): void {
+    const e = this.eyeOf(me, tmp);
+    if (this.audio) this.audio.foley(name, e.x, e.y, e.z, volume);
+    else if (name !== "holster" && name !== "draw") sfx.sound("reload_click", e, volume);
+  }
+
   private eyeOf(p: PlayerStateType, out: Vector3): Vector3 {
     return out.set(this.session.value(p, "x"), this.session.value(p, "y") + this.eyeHeight(p.flags), this.session.value(p, "z"));
   }
@@ -271,6 +312,7 @@ export class CombatView {
     // recoil as a picture: the lens kicks, a little shake; the aim itself is never moved
     this.rig.addKick(r.recoil * 0.55, (Math.random() - 0.5) * r.recoil * 0.25);
     this.rig.addShake(Math.min(0.6, r.recoil * 3));
+    this.controls.rumble("shot", Math.min(1, 0.4 + r.recoil * 3));
   }
 
   // ---- shots (predicted and reported) ----------------------------------------------------------------------------------------------------------
@@ -359,24 +401,32 @@ export class CombatView {
     if (view) view.muzzle(muzzle, mdir);
     else muzzle.set(e.x, e.y, e.z), mdir.set(e.dx, e.dy, e.dz);
     this.fx.muzzle(WEAPON.CANNON, muzzle.x, muzzle.y, muzzle.z, mdir.x, mdir.y, mdir.z);
+    this.audio?.blast("cannon", e.x, e.y, e.z);
     const r = WEAPONS[WEAPON.CANNON].ranged!;
     this.projectiles.spawn(WEAPON.CANNON, muzzle.x, muzzle.y, muzzle.z, e.dx * r.speed, e.dy * r.speed, e.dz * r.speed);
-    sfx.sound("cannon_shot", { x: e.x, y: e.y, z: e.z });
+    if (!this.audio) sfx.sound("cannon_shot", { x: e.x, y: e.y, z: e.z });
     const d = Math.hypot(e.x - this.stage.camera.position.x, e.z - this.stage.camera.position.z);
     this.rig.addShake(Math.max(0, 1 - d / 70) * 0.9);
+    this.controls.rumble("blast", Math.max(0, 1 - d / 70));
   }
 
   private onImpact(e: ImpactEvent): void {
     this.fx.impact(e.s as never, e.x, e.y, e.z, e.nx, e.ny, e.nz, e.w);
-    const name = IMPACT_SOUND[e.s] ?? "impact_earth";
-    sfx.sound(name, { x: e.x, y: e.y, z: e.z }, e.w === WEAPON.CANNON ? 1 : 0.8);
+    if (this.audio) this.audio.impact(MATERIAL[e.s] ?? "earth", e.x, e.y, e.z, WEAPON_POWER[e.w] ?? 0.5); // splinter, chip, ring, thud or the wet blow (the Gore setting picks its version)
+    else sfx.sound(IMPACT_SOUND[e.s] ?? "impact_earth", { x: e.x, y: e.y, z: e.z }, e.w === WEAPON.CANNON ? 1 : 0.8);
     void SURFACE;
   }
 
   private onBoom(e: BoomEvent): void {
     this.fx.explosion(e.x, e.y, e.z, e.radius);
-    sfx.sound("explosion", { x: e.x, y: e.y, z: e.z });
+    this.stage.decals.blast(e.x, e.z, Math.max(0.9, e.radius * 0.55)); // the scorch stays on the field (it is the first thing the battlefield's aftermath is made of)
+    if (this.audio) this.audio.blast("explosion", e.x, e.y, e.z);
+    else sfx.sound("explosion", { x: e.x, y: e.y, z: e.z });
+    this.blasts.push(e.x, e.z, this.time);
+    if (this.blasts.length > 24) this.blasts.splice(0, 3);
+    this.onBlast?.(e.x, e.z);
     const d = Math.hypot(e.x - this.stage.camera.position.x, e.z - this.stage.camera.position.z);
+    this.controls.rumble("blast", Math.max(0.15, 1 - d / (e.radius * 8)));
     this.rig.addShake(Math.max(0, 1 - d / (e.radius * 8)) * 0.95);
     this.rig.addKick(Math.max(0, 1 - d / (e.radius * 6)) * 0.03);
   }
@@ -384,6 +434,7 @@ export class CombatView {
   /** The local player was hit: a bearing mark pointing at where it came from (the blow's push direction reversed, relative to the view). */
   onHit(e: HitEvent): void {
     if (e.id !== this.session.sessionId) return;
+    this.controls.rumble("hurt", Math.min(1, 0.4 + e.power));
     // the push direction (dx, dz) points away from the attacker; the attacker is at -(dx, dz). Bearing relative to the camera yaw.
     const from = Math.atan2(e.dx, e.dz); // world heading of the direction TO the attacker, in the same yaw convention as the camera (0 = -Z)
     let rel = from - this.rig.yaw;
@@ -440,14 +491,17 @@ export class CombatView {
       reload: mine.reload ?? 0,
       wait: Math.min(1, wait),
       gamepad,
-      reloadKey: keyLabel(getBindings().reload[0]),
       busy,
     });
-    // reload sounds: a click as it begins, the ram halfway, a click when the piece is charged
+    // handling sounds: the draw and the holster as the wish changes, then the powder, the ram halfway and the cock when the piece is charged (the plain click without the audio)
+    if (w !== this.lastWish) {
+      if (this.lastWish !== -2) this.handle(w < 0 ? "holster" : "draw", me, 0.8);
+      this.lastWish = w;
+    }
     const rl = mine.reload ?? 0;
-    if (rl > 0 && this.lastReload === 0) sfx.sound("reload_click", this.eyeOf(me, tmp));
-    if (rl >= 45 && this.lastReload < 45 && rl > 0) sfx.sound("reload_click", this.eyeOf(me, tmp), 0.8);
-    if (rl === 0 && this.lastReload >= 50) sfx.sound("reload_click", this.eyeOf(me, tmp), 1);
+    if (rl > 0 && this.lastReload === 0) this.handle("powder", me, 1);
+    if (rl >= 45 && this.lastReload < 45 && rl > 0) this.handle("ramrod", me, 0.8);
+    if (rl === 0 && this.lastReload >= 50) this.handle("cock", me, 1);
     this.lastReload = rl;
     // the sight
     const r = def?.ranged;
@@ -456,8 +510,7 @@ export class CombatView {
     if (armed && r) {
       const speed = Math.hypot(this.session.value(me, "vx"), this.session.value(me, "vz"));
       const spread = spreadFor(r, { aiming: (me.flags & FLAG.AIMING) !== 0, speed, crouching: (me.flags & FLAG.CROUCHING) !== 0 }) + this.bloom;
-      const fov = (this.stage.camera.fov * Math.PI) / 180;
-      gap = (Math.tan(spread) * (window.innerHeight / 2)) / Math.tan(fov / 2);
+      gap = reticleRadiusPx(spread, this.stage.camera.fov, window.innerHeight, (me.flags & FLAG.AIMING) !== 0); // the circle IS the spread cone, projected (and a dot when aimed and still)
     }
     this.hud.updateSight({ visible: armed || (!!def && def.fire === "melee" && !busy), gap: armed ? gap : 6, aiming: (me.flags & FLAG.AIMING) !== 0 });
     // the cannon card: when standing at a gun
@@ -487,7 +540,7 @@ export class CombatView {
     if (!c || (this.predicted && (this.predicted.flags & (FLAG.CARRYING | FLAG.DOWNED)) !== 0)) return "";
     if (c.phase === 0) return c.shells > 0 ? `Hold ${use}  Load the cannon` : "The limber is empty";
     if (c.phase === 1) return `Hold ${use}  Ram the charge home`;
-    if (c.phase === 2) return `Hold ${use} and press FIRE  Light the fuse`;
+    if (c.phase === 2) return `Hold ${use} and press {fire}  Light the fuse`;
     return "Stand clear!";
   }
 

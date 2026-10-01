@@ -105,7 +105,7 @@ export function buildTorso(c: BodyCtx): BufferGeometry | undefined {
   };
   const nOuter = neckOuter(P, spec, 0);
   // the coat's facings stand this proud of the trunk (a strap or a plate goes above them)
-  const facingLift = [1, 3, 4, 8, 9].includes(j) ? 0.012 : j === 5 || j === 10 || j === 2 ? 0.008 : 0.002;
+  const facingLift = [1, 3, 4, 8, 9].includes(j) ? 0.012 : j === 5 || j === 10 || j === 2 || j === 11 ? 0.009 : j === 15 ? 0.011 : j === 12 ? 0.007 : 0.002;
   const layerAt = (x: number, y: number): number => (j === 6 || j === 7 ? 0 : layerAtX(view, x, y));
   const frame: TorsoFrame = {
     b, spec, P, h, W, D, neckY: view.neckY, nr: Math.max(nk.rx, nk.rz), burnt, accent, dye: singe(PALETTE.cloth[(spec.hatColor + 4) % PALETTE.cloth.length]!, burnt), at, tone,

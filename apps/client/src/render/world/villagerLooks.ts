@@ -1,6 +1,6 @@
 import * as K from "@cb/procedural";
-import { generateCharacter, sanitizeSpec, type CharacterSpec, type FieldKey } from "@cb/procedural";
-import { hash3, type Villager } from "@cb/shared";
+import { NATIVE_FROM, applyPeople, generateCharacter, sanitizeSpec, type CharacterSpec, type FieldKey } from "@cb/procedural";
+import { hash3, peopleForVillager, type Villager } from "@cb/shared";
 
 /**
  * How Hollowmere's people dress. Every villager starts from `generateCharacter` (so bodies, noses and ears come out as the game's usual caricatures) and
@@ -9,6 +9,10 @@ import { hash3, type Villager } from "@cb/shared";
  * The costume speaks of the work (a veiled pith helmet for the bees, an eyeshade for the registrar, pushed-up goggles at the forge, a sou'wester and
  * wellingtons on the pond); nothing speaks of anybody's ancestry. Skin tones are spread evenly over the eight of the palette by seat in the roster,
  * not by trade, and no costume is drawn from a real people's dress (no fezs, ponchos, top knots or turbans in the catalogue picks).
+ *
+ * D-038: the Society's own staff (`peopleForVillager` = "colonial": the Retired Everything, the Registrar, the Gentleman of Leisure) KEEP the colonial caricature; everybody else is a person
+ * of a FICTIONAL PEOPLE (the Mereborn, or a Wayfarer of one of the others): `applyPeople` re-draws the silhouette, the hat, the outer garment, the neckwear, the hair, the paint and the
+ * dyes from the people's own tables, and the few pieces that say the TRADE (goggles at the forge, a sou'wester on the pond, a net hat for the bees) are put back on top (`NATIVE_KEEP`).
  */
 
 type Pick = string | number | readonly (string | number)[];
@@ -86,6 +90,21 @@ const COSTUMES: Record<string, Costume> = {
   "Night Watch": { hat: "Nightcap", jacket: "Greatcoat", shirt: "Plain", shirtColor: LINEN, jacketColor: OX, trousersColor: OLIVE, hatColor: RED, boots: "Hobnailed", neckwear: "Muffler", hipGear: "Cartridge Pouches", moustache: "Lampshade", beard: "None", pack: "None" },
 };
 
+/** What of a trade survives into a native's dress: the tools and the weather-gear, never the colonial uniform (applied AFTER `applyPeople`). */
+const NATIVE_KEEP: Record<string, Costume> = {
+  "Smith & Farrier": { hat: "None", gloves: "Gauntlets", eyewear: "Pushed-Up Goggles", belt: "Leather" },
+  Beekeeper: { hat: "Net Cap", gloves: "White Cotton", pack: "None" },
+  Ferryman: { hat: "Sou'wester", boots: "Wellingtons", beard: "Sea Captain", moustache: "None", neckwear: "Scarf", hipGear: "Coiled Rope" },
+  Fisher: { boots: "Wellingtons", pack: "Satchel", hipGear: "Canteen" },
+  Fishmonger: { hat: "Sou'wester", boots: "Wellingtons" },
+  Gardener: { gloves: "Leather", pack: "Satchel" },
+  Laundress: { gloves: "Fingerless", hairAcc: "Silk Flower" },
+  Miller: { pocket: "Breast Pocket" },
+  "Keeper of the Hours": { hat: "Tiered Hat", jacket: "Court Cloak", jacketColor: PLUM, hatColor: PLUM, sash: "Order Ribbon", eyewear: "Half-Moons" },
+  Clockkeeper: { eyewear: "Jeweller's Loupe", pocket: "Pens and Pencils" },
+  "Warden of the Gate": { gloves: "White Cotton" },
+};
+
 const CHILDREN: Costume = { hat: ["Flat Cap", "None", "None", "Slouch Hat"], jacket: ["Shirt Sleeves", "Waistcoat", "Tunic"], shirt: ["Plain", "Checked", "Work Shirt"], trousers: ["Baggy", "Tropical Shorts", "Plain"], boots: ["Clogs", "Ankle"], hair: ["Mop Top", "Bowl Cut", "Ponytail", "Curls", "Wild Tufts"], beard: "None", moustache: "None", sideburns: "None", complexion: ["Freckled", "Heavily Freckled", "Clear"], eyewear: "None", neckwear: ["None", "Scarf"], greying: "None", stubble: "Clean-Shaven" };
 
 /** The dyes an outfit may change by, so two people in the same trade do not match: a step along the local palette. */
@@ -116,6 +135,21 @@ export function folkSpec(v: Villager): CharacterSpec {
   let n = 0;
   for (const [field, pick] of Object.entries(costume) as [FieldKey, Pick][]) spec[field] = resolve(field, pick, hash3(v.lookSeed, n++, 0x77));
   if (spec.hair === K.HAIR_STYLES.indexOf("Top Knot")) spec.hair = 3;
+  // a person of a fictional people (D-038), the Society's own staff excepted
+  const people = peopleForVillager(v.title);
+  if (people !== "colonial") {
+    const skin = spec.skin;
+    const native = applyPeople(spec as unknown as CharacterSpec, people, v.lookSeed);
+    Object.assign(spec, native);
+    spec.skin = skin;
+    if (v.age !== "child") {
+      let m = 0;
+      for (const [field, pick] of Object.entries(NATIVE_KEEP[v.title] ?? {}) as [FieldKey, Pick][]) spec[field] = resolve(field, pick, hash3(v.lookSeed, m++, 0x91));
+      // (a tool may replace a hat, never the whole of the people's dress: if nothing of it is left, it all comes back)
+      const own = (): boolean => (["hat", "jacket", "neckwear", "hair"] as const).some((f) => spec[f] >= (NATIVE_FROM[f] ?? 1e9));
+      if (!own()) for (const f of ["hat", "jacket", "neckwear", "hair"] as const) spec[f] = native[f];
+    }
+  }
   // the local palette: the same trade in a different year's dye (only where the costume does not fix one)
   const jitter = hash3(v.lookSeed, 0x1c, 0x5) % LOCAL_DYES.length;
   if (!("jacketColor" in costume)) spec.jacketColor = LOCAL_DYES[jitter]!;

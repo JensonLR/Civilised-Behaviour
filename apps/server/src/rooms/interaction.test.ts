@@ -28,7 +28,13 @@ describe("prop interaction (server authority)", () => {
       clients.push({ c, input: c.input({ type: MoveInput, mode: "reliable" }) as unknown as { data: { buttons: number; moveF: number }; send(): void } });
     }
     await sleep(150);
-    const props = [...room.state.props.entries()].filter(([, p]) => PROP_DEFS[p.kind as PropKindId].carryable);
+    const carryable = [...room.state.props.entries()].filter(([, p]) => PROP_DEFS[p.kind as PropKindId].carryable);
+    // (D-038: props come in clusters of three; the tests stand beside the first prop, so the isolated ones (nothing within 8 m: the out-of-reach test stands 5 m off) go first and "the nearest prop" is the one named)
+    const mounts: { x: number; z: number }[] = [];
+    room.state.mounts.forEach((m) => mounts.push({ x: m.x, z: m.z }));
+    // (nor beside a horse or the wagon: a load dropped there is taken by the wagon's rack)
+    const lonely = ([k, p]: (typeof carryable)[number]): boolean => carryable.every(([k2, q]) => k2 === k || Math.hypot(q.x - p.x, q.z - p.z) > 8) && mounts.every((m) => Math.hypot(m.x - p.x, m.z - p.z) > 10);
+    const props = [...carryable.filter(lonely), ...carryable.filter((e) => !lonely(e))];
     expect(props.length).toBeGreaterThan(5);
     return { room, clients, props };
   }

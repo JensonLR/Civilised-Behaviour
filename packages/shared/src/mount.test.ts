@@ -301,7 +301,7 @@ describe("stepMounted: world", () => {
     expect(play()).toEqual(play());
     // Boxing counts depend on the path the body takes (a body pressed against a wall stores Smis, a free one stores doubles), so the comparison is made on the world its
     // budget was calibrated on: Hollowmere without the HQ route's finger-posts (hqRoute.ts), which lie in the camp's neighbourhood and change who gets stuck where.
-    const wb = new CollisionWorld(w.terrain, w.obstacles.filter((o) => o.tag !== "fingerpost"), w.boundsRadius);
+    const wb = new CollisionWorld(w.terrain, w.obstacles.filter((o) => o.tag !== "fingerpost" && o.tag !== "house" && o.tag !== "vprop"), w.boundsRadius); // (D-038: nor the village, whose doors and walls were replanned: the 100,000-step circuit passes through it, and a body pinned in a doorway stores Smis)
     const m = rider(wb, 2, 3);
     const k = createCharState(2, 3, wb);
     const c = cmd({ buttons: BUTTON.SPRINT });

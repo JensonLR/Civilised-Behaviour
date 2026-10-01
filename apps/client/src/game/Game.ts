@@ -1,9 +1,11 @@
 import { Vector3 } from "three";
+import { seedFromString } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp } from "@cb/shared";
+import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -14,7 +16,12 @@ import { ViewModel, modeFor, type ViewModelFrame } from "../render/ViewModel.ts"
 import { RagdollWorld } from "../render/Ragdoll.ts";
 import { BASE_SENSITIVITY, effectiveShake, getFov, getGore, getHeadBob, getReduceMotion, getHoldToSprint, getInvertY, getPadSensitivity, getSensitivity, getShowLimbs, getView, onSettingChange, setView } from "../settings.ts";
 import { playSfx, setListener } from "../audio/index.ts";
-import { getBindings, keyLabel } from "../input/bindings.ts";
+import { regionSurface, surfaceAt } from "../audio/surface.ts";
+import { newSignals, type MusicSignals } from "../audio/musicLayers.ts";
+import { getAtmosphere } from "../render/world/atmosphere.ts";
+import { Aftermath, planAftermath, type AftermathItem, type AftermathSite } from "../render/world/aftermath.ts";
+import { BattleLedger } from "./battleLedger.ts";
+import { MusicSignaller } from "./musicSignals.ts";
 import { FIRST_PERSON } from "../render/firstPerson.ts";
 import { GameAudio } from "./GameAudio.ts";
 import { ContentAudio } from "./ContentAudio.ts";
@@ -44,6 +51,11 @@ import { CombatView } from "./CombatView.ts";
 
 interface Actor {
   body: CharacterActor;
+  /** Stable number for this body's drag trail in the decal field. */
+  key: number;
+  /** What the world is doing to this body (mud, a blast, rain, water): refreshed a few times a second, read every frame by the actor's `stepExposure`. */
+  ground: { mud: number; blast: number; rain: number; washing: boolean };
+  groundIn: number;
 }
 
 const tmp = new Vector3();
@@ -89,6 +101,24 @@ export class Game {
   private readonly props: PropViews;
   private readonly hud: Hud;
   private readonly hitFx: HitFx;
+  /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
+  private readonly ledger = new BattleLedger();
+  private readonly aftermath: Aftermath;
+  private aftermathSig = "";
+  private aftermathSite: { key: string; site: AftermathSite } | undefined;
+  /** The adaptive score hears the field through these (game/musicSignals.ts), once a frame. */
+  private readonly signaller = new MusicSignaller();
+  private readonly signals: MusicSignals;
+  private readonly signalView = { rows: undefined as unknown as { forEach(cb: (row: never, id: string) => void): void }, me: "", x: 0, z: 0, region: "hollowmere" as RegionId, phase: "" as ScenarioView["phase"] | "", parley: false, frozen: false };
+  private scenarioPhase: ScenarioView["phase"] | "" = "";
+  /** Pad aim assist (D-038): the hostile rows it may pull toward, its output and how far it has already moved the aim from where the player pointed. */
+  private readonly assistTargets: AssistTarget[] = [];
+  private readonly assistOut: AssistOut = { dYaw: 0, dElev: 0, slow: 1, id: "" };
+  private assistYaw = 0;
+  private assistElev = 0;
+  /** Is there something in reach the Use control would act on, and is it a hold (revive, dress, load)? Set by `updatePrompt`, read by the pad's Use/Reload split (input/Controls.ts). */
+  private usable = false;
+  private useHold = false;
   /** Weapons, shots, projectiles, impacts, the cannon and the gunnery interface (game/CombatView.ts). */
   private readonly combat: CombatView;
   private readonly debris: LimbDebris;
@@ -152,6 +182,7 @@ export class Game {
     this.rig.setView(getView(), true);
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.audio = new GameAudio((x, z) => session.world.terrainHeight(x, z));
+    this.signals = newSignals(session.region);
     this.builtRegion = session.region;
     this.builtKey = NetSession.worldKeyOf(session.room.state);
     this.applySettings();
@@ -163,10 +194,21 @@ export class Game {
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
+    this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
+    this.debris.onLand = (x, z, vx, vz) => {
+      stage.decals.bloodPool(x, z, 0.28, 0.7);
+      stage.decals.spatterAt(x, z, vx, vz, 0.32);
+      this.audio.bloodOnGround(x, session.world.terrainHeight(x, z), z);
+    };
     this.viewmodel = new ViewModel(stage);
     this.combat = new CombatView(stage, session, controls, this.rig, () => this.actors, hud);
     this.combat.viewmodel = this.viewmodel;
+    this.combat.audio = this.audio;
+    this.combat.onBlast = (x, z) => this.ledger.noteBlast(x, z);
+    this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
+    controls.canInteract = () => this.usable;
+    controls.holdInteract = () => this.useHold;
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
       players: () => session.room.state.players.size,
@@ -509,6 +551,7 @@ export class Game {
         view = undefined;
       }
       this.tracker.update(view);
+      this.scenarioPhase = view?.phase ?? "";
       this.stage.setScenario(view);   // (D-037: the region's scenery may dress it: a fall, a flood)
     }
     this.trackerClock -= 1;
@@ -571,6 +614,14 @@ export class Game {
       this.rig.setWorld(world);
       this.combat.setWorld();
       this.stage.buildWorld(world, region, st.seed);
+      if (region !== this.builtRegion) {
+        // a new shore: nothing of the old field's fight is here, and the music starts from a baseline (nothing already on the field counts as a shot or a death)
+        this.ledger.reset();
+        this.signaller.reset();
+        this.aftermath.show([], getGore());
+        this.aftermathSig = "";
+        this.aftermathSite = undefined;
+      }
       this.builtRegion = region;
       this.builtKey = NetSession.worldKeyOf(st);
       this.applyCampaignVisuals();
@@ -610,6 +661,10 @@ export class Game {
     this.viewmodel.dispose();
     this.hitFx.dispose();
     this.debris.dispose();
+    this.aftermath.dispose();
+    this.controls.canInteract = () => true;
+    this.controls.holdInteract = () => false;
+    this.controls.lookSlow = 1;
     this.disposed = true;
     this.ragdolls?.dispose();
     this.ragdolls = undefined;
@@ -642,6 +697,7 @@ export class Game {
       if (this.controls.usingGamepad) this.wheel.stick(this.controls.padStick.x, this.controls.padStick.y);
       else this.wheel.nudge(lx, ly);
     } else this.rig.look(lx, ly);
+    this.applyAssist(dt);
 
     const me = this.session.bindLocalPlayer();
     if (me) {
@@ -666,12 +722,16 @@ export class Game {
     this.syncActors(dt);
     this.hitFx.update(dt);
     this.debris.update(dt);
+    this.aftermath.update(dt);
+    this.ledger.note(this.session.room.state.players);
+    this.syncAftermath(dt);
     this.combat.update(dt, this.controls.usingGamepad);
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
     this.syncCampaign(now);
     this.demoBanner?.tick();
     this.content.update(dt, this.session.room.state);
+    this.updateMusic(dt, me);
     if (this.orientation.active) {
       const pf = this.session.predicted;
       if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad ? "pad" : "keyboard");
@@ -680,6 +740,7 @@ export class Game {
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
       setListener(tmp, this.rig.yaw);
+      this.stage.setViewer(tmp.x, tmp.z); // a room's roof lifts while you are inside it (docs/LEVEL_PLAN.md section 4, rule 7)
       const pf = this.session.predicted;
       this.rig.mounted = pf !== undefined && (pf.flags & FLAG.MOUNTED) !== 0;
       this.rig.mountSpeed01 = pf ? Math.hypot(this.session.value(pf, "vx"), this.session.value(pf, "vz")) / MOUNT.gallop : 0;
@@ -700,6 +761,101 @@ export class Game {
     if (this.loadout.isOpen) return "loadout";
     if (this.mapRoom.isOpen) return "map";
     return this.parley.isOpen ? "other" : "none";
+  }
+
+  /** The adaptive score hears the field: the rows, the scenario's phase, a parley open, a sheet owning the screen (game/musicSignals.ts, audio/musicLayers.ts). `GameAudio.update` does the rest (and honours Adaptive music). */
+  private updateMusic(dt: number, me: unknown): void {
+    const st = this.session.room.state;
+    const v = this.signalView;
+    const pf = this.session.predicted;
+    v.rows = st.players as never;
+    v.me = this.session.sessionId;
+    v.x = me && pf ? this.session.value(pf, "x") : 0;
+    v.z = me && pf ? this.session.value(pf, "z") : 0;
+    v.region = this.builtRegion;
+    v.phase = this.scenarioPhase;
+    v.parley = this.parley.isOpen;
+    v.frozen = (st.travelPhase ?? 0) >= 2 || this.mapRoom.isOpen || this.paper.isOpen || this.loadout.isOpen;
+    this.signaller.update(dt, v as never, this.signals);
+    this.audio.update(dt, this.signals);
+  }
+
+  /**
+   * Pad aim assist (PAD ONLY, setting `aimAssist`): while aiming, a hostile near the crosshair pulls the aim toward its chest as a RATE and slows the look stick (`assistLook`, input/aim.ts). The
+   * total pull is kept inside `AIM.assist.maxPull`, a fifth of the server's slack, so the server never sees an aim it would not take from a steady hand. The mouse never gets any.
+   */
+  private applyAssist(dt: number): void {
+    const c = this.controls;
+    const me = this.session.predicted;
+    if (!c.aiming || !c.assistOn || !me || this.wheel.isOpen) {
+      c.lookSlow = 1;
+      this.assistYaw = 0;
+      this.assistElev = 0;
+      return;
+    }
+    const targets = this.assistTargets;
+    let n = 0;
+    this.session.room.state.players.forEach((p, id) => {
+      if (id === this.session.sessionId || !p.npc || (p.flags & FLAG.DOWNED) !== 0) return;
+      const side = NPC_SIDE[p.npc];
+      if (!side || !FOE_SIDES.has(side)) return;
+      const t = (targets[n] ??= { id: "", x: 0, y: 0, z: 0, r: 0.45 });
+      t.id = id;
+      t.x = this.session.value(p, "x");
+      t.y = this.session.value(p, "y") + 1.2;
+      t.z = this.session.value(p, "z");
+      n++;
+    });
+    targets.length = n;
+    tmp.set(this.session.value(me, "x"), this.session.value(me, "y") + ((me.flags & FLAG.CROUCHING) !== 0 ? COMBAT.eyeHeightCrouch : COMBAT.eyeHeight), this.session.value(me, "z"));
+    const out = assistLook(tmp, this.rig.yaw, -this.rig.pitch, targets, true, this.assistOut);
+    c.lookSlow = out.slow;
+    if (out.id === "") {
+      this.assistYaw = 0;
+      this.assistElev = 0;
+      return;
+    }
+    const max = AIM.assist.maxPull;
+    const ny = clamp(this.assistYaw + out.dYaw * dt, -max, max);
+    const ne = clamp(this.assistElev + out.dElev * dt, -max, max);
+    this.rig.nudge(ny - this.assistYaw, ne - this.assistElev);
+    this.assistYaw = ny;
+    this.assistElev = ne;
+  }
+
+  /**
+   * The battlefield's aftermath: when the ledger (a new casualty or blast), the gore setting or the region changes, plan it again (pure, deterministic, audited placement) and put it on the field
+   * (`Aftermath.show` keeps what is already there where it is). The audit adapter supplies the doors and routes the plan keeps clear of (built once per region and seed, on the first need).
+   */
+  private syncAftermath(dt: number): void {
+    void dt;
+    const gore = getGore();
+    const sig = `${this.builtRegion}|${this.ledger.revision}|${gore}`;
+    if (sig === this.aftermathSig) return;
+    this.aftermathSig = sig;
+    const t = this.ledger.tally;
+    let items: readonly AftermathItem[] = [];
+    if (t.dead + t.downed + t.blasts > 0) {
+      const seed = this.session.room.state.seed;
+      const key = `${this.builtRegion}|${seed}`;
+      if (this.aftermathSite?.key !== key) {
+        const audit = LEVEL_ADAPTERS[this.builtRegion](seed);
+        this.aftermathSite = { key, site: { region: this.builtRegion, world: this.session.world, doors: audit.doors, routes: audit.routes } };
+      }
+      items = planAftermath({ region: this.builtRegion, seed, tally: t, centres: this.ledger.centres, gore, site: this.aftermathSite.site });
+    }
+    this.aftermath.show(items, gore);
+  }
+
+  /** What the world is doing to a body standing at (x, y, z): the ground (mud in wet weather and in the delta, water to wash in), rain, and a blast lately near. Refreshed a few times a second per body. */
+  private refreshGround(a: Actor, x: number, y: number, z: number): void {
+    const g = a.ground;
+    const surf = regionSurface(this.builtRegion, surfaceAt(x, z, y - this.session.world.terrainHeight(x, z)));
+    const atm = getAtmosphere();
+    g.rain = atm.rain;
+    g.washing = surf === "water";
+    g.mud = surf === "mud" ? 0.9 : surf === "grass" || surf === "dirt" ? Math.min(1, atm.wet * 0.9 + (surf === "dirt" ? 0.15 : 0)) : 0;
+    g.blast = this.combat.blastNear(x, z);
   }
 
   /** Feeds the first-person hands and weapon (after the camera has been placed for this frame), and lets the body's own arms give way to them. */
@@ -742,11 +898,11 @@ export class Game {
     const mine = this.session.local;
     if (!me || !mine) return;
     const pad = this.controls.usingGamepad;
-    // the keys as the player has bound them (a rebind in the settings changes the prompts at once); the pad's layout is fixed
-    const keys = getBindings();
-    const use = pad ? "X" : keyLabel(keys.interact[0]);
-    const grab = pad ? "RB" : keyLabel(keys.grab[0]);
-    const throwKey = pad ? "LB" : keyLabel(keys.throw[0]);
+    // prompt TOKENS (input/glyphDom.ts): the HUD draws each as the glyph of the device in use and the player's own binding, and draws it again when they pick up the other device
+    const use = "{interact}";
+    const grab = "{grab}";
+    const throwKey = "{throw}";
+    let foundation = false;
     const players = this.session.room.state.players;
     const flags = me.flags;
     let prompt = "";
@@ -809,9 +965,15 @@ export class Game {
     if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
       // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks)
       const st = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);
-      if (st && st.kind === "foundation") prompt = this.foundationText(undefined);
+      if (st && st.kind === "foundation") {
+        prompt = this.foundationText(undefined);
+        foundation = true;
+      }
       else if (st && st.kind !== "pier") prompt = `${use}  ${st.prompt}`;
     }
+    // what the pad's Use control will do this frame: a tap is Use only when there is something to use, otherwise it reloads (input/Controls.ts)
+    this.usable = foundation || prompt.includes(use);
+    this.useHold = prompt.startsWith(`Hold ${use}`);
     const showLimbs = getShowLimbs();
     this.hud.update({
       flags,
@@ -873,6 +1035,7 @@ export class Game {
     this.controls.settings.sensitivity = s.sensitivity;
     this.controls.settings.padSensitivity = getPadSensitivity();
     this.controls.settings.holdToSprint = getHoldToSprint();
+    this.stage.setGore(getGore());
     if (this.rig.mode !== getView()) this.rig.setView(getView());
     // the graphics preset, live: effect density, and the ink line on the figures already standing in the scene
     this.combat?.setPreset();
@@ -906,12 +1069,23 @@ export class Game {
       this.audio.actor(id, isMe, dt, x, y, z, this.session.value(p, "vx"), this.session.value(p, "vy"), this.session.value(p, "vz"), flags);
       a.body.setLook(p.look);
       if (isMe) a.body.setFirstPerson(this.rig.headHidden, this.rig.yaw); // own head, never the others'
+      a.groundIn -= dt;
+      if (a.groundIn <= 0) {
+        a.groundIn = 0.25 + (a.key & 7) * 0.02; // (spread over frames: bodies do not all look at the ground in the same one)
+        this.refreshGround(a, x, y, z);
+      }
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id) },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground },
         getGore(),
         getShowLimbs(),
       );
+      // a body dragged across the field leaves its trail (the pool under a bleeding body is the hit's; this is the smear behind a rescue)
+      if ((flags & FLAG.DRAGGED) !== 0) {
+        const vx = this.session.value(p, "vx");
+        const vz = this.session.value(p, "vz");
+        if (vx * vx + vz * vz > 0.04) this.stage.decals.drag(a.key, x, z, vx, vz, p.wounds !== 0 ? 0.6 : 0.1);
+      }
       if (!isMe) this.plate(id, p, a, x, y, z);
     });
     this.plates.endFrame();
@@ -983,7 +1157,8 @@ export class Game {
 
   private addActor(p: PlayerStateType): Actor {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
-    return { body };
+    const key = seedFromString(`${p.slot}:${p.name}:${p.npc}`) & 0xffff;
+    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015 };
   }
 
   private removeActor(a: Actor): void {

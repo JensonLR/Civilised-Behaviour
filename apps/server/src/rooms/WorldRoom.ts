@@ -108,6 +108,7 @@ import {
   npcKey,
   openParley,
   regionProps,
+  peopleForNpc,
   regionSpawn,
   serializeCampaign,
   stationsFor,
@@ -119,7 +120,7 @@ import {
   type ScenarioOutcome,
   type ScenarioView,
 } from "@cb/shared";
-import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, generateCharacter, specFromUntrusted } from "@cb/procedural";
+import { HISTORY_KEYS, applyClientAppearance, applyPeople, decodeSpec, encodeSpec, generateCharacter, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { Demo } from "../systems/Demo.ts";
@@ -1385,9 +1386,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     return true;
   }
 
-  /** The authored look of an NPC: a seeded character with the spec's patch laid over it (clamped, canonical). */
+  /**
+   * The authored look of an NPC: a seeded character, drawn as one of the region's FICTIONAL native peoples when its role or spec says so (D-038: `spec.people ?? peopleForNpc(role, region)`;
+   * the Society's, the Syndicate's and the Company's folk stay the colonial caricature), with the spec's patch laid over it (clamped, canonical). `look` is already a string on the wire:
+   * no schema change, and the client draws exactly what the server named.
+   */
   private npcLook(spec: NpcSpec): string {
-    const base = generateCharacter(spec.lookSeed);
+    const people = spec.people ?? peopleForNpc(spec.role, this.state.region as RegionId);
+    const base = people ? applyPeople(generateCharacter(spec.lookSeed), people, spec.lookSeed) : generateCharacter(spec.lookSeed);
     if (!spec.look) return encodeSpec(base);
     try {
       return encodeSpec(specFromUntrusted(encodeSpec({ ...base, ...spec.look }), spec.lookSeed));

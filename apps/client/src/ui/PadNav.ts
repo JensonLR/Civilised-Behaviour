@@ -1,8 +1,10 @@
 import { playSfx } from "../audio/index.ts";
 
 /**
- * Generic gamepad navigation for DOM menus: D-pad/left stick up-down moves focus, left-right adjusts sliders, selects and checkboxes, A
- * activates, B dispatches `padback` on the root, and the bumpers (LB/RB) dispatch `padtab` ({detail: -1 | +1}) so tabbed sheets can switch page.
+ * Generic gamepad navigation for DOM menus: D-pad/left stick up-down moves focus (in reading order, the focused control scrolled into view), left-right adjusts sliders, selects and
+ * checkboxes, A activates (a button, a switch, a tab, a link; on a select it steps to the next option), B dispatches `padback` on the root, and the bumpers (LB/RB) dispatch `padtab`
+ * ({detail: -1 | +1}) so tabbed sheets can switch page. A TRAPPED sheet (an `.overlay`, or anything with an `aria-modal` dialog in it) never loses its focus: if the focused control is removed
+ * or disabled (a list rebuilt, a stepper that has reached its limit) the pad's next input lands on the sheet's primary action instead of nowhere.
  * One implementation for every menu screen so controller support is never an afterthought (brief: "controller focus from the start").
  */
 export function startPadNav(root: HTMLElement, isActive: () => boolean): () => void {
@@ -15,9 +17,17 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
   let rbWas = false;
 
   const focusables = (): HTMLElement[] =>
-    [...root.querySelectorAll<HTMLElement>("input, select, button")].filter(
-      (el) => !(el as HTMLInputElement).disabled && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1" && !el.closest("[inert]"),
+    [...root.querySelectorAll<HTMLElement>("input, select, button, a[href], [role='menuitem'], [role='button']")].filter(
+      (el) => !(el as HTMLInputElement).disabled && el.getAttribute("aria-disabled") !== "true" && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1" && !el.closest("[inert]"),
     );
+  const trapped = (): boolean => root.classList.contains("overlay") || root.querySelector("[aria-modal='true']") !== null;
+  /** The sheet's primary action: what it marks for autofocus, else its primary button, else the first control. */
+  const primary = (items: HTMLElement[]): HTMLElement | undefined => items.find((el) => el.hasAttribute("data-autofocus")) ?? items.find((el) => el.classList.contains("primary")) ?? items[0];
+  const focusEl = (el: HTMLElement | undefined): void => {
+    if (!el) return;
+    el.focus();
+    el.scrollIntoView?.({ block: "nearest" });
+  };
 
   const adjust = (el: HTMLElement, dir: number, fast: boolean): void => {
     if (el instanceof HTMLInputElement && el.type === "range") {
@@ -43,6 +53,17 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     }
   };
 
+  /** A on the focused control: press a button, tab, link or switch; step a select to its next option (wrapping). A slider is moved by left and right, not A. */
+  const activate = (el: HTMLElement): void => {
+    if (el instanceof HTMLSelectElement) {
+      el.selectedIndex = (el.selectedIndex + 1) % Math.max(1, el.options.length);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (el instanceof HTMLInputElement) {
+      if (el.type === "checkbox" || el.type === "radio" || el.type === "button" || el.type === "submit") el.click();
+    } else el.click();
+  };
+
   const tick = (): void => {
     raf = requestAnimationFrame(tick);
     if (!isActive()) return;
@@ -57,11 +78,20 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     const right = ax > 0.6 || pad.buttons[15]?.pressed;
 
     const items = focusables();
-    const current = document.activeElement as HTMLElement | null;
+    let current = document.activeElement as HTMLElement | null;
+    // a trapped sheet whose focused control has gone: land on the primary action (and let this input be spent on that, not on moving off it)
+    if (trapped() && items.length && (!current || !root.contains(current) || !items.includes(current))) {
+      if (up || down || left || right || (pad.buttons[0]?.pressed ?? false)) {
+        focusEl(primary(items));
+        current = document.activeElement as HTMLElement | null;
+        moveCooldown = now + 190;
+        aWas = true;
+      }
+    }
     if ((up || down) && now > moveCooldown && items.length) {
       moveCooldown = now + 190;
       const i = current ? items.indexOf(current) : -1;
-      items[(i + (down ? 1 : -1) + items.length) % items.length]?.focus();
+      focusEl(items[i < 0 ? (down ? 0 : items.length - 1) : (i + (down ? 1 : -1) + items.length) % items.length]);
       playSfx("ui_hover");
     }
     if ((left || right) && now > adjustCooldown && current) {
@@ -69,7 +99,7 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
       adjust(current, right ? 1 : -1, Math.abs(ax) > 0.95);
     }
     const a = pad.buttons[0]?.pressed ?? false;
-    if (a && !aWas && current && (current instanceof HTMLButtonElement || (current instanceof HTMLInputElement && current.type === "checkbox"))) current.click();
+    if (a && !aWas && current) activate(current);
     aWas = a;
     const b = pad.buttons[1]?.pressed ?? false;
     if (b && !bWas) root.dispatchEvent(new CustomEvent("padback"));

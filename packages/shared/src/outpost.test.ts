@@ -255,4 +255,5 @@ describe("every stage stays walkable", () => {
   }
 });
 
-const HOLLOWMERE_ARENA_7 = "473:1236351889";
+// (re-recorded for D-038: Hollowmere's camp, village doors and footbridge deck were replanned on purpose: two tents, a crate, wider door steps and a deck at most a step above its bank; the obstacle COUNT is unchanged)
+const HOLLOWMERE_ARENA_7 = "473:741650406";

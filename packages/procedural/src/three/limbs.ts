@@ -54,8 +54,8 @@ function epaulette(b: PartBuilder, c: BodyCtx, side: "L" | "R", rings: readonly 
     const n = kind === 3 ? 6 : 8;
     for (let i = 0; i < n; i++) {
       const phi = sx * (Math.PI / 2) + (i - (n - 1) / 2) * (kind === 3 ? 0.3 : 0.24);
-      if (kind === 3) boxBetween(b, surf(phi, top - r * 0.12, 0.004).p, surf(phi, top - r * 0.12 - 0.05, 0.004).p, 0.028, 0.028, tone(gold, i % 2 ? 0.85 : 1.1));
-      else boxBetween(b, surf(phi, top - r * 0.1, 0.002).p, surf(phi, top - r * 0.1 - 0.09, 0.002).p, 0.011, 0.011, gold);
+      if (kind === 3) boxBetween(b, surf(phi, top - r * 0.12, 0.0165).p, surf(phi, top - r * 0.12 - 0.05, 0.0165).p, 0.028, 0.028, tone(gold, i % 2 ? 0.85 : 1.1));
+      else boxBetween(b, surf(phi, top - r * 0.1, 0.0075).p, surf(phi, top - r * 0.1 - 0.09, 0.0075).p, 0.011, 0.011, gold);
     }
   }
   if (kind === 4) {
@@ -634,7 +634,7 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, ki
   const { footH } = c;
   const { fl, fw, H, heelZ, toeUp } = d;
   const yFloor = -legLen - footH;
-  const soleC = kind.clog ? tone(bootC, 0.8) : kind.soft ? tone(bootC, 0.55) : tone(bootC, 0.5);
+  const soleC = kind.clog ? tone(bootC, 0.8) : kind.patten ? singe(PALETTE.material.wood, c.burnt) : kind.reed ? tone(bootC, 0.72) : kind.soft ? tone(bootC, 0.55) : tone(bootC, 0.5);
   // Loft axis: local +Y = forward (world -Z) after the rotation, local Z = up; cz lifts the section off the ground.
   const rings = footUpperRings(d, bootC, kind);
   b.loft(rings, bootC, [0, yFloor + 0.012, heelZ], [-Math.PI / 2, 0, 0], undefined, { segments: 8 });
@@ -658,7 +658,17 @@ function buildFoot(b: PartBuilder, c: BodyCtx, legLen: number, bootC: number, ki
     b.loft([{ y: 0.03, rx: fw * 0.5, rz: H * 0.5, cz: H * 0.55, color: spat }, { y: fl * 0.5, rx: fw * 0.55, rz: H * 0.42, cz: H * 0.5, crease: true, color: spat }], bootC, [0, yFloor + 0.025, heelZ - fl * 0.02], [-Math.PI / 2, 0, 0], undefined, { capBottom: false });
   }
   if (kind.hobnails) for (let i = 0; i < 6; i++) b.cone(0.013, 0.01, PALETTE.trim.hobnail, [((i % 2) - 0.5) * fw * 0.6, yFloor + 0.003, heelZ - fl * (0.15 + (i >> 1) * 0.3)], [Math.PI, 0, 0]); // (nail heads under the sole, points down)
-  if (kind.soft) {
+  if (kind.reed) {
+    // reed sandal: two crossed straps over the instep and a loop round the heel
+    const strap = tone(bootC, 0.62);
+    for (const k of [0.34, 0.58]) b.box(fw * 0.7, H * 0.09, fl * 0.07, strap, [0, yFloor + H * (0.62 - 0.12 * k), heelZ - fl * k]);
+    b.box(fw * 0.62, H * 0.12, fl * 0.05, strap, [0, yFloor + H * 0.45, heelZ + fl * 0.02]);
+  }
+  if (kind.patten) {
+    // mud pattens: two cross-bars of wood under the sole, standing the shoe clear of the silt (the soles are flush with the ground in the rest pose)
+    for (const k of [0.16, 0.62]) b.box(fw * 1.02, footH * 0.7, fl * 0.1, soleC, [0, yFloor + footH * 0.35, heelZ - fl * k]);
+  }
+  if (kind.soft && !kind.reed && !kind.patten) {
     // slipper: a pompom / a curled toe tip
     b.sphere(fw * 0.14, tone(bootC, 1.35), [0, yFloor + H * 0.7, heelZ - fl * 0.98]);
   }

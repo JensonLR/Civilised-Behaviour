@@ -4,6 +4,7 @@ import { FOLLOWER_DEFS, wageDue } from "@cb/shared";
 import { LOADOUT_ITEMS, loadWord, normalizeLoadout, stepLoadout, trimLoadout, validateLoadout, type LoadoutKey } from "@cb/shared";
 import { moraleBand } from "@cb/shared";
 import { Modal, h } from "./modal.ts";
+import { sheetHints } from "./sheetHints.ts";
 import "./loadout.css";
 
 /**
@@ -61,6 +62,7 @@ export class LoadoutSheet {
       h("div", { class: "body" }, h("h3", {}, "Stores"), this.ledger, this.summary, this.gauge, this.problems, h("h3", {}, "Hired hands"), this.crew),
       this.status,
       h("div", { class: "row actions" }, leave, prepare),
+      sheetHints({ choose: "Choose" }).el,
     );
     this.modal.onClose = () => {
       if (!this.quiet && !this.confirmed) this.cb?.close();

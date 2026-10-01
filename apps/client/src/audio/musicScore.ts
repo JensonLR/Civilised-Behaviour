@@ -89,6 +89,12 @@ function nearestChordTone(degree: number, near: number): number {
   return best;
 }
 
+/** The chord root (scale degree, 0 = I) of each bar of phrase `phrase`: what `generatePhrase` plays, so the layered stems (musicStems.ts) sit on the same changes. */
+export function chordDegrees(mode: MusicMode, seed: number, phrase: number): readonly number[] {
+  const variant = phrase % 4 === 3 ? 0 : phrase;
+  return PROGRESSIONS[mode][hash3(seed, variant >> 1, 11) % PROGRESSIONS[mode].length]!;
+}
+
 /**
  * One eight-bar phrase: an array of bars, each an array of notes. `phrase` counts phrases since the music began; every fourth phrase repeats
  * the first so the ear can hold on to something.
@@ -96,7 +102,7 @@ function nearestChordTone(degree: number, near: number): number {
 export function generatePhrase(mode: MusicMode, seed: number, phrase: number): Note[][] {
   const info = MODES[mode];
   const variant = phrase % 4 === 3 ? 0 : phrase; // the tune comes home
-  const prog = PROGRESSIONS[mode][hash3(seed, variant >> 1, 11) % PROGRESSIONS[mode].length]!;
+  const prog = chordDegrees(mode, seed, phrase);
   const rng = new Rng(hash3(seed, variant, 7));
   const bars: Note[][] = [];
   const cells = info.beats === 3 ? CELLS_3 : CELLS_4;

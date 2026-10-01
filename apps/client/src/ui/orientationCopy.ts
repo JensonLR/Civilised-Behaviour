@@ -1,8 +1,8 @@
 import type { Device, OrientStep } from "./orientationLogic.ts";
 
 /**
- * The words of the first-run orientation card (D-035, R). Authored copy, pending developer review (docs/AI_CONTENT_REGISTER.md). `{key}` placeholders are filled from the player's
- * LIVE key bindings (a rebind shows up at once); the pad lines name the pad's fixed layout. The Society takes orientation seriously, in the way it takes everything it can bill for.
+ * The words of the first-run orientation card (D-035, R). Authored copy, pending developer review (docs/AI_CONTENT_REGISTER.md). `{prompt}` tokens (`{move}`, `{use}`, `{skip}`: any `PromptId`, see input/glyphDom.ts) become the glyph of the device in use, from the player's
+ * LIVE bindings (a rebind or a change of device shows up at once); no key or button name is written here. The Society takes orientation seriously, in the way it takes everything it can bill for.
  */
 
 export const ORIENT_TITLE = "Form 1: Arrival";
@@ -12,18 +12,18 @@ export const ORIENT_DONE = "Orientation complete. The Society notes your attenda
 export const ORIENT_REPLAY = "Replay the orientation";
 
 export const ORIENT_HINT: Readonly<Record<Device, string>> = {
-  keyboard: "Esc skips it for good. The Field Manual (F1) has it again.",
-  pad: "Back skips it for good. The Field Manual has it again.",
+  keyboard: "{skip} skips it for good. The Field Manual (F1) has it again.",
+  pad: "{skip} skips it for good. The Field Manual has it again.",
 };
 
 export const ORIENT_TEXT: Readonly<Record<OrientStep, Readonly<Record<Device, string>>>> = {
   move: {
     keyboard: "Stretch your legs: walk a few paces about the camp ({move}).",
-    pad: "Stretch your legs: walk a few paces about the camp (left stick).",
+    pad: "Stretch your legs: walk a few paces about the camp ({move}).",
   },
   look: {
     keyboard: "Look about you: turn right round with the mouse, as one does at a view.",
-    pad: "Look about you: turn right round with the right stick, as one does at a view.",
+    pad: "Look about you: turn right round with {look}, as one does at a view.",
   },
   pin: {
     keyboard: "Find the survey table: turn until its pin, \"Map room\", sits dead ahead on the heading strip.",
@@ -31,15 +31,15 @@ export const ORIENT_TEXT: Readonly<Record<OrientStep, Readonly<Record<Device, st
   },
   board: {
     keyboard: "Read the notice board by the marquee ({use}). Do not argue with it.",
-    pad: "Read the notice board by the marquee (X). Do not argue with it.",
+    pad: "Read the notice board by the marquee ({use}). Do not argue with it.",
   },
   supply: {
     keyboard: "Open the supply manifest at the crate pyramid ({use}). Everything is billed; the horses are not consulted.",
-    pad: "Open the supply manifest at the crate pyramid (X). Everything is billed; the horses are not consulted.",
+    pad: "Open the supply manifest at the crate pyramid ({use}). Everything is billed; the horses are not consulted.",
   },
   map: {
     keyboard: "Consult the map room at the survey table ({use}). The boat is optional; the paperwork is not.",
-    pad: "Consult the map room at the survey table (X). The boat is optional; the paperwork is not.",
+    pad: "Consult the map room at the survey table ({use}). The boat is optional; the paperwork is not.",
   },
 };
 
@@ -52,7 +52,3 @@ export const ORIENT_STEP_NAME: Readonly<Record<OrientStep, string>> = {
   map: "Open the map room",
 };
 
-/** Fills `{move}` / `{use}` from the live bindings' labels. */
-export function fillKeys(text: string, keys: { move: string; use: string }): string {
-  return text.replace("{move}", keys.move).replace("{use}", keys.use);
-}

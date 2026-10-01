@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { layerEnd, layersEnd, type Layer } from "./dsp.ts";
 import { REQUIRED_SOUNDS, SOUNDS, SOUND_NAMES, type SoundDef } from "./sounds.ts";
 import { variantSeed } from "./bake.ts";
+import { GRIT_SOUND_NAMES } from "./soundsGrit.ts";
 
 const build = (name: string, def: SoundDef, key: string, variant: number): Layer[] => def.layers({ pitch: 1, rng: new Rng(variantSeed(name, key, variant)), key, variant });
 
@@ -11,6 +12,11 @@ describe("sound registry", () => {
     for (const n of REQUIRED_SOUNDS) expect(SOUNDS[n], n).toBeDefined();
     for (const n of ["musket_shot", "pistol_shot", "blunderbuss_shot", "cannon_shot", "sabre_swing", "sabre_hit", "reload_click", "impact_flesh", "impact_wood", "impact_earth", "impact_iron", "explosion"]) expect(SOUND_NAMES).toContain(n);
     for (const n of ["footstep_grass", "footstep_dirt", "footstep_stone", "footstep_wood"]) expect(SOUND_NAMES).toContain(n);
+  });
+
+  it("the grit pass's names are all registered (gore, impacts, foley, boots, tails, the regions' voices): gritSounds.test.ts measures each", () => {
+    for (const n of GRIT_SOUND_NAMES) expect(SOUND_NAMES, n).toContain(n);
+    for (const n of ["gore_flesh_heavy", "gore_flesh_light", "gore_bone", "gore_sever_wet", "gore_blood_ground", "gore_body_fall", "gore_bad_breath", "impact_splinter", "impact_chip", "impact_ring", "impact_splash", "foley_cloth", "foley_gear", "foley_holster", "foley_draw", "foley_ramrod", "foley_powder", "foley_cock", "foley_shell", "footstep_mud", "footstep_sand", "footstep_plank", "explosion_tail"]) expect(SOUND_NAMES).toContain(n);
   });
 
   it("every definition is sane: priorities, caps, distances and levels", () => {

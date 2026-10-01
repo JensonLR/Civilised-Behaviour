@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, SphereGeometry, type Group, type Scene, type Vector3 } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
-import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel, type RideInput } from "@cb/procedural/three";
+import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
 import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
@@ -58,6 +58,8 @@ export interface ActorPose {
   combat?: ActorCombat;
   /** Sitting a horse (`MountView.rideInput`): the animator blends the riding pose over its own. Absent = on foot. */
   ride?: RideInput;
+  /** What the world is doing to this body now (mud underfoot, a blast or fire near, rain, water): it gathers mud and soot (D-038, `stepExposure`). Absent = nothing accrues. A shared scratch object is fine: it is read at once. */
+  ground?: Omit<ExposureInput, "moving">;
 }
 
 /** The replicated combat state of one figure, as the actor needs it. */
@@ -70,6 +72,8 @@ export interface ActorCombat {
   reload: number;
   /** Working a cannon (0..1). */
   crew?: number;
+  /** The `WEAPON` ids this body carries (the ones not in the hands hang on it: pistol and sabre on the hips, long guns slung). Absent = none drawn. */
+  carried?: readonly number[];
 }
 
 /**
@@ -104,6 +108,11 @@ export class CharacterActor {
   private headShadow: Mesh | undefined;
   /** The first-person viewmodel draws this body's arms and weapon: here they cast their shadow and nothing else (render/ghost.ts). */
   private viewmodelOn = false;
+  /** Open wounds, mud and soot on the body (procedural/three/wounds.ts): re-made only when a level changes. */
+  private marks!: BodyMarks;
+  private readonly exposure: Exposure = { mud: 0, soot: 0 };
+  private downedFor = 0;
+  private marksKey = -1;
 
   constructor(
     private readonly scene: Scene,
@@ -140,8 +149,11 @@ export class CharacterActor {
     const prevYaw = prev?.rotation.y ?? 0;
     this.ragdoll?.dispose();
     this.ragdoll = undefined;
+    this.marks?.dispose();
     this.rig?.dispose();
     this.rig = buildCharacter(spec, { outline: this.outline });
+    this.marks = new BodyMarks(this.rig);
+    this.marksKey = -1;
     this.anim = new CharacterAnimator(this.rig);
     this.hands = new HandPoser(this.rig);
     this.weapons?.dispose();
@@ -272,6 +284,25 @@ export class CharacterActor {
     this.ragdoll = world.spawn(this.rig, { vx: this.lastVx, vy: this.lastVy, vz: this.lastVz, dx: e.dx, dz: e.dz, power: e.power, zone: e.zone });
   }
 
+  /**
+   * The wounds of a body that is down are OPEN (the living wear dressings) and dry over the minutes it lies there; mud and soot gather from `pose.ground` and show as levels 0..3. The
+   * marks are re-made only when one of those changes, never per frame.
+   */
+  private updateMarks(dt: number, pose: ActorPose, gore: GoreLevel, downed: boolean): void {
+    const lying = downed || this.ragdoll !== undefined;
+    this.downedFor = downed ? this.downedFor + dt : 0;
+    const g = pose.ground;
+    if (g) stepExposure(this.exposure, dt, { mud: g.mud, moving: this.lastSpeed > 0.5, blast: g.blast, rain: g.rain, washing: g.washing });
+    const open = lying ? (pose.wounds ?? 0) : 0;
+    const dryB = Math.min(3, Math.floor(Math.min(1, this.downedFor / 180) * 4));
+    const mud = grimeLevel(this.exposure.mud);
+    const soot = grimeLevel(this.exposure.soot);
+    const key = ((((open * 4 + dryB) * 4 + mud) * 4 + soot) * 3) + (gore === "full" ? 0 : gore === "reduced" ? 1 : 2);
+    if (key === this.marksKey) return;
+    this.marksKey = key;
+    this.marks.set({ open, dryness: dryB / 3, mud, soot, gore });
+  }
+
   /** `showLimbs` false (a personal comfort setting) renders lost limbs as ordinary grievous wounds instead of stumps. */
   update(dt: number, pose: ActorPose, gore: GoreLevel = "full", showLimbs = true): void {
     const downed = (pose.flags & FLAG.DOWNED) !== 0;
@@ -303,6 +334,7 @@ export class CharacterActor {
       hidden: busy,
       crew: (pose.flags & FLAG.OPERATING) !== 0 ? Math.max(c?.crew ?? 0, 1) : 0,
       fp: this.fpBlend,
+      carried: c?.carried,
     });
     this.anim.motion = getReduceMotion() ? 0.3 : 1;   // hair sway only (D-037): 30% under "reduce motion"
     this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride });
@@ -319,6 +351,7 @@ export class CharacterActor {
     if (this.fpBlend > 0.002) this.poseFirstPersonArms(dt, pose);
     this.rig.setWounds(pose.wounds ?? 0, gore);
     this.rig.setMissing(showLimbs ? (pose.missing ?? 0) : 0, gore);
+    this.updateMarks(dt, pose, gore, downed);
     if (this.viewmodelOn) this.applyViewmodelGhost();
 
     const rd = this.ragdoll;
@@ -398,6 +431,7 @@ export class CharacterActor {
   }
 
   dispose(): void {
+    this.marks.dispose();
     this.ragdoll?.dispose();
     this.ragdoll = undefined;
     this.weapons?.dispose();

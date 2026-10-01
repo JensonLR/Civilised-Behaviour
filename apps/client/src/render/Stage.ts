@@ -15,6 +15,8 @@ import {
 } from "three";
 import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld, type HqHistoryPiece, type RegionDress, type RegionId, type ScenarioView } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
+import type { GoreLevel } from "@cb/procedural/three";
+import { DecalField, type DecalPreset } from "./decals/index.ts";
 import { createRegionView, type RegionView } from "./world/regionView.ts";
 import { setToonLite } from "./world/toon.ts";
 import { atmoUniforms, atmosphereForWriting, motion, motionScale, windGain } from "./world/atmosphere.ts";
@@ -89,6 +91,12 @@ export const PRESETS: Record<"low" | "medium" | "high" | "test", GraphicsPreset>
 };
 export type PresetName = keyof typeof PRESETS;
 
+/** The decal cap that goes with a graphics preset (the test preset, like low, keeps the field small). */
+function decalPresetOf(p: GraphicsPreset): DecalPreset {
+  for (const [name, v] of Object.entries(PRESETS)) if (v === p) return name === "high" ? "high" : name === "medium" ? "medium" : "low";
+  return p.grassTufts >= 8000 ? "high" : p.grassTufts >= 5000 ? "medium" : "low";
+}
+
 /**
  * Owns the WebGL renderer, scene lighting, sky and static world dressing, and the time of day and weather. In a room the hour and the
  * weather are pure functions of the server's world age (`SkyClock`, fed by `syncWorldClock`), so every player sees the same sky; `?time=`
@@ -115,6 +123,8 @@ export class Stage {
   private worldSec = 0;
   private worldView?: RegionView;
   private preset: GraphicsPreset;
+  /** D-038: the field's persistent marks (blood pools, spray, drags, scorch, mud): ONE instanced draw call, kept across frames, cleared when the region changes. Gore level via `setGore`. */
+  readonly decals: DecalField;
 
   get outlines(): boolean {
     return this.preset.outlines;
@@ -178,9 +188,20 @@ export class Stage {
     this.scene.add(this.sun, this.sun.target);
 
     this.makeSky();
+    this.decals = new DecalField(this.scene, (x, z) => this.builtFor?.terrainHeight(x, z) ?? 0, decalPresetOf(this.preset));
     this.applyDay();
     this.resize();
     window.addEventListener("resize", () => this.resize());
+  }
+
+  /** The gore setting (Full / Reduced / Off) for the persistent marks: Off leaves iodine-yellow stains and soot, never red. */
+  setGore(level: GoreLevel): void {
+    this.decals.setGore(level);
+  }
+
+  /** Where the local player stands, once a frame: a region with walkable interiors lifts the roof over the room the viewer is in (docs/LEVEL_PLAN.md section 4, rule 7). */
+  setViewer(x: number, z: number): void {
+    this.worldView?.setViewer?.(x, z);
   }
 
   /** (Re)builds the dome for the preset: the painted sky, or the flat one. */
@@ -209,6 +230,7 @@ export class Stage {
 
   /** Builds the world (painted terrain, hills, trees, rocks, ground cover, the camp) from the same deterministic data the server simulates. */
   buildWorld(world: CollisionWorld, region: RegionId = "hollowmere", seed?: number): void {
+    if (region !== this.builtRegion) this.decals.pool.clear(); // (blood is world space: it does not follow the party across the sea)
     this.builtFor = world;
     this.builtRegion = region;
     this.builtSeed = seed; // (Highmark's herds and signs are a pure function of the world seed; a preset change rebuilds with the same one)
@@ -298,6 +320,7 @@ export class Stage {
     this.sun.shadow.map = null;
     this.sun.shadow.mapSize.set(next.shadowMapSize, next.shadowMapSize);
     this.resize();
+    this.decals.setPreset(decalPresetOf(next));
     if (next.sky !== prevSky) {
       this.makeSky();
       this.applyDay();
@@ -429,6 +452,7 @@ export class Stage {
     this.updateSky(performance.now(), dt);
     this.applyDay();
     this.worldView?.update(now, this.camera.position, this.worldSec);
+    this.decals.update(dt);
     this.renderer.render(this.scene, this.camera);
   }
 }

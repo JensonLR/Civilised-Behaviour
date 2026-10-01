@@ -1,9 +1,10 @@
-import { getBindings, keyLabel } from "../input/bindings.ts";
-import { onSettingChange } from "../settings.ts";
+import { bindPrompt } from "../input/glyphDom.ts";
+import type { InputDevice } from "../input/devices.ts";
 
 /**
  * The parts of the in-game HUD that are not the gauge and the cards: the expedition number with its "Copy invite" button (top right) and the line of
- * key hints (bottom right). The hints are written from the CURRENT key bindings and rewritten when a key is rebound. Returns a function that removes
+ * hints (bottom right). The hints are prompt tokens (input/glyphDom.ts): they take the glyphs of the device in use and the player's own bindings, and are rewritten
+ * when a key is rebound or the player picks up the other device. Returns a function that removes
  * both and stops listening (leaving an expedition, tests).
  */
 export function buildHudChrome(hud: HTMLElement, code: string, link: string): () => void {
@@ -22,16 +23,14 @@ export function buildHudChrome(hud: HTMLElement, code: string, link: string): ()
   hud.prepend(bar);
   const help = document.createElement("div");
   help.className = "help";
-  const k = (id: "sprint" | "jump" | "crouch" | "view"): string => keyLabel(getBindings()[id][0]);
-  const write = (): void => {
-    const move = (["forward", "left", "back", "right"] as const).map((id) => keyLabel(getBindings()[id][0])).join("");
-    help.textContent = `Esc pause · F1 manual · ${move} move · ${k("sprint")} sprint · ${k("jump")} jump · ${k("crouch")} crouch · ${k("view")} view`;
-  };
-  write();
-  const off = onSettingChange((key) => (key === "bindings" || key === "all") && write());
+  const hints = (device: InputDevice): string =>
+    device === "keyboard"
+      ? "{pause} pause · F1 manual · {move} move · {sprint} sprint · {jump} jump · {crouch} crouch · {view} view"
+      : "{pause} pause · {move} move · {jump} jump · {aim} aim · {fire} fire · {interact} use · {view} view";
+  const offHints = bindPrompt(help, hints);
   hud.append(help);
   return () => {
-    off();
+    offHints();
     window.clearTimeout(timer);
     bar.remove();
     help.remove();

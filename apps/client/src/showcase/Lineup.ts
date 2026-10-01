@@ -1,9 +1,10 @@
 import { Vector3 } from "three";
-import { CollisionWorld, FLAG, WEAPON, ZONE_COUNT, setWound } from "@cb/shared";
-import { ARCHETYPES, FIELDS, computeProportions, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
+import { CollisionWorld, FLAG, PEOPLE_IDS, WEAPON, ZONE_COUNT, setWound, type PeopleId } from "@cb/shared";
+import { ARCHETYPES, FIELDS, applyPeople, computeProportions, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId } from "@cb/procedural/three";
 import { RagdollWorld } from "../render/Ragdoll.ts";
 import { WeaponRig } from "../render/weapons/WeaponRig.ts";
+import { FIT_SHAPES } from "@cb/procedural/fit-shapes";
 import { PRESETS } from "../ui/creatorLogic.ts";
 import { LabStage } from "./LabStage.ts";
 
@@ -17,6 +18,8 @@ import { LabStage } from "./LabStage.ts";
  *   wield=rifle   rifle|blunderbuss|pistol|sabre|umbrella in the hands (any pose), aimw=1 aiming it, sw=0.4 a blow in flight
  *                 steps=N settles the animator for N frames (default 90) so different gait phases can be reviewed
  *   act=0         no idle acts / ambient life (a plain standing pose; the idle acts move the arms and make fit stills differ from figure to figure)
+ *   shapes=stubbyWide,tallThin,seed3   one figure per named fit-audit body shape (FIT_SHAPES names); the sliders come from the shape, everything else from the seeded character
+ *   people=kessarine|all   re-draw every figure as a person of that fictional people (applyPeople; "all" cycles the six; "wayfarers" for the hub mix)
  *   look=<code>   show exactly one encoded character (from the creator) instead of the row
  *   presets=1     the creator's curated archetype presets, in order (n and seed are ignored)
  *   marks=1       add campaign history marks (scars, gold tooth, eyepatch, wooden leg, medals)
@@ -76,6 +79,21 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
   else {
     const n = Number(params.get("n") ?? ARCHETYPES.length);
     for (let i = 0; i < n; i++) specs.push(generateCharacter(seed + i * 7919, i % ARCHETYPES.length));
+  }
+  const shapeNames = (params.get("shapes") ?? "").split(",").filter(Boolean);
+  if (shapeNames.length) {
+    specs.length = 0;
+    shapeNames.forEach((name, i) => {
+      const shape = FIT_SHAPES.find((f) => f.name === name);
+      const base = generateCharacter(seed + i * 7919, i % ARCHETYPES.length);
+      if (shape) for (const k of ["height", "headScale", "torsoWidth", "torsoDepth", "belly", "shoulderWidth", "armLength", "legLength", "handScale", "footScale", "noseScale", "earScale", "jaw", "posture"] as const) base[k] = shape.spec[k];
+      specs.push(base);
+    });
+  }
+  const people = params.get("people");
+  if (people) {
+    const ids = people === "all" ? PEOPLE_IDS.filter((p) => p !== "wayfarers") : [people as PeopleId];
+    specs.forEach((s, i) => void Object.assign(s, applyPeople(s, ids[i % ids.length]!, seed + i * 31)));
   }
   const same = params.get("same");
   if (same !== null && specs[Number(same)]) {

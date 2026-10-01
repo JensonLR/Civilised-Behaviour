@@ -1,4 +1,4 @@
-import { FIELDS, type CharacterSpec, type FieldDef } from "../../spec.ts";
+import { FIELDS, NATIVE_FROM, type CharacterSpec, type FieldDef } from "../../spec.ts";
 import { addedPrims, judgeFloating, judgePenetration, judgePoseClip, makeTag, measure, POSES, type Finding, type FitPrim, type Measured, type PoseDef } from "./penetration.ts";
 import { FIT_SHAPES, hash2, JACKET_ROTATION, needsFor, optionValues, plainBase, sweepFields, type FitShape } from "./shapes.ts";
 
@@ -8,6 +8,8 @@ import { FIT_SHAPES, hash2, JACKET_ROTATION, needsFor, optionValues, plainBase, 
  */
 
 export interface SweepOptions {
+  /** The fictional peoples' options (NATIVE_FROM: index >= the first native one) are a second table with their own ratchet (fitNative.test.ts): "skip" (default) leaves them out, "only" runs only them. */
+  natives?: "skip" | "only";
   /** Shapes each option is tried on: the two bug-report bodies always, plus this many more, chosen by a stable hash of the option so a sweep covers them all over the catalog. */
   extraShapes?: number;
   /** Restrict to some fields. */
@@ -40,6 +42,8 @@ export function sweepCases(o: SweepOptions = {}): OptionCase[] {
     if (o.fields && !o.fields.includes(f.key)) continue;
     const fi = (FIELDS as readonly FieldDef[]).indexOf(f);
     for (const v of optionValues(f)) {
+      const nat = NATIVE_FROM[f.key] !== undefined && v >= NATIVE_FROM[f.key]!;
+      if ((o.natives === "only") !== nat) continue;
       const shapes = [...fixed];
       for (let k = 0; k < extra; k++) shapes.push(rest[hash2(fi * 131 + v, k) % rest.length]!);
       for (const shape of new Set(shapes)) {

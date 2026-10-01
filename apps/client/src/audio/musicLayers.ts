@@ -31,7 +31,7 @@ export const LAYER_TARGET: Readonly<Record<MusicMood, Readonly<Record<MusicLayer
   calm: { bed: 1, pulse: 0, dread: 0, drive: 0, stabs: 0, dirge: 0, colour: 0.45 },
   tension: { bed: 0.55, pulse: 0.8, dread: 0.55, drive: 0, stabs: 0, dirge: 0, colour: 0.55 },
   combat: { bed: 0.28, pulse: 0.35, dread: 0.5, drive: 1, stabs: 0.8, dirge: 0, colour: 0.4 },
-  aftermath: { bed: 0.12, pulse: 0, dread: 0.2, drive: 0, stabs: 0, dirge: 1, colour: 0.3 },
+  aftermath: { bed: 0.1, pulse: 0, dread: 0.2, drive: 0, stabs: 0, dirge: 1, colour: 0.2 },
 };
 
 /** Seconds a layer takes to go from 0 to 1 (attack) and from 1 to 0 (release): drums arrive fast and leave slowly, the dirge arrives slowly. */

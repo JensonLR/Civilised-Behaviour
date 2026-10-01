@@ -62,10 +62,10 @@ const A1K = rawA(1000);
 export const aWeight = (f: number): number => (rawA(f) / A1K) ** 2;
 
 /** Spectral centroid and 3-band split of the A-weighted power (what is actually audible, not what is merely large). */
-export function spectrum(data: Float32Array, sampleRate: number): { centroid: number; bands: [number, number, number] } {
+export function spectrum(data: Float32Array, sampleRate: number, seconds = 2): { centroid: number; bands: [number, number, number] } {
   const N = 2048;
   if (data.length < N + 1) return { centroid: 0, bands: [0, 0, 0] };
-  const limit = Math.min(data.length - N, sampleRate * 2);
+  const limit = Math.min(data.length - N, sampleRate * seconds);
   const power = new Float64Array(N / 2);
   const re = new Float64Array(N);
   const im = new Float64Array(N);

@@ -20,6 +20,13 @@ export const JACKET_CUT: Record<number, { waist: number; chest: number; shoulder
   8: { waist: 0.97, chest: 1.0, shoulder: 1.02, pow: 0 },
   9: { waist: 0.94, chest: 1.03, shoulder: 1.05, pow: 0.1 }, // reefer: short, snug, square-shouldered
   10: { waist: 1.04, chest: 1.04, shoulder: 1.03, pow: 0.5 }, // Norfolk: boxy
+  // the fictional peoples' garments (D-038): cut from the same few shapes
+  11: { waist: 1.03, chest: 1.03, shoulder: 1.02, pow: 0.2 }, // stone smock: loose, boxy
+  12: { waist: 0.98, chest: 1.0, shoulder: 1.0, pow: 0 }, // lamp robe: narrow and straight
+  13: { waist: 1.03, chest: 1.03, shoulder: 1.02, pow: 0.1 }, // herd cloak (the coat under the mantle): bulk
+  14: { waist: 1.0, chest: 1.01, shoulder: 1.0, pow: 0 }, // crepe shawl (the bodice under it)
+  15: { waist: 1.03, chest: 1.03, shoulder: 1.02, pow: 0.3 }, // wading smock: roomy
+  16: { waist: 1.03, chest: 1.03, shoulder: 1.02, pow: 0.1 }, // court cloak
 };
 
 /** The torso's cross-sections, bone-local (origin at the waist joint, +Y up to the base of the neck). Shared with the wound dressings. */

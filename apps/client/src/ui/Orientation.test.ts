@@ -158,11 +158,13 @@ describe("the first-run orientation card", () => {
     tick(o, 0, 0, 0, { device: "keyboard" });
     const kb = card().textContent!;
     expect(kb).toContain("Esc skips");
+    expect(items()[0]!.querySelector(".what kbd.glyph")).not.toBeNull();
     expect(items()[0]!.querySelector(".what")!.textContent).not.toContain("{");
     tick(o, 0, 0, 0, { device: "pad" });
     const pad = card().textContent!;
-    expect(pad).toContain("Back skips");
-    expect(items()[0]!.querySelector(".what")!.textContent).toContain("left stick");
+    expect(pad).toContain("View skips");
+    expect(items()[0]!.querySelector(".what [data-prompt='move']")).not.toBeNull();
+    expect(items()[0]!.querySelector(".what kbd")).toBeNull();
     expect(pad).not.toContain("Esc skips");
     o.dispose();
   });

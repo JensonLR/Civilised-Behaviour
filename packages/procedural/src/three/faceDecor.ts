@@ -251,6 +251,24 @@ export function buildFaceDecor(c: FaceCtx): void {
   } else if (paint === 6) {
     // a soot mask across the eyes
     strip(c, front, [[-0.8 * R, 0.12 * R], [-0.4 * R, 0.08 * R], [0, 0.06 * R], [0.4 * R, 0.08 * R], [0.8 * R, 0.12 * R]], (t) => R * (0.09 + 0.05 * Math.sin(Math.PI * t)), PALETTE.material.soot);
+  } else if (paint === 7) {
+    // lime dabs (the Mereborn): thumb-prints of lime-wash on both cheeks, the chin and the brow, from a day's whitewashing
+    for (const [x, y, r] of [[0.46, -0.2, 0.1], [-0.46, -0.2, 0.1], [0.2, -0.7, 0.07], [-0.34, 0.6, 0.075], [0.4, 0.5, 0.06]] as const) fan(c, front, blob(x * R, y * R, r * R, seed + Math.round(x * 17), 10, 0.15), PALETTE.trim.zinc, 2);
+  } else if (paint === 8) {
+    // the lamp-soot line (the Kessarine): one clean line of lamp soot from temple to temple across the brow, and a dab at its centre
+    strip(c, front, [[-0.7 * R, 0.5 * R], [-0.35 * R, 0.56 * R], [0, 0.58 * R], [0.35 * R, 0.56 * R], [0.7 * R, 0.5 * R]], R * 0.04, PALETTE.material.soot);
+    fan(c, front, blob(0, 0.7 * R, 0.05 * R, seed + 3, 8, 0.1), PALETTE.material.soot, 2);
+  } else if (paint === 9) {
+    // grange stripes (the Marchers): three diagonal bars of ochre across one cheek, the way the herders tally a day
+    for (let k = 0; k < 3; k++) strip(c, front, [[(0.28 + k * 0.1) * R, 0.02 * R], [(0.4 + k * 0.1) * R, -0.28 * R]], R * 0.03, PALETTE.cloth[3]!);
+  } else if (paint === 10) {
+    // an ash brow (the Vesperine): a smear of grey ash over both brows and down the nose, worn at a funeral
+    const ash = mix(c.skin, PALETTE.hair[6], 0.72);
+    strip(c, front, [[-0.55 * R, 0.4 * R], [-0.25 * R, 0.43 * R], [0.25 * R, 0.43 * R], [0.55 * R, 0.4 * R]], R * 0.07, ash);
+    strip(c, front, [[0, 0.4 * R], [0, 0.1 * R]], R * 0.025, ash);
+  } else if (paint === 11) {
+    // tide lines (the Brinefolk): three wavy teal lines under each eye, one for each tide a child has fished
+    for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) strip(c, front, [[sx * 0.3 * R, (-0.04 - k * 0.07) * R], [sx * 0.42 * R, (-0.02 - k * 0.07) * R], [sx * 0.54 * R, (-0.06 - k * 0.07) * R], [sx * 0.64 * R, (-0.03 - k * 0.07) * R]], R * 0.016, PALETTE.cloth[10]);
   }
 
   // ---- tattoos ----------------------------------------------------------------------------------------------------------------------------

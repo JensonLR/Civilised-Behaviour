@@ -23,6 +23,19 @@ describe("the tables", () => {
     expect(LAYER_TARGET.combat.drive).toBeGreaterThan(LAYER_TARGET.calm.drive);
     for (const m of MUSIC_MOODS) expect(LAYER_TARGET[m].dirge > 0.5).toBe(m === "aftermath");
   });
+  it("the aftermath is the quiet, dark mood: the dirge carries it, the drums and stabs are out, the colour is thinner than in the calm", () => {
+    const a = LAYER_TARGET.aftermath;
+    expect(a.dirge).toBe(1);
+    expect(a.drive + a.stabs + a.pulse).toBe(0);
+    expect(a.colour).toBeLessThan(LAYER_TARGET.calm.colour);
+    expect(a.bed).toBeLessThan(LAYER_TARGET.tension.bed);
+  });
+  it("combat keeps the jolly bed under the drums (thinner, never gone), and tension adds the pulse and the drone before any drum", () => {
+    expect(LAYER_TARGET.combat.bed).toBeGreaterThan(0.2);
+    expect(LAYER_TARGET.combat.drive + LAYER_TARGET.combat.stabs).toBeGreaterThan(1.5);
+    expect(LAYER_TARGET.tension.drive).toBe(0);
+    expect(LAYER_TARGET.tension.pulse + LAYER_TARGET.tension.dread).toBeGreaterThan(1);
+  });
   it("every region has a colour", () => {
     for (const r of REGION_IDS) expect(REGION_COLOUR[r].instrument.length).toBeGreaterThan(3);
   });

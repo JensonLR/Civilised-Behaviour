@@ -22,7 +22,7 @@ export const HAIR_SWAY_MAX = { x: 0.05, y: 0.015, z: 0.08 } as const;
 /** The quadrants of the sway box, in the order the shader reads them: (right, back), (right, forward), (left, back), (left, forward) as the signs of (x, z). */
 const QUADRANT: readonly (readonly [number, number])[] = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
 /** How much deeper than it already sits a hair vertex may be driven into the skull, neck or trunk by the sway (metres). */
-const SWAY_SINK = 0.003;
+const SWAY_SINK = 0.0015;
 
 /** The uniform one rig owns; the animator writes `value` (head bone frame, metres at weight 1). */
 export interface HairSwayUniform {
@@ -52,17 +52,20 @@ export function addHairSway(geo: BufferGeometry, flag: BufferAttribute, hf: Head
     const w = smooth(0.08, 1.0, stand / R);
     if (w < 0.01) continue; // (a root, or a short style's whole thickness: it does not move)
     const floor = Math.min(hf.solidDist(x, y, z), 0) - SWAY_SINK;
-    // the largest fraction s of a displacement (dx, dy, dz) at which the vertex is still outside `floor`: the full travel if that is clear, else the last of 6 steps outwards before it goes under, less 10% (conservative)
-    const safe = (dx: number, dyy: number, dz: number): number => {
-      if (hf.solidDist(x + dx, y + dyy, z + dz) >= floor) return 1;
-      // (marched from the root outwards, not bisected: a solid's distance is not monotone along a line, and the first place it goes under is where to stop)
+    // the largest fraction s of a displacement (dx, dy, dz) at which the vertex is still outside `floor`: the full travel if the whole path is clear, else the last clear place before it goes under, less 10%.
+    // SPHERE-TRACED (each step is 0.6 of the distance to the nearest solid, at least 1.2 mm): a thin obstacle (a ruff, a bedroll, a cape's rim) cannot be stepped over, which a fixed 6-step march could do (D-038).
+    const safe = (dx: number, dyy: number, dz: number, fixedY = 0): number => {
+      const L = Math.hypot(dx, dyy, dz);
+      if (L < 1e-9) return 1;
+      let t = 0;
       let s = 0;
-      for (let step = 1; step <= 6; step++) {
-        const t = step / 8;
-        if (hf.solidDist(x + dx * t, y + dyy * t, z + dz * t) < floor) break;
+      for (let step = 0; step < 80 && t < 1; step++) {
+        const d = hf.solidDist(x + dx * t, y + fixedY + dyy * t, z + dz * t) - floor;
+        if (d < 0) return s * 0.9;
         s = t;
+        t += Math.max(d * 0.6, 0.0012) / L;
       }
-      return s * 0.9;
+      return t >= 1 ? 1 : s * 0.9;
     };
     const up = safe(0, Y * w, 0);
     hsy[i] = w * up;
@@ -72,7 +75,8 @@ export function addHairSway(geo: BufferGeometry, flag: BufferAttribute, hf: Head
       const dz = QUADRANT[k]![1] * Z * w;
       // every combination of the three drives that are on (the animator moves them independently; a solid is not convex, so the corner alone is not enough)
       let m = 1;
-      for (const ax of [0, dx]) for (const ay of [0, Y * w * up]) for (const az of [0, dz]) if (ax !== 0 || ay !== 0 || az !== 0) m = Math.min(m, safe(ax, ay, az));
+      // (the lift is driven on its own weight: the x/z travel is scaled with the lift held at ITS full value, which is what the shader does)
+      for (const ay of [0, Y * w * up]) for (const [ax, az] of [[dx, 0], [0, dz], [dx, dz]] as const) m = Math.min(m, safe(ax, 0, az, ay));
       hsw[i * 4 + k] = w * m;
     }
   }

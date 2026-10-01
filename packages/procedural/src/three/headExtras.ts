@@ -112,6 +112,30 @@ export function buildHairAccessory(c: FaceCtx, hatOn: boolean): void {
       const dir = norm(add(add(t1, t2, -0.35), n, 0.15));
       b.cone(R * 0.05, R * 0.26, PALETTE.trim.ribbonGreen, add(root, [dir[0] * s, dir[1], dir[2]], R * 0.14), orient([dir[0] * s, dir[1], dir[2]]));
     }
+  } else if (a >= 6 && a <= 9) {
+    // the fictional peoples' hair ornaments (D-038): copper rings, bone pins, glass beads, herd-tags. Bare-headed they hang at the side of the head; under a hat, low behind the ear.
+    const d: V3 = low ? [0.82, 0.02, 0.58] : [0.84, 0.28, 0.12];
+    const { p, n, t1, t2 } = frame(c, d, R * 0.02);
+    if (a === 6) {
+      // copper rings: three small rings strung one below another on a lock
+      for (let k = 0; k < 3; k++) b.torus(R * (0.075 - 0.008 * k), R * 0.022, PALETTE.trim.bronze, add(add(p, t2, -R * 0.15 * k), n, R * 0.03), orient(t1));
+    } else if (a === 7) {
+      // bone pins: two long pins crossed through the hair, ivory
+      for (const sgn of [-1, 1]) {
+        const dir = norm(add(add(t1, t2, sgn * 0.7), n, 0.15));
+        const len = R * 0.62;
+        b.cylinder(R * 0.02, R * 0.02, len, PALETTE.trim.ivory, add(add(p, n, R * 0.02), dir, len * 0.45), orient(dir));
+        b.sphere(R * 0.04, PALETTE.trim.ivory, add(add(p, n, R * 0.02), dir, len * 0.95));
+      }
+    } else if (a === 8) {
+      // glass beads: a short cord of five beads hanging from the temple
+      const cols = [PALETTE.trim.visorGlass, PALETTE.trim.pearl, PALETTE.trim.gemGreen, PALETTE.trim.visorGlass, PALETTE.trim.pearl];
+      for (let k = 0; k < 5; k++) b.sphere(R * (0.045 + 0.006 * (k % 2)), cols[k]!, add(add(p, t2, -R * 0.12 * k), n, R * 0.03));
+    } else {
+      // herd-tags: three small brass tags on a cord, one for each herd the family keeps
+      b.cylinder(R * 0.012, R * 0.012, R * 0.5, PALETTE.material.rope, add(add(p, t2, -R * 0.22), n, R * 0.02), orient(t2));
+      for (let k = 0; k < 3; k++) b.box(R * 0.1, R * 0.13, R * 0.02, gold, add(add(p, t2, -R * (0.14 + 0.15 * k)), n, R * 0.045), orient(n));
+    }
   } else {
     // feather pin: a brass pin head and a long curved quill sweeping up and back
     const d: V3 = low ? [0.8, 0.1, 0.6] : [0.85, 0.5, 0.05];

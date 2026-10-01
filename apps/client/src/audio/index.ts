@@ -1,7 +1,10 @@
 import { getCaptions, getGore, getMuteUnfocused, getVolume, onSettingChange, VOLUME_KEYS } from "../settings.ts";
+import type { RegionId } from "@cb/shared";
 import { ambience } from "./ambience.ts";
 import { engine, type AudioState, type PlayOpts } from "./engine.ts";
 import { music } from "./music.ts";
+import type { MusicLayerId } from "./musicLayers.ts";
+import { GORE_SOUNDS } from "./soundsGrit.ts";
 import type { MusicMode } from "./musicScore.ts";
 import { stepVolume } from "./stride.ts";
 import type { Surface } from "./surface.ts";
@@ -32,10 +35,13 @@ function wire(): void {
   onSettingChange(sync);
 }
 
+/** The sounds with a `full | reduced | off` version: the Gore setting picks it unless the caller names a key. */
+const GORE_KEYED: ReadonlySet<string> = new Set(["limb_sever", ...GORE_SOUNDS.filter((n) => n !== "gore_body_fall")]);
+
 /** Plays a sound effect by name. `opts.x/y/z` places it in the world (relative to the listener); without them it is heard in the centre. */
 export function playSfx(name: string, opts?: PlayOpts): void {
   wire();
-  if (name === "limb_sever" && opts?.key === undefined) opts = { ...opts, key: getGore() };
+  if (opts?.key === undefined && GORE_KEYED.has(name)) opts = { ...opts, key: getGore() };
   engine.play(name, opts);
 }
 
@@ -59,6 +65,33 @@ export function setMasterVolume(v: number): void {
 }
 export function setChannelVolume(channel: Exclude<VolumeChannel, "master">, v: number): void {
   engine.setVolume(channel, v);
+}
+
+/** The mood driver's output: a gain per music stem (musicLayers.ts) and the parley duck. Call it every frame (GameAudio does); it is cheap and safe before the music has started. */
+export function setMusicMix(gain: Readonly<Record<MusicLayerId, number>>, duck = 1): void {
+  music.setMix(gain, duck);
+}
+/** The region whose colour stem plays and whose own voices the ambience schedules. */
+export function setAudioRegion(region: RegionId): void {
+  music.setRegion(region);
+  ambience.setRegion(region);
+}
+/** The ambience bus's mood stage, a linear gain (mixDuck.ts `ambienceMood`): -6 dB in a fight, half under a parley. */
+export function setAmbienceMood(level: number): void {
+  engine.setAmbienceMood(level);
+}
+
+/**
+ * An explosion or a cannon shot WITH its tail: the report now (positional, as `playSfx`), then the rumble and the debris after the time the sound takes to arrive and a beat, `near` inside 70 m,
+ * `far` beyond, and `cannon` for a gun (the hill gives the shot back). Fire and forget.
+ */
+export function playBlast(kind: "explosion" | "cannon", x: number, y: number, z: number, volume = 1): void {
+  playSfx(kind === "cannon" ? "cannon_shot" : "explosion", { x, y, z, volume });
+  const l = engine.listener;
+  const d = Math.hypot(x - l.x, z - l.z);
+  const key = kind === "cannon" ? "cannon" : d < 70 ? "near" : "far";
+  const wait = Math.min(2.5, d / 343 + 0.25);
+  setTimeout(() => playSfx("explosion_tail", { x, y, z, volume: kind === "cannon" ? volume * 0.85 : volume, key }), wait * 1000);
 }
 
 export function startAmbience(): void {

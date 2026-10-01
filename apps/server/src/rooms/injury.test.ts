@@ -53,7 +53,10 @@ describe("injuries in play (server authority)", () => {
   };
 
   const propWith = (room: WorldRoom, heavy: boolean) => {
-    const found = [...room.state.props.entries()].find(([, p]) => (PROP_DEFS[p.kind as PropKindId].mass > INJURY.lightPropMass) === heavy && PROP_DEFS[p.kind as PropKindId].carryable);
+    // (D-038: props now come in clusters of three, so the one a test stands beside must have no neighbour within 2.5 m, or "the nearest" is another prop than the one named)
+    const all = [...room.state.props.entries()];
+    const alone = ([k, p]: (typeof all)[number]): boolean => all.every(([k2, q]) => k2 === k || !PROP_DEFS[q.kind as PropKindId].carryable || Math.hypot(q.x - p.x, q.z - p.z) > 2.5);
+    const found = all.find((e) => (PROP_DEFS[e[1].kind as PropKindId].mass > INJURY.lightPropMass) === heavy && PROP_DEFS[e[1].kind as PropKindId].carryable && alone(e));
     expect(found, heavy ? "seed has a crate or barrel" : "seed has a bottle or chair").toBeDefined();
     return found!;
   };

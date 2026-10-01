@@ -41,9 +41,16 @@ export interface Crown {
 }
 
 /** Where the band of each hat is, for trims: height above the seat in R. */
-const TRIM_Y: readonly number[] = [0, 0.16, 0.06, 0.08, 0.2, 0.04, 0.08, 0.08, 0.06, 0.06, 0.12, 0.35, 0.08, 0.04, 0.12, 0.06, 0.1, 0.06, 0.3, 0.06, 0.08];
+const TRIM_Y: readonly number[] = [0, 0.16, 0.06, 0.08, 0.2, 0.04, 0.08, 0.08, 0.06, 0.06, 0.12, 0.35, 0.08, 0.04, 0.12, 0.06, 0.1, 0.06, 0.3, 0.06, 0.08, 0.06, 0.1, 0.12, 0.06, 0.08, 0.1, 0.1, 0.08];
 
-export const HAT_SEAT = [0, 0.55, 0.5, 0.42, 0.55, 0.55, 0.5, 0.45, 0.5, 0.45, 0.52, 0.5, 0.42, 0.5, 0.5, 0.5, 0.42, 0.45, 0.5, 0.5, 0.5];
+export const HAT_SEAT = [0, 0.55, 0.5, 0.42, 0.55, 0.55, 0.5, 0.45, 0.5, 0.45, 0.52, 0.5, 0.42, 0.5, 0.5, 0.5, 0.42, 0.45, 0.5, 0.5, 0.5, 0.5, 0.45, 0.5, 0.48, 0.45, 0.5, 0.5, 0.45];
+
+/** Hairstyles that hang a sheet down the back / ropes down the back / a single tail or plait: a hat's tail (a nightcap's, a dust-wrap's end) lies OUTSIDE the sheets and beside the tails. */
+const BACK_SHEET: ReadonlySet<number> = new Set([8, 15, 17, 21]);
+const BACK_ROPES: ReadonlySet<number> = new Set([19]);
+const BACK_TAIL: ReadonlySet<number> = new Set([10, 11, 20, 22]);
+const hairBackExtra = (hair: number, R: number): number => (BACK_SHEET.has(hair) ? R * 0.3 : BACK_ROPES.has(hair) ? R * 0.22 : 0);
+const hairBackSide = (hair: number): number => (BACK_TAIL.has(hair) ? 0.6 : 0);
 
 const TWO_PI = Math.PI * 2;
 const wrap = (p: number): number => ((((p + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
@@ -355,10 +362,10 @@ export function buildHat(h: HatCtx): void {
     case 17: { // nightcap: a soft cap fitted to the head with a long tail that flops over the top, hangs down the back and ends in a pompom
       const cr = dome({ k: 1.08, m1: R * 0.07, full: (f) => 1 + 0.05 * Math.sin(Math.PI * f) });
       strip(cr, hy + R * 0.04, R * 0.1, tone(hatC, 1.25), R * 0.03);
-      const phi = Math.PI - 0.3;
+      const phi = Math.PI - 0.3 - hairBackSide(spec.hair);
       const yH = cr.top - R * 0.15;
       const ys = Array.from({ length: 7 }, (_, i) => yH - (R * 1.5 * i) / 6);
-      const prof = hf.hangProfile(phi, ys, { gap: R * 0.07 + 0.01, slope: 1.6, maxR: R * 1.5, outer: (y) => Math.max(hf.headOuter(phi, y), y >= hy ? ringAtAz(cr.radiusAt(y), phi) : 0) + R * 0.1 });
+      const prof = hf.hangProfile(phi, ys, { gap: R * 0.07 + 0.01, slope: 1.6, maxR: R * 1.5, outer: (y) => Math.max(hf.headOuter(phi, y), y >= hy ? ringAtAz(cr.radiusAt(y), phi) : 0) + R * 0.1 + hairBackExtra(spec.hair, R) });
       const keep = Math.max(3, ys.filter((y) => y >= prof.land - 1e-9).length);
       const path: V3[] = [[R * 0.03, cr.top + R * 0.02, R * 0.02], [R * 0.05, cr.top + R * 0.2, R * 0.3]];
       for (let i = 0; i < keep; i++) path.push([Math.sin(phi) * prof.rho[i]!, ys[i]!, -Math.cos(phi) * prof.rho[i]!]);
@@ -434,18 +441,118 @@ export function buildHat(h: HatCtx): void {
       trimCrown = cr;
       break;
     }
+    // ---- the fictional peoples' headwear (D-038): each is described by what it DOES for the people who wear it ----
+    case 21: { // reed brim (the Mereborn rain-hat): a shallow cone of woven reed under a very broad, gently drooping brim, ring-woven, with a chin cord loop at each side
+      const reed = singe(PALETTE.trim.straw, burnt);
+      const cr = dome({ k: 1.08, full: (f) => 1 + 0.02 * Math.sin(Math.PI * f), color: reed });
+      brim(cr, hy - R * 0.02, () => R * 1.0, (_p, s) => -R * (0.1 * s + 0.2 * s * s), reed, R * 0.03, tone(reed, 0.8), 3);
+      const dh = cr.top - hy;
+      strip(cr, hy + R * 0.06, R * 0.07, tone(reed, 0.8), R * 0.01);
+      strip(cr, hy + dh * 0.45, R * 0.05, tone(reed, 0.86), R * 0.01);
+      strip(cr, hy + dh * 0.75, R * 0.04, tone(reed, 0.86), R * 0.01);
+      b.cone(R * 0.05, R * 0.14, tone(reed, 0.75), [0, cr.top + R * 0.05, 0]);
+      trimCrown = cr;
+      break;
+    }
+    case 22: { // lamp hood (the Kessarine): a soft hood drawn up to a point that leans back, a brass ring at the brow
+      const hh = Math.max(R * 1.35, clearH + R * 0.3);
+      const cr = column(hh, [[0, 1.0], [0.35, 0.96], [0.7, 0.62], [1, 0.1]], { color: hatC, lean: -R * 0.28 });
+      strip(cr, hy + R * 0.05, R * 0.08, accent, R * 0.014);
+      b.sphere(R * 0.07, accent, [0, cr.top + R * 0.01, cr.rings[cr.rings.length - 1]!.cz ?? 0]);
+      trimCrown = cr;
+      break;
+    }
+    case 23: { // sheaf hat (the Marchers): a tall banded drum of plaited grange straw, tied in three places, its top left to fan out like the cut ends of a sheaf
+      const straw = singe(PALETTE.trim.straw, burnt);
+      const sh = Math.max(R * 1.0, clearH + R * 0.1);
+      const cr = column(sh, [[0, 1.0], [0.5, 1.0], [1, 1.04]], { bevel: R * 0.03, color: straw });
+      for (const t of [0.14, 0.5, 0.86]) strip(cr, hy + sh * t, R * 0.1, tone(hatC, 0.9), R * 0.018);
+      if (PartBuilder.lod === 0 && !PartBuilder.hullMode) {
+        const topR = cr.radiusAt(cr.top);
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * TWO_PI;
+          const rr = ringAtAz(topR, a) * (0.4 + 0.5 * (i % 2));
+          b.cone(R * 0.05, R * 0.2, i % 2 ? straw : tone(straw, 1.12), [Math.sin(a) * rr, cr.top + R * 0.08, -Math.cos(a) * rr], [Math.sin(a) * 0.35, 0, Math.cos(a) * 0.35]);
+        }
+      }
+      trimCrown = cr;
+      break;
+    }
+    case 24: { // tide hat (the Brinefolk): a low crown and a wide, FLAT plate of a brim, a cord of net round the crown and a glass float on a loop at the front
+      const cr = dome({ k: 0.98, full: (f) => 1 + 0.03 * Math.sin(Math.PI * f) });
+      brim(cr, hy - R * 0.01, (p) => R * (0.86 + 0.1 * Math.cos(p)), (_p, s) => -R * 0.03 * s, hatC, R * 0.03, tone(hatC, 0.8), 3);
+      strip(cr, hy + R * 0.08, R * 0.12, tone(hatC, 0.7), R * 0.012);
+      const fl = cr.at(0, hy + R * 0.14, R * 0.09);
+      b.sphere(R * 0.1, singe(PALETTE.cloth[10], burnt), fl);
+      trimCrown = cr;
+      break;
+    }
+    case 25: { // dust wrap (the Vesperine): a cap of wound crepe, three wraps at different slants, its loose end hanging behind to the shoulder blades (it lies on the neck and coat)
+      const cr = dome({ k: 1.1, m1: R * 0.07, full: (f) => 1 + 0.05 * Math.sin(Math.PI * f) });
+      for (let i = 0; i < 3; i++) strip(cr, hy + R * (0.06 + 0.22 * i), R * 0.12, tone(hatC, i % 2 ? 0.8 : 1.12), R * (0.012 + 0.004 * i));
+      if (!coarse) {
+        const phi = Math.PI + 0.25 + hairBackSide(spec.hair);
+        const yH = hy + R * 0.18;
+        const ys = Array.from({ length: 6 }, (_, i) => yH - (R * 1.3 * i) / 5);
+        const prof = hf.hangProfile(phi, ys, { gap: R * 0.07 + 0.01, slope: 1.6, maxR: R * 1.5, outer: (y) => Math.max(hf.headOuter(phi, y), y >= hy ? ringAtAz(cr.radiusAt(y), phi) : 0) + R * 0.09 + hairBackExtra(spec.hair, R) });
+        const keep = Math.max(3, ys.filter((y) => y >= prof.land - 1e-9).length);
+        const path: V3[] = [cr.at(phi, yH + R * 0.06, -R * 0.01)];
+        for (let i = 0; i < keep; i++) path.push([Math.sin(phi) * prof.rho[i]!, ys[i]!, -Math.cos(phi) * prof.rho[i]!]);
+        b.sweep(curve(path, 10), (t) => ({ rx: R * (0.2 - 0.07 * t), rz: R * 0.035, pow: 2.2, color: tone(hatC, 0.9 + 0.1 * t) }), hatC, { side: [1, 0, 0], segments: 5, round: "end" });
+      }
+      trimCrown = cr;
+      break;
+    }
+    case 26: { // tiered hat (the Mereborn elders): three drums, each narrower than the one below, each with its own thin brim; the Keeper of the Hours wears it in plum
+      const th = Math.max(R * 1.25, clearH + R * 0.1);
+      const cr = column(th, [[0, 1.0], [0.33, 1.0], [0.34, 0.84], [0.66, 0.84], [0.67, 0.68], [1, 0.7]], { bevel: R * 0.03 });
+      brim(cr, hy, () => R * 0.22, (_p, s) => R * 0.03 * s, hatC, R * 0.028);
+      brim(cr, hy + th * 0.335, () => R * 0.16, (_p, s) => R * 0.03 * s, tone(hatC, 0.92), R * 0.026);
+      brim(cr, hy + th * 0.675, () => R * 0.13, (_p, s) => R * 0.03 * s, tone(hatC, 0.86), R * 0.024);
+      strip(cr, hy + th * 0.16, R * 0.08, accent, R * 0.012);
+      trimCrown = cr;
+      break;
+    }
+    case 27: { // bell crown (the Marchers' court): a flared bell of a hat whose brim turns up all round like a lip, gilt edge, a small bell at the top
+      const bh = Math.max(R * 0.9, clearH + R * 0.08);
+      const cr = column(bh, [[0, 1.0], [0.4, 0.98], [1, 0.92]], { bevel: R * 0.035 });
+      brim(cr, hy, () => R * 0.42, (_p, s) => R * 0.34 * s * s, hatC, R * 0.03, tone(hatC, 0.8), 4);
+      strip(cr, hy + R * 0.12, R * 0.06, accent, R * 0.014);
+      b.cone(R * 0.1, R * 0.16, accent, [0, cr.top + R * 0.1, 0], [Math.PI, 0, 0]);
+      b.sphere(R * 0.035, tone(accent, 0.8), [0, cr.top + R * 0.01, 0]);
+      trimCrown = cr;
+      break;
+    }
+    case 28: { // net cap (the Brinefolk): a close skull cap of knotted cord, glass floats at the crown
+      const cord = tone(hatC, 1.15);
+      const cr = dome({ k: 1.1, m1: R * 0.065, full: (f) => 1 + 0.04 * Math.sin(Math.PI * f) });
+      strip(cr, hy + R * 0.04, R * 0.08, cord, R * 0.014);
+      if (!coarse) {
+        for (let i = 0; i < 8; i++) {
+          const phi = (i / 8) * TWO_PI;
+          b.sweep(curve(cr.meridian(phi, R * 0.012).slice(0, -1), cr.rings.length + 2), () => ({ rx: R * 0.016, rz: R * 0.016, pow: 2 }), cord, { side: [0, 1, 0], segments: 3 });
+        }
+        strip(cr, hy + R * 0.22, R * 0.03, cord, R * 0.012);
+        strip(cr, hy + R * 0.42, R * 0.03, cord, R * 0.012);
+      }
+      b.sphere(R * 0.09, singe(PALETTE.cloth[10], burnt), [R * 0.02, cr.top + R * 0.04, 0]);
+      trimCrown = cr;
+      break;
+    }
     default:
       break;
   }
 
   // ---- hat trims -------------------------------------------------------------------------------------------------------------------------------
   const t = spec.hatTrim;
-  if (t === 0 || spec.hat === 0 || !trimCrown) return;
+  // (pushed-up goggles under a hat sit ON the hat, where the "goggles on brim" trim puts them: eyewear.ts leaves them off the forehead when a hat is worn)
+  const gogglesUp = spec.eyewear === 10 && spec.hat !== 0 && trimCrown !== undefined;
+  if ((t === 0 && !gogglesUp) || spec.hat === 0 || !trimCrown) return;
   const cr = trimCrown;
   const by = hy + (TRIM_Y[spec.hat] ?? 0.06) * R;
   /** A point on the crown wall at the trim band, azimuth phi, `off` out. */
   const on = (phi: number, dy = 0, off = 0): V3 => cr.at(phi, by + dy, off);
-  if (t === 1) {
+  if (t === 1 || (gogglesUp && t === 0)) {
     // goggles pushed up on the front of the hat: two lenses in brass rims on a strap wound round the crown
     strip(cr, by + R * 0.03, R * 0.06, leather, R * 0.014);
     for (const sx of [-1, 1]) {
@@ -521,7 +628,7 @@ function buildVeil(h: HatCtx, cr: Crown, bw: number): void {
       outer: (y) => {
         const t = Math.max(0, Math.min(1, (yTop - y) / (yTop - yBot)));
         const yr = y - cy;
-        const skull = yr > -R * 1.05 ? ringAtAz(hf.section(yr), phi) + hf.hairLift(Math.sin(phi), 0, -Math.cos(phi)) + R * 0.08 : 0;
+        const skull = yr > -R * 1.05 ? ringAtAz(hf.section(yr), phi) + hf.hairLift(Math.sin(phi), 0, -Math.cos(phi)) + R * 0.08 + hairBackExtra(h.spec.hair, R) : 0;
         return Math.max(skull, edge + (lowR - edge) * (t * t * (3 - 2 * t)));
       },
     });

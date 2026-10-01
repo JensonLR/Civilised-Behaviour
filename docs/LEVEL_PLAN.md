@@ -280,7 +280,7 @@ Deviations that apply to a whole region:
 | Vesper | syndicate.tent2 | tent | 22.5,-84.5 | 0.20 | 4.0x3.2 | 2.4 | 0 | - | 0 |
 | Saltmarket | warehouse0 | interior | -44.0,108.0 | 0.00 | 13.0x8.0 | 5.1 | 0.9 | 1.5 / 2.4 | 3 |
 | Saltmarket | warehouse1 | interior | 46.0,110.0 | 3.14 | 12.0x8.0 | 5.3 | 0.9 | 1.5 / 2.4 | 3 |
-| Saltmarket | warehouse2 | sealed | -26.0,-2.0 | 0.30 | 5.2x4.0 | 4.4 | 0.9 | 1.5 / 2.4 | 0 |
+| Saltmarket | warehouse2 | sealed | -26.0,-2.0 | 1.20 | 5.2x4.0 | 4.4 | 0.9 | 1.5 / 2.4 | 0 |
 | Saltmarket | warehouse3 | sealed | 20.0,-26.0 | 0.50 | 5.2x4.0 | 4.5 | 0.9 | 1.5 / 2.4 | 0 |
 | Saltmarket | warehouse4 | sealed | 70.0,-22.0 | 0.25 | 6.4x4.8 | 4.5 | 0.9 | 1.5 / 2.4 | 0 |
 | Saltmarket | warehouse5 | solid | 96.0,30.0 | -0.40 | 5.6x4.4 | 3.1 | 0.9 | - | 0 |

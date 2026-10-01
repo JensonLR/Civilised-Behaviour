@@ -1,6 +1,7 @@
 import type { Paper } from "@cb/shared";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
+import { sheetHints } from "./sheetHints.ts";
 import "./newspaper.css";
 
 /**
@@ -15,7 +16,7 @@ export class NewspaperView {
 
   constructor(root: HTMLElement) {
     root.appendChild(this.modal.root);
-    this.modal.panel.append(this.body, h("div", { class: "actions" }, h("button", { type: "button", "data-autofocus": true, onclick: () => this.modal.close() }, "Fold it away")));
+    this.modal.panel.append(this.body, h("div", { class: "actions" }, h("button", { type: "button", "data-autofocus": true, onclick: () => this.modal.close() }, "Fold it away")), sheetHints({ close: "Fold it away" }).el);
     this.modal.onClose = () => {
       const cb = this.onClose;
       this.onClose = undefined;

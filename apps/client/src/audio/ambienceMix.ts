@@ -1,5 +1,6 @@
-import { CAMP, RIVER, riverCentre, waterField, type WaterField } from "@cb/shared";
+import { CAMP, RIVER, riverCentre, waterField, type RegionId, type WaterField } from "@cb/shared";
 import type { Atmosphere } from "./atmosphereSource.ts";
+import { REGION_AMBIENCE } from "./ambienceRegion.ts";
 import { newSpatial, spatialise, type Listener, type SpatialOut } from "./spatial.ts";
 
 /**
@@ -46,16 +47,30 @@ export function daylight(hour: number): number {
   return smooth(5, 7.2, h) * (1 - smooth(17.8, 20.5, h));
 }
 
-export function ambienceTargets(l: Listener, a: Atmosphere, out: AmbienceTargets = newTargets()): AmbienceTargets {
+/**
+ * `region` matters twice: the fire, the stream and the waterfall are Hollowmere's own landmarks (their positions are in its coordinates), so in every other region they stay silent
+ * instead of sounding from empty ground; and each region leans the wind a little (the plain breezes, the gorge breathes).
+ */
+export function ambienceTargets(l: Listener, a: Atmosphere, out: AmbienceTargets = newTargets(), region: RegionId = "hollowmere"): AmbienceTargets {
   const day = daylight(a.hour);
   const dry = 1 - clamp01(a.rain * 1.4);
-  out.wind = 0.06 + 0.5 * clamp01(a.wind);
+  out.wind = Math.min(1, 0.06 + 0.5 * clamp01(a.wind) + REGION_AMBIENCE[region].wind);
   out.whistle = clamp01(a.wind) ** 3 * 0.9;
   out.rain = clamp01(a.rain);
   // Crickets: the warm dusk and the night, silenced by rain.
   out.crickets = (1 - day) * dry;
   out.birds = day * dry;
 
+  if (region !== "hollowmere") {
+    out.fire.gain = 0;
+    out.fire.pan = 0;
+    out.fire.cutoff = 20000;
+    out.stream.gain = 0;
+    out.stream.pan = 0;
+    out.falls.gain = 0;
+    out.falls.pan = 0;
+    return out;
+  }
   const f = CAMP.fire;
   spatialise(l, f.x, l.y, f.z, 3, 42, sp);
   out.fire.gain = sp.gain * 0.9;

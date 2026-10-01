@@ -41,8 +41,11 @@ export function gearOnSide(spec: CharacterSpec, P: Proportions, side: "L" | "R")
     if (g === 1) return same(h * 0.08 - 0.11 * u, h * 0.08 + 0.2 * u, 0.03 + 0.068 * u);
     if (g === 6) return same(h * 0.04 - Math.min(0.44, leg * 0.5), h * 0.04 + 0.22, 0.115);
     if (g === 7) return same(h * 0.08 - 0.14 * u - 0.4, h * 0.08 + 0.14, 0.118 + 0.06 * u);
+    if (g === 11) return same(h * 0.1 - 0.12 * u, h * 0.1 + 0.06 * u, 0.03 + 0.1 * u);
+    if (g === 13) return same(h * 0.06 - 0.17 * u, h * 0.06 + 0.12 * u, 0.03 + 0.15 * u);
   } else {
     if (g === 2) return same(h * 0.06 - 0.105 * u, h * 0.06 + 0.2 * u, 0.076 * u + 0.006);
+    if (g === 10) return same(h * 0.06 - 0.12 * u, h * 0.06 + 0.12 * u, 0.04 * u + 0.036);
     if (g === 5) return { yLo: h * 0.1 - Math.min(0.78, leg * 0.8 + h * 0.1), yHi: h * 0.1 + 0.19, extra: 0.06, extraLow: 0.15 };
     if (spec.pack === 3) return same(h * 0.02 - 0.125 * u, h * 0.02 + 0.2 * u, 0.118 * u + 0.008);
     if (spec.pack === 8) return same(h * 0.02 - 0.13 * u, h * 0.02 + 0.25 * u, 0.212 * u + 0.012);

@@ -17,6 +17,16 @@ if (showcase === "lineup") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runLineup } = await import("./showcase/Lineup.ts");
   runLineup(canvas, params);
+} else if (showcase === "peoples") {
+  // D-038: the fictional peoples of each region (a wrapper over the lineup)
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runPeoples } = await import("./showcase/Peoples.ts");
+  runPeoples(canvas, params);
+} else if (showcase === "gore") {
+  // D-038: the field after a fight at each Gore level (pools, spray, drag marks, craters, mud, soot, open wounds)
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runGore } = await import("./showcase/Gore.ts");
+  runGore(canvas, params);
 } else if (showcase === "weapons") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWeapons } = await import("./showcase/Weapons.ts");

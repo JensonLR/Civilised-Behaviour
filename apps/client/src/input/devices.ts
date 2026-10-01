@@ -1,5 +1,6 @@
-import type { GlyphPreference } from "../settings.ts";
+import { getGlyphPreference, onSettingChange, type GlyphPreference } from "../settings.ts";
 import { ACTIONS, getBindings, keyLabel, type ActionId } from "./bindings.ts";
+import { getPadBindings, type PadAction } from "./padProfile.ts";
 
 /**
  * THE INPUT DEVICE AND GLYPH CONTRACT (D-038, docs/_notes/polish2.md section 5). One module answers "which device is the player using right now" and "what do I print for this
@@ -90,6 +91,8 @@ export const PROMPT_KEY: Readonly<Partial<Record<PromptId, string>>> = {
   look: "Mouse", move: "W A S D", weaponPrev: "Wheel up", weaponNext: "Wheel down", holster: "0", wheelPick: "Mouse",
 };
 
+const PAD_REBINDABLE: ReadonlySet<PromptId> = new Set<PromptId>(["jump", "crouch", "interact", "melee", "throw", "grab", "sprint", "view", "aim", "fire"]);
+
 export type Glyph =
   | { kind: "key"; label: string; name: string }
   | { kind: "pad"; control: PadControl; label: string; name: string; shape: string; hold: boolean };
@@ -103,13 +106,22 @@ export function glyphFor(prompt: PromptId, device: InputDevice): Glyph {
       const label = keys.length ? keyLabel(keys[0]!) : "unbound";
       return { kind: "key", label, name: `${label} key` };
     }
+    if (prompt === "move") {
+      // the four movement keys as bound ("W A S D" by default, a rebind shows at once)
+      const b = getBindings();
+      const label = (["forward", "left", "back", "right"] as const).map((id) => keyLabel(b[id][0])).join(" ");
+      return { kind: "key", label, name: `${label} keys` };
+    }
     const fixed = PROMPT_KEY[prompt] ?? prompt;
     return { kind: "key", label: fixed, name: fixed };
   }
   const p = PROMPT_PAD[prompt];
   if (!p) return { kind: "key", label: prompt, name: prompt };
-  const g = PAD_GLYPHS[device][p.control];
-  return { kind: "pad", control: p.control, label: g.label, name: g.name, shape: g.shape, hold: p.hold === true };
+  // the rebindable pad actions follow the player's own layout; reload rides on the Use control (held)
+  const bound = prompt === "reload" ? getPadBindings().interact : PAD_REBINDABLE.has(prompt) ? getPadBindings()[prompt as PadAction] : undefined;
+  const control = bound ?? p.control;
+  const g = PAD_GLYPHS[device][control];
+  return { kind: "pad", control, label: g.label, name: g.name, shape: g.shape, hold: p.hold === true };
 }
 
 /** "Use [X]" / "Use [E]" / "Hold [R3] to switch view": a sentence with the glyph's text in brackets (the DOM renderer swaps the brackets for a glyph element). */
@@ -162,3 +174,22 @@ export class DeviceTracker {
 
 /** The one tracker the game and every UI module share. */
 export const deviceTracker = new DeviceTracker();
+
+let prefWired = false;
+/**
+ * Pins the tracker to the player's `glyphs` setting now and on every change of it (idempotent). `Controls` calls it, so the game needs no wiring of its own; the
+ * integrator may call it earlier (boot) with no harm.
+ */
+export function wireGlyphPreference(tracker: DeviceTracker = deviceTracker): void {
+  if (prefWired && tracker === deviceTracker) return;
+  if (tracker === deviceTracker) prefWired = true;
+  tracker.setPreference(getGlyphPreference());
+  onSettingChange((k) => (k === "glyphs" || k === "all") && tracker.setPreference(getGlyphPreference()));
+}
+
+/** The pad family of the first connected standard-mapping pad (for a pad player's first screen, before any button is pressed), or undefined when there is none. */
+export function connectedPadFamily(pads: readonly (Pick<Gamepad, "connected" | "mapping" | "id"> | null)[] | undefined = typeof navigator !== "undefined" ? navigator.getGamepads?.() : undefined): "xbox" | "playstation" | undefined {
+  if (!pads) return undefined;
+  for (const p of pads) if (p?.connected && p.mapping === "standard") return padFamily(p.id);
+  return undefined;
+}

@@ -1,7 +1,8 @@
-import { getBindings, keyLabel } from "../input/bindings.ts";
+import { fillPrompt, onPromptChange } from "../input/glyphDom.ts";
+import { deviceTracker, type InputDevice } from "../input/devices.ts";
 import { emitSetting, onSettingChange, readStored, writeStored } from "../settings.ts";
 import { ORIENT_STEPS, OrientationSampler, currentStep, doneCount, isActive, isDone, newOrientation, orientationStep, parseOrientation, serializeOrientation, skipOrientation, type Device, type OrientStep, type OrientationState, type SheetKind } from "./orientationLogic.ts";
-import { ORIENT_DONE, ORIENT_HINT, ORIENT_SKIP, ORIENT_STEP_NAME, ORIENT_TAG, ORIENT_TEXT, ORIENT_TITLE, fillKeys } from "./orientationCopy.ts";
+import { ORIENT_DONE, ORIENT_HINT, ORIENT_SKIP, ORIENT_STEP_NAME, ORIENT_TAG, ORIENT_TEXT, ORIENT_TITLE } from "./orientationCopy.ts";
 import "./orientation.css";
 
 /**
@@ -24,11 +25,8 @@ export function replayOrientation(): void {
   emitSetting("replayOrientation");
 }
 
-const liveKeys = (): { move: string; use: string } => {
-  const b = getBindings();
-  const label = (id: "forward" | "left" | "back" | "right"): string => keyLabel(b[id][0]);
-  return { move: [label("forward"), label("left"), label("back"), label("right")].join(" "), use: keyLabel(b.interact[0]) };
-};
+/** The glyph family the card prints: the keyboard's, or the pad in use (the tracker's own, or the Xbox set when the game says "pad" before any pad press has been seen). */
+const glyphDevice = (device: Device): InputDevice => (device === "keyboard" ? "keyboard" : deviceTracker.effective === "keyboard" ? "xbox" : deviceTracker.effective);
 
 export class Orientation {
   private state: OrientationState;
@@ -44,6 +42,7 @@ export class Orientation {
   private doneFor = 0;
   private padHeld = false;
   private off: (() => void) | undefined;
+  private offGlyphs: (() => void) | undefined;
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.key === "Escape" && this.visible && !e.repeat) this.skip(); // (no preventDefault: the pause screen still opens)
   };
@@ -97,8 +96,8 @@ export class Orientation {
     window.addEventListener("keydown", this.onKey);
     this.off = onSettingChange((k) => {
       if (k === "replayOrientation") this.restart();
-      else if (k === "all" || k === "bindings") this.render();
     });
+    this.offGlyphs = onPromptChange(() => this.render()); // a change of device or binding: every line is written again with the new glyphs
     this.render();
   }
 
@@ -170,16 +169,16 @@ export class Orientation {
   }
 
   private render(): void {
-    const keys = liveKeys();
     const cur = currentStep(this.state);
+    const gd = glyphDevice(this.device);
     for (const id of ORIENT_STEPS) {
       const r = this.rows.get(id)!;
       r.li.className = `${isDone(this.state, id) ? "done" : ""}${id === cur ? " current" : ""}`.trim();
       if (id === cur) r.li.setAttribute("aria-current", "step");
       else r.li.removeAttribute("aria-current");
-      r.what.textContent = fillKeys(ORIENT_TEXT[id][this.device], keys);
+      fillPrompt(r.what, ORIENT_TEXT[id][this.device], gd);
     }
-    this.hint.textContent = ORIENT_HINT[this.device];
+    fillPrompt(this.hint, ORIENT_HINT[this.device], gd);
     this.doneLine.hidden = !this.state.finished;
     this.root.setAttribute("aria-label", `Field orientation, ${doneCount(this.state)} of ${ORIENT_STEPS.length} done`);
     this.skipBtn.hidden = this.state.finished;
@@ -189,6 +188,7 @@ export class Orientation {
   dispose(): void {
     window.removeEventListener("keydown", this.onKey);
     this.off?.();
+    this.offGlyphs?.();
     this.root.remove();
   }
 }

@@ -3,6 +3,7 @@ import { SoundBank } from "./bake.ts";
 import { CaptionGate, captionFor } from "./captions.ts";
 import { noiseBuffers } from "./dsp.ts";
 import { SOUNDS, type SoundDef } from "./sounds.ts";
+import { BLAST_HOLD, stemBlastLevel } from "./mixDuck.ts";
 import { newSpatial, spatialise, type Listener } from "./spatial.ts";
 import { VoicePool } from "./voicePool.ts";
 import { VOLUME_CHANNELS, clamp01, volumeToGain, type VolumeChannel } from "./volume.ts";
@@ -66,7 +67,9 @@ class Engine {
   master!: GainNode;
   buses = {} as Record<"sfx" | "music" | "ambience", GainNode>;
   /** Duck gains sit between the music/ambience sources and their buses. */
-  duck = {} as Record<"music" | "ambience", GainNode>;
+  duck = {} as Record<"music" | "ambience" | "stems", GainNode>;
+  /** The mood stage in series after the ambience duck: -6 dB in a fight and half under a parley (mixDuck.ts). */
+  mood = {} as Record<"ambience", GainNode>;
   reverbIn!: GainNode;
   reverbSend = {} as Record<"sfx" | "music" | "ambience", GainNode>;
   sfx!: Lane;
@@ -167,8 +170,13 @@ class Engine {
     // Music and ambience pass through a duck gain first, so a cannon can push the world down for a moment.
     this.duck.music = g(1);
     this.duck.music.connect(this.buses.music);
+    this.mood.ambience = g(1);
+    this.mood.ambience.connect(this.buses.ambience);
     this.duck.ambience = g(1);
-    this.duck.ambience.connect(this.buses.ambience);
+    this.duck.ambience.connect(this.mood.ambience);
+    // The combat stems (drums, stabs, drone, dirge, the region's colour) skip the bed's heavy duck: a cannon takes 4 dB off them for 0.6 s, no more (mixDuck.ts).
+    this.duck.stems = g(1);
+    this.duck.stems.connect(this.buses.music);
 
     // Shared reverb: sends are taken after each bus's own volume, so turning a channel down turns its reverb down too.
     const conv = ctx.createConvolver();
@@ -395,7 +403,18 @@ class Engine {
       d.gain.setTargetAtTime(level, now, 0.02);
       d.gain.setTargetAtTime(1, now + Math.max(0.15, hold), 0.5);
     }
+    const sd = this.duck.stems;
+    sd.gain.cancelScheduledValues(now);
+    sd.gain.setTargetAtTime(stemBlastLevel(amount), now, 0.02);
+    sd.gain.setTargetAtTime(1, now + Math.min(BLAST_HOLD, Math.max(0.15, hold)), 0.15);
     this.duckedUntil = now + hold + 1.5;
+  }
+
+  /** The ambience bus's mood stage (mixDuck.ts `ambienceMood`): eases over about a second so a fight breathes the wind down instead of cutting it. */
+  setAmbienceMood(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.mood.ambience) return;
+    this.mood.ambience.gain.setTargetAtTime(clamp01(level), ctx.currentTime, 0.5);
   }
 
   /** Housekeeping at 10 Hz: frees finished voices' nodes and lets loops that stopped being refreshed fade. */

@@ -12,6 +12,7 @@ export interface MenuHandlers {
 export const isNoLiveCampaign = (message: string): boolean => /^No campaign with that code/i.test(message);
 
 import { describeError, stepAt } from "./menuLogic.ts";
+import { bindPrompt } from "../input/glyphDom.ts";
 import { startPadNav } from "./PadNav.ts";
 import { REACH_RETRY } from "../platform/reachCopy.ts";
 import { anyModalOpen } from "./modal.ts";
@@ -100,6 +101,12 @@ export class Menu {
           <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="back">Return to the door</button></div>
         </div>
       </div>`;
+    // a pad's hint under the door (shown only while a pad is the device in use): the front door is the first thing a pad player sees
+    const hint = document.createElement("p");
+    hint.className = "hintbar pad-only";
+    hint.setAttribute("aria-hidden", "true");
+    bindPrompt(hint, () => "{menuUp} {menuDown} Move   {confirm} Choose   {menuLeft} {menuRight} Adjust");
+    root.querySelector(".main .version")?.before(hint);
     this.creatorHost = root.querySelector<HTMLElement>("#creator-host")!;
     this.nameInput = root.querySelector<HTMLInputElement>("#name")!;
     this.codeInput = root.querySelector<HTMLInputElement>("#code")!;

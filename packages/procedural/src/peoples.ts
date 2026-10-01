@@ -67,7 +67,7 @@ export const PEOPLE_CATALOG_ADDITIONS = {
 } as const;
 export type AdditionKey = keyof typeof PEOPLE_CATALOG_ADDITIONS;
 /** Flipped by package C when every name above is in the catalogue AND has geometry (the audit test then requires it). */
-export const PEOPLE_ADDITIONS_LANDED = false as boolean;
+export const PEOPLE_ADDITIONS_LANDED = true as boolean;
 
 const FIELD_LIST: Record<TagField, readonly string[]> = {
   hat: C.HATS, jacket: C.JACKETS, shirt: C.SHIRTS, trousers: C.TROUSERS, boots: C.BOOTS, belt: C.BELTS, sash: C.SASHES, neckwear: C.NECKWEAR, pack: C.PACKS, hipGear: C.HIP_GEAR,
@@ -193,6 +193,13 @@ export function applyPeople(spec: CharacterSpec, people: PeopleId, seed: number)
     const name = drawName(table, list, rng);
     if (name !== undefined) out[f] = list.indexOf(name);
   }
+  // every native wears at least one piece of its own people's dress that reads at ten metres (hat, garment, neckwear or hair): the signature garment (the most-drawn native one of the table) if the draws gave none
+  const own = new Set<string>(Object.values(PEOPLE_CATALOG_ADDITIONS).flat() as string[]);
+  const wornOwn = ((["hat", "jacket", "neckwear", "hair"]) as TagField[]).some((f) => own.has(FIELD_LIST[f][out[f] ?? 0] ?? "")); // (what reads at ten metres)
+  if (!wornOwn) {
+    const sig = o.pick.jacket?.find(([n]) => own.has(n) && C.JACKETS.includes(n as never));
+    if (sig) out.jacket = (C.JACKETS as readonly string[]).indexOf(sig[0]);
+  }
   // the colonial uniform and the borrowed dress never survive
   for (const [f, names] of Object.entries(COLONIAL_CODED) as [string, readonly string[]][]) {
     const list = f === "epaulettes" ? C.EPAULETTES : f === "decoration" ? C.DECORATIONS : f === "eyewear" ? C.EYEWEAR : FIELD_LIST[f as TagField];
@@ -201,6 +208,14 @@ export function applyPeople(spec: CharacterSpec, people: PeopleId, seed: number)
   }
   out.medals = 0;
   out.medalStyle = 0;
+  // no spectacles, naturalist's gear or gilt trim: the Society's affectations (a trade may put a tool back: villagerLooks.ts `NATIVE_KEEP`)
+  out.eyewear = 0;
+  if (!wayfarer) out.pack = 0;
+  if ([1, 3, 4].includes(out.hatTrim ?? 0)) out.hatTrim = 0; // (goggles on the brim, a badge, a cockade)
+  if ([1, 4].includes(out.coatTrim ?? 0)) out.coatTrim = 0; // (frogging, gold braid)
+  if (out.cuffDetail === 2) out.cuffDetail = 0; // (gold links)
+  if (out.pocket === 4) out.pocket = 0; // (pens and pencils)
+  if (out.buckle === 4) out.buckle = 0; // (a crest plate)
   // dress in the people's own dyes
   const dyes: number[] = PEOPLE[id].dyes.map((d) => DYE[d]);
   const dye = (i: number): number => dyes[i % dyes.length]!;

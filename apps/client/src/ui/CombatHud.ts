@@ -1,4 +1,6 @@
 import { CARRIED, WEAPON, WEAPONS, type WeaponId } from "@cb/shared";
+import { deviceTracker } from "../input/devices.ts";
+import { fillPrompt, onPromptChange } from "../input/glyphDom.ts";
 
 /**
  * The gunnery half of the interface, in the Society's stationery: a small armoury card (the hotbar of what is carried, the piece in hand, rounds in
@@ -39,7 +41,7 @@ export interface ArmsView {
   /** Cooldown remaining as a fraction 0..1 of the last shot's wait (a hint bar), 0 when ready. */
   wait: number;
   gamepad: boolean;
-  /** The label of the key that reloads (follows a rebind), for "Empty - press R". */
+  /** Unused now (the reload prompt is the `{reload}` token, which follows a rebind and the device); kept so the game's call still type-checks. */
   reloadKey?: string;
   /** Hands busy (carrying, dragging, downed...): the card dims. */
   busy: boolean;
@@ -81,6 +83,10 @@ export class CombatHud {
   private readonly bearingPower = new Float32Array(BEARINGS);
   private readonly cannon: HTMLElement;
   private shown = "";
+  private cannonShown = "";
+  private lastArms: ArmsView | undefined;
+  private lastCannon: CannonHud | undefined;
+  private offPrompt: (() => void) | undefined;
   private markTimer = 0;
   private readonly bearingTimers = new Float32Array(BEARINGS);
   private lastGap = -1;
@@ -88,7 +94,7 @@ export class CombatHud {
   constructor(private readonly root: HTMLElement) {
     this.arms = el(root, "div", "arms");
     this.arms.hidden = true;
-    const slots = CARRIED.map((id, i) => `<span class="slot" data-w="${id}"><kbd>${i + 1}</kbd><svg viewBox="0 0 60 26" aria-hidden="true">${ICONS[id] ?? ""}</svg></span>`).join("");
+    const slots = CARRIED.map((id, i) => `<span class="slot" data-w="${id}"><kbd class="kb-only">${i + 1}</kbd><svg viewBox="0 0 60 26" aria-hidden="true">${ICONS[id] ?? ""}</svg></span>`).join("");
     this.arms.innerHTML = `<div class="hotbar" role="group" aria-label="Weapons carried">${slots}</div>
       <div class="piece"><span class="pname"></span><span class="pips" aria-hidden="true"></span><span class="reserve"></span></div>
       <div class="gauge" hidden><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="fill"></div></div><span class="gtext"></span></div>`;
@@ -119,14 +125,22 @@ export class CombatHud {
 
     this.cannon = el(root, "div", "cannoncard");
     this.cannon.hidden = true;
+    // the player picks up the other device (or rebinds): the prompts on show are drawn again with the new glyphs, between two frames
+    this.offPrompt = onPromptChange(() => {
+      this.shown = "";
+      this.cannonShown = "";
+      if (this.lastArms) this.updateArms(this.lastArms);
+      this.updateCannon(this.lastCannon);
+    });
   }
 
   /** The armoury card. Cheap to call every frame: it only writes what changed. */
   updateArms(v: ArmsView): void {
+    this.lastArms = v;
     const carrying = v.owned !== 0;
     this.arms.hidden = !carrying;
     if (!carrying) return;
-    const key = `${v.weapon}|${v.owned}|${v.ammo}|${v.reserve}|${v.reload}|${v.busy ? 1 : 0}|${v.gamepad ? 1 : 0}|${Math.round(v.wait * 8)}|${v.reloadKey ?? ""}`;
+    const key = `${v.weapon}|${v.owned}|${v.ammo}|${v.reserve}|${v.reload}|${v.busy ? 1 : 0}|${v.gamepad ? 1 : 0}|${Math.round(v.wait * 8)}|${v.reloadKey ?? ""}|${deviceTracker.effective}`;
     if (key === this.shown) return;
     this.shown = key;
     this.arms.classList.toggle("busy", v.busy);
@@ -134,7 +148,7 @@ export class CombatHud {
       const id = CARRIED[i]!;
       s.classList.toggle("on", id === v.weapon);
       s.classList.toggle("lack", (v.owned & (1 << id)) === 0);
-      s.querySelector("kbd")!.textContent = v.gamepad ? "" : String(i + 1);
+      s.querySelector("kbd")!.textContent = String(i + 1); // (hidden on a pad by CSS: the d-pad cycles, there are no number keys)
     });
     const def = v.weapon >= 0 ? WEAPONS[v.weapon as WeaponId] : undefined;
     this.name.textContent = def ? def.label : "Empty hands";
@@ -143,12 +157,12 @@ export class CombatHud {
       let pips = "";
       for (let i = 0; i < r.magazine; i++) pips += `<i class="${i < v.ammo ? "full" : "spent"}"></i>`;
       this.pips.innerHTML = pips;
-      this.reserve.textContent = `×${v.reserve}`;
+      fillPrompt(this.reserve, `×${v.reserve}`);
       this.reserve.classList.toggle("dry", v.reserve === 0 && v.ammo === 0);
       this.pips.parentElement!.classList.toggle("empty", v.ammo === 0 && v.reload === 0);
     } else {
       this.pips.innerHTML = "";
-      this.reserve.textContent = def ? (def.fire === "melee" ? "Hold FIRE to swing" : "") : "";
+      fillPrompt(this.reserve, def ? (def.fire === "melee" ? "Hold {fire} to swing" : "") : "");
       this.reserve.classList.remove("dry");
       this.pips.parentElement!.classList.remove("empty");
     }
@@ -162,7 +176,7 @@ export class CombatHud {
       this.gauge.classList.remove("dry");
     } else if (empty) {
       this.gaugeFill.style.width = "0%";
-      this.gaugeText.textContent = v.reserve > 0 ? (v.gamepad ? "Empty – press X" : `Empty – press ${v.reloadKey ?? "R"}`) : "Out of powder and shot";
+      fillPrompt(this.gaugeText, v.reserve > 0 ? "Empty – press {reload}" : "Out of powder and shot"); // ({reload} is the Reload key, or the pad's Use control held)
       this.gauge.classList.toggle("dry", v.reserve === 0);
     }
   }
@@ -220,17 +234,23 @@ export class CombatHud {
   }
 
   updateCannon(v: CannonHud | undefined): void {
+    this.lastCannon = v;
     if (!v) {
       this.cannon.hidden = true;
+      this.cannonShown = "";
       return;
     }
     this.cannon.hidden = false;
-    const state = v.phase === 0 ? (v.shells > 0 ? "Empty – hold E to load" : "Out of shot") : v.phase === 1 ? `Loading – ${v.progress}%` : v.phase === 2 ? "Loaded – FIRE lights the fuse" : "Fuse lit – stand clear!";
+    const state = v.phase === 0 ? (v.shells > 0 ? "Empty – hold {interact} to load" : "Out of shot") : v.phase === 1 ? `Loading – ${v.progress}%` : v.phase === 2 ? "Loaded – {fire} lights the fuse" : "Fuse lit – stand clear!";
     const pace = v.phase === 1 ? (v.crew >= 2 ? "full crew: quick" : "one hand: slow") : "";
+    const ckey = `${state}|${v.progress}|${v.crew}|${v.shells}|${v.phase}|${deviceTracker.effective}`;
+    if (ckey === this.cannonShown) return;
+    this.cannonShown = ckey;
     this.cannon.dataset.phase = String(v.phase);
-    this.cannon.innerHTML = `<div class="ct">Field Cannon</div><div class="cs">${state}</div>
+    this.cannon.innerHTML = `<div class="ct">Field Cannon</div><div class="cs"></div>
       <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v.progress}"><div class="fill" style="width:${v.phase === 2 ? 100 : v.progress}%"></div></div>
       <div class="cc">Crew ${v.crew}${pace ? ` · ${pace}` : ""} · Shot in the limber: ${v.shells}</div>`;
+    fillPrompt(this.cannon.querySelector<HTMLElement>(".cs")!, state);
   }
 
   /** Advances the fade timers. */
@@ -250,6 +270,7 @@ export class CombatHud {
   }
 
   dispose(): void {
+    this.offPrompt?.();
     for (const e of [this.arms, this.sight, this.mark, this.bearings, this.cannon]) e.remove();
     void this.root;
   }

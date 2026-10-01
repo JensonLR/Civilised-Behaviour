@@ -2,6 +2,7 @@ import { playSfx } from "../audio/index.ts";
 import { h, Modal, anyModalOpen } from "./modal.ts";
 import { openHowTo } from "./HowTo.ts";
 import { openSettings } from "./Settings.ts";
+import { sheetHints } from "./sheetHints.ts";
 
 export interface PauseDeps {
   canvas: HTMLCanvasElement;
@@ -47,6 +48,7 @@ export class Pause {
       this.info,
       h("div", { class: "menu" }, resume, how, opts, ...(wish ? [wish] : []), this.copy, this.leaveBtn),
       h("p", { class: "fine" }, "The world does not wait for you. Your comrades are still on the march."),
+      sheetHints({ choose: "Choose", close: "Resume" }).el,
     );
     this.modal.onClose = () => {
       this.confirmLeave = 0;

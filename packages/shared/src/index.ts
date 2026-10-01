@@ -87,4 +87,5 @@ export * from "./platformText.ts";
 export * from "./budgets.ts";
 // ---- D-038 polish 2: level audit, native peoples ----
 export * from "./levelAudit.ts";
+export * from "./levelAuditAdapters.ts";
 export * from "./peoples.ts";

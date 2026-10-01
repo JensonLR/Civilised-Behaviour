@@ -1,6 +1,6 @@
 import { HILL, trailSample, waterField, type TrailSample, type WaterField } from "@cb/shared";
 
-export type Surface = "grass" | "dirt" | "stone" | "wood" | "water";
+export type Surface = "grass" | "dirt" | "stone" | "wood" | "water" | "mud" | "sand" | "plank";
 
 const trail: TrailSample = { wear: 0, shoulder: 0, rut: 0 };
 const water: WaterField = { q: 0, s: 0, pond: false };
@@ -18,4 +18,22 @@ export function surfaceAt(x: number, z: number, aboveGround = 0): Surface {
   trailSample(x, z, trail);
   if (trail.wear > 0.4 || trail.rut > 0.3) return "dirt";
   return "grass";
+}
+
+/**
+ * What the ground is in each region, where the Hollowmere landscape functions have nothing to say (D-038): Kessar's shore is sand, the Saltmarket's delta is mud, Vesper's canyon floor is stone and
+ * dust. Only the soft grounds change (`grass` and `dirt`); water, wood and planks are what they are everywhere.
+ */
+export function regionSurface(region: string, base: Surface): Surface {
+  if (base !== "grass" && base !== "dirt") return base;
+  switch (region) {
+    case "kessar":
+      return "sand";
+    case "saltmarket":
+      return "mud";
+    case "vesper":
+      return base === "dirt" ? "dirt" : "stone";
+    default:
+      return base;
+  }
 }

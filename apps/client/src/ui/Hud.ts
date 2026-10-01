@@ -1,4 +1,5 @@
 import { CASUALTY, FLAG, LIMB_LIST, ZONE_COUNT, ZONE_NAMES, limbZone, woundLevel } from "@cb/shared";
+import { fillPrompt, onPromptChange } from "../input/glyphDom.ts";
 import { Compass } from "./Compass.ts";
 import { Telegrams } from "./Telegrams.ts";
 import { VITALS_LABEL, vitalsLevel } from "./vitals.ts";
@@ -38,7 +39,7 @@ export interface HudView {
   reviveProgressOnMe: number;
   /** Progress (0-100) of the revive the local player is performing, or -1. */
   reviveProgressByMe: number;
-  /** Contextual action prompt for whatever is in reach (already worded for the current input device). */
+  /** Contextual action prompt for whatever is in reach. Prompt TOKENS (`{interact}`, `{grab}`, `{throw}`: input/glyphDom.ts) become the glyph of the device in use; plain text passes through. */
   prompt: string;
   /** Names for messages. */
   reviverName: string;
@@ -89,6 +90,9 @@ export class Hud {
   readonly telegrams: Telegrams;
   private shownWounds = -1;
   private level = -1;
+  /** The last prompt text, so a change of device (or a rebind) redraws it at once, between two frames. */
+  private lastPrompt = "";
+  private offPrompt: (() => void) | undefined;
 
   constructor(private readonly root: HTMLElement) {
     this.health = el(root, "div", "health");
@@ -133,6 +137,7 @@ export class Hud {
     this.vitals.dataset.level = "0";
     this.compass = new Compass(root);
     this.telegrams = new Telegrams(root);
+    this.offPrompt = onPromptChange(() => fillPrompt(this.prompt, this.lastPrompt));
   }
 
   /** A telegram (the rout announcement, a comrade's news): queued, at most three on show, each for as long as it takes to read. */
@@ -187,9 +192,11 @@ export class Hud {
       this.progress.querySelector(".bar")!.setAttribute("aria-valuenow", String(value));
     }
 
+    // the prompt is text with tokens ("{interact}  Pick up barrel"): each token is the glyph of the device in use (input/glyphDom.ts), re-drawn when the device changes
     const text = down ? "" : v.prompt;
     this.prompt.hidden = text === "";
-    if (this.prompt.textContent !== text) this.prompt.textContent = text;
+    this.lastPrompt = text;
+    fillPrompt(this.prompt, text);
   }
 
   private updateWounds(mask: number, missing: number): void {
@@ -213,6 +220,7 @@ export class Hud {
   }
 
   dispose(): void {
+    this.offPrompt?.();
     for (const e of [this.health, this.wounds, this.crosshair, this.prompt, this.progress, this.downed, this.vitals]) e.remove();
     this.compass.dispose();
     this.telegrams.dispose();

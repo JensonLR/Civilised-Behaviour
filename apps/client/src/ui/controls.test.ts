@@ -28,7 +28,8 @@ describe("controls lists", () => {
     const text = info.keyboardRows().map((r) => r.what).join("|");
     for (const w of ["Move", "Sprint", "Jump", "Crouch", "Use", "Grab", "Throw", "Reload", "Melee", "Switch first", "Pause"]) expect(text).toContain(w);
     const pad = info.padRows().map((r) => r.keys[0]);
-    for (const g of ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "Start"]) expect(pad).toContain(g);
+    for (const g of ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "Menu"]) expect(pad).toContain(g);
+    expect(info.padRows("playstation").map((r) => r.keys[0])).toEqual(expect.arrayContaining(["✕", "○", "□", "△", "L1", "R1", "L2", "R2", "Options"]));
   });
 });
 

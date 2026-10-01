@@ -296,7 +296,8 @@ const HOUSES: readonly SaltmarketBox[] = [
   { x: -44, z: 108, yaw: 0, hx: 6.5, hz: 4, height: 5.1 },
   { x: 46, z: 110, yaw: Math.PI, hx: 6, hz: 4, height: 5.3 },
   // reed-cutters' stilt huts on the isthmus and beyond: low, thatched, the roof hardly above a standing walker's eye
-  { x: -26, z: -2, yaw: 0.3, hx: 2.6, hz: 2, height: 4.4 },
+  // (hut 2 faces SE, at the boardwalk's first bend: the raised 4.4 m ridge seen broadside from the walk cost the skyline three bins of open horizon, edge-on it costs none: `saltmarket.test.ts` measures it)
+  { x: -26, z: -2, yaw: 1.2, hx: 2.6, hz: 2, height: 4.4 },
   { x: 20, z: -26, yaw: 0.5, hx: 2.6, hz: 2.0, height: 4.5 },
   { x: 70, z: -22, yaw: 0.25, hx: 3.2, hz: 2.4, height: 4.5 },
   { x: 96, z: 30, yaw: -0.4, hx: 2.8, hz: 2.2, height: 3.1 },

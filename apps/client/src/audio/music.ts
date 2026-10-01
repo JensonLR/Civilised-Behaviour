@@ -1,14 +1,20 @@
+import { Rng, hash3, type RegionId } from "@cb/shared";
 import { engine } from "./engine.ts";
 import { beatSeconds, generatePhrase, MODES, type MusicMode, type MusicVoice, type Note } from "./musicScore.ts";
-import { env, noiseBuffers } from "./dsp.ts";
+import { MUSIC_LAYERS, type MusicLayerId } from "./musicLayers.ts";
+import { BED_GAIN, BED_INST, MUSIC_SEED, stemBar } from "./musicStems.ts";
+import { env, noiseBuffers, renderLayers } from "./dsp.ts";
 
 /**
  * Plays the generative score (musicScore.ts) with a few hand-built instruments: a parlour piano (a struck string: a fundamental and
  * a few decaying partials, a soft hammer of filtered noise), a music-box tune, a harp-like pluck and a slow pad. A 120 ms timer schedules
  * bars 0.6 s ahead on the audio clock, so a busy frame never stutters the rhythm. Fades between the menu and the game versions.
+ *
+ * The game version is LAYERED (D-038): the bed plays as it always did, through its own stem gain, and six more stems (musicStems.ts: pulse, dread, drive, stabs, dirge and the region's colour)
+ * are scheduled bar by bar on the same clock into stem gains the mood driver (musicLayers.ts, driven by GameAudio) moves. A stem whose gain is at zero is not scheduled at all.
  */
 
-const SEED = 0xc0ffee;
+const SEED = MUSIC_SEED;
 const hz = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
 
 interface Inst {
@@ -30,15 +36,10 @@ const INST: Record<MusicMode, Partial<Record<MusicVoice, Inst>>> = {
     bass: { partials: [[1, 1], [2, 0.5], [3, 0.2]], dec: 0.9, atk: 0.006, type: "triangle", hammer: 0.25 },
     chord: { partials: [[1, 1], [2, 0.35], [3, 0.12]], dec: 0.55, atk: 0.004, type: "triangle", hammer: 0.35, detune: 3 },
   },
-  game: {
-    melody: { partials: [[1, 1], [2.76, 0.07], [5.4, 0.03]], dec: 2.2, atk: 0.01, detune: 3 }, // a soft bell
-    bass: { partials: [[1, 1], [2, 0.2]], dec: 2.6, atk: 0.35, lp: 500 },
-    pad: { partials: [[1, 1]], dec: 3.5, atk: 1.2, type: "triangle", detune: 9, lp: 1000 },
-    arp: { partials: [[1, 1], [2, 0.25]], dec: 1.0, atk: 0.004, type: "triangle", hammer: 0.12 },
-  },
+  game: BED_INST, // shared with the offline measurement of the bed (musicStems.ts), so the two cannot drift apart
 };
 
-const GAIN: Record<MusicVoice, number> = { melody: 0.5, bass: 0.55, chord: 0.5, arp: 0.5, pad: 0.4 };
+const GAIN = BED_GAIN;
 
 /** Schedules one note of the score into `out` at audio time `t`. Works on any BaseAudioContext, so an offline render can measure the music. */
 export function playNote(ctx: BaseAudioContext, out: AudioNode, mode: MusicMode, t: number, n: Note, beat: number): void {
@@ -92,10 +93,25 @@ export function playNote(ctx: BaseAudioContext, out: AudioNode, mode: MusicMode,
   }
 }
 
+/** A stem's gain below this is silent: its bars are not scheduled (no nodes are made for what nobody hears). */
+const STEM_AUDIBLE = 0.012;
+
+/** The tone filter's cut-off (Hz) for the given stem gains: the game bed is at 3600; the aftermath's dirge closes it to 2400 (darker), and the drums open it a little (brighter). */
+export const toneCutoff = (g: Readonly<Record<MusicLayerId, number>>): number => 3600 - 1200 * Math.min(1, g.dirge) + 500 * Math.min(1, g.drive);
+
 class MusicPlayer {
   private wanted: MusicMode | null = null;
   private playing: MusicMode | null = null;
   private out: GainNode | undefined;
+  private tone: BiquadFilterNode | undefined;
+  /** Game mode: the fade gain of the combat stems (the bed has `out`) and their own tone filter, which feeds `engine.duck.stems`, not the bed's heavy duck. */
+  private outStems: GainNode | undefined;
+  private stemTone: BiquadFilterNode | undefined;
+  /** Per-stem output gains (game mode only), and the targets the mood driver last asked for. */
+  private stem: Record<MusicLayerId, GainNode> | undefined;
+  private readonly want: Record<MusicLayerId, number> = { bed: 1, pulse: 0, dread: 0, drive: 0, stabs: 0, dirge: 0, colour: 0 };
+  private duck = 1;
+  private region: RegionId = "hollowmere";
   private timer: ReturnType<typeof setInterval> | undefined;
   private barStart = 0;
   private bar = 0;
@@ -119,14 +135,44 @@ class MusicPlayer {
     return this.wanted;
   }
 
+  /** The region whose colour stem plays (takes effect from the next bar). */
+  setRegion(region: RegionId): void {
+    this.region = region;
+  }
+
+  /**
+   * The mood driver's live gains (0..1 per stem) and the parley duck (0..1 on everything). Safe to call every frame and before the music has started: the
+   * values are kept and applied the moment the game version begins.
+   */
+  setMix(gain: Readonly<Record<MusicLayerId, number>>, duck = 1): void {
+    this.duck = duck;
+    for (const id of MUSIC_LAYERS) this.want[id] = gain[id];
+    this.applyMix();
+    const ctx = engine.ctx;
+    if (this.stemTone && ctx) this.stemTone.frequency.setTargetAtTime(toneCutoff(gain), ctx.currentTime, 0.8);
+  }
+
+  private applyMix(): void {
+    const ctx = engine.ctx;
+    if (!ctx || !this.stem) return;
+    for (const id of MUSIC_LAYERS) this.stem[id].gain.setTargetAtTime(this.want[id] * this.duck, ctx.currentTime, 0.25);
+  }
+
   private fadeOutCurrent(): void {
     const ctx = engine.ctx;
     const old = this.out;
     if (!ctx || !old) return;
-    old.gain.cancelScheduledValues(ctx.currentTime);
-    old.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
-    setTimeout(() => old.disconnect(), 3500);
+    for (const g of [old, this.outStems]) {
+      if (!g) continue;
+      g.gain.cancelScheduledValues(ctx.currentTime);
+      g.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+      setTimeout(() => g.disconnect(), 3500);
+    }
     this.out = undefined;
+    this.outStems = undefined;
+    this.tone = undefined;
+    this.stemTone = undefined;
+    this.stem = undefined;
   }
 
   private switchTo(mode: MusicMode): void {
@@ -142,9 +188,32 @@ class MusicPlayer {
     const send = ctx.createGain();
     send.gain.value = mode === "menu" ? 0.3 : 0.55;
     out.connect(tone);
+    this.tone = tone;
     tone.connect(engine.duck.music);
     tone.connect(send);
     send.connect(engine.reverbSend.music);
+    if (mode === "game") {
+      // The stems fade in with the bed but travel their own way: a lighter blast duck (mixDuck.ts) and a tone filter the mood closes (the dirge) or opens (the drums).
+      const outStems = ctx.createGain();
+      outStems.gain.value = 0;
+      outStems.gain.setTargetAtTime(1, ctx.currentTime, 0.7);
+      const stemTone = ctx.createBiquadFilter();
+      stemTone.type = "lowpass";
+      stemTone.frequency.value = toneCutoff(this.want);
+      outStems.connect(stemTone);
+      stemTone.connect(engine.duck.stems);
+      stemTone.connect(send);
+      const stem = {} as Record<MusicLayerId, GainNode>;
+      for (const id of MUSIC_LAYERS) {
+        const g = ctx.createGain();
+        g.gain.value = this.want[id] * this.duck;
+        g.connect(id === "bed" ? out : outStems);
+        stem[id] = g;
+      }
+      this.outStems = outStems;
+      this.stemTone = stemTone;
+      this.stem = stem;
+    }
     this.out = out;
     this.playing = mode;
     this.barStart = ctx.currentTime + 0.25;
@@ -152,6 +221,15 @@ class MusicPlayer {
     this.phrase = 0;
     this.bars = generatePhrase(mode, SEED, 0);
     this.timer ??= setInterval(() => this.pump(), 120);
+  }
+
+  /** Renders this bar of every audible stem (the same layers the offline tests measure) into its gain. */
+  private scheduleStems(ctx: AudioContext, stem: Record<MusicLayerId, GainNode>): void {
+    for (const id of MUSIC_LAYERS) {
+      if (id === "bed" || this.want[id] * this.duck < STEM_AUDIBLE) continue;
+      const rng = new Rng(hash3(SEED, this.phrase * 8 + this.bar, 0x7a11 + MUSIC_LAYERS.indexOf(id)));
+      renderLayers(ctx, stem[id], this.barStart, stemBar(id, this.region, this.phrase, this.bar), { rng });
+    }
   }
 
   private pump(): void {
@@ -162,7 +240,9 @@ class MusicPlayer {
     const beat = beatSeconds(mode);
     while (this.barStart < ctx.currentTime + 0.6) {
       const notes = this.bars[this.bar] ?? [];
-      for (const n of notes) playNote(ctx, this.out, mode, this.barStart + n.beat * beat, n, beat);
+      const bedOut = this.stem ? this.stem.bed : this.out;
+      if (!this.stem || this.want.bed * this.duck >= STEM_AUDIBLE) for (const n of notes) playNote(ctx, bedOut, mode, this.barStart + n.beat * beat, n, beat);
+      if (this.stem) this.scheduleStems(ctx, this.stem);
       this.barStart += info.beats * beat;
       if (++this.bar >= info.bars) {
         this.bar = 0;

@@ -158,8 +158,8 @@ export function addSash(f: TorsoFrame, c: BodyCtx): void {
     const k = fr.at(0, 0, 0.019 + 0.03);
     b.sphere(0.04, tone(red, 0.9), k, [1, 1, 0.8], fr.rot);
     for (const [dx, len] of [[0.03, 0.26], [0.09, 0.2]] as const) {
-      b.sweep(curve([k, pushOut(f, [k[0] + dx * 0.5, k[1] - len * 0.5, k[2] - 0.02], 0.016), pushOut(f, [k[0] + dx, k[1] - len, k[2] - 0.015], 0.016)], 6), () => ({ rx: 0.03 * 0.9, rz: 0.012, pow: 2.4 }), red, { side: [1, 0, 0], segments: 5 });
-      for (let i = 0; i < 4; i++) { const tp = pushOut(f, [k[0] + dx + (i - 1.5) * 0.012, k[1] - len - 0.03, k[2] - 0.015], 0.016); b.box(0.006, 0.05, 0.006, gold, tp); }
+      b.sweep(curve([k, pushOut(f, [k[0] + dx * 0.5, k[1] - len * 0.5, k[2] - 0.02], 0.034), pushOut(f, [k[0] + dx, k[1] - len, k[2] - 0.015], 0.034)], 6), () => ({ rx: 0.03 * 0.9, rz: 0.012, pow: 2.4 }), red, { side: [1, 0, 0], segments: 5 });
+      for (let i = 0; i < 4; i++) { const tp = pushOut(f, [k[0] + dx + (i - 1.5) * 0.012, k[1] - len - 0.03, k[2] - 0.015], 0.034); b.box(0.006, 0.05, 0.006, gold, tp); }
     }
   }
   if (s === 5) {

@@ -127,6 +127,11 @@ const FROZEN_OPTIONS: Readonly<Record<string, number>> = {
   noseStyle: 6, hair: 10, moustache: 10, beard: 8, sideburns: 4, hat: 11, jacket: 6, shirt: 4, trousers: 4, boots: 4, belt: 3, eyewear: 5, sash: 3,
   neckwear: 4, pack: 5, hipGear: 5, gloves: 3,
 };
+/**
+ * Where the NATIVE-PEOPLES options start in each list (D-038): `applyPeople` draws them for the fictional peoples; the generic generator (the Society's folk, the creator's dice) never
+ * does, so adding them changed nobody who already existed.
+ */
+export const NATIVE_FROM: Readonly<Record<string, number>> = { hat: 21, jacket: 11, neckwear: 9, facePaint: 7, hair: 17, hairAcc: 6, hipGear: 10, boots: 9 };
 /** Chance that a generated character picks one of the options appended later, per field. */
 const NOVELTY_ODDS: Readonly<Record<string, number>> = { hat: 0.34, hair: 0.34, jacket: 0.3, moustache: 0.25, beard: 0.25, boots: 0.3, eyewear: 0.3, trousers: 0.25 };
 /** Chance that a batch field is set at all (default 0.4). Rare vanity (tattoos, face paint) stays rare so a crowd reads as a crowd. */
@@ -273,7 +278,8 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
       FIELD_BATCHES.forEach((b, k) => i >= b.start && (batch = k));
       const st = streams[batch] as Rng;
       const frozen = FROZEN_OPTIONS[f.key];
-      const max = frozen !== undefined ? frozen - 1 : f.max;
+      const nativeFrom = NATIVE_FROM[f.key];
+      const max = frozen !== undefined ? frozen - 1 : nativeFrom !== undefined ? nativeFrom - 1 : f.max;
       if (batch === 0) spec[f.key] = st.chance(0.55) ? 0 : st.int(1, max); // batch 1 keeps its original odds
       else if (f.key === "age") spec[f.key] = st.chance(EXTRA_ODDS[f.key] ?? 0.6) ? st.int(40, 230) : st.int(0, 60);
       else spec[f.key] = st.chance(EXTRA_ODDS[f.key] ?? 0.4) ? st.int(1, max) : 0;
@@ -308,7 +314,7 @@ export function generateCharacter(seed: number, archetype?: number): CharacterSp
   for (const f of FIELDS) {
     const frozen = FROZEN_OPTIONS[f.key];
     if (frozen === undefined || f.max < frozen) continue;
-    if (novelty.chance(NOVELTY_ODDS[f.key] ?? 0.2)) spec[f.key] = novelty.int(frozen, f.max);
+    if (novelty.chance(NOVELTY_ODDS[f.key] ?? 0.2)) spec[f.key] = novelty.int(frozen, (NATIVE_FROM[f.key] ?? f.max + 1) - 1);
   }
   return sanitizeSpec(spec);
 }

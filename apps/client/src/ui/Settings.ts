@@ -1,8 +1,9 @@
 import { playSfx, previewCaption } from "../audio/index.ts";
 import { ACTIONS, assign, defaultBindings, getBindings, keyLabel, setBindings, type ActionDef, type ActionId, type Bindings, type Slot } from "../input/bindings.ts";
 import * as S from "../settings.ts";
-import { ACTION_GROUPS, PAD_LAYOUT } from "./controlsInfo.ts";
+import { ACTION_GROUPS } from "./controlsInfo.ts";
 import { Modal, h } from "./modal.ts";
+import { buildPadSection, type PadSection } from "./SettingsPad.ts";
 
 /**
  * The settings screen ("Standing Orders"): four tabs, every control a real form control (range, checkbox, select, button) so it works with
@@ -28,6 +29,7 @@ export class SettingsSheet {
   private readonly refreshers: Refresh[] = [];
   private readonly status: HTMLElement;
   private tab: TabId = "audio";
+  private padSection: PadSection | undefined;
   private capture: { action: ActionId; slot: Slot; btn: HTMLButtonElement } | undefined;
   private pending: { action: ActionId; slot: Slot; code: string } | undefined;
   private conflictBar!: HTMLElement;
@@ -101,6 +103,7 @@ export class SettingsSheet {
       this.disarmReset();
       this.cancelCapture();
       this.clearConflict();
+      this.padSection?.cancelLearn();
     };
     this.showTab("audio", false);
   }
@@ -285,12 +288,11 @@ export class SettingsSheet {
     this.refreshers.push(() => this.refreshBindings());
 
     this.heading(p, "Mouse and gamepad");
-    p.appendChild(h("p", { class: "fine" }, "Fire is the left mouse button and Aim the right. The gamepad layout is fixed (standard mapping):"));
-    const pad = h("div", { class: "padmap" }, this.padSvg());
-    const list = h("dl", { class: "keys pads" });
-    for (const r of PAD_LAYOUT) list.appendChild(h("div", {}, h("dt", {}, h("kbd", { class: "pad" }, r.glyph)), h("dd", {}, r.what)));
-    pad.appendChild(list);
-    p.appendChild(pad);
+    p.appendChild(h("p", { class: "fine" }, "Fire is the left mouse button and Aim the right (hold, or toggle below). The gamepad's feel and layout are here too; the prompts on screen follow whichever device you last used."));
+    // D-038: the pad's feel, aim assist, rumble and a rebindable layout (ui/SettingsPad.ts); every prompt in the game follows it
+    this.padSection?.dispose();
+    this.padSection = buildPadSection();
+    p.appendChild(this.padSection.el);
   }
 
   private bindRow(a: ActionDef): HTMLElement {
@@ -404,24 +406,6 @@ export class SettingsSheet {
     this.pending = undefined;
     this.conflictBar.hidden = true;
     this.modal.escapeBusy = this.capture !== undefined;
-  }
-
-  private padSvg(): SVGElement {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 120 78");
-    svg.setAttribute("class", "padsvg");
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Gamepad: sticks and face buttons on the front, bumpers and triggers on top");
-    svg.innerHTML = `
-      <path class="body" d="M24 22c-9 3-16 20-19 38-1.6 9 6 12 12 6l14-14h58l14 14c6 6 13.600 3 12-6-3-18-10-35-19-38-4-1.500-9-2-14-2H38c-5 0-10 .5-14 2Z"/>
-      <path class="bump" d="M28 20 32 12h16l3 8M92 20 88 12H72l-3 8"/>
-      <circle class="stick" cx="40" cy="36" r="8"/><circle class="stick" cx="76" cy="52" r="8"/>
-      <path class="dpad" d="M26 52h6v-6h6v6h6v6h-6v6h-6v-6h-6z"/>
-      <circle class="btn" cx="88" cy="28" r="4.500"/><circle class="btn" cx="98" cy="36" r="4.500"/><circle class="btn" cx="78" cy="36" r="4.500"/><circle class="btn" cx="88" cy="44" r="4.500"/>
-      <g class="glyphs"><text x="88" y="29.800">Y</text><text x="98" y="37.800">B</text><text x="78" y="37.800">X</text><text x="88" y="45.800">A</text>
-      <text x="40" y="38.500">L</text><text x="76" y="54.500">R</text><text x="40" y="9">LB · LT</text><text x="80" y="9">RB · RT</text></g>`;
-    return svg;
   }
 
   private buildAccess(body: HTMLElement): void {

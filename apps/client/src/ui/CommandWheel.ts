@@ -1,10 +1,11 @@
 import type { CommandId } from "@cb/shared";
 import { startPadNav } from "./PadNav.ts";
 import { h } from "./modal.ts";
+import { bindPrompt } from "../input/glyphDom.ts";
 import "./commandWheel.css";
 
 /**
- * The command wheel: five stamps on a ring, opened by HOLDING the Command action (default Q / pad LB; the integrator owns the rebindable action and calls
+ * The command wheel: five stamps on a ring, opened by HOLDING the Command action (its glyph is printed by `howto`; the integrator owns the rebindable action and calls
  * `open()` on press and `release()` on let-go). Choose by mouse (`nudge` with pointer-lock deltas, or `point` with a normalised position) or by stick
  * (`stick`); release sends the stamp under the pointer; the centre cancels. While open, 1-5 send at once, arrows move the choice, Enter / Space send it,
  * Escape cancels. The five stamps are real buttons (reachable by Tab and by PadNav's D-pad / A / B) and the ring is `role="menu"`.
@@ -42,6 +43,8 @@ export class CommandWheel {
   private readonly ring = h("div", { class: "ring", role: "menu", "aria-label": "Command the hands", hidden: true });
   private readonly centre = h("div", { class: "centre", "aria-hidden": "true" }, h("span", {}, "Cancel"));
   private readonly result = h("p", { class: "result", role: "status", "aria-live": "polite", hidden: true });
+  /** How to use the wheel, in the glyphs of the device in use (hold the command control, point, release). */
+  private readonly howto = h("p", { class: "wheelhint", "aria-hidden": "true" });
   private readonly buttons: HTMLButtonElement[] = [];
   private chosen = -1;
   private cx = 0;
@@ -79,7 +82,7 @@ export class CommandWheel {
       const b = h(
         "button",
         { type: "button", class: "stamp", role: "menuitem", "data-i": String(i), "data-id": s.id, tabindex: "0", style: `--a: ${i * (360 / WHEEL_STAMPS.length)}deg` },
-        h("span", { class: "key", "aria-hidden": "true" }, String(i + 1)),
+        h("span", { class: "key kb-only", "aria-hidden": "true" }, String(i + 1)),
         h("span", { class: "label" }, s.label),
         h("span", { class: "hint" }, s.hint),
       );
@@ -89,7 +92,8 @@ export class CommandWheel {
       this.ring.appendChild(b);
     });
     this.ring.appendChild(this.centre);
-    this.root.append(this.ring, this.result);
+    bindPrompt(this.howto, () => "Hold {command}, point with {wheelPick}, let go to send");
+    this.root.append(this.ring, this.howto, this.result);
     parent.appendChild(this.root);
     this.ring.addEventListener("padback", () => this.cancel());
     this.stopPad = startPadNav(this.ring, () => this.opened);

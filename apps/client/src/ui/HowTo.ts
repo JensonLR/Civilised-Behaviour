@@ -1,6 +1,9 @@
 import { emitSetting, readStored, writeStored } from "../settings.ts";
+import { connectedPadFamily, deviceTracker, type InputDevice } from "../input/devices.ts";
+import { glyphEl, onPromptChange } from "../input/glyphDom.ts";
 import { keyboardRows, padRows, type ControlRow } from "./controlsInfo.ts";
 import { Modal, h } from "./modal.ts";
+import { sheetHints } from "./sheetHints.ts";
 import { openSettings } from "./Settings.ts";
 import { replayOrientation } from "./Orientation.ts";
 import { ORIENT_REPLAY } from "./orientationCopy.ts";
@@ -63,8 +66,19 @@ class HowToCard {
         this.list,
       ),
       h("div", { class: "actions" }, opts, replay, done),
+      sheetHints().el,
     );
     this.modal.onClose = () => markHowToSeen();
+    // a pad picked up (or put down) while the card is open: the list follows, no reload
+    onPromptChange((e) => {
+      if (this.modal.isOpen) this.show(e === "keyboard" ? "keyboard" : "pad");
+    });
+  }
+
+  /** The pad family whose shapes the pad list draws: the one in use, else the connected pad's, else the Xbox set. */
+  private family(): Exclude<InputDevice, "keyboard"> {
+    const e = deviceTracker.effective;
+    return e !== "keyboard" ? e : connectedPadFamily() ?? "xbox";
   }
 
   private show(d: Device): void {
@@ -72,9 +86,18 @@ class HowToCard {
     this.kb.setAttribute("aria-pressed", String(d === "keyboard"));
     this.pad.setAttribute("aria-pressed", String(d === "pad"));
     this.list.className = d === "pad" ? "keys pads" : "keys";
-    const rows: ControlRow[] = d === "keyboard" ? keyboardRows() : padRows();
+    const fam = this.family();
+    const rows: ControlRow[] = d === "keyboard" ? keyboardRows() : padRows(fam);
     this.list.replaceChildren(
-      ...rows.map((r) => h("div", {}, h("dt", {}, ...r.keys.map((k) => h("kbd", { class: d === "pad" ? "pad" : "" }, k))), h("dd", {}, r.what))),
+      ...rows.map((r) =>
+        h(
+          "div",
+          {},
+          // keyboard: one key cap per bound key (two keys are two caps); pad: the glyph of each control, shaped for the family in use and for the player's own layout
+          h("dt", {}, ...(d === "pad" && r.prompts ? r.prompts.map((p) => glyphEl(p, fam)) : r.keys.map((k) => h("kbd", { class: "glyph glyph-key" }, k)))),
+          h("dd", {}, r.what),
+        ),
+      ),
     );
   }
 
@@ -83,7 +106,7 @@ class HowToCard {
   }
 
   open(opener?: HTMLElement | null): void {
-    this.show(detectDevice());
+    this.show(deviceTracker.device !== "keyboard" ? "pad" : detectDevice());
     this.modal.open(opener);
   }
 

@@ -1,6 +1,7 @@
 import { REGION_IDS, type CampaignMapData, type PowerId, type RegionId } from "@cb/shared";
 import { Modal, h } from "./modal.ts";
 import { CHART_AT, CampaignMap, chartRoute, drawCampaignOverlay, regionPair } from "./CampaignMap.ts";
+import { sheetHints } from "./sheetHints.ts";
 import "./mapRoom.css";
 
 export interface MapRoomRegion {
@@ -89,6 +90,7 @@ export class MapRoom {
       this.crew,
       this.status,
       h("div", { class: "actions" }, this.close, h("div", { class: "acts" }, this.cancel, this.ready, this.propose)),
+      sheetHints().el,
     );
     this.propose.addEventListener("click", () => {
       if (this.selected && this.canPropose()) this.cb?.propose(this.selected);

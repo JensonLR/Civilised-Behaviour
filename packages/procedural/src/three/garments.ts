@@ -8,6 +8,7 @@ import { CREAM, LEATHER, PartBuilder, singe, type V3 } from "./parts.ts";
 import { JACKET_CUT, torsoRings } from "./fit/torsoShape.ts";
 import { skirtRings as skirtShapeRings } from "./fit/skirtShape.ts";
 import { collarKind, collarSections, neckOuter, type CollarKind } from "./fit/collarShape.ts";
+import { dressNativeJacket } from "./nativeJackets.ts";
 import { patchSurface, polySurface, type Surf } from "./fit/surface.ts";
 import { bandAround, buttonOn, frameAt, hangingStrip } from "./fit/torsoKit.ts";
 import { backZ, dyeAt, frontZ, legRadius, neckRadii, waistHalf, ringAt, ringSurface, soil, tone, type BodyCtx } from "./bodyKit.ts";
@@ -20,7 +21,7 @@ import { backZ, dyeAt, frontZ, legRadius, neckRadii, waistHalf, ringAt, ringSurf
  * Jacket indices (catalog JACKETS): 0 shirt sleeves, 1 frock coat, 2 tunic, 3 waistcoat, 4 greatcoat, 5 hunting jacket, 6 cape, 7 poncho,
  * 8 smoking jacket, 9 naval reefer, 10 Norfolk jacket.
  */
-export const JACKET = { SHIRT: 0, FROCK: 1, TUNIC: 2, WAISTCOAT: 3, GREATCOAT: 4, HUNTING: 5, CAPE: 6, PONCHO: 7, SMOKING: 8, NAVAL: 9, NORFOLK: 10 } as const;
+export const JACKET = { SHIRT: 0, FROCK: 1, TUNIC: 2, WAISTCOAT: 3, GREATCOAT: 4, HUNTING: 5, CAPE: 6, PONCHO: 7, SMOKING: 8, NAVAL: 9, NORFOLK: 10, STONE_SMOCK: 11, LAMP_ROBE: 12, HERD_CLOAK: 13, CREPE_SHAWL: 14, WADING_SMOCK: 15, COURT_CLOAK: 16 } as const;
 
 // The torso's cut and sections live in fit/torsoShape.ts (the one definition the body field and every wearable read); re-exported here for the callers that import them from garments.
 export { JACKET_CUT, torsoRings };
@@ -64,7 +65,7 @@ function vHalf(v: TorsoView, close: number, top: number, y: number): number {
 }
 
 /** A surface strip along the front: between azimuth lo(y) and hi(y) (radians from the centre line) for y in [y0, y1]. */
-function stripPatch(v: TorsoView, y0: number, y1: number, lo: (y: number) => number, hi: (y: number) => number, color: number | ((phi: number, y: number) => number), lift = 0.008, side: 1 | -1 | 0 = 0, nu = 10, nv = 12, uMax = 1.6): void {
+export function stripPatch(v: TorsoView, y0: number, y1: number, lo: (y: number) => number, hi: (y: number) => number, color: number | ((phi: number, y: number) => number), lift = 0.008, side: 1 | -1 | 0 = 0, nu = 10, nv = 12, uMax = 1.6): void {
   const sides: (1 | -1)[] = side === 0 ? [-1, 1] : [side];
   v.layers.push({ inside: (phi, y) => Math.min(Math.abs(phi) - lo(y), hi(y) - Math.abs(phi), (y - y0) * 4, (y1 - y) * 4), lift });
   for (const sg of sides) {
@@ -84,7 +85,7 @@ function stripPatch(v: TorsoView, y0: number, y1: number, lo: (y: number) => num
 }
 
 /** A row of buttons down the front at azimuth column x (metres), heights ys. */
-function buttons(v: TorsoView, ys: readonly number[], x: number, color: number, r = 0.021): void {
+export function buttons(v: TorsoView, ys: readonly number[], x: number, color: number, r = 0.021): void {
   for (const y of ys) buttonOn(v.b, v.s, x, y, r, color, layerAtX(v, x, y));
 }
 
@@ -108,7 +109,7 @@ function rollEdge(v: TorsoView, sign: 1 | -1, y0: number, y1: number, phiAt: (y:
 }
 
 /** A patch pocket or flap on the torso surface. */
-function pocket(v: TorsoView, x: number, y: number, w: number, hgt: number, color: number, flap = true): void {
+export function pocket(v: TorsoView, x: number, y: number, w: number, hgt: number, color: number, flap = true): void {
   const fr = frameAt(v.s.atX(x, y, 0));
   const o = layerAtX(v, x, y);
   v.b.box(w, hgt, 0.02, color, fr.at(0, 0, o + 0.01), fr.rot);
@@ -117,13 +118,13 @@ function pocket(v: TorsoView, x: number, y: number, w: number, hgt: number, colo
 }
 
 /** A small flat piece on the front of the trunk (a welt, a handkerchief, a plate): centred at lateral x, height y; `roll` turns it in the surface. */
-function tab(v: TorsoView, x: number, y: number, w: number, hgt: number, d: number, color: number, o: { out?: number; roll?: number } = {}): void {
+export function tab(v: TorsoView, x: number, y: number, w: number, hgt: number, d: number, color: number, o: { out?: number; roll?: number } = {}): void {
   const fr = frameAt(v.s.atX(x, y, 0));
   v.b.box(w, hgt, d, color, fr.at(0, 0, layerAtX(v, x, y) + (o.out ?? 0) + d / 2), [fr.rot[0], fr.rot[1], fr.rot[2] + (o.roll ?? 0)]);
 }
 
 /** A placket (a buttoned strip of facing) down the centre front between two heights: a strip laid on the surface, so it follows the belly and the chest. */
-function placket(v: TorsoView, y0: number, y1: number, color: number): void {
+export function placket(v: TorsoView, y0: number, y1: number, color: number): void {
   hangingStrip(v.b, v.s, 0, y1, y0, 0.017, 0.0075, color, { base: layerAtX(v, 0, (y0 + y1) / 2), round: undefined });
 }
 
@@ -133,13 +134,13 @@ function pleat(v: TorsoView, x: number, y0: number, y1: number, color: number): 
 }
 
 /** A half-belt across the back (a strip round the back of the coat between azimuths). */
-function bandBack(v: TorsoView, y: number, halfH: number, halfWidth: number, color: number): void {
+export function bandBack(v: TorsoView, y: number, halfH: number, halfWidth: number, color: number): void {
   const pts = [-1, -0.5, 0, 0.5, 1].map((k) => v.s.atX(k * halfWidth, y, 0.008, true).p);
   v.b.sweep(pts, () => ({ rx: halfH, rz: 0.008, pow: 3 }), color, { side: [0, 1, 0], segments: 4, round: "both" });
 }
 
 /** Collars: a band that hugs the neck (never smaller than the neck it sits on), plus the style's turn-down. Sizes come from fit/collarShape.ts (neckwear wraps the same sections). */
-function collar(v: TorsoView, kind: CollarKind, cloth = kind === "shirt" || kind === "high" ? singe(CREAM, v.c.burnt) : v.facing): void {
+export function collar(v: TorsoView, kind: CollarKind, cloth = kind === "shirt" || kind === "high" ? singe(CREAM, v.c.burnt) : v.facing): void {
   const { b, nrx, nrz, neckY } = v;
   const sec = collarSections(kind, nrx, nrz, neckY);
   const noCaps = { capTop: false, capBottom: false };
@@ -233,6 +234,7 @@ export function dressTorso(v: TorsoView): void {
   } else if (j === JACKET.TUNIC || j === JACKET.HUNTING || j === JACKET.NORFOLK || j === JACKET.NAVAL) collar(v, j === JACKET.NAVAL ? "fall" : "stand");
   else if (j === JACKET.FROCK || j === JACKET.GREATCOAT || j === JACKET.SMOKING) collar(v, "fall");
   else if (j === JACKET.CAPE || j === JACKET.PONCHO) collar(v, "stand");
+  else if (j >= JACKET.STONE_SMOCK) dressNativeJacket(v, j); // (the fictional peoples' garments: their own collars, fronts and mantles: nativeJackets.ts)
 
   const vestC = v.vest;
   const shirtFront = singe(CREAM, c.burnt);
@@ -412,6 +414,10 @@ export function closedSkirtLength(spec: CharacterSpec, P: Proportions): number {
       return P.legUpper * 0.5;
     case JACKET.SMOKING:
       return P.legUpper * 0.62;
+    case JACKET.STONE_SMOCK:
+      return P.legUpper * 0.42;
+    case JACKET.WADING_SMOCK:
+      return P.legUpper * 0.34;
     default:
       return 0;
   }
@@ -434,6 +440,16 @@ export function skirtSpec(spec: CharacterSpec, P: Proportions): { len: number; f
       return { len: closedSkirtLength(spec, P), flare: 1.08, open: false };
     case JACKET.SMOKING:
       return { len: closedSkirtLength(spec, P), flare: 1.1, open: false };
+    case JACKET.STONE_SMOCK:
+      return { len: closedSkirtLength(spec, P), flare: 1.1, open: false };
+    case JACKET.WADING_SMOCK:
+      return { len: closedSkirtLength(spec, P), flare: 1.06, open: false };
+    case JACKET.LAMP_ROBE: // ankle-length and split at the front (a closed bell would be walked through)
+      return { len: P.legUpper * 1.2, flare: 1.1, open: true };
+    case JACKET.HERD_CLOAK:
+      return { len: P.legUpper * 1.0, flare: 1.2, open: true };
+    case JACKET.COURT_CLOAK:
+      return { len: P.legUpper * 1.4, flare: 1.32, open: true };
     default:
       return undefined;
   }
