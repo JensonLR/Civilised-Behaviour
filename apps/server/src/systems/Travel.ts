@@ -11,6 +11,8 @@ export interface TravelHost {
   notice(text: string): void;
   /** Publish the state to clients (travelPhase, travelTo, travelReady, travelLeft). Called only when something a client can see changed. */
   sync(s: TravelState): void;
+  /** D-035: the steam launch's sailing time to `to` (seconds), or undefined for the region's own. */
+  sailSeconds?(to: RegionId): number | undefined;
 }
 
 /**
@@ -34,11 +36,11 @@ export class Travel {
 
   /** `sid` is the proposer's session (unused by the rules; kept for the room's logs). */
   propose(_sid: string, slot: number, to: unknown): void {
-    this.apply(travelPropose(this.s, this.host.current(), to, slot, this.host.connectedSlots()));
+    this.apply(travelPropose(this.s, this.host.current(), to, slot, this.host.connectedSlots(), this.secs(to)));
   }
 
   ready(slot: number, on: unknown): void {
-    this.apply(travelReady(this.s, slot, on === true, this.host.connectedSlots()));
+    this.apply(travelReady(this.s, slot, on === true, this.host.connectedSlots(), this.secs(this.s.to)));
   }
 
   cancel(): void {
@@ -52,13 +54,17 @@ export class Travel {
 
   tick(dt: number): void {
     if (this.s.phase === 0) return;
-    this.apply(travelTick(this.s, dt, this.host.connectedSlots()));
+    this.apply(travelTick(this.s, dt, this.host.connectedSlots(), this.secs(this.s.to)));
   }
 
   /** A slot left: a vote it was blocking may now be unanimous, an arrival it was holding up may be complete. */
   onLeave(_slot: number): void {
     if (this.s.phase === 0) return;
-    this.apply(travelReconcile(this.s, this.host.connectedSlots()));
+    this.apply(travelReconcile(this.s, this.host.connectedSlots(), this.secs(this.s.to)));
+  }
+
+  private secs(to: unknown): number | undefined {
+    return typeof to === "string" && (to === "hollowmere" || to === "kessar") ? this.host.sailSeconds?.(to) : undefined;
   }
 
   private apply(step: TravelStep): void {

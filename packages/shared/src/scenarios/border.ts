@@ -1,6 +1,7 @@
 import type { CampaignState, CasualtyTally, ComplicationId, ObjectiveView, ScenarioFx, ScenarioOutcome, ScenarioView } from "../campaignTypes.ts";
 import { BORDER_ESCALATE_S, KESSAR_SITES, NPC } from "../campaignTypes.ts";
 import { COMPLICATION_HINT, dealComplication } from "../chaos.ts";
+import type { RivalPresence } from "../worldTypes.ts";
 import { NPC_SIDE, type NpcSpec } from "../expeditionTypes.ts";
 import { clamp } from "../math.ts";
 import { hash3 } from "../rng.ts";
@@ -32,9 +33,9 @@ export interface BorderState extends BaseState {
 
 const NO_PLAN_LINE = "\"What plan? If you have something to tell us, tell us. If you merely suspect, the Ward has a form for suspicion, but it is longer.\" The sergeant is unmoved, and the border is no calmer.";
 
-function init(c: CampaignState, _asking: number, seed: number): BorderState {
+function init(c: CampaignState, _asking: number, seed: number, presence?: RivalPresence): BorderState {
   return {
-    phase: "approach", t: 0, resolvedAt: 0, complication: dealComplication(c, "border_incident", seed), rain: 0, tension: 10 + (hash3(seed >>> 0, int(c.day, 0, 1e6, 0), 0xb04d) % 11),
+    phase: "approach", t: 0, resolvedAt: 0, complication: dealComplication(c, "border_incident", seed, presence), rain: 0, tension: 10 + (hash3(seed >>> 0, int(c.day, 0, 1e6, 0), 0xb04d) % 11),
     near: { marker: 0, ward: 0, rival: 0 }, survey: { ward: false, rival: false }, plan: false, envelope: false, hostile: false, stray: false, reinforced: false, escalatedAt: -1,
     ward: { alive: 2, routed: 0, down: 0, total: 2 }, rival: { alive: 3, routed: 0, down: 0, total: 3 }, tally: zeroTally(), brokePromise: false, paid: 0,
   };

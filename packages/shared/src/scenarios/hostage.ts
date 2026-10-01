@@ -1,6 +1,7 @@
 import type { CampaignState, CasualtyTally, ComplicationId, ObjectiveView, ScenarioFx, ScenarioOutcome, ScenarioView } from "../campaignTypes.ts";
 import { HOSTAGE_DEADLINE_S, KESSAR_ANCHORS, KESSAR_SITES, NPC } from "../campaignTypes.ts";
 import { COMPLICATION_HINT, dealComplication } from "../chaos.ts";
+import type { RivalPresence } from "../worldTypes.ts";
 import { NPC_SIDE, type NpcSpec } from "../expeditionTypes.ts";
 import { clamp } from "../math.ts";
 import { hash3 } from "../rng.ts";
@@ -41,9 +42,9 @@ const NAMES = ["Colour-Sergeant Barnaby Cull", "Gunner Ludo Marrowby", "Private 
 const ARMS: readonly WeaponId[] = [WEAPON.PISTOL, WEAPON.RIFLE, WEAPON.BLUNDERBUSS, WEAPON.SABRE];
 const REINF_POSTS = [{ x: 62, z: -29 }, { x: 60, z: -21 }] as const;
 
-function init(c: CampaignState, _asking: number, seed: number): HostageState {
+function init(c: CampaignState, _asking: number, seed: number, presence?: RivalPresence): HostageState {
   const day = int(c.day, 0, 1e6, 0);
-  const complication = dealComplication(c, "hostage_rescue", seed);
+  const complication = dealComplication(c, "hostage_rescue", seed, presence);
   const ransom = clamp(HOSTAGE.ransomBase + Math.round(c.factions.ward.rivalInfluence * 0.3) + (hash3(seed >>> 0, day, 0x4a11) % 11), 20, HOSTAGE.ransomMax);
   return {
     phase: "planning", t: 0, resolvedAt: 0, complication, rain: 0, purse: int(c.purse, 0, 99999, 0), ransom: Math.round(ransom / 5) * 5,

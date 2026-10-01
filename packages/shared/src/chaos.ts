@@ -1,5 +1,6 @@
 import type { CampaignState, ComplicationId, ScenarioTemplateId } from "./campaignTypes.ts";
 import { hash3 } from "./rng.ts";
+import type { RivalPresence } from "./worldTypes.ts";
 
 /**
  * The chaos director (D-034). No spawner: a complication is ONE thing the template already knows how to handle (a timed event, a thinner fog, a
@@ -25,17 +26,20 @@ const crossingScouts = (c: CampaignState): boolean => c.factions.ward.rivalInflu
 
 const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4 };
 
-export function dealComplication(c: CampaignState, id: ScenarioTemplateId, seed: number): ComplicationId {
+export function dealComplication(c: CampaignState, id: ScenarioTemplateId, seed: number, presence?: RivalPresence): ComplicationId {
   if (id === "secure_crossing") return crossingScouts(c) ? "rival_scouts" : "none";
   const rival = c.factions.ward.rivalInfluence;
   const day = Math.max(0, Math.round(c.day));
   const last = c.sites?.lastComplication ?? "none";
-  const pool = COMPLICATION_POOL[id].filter((x) => x !== last && (!RIVAL_ONLY.has(x) || rival >= RIVAL_MIN));
+  // D-035: a Syndicate that is out for redress deals more trouble; one lying low, less; and it is "worth the name" whenever it is not hiding
+  const rivalOk = rival >= RIVAL_MIN || (presence !== undefined && presence.goal !== "lie_low");
+  const pool = COMPLICATION_POOL[id].filter((x) => x !== last && (!RIVAL_ONLY.has(x) || rivalOk));
   if (pool.length === 0) return "none";
-  const total = NONE_WEIGHT + pool.length * ENTRY_WEIGHT;
+  const none = presence === undefined ? NONE_WEIGHT : presence.goal === "sabotage_party" ? 1 : presence.goal === "lie_low" ? 5 : NONE_WEIGHT;
+  const total = none + pool.length * ENTRY_WEIGHT;
   let roll = hash3(seed >>> 0, day, 0xc4a05, TEMPLATE_TAG[id]) % total;
-  if (roll < NONE_WEIGHT) return "none";
-  roll -= NONE_WEIGHT;
+  if (roll < none) return "none";
+  roll -= none;
   return pool[Math.floor(roll / ENTRY_WEIGHT)]!;
 }
 

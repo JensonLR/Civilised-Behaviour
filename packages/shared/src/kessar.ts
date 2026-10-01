@@ -5,6 +5,8 @@ import { lerp, smoothstep } from "./math.ts";
 import { PropKind, type PropSpawn } from "./props.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
+import { inOutpostRing, outpostObstacles } from "./outpost.ts";
+import type { OutpostStage } from "./worldTypes.ts";
 
 /**
  * KESSAR REACH, region 1: the authored plan (ONE pure description the terrain, the colliders, the props and the client's geometry all read, like
@@ -359,7 +361,7 @@ const ROCK_TAG = "rock" as const;
  * (whoever stood on it falls to the bed) but keeps the pier stumps, and rubble lies in the water. Appended with its own random streams so a
  * collapsed world differs from an intact one ONLY at the bridge.
  */
-export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeState): Obstacle[] {
+export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeState, opts?: { outpost?: OutpostStage; telegraph?: boolean }): Obstacle[] {
   const plan = kessarPlan();
   const g = (x: number, z: number): number => terrain.height(x, z);
   const out: Obstacle[] = [];
@@ -486,6 +488,14 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
     }
     k++;
   }
+  // D-035: the Society's outpost. The seeded dressing above is computed exactly as before at EVERY stage; a stage above "none" then clears the scatter out of the outpost's
+  // ring (the same set at every stage, so a stage change moves nothing else) and appends its own colliders, which draw no random numbers. "none" is today's world, byte for byte.
+  const stage = opts?.outpost ?? "none";
+  if (stage !== "none") {
+    const kept = out.filter((o) => !((o.tag === "tree" || o.tag === ROCK_TAG) && inOutpostRing(o.x, o.z)));
+    out.length = 0;
+    out.push(...kept, ...outpostObstacles(stage, opts?.telegraph === true, terrain));
+  }
   return out;
 }
 
@@ -500,9 +510,9 @@ export function kessarSitePoints(): { id: string; x: number; z: number }[] {
 }
 
 /** Kessar's collision world. `bridge: "collapsed"` rebuilds it without the deck (the integrator swaps worlds after the charge goes off). */
-export function createKessarWorld(seed: number, bridge: BridgeState = "intact"): CollisionWorld {
+export function createKessarWorld(seed: number, bridge: BridgeState = "intact", opts?: { outpost?: OutpostStage; telegraph?: boolean }): CollisionWorld {
   const terrain = createKessarTerrain(seed);
-  return new CollisionWorld(terrain, kessarObstacles(terrain, seed, bridge), A.bounds);
+  return new CollisionWorld(terrain, kessarObstacles(terrain, seed, bridge, opts), A.bounds);
 }
 
 /** The landing: a ring of up to four on the beach (never on the pier). */

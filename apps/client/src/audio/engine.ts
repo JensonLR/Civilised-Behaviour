@@ -252,9 +252,9 @@ class Engine {
   private caption(name: string, o: PlayOpts, def: SoundDef): void {
     if (!this.captionsOn || this.captionSinks.length === 0) return;
     const now = performance.now() / 1000;
-    if (!this.gate.accept(name, now)) return;
+    if (!this.gate.accept(name, now, o.key)) return;
     const positional = o.x !== undefined && !def.ui;
-    const text = captionFor(name, positional ? spatialise(this.listener, o.x!, o.y ?? this.listener.y, o.z ?? this.listener.z, def.ref, def.max, this.sp) : null);
+    const text = captionFor(name, positional ? spatialise(this.listener, o.x!, o.y ?? this.listener.y, o.z ?? this.listener.z, def.ref, def.max, this.sp) : null, o.key);
     if (text) for (const s of this.captionSinks) s(text);
   }
 

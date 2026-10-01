@@ -17,7 +17,7 @@ import {
   type Scene,
   type Texture,
 } from "three";
-import { CanopyIndex, GATE_CLOCK_Y, PALETTE, RIVER, autumnAt, buildFlock, classifyObstacle, riverCentre, smoothstep, villagePlan, type CollisionWorld, type DayState, type LandscapeTerrain } from "@cb/shared";
+import { CanopyIndex, GATE_CLOCK_Y, PALETTE, RIVER, autumnAt, buildFlock, classifyObstacle, riverCentre, smoothstep, villagePlan, type CollisionWorld, type DayState, type HqHistoryPiece, type LandscapeTerrain } from "@cb/shared";
 import { sharedToonRamp, type WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, motion } from "./atmosphere.ts";
 import { createAtlasTexture, createGlowTexture } from "./atlas.ts";
@@ -53,6 +53,8 @@ import { buildCampCloth, lanternGlass, lanternSpots } from "./camplife.ts";
 import { buildRain } from "./rain.ts";
 import { buildShafts, createShaftUniforms, type ShaftSpot } from "./shafts.ts";
 import { buildRuins } from "./ruins.ts";
+import { HqRouteView } from "./hqRoute.ts";
+import { buildHqHistoryGeometry } from "./hqHistory.ts";
 import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
@@ -142,6 +144,8 @@ export class WorldView {
   private water?: WaterUniforms;
   private fireLevel = 0;
   readonly stats: WorldStats = { meshes: 0, triangles: 0, parts: {} };
+  private historyGroup?: Group;
+  private historyDisposables: { dispose(): void }[] = [];
 
   constructor(
     private readonly scene: Scene,
@@ -162,6 +166,7 @@ export class WorldView {
       this.addGroundCover(plan);
       this.addVillage(); // (before the camp: its lit windows join the lantern glass)
       this.addCamp();
+      this.track(new HqRouteView(this.root, this.world)); // the finger-posts of the way round HQ (D-035; the colliders are in arena.ts)
       this.addClearing(plan);
       this.addRuin();
       this.lilies = this.detail.rain > 0 ? plan.lilies : []; // (low has no lily pads)
@@ -713,7 +718,35 @@ export class WorldView {
     this.lastT = t;
   }
 
+  /**
+   * What HQ keeps of the campaign (D-035), on the planning table, in the strongbox and on the marquee's back wall: swapped in place, one merged solid + its ink hull (<= +2 draws), no
+   * collider. Called with the pieces `historyPieces(campaign, settlements)` derives; an empty list takes everything down.
+   */
+  applyHistory(pieces: readonly HqHistoryPiece[]): void {
+    if (this.historyGroup) {
+      this.root.remove(this.historyGroup);
+      this.historyGroup = undefined;
+    }
+    for (const d of this.historyDisposables) d.dispose();
+    this.historyDisposables = [];
+    if (pieces.length === 0) return;
+    const ground = (x: number, z: number): number => this.world.terrainHeight(x, z);
+    const geo = buildHqHistoryGeometry(pieces, ground, this.detail.outlines ? 1 : 0);
+    if (!geo) return;
+    const hull = this.detail.outlines ? buildHqHistoryGeometry(pieces, ground, 0) : undefined;
+    const mat = toonMaterial();
+    this.historyDisposables.push(geo, mat, ...(hull ? [hull] : []));
+    const group = new Group();
+    group.name = "hq-history";
+    makeSolid(group, geo, mat, { name: "hq-history", outline: this.detail.outlines, ink: "small", hullGeometry: hull, castShadow: true });
+    this.root.add(group);
+    this.historyGroup = group;
+  }
+
   dispose(): void {
+    if (this.historyGroup) this.root.remove(this.historyGroup);
+    for (const d of this.historyDisposables) d.dispose();
+    this.historyDisposables = [];
     this.folk?.dispose();
     this.folk = undefined;
     disposeTree(this.root as Object3D);

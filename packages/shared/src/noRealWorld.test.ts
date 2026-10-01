@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as factions from "./factions.ts";
 import * as negText from "./negotiationText.ts";
@@ -8,6 +8,13 @@ import { openParley } from "./negotiation.ts";
 import { COMPLICATION_HINT } from "./chaos.ts";
 import { TEMPLATES, TEMPLATE_IDS } from "./scenarios/registry.ts";
 import { answerSiteParley, openSiteParley, type SiteParleyKind } from "./scenarios/parleys.ts";
+import { POWER_DEFS, newPowers, powersDispatches } from "./powers.ts";
+import { MINOR_IDS } from "./powers.ts";
+import { audiencesAt, openAudience, answerAudience } from "./audiences.ts";
+import { rivalDispatch } from "./rival.ts";
+import { RIVAL_GOALS } from "./rival.ts";
+import * as powersText from "./powersText.ts";
+import * as rivalText from "./rivalText.ts";
 
 /** The world is fictional. This scans the authored text of the campaign layer (and any other authored-text file that exists) for real-world names. */
 const BANNED = [
@@ -92,11 +99,59 @@ describe("no real-world terms in authored text", () => {
     for (const f of ["factions.ts", "negotiation.ts", "negotiationText.ts", "newspaper.ts", "newspaperText.ts", "campaignTypes.ts", "scenario.ts", "garrison.ts", "regions.ts", "chaos.ts", "kessar.ts",
       "scenarios/types.ts", "scenarios/common.ts", "scenarios/parleys.ts", "scenarios/crossing.ts", "scenarios/hostage.ts", "scenarios/convoy.ts", "scenarios/border.ts", "scenarios/registry.ts",
       // the hired hands, their orders and the manifest (D-034): authored names, grumbles, refusals, stores
-      "followers.ts", "command.ts", "loadout.ts", "partyState.ts", "mount.ts", "morale.ts", "expeditionTypes.ts"]) {
+      "followers.ts", "command.ts", "loadout.ts", "partyState.ts", "mount.ts", "morale.ts", "expeditionTypes.ts",
+      // D-035: the powers, the rival agent, the audiences and the relation map
+      "powers.ts", "powersText.ts", "rival.ts", "rivalText.ts", "audiences.ts", "relations.ts", "worldTypes.ts"]) {
       const url = new URL(f, dir);
       expect(existsSync(url), f).toBe(true);
       const hit = readFileSync(url, "utf8").split("\n").findIndex((l) => RE.test(l));
       expect(hit, `${f}:${hit + 1}`).toBe(-1);
     }
+  });
+
+  it("every authored-copy file is scanned by glob: *Text.ts, *Lines.ts under shared and *Copy.ts under the client (O's and R's included)", () => {
+    const walk = (dir: URL, test: (f: string) => boolean, out: URL[] = []): URL[] => {
+      for (const f of readdirSync(dir)) {
+        if (f === "node_modules" || f === "dist") continue;
+        const u = new URL(f, dir);
+        if (statSync(u).isDirectory()) walk(new URL(`${f}/`, dir), test, out);
+        else if (test(f) && !f.endsWith(".test.ts")) out.push(u);
+      }
+      return out;
+    };
+    const files = [
+      ...walk(new URL(".", import.meta.url), (f) => /(Text|Lines)\.ts$/.test(f)),
+      ...walk(new URL("../../../apps/client/src/", import.meta.url), (f) => /Copy\.ts$/.test(f)),
+    ];
+    expect(files.length, files.map((u) => u.pathname).join("\n")).toBeGreaterThanOrEqual(8);
+    for (const u of files) {
+      const hit = readFileSync(u, "utf8").split("\n").findIndex((l) => RE.test(l));
+      expect(hit, `${u.pathname}:${hit + 1}`).toBe(-1);
+    }
+  });
+
+  it("the powers, audiences and the rival's copy produce clean text", () => {
+    const all = [...strings(POWER_DEFS), ...strings(powersText), ...strings(rivalText)];
+    expect(all.length).toBeGreaterThan(300);
+    for (const t of all) expect(RE.test(t), t).toBe(false);
+    for (let seed = 0; seed < 30; seed++) {
+      const c = { ...factions.newCampaign(seed), expeditions: 2, day: 6 + seed };
+      const p = newPowers(seed);
+      for (const g of RIVAL_GOALS) for (const x of strings(rivalDispatch({ ...p, rival: { ...p.rival, goal: g } }, seed))) expect(RE.test(x), x).toBe(false);
+      for (const x of strings(powersDispatches(p, seed))) expect(RE.test(x), x).toBe(false);
+      const a = audiencesAt(c, p);
+      for (const au of a) {
+        const lv = factions.leverageOf(c, { armed: 3, garrisonAlive: 0, garrisonTotal: 0, partyWounded: 0 });
+        let v = openAudience(c, p, lv, au, seed);
+        const texts: string[] = [au.intro, au.speaker, v.line, ...v.options.flatMap((o) => [o.label, o.hint])];
+        for (let o = 0; o < 4; o++) {
+          const step = answerAudience(c, p, lv, au, v, Math.min(o, v.options.length - 1), seed);
+          texts.push(step.line ?? "");
+          if (step.view) { v = step.view; texts.push(v.line, ...v.options.flatMap((x) => [x.label, x.hint])); }
+        }
+        for (const x of texts) expect(RE.test(x), x).toBe(false);
+      }
+    }
+    expect(MINOR_IDS.length).toBe(3);
   });
 });

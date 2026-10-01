@@ -368,3 +368,55 @@ describe("reverb impulse", () => {
     expect(ir.getChannelData(0)).not.toEqual(ir.getChannelData(1));
   });
 });
+
+describe("the expedition's world sounds through the engine (D-035)", () => {
+  it("a gallop's beats and a bell's tolls stay inside their caps and the pool, and keys pick different buffers", async () => {
+    const e = await ready(["hoof", "bell", "crew_shout", "tack_jingle"]);
+    const ctx = e.ctx as unknown as FakeCtx;
+    for (let i = 0; i < 400; i++) {
+      ctx.currentTime += 0.05;
+      e.play("hoof", { x: 3, y: 0, z: 2, key: "gallop" });
+      e.play("tack_jingle", { x: 3, y: 1, z: 2 });
+      if (i % 20 === 0) e.play("bell", { x: 10, y: 4, z: 0, key: i % 40 === 0 ? "hq" : "outpost" });
+      expect(e.sfx.pool.countOf("hoof", ctx.currentTime)).toBeLessThanOrEqual(SOUNDS.hoof!.cap);
+      expect(e.sfx.pool.count(ctx.currentTime)).toBeLessThanOrEqual(28);
+    }
+    expect(e.bank.pick("hoof", "gallop", 0)).not.toBe(e.bank.pick("hoof", "walk", 0));
+    expect(e.bank.pick("bell", "hq", 0)).not.toBe(e.bank.pick("bell", "outpost", 0));
+    expect(e.bank.pick("crew_shout", "fire", 0)).not.toBe(e.bank.pick("crew_shout", "loading", 0));
+    e.dispose();
+  });
+
+  it("the sailing creak is one voice kept alive by calls (never positional), fades when they stop; the parley stamp is heard in the centre at full pan", async () => {
+    const e = await ready(["sail_creak", "parley_stamp", "gull"]);
+    const ctx = e.ctx as unknown as FakeCtx;
+    const before = created.sources;
+    for (let i = 0; i < 40; i++) {
+      ctx.currentTime += 0.05;
+      e.play("sail_creak", { volume: 0.85 });
+      e.tick();
+    }
+    expect(created.sources - before).toBe(1);
+    expect(e.loops.has("sail_creak")).toBe(true);
+    ctx.currentTime += 1;
+    e.tick();
+    expect(e.loops.has("sail_creak")).toBe(false);
+    e.play("parley_stamp", { x: 90, y: 0, z: 90 }); // a UI sound ignores where it is said to be
+    e.play("gull", { x: 400, y: 0, z: 0, seed: 3 }); // ambient and non-positional too
+    expect(created.sources - before).toBe(3);
+    e.dispose();
+  });
+
+  it("keyed captions reach the player with the bearing, once, through the engine", () => {
+    const e = new Engine();
+    const lines: string[] = [];
+    e.captionsOn = true;
+    e.captionSinks.push((t) => lines.push(t));
+    e.play("crew_shout", { x: -12, y: 0, z: 0, key: "fire" });
+    e.play("crew_shout", { x: -12, y: 0, z: 0, key: "fire" }); // inside the gap: no second line
+    e.play("bell", { x: 0, y: 0, z: -40, key: "hq" });
+    e.play("parley_stamp");
+    e.play("hoof", { x: 5, y: 0, z: 0, key: "trot" });
+    expect(lines).toEqual(['[the gun crew: "Fire!", left]', "[the day bell tolls at camp, ahead]", "[a rubber stamp falls]", "[hoofbeats, right]"]);
+  });
+});

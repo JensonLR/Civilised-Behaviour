@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -13,9 +13,13 @@ import { playSfx, setListener } from "../audio/index.ts";
 import { getBindings, keyLabel } from "../input/bindings.ts";
 import { FIRST_PERSON } from "../render/firstPerson.ts";
 import { GameAudio } from "./GameAudio.ts";
+import { ContentAudio } from "./ContentAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
 import { MountView, type RiderPoseLike } from "../render/mounts/MountView.ts";
-import { mountPrompt } from "../render/mounts/mountPrompt.ts";
+import { Orientation } from "../ui/Orientation.ts";
+import type { SheetKind } from "../ui/orientationLogic.ts";
+import { PlateCache } from "./plates.ts";
+import { MountPrompter } from "../render/mounts/mountPrompt.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { noteFolk } from "../render/world/villagers.ts";
@@ -66,6 +70,12 @@ export class Game {
   private readonly tags: NameTags;
   /** Horses and wagons: drawn from `WorldState.mounts`, a ridden horse from its rider's predicted state. */
   private readonly mountView: MountView;
+  private readonly mountPrompter: MountPrompter;
+  /** The first-run orientation card (D-035, R): completed from state the frame already has, never modal. */
+  private readonly orientation: Orientation;
+  private readonly plates = new PlateCache(HAND_ROLES);
+  /** Seconds of frame time, for the plates' ray cache. */
+  private plateClock = 0;
   private readonly riderScratch: RiderPoseLike = { x: 0, y: 0, z: 0, facing: 0, vx: 0, vz: 0, vy: 0, flags: 0 };
   /** The supply manifest sheet (station "loadout") and the command wheel for the hired hands. */
   private readonly loadout: LoadoutSheet;
@@ -92,6 +102,8 @@ export class Game {
   private disposed = false;
   private pingTimer = 0;
   private readonly audio: GameAudio;
+  /** Hoofbeats, the sailing, the paper, the day bell and the gun crew, from replicated state only (D-035). */
+  private readonly content = new ContentAudio({ outpostSite: () => KESSAR_OUTPOST.site });
   private readonly offSettings: () => void;
   // --- the campaign layer: map room, sailing, parley, the paper, the orders of the day ---
   private readonly mapRoom: MapRoom;
@@ -100,7 +112,6 @@ export class Game {
   private readonly paper: NewspaperView;
   private readonly tracker: ObjectiveTracker;
   private builtRegion: RegionId;
-  private builtBridge: string;
   private building = false;
   /** `regionReady` has been sent for the landfall in progress (reset when the sailing machine leaves the arriving phase). */
   private arrivalSent = false;
@@ -109,6 +120,13 @@ export class Game {
   private mapSig = "";
   private campaign: CampaignState | undefined;
   private campaignRev = -1;
+  /** D-035: the powers and the settlements, parsed from their JSON when their revision moves; and the identity of the collision world last built (bridge, outpost stage, telegraph). */
+  private powers: PowersState | undefined;
+  private powersRev = -1;
+  private settlements: SettlementsState | undefined;
+  private settlementsRev = -1;
+  private builtKey: string;
+  private campaignRevSeen = -2;
   private scenarioRev = -1;
   private lastWorldMs = 0;
   private lastWorldPerf = 0;
@@ -126,13 +144,14 @@ export class Game {
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
     this.audio = new GameAudio((x, z) => session.world.terrainHeight(x, z));
     this.builtRegion = session.region;
-    this.builtBridge = NetSession.bridgeOf(session.room.state.campaign);
+    this.builtKey = NetSession.worldKeyOf(session.room.state);
     this.applySettings();
     this.offSettings = onSettingChange(() => this.applySettings());
     this.tagLayer = hud;
     this.props = new PropViews(stage.scene, stage.outlines);
     this.tags = new NameTags(hud);
     this.mountView = new MountView(stage.scene, { outline: stage.outlines });
+    this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
@@ -157,6 +176,7 @@ export class Game {
     this.parley = new Parley(document.body);
     this.paper = new NewspaperView(document.body);
     this.tracker = new ObjectiveTracker(hud);
+    this.orientation = new Orientation(hud);
     this.loadout = new LoadoutSheet(document.body);
     this.wheel = new CommandWheel(document.body, (c) => this.sendCommand(c));
     controls.onCommand = (phase) => this.onCommandKey(phase);
@@ -204,12 +224,42 @@ export class Game {
   private openMap(): void {
     const st = this.session.room.state;
     const room = this.session.room;
-    this.mapRoom.open(mapRoomView(st, this.campaign, this.session.local?.slot), {
+    this.mapRoom.open(mapRoomView(st, this.campaign, this.session.local?.slot, this.campaignMapData(), this.presence()), {
       propose: (to) => room.send("travelPropose", { to }),
       ready: (on) => room.send("travelReady", { ready: on }),
       cancel: () => room.send("travelCancel", {}),
       close: () => {},
+      audience: (power) => room.send("audienceOpen", { power }),
     });
+  }
+
+  /** What the Syndicate has in the field now (the contract on offer depends on it, here exactly as on the server). */
+  private presence(): ReturnType<typeof rivalPresence> | undefined {
+    return this.campaign ? rivalPresence(this.campaign, this.powers ?? newPowers(this.session.room.state.seed)) : undefined;
+  }
+
+  /** What the campaign map shows (shared `campaignMapOf`): outposts, the Syndicate's last sighting, the powers and who is asking for the party, the contract on offer, what is latched. */
+  private campaignMapData(): CampaignMapData | undefined {
+    const c = this.campaign;
+    if (!c) return undefined;
+    const st = this.session.room.state;
+    const p = this.powers ?? newPowers(st.seed);
+    const s = this.settlements ?? newSettlements();
+    const intel = techEffects(s.tech).intelDays + powerEffects(p).intelDays;
+    const asking = audiencesAt(c, p).map((a) => a.power);
+    const offer = pickTemplate(c, "kessar", st.seed, rivalPresence(c, p));
+    const here = isRegionId(st.region) ? st.region : "hollowmere";
+    return campaignMapOf(c, s, rivalSighting(c, p, intel), mapPins(c, p, asking), offer ? { region: "kessar", ...templateNote(offer) } : undefined, s.tech, here, p.rival.posts);
+  }
+
+  /** What HQ keeps of the campaign, and what is built in the field: pushed to the Stage whenever the ledger, the powers or the settlements move. */
+  private applyCampaignVisuals(): void {
+    const c = this.campaign;
+    if (!c) return;
+    const s = this.settlements ?? newSettlements();
+    const p = this.powers ?? newPowers(this.session.room.state.seed);
+    this.stage.setDress(regionDressOf(s, p.rival, "kessar"));
+    this.stage.setHistory(historyPieces(c, s));
   }
 
   // ---- the expedition: the manifest sheet, the hired hands, the command wheel -------------------------------------------------------------------
@@ -351,7 +401,12 @@ export class Game {
 
   private openPaper(): void {
     const c = this.campaign ?? newCampaign(this.session.room.state.seed);
-    this.paper.show(generatePaper(c, this.session.room.state.seed), () => {});
+    const seed = this.session.room.state.seed;
+    const p = this.powers ?? newPowers(seed);
+    const s = this.settlements ?? newSettlements();
+    // the powers' and the outposts' dispatches print first (D-035): the Syndicate's goal from the day it is set, the newest of the powers' log, the newest of the outpost's news
+    const dispatches = [...powersDispatches(p, seed, 2), ...settlementDispatches(s, settlementNews(s).slice(0, 1), seed)].slice(0, 3);
+    this.paper.show(generatePaper(c, seed, { dispatches }), () => {});
   }
 
   private onParley(m: { view?: ParleyView; line?: string; closed?: boolean }): void {
@@ -377,6 +432,21 @@ export class Game {
       this.campaignRev = st.campaignRev ?? 0;
       this.campaign = st.campaign ? parseCampaign(st.campaign) : undefined;
       if (this.loadout.isOpen) this.loadout.update(this.loadoutView());
+    }
+    let visuals = false;
+    if ((st.powersRev ?? 0) !== this.powersRev) {
+      this.powersRev = st.powersRev ?? 0;
+      this.powers = st.powers ? parsePowers(st.powers) : undefined;
+      visuals = true;
+    }
+    if ((st.settlementsRev ?? 0) !== this.settlementsRev) {
+      this.settlementsRev = st.settlementsRev ?? 0;
+      this.settlements = st.settlements ? parseSettlements(st.settlements) : undefined;
+      visuals = true;
+    }
+    if (visuals || this.campaignRevSeen !== this.campaignRev) {
+      this.campaignRevSeen = this.campaignRev;
+      this.applyCampaignVisuals();
     }
     if ((st.partyRev ?? 0) !== this.partyRev) {
       this.partyRev = st.partyRev ?? 0;
@@ -419,16 +489,17 @@ export class Game {
       }
     }
     // landfall (or a bridge that fell): the ground under us is a different one
-    const bridge = NetSession.bridgeOf(st.campaign);
+    // the collision world is a pure function of (region, bridge, outpost stage, telegraph): rebuild only when that identity changes (the scenery's own dress swaps in place)
+    const key = NetSession.worldKeyOf(st);
     const region = this.session.region;
-    if (!this.building && (region !== this.builtRegion || bridge !== this.builtBridge)) void this.rebuildWorld();
+    if (!this.building && (region !== this.builtRegion || key !== this.builtKey)) void this.rebuildWorld();
     // a client that is already standing in the new region when the landing is announced (it joined or came back mid-landfall) has nothing to build: say so, or everyone waits out the timeout
     if (phase !== 3) this.arrivalSent = false;
     else if (!this.building && !this.arrivalSent && region === this.builtRegion && isRegionId(st.region)) this.sendArrival(st.region);
     // the map room follows the vote
     if (this.mapRoom.isOpen) {
-      const v = mapRoomView(st, this.campaign, this.session.local?.slot);
-      const msig = JSON.stringify([v.phase, v.to, v.ready, v.regions.map((r) => r.here)]);
+      const v = mapRoomView(st, this.campaign, this.session.local?.slot, this.campaignMapData(), this.presence());
+      const msig = JSON.stringify([v.phase, v.to, v.ready, v.regions.map((r) => r.here), v.campaign]);
       if (msig !== this.mapSig) {
         this.mapSig = msig;
         this.mapRoom.update(v);
@@ -453,7 +524,8 @@ export class Game {
       this.combat.setWorld();
       this.stage.buildWorld(world, region);
       this.builtRegion = region;
-      this.builtBridge = NetSession.bridgeOf(st.campaign);
+      this.builtKey = NetSession.worldKeyOf(st);
+      this.applyCampaignVisuals();
       this.loadRagdolls();
       await this.stage.precompile();
       if ((st.travelPhase ?? 0) === 3 && isRegionId(st.region)) this.sendArrival(st.region);
@@ -483,6 +555,7 @@ export class Game {
     this.controls.onToggleView = undefined;
     this.offSettings();
     this.audio.dispose();
+    this.content.dispose();
     this.hud.dispose();
     this.combat.dispose();
     this.viewmodel.dispose();
@@ -498,6 +571,7 @@ export class Game {
     this.parley.dispose();
     this.paper.dispose();
     this.tracker.dispose();
+    this.orientation.dispose();
     this.loadout.dispose();
     this.wheel.dispose();
     this.tags.dispose();
@@ -545,6 +619,11 @@ export class Game {
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
     this.syncCampaign(now);
+    this.content.update(dt, this.session.room.state);
+    if (this.orientation.active) {
+      const pf = this.session.predicted;
+      if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad ? "pad" : "keyboard");
+    }
 
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
@@ -561,6 +640,14 @@ export class Game {
     this.stage.render();
     this.viewmodel.render();
     this.overlay.frame(dt);
+  }
+
+  /** Which full-screen sheet is open, for the orientation card (it ticks the notice board, the supply manifest and the map room off from this). */
+  private orientationSample(): SheetKind {
+    if (this.paper.isOpen) return "paper";
+    if (this.loadout.isOpen) return "loadout";
+    if (this.mapRoom.isOpen) return "map";
+    return this.parley.isOpen ? "other" : "none";
   }
 
   /** Feeds the first-person hands and weapon (after the camera has been placed for this frame), and lets the body's own arms give way to them. */
@@ -641,7 +728,7 @@ export class Game {
       // a barrel at the pier is a fuse waiting to be lit (the server checks the barrel and the range; this only says what the key will do)
       const spot = this.builtRegion === "kessar" ? findStation("kessar", this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
       const heldKind = this.heldKind();
-      prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : `${use}  Drop     ${throwKey}  Throw`;
+      prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw` : `${use}  Drop     ${throwKey}  Throw`;
     } else if ((flags & FLAG.DOWNED) === 0) {
       const downedId = findDownedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
         players.forEach((o, id) => id !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
@@ -670,7 +757,8 @@ export class Game {
     if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
       // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks)
       const st = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);
-      if (st && st.kind !== "pier") prompt = `${use}  ${st.prompt}`;
+      if (st && st.kind === "foundation") prompt = this.foundationText(undefined);
+      else if (st && st.kind !== "pier") prompt = `${use}  ${st.prompt}`;
     }
     const showLimbs = getShowLimbs();
     this.hud.update({
@@ -695,30 +783,20 @@ export class Game {
   }
 
   private mountPromptNow(me: NonNullable<Game["session"]["predicted"]>, mine: PlayerStateType, flags: number): string | undefined {
-    const st = this.session.room.state;
-    if (st.mounts.size === 0) return undefined;
-    const rows: (readonly [string, Parameters<typeof mountPrompt>[1] extends Iterable<readonly [string, infer R]> ? R : never])[] = [];
-    st.mounts.forEach((row, id) => rows.push([id, row]));
-    return mountPrompt(
-      { x: this.session.value(me, "x"), z: this.session.value(me, "z"), facing: me.facing, flags, missing: mine.missing, sessionId: this.session.sessionId, holding: (flags & FLAG.CARRYING) !== 0 },
-      rows,
-      {
-        props: (wid) => {
-          let n = 0;
-          st.props.forEach((p) => {
-            if (p.holder === `wagon:${wid}`) n++;
-          });
-          return n;
-        },
-        bodies: (wid) => {
-          let n = 0;
-          st.players.forEach((p) => {
-            if (p.dragger === `wagon:${wid}`) n++;
-          });
-          return n;
-        },
-      },
-    );
+    return this.mountPrompter.now(this.session.value(me, "x"), this.session.value(me, "z"), me.facing, flags, mine.missing);
+  }
+
+  /** The words at the outpost's foundation (D-035): how many crates are down, what the carried thing will do. */
+  private foundationText(held: PropKindId | undefined): string {
+    const f = foundationStatus(this.settlements ?? newSettlements(), "kessar");
+    const name = this.settlements?.posts.kessar?.name ?? "the outpost";
+    if (f.standing) {
+      if (held === undefined) return `${name}: ${STAGE_LABEL[this.settlements!.posts.kessar!.stage]}. Carry crates, barrels and chairs here to keep it alive.`;
+      return held === PropKind.BOTTLE ? "A bottle does not found anything" : `Deliver the ${PROP_DEFS[held].name} to ${name}`;
+    }
+    const n = Math.min(FOUNDATION_CRATES, f.crates + 1);
+    if (held === undefined) return `The foundation: ${f.crates} of ${FOUNDATION_CRATES} crates down${f.ruined ? " (a ruin to raise again)" : ""}. Carry a crate here.`;
+    return held === PropKind.CRATE ? `Deliver the crate (${n} of ${FOUNDATION_CRATES})` : "Only crates found a camp";
   }
 
   /** The kind of prop the local player is holding, if any. */
@@ -754,6 +832,8 @@ export class Game {
     const players = this.session.room.state.players;
     const seen = new Set<string>();
     let walkerCount = 0;
+    this.plateClock += dt;
+    this.plates.beginFrame();
     players.forEach((p: PlayerStateType, id: string) => {
       seen.add(id);
       let a = this.actors.get(id);
@@ -782,6 +862,7 @@ export class Game {
       );
       if (!isMe) this.plate(id, p, a, x, y, z);
     });
+    this.plates.endFrame();
     this.tags.sweep(seen);
     this.stage.setPushers(walkers, walkerCount);
     this.audio.sweep();
@@ -798,20 +879,20 @@ export class Game {
     }
   }
 
-  /** One name plate: the shared rule says whether it can sit where it points (never clamped); hired hands carry their order and their nerve. */
+  /** One name plate: the shared rule says whether it can sit where it points (never clamped); hired hands carry their order and their nerve. The text and the sight ray are cached (plates.ts). */
   private plate(id: string, p: PlayerStateType, a: Actor, x: number, y: number, z: number): void {
     const down = (p.flags & FLAG.DOWNED) !== 0;
-    let text = (p.connected ? p.name : `${p.name} (reconnecting)`) + (down ? " ✚ DOWN" : "");
-    if (HAND_ROLES.has(p.npc) && !down) {
-      const order = p.cmd < COMMAND_IDS.length ? COMMAND_IDS[p.cmd]! : "follow";
-      text += ` · ${order} · ${moraleBand(p.morale)}`;
-    }
+    const text = this.plates.text(id, p);
     tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
     const cam = this.stage.camera.position;
-    const dist = Math.hypot(x - cam.x, y - cam.y, z - cam.z);
+    const dist = Math.sqrt((x - cam.x) ** 2 + (y - cam.y) ** 2 + (z - cam.z) ** 2); // not Math.hypot: it allocates per call
     const topPx = ((1 - tmp.y) / 2) * window.innerHeight;
-    // a soldier's plate reaches farther while the camera can see him (a wall in between keeps it short)
-    const inSight = p.npc !== 0 && dist <= 26 && !rayWorld(this.session.world, cam.x, cam.y, cam.z, (x - cam.x) / dist, (y + 1.2 - cam.y) / dist, (z - cam.z) / dist, dist - 0.6, aimHit);
+    // a soldier's plate reaches farther while the camera can see him (a wall in between keeps it short); the ray is cached per NPC for 0.15 s and spread over frames
+    let inSight = false;
+    if (p.npc !== 0 && dist <= 26) {
+      if (this.plates.due(id, this.plateClock)) this.plates.report(id, !rayWorld(this.session.world, cam.x, cam.y, cam.z, (x - cam.x) / dist, (y + 1.2 - cam.y) / dist, (z - cam.z) / dist, dist - 0.6, aimHit));
+      inSight = this.plates.sight(id);
+    }
     this.tags.update(id, text, p.npc, down, dist, tmp, topPx, inSight);
   }
 

@@ -9,7 +9,10 @@ import {
   createRegionWorld,
   isRegionId,
   parseCampaign,
+  regionWorldOpts,
+  worldKey,
   stepCharacter,
+  type RegionWorldOpts,
   type BridgeState,
   type RegionId,
   type ScenarioTemplateId,
@@ -81,7 +84,7 @@ export class Session {
   private constructor(
     readonly room: Room<WorldStateType>,
   ) {
-    this.world = Session.worldFor(room.state.region, room.state.seed, Session.bridgeOf(room.state.campaign));
+    this.world = Session.worldFor(room.state.region, room.state.seed, Session.worldOptsOf(room.state));
     this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.predict.attachAll("props", { x: "lerp", y: "lerp", z: "lerp", qx: "lerp", qy: "lerp", qz: "lerp", qw: "lerp" } as never);
@@ -97,13 +100,23 @@ export class Session {
     return (campaignJson ? parseCampaign(campaignJson)?.crossing.bridge : undefined) ?? "intact";
   }
 
-  static worldFor(region: string | undefined, seed: number, bridge: BridgeState): CollisionWorld {
-    return createRegionWorld(isRegionId(region) ? region : "hollowmere", seed, { bridge });
+  /** What the collision world depends on, read from the two replicated JSON strings (the server calls the same function): bridge, outpost stage, telegraph (D-035). */
+  static worldOptsOf(st: { campaign?: string; settlements?: string }): RegionWorldOpts {
+    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "");
+  }
+
+  /** The world's identity: the Game rebuilds the collision world and the scenery only when it changes. */
+  static worldKeyOf(st: { campaign?: string; settlements?: string }): string {
+    return worldKey(Session.worldOptsOf(st));
+  }
+
+  static worldFor(region: string | undefined, seed: number, opts: RegionWorldOpts | BridgeState): CollisionWorld {
+    return createRegionWorld(isRegionId(region) ? region : "hollowmere", seed, typeof opts === "string" ? { bridge: opts } : opts);
   }
 
   /** Rebuilds the local world for the current region and crossing (landfall, or the bridge came down). The reconciler's step reads `this.world` each time. */
   refreshWorld(): CollisionWorld {
-    this.world = Session.worldFor(this.room.state.region, this.room.state.seed, Session.bridgeOf(this.room.state.campaign));
+    this.world = Session.worldFor(this.room.state.region, this.room.state.seed, Session.worldOptsOf(this.room.state));
     return this.world;
   }
 
@@ -119,7 +132,11 @@ export class Session {
     });
   }
 
-  static async create(name: string, look?: string, rules: { dismemberment?: boolean; region?: RegionId; scenario?: ScenarioTemplateId } = {}): Promise<Session> {
+  /**
+   * Creates a campaign, or (with `rules.resume`, a join code) resumes a saved one. The server loads the record for a former member only and answers every refusal with the same
+   * message, so a code cannot be probed (D-035).
+   */
+  static async create(name: string, look?: string, rules: { dismemberment?: boolean; region?: RegionId; scenario?: ScenarioTemplateId; resume?: string } = {}): Promise<Session> {
     const client = new Client(serverUrl());
     const options: JoinOptions = {
       name,
@@ -128,6 +145,7 @@ export class Session {
       ...(rules.dismemberment === undefined ? {} : { dismemberment: rules.dismemberment }),
       ...(rules.region ? { region: rules.region } : {}),
       ...(rules.scenario ? { scenario: rules.scenario } : {}),
+      ...(rules.resume ? { resume: rules.resume.toUpperCase() } : {}),
     };
     const room = await client.create<WorldStateType>(ROOM_WORLD, options, WorldState as never);
     await Session.stateReady(room);

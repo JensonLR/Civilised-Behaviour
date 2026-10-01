@@ -32,11 +32,28 @@ export const CAPTIONS: Readonly<Record<string, CaptionDef>> = {
   revive_done: D("comrade revived", 40, 1.5),
   thunder: D("thunder", 1e9, 3, false),
   pickup: D("something lifted", 8, 0.8),
+  // the expedition's world (D-035): every new sound has one; a keyed sound may have a line per key (`name:key`), else the plain `name` line serves
+  hoof: D("hoofbeats", 45, 2.5),
+  tack_jingle: D("tack jingling", 14, 2),
+  sail_creak: D("the ship creaks and slops", 1e9, 8, false),
+  gull: D("a gull cries", 1e9, 6, false),
+  paper_rustle: D("paper rustles", 25, 2),
+  bell: D("a bell tolls", 450, 3),
+  "bell:hq": D("the day bell tolls at camp", 450, 3),
+  "bell:outpost": D("an outpost bell rings", 300, 3),
+  parley_stamp: D("a rubber stamp falls", 1e9, 1, false),
+  crew_shout: D("the gun crew shouts", 70, 1.5),
+  "crew_shout:stand_clear": D('the gun crew: "Stand clear!"', 70, 1.5),
+  "crew_shout:loading": D('the gun crew: "Loading!"', 70, 1.5),
+  "crew_shout:fire": D('the gun crew: "Fire!"', 70, 1.5),
 };
 
+/** The caption line a sound plays under: its `name:key` line when it has one, else its plain `name` line. */
+export const captionName = (name: string, key?: string): string => (key !== undefined && CAPTIONS[`${name}:${key}`] !== undefined ? `${name}:${key}` : name);
+
 /** `[musket shot, left]`; null when the sound has no caption, is out of range, or (for positional sounds) is right on top of you. */
-export function captionFor(name: string, rel: Pick<SpatialOut, "dist" | "az"> | null): string | null {
-  const def = CAPTIONS[name];
+export function captionFor(name: string, rel: Pick<SpatialOut, "dist" | "az"> | null, key?: string): string | null {
+  const def = CAPTIONS[captionName(name, key)];
   if (!def) return null;
   if (rel && rel.dist > def.range) return null;
   const far = rel !== null && rel.dist > 60 ? "distant " : "";
@@ -47,12 +64,13 @@ export function captionFor(name: string, rel: Pick<SpatialOut, "dist" | "az"> | 
 /** Per-name cool-down so a volley is a handful of lines, not fifty. Allocation-free after a name has been seen once. */
 export class CaptionGate {
   private readonly last = new Map<string, number>();
-  accept(name: string, now: number): boolean {
-    const def = CAPTIONS[name];
+  accept(name: string, now: number, key?: string): boolean {
+    const line = captionName(name, key);
+    const def = CAPTIONS[line];
     if (!def) return false;
-    const prev = this.last.get(name);
+    const prev = this.last.get(line);
     if (prev !== undefined && now - prev < def.gap) return false;
-    this.last.set(name, now);
+    this.last.set(line, now);
     return true;
   }
   reset(): void {

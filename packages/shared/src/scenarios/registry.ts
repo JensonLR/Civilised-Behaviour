@@ -1,5 +1,6 @@
 import type { CampaignState, RegionId, ScenarioTemplateId } from "../campaignTypes.ts";
 import { hash3 } from "../rng.ts";
+import type { RivalPresence } from "../worldTypes.ts";
 import { borderTemplate } from "./border.ts";
 import { convoyTemplate } from "./convoy.ts";
 import { crossingTemplate, crossingSettled } from "./crossing.ts";
@@ -32,7 +33,7 @@ const RECENT = 4;
  * only while it is NOT settled (a paid crossing is on the books for SETTLED_DAYS) and the bridge still stands. Never the same template twice running when
  * another is eligible; weighted ties are broken by hash3(seed, day), so the same ledger always offers the same thing.
  */
-export function pickTemplate(c: CampaignState, region: RegionId, seed: number): ScenarioTemplateId | undefined {
+export function pickTemplate(c: CampaignState, region: RegionId, seed: number, presence?: RivalPresence): ScenarioTemplateId | undefined {
   if (region !== "kessar") return undefined;
   if (c.history.length === 0) return "secure_crossing";
   const recent = c.history.slice(-RECENT);
@@ -42,8 +43,8 @@ export function pickTemplate(c: CampaignState, region: RegionId, seed: number): 
     // a floor of 1 so there is always something to offer when the crossing is closed
     secure_crossing: crossingSettled(c) || c.crossing.bridge === "collapsed" ? 0 : 3,
     hostage_rescue: 1 + (had("forced") ? 4 : 0) + (had("abandoned") ? 3 : 0) + (w.militaryStrength <= 40 ? 2 : 0),
-    convoy_ambush: 1 + (w.rivalInfluence >= 50 ? 4 : 0) + (had("rival_secured") ? 3 : 0),
-    border_incident: 1 + (w.militaryStrength >= 55 && w.rivalInfluence >= 35 ? 4 : 0),
+    convoy_ambush: 1 + (w.rivalInfluence >= 50 ? 4 : 0) + (had("rival_secured") ? 3 : 0) + (presence?.wagon ? 6 : 0),   // the Syndicate runs a wagon while it has goods to move
+    border_incident: 1 + (w.militaryStrength >= 55 && w.rivalInfluence >= 35 ? 4 : 0) + (presence !== undefined && presence.postStage > 0 ? 3 : 0),
   };
   const last = c.history[c.history.length - 1]!.template;
   const ids = TEMPLATE_IDS.filter((id) => weights[id] > 0);

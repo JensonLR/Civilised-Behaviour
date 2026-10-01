@@ -9,33 +9,35 @@ for (const [name, value] of Object.entries(paletteCssVars())) document.documentE
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const params = new URLSearchParams(location.search);
+// Showcases (and the `?region=` / `?scenario=` levers in boot.ts) are QA tools: a production build ignores them.
+const showcase = import.meta.env.MODE !== "production" ? params.get("showcase") : null;
 
-if (params.get("showcase") === "lineup") {
+if (showcase === "lineup") {
   // Marketing/QA scene: no networking, no menu.
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runLineup } = await import("./showcase/Lineup.ts");
   runLineup(canvas, params);
-} else if (params.get("showcase") === "weapons") {
+} else if (showcase === "weapons") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWeapons } = await import("./showcase/Weapons.ts");
   runWeapons(canvas, params);
-} else if (params.get("showcase") === "hud") {
+} else if (showcase === "hud") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runHud } = await import("./showcase/Hud.ts");
   runHud(canvas, params);
-} else if (params.get("showcase") === "fx") {
+} else if (showcase === "fx") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runFx } = await import("./showcase/Fx.ts");
   runFx(canvas, params);
-} else if (params.get("showcase") === "viewmodel") {
+} else if (showcase === "viewmodel") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runViewModel } = await import("./showcase/ViewModel.ts");
   runViewModel(canvas, params);
-} else if (params.get("showcase") === "world") {
+} else if (showcase === "world") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWorld } = await import("./showcase/World.ts");
   runWorld(canvas, params);
-} else if (params.get("showcase") === "horses") {
+} else if (showcase === "horses") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runHorses } = await import("./showcase/Horses.ts");
   runHorses(canvas, params);

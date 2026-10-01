@@ -1,4 +1,4 @@
-import { CloseCode, Room, type Client } from "@colyseus/core";
+import { CloseCode, Room, ServerError, matchMaker, type Client } from "@colyseus/core";
 import {
   BUTTON,
   CASUALTY,
@@ -54,6 +54,33 @@ import {
   applyOutcome,
   askingToll,
   answerParley,
+  DAYS_IDLE_CAP,
+  OUTPOST_STAGES,
+  RESOLUTIONS,
+  TEMPLATE_RESOLUTIONS,
+  foundOutpost,
+  type OutpostStage,
+  type ResolutionId,
+  ROOM_WORLD,
+  isValidJoinCode,
+  newPowers,
+  newSettlements,
+  parseParty,
+  serializePowers,
+  serializeSettlements,
+  powersAfterOutcome,
+  powersAfterSettlement,
+  rivalAdvance,
+  rivalPresence,
+  regionClimate,
+  powerEffects,
+  regionWorldOpts,
+  worldKey,
+  techEffects,
+  type PowersState,
+  type RegionWorldOpts,
+  type SettlementsState,
+  type SettlementEvent,
   consequenceLines,
   createRegionWorld,
   findStation,
@@ -84,6 +111,7 @@ import {
   stationsFor,
   type BridgeState,
   type CampaignState,
+  type PartyState,
   type NpcSpec,
   type RegionId,
   type ScenarioOutcome,
@@ -100,6 +128,14 @@ import { Combat } from "../systems/Combat.ts";
 import { Followers } from "../systems/Followers.ts";
 import { Mounts } from "../systems/Mounts.ts";
 import { Scenario } from "../systems/Scenario.ts";
+import { Audience } from "../systems/Audience.ts";
+import { Outposts } from "../systems/Outposts.ts";
+import { CAMPAIGN_CODECS } from "./campaignCodecs.ts";
+import { CampaignSaver } from "../persistence/saver.ts";
+import { canResume, identityKey, parseIdentity } from "../persistence/identity.ts";
+import { createRecord } from "../persistence/record.ts";
+import { idleDays, restore, snapshot } from "../persistence/sections.ts";
+import type { CampaignRecord } from "../persistence/types.ts";
 import { Travel } from "../systems/Travel.ts";
 
 /** Ticks of client silence/hitch the server tolerates (12 ticks = 400 ms). Used for BOTH the frame-budget burst and the idle threshold. */
@@ -186,6 +222,25 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private lastClockSync = 0;
   // --- the campaign (slice 1: docs/_notes/slice.md) ---
   private campaign!: CampaignState;
+  /** D-035: the three minor powers, the relation map and the rival agent; the outposts and the latched tech. Each has its own JSON and revision on the wire. */
+  private powers!: PowersState;
+  private settlements!: SettlementsState;
+  private audience!: Audience;
+  private outposts!: Outposts;
+  /** The saver of this campaign (undefined: nobody with a valid identity created it, so nothing is persisted) and the days of absence still to give the rival at the next commit. */
+  private saver: CampaignSaver | undefined;
+  private saveQueued = false;
+  private created = false;
+  private pendingIdle = 0;
+  /** Sections a NEWER build wrote (a downgrade): played on fresh values here, never saved over (the record keeps the newer data). */
+  private heldSections: readonly string[] = [];
+  /**
+   * One room per saved campaign. `matchMaker.query` lags at both ends (a room's metadata arrives late; its listing is removed BEFORE `onDispose` has awaited the last save), so a
+   * resume racing a creation, a twin resume or a room that is still flushing could load a stale revision and then lose every save to a conflict. This process-wide claim, taken
+   * synchronously, closes the gap: a claim in `closing` state is waited for (the flush is a few ms), a live one refuses.
+   */
+  private static readonly campaignClaims = new Map<string, { closing: boolean }>();
+  private claim: { code: string; mine: { closing: boolean } } | undefined;
   private travel!: Travel;
   private scenario: Scenario | undefined;
   private cast!: Cast;
@@ -212,9 +267,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   };
 
   override async onCreate(options: JoinOptions): Promise<void> {
-    const seed = Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
+    // RESUME (D-035): a saved campaign comes back by its join code, for a former member only; every refusal is the same error (no enumeration).
+    const resume = await this.resumeFrom(options);
+    const seed = resume ? resume.rec.seed : Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
     this.state.seed = seed;
-    this.state.code = generateJoinCode();
+    this.state.code = resume ? resume.rec.code : await this.freshJoinCode();
     // Campaign rule: the server default, which the creator may switch off (never on when the server has it off).
     this.state.dismemberment = getRoomConfig().dismemberment && options?.dismemberment !== false;
     // Same shape for friendly fire (GDD: default on, the host can disable): never on when the server has it off.
@@ -227,8 +284,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.bornAt = performance.now();
     this.syncClock(true);
     // The campaign is server-owned state: one per room, mutated only by scenario outcomes (commitOutcome).
-    this.campaign = newCampaign(seed);
-    const region: RegionId = isRegionId(options?.region) ? options.region : "hollowmere";
+    this.campaign = resume ? (resume.values.campaign as CampaignState) : newCampaign(seed);
+    this.powers = resume ? (resume.values.powers as PowersState) : newPowers(seed);
+    this.settlements = resume ? (resume.values.settlements as SettlementsState) : newSettlements();
+    this.pendingIdle = resume ? Math.min(DAYS_IDLE_CAP, resume.idle) : 0;
+    this.heldSections = resume?.newer ?? [];
+    // `region` and `scenario` are QA levers: production (debugCommands off) ignores them, whatever the client sends. A resumed campaign always starts at HQ.
+    const dev = cfg.debugCommands;
+    const region: RegionId = !resume && dev && isRegionId(options?.region) ? options.region : "hollowmere";
     await initRapier();
     this.state.region = region;
     this.state.travelPhase = 0;
@@ -239,9 +302,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.campaignRev = 0;
     this.state.scenario = "";
     this.state.scenarioRev = 0;
-    this.state.party = serializeParty(newParty());
+    this.state.party = serializeParty(resume ? (resume.values.party as PartyState) : newParty());
     this.state.partyRev = 0;
-    this.forcedTemplate = isTemplateId(options?.scenario) ? options.scenario : undefined;
+    this.state.powers = serializePowers(this.powers);
+    this.state.powersRev = 0;
+    this.state.settlements = serializeSettlements(this.settlements);
+    this.state.settlementsRev = 0;
+    await this.bindSaver(options, resume);
+    this.forcedTemplate = dev && isTemplateId(options?.scenario) ? options.scenario : undefined;
     this.buildRegion(region);
     this.travel = new Travel({
       connectedSlots: () => this.connectedSlots(),
@@ -256,6 +324,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.state.travelLeft = Math.min(255, Math.max(0, Math.ceil(st.left)));
         if (sailing) this.onSail();
       },
+      // the steam launch (D-035): a latched piece of infrastructure, not a menu item
+      sailSeconds: () => techEffects(this.settlements.tech).sailSeconds,
     });
     const room = this;
     this.casualties = new Casualties(
@@ -318,7 +388,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       removeNpc: (key) => this.removeNpc(key),
       stepNpc: (key, cmd) => this.stepNpc(key, cmd),
       world: () => this.world,
-      worldMs: () => performance.now() - this.bornAt,
+      // The SIM clock (not the wall clock): two rooms with the same seed and inputs stay identical however the host stalls.
+      worldMs: () => this.simT * 1000,
       seed,
       fear: () => this.campaign.factions.ward.fear,
       brains: { garrison: npcThink, follower: followerThink },
@@ -373,7 +444,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       setParty: (json) => {
         this.state.party = json;
         this.state.partyRev = (this.state.partyRev + 1) & 0xffff;
+        this.persist();
       },
+      bonusKg: () => techEffects(this.settlements.tech).capacityKg,
       dress: (medic, target) => this.casualties.assist(medic, target, "dress"),
       revive: (medic, target) => this.casualties.assist(medic, target, "revive"),
       propPos: (id) => {
@@ -387,9 +460,39 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       notice: (sid, text) => (sid === "*" ? this.broadcast("notice", { text }) : this.clients.getById(sid)?.send("notice", { text })),
       prepOpen: () => this.state.region === "hollowmere" && this.state.travelPhase < 2,
+      atSupply: (sid) => this.atSupply(sid),
       inBounds: (x, z) => Math.hypot(x, z) <= REGIONS[this.state.region as RegionId].bounds,
       day: () => this.campaign.day,
       nowS: () => this.simT,
+      seed,
+    });
+    this.outposts = new Outposts({
+      players: this.party,
+      region: () => this.state.region as RegionId,
+      settlements: () => this.settlements,
+      setSettlements: (s, ev) => this.commitSettlements(s, ev),
+      campaign: () => this.campaign,
+      climate: () => regionClimate(this.campaign, this.powers, this.state.region as RegionId),
+      propKind: (id) => this.state.props.get(id)?.kind,
+      consumeProp: (id) => this.consumeProp(id),
+      notice: (text) => this.broadcast("notice", { text }),
+      send: (sid, type, msg) => this.clients.getById(sid)?.send(type, msg),
+      rebuildWorld: () => this.rebuildWorld(),
+      busy: () => this.travel.busy,
+      day: () => this.campaign.day,
+      seed,
+    });
+    this.audience = new Audience({
+      campaign: () => this.campaign,
+      powers: () => this.powers,
+      atMapRoom: (sid) => {
+        const p = this.state.players.get(sid);
+        return !!p && !p.npc && this.state.region === "hollowmere" && this.atMapRoom(p);
+      },
+      send: (sid, type, msg) => this.clients.getById(sid)?.send(type, msg),
+      commit: (c, p) => this.commitAudience(c, p),
+      players: this.party,
+      nowMs: () => this.simT * 1000,
       seed,
     });
     this.startScenario(region);
@@ -398,12 +501,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // Campaigns are friends-first: unlisted, reachable only via join code or direct room id.
     void this.setPrivate(true);
     metrics.rooms++;
+    this.created = true;
     log.info("room.create", { roomId: this.roomId, code: this.state.code, seed });
 
     this.setFixedTimestep((ctx) => {
       const t0 = performance.now();
       this.tickDt = ctx.dt;
       this.simT += ctx.dt;
+      this.outposts.tick(ctx.dt);
       const sailing = this.travel.busy;
       this.state.players.forEach((player, sessionId) => {
         if (player.npc) return; // NPC rows are stepped by the scenario, through the same step a player uses
@@ -503,9 +608,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (p && isRegionId(msg?.region)) this.travel.regionReady(p.slot, msg.region);
     });
     this.onMessage("parleyPick", (client, msg: { option?: unknown }) => {
-      if (typeof msg?.option === "number") this.scenario?.onPick(client.sessionId, msg.option);
+      if (this.audience.has(client.sessionId)) this.audience.onPick(client.sessionId, msg?.option); // an audience at HQ takes the answer
+      else if (typeof msg?.option === "number") this.scenario?.onPick(client.sessionId, msg.option);
     });
-    this.onMessage("parleyClose", (client) => this.scenario?.onParleyClose(client.sessionId));
+    this.onMessage("parleyClose", (client) => {
+      if (!this.audience.onClose(client.sessionId)) this.scenario?.onParleyClose(client.sessionId);
+    });
+    // An audience with a power (D-035): only at the map table or the dock, only for a power that is asking today; the answers ride the parley messages above.
+    this.onMessage("audienceOpen", (client, msg: { power?: unknown }) => this.audience.open(client.sessionId, msg?.power));
     // The expedition's prep and orders. Each is hostile until the Followers system's parsers and checks accept it (sender standing, rate, range, targets).
     this.onMessage("loadoutSet", (client, msg: unknown) => void this.followers.onLoadoutSet(client.sessionId, msg));
     this.onMessage("hire", (client, msg: unknown) => void this.followers.onHire(client.sessionId, msg));
@@ -546,6 +656,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.cmd = NO_COMMAND;
     player.morale = 0;
     this.combat.onJoin(client.sessionId, player);
+    if (this.saver) {
+      const id = parseIdentity(options?.token);
+      if (id) {
+        this.saver.addMember(id); // an HMAC key, never the id; saved with the next save
+        this.persist();
+      }
+    }
     this.syncClock(true); // a joiner's first state must carry a fresh world age
     metrics.players++;
     metrics.physicsBodies++;
@@ -571,6 +688,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       }
     }
     this.mounts.onLeave(client.sessionId); // a rider comes down where he is
+    this.audience.onLeave(client.sessionId);
+    this.outposts.onLeave(client.sessionId);
     this.followers.onLeave(client.sessionId);
     this.casualties.onLeave(client.sessionId);
     this.combat.onLeave(client.sessionId);
@@ -587,7 +706,112 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.players.delete(client.sessionId);
     this.travel.onLeave(player.slot);
     metrics.players--;
+    this.persist(); // (also when the last player leaves: the campaign is on disk before the room goes)
     log.info("room.leave", { roomId: this.roomId, sessionId: client.sessionId, consented });
+  }
+
+  // ---- persistence (D-035): the ledger is saved, the live world is not ---------------------------------------------------------------------------------
+
+  /**
+   * `options.resume`: load the saved campaign for that join code. Only a former member (by identity key) may; an unknown code, a stranger, a bad token and a campaign that is
+   * already live all get the SAME error, so a join code cannot be probed. Absent option = a new campaign (returns undefined).
+   */
+  private async resumeFrom(options: JoinOptions): Promise<{ rec: CampaignRecord; values: Record<string, unknown>; idle: number; newer: string[] } | undefined> {
+    if (options?.resume === undefined) return undefined;
+    const deny = (why: string): never => {
+      this.releaseClaim();
+      log.info("room.resume_denied", { roomId: this.roomId, why });
+      throw new ServerError(4004, "No expedition by that code is waiting for you.");
+    };
+    const rt = getRoomConfig().persistence;
+    const code = typeof options.resume === "string" ? options.resume.toUpperCase() : "";
+    const id = parseIdentity(options.token);
+    if (!rt || !isValidJoinCode(code) || !id) return deny("request");
+    let other = WorldRoom.campaignClaims.get(code);
+    for (let i = 0; other?.closing && i < 200; i++) {
+      await new Promise((r) => setTimeout(r, 25)); // a room of this campaign is writing its last save: wait for it, then load what it wrote
+      other = WorldRoom.campaignClaims.get(code);
+    }
+    if (other) return deny("live");
+    this.takeClaim(code); // (synchronous after the last await: two resumes cannot both pass)
+    const store = await rt.store();
+    const rec = await store.findByCode(code);
+    if (!rec || !canResume(rec, identityKey(id, rt.cfg.pepper))) return deny("not a member");
+    const live = await matchMaker.query({ name: ROOM_WORLD });
+    if (live.some((r) => r.roomId !== this.roomId && (r.metadata as { code?: string } | undefined)?.code === code)) return deny("live");
+    const r = restore(CAMPAIGN_CODECS, rec);
+    if (r.repaired.length) log.warn("room.resume_repaired", { roomId: this.roomId, sections: r.repaired });
+    log.info("room.resume", { roomId: this.roomId, code, rev: rec.rev });
+    if (r.newer.length) log.warn("room.resume_newer_sections", { roomId: this.roomId, sections: r.newer, note: "written by a newer build; kept untouched, not saved over" });
+    return { rec, values: r.values, idle: idleDays(rec.savedAt, Date.now()), newer: r.newer };
+  }
+
+  private takeClaim(code: string): void {
+    this.releaseClaim();
+    const mine = { closing: false };
+    WorldRoom.campaignClaims.set(code, mine);
+    this.claim = { code, mine };
+  }
+
+  private releaseClaim(): void {
+    const c = this.claim;
+    this.claim = undefined;
+    if (c && WorldRoom.campaignClaims.get(c.code) === c.mine) WorldRoom.campaignClaims.delete(c.code);
+  }
+
+  /** A join code no live room and no saved campaign already uses. */
+  private async freshJoinCode(): Promise<string> {
+    const rt = getRoomConfig().persistence;
+    let code = generateJoinCode();
+    if (!rt) return code;
+    try {
+      const store = await rt.store();
+      for (let i = 0; i < 12 && (await store.findByCode(code)); i++) code = generateJoinCode();
+    } catch {
+      /* a store that cannot answer must not stop a campaign from starting */
+    }
+    return code;
+  }
+
+  /** Attach the saver: a resumed record, or a fresh one owned by the creator's identity key. Without a valid identity nothing is persisted (and nobody could resume it anyway). */
+  private async bindSaver(options: JoinOptions, resume: { rec: CampaignRecord } | undefined): Promise<void> {
+    const rt = getRoomConfig().persistence;
+    const id = parseIdentity(options?.token);
+    if (!rt || !id) return;
+    try {
+      const store = await rt.store();
+      const saver = new CampaignSaver(store, { now: () => Date.now(), log, pepper: rt.cfg.pepper });
+      if (resume) saver.bind(resume.rec);
+      else saver.bind(createRecord({ code: this.state.code, seed: this.state.seed, owner: identityKey(id, rt.cfg.pepper) }));
+      this.saver = saver;
+      if (!resume) this.takeClaim(this.state.code); // (a resume took its claim before it loaded the record)
+      if (!resume) this.persistNow(); // the record exists from the first moment (a campaign nobody played is still resumable by its creator)
+    } catch (e) {
+      log.error("room.saver_unavailable", { roomId: this.roomId, err: e instanceof Error ? e.name : "error" });
+    }
+  }
+
+  /** Save the ledger soon (once per tick however many things changed). Never throws into the room. */
+  private persist(): void {
+    if (!this.saver || this.saveQueued) return;
+    this.saveQueued = true;
+    queueMicrotask(() => {
+      this.saveQueued = false;
+      this.persistNow();
+    });
+  }
+
+  private persistNow(): void {
+    if (!this.saver) return;
+    try {
+      const live: Record<string, unknown> = { campaign: this.campaign, party: parseParty(this.state.party) ?? newParty(), powers: this.powers, settlements: this.settlements };
+      for (const k of this.heldSections) delete live[k]; // (a section a newer build wrote is not ours to overwrite)
+      const snap = snapshot(CAMPAIGN_CODECS, live);
+      void this.saver.saveNow(snap);
+    } catch (e) {
+      metrics.saveFailures++;
+      log.error("room.save_failed", { roomId: this.roomId, err: e instanceof Error ? e.name : "error" });
+    }
   }
 
   /** Refreshes `state.worldMs` (the world's age) at most every CLOCK_SYNC_MS unless forced. */
@@ -598,16 +822,23 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.worldMs = now - this.bornAt;
   }
 
-  override onDispose(): void {
-    this.scenario?.dispose();
-    this.scenario = undefined;
-    this.mounts?.dispose();
-    metrics.rooms--;
-    if (this.physics) {
-      metrics.physicsBodies -= this.physics.props.size; // player capsules are released in onLeave
-      this.physics.dispose();
+  override async onDispose(): Promise<void> {
+    if (this.claim) this.claim.mine.closing = true; // (a resume of this campaign now waits for the last save below)
+    try {
+      this.persistNow();
+      this.scenario?.dispose();
+      this.scenario = undefined;
+      this.mounts?.dispose();
+      if (this.created) metrics.rooms--; // (a creation that was refused, e.g. a resume nobody may make, never counted)
+      if (this.physics) {
+        metrics.physicsBodies -= this.physics.props.size; // player capsules are released in onLeave
+        this.physics.dispose();
+      }
+      log.info("room.dispose", { roomId: this.roomId, code: this.state.code });
+      await this.saver?.flush(5000); // the last save is awaited (5 s cap): the campaign survives the room
+    } finally {
+      this.releaseClaim();
     }
-    log.info("room.dispose", { roomId: this.roomId, code: this.state.code });
   }
 
   /**
@@ -671,13 +902,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private useStation(sessionId: string, player: PlayerStateType, held: string | undefined): boolean {
     if (this.travel.busy) return true;
     if (this.scenario?.onInteract(sessionId, player, held)) return true;
+    if (this.outposts.onInteract(sessionId, player, held)) return true; // a carried crate at the foundation (D-035)
     if (held) return false; // arms full: a carried prop is dropped or thrown, never "used" on a table
     const st = findStation(this.state.region as RegionId, player.x, player.z, player.facing);
     if (!st) return false;
     if (st.kind === "map" || st.kind === "dock") this.clients.getById(sessionId)?.send("station", { kind: "map" });
     else if (st.kind === "paper") this.clients.getById(sessionId)?.send("station", { kind: "paper" });
     else if (st.kind === "loadout") this.clients.getById(sessionId)?.send("station", { kind: "loadout" });
-    else return false; // pier / warden belong to the scenario
+    else return false; // pier / warden belong to the scenario, the foundation to the outposts (it needs a carried prop)
     return true;
   }
 
@@ -685,6 +917,16 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private atMapRoom(p: PlayerStateType): boolean {
     for (const st of stationsFor(this.state.region as RegionId)) {
       if ((st.kind === "map" || st.kind === "dock") && Math.hypot(p.x - st.x, p.z - st.z) <= st.r + MAP_REACH_SLACK) return true;
+    }
+    return false;
+  }
+
+  /** The manifest and the hire list are decided at the supply table: the sender's ROW (never a client claim) within the loadout station's reach. */
+  private atSupply(sid: string): boolean {
+    const p = this.state.players.get(sid);
+    if (!p || p.npc) return false;
+    for (const st of stationsFor(this.state.region as RegionId)) {
+      if (st.kind === "loadout" && Math.hypot(p.x - st.x, p.z - st.z) <= st.r + MAP_REACH_SLACK) return true;
     }
     return false;
   }
@@ -703,8 +945,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** Builds the world, physics, props and fixtures of `id` (the room holds exactly one active region). Callers have already torn down the old one. */
   private buildRegion(id: RegionId): void {
     const seed = this.state.seed;
-    const bridge = this.campaign.crossing.bridge;
-    this.world = createRegionWorld(id, seed, { bridge });
+    this.world = createRegionWorld(id, seed, this.worldOpts());
     this.physics = new PhysicsWorld(this.world);
     this.state.props.clear();
     for (const spawn of regionProps(id, seed, this.world)) {
@@ -741,7 +982,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** Kessar Reach carries one contract per visit (`pickTemplate`: the ledger decides, never the same one twice running); Hollowmere has none. Called once the room's systems exist (the cast is spawned through them). */
   private startScenario(id: RegionId): void {
     if (id === "hollowmere") return; // the hub carries no contract, whatever a dev override says
-    const template = this.forcedTemplate ?? pickTemplate(this.campaign, id, this.state.seed);
+    const template = this.forcedTemplate ?? pickTemplate(this.campaign, id, this.state.seed, rivalPresence(this.campaign, this.powers));
     if (template === undefined) return;
     this.scenario = new Scenario(this.scenarioHost(), template);
     this.scenario.start();
@@ -802,9 +1043,24 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** A scenario resolved: the campaign changes (one rules table in shared/factions.ts), everyone is told what the Ward made of it. */
   private commitOutcome(o: ScenarioOutcome): void {
     const before = this.campaign;
-    this.campaign = applyOutcome(before, o);
+    // The pipeline (D-035): ledger -> the powers' relations -> the rival's days (absence gives it whole idle days, once) -> the outposts' day -> what the outposts mean to the
+    // powers -> publish everything -> save. Each step is a pure function in shared/; this method only orders them and publishes.
+    let c = applyOutcome(before, o);
+    let p = powersAfterOutcome(before, c, this.powers, o);
+    const idle = this.pendingIdle;
+    this.pendingIdle = 0;
+    const adv = rivalAdvance(c, p, c.day + idle);
+    c = adv.c;
+    p = adv.p;
+    const events: SettlementEvent[] = [];
+    this.campaign = c;
+    this.powers = p;
+    for (const e of adv.events) if (e.kind === "raided_outpost") events.push(...this.outposts.raid(e.region, e.day));
+    events.push(...this.outposts.evolve(c.day, regionClimate(c, p, "kessar")));   // (the outposts publish themselves and tell the powers: commitSettlements)
     this.publishCampaign();
+    this.publishPowers();
     for (const line of consequenceLines(before, this.campaign).slice(0, 3)) this.broadcast("notice", { text: line });
+    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") this.broadcast("notice", { text: this.settlementLine(e) });
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
     for (const line of this.followers.settle(o).slice(0, 4)) this.broadcast("notice", { text: line });
     log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
@@ -813,6 +1069,62 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private publishCampaign(): void {
     this.state.campaign = serializeCampaign(this.campaign);
     this.state.campaignRev = (this.state.campaignRev + 1) & 0xffff;
+    this.persist();
+  }
+
+  private publishPowers(): void {
+    const json = serializePowers(this.powers);
+    if (json === this.state.powers) return;
+    this.state.powers = json;
+    this.state.powersRev = (this.state.powersRev + 1) & 0xffff;
+    this.persist();
+  }
+
+  private publishSettlements(): void {
+    const json = serializeSettlements(this.settlements);
+    if (json === this.state.settlements) return;
+    this.state.settlements = json;
+    this.state.settlementsRev = (this.state.settlementsRev + 1) & 0xffff;
+    this.persist();
+  }
+
+  /** A line for a notice about what an outpost event means (the paper says it better, later). */
+  private settlementLine(e: SettlementEvent): string {
+    const stage = e.stage.replace(/_/g, " ");
+    switch (e.kind) {
+      case "promoted": return `${e.name} is now a ${stage}.`;
+      case "demoted": return `${e.name} has slipped back to a ${stage}.`;
+      case "abandoned": return `${e.name} has been given up to the grass.`;
+      case "raided": return `${e.name} was visited in the night. It is being described as an inspection.`;
+      case "telegraph": return `The telegraph reaches ${e.name}.`;
+      case "launch": return `A steam launch now serves ${e.name}.`;
+      default: return `${e.name}: ${e.kind}.`;
+    }
+  }
+
+  /** Outposts changed (a delivery, the daily rules, a raid): publish, tell the powers what it means, save. */
+  private commitSettlements(s: SettlementsState, events: readonly SettlementEvent[]): void {
+    this.settlements = s;
+    this.publishSettlements();
+    if (events.length) {
+      this.powers = powersAfterSettlement(this.campaign, this.powers, events);
+      this.publishPowers();
+    }
+  }
+
+  /** An audience ended: the purse and the powers moved together. */
+  private commitAudience(c: CampaignState, p: PowersState): void {
+    this.campaign = c;
+    this.powers = p;
+    this.publishCampaign();
+    this.publishPowers();
+  }
+
+  /** Credits the purse (a standing deal that cheapens the manifest). */
+  private credit(n: number): void {
+    if (!(n > 0)) return;
+    this.campaign = { ...this.campaign, purse: Math.min(99999, this.campaign.purse + Math.floor(n)) };
+    this.publishCampaign();
   }
 
   /** Takes pounds out of the purse (the manifest at sailing, a signing fee). Never below zero. */
@@ -848,19 +1160,58 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         return out;
       },
       spawnProp: (kind, x, z) => this.spawnPropAt(kind, x, z),
-      rebuildBridge: (b) => this.rebuildBridge(b),
+      rebuildBridge: (b) => this.rebuildWorld(b),
       publish: (v: ScenarioView) => this.publishScenario(JSON.stringify(v)),
       send: (sid, type, msg) => this.clients.getById(sid)?.send(type, msg),
-      negotiation: { askingToll, leverageOf, openParley, answerParley },
+      // the Ward's price carries what the Guild says about you at funerals (powers' flags); the Syndicate's presence shapes who is met
+      negotiation: {
+        askingToll: (c) => askingToll(c, this.powers),
+        leverageOf,
+        openParley: (c, lv, seed) => openParley(c, lv, seed, this.powers),
+        answerParley: (c, lv, seed, view, option) => answerParley(c, lv, seed, view, option, this.powers),
+      },
+      rivalPresence: () => rivalPresence(this.campaign, this.powers),
       seed: this.state.seed,
       groundY: (x, z) => this.world.terrainHeight(x, z),
     };
   }
 
-  /** The charge brought the bridge down: new analytic world (what people walk on) and new static colliders (what props land on). */
-  private rebuildBridge(bridge: BridgeState): void {
-    this.world = createRegionWorld(this.state.region as RegionId, this.state.seed, { bridge });
+  /**
+   * The collision world depends on (bridge, outpost stage, telegraph) (D-035: `regionWorldOpts`, the same function the clients call). The charge has brought the bridge down
+   * (`bridge` overrides what the ledger has not caught up with yet), or an outpost was founded or promoted: new analytic world (what people walk on) and new static colliders
+   * (what props land on), then EVERY row (players, NPCs, mounts) is pushed out of whatever solid now stands where it is. The delivery yard is free at every stage, so nobody delivering is trapped.
+   */
+  private rebuildWorld(bridge?: BridgeState): void {
+    const opts = this.worldOpts();
+    this.world = createRegionWorld(this.state.region as RegionId, this.state.seed, bridge ? { ...opts, bridge } : opts);
     this.physics.replaceStatic(this.world);
+    const pos = { x: 0, z: 0 };
+    this.state.players.forEach((p) => {
+      pos.x = p.x;
+      pos.z = p.z;
+      if (this.world.resolveXZ(pos, p.y, CHARACTER.radius, CHARACTER.height)) {
+        p.x = pos.x;
+        p.z = pos.z;
+        p.vx = p.vz = 0;
+      }
+    });
+    this.state.mounts.forEach((m) => {
+      pos.x = m.x;
+      pos.z = m.z;
+      if (this.world.resolveXZ(pos, m.y, 0.8, 1.6)) {
+        m.x = pos.x;
+        m.z = pos.z;
+      }
+    });
+  }
+
+  /**
+   * What the collision world is built from: the LEDGER and the settlements as the room holds them, never the last published strings. Inside `commitOutcome` the ledger moves
+   * first and is published last, so a rebuild there (an outpost promoted by the same ending that brought the bridge down) must not read the old bridge off `state.campaign`.
+   * Once published the two are the same text, which is what the clients build from.
+   */
+  private worldOpts(): RegionWorldOpts {
+    return regionWorldOpts(serializeCampaign(this.campaign), serializeSettlements(this.settlements));
   }
 
   private consumeProp(id: string): void {
@@ -931,6 +1282,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** The ship leaves Hollowmere: the manifest is trimmed to the purse and the load, charged ONCE, and its effects wait for landfall. Sailing home carries no manifest. */
   private onSail(): void {
     this.pendingPrep = this.state.region === "hollowmere" ? this.followers.prepCommit() : undefined;
+    // a standing deal (the Houses' weather policy, the Granges' grain) cheapens the manifest; a strike or a markup makes it dearer (D-035)
+    const pct = powerEffects(this.powers).manifestPct;
+    const charged = this.pendingPrep?.charged ?? 0;
+    const delta = Math.round((charged * pct) / 100);
+    if (delta > 0) this.spend(delta);
+    else if (delta < 0) this.credit(-delta);
+    if (delta !== 0) this.broadcast("notice", { text: delta < 0 ? `A standing arrangement takes £${-delta} off the manifest.` : `The quay adds £${delta} to the manifest, for reasons it has put in writing.` });
   }
 
   /**
@@ -1122,6 +1480,25 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         player.facing = Number(f) || 0;
         player.vx = player.vz = 0;
       }
+    }
+    else if (cmd?.startsWith("outcome:")) {
+      // outcome:<resolution> : commit a synthetic ending of the matching contract (QA + e2e: a campaign with a history without walking three crossings; the same pipeline a real ending takes)
+      const r = cmd.slice(8);
+      if (!(RESOLUTIONS as readonly string[]).includes(r)) return;
+      const template = (Object.keys(TEMPLATE_RESOLUTIONS) as ScenarioTemplateId[]).find((t) => (TEMPLATE_RESOLUTIONS[t] as readonly string[]).includes(r)) ?? "secure_crossing";
+      this.commitOutcome({
+        scenario: template, resolution: r as ResolutionId, toll: 40, paid: 0, bridge: this.campaign.crossing.bridge, brokePromise: false, seconds: 1,
+        tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 },
+      });
+    }
+    else if (cmd?.startsWith("outpost:")) {
+      // outpost:<stage> : the Society's outpost at Kessar exists at once at that stage (QA + e2e: the four crates are walked in resume.test)
+      const stage = cmd.slice(8) as OutpostStage;
+      if (!(OUTPOST_STAGES as readonly string[]).includes(stage) || stage === "none") return;
+      const base = foundOutpost(this.settlements, "kessar", this.campaign, this.state.seed).posts.kessar!;
+      const events: SettlementEvent[] = [{ kind: "founded", day: this.campaign.day, region: "kessar", stage, name: base.name }];
+      this.commitSettlements({ ...this.settlements, posts: { ...this.settlements.posts, kessar: { ...base, stage, supply: 60, security: 50, trade: 50 } } }, events);
+      this.rebuildWorld();
     }
     else if (cmd === "nearCannon") {
       // Stand at the breech of the first cannon, looking down the barrel.

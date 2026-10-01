@@ -7,6 +7,7 @@ import { clamp } from "./math.ts";
 import type { NavOptions } from "./nav.ts";
 import { hash3 } from "./rng.ts";
 import { WEAPON, type WeaponId } from "./weapons.ts";
+import type { RivalPresence } from "./worldTypes.ts";
 
 /**
  * The people of Kessar Reach: who stands where (roster). What each decides to do is `npcBrain.ts` (`npcThink`), run by the server's `Cast`
@@ -33,7 +34,7 @@ const SENTRY_ARMS: readonly WeaponId[] = [WEAPON.RIFLE, WEAPON.PISTOL, WEAPON.SA
 const RIVAL_POSTS = [{ x: -2, z: 0 }, { x: 2, z: 1.5 }, { x: 0, z: -2.5 }] as const;
 
 /** Up to 8 sentries (anchors in order), the Warden, and the Syndicate's three (two enforcers and a surveyor with a chain and opinions). Never above NPC_CAP. */
-export function garrisonRoster(c: CampaignState, seed: number): NpcSpec[] {
+export function garrisonRoster(c: CampaignState, seed: number, presence?: RivalPresence): NpcSpec[] {
   const out: NpcSpec[] = [];
   const n = garrisonSize(c.factions.ward.militaryStrength);
   for (let i = 0; i < n; i++) {
@@ -50,13 +51,17 @@ export function garrisonRoster(c: CampaignState, seed: number): NpcSpec[] {
     name: "Lamp-Warden Ysolde Hask", skill: 40, bravery: 62, brain: "garrison",
   });
   const camp = KESSAR_ANCHORS.rivalCamp;
-  for (let i = 0; i < 3; i++) {
-    const p = RIVAL_POSTS[i]!;
-    const role = i < 2 ? NPC.RIVAL_GUARD : NPC.RIVAL_SURVEYOR;
+  // The Syndicate's people: two enforcers and a surveyor, unless the rival agent (D-035) says otherwise: `escort` enforcers and `surveyors` surveyors.
+  const guards = presence ? presence.escort : 2, surveyors = presence ? presence.surveyors : 1;
+  for (let i = 0; i < guards + surveyors; i++) {
+    const p = RIVAL_POSTS[i % RIVAL_POSTS.length]!;
+    const guard = i < guards;
+    const role = guard ? NPC.RIVAL_GUARD : NPC.RIVAL_SURVEYOR;
+    const arm = guard ? (i === 0 ? WEAPON.BLUNDERBUSS : WEAPON.PISTOL) : WEAPON.UMBRELLA;
     out.push({
-      id: `rival-${i}`, role, faction: "rival", side: NPC_SIDE[role]!, group: "rival", post: { x: camp.x + p.x, z: camp.z + p.z },
-      weapon: i === 0 ? WEAPON.BLUNDERBUSS : i === 1 ? WEAPON.PISTOL : WEAPON.UMBRELLA, lookSeed: hash3(seed, i, NPC.RIVAL_GUARD), name: RIVAL_NAMES[i]!,
-      skill: i < 2 ? 60 : 30, bravery: i < 2 ? 58 : 24, brain: "garrison",
+      id: `rival-${i}`, role, faction: "rival", side: NPC_SIDE[role]!, group: "rival", post: { x: camp.x + p.x + (i >= RIVAL_POSTS.length ? 2.5 * (i - RIVAL_POSTS.length + 1) : 0), z: camp.z + p.z },
+      weapon: arm, lookSeed: hash3(seed, i, NPC.RIVAL_GUARD), name: RIVAL_NAMES[i % RIVAL_NAMES.length]!,
+      skill: guard ? 60 : 30, bravery: guard ? 58 : 24, brain: "garrison",
     });
   }
   return out.slice(0, NPC_CAP);

@@ -1,7 +1,7 @@
 import {
   FLAG, PropKind, SCENARIO, createWeather, hash3, isNpcKey, npcKey, weatherAt,
   type BridgeState, type CampaignState, type CasualtyTally, type Leverage, type ParleyKind, type ParleyStep, type ParleyView, type PlayerStateType,
-  type ScenarioFx, type ScenarioInput, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
+  type ScenarioFx, type ScenarioInput, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView, type RivalPresence,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
 import type { CastApi, MountApi, NpcSpec, PlayersView } from "@cb/shared";
@@ -46,6 +46,8 @@ export interface ScenarioHost {
   };
   seed: number;
   groundY(x: number, z: number): number;
+  /** D-035: what the Syndicate has in the region now (arrival time, escort, wagon); absent = the slice-1 numbers. */
+  rivalPresence?(): RivalPresence | undefined;
 }
 
 const TICK_WATCH = 0.25, TICK_WEATHER = 1;
@@ -113,11 +115,12 @@ export class Scenario {
     if (this.started) return;
     const c = this.host.campaign();
     const def = this.def;
-    this.s = def.init(c, this.host.negotiation.askingToll(c), this.host.seed);
+    const presence = this.host.rivalPresence?.();
+    this.s = def.init(c, this.host.negotiation.askingToll(c), this.host.seed, presence);
     this.parleySeed = hash3(this.host.seed, c.day, 0x7a11);
     this.started = true;
     for (const [name, pts] of Object.entries(def.routes ?? {})) this.host.cast.defineRoute(name, pts);
-    this.specs = def.roster(c, this.host.seed, this.s);
+    this.specs = def.roster(c, this.host.seed, this.s, presence);
     for (const sp of this.specs) this.bySpecKey.set(npcKey(sp.id), sp);
     this.spawnGroups((g) => !g.startsWith("late:"));
     if (def.wagon && this.host.mounts) {

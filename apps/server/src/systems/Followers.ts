@@ -25,6 +25,7 @@ export const LEADER_NEAR = 18;
 const TEND_SEARCH = 30;
 const TEND_RETHINK = 0.5;
 const DRESS_GAP = 1.2;
+const FAR_NOTICE_GAP_S = 4;
 
 export interface FollowersHost {
   /** Humans (no NPC rows); `get` finds any row. Standing, connected humans only may send orders. */
@@ -47,6 +48,8 @@ export interface FollowersHost {
   notice(sid: string, text: string): void;
   /** True while the party is at the table (the hub, not sailing, not on an expedition): the only time the manifest and the roster may change. */
   prepOpen(): boolean;
+  /** True when the sender stands at the supply table (the loadout station's reach). The manifest and the hire list are decided THERE, not from across the camp. */
+  atSupply(sid: string): boolean;
   inBounds(x: number, z: number): boolean;
   /** Campaign day (the hire pool is a function of seed and day). */
   day(): number;
@@ -55,6 +58,8 @@ export interface FollowersHost {
   seed: number;
   /** Optional: a follower who has died for good (the Casualties' call). */
   isDead?(key: string): boolean;
+  /** D-035: kilograms the roads add to the party's capacity. */
+  bonusKg?(): number;
 }
 
 interface Hand {
@@ -85,6 +90,7 @@ export class Followers {
   private shown: string;
   private readonly hands = new Map<string, Hand>();
   private readonly buckets = new Map<string, Bucket>();
+  private readonly farNotice = new Map<string, number>();
   private landing = { x: 0, z: 0 };
 
   constructor(private readonly host: FollowersHost) {
@@ -130,6 +136,20 @@ export class Followers {
     return true;
   }
 
+  /** The table gate for `loadoutSet` and `hire`: prep must be open and the sender within reach of the supply table; a far sender gets one notice a few seconds. */
+  private atTable(sid: string): boolean {
+    if (!this.host.prepOpen()) return false;
+    if (this.host.atSupply(sid)) return true;
+    const now = this.host.nowS();
+    const last = this.farNotice.get(sid);
+    if (last === undefined || !(now - last < FAR_NOTICE_GAP_S) || now < last) {
+      if (this.farNotice.size >= 32) this.farNotice.clear();
+      this.farNotice.set(sid, now);
+      this.host.notice(sid, "The supply clerk cannot hear you from there.");
+    }
+    return false;
+  }
+
   private humanCount(): number {
     let n = 0;
     this.host.players.forEach((p) => {
@@ -148,7 +168,7 @@ export class Followers {
 
   /** The manifest is edited freely at the table; it is normalised here and validated again at propose and at sail. */
   onLoadoutSet(sid: string, raw: unknown): boolean {
-    if (!this.sender(sid) || !this.allow(sid) || !this.host.prepOpen()) return false;
+    if (!this.sender(sid) || !this.allow(sid) || !this.atTable(sid)) return false;
     const l = parseLoadoutMsg(raw);
     if (!l) return false;
     this.p = { ...this.p, loadout: l };
@@ -157,7 +177,7 @@ export class Followers {
   }
 
   onHire(sid: string, raw: unknown): boolean {
-    if (!this.sender(sid) || !this.allow(sid) || !this.host.prepOpen()) return false;
+    if (!this.sender(sid) || !this.allow(sid) || !this.atTable(sid)) return false;
     const m = parseHireMsg(raw);
     if (!m) return false;
     const purse = this.host.purse();
@@ -253,7 +273,7 @@ export class Followers {
   /** Departure (the ship leaves): trims the manifest to the purse and the capacity, charges it, stores the stock. Returns the effects to apply at landfall. */
   prepCommit(): { effects: PrepEffects; lines: string[]; charged: number } {
     const humans = this.humanCount();
-    const t = trimLoadout(this.p.loadout, { purse: this.host.purse(), humans, roster: this.p.roster });
+    const t = trimLoadout(this.p.loadout, { purse: this.host.purse(), humans, roster: this.p.roster, bonusKg: this.host.bonusKg?.() ?? 0 });
     const charged = loadoutCost(t.loadout);
     if (charged > 0) this.host.spend(charged);
     const effects = prepEffects(t.loadout);
@@ -265,7 +285,7 @@ export class Followers {
 
   /** Whether the current manifest could sail now (the propose-time check). */
   check(): LoadoutCheck {
-    return validateLoadout(this.p.loadout, { purse: this.host.purse(), humans: this.humanCount(), roster: this.p.roster });
+    return validateLoadout(this.p.loadout, { purse: this.host.purse(), humans: this.humanCount(), roster: this.p.roster, bonusKg: this.host.bonusKg?.() ?? 0 });
   }
 
   /** Landfall: the roster stands around `near`. Hands the Cast refuses (cap) simply do not come. */

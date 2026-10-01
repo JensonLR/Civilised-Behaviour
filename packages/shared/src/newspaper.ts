@@ -7,6 +7,7 @@ import {
   type HeadKey,
 } from "./newspaperText.ts";
 import { hash3 } from "./rng.ts";
+import type { PaperExtras } from "./worldTypes.ts";
 
 /**
  * The Society's house paper, generated from the campaign ledger. Deterministic: the same campaign and world seed always print the same edition;
@@ -19,7 +20,7 @@ export const PAPER_LIMITS = { headline: 90, standfirst: 280, head: 60, body: 420
 
 const cap = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
 
-export function generatePaper(c: CampaignState, worldSeed: number): Paper {
+export function generatePaper(c: CampaignState, worldSeed: number, extras?: PaperExtras): Paper {
   const edition = c.expeditions + 1;
   const s = hash3(worldSeed, c.expeditions, c.day, 5);
   const pick = <T>(list: readonly T[], tag: number): T => list[hash3(s, tag, list.length) % list.length]!;
@@ -103,7 +104,8 @@ export function generatePaper(c: CampaignState, worldSeed: number): Paper {
     edition,
     dateline: `Hollowmere Depot, Day ${c.day}. ${pick(DATELINE_TAIL, 60)}`,
     headline, standfirst,
-    stories: cands.slice(0, PAPER_LIMITS.stories),
+    // D-035: the powers' and the outposts' dispatches print FIRST (the paper's own stories fill what is left); absent extras = the old paper, byte for byte
+    stories: [...(extras?.dispatches ?? []).slice(0, PAPER_LIMITS.stories).map((d) => ({ slug: d.slug, head: cap(d.head, PAPER_LIMITS.head), body: cap(d.body, PAPER_LIMITS.body) })), ...cands].slice(0, PAPER_LIMITS.stories),
     notices: notices.slice(0, PAPER_LIMITS.notices).map((n) => cap(n, PAPER_LIMITS.notice)),
   };
 }

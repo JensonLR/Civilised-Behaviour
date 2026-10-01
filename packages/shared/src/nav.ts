@@ -40,7 +40,6 @@ export interface NavGrid {
   /** Bit d set: a body may walk from this cell to its neighbour in direction d (see DX, DZ). */
   readonly edges: Uint8Array;
   readonly openCount: number;
-  readonly buildMs: number;
 }
 
 /** Neighbour directions, clockwise from +x: E, SE, S, SW, W, NW, N, NE (z grows southward). */
@@ -105,7 +104,6 @@ export function buildNavGrid(world: CollisionWorld, opts: NavOptions = {}): NavG
   const hit = cache.get(world);
   if (hit && hit.key === key) return hit.grid;
 
-  const t0 = performance.now();
   const n = Math.ceil((2 * bounds) / cell);
   const origin = -bounds;
   const total = n * n;
@@ -272,7 +270,7 @@ export function buildNavGrid(world: CollisionWorld, opts: NavOptions = {}): NavG
     }
   }
 
-  const grid: NavGrid = { world, cell, n, origin, clearance, open, tall, near, h, edges, openCount, buildMs: performance.now() - t0 };
+  const grid: NavGrid = { world, cell, n, origin, clearance, open, tall, near, h, edges, openCount };
   cache.set(world, { key, grid });
   return grid;
 }

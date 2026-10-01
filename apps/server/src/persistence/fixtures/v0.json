@@ -1,0 +1,21 @@
+{
+  "format": "cb-save",
+  "version": 0,
+  "crc32": 1839682900,
+  "record": {
+    "id": "11111111-2222-4333-8444-555555555555",
+    "code": "H7K2M",
+    "seed": 424242,
+    "rev": 3,
+    "savedAt": 1790000000000,
+    "ownerKey": "ownerkeyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "memberKeys": [
+      "ownerkeyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "guestkeyBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    ],
+    "sections": {
+      "campaign": "{\"day\":4,\"v\":1}",
+      "party": "{\"v\":1,\"roster\":[]}"
+    }
+  }
+}

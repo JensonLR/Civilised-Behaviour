@@ -16,3 +16,6 @@ the paid build is already worth the price.
 ## Integration
 Wrapper undecided (D-010). Electron main process owns Steam; the renderer sees only a narrow contextBridge API. Steam ticket validated
 server-side (PlatformAuth); no publisher key in any client code.
+
+## Identity adapter note (D-035)
+Campaign resume is keyed by an HMAC identity KEY (`apps/server/src/persistence/identity.ts`): today the anonymous per-device UUID the browser client generates (`cb.identity`), never stored raw. `steam:<17 digits>` is accepted only through an injected `IdentityVerifier` (the Steam ticket check lands there, in the Electron/Steam adapter, server-side validation of the session ticket): until then a `steam:` token is simply not an identity and a campaign it creates is not persisted. When the verifier lands: (1) the Steam id is personal data (see `PRIVACY_DATA_MAP.md`), (2) the same human on the web and on Steam are two different keys (members), so a "link account" step is a future decision, (3) `IDENTITY_PEPPER` must be set in production and must never change.

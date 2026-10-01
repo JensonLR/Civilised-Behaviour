@@ -2,6 +2,8 @@ import { emitSetting, readStored, writeStored } from "../settings.ts";
 import { keyboardRows, padRows, type ControlRow } from "./controlsInfo.ts";
 import { Modal, h } from "./modal.ts";
 import { openSettings } from "./Settings.ts";
+import { replayOrientation } from "./Orientation.ts";
+import { ORIENT_REPLAY } from "./orientationCopy.ts";
 
 /**
  * "Field Manual": a one-page how-to-play card. It lists the controls for the input device the player is actually using (a connected gamepad
@@ -41,6 +43,12 @@ class HowToCard {
     done.addEventListener("click", () => this.close());
     const opts = h("button", { type: "button" }, "Options");
     opts.addEventListener("click", () => openSettings(opts, "controls"));
+    // the first-run orientation again (the card in the game picks it up now, or at the next expedition)
+    const replay = h("button", { type: "button", "data-act": "replay-orientation" }, ORIENT_REPLAY);
+    replay.addEventListener("click", () => {
+      replayOrientation();
+      this.close();
+    });
     this.kb.addEventListener("click", () => this.show("keyboard"));
     this.pad.addEventListener("click", () => this.show("pad"));
     this.modal.panel.append(
@@ -54,7 +62,7 @@ class HowToCard {
         h("div", { class: "seg", role: "group", "aria-label": "Show controls for" }, this.kb, this.pad),
         this.list,
       ),
-      h("div", { class: "actions" }, opts, done),
+      h("div", { class: "actions" }, opts, replay, done),
     );
     this.modal.onClose = () => markHowToSeen();
   }

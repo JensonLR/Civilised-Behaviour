@@ -81,11 +81,11 @@ export function loadoutWeight(l: Loadout): number {
 }
 
 /** Kilograms the party can take: 30 per human, +25 per porter, +90 with a wagon, +40 per horse beyond the first. */
-export function partyCapacity(humans: number, roster: readonly Pick<Follower, "kind">[], l: Loadout): number {
+export function partyCapacity(humans: number, roster: readonly Pick<Follower, "kind">[], l: Loadout, bonusKg = 0): number {
   const h = Number.isFinite(humans) ? Math.min(4, Math.max(1, Math.floor(humans))) : 1;
   let porters = 0;
   for (const f of roster) if (f.kind === "porter") porters++;
-  return h * CAPACITY.perHuman + porters * CAPACITY.perPorter + (l.wagon ? CAPACITY.wagon : 0) + Math.max(0, l.horses - 1) * CAPACITY.extraHorse;
+  return h * CAPACITY.perHuman + porters * CAPACITY.perPorter + (l.wagon ? CAPACITY.wagon : 0) + Math.max(0, l.horses - 1) * CAPACITY.extraHorse + (Number.isFinite(bonusKg) ? Math.max(0, Math.min(200, bonusKg)) : 0);
 }
 
 export type LoadWord = "Light" | "Laden" | "Full" | "Overloaded";
@@ -96,14 +96,15 @@ export function loadWord(weight: number, capacity: number): LoadWord {
   return u > 1 ? "Overloaded" : u > 0.85 ? "Full" : u >= 0.55 ? "Laden" : "Light";
 }
 
-export interface LoadoutContext { purse: number; humans: number; roster: readonly Pick<Follower, "kind">[] }
+/** `bonusKg` (D-035): what the roads add (+20 kg per level), from the settlements' tech. */
+export interface LoadoutContext { purse: number; humans: number; roster: readonly Pick<Follower, "kind">[]; bonusKg?: number }
 export interface LoadoutCheck { ok: boolean; problems: string[]; cost: number; weight: number; capacity: number }
 
 export function validateLoadout(l: Loadout, ctx: LoadoutContext): LoadoutCheck {
   const problems: string[] = [];
   const cost = loadoutCost(l);
   const weight = loadoutWeight(l);
-  const capacity = partyCapacity(ctx.humans, ctx.roster, l);
+  const capacity = partyCapacity(ctx.humans, ctx.roster, l, ctx.bonusKg);
   if (l.wagon && l.horses < 1) problems.push("A wagon needs a horse to pull it.");
   if (weight > capacity) problems.push(`Overweight by ${weight - capacity} kg: the party can carry ${capacity} kg.`);
   const purse = Number.isFinite(ctx.purse) ? ctx.purse : 0;

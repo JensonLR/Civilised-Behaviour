@@ -7,6 +7,7 @@ import { VILLAGE_PADS, villageKeepOut, villageObstacles } from "./village.ts";
 import { ruinObstacles } from "./ruins.ts";
 import { clearingObstacles } from "./clearing.ts";
 import { cannonObstacles } from "./weapons.ts";
+import { hqRouteObstacles } from "./hqRoute.ts";
 
 export const ARENA_RADIUS = 90;
 
@@ -194,7 +195,7 @@ export function createArena(seed: number): CollisionWorld {
 
   const clashes = (o: Obstacle): boolean => clashesFurniture(o.x, o.z, o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz));
   const kept = obstacles.filter((o) => !(["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && clashes(o)));
-  return new CollisionWorld(terrain, [...kept, ...furniture], ARENA_RADIUS);
+  return new CollisionWorld(terrain, [...kept, ...furniture, ...hqRouteObstacles(terrain)], ARENA_RADIUS); // the way-round-HQ finger-posts go in last (hqRoute.ts)
 }
 
 /** Deterministic spawn ring around the origin for up to `count` players. */

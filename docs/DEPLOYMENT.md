@@ -30,6 +30,15 @@ browser (two tabs) to confirm; `scripts/deploy-smoke.mjs <clientUrl>` automates 
 `NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (optional until M10),
 `SIMULATED_LATENCY_MS` (must be 0 in production).
 
+Campaign persistence (`apps/server/src/persistence`, read by `persistenceConfig`; fails fast with a readable list):
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `CAMPAIGN_STORE` | `memory` | `memory` (nothing survives a restart), `file` (atomic versioned JSON, single server process owns the directory) or `postgres` (Drizzle over `postgres`, tables created at boot from embedded SQL, no CLI) |
+| `SAVE_DIR` | `./data/saves` | Directory for `file`. Put it on a persistent volume; `<id>.json` + one `.bak` per campaign, damaged files are moved to `<id>.corrupt-<ts>-<n>.json` and a file written by a newer build is refused and left alone |
+| `DATABASE_URL` | none | Required for `postgres`. Never logged. A boot failure of any store downgrades to memory with a loud error rather than crashing |
+| `IDENTITY_PEPPER` | dev constant | HMAC key for identity keys. REQUIRED (>= 16 chars) in production for `file`/`postgres`; secret, stable (rotating it orphans every membership) |
+| `SAVE_RETENTION_DAYS` | `180` | Dormant campaigns older than this are purged at boot and daily (1-3650) |
+
 ## Production build plan
 Server: bundle `apps/server/src/main.ts` with esbuild (inline `@cb/shared`, external node_modules), run `node dist/main.js` in a
 Node 22 slim image. Client: `vite build`, upload `dist/`; set `VITE_SERVER_URL=wss://<game-host>`.

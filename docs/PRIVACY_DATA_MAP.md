@@ -1,14 +1,27 @@
 # Privacy data map
 
-Status: reflects the code as of 2026-09-29. Draft for a future privacy policy; final legal review is advisable before release.
+Status: reflects the code as of 2026-10-01 (campaign persistence, D-035, now wired into the room: `WorldRoom` saves on every ledger/powers/settlements/party change, when the last player leaves and (awaited, 5 s cap) on dispose; `JoinOptions.resume` loads a record for a former member). Draft for a future privacy policy; final legal review is advisable before release.
 
 | Data | Where | Purpose | Retention |
 |------|-------|---------|-----------|
 | Display name (<=20 chars, sanitised) | Room state (memory); browser localStorage `cb.name` | Show players to each other | Room lifetime / until user clears storage |
-| Random identity token (UUID) | Browser localStorage `cb.identity`; sent on join (unused server-side yet) | Future stable player identity | Until user clears storage |
+| Random identity token (UUID) | Browser localStorage `cb.identity`; sent on join and create; the server turns it into an HMAC identity KEY (below) and keeps only that | Membership check when a campaign is resumed | Until user clears storage (client); the key lives as long as the campaign record |
 | IP address | Transient in-memory rate-limiter key for `/campaign/:code`; HTTP/proxy logs of the hosting provider | Abuse prevention | Limiter: minutes; host logs per provider policy |
-| Gameplay state (positions, etc.) | Server memory only | Play the game | Room lifetime (no persistence until M10) |
+| Gameplay state (positions, props, NPCs, mounts, scenario progress) | Server memory only | Play the game | Room lifetime. Only the ledger sections below are saved |
+| Campaign record (`CampaignRecord`): campaign id (server uuid), join code, world seed, revision, last-save time, `owner` and `members` as identity KEYS, opaque JSON sections (`campaign` ledger, `party`, `powers`, `settlements`) | Save file `<SAVE_DIR>/<id>.json` or Postgres tables `campaigns` and `campaign_members` (`CAMPAIGN_STORE=file|postgres`; memory = nothing persisted) | Let a former member resume the expedition at HQ | Until the campaign is dormant for `SAVE_RETENTION_DAYS` (default 180, set 1-3650), then purged at boot and daily; or until deleted (below) |
+| Identity key | Inside the record (`owner`, `members`), nothing else | Membership check on resume | Same as the record |
 | Server logs | stdout JSON (room ids, session ids, names) | Operations | Per hosting provider |
 
-Not collected: DOB, address, email, voice, payment data (storefronts handle payment). Persistence (M10) will add: platform ID,
-display name, campaign data; deletion process to be documented then.
+
+## Campaign persistence (apps/server/src/persistence)
+- **No raw identifiers are stored or logged.** The client's random device id (`cb.identity`, a UUID v4) is turned into an identity key, `HMAC-SHA256(IDENTITY_PEPPER, kind + ":" + id)` (base64url), before it touches a record, a file, a table or a log line. A test greps every persisted byte (file store including `.bak`, every Postgres column) and the saver's log output for the raw ids and the pepper. Keys are pseudonymous, not anonymous: with the pepper and a known id the key can be recomputed, so treat the pepper as a secret (never in the renderer or the repo). Rotating it orphans every membership.
+- **Not saved:** display names, IPs, positions, props, NPCs, carried items, per-player look history (a reserved `players` section name exists and is unused).
+- **An unverified identity authorises nothing beyond what the join code already does:** resuming a dormant campaign needs the code AND having been a member; an unknown code and a non-member get the same refusal (no enumeration).
+- **Retention:** `purgeDormant` deletes campaigns whose last save is older than `SAVE_RETENTION_DAYS`, and ages out quarantined files (`<id>.corrupt-<ts>-<n>.json`) the same way. The server runs it at boot and daily (`purgeExpired`).
+- **Deletion path (operator procedure until a self-service screen exists):** on a request, compute the person's key from their device id and the production pepper, then call `store.deleteByIdentity(key)` (a one-off script or admin task using `FileStore` or `createPgStore`). The key leaves every `members` list; a campaign left with nobody is deleted outright; an owner is re-pointed at the first remaining member; the file store also deletes the `.bak` and any quarantined copy of the affected campaigns (they contain the old key); the revision moves on and `savedAt` is kept so erasing someone does not reset the campaign's dormancy clock. A whole campaign: `store.delete(id)` (removes the primary, backup, tmp and quarantined files). Confirm to the requester within the legal deadline; log the count, never the key.
+- **Backups:** none by default. The file store keeps ONE prior version of each campaign as `<id>.json.bak` (crash and corruption recovery, not a backup); Postgres backups are whatever the host provides, and the operator must apply the same retention and deletion to them.
+- **Steam id caveat:** `steam:<17 digits>` is a platform account identifier and is personal data once the Steam verifier lands. Its HMAC key is still pseudonymous personal data (the platform can re-derive it); the deletion path above must then be driven from the platform's own deletion/GDPR signals, and the privacy policy must list Steam as an identity source.
+
+Not collected: DOB, address, email, voice, payment data (storefronts handle payment). Still to add when the Steam adapter lands: the platform ID (see the Steam id caveat above) and a self-service deletion screen (until then deletion is the operator procedure above).
+
+**Wiring facts (D-035, the integrator).** A campaign created WITHOUT a valid UUID-v4 token is never persisted (nobody could resume it). A joiner with a valid token is added to `members` (at most 8; the owner is never evicted). Creating with `resume: <join code>` needs the code AND a member token; an unknown code, a stranger, a bad token and a campaign already live all return the SAME error text ("No expedition by that code is waiting for you.") so a code cannot be probed. `/metrics` carries `persistence` (recoveries, quarantined, refusedTooNew, dataLost) and `saveFailures`.

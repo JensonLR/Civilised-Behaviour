@@ -4,6 +4,7 @@ import type {
 } from "./campaignTypes.ts";
 import { isRegionId } from "./campaignTypes.ts";
 import { hash3 } from "./rng.ts";
+import { FLAG_FX } from "./powersText.ts";
 
 /**
  * Factions and the campaign ledger. Pure and deterministic: no Math.random/Date.now; every roll is hash3(seed, ...).
@@ -201,9 +202,11 @@ const STANCE_TOLL: Record<FactionStance, number> = { hostile: 25, wary: 10, neut
 const NEED_TOLL: Record<NeedId, number> = { coin: 8, arms: 4, medicine: 0, deference: 0 };
 
 /** Integer pounds 25..90: 40 base + need + (prosperity-50)/5 + 0.15*rivalInfluence (the Syndicate bids the crossing up) + stance. */
-export function askingToll(c: CampaignState): number {
+export function askingToll(c: CampaignState, p?: { flags: readonly string[] }): number {
   const f = c.factions.ward;
-  const raw = WARD.price.base + NEED_TOLL[f.need] + (f.prosperity - 50) * 0.2 + f.rivalInfluence * 0.15 + STANCE_TOLL[stanceOf(f)];
+  let standing = 0;
+  if (p) for (const flag of p.flags) standing += FLAG_FX[flag]?.tollDelta ?? 0;   // D-035: what the Guild says about you at funerals
+  const raw = standing + WARD.price.base + NEED_TOLL[f.need] + (f.prosperity - 50) * 0.2 + f.rivalInfluence * 0.15 + STANCE_TOLL[stanceOf(f)];
   return Math.min(TOLL_MAX, Math.max(TOLL_MIN, Math.round(raw)));
 }
 

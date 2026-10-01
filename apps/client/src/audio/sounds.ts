@@ -504,6 +504,147 @@ const fireSnap = def({
   ],
 });
 
+// ---- the expedition's world (D-035, R): hooves, tack, the sailing, paper, bells, the parley stamp, the gun crew ----------------------------------------
+
+/**
+ * Hoofbeats on turf, one per beat (`hooves.ts` times them to the horse animator's stride law). The key is the gait: a walk is a soft, rounded thud, a trot a sharper
+ * knock with a click of iron, a canter a heavier three-beat, a gallop a drum with the ground's rumble under it. Normalised alike; the gait's weight is in the play-time volume.
+ */
+const hoof = def({
+  group: "foot", peakDb: -12, ref: 8, max: 70, reverb: 0.1, prio: 1, cap: 3, gap: 0.04, variants: 3, jitter: 0.07, keys: ["walk", "trot", "canter", "gallop"],
+  layers: (p) => {
+    const heavy = p.key === "gallop" ? 1 : p.key === "canter" ? 0.85 : p.key === "trot" ? 0.6 : 0.4;
+    const click = p.key === "walk" ? 0.25 : p.key === "trot" ? 0.7 : 0.5;
+    return [
+      T({ hz: (118 - 30 * heavy) * jit(p, 0.1), to: 48 - 8 * heavy, over: 0.06, atk: 0.002, dec: 0.1 + 0.08 * heavy, peak: 0.7 + 0.3 * heavy }),
+      N({ kind: "brown", atk: 0.003, dec: 0.11 + 0.1 * heavy, peak: 0.8 + 0.2 * heavy, f: [lp(620 - 220 * heavy, 280, 0.12)] }),
+      N({ kind: "pink", atk: 0.002, dec: 0.04, peak: 0.45, f: [bp(1250 * jit(p, 0.15), 1.1)] }),
+      N({ at: 0.001, dec: 0.012 + 0.006 * click, peak: click, f: [bp(3300 * jit(p, 0.1), 2.2)] }),
+      ...(heavy > 0.8 ? [N({ kind: "brown", at: 0.03, atk: 0.04, dec: 0.28, peak: 0.45, f: [lp(210)] })] : []),
+    ];
+  },
+});
+
+/** Bridle bits, buckles and a creak of saddle leather: a few small rings and a rustle. */
+const tackJingle = def({
+  group: "foot", peakDb: -16, ref: 6, max: 40, reverb: 0.15, prio: 0, cap: 2, gap: 0.2, variants: 4, jitter: 0.05,
+  layers: (p) => [
+    N({ kind: "pink", atk: 0.015, dec: 0.12, peak: 0.45, f: [bp(900 * jit(p, 0.1), 1.2, 600, 0.12)] }),
+    N({ at: 0.02, atk: 0.03, dec: 0.14, peak: 0.12, f: [hp(5200)] }),
+    ...[0, 1, 2, 3, 4].map((i) => R({ at: i * 0.045 + p.rng.next() * 0.025, hz: 3000 + p.rng.next() * 1700, ratios: [1, 2.76, 5.4], amps: [1, 0.4, 0.15], decs: [0.2, 0.12, 0.08], peak: 0.45 - i * 0.04 })),
+    N({ at: 0.03, dec: 0.01, peak: 0.5, f: [bp(4200, 3)] }),
+  ],
+});
+
+/** A ship under way: timbers working, a rope, the slop of water on the hull, in a seamless 2.4 s loop (every layer ends inside the period). */
+const sailCreak = def({
+  group: "ambient", peakDb: -16, ui: true, reverb: 0.1, prio: 1, cap: 1, gap: 0, variants: 1, loop: 2.4, jitter: 0,
+  layers: () => [
+    T({ type: "sawtooth", at: 0.1, hz: 96, to: 72, over: 0.5, atk: 0.12, dec: 0.4, peak: 0.5, f: [lp(560, 380, 0.5, 4)], vib: [7, 0.04] }),
+    T({ type: "sawtooth", at: 1.2, hz: 134, to: 108, over: 0.45, atk: 0.1, dec: 0.35, peak: 0.4, f: [bp(430, 6)], vib: [6, 0.05] }),
+    N({ kind: "pink", at: 0.55, atk: 0.2, dec: 0.4, peak: 0.28, f: [bp(1100, 2)] }),
+    N({ kind: "pink", at: 1.7, atk: 0.12, dec: 0.3, peak: 0.22, f: [bp(1300, 2.4)] }),
+    N({ kind: "brown", at: 0, atk: 0.5, dec: 0.9, peak: 0.9, f: [lp(300, 190, 0.9)] }),
+    N({ kind: "brown", at: 1.1, atk: 0.3, dec: 0.6, peak: 0.8, f: [lp(260, 170, 0.8)] }),
+    N({ kind: "pink", at: 0.4, atk: 0.35, dec: 0.5, peak: 0.16, f: [lp(2200)] }),
+  ],
+});
+
+/** A gull: two or three keening cries, each a glide up and over with a quaver, and a breath of noise. */
+const gull = def({
+  group: "ambient", peakDb: -17, ui: true, reverb: 0.3, prio: 0, cap: 2, gap: 1, variants: 6, jitter: 0.06,
+  layers: (p) => {
+    const out: Layer[] = [];
+    const n = 2 + (p.variant % 2);
+    let at = 0;
+    for (let i = 0; i < n; i++) {
+      const base = (1700 + p.rng.next() * 500) * (1 - i * 0.03);
+      out.push(
+        T({ at, hz: base, to: base * 1.7, over: 0.1, atk: 0.02, dec: 0.2, peak: 0.6, vib: [27, 0.035] }),
+        T({ at: at + 0.1, hz: base * 1.7, to: base * 0.9, over: 0.26, atk: 0.01, dec: 0.22, peak: 0.45, vib: [24, 0.04] }),
+        T({ at, hz: base * 2.02, to: base * 3.1, over: 0.12, atk: 0.02, dec: 0.12, peak: 0.12 }),
+        N({ at, atk: 0.03, dec: 0.3, peak: 0.12, f: [bp(3200, 1.2)] }),
+      );
+      at += 0.38 + p.rng.next() * 0.12;
+    }
+    return out;
+  },
+});
+
+/** Paper: a broadsheet unfolded or a notice taken down. A hush of air, then the crinkles. */
+const paperRustle = def({
+  group: "body", peakDb: -15, ref: 5, max: 36, reverb: 0.1, prio: 1, cap: 2, gap: 0.3, variants: 4, jitter: 0.06,
+  layers: (p) => [
+    N({ atk: 0.04, dec: 0.2, peak: 0.55, f: [bp(3800 * jit(p, 0.1), 0.8, 2200, 0.25)] }),
+    N({ kind: "pink", at: 0.03, atk: 0.06, dec: 0.28, peak: 0.3, f: [bp(1900, 1)] }),
+    ...[0, 1, 2, 3, 4, 5, 6].map((i) => N({ at: 0.04 + i * 0.05 + p.rng.next() * 0.04, dec: 0.012 + p.rng.next() * 0.012, peak: 0.55 - i * 0.04, f: [hp(2600 + p.rng.next() * 1500), lp(9000)] })),
+  ],
+});
+
+/** A bell. `hq`: the day bell over the marquee, a big brass tone tolled twice. `outpost`: the little one on a post or a clock tower, three quick pings. */
+const bell = def({
+  group: "world", peakDb: -9, ref: 30, max: 420, reverb: 0.5, prio: 2, cap: 2, gap: 1, variants: 2, jitter: 0.01, keys: ["hq", "outpost"],
+  layers: (p) => {
+    const hq = p.key === "hq";
+    const hz = hq ? 392 : 784;
+    const strike = (at: number, amp: number, decMul: number): Layer[] => [
+      R({ at, hz: hz * jit(p, 0.004), ratios: [1, 2.0, 2.4, 2.76, 4.07, 5.4], amps: [1, 0.6, 0.35, 0.4, 0.2, 0.1], decs: [3, 2.2, 1.6, 1.3, 0.8, 0.5].map((d) => d * decMul), peak: amp }),
+      T({ at, hz: hz / 2, to: hz / 2.2, over: 0.05, atk: 0.002, dec: 0.2 * decMul, peak: 0.4 * amp }),
+      N({ at, dec: 0.02, peak: 0.5 * amp, f: [bp(hz * 5, 1.5)] }),
+    ];
+    return hq ? [...strike(0, 1, 1), ...strike(1.7, 0.8, 1)] : [...strike(0, 0.9, 0.4), ...strike(0.42, 0.8, 0.4), ...strike(0.84, 0.7, 0.4)];
+  },
+});
+
+/** The stamp on a signed deal: a wooden thump, a pad of ink, a slap of paper. Heard in the centre (it is on the table in front of you). */
+const parleyStamp = ui({
+  peakDb: -11, reverb: 0.05, gap: 0.1,
+  layers: () => [
+    T({ hz: 145, to: 62, over: 0.05, atk: 0.001, dec: 0.12, peak: 1 }),
+    N({ kind: "brown", atk: 0.002, dec: 0.1, peak: 0.8, f: [lp(520)] }),
+    N({ kind: "pink", at: 0.003, atk: 0.001, dec: 0.04, peak: 0.55, f: [bp(1200, 1.4)] }),
+    N({ at: 0.012, dec: 0.03, peak: 0.3, f: [hp(2600)] }),
+    T({ at: 0.095, hz: 105, to: 70, over: 0.04, dec: 0.06, peak: 0.35 }),
+  ],
+});
+
+/**
+ * The gun crew calls its work: `stand_clear` (loaded), `loading`, `fire` (the fuse is lit). Formant voices (the same tract as `hurt`), a word built from a consonant burst and
+ * a vowel glide or two, four crew members (the variant sets the pitch and the size of the voice). Shouted, so it climbs and carries.
+ */
+const AH: readonly (readonly [number, number, number])[] = [[700, 9, 1], [1220, 10, 0.5], [2600, 12, 0.2]];
+const EE: readonly (readonly [number, number, number])[] = [[300, 9, 1], [2200, 10, 0.6], [3000, 12, 0.3]];
+const OH: readonly (readonly [number, number, number])[] = [[520, 9, 1], [920, 10, 0.7], [2500, 12, 0.25]];
+const IH: readonly (readonly [number, number, number])[] = [[400, 9, 1], [1900, 10, 0.5], [2600, 12, 0.3]];
+const NASAL: readonly (readonly [number, number, number])[] = [[260, 8, 1], [1100, 8, 0.15], [2400, 10, 0.05]];
+const scaled = (f: readonly (readonly [number, number, number])[], k: number): (readonly [number, number, number])[] => f.map(([hz, q, g]) => [hz * k, q, g] as const);
+const crewShout = def({
+  group: "body", peakDb: -8, ref: 16, max: 130, reverb: 0.35, prio: 3, cap: 2, gap: 0.5, variants: 4, jitter: 0.03, duck: 0.1, keys: ["stand_clear", "loading", "fire"],
+  layers: (p) => {
+    const f0 = 98 + ((p.variant * 31) % 4) * 14;
+    const k = 0.94 + (p.variant % 3) * 0.06;
+    const v = (at: number, hz: number, to: number, over: number, formants: readonly (readonly [number, number, number])[], dec: number, peak: number, breath = 0.2): Layer =>
+      V({ at, hz: hz * f0, to: to * f0, over, formants: scaled(formants, k), atk: 0.015, dec, peak, breath });
+    if (p.key === "loading") {
+      // "LO-ding!"
+      return [v(0, 1.45, 1.15, 0.25, OH, 0.3, 0.9), N({ at: 0.27, dec: 0.012, peak: 0.5, f: [bp(3800, 2)] }), v(0.3, 1.5, 1.25, 0.2, IH, 0.22, 0.8), v(0.5, 1.3, 1.1, 0.2, NASAL, 0.18, 0.5, 0)];
+    }
+    if (p.key === "fire") {
+      // "FI-er!"
+      return [N({ atk: 0.01, dec: 0.1, peak: 0.45, f: [bp(3600, 1.1)] }), v(0.06, 1.55, 1.35, 0.14, AH, 0.2, 1), v(0.18, 1.45, 1.1, 0.22, EE, 0.28, 0.9)];
+    }
+    // "STAND CLEAR!"
+    return [
+      N({ atk: 0.012, dec: 0.12, peak: 0.45, f: [bp(5200, 1)] }),
+      v(0.07, 1.3, 1.2, 0.2, AH, 0.22, 0.95),
+      v(0.26, 1.2, 1.0, 0.1, NASAL, 0.1, 0.5, 0),
+      N({ at: 0.36, dec: 0.012, peak: 0.45, f: [bp(1900, 1.5)] }),
+      v(0.4, 1.55, 1.4, 0.1, IH, 0.14, 0.7),
+      v(0.5, 1.5, 1.05, 0.34, EE, 0.4, 1),
+    ];
+  },
+});
+
 /** All sound names: a plain object so `playSfx(name)` is one hash lookup. */
 export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   musket_shot: musket,
@@ -543,7 +684,19 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   bird,
   fire_pop: firePop,
   fire_snap: fireSnap,
+  // the expedition's world (D-035, R)
+  hoof,
+  tack_jingle: tackJingle,
+  sail_creak: sailCreak,
+  gull,
+  paper_rustle: paperRustle,
+  bell,
+  parley_stamp: parleyStamp,
+  crew_shout: crewShout,
 };
+
+/** The sounds the expedition's world adds (hooves.ts and game/ContentAudio.ts play them): a test renders and measures every one. */
+export const CONTENT_SOUNDS = ["hoof", "tack_jingle", "sail_creak", "gull", "paper_rustle", "bell", "parley_stamp", "crew_shout"] as const;
 
 export const SOUND_NAMES: readonly string[] = Object.keys(SOUNDS);
 

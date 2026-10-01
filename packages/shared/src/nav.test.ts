@@ -42,7 +42,6 @@ describe("nav grid (Kessar)", () => {
     expect(navOf(w)).toBe(g);
     // budget is < 80 ms on a quiet machine; the margin keeps a loaded CI box honest rather than flaky
     expect(ms).toBeLessThan(400);
-    expect(g.buildMs).toBeLessThan(400);
   });
 
   it("opens the places the story needs and closes the places nobody can stand", () => {

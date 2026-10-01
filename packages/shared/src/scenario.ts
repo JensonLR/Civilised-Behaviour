@@ -5,6 +5,7 @@ import { NPC_CAP, RIVAL_ARRIVES_S, RIVAL_PARLEY_S, RESOLVED_LINGER_S } from "./c
 import { garrisonSize } from "./garrison.ts";
 import { clamp } from "./math.ts";
 import { hash3 } from "./rng.ts";
+import type { RivalPresence } from "./worldTypes.ts";
 
 /**
  * "Secure the river crossing": the scenario as a pure state machine. `reduceScenario` is the ONLY place phase logic lives; the server
@@ -55,7 +56,7 @@ const int = (v: unknown, lo: number, hi: number, d = lo): number => (typeof v ==
  * a standing toll in the campaign wins. A bridge that is already collapsed starts RESOLVED with no resolution: there is nothing left to
  * win, no outcome is produced, and nothing is committed a second time.
  */
-export function newScenario(c: CampaignState, asking = 0): ScenarioState {
+export function newScenario(c: CampaignState, asking = 0, presence?: RivalPresence): ScenarioState {
   const total = garrisonSize(c.factions.ward.militaryStrength);
   const day = int(c.day, 0, 1e6, 0);
   const scouts = c.factions.ward.rivalInfluence >= 45 || hash3(c.seed, day, 0x5c07) % 100 < 35;
@@ -64,7 +65,7 @@ export function newScenario(c: CampaignState, asking = 0): ScenarioState {
     phase: dead ? "resolved" : "approach", t: 0, partyNear: false, parley: false, chargeArmed: false, fuse: 0, hostile: false,
     alive: total, routed: 0, total,
     toll: c.crossing.toll > 0 ? c.crossing.toll : int(asking, 0, 1000, 0), paid: 0, resolvedAt: 0, tally: zeroTally(), brokePromise: false, rivalAdvanced: false,
-    rivalAt: RIVAL_ARRIVES_S - (scouts ? SCENARIO.rivalEarlyBy : 0), complication: scouts ? "rival_scouts" : "none", rain: 0,
+    rivalAt: presence ? presence.arrivesInS : RIVAL_ARRIVES_S - (scouts ? SCENARIO.rivalEarlyBy : 0), complication: scouts ? "rival_scouts" : "none", rain: 0,
   };
 }
 

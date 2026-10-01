@@ -50,3 +50,18 @@ export * from "./partyState.ts";
 export * from "./chaos.ts";
 export * from "./scenarios/registry.ts";
 export * from "./scenarios/parleys.ts";
+// ---- D-035 campaign slice ----
+export * from "./worldTypes.ts";
+export * from "./hqRoute.ts";
+export * from "./hqRouteText.ts";
+export * from "./powersText.ts";
+export * from "./relations.ts";
+export * from "./powers.ts";
+export * from "./rivalText.ts";
+export * from "./rival.ts";
+export * from "./audiences.ts";
+export * from "./outpostText.ts";
+export * from "./outpost.ts";
+export * from "./settlement.ts";
+export * from "./mapData.ts";
+export * from "./hqHistory.ts";

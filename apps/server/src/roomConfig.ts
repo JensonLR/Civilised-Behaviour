@@ -1,3 +1,4 @@
+import type { PersistenceRuntime } from "./persistence/runtime.ts";
 /**
  * Process-wide settings that rooms need from the validated server config. Rooms are constructed by
  * Colyseus (no constructor injection), so createGameServer() publishes these once at startup.
@@ -15,6 +16,8 @@ export interface RoomConfig {
   dayStartHour?: number;
   /** Real minutes for a full day (default 30; 0 freezes the clock). */
   dayMinutes?: number;
+  /** The campaign store (D-035). Absent = rooms keep their campaign in memory only (unit rigs that build a room without a server). */
+  persistence?: PersistenceRuntime;
 }
 
 let current: RoomConfig = { debugCommands: false, routSeconds: 8, dismemberment: true, friendlyFire: true, dayStartHour: 9, dayMinutes: 30 };

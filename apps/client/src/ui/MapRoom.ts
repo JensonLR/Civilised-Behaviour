@@ -1,5 +1,6 @@
-import type { RegionId } from "@cb/shared";
+import type { CampaignMapData, PowerId, RegionId } from "@cb/shared";
 import { Modal, h } from "./modal.ts";
+import { CampaignMap, drawCampaignOverlay } from "./CampaignMap.ts";
 import "./mapRoom.css";
 
 export interface MapRoomRegion {
@@ -25,12 +26,16 @@ export interface MapRoomView {
   to?: RegionId;
   /** This player's slot, so the "ready" switch shows the server's truth. */
   you?: number;
+  /** D-035: what the campaign has built and who is asking for the party (shared `campaignMapOf`). Absent: the plain chart. */
+  campaign?: CampaignMapData;
 }
 export interface MapRoomCallbacks {
   propose(to: RegionId): void;
   ready(on: boolean): void;
   cancel(): void;
   close(): void;
+  /** D-035: the player asked for an audience with a power (the server decides). */
+  audience?(power: PowerId): void;
 }
 
 /** Where each region's marker sits on the chart (a 320 x 200 sheet): home on the near shore, the colony across the water. */
@@ -64,6 +69,8 @@ export class MapRoom {
   private myReady = false;
   private quiet = false;
   private readonly routes = new Map<string, SVGElement>();
+  private readonly campaign = new CampaignMap();
+  private readonly overlay = svg("g", { class: "campaign-layer" });
 
   constructor(root: HTMLElement) {
     root.appendChild(this.modal.root);
@@ -74,6 +81,7 @@ export class MapRoom {
       h("p", { class: "tag" }, "Pick a shore. The Society will do the rest, and invoice you for it."),
       h("div", { class: "chartwrap" }, this.chart as unknown as Node),
       this.list,
+      this.campaign.root,
       h("h3", {}, "Crew"),
       this.crew,
       this.status,
@@ -153,6 +161,7 @@ export class MapRoom {
       g.appendChild(label);
       c.appendChild(g);
     }
+    c.appendChild(this.overlay);
     this.chart.setAttribute("focusable", "false");
   }
 
@@ -194,6 +203,11 @@ export class MapRoom {
     for (const g of this.chart.querySelectorAll("g.mark")) g.classList.toggle("here", v.regions.some((r) => r.here && r.id === g.getAttribute("data-region")));
     const route = this.routes.get("kessar");
     route?.classList.toggle("active", v.phase === 1 || this.canPropose());
+    // the campaign layer: outposts, the Syndicate's marker, the powers and their audiences (D-035)
+    drawCampaignOverlay(this.overlay, v.campaign);
+    const focusedAudience = (document.activeElement as HTMLElement | null)?.getAttribute?.("data-power");
+    this.campaign.render(v.campaign, { audience: (p) => this.cb?.audience?.(p) });
+    if (focusedAudience) this.campaign.root.querySelector<HTMLElement>(`button[data-power="${focusedAudience}"]`)?.focus();
     // the crew
     this.crew.replaceChildren();
     for (const c of v.ready) this.crew.appendChild(h("li", { class: c.ready ? "yes" : "no" }, h("span", { class: "who" }, c.name), h("span", { class: "state" }, v.phase === 1 ? (c.ready ? "ready" : "waiting") : "aboard")));

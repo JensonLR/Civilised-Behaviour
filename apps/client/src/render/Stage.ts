@@ -13,7 +13,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld, type RegionId } from "@cb/shared";
+import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld, type HqHistoryPiece, type RegionDress, type RegionId } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
 import { createRegionView, type RegionView } from "./world/regionView.ts";
 import { setToonLite } from "./world/toon.ts";
@@ -216,6 +216,24 @@ export class Stage {
     this.worldView = createRegionView(region, this.scene, world, this.preset, this.lightDir);
     old?.dispose();
     this.worldView.applyDay(this.day);
+    // what the campaign has built (D-035) is re-applied to every new view, so a preset change or a region change never loses it
+    if (this.dress) this.worldView.applyDress?.(this.dress);
+    this.worldView.applyHistory?.(this.history);
+  }
+
+  private dress: RegionDress | undefined;
+  private history: readonly HqHistoryPiece[] = [];
+
+  /** The Society's outpost, the roads, the wire, the launch and the Syndicate's post as the campaign has them (Kessar swaps its group in place). */
+  setDress(d: RegionDress | undefined): void {
+    this.dress = d;
+    if (d) this.worldView?.applyDress?.(d);
+  }
+
+  /** What HQ keeps of the campaign: pieces on the planning table, the strongbox and the marquee's back wall (Hollowmere swaps its group in place). */
+  setHistory(p: readonly HqHistoryPiece[]): void {
+    this.history = p;
+    this.worldView?.applyHistory?.(p);
   }
 
   /**

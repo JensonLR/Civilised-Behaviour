@@ -1,6 +1,7 @@
 import type { CampaignState, CasualtyTally, ComplicationId, ObjectiveView, ScenarioFx, ScenarioOutcome, ScenarioView } from "../campaignTypes.ts";
 import { CONVOY_DEPART_S, KESSAR_ANCHORS, KESSAR_SITES, NPC } from "../campaignTypes.ts";
 import { COMPLICATION_HINT, dealComplication } from "../chaos.ts";
+import type { RivalPresence } from "../worldTypes.ts";
 import { NPC_SIDE, type NpcSpec } from "../expeditionTypes.ts";
 import { clamp } from "../math.ts";
 import { PropKind } from "../props.ts";
@@ -38,9 +39,9 @@ export interface ConvoyState extends BaseState {
   tally: CasualtyTally; brokePromise: boolean; paid: number; loot: number;
 }
 
-function init(c: CampaignState, _asking: number, seed: number): ConvoyState {
+function init(c: CampaignState, _asking: number, seed: number, presence?: RivalPresence): ConvoyState {
   return {
-    phase: "planning", t: 0, resolvedAt: 0, complication: dealComplication(c, "convoy_ambush", seed), rain: 0,
+    phase: "planning", t: 0, resolvedAt: 0, complication: dealComplication(c, "convoy_ambush", seed, presence), rain: 0,
     departed: false, alarm: false, hostile: false, tipped: false, claim: false, witnessed: false, outrider: false, patrol: false,
     near: { cut: 0 }, guards: { alive: 2, routed: 0, down: 0, total: 2 }, tally: zeroTally(), brokePromise: false, paid: 0, loot: 0,
   };

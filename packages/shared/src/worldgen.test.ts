@@ -157,7 +157,7 @@ describe("the arena and the camp", () => {
         }
       }
       for (const o of w.obstacles) {
-        if (camp.includes(o)) continue;
+        if (camp.includes(o) || o.tag === "fingerpost") continue; // (the HQ route's finger-posts stand in the camp on purpose: hqRoute.test.ts)
         expect(Math.hypot(o.x, o.z) - footprint(o), `${o.tag} at ${o.x},${o.z}`).toBeGreaterThan(14);
       }
     }

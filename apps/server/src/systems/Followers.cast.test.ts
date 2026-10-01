@@ -35,7 +35,7 @@ function setup(kind: "rifleman" | "porter" | "surgeon") {
   const f = new Followers({
     players: { forEach: (cb) => rows.forEach((p, id) => { if (!p.npc) cb(p, id); }), get: (id) => rows.get(id) },
     cast, brainOf: (id) => brainOf(id), purse: () => purse.v, spend: (n) => { purse.v -= n; }, getParty: () => party, setParty: (j) => { party = j; },
-    dress: () => true, revive: () => true, propPos: () => undefined, holdProp: () => false, dropProp: () => {}, notice: () => {}, prepOpen: () => true,
+    dress: () => true, revive: () => true, propPos: () => undefined, holdProp: () => false, dropProp: () => {}, notice: () => {}, prepOpen: () => true, atSupply: () => true,
     inBounds: (x, z) => Math.abs(x) < 150 && Math.abs(z) < 150, day: () => 2, nowS: () => ms / 1000, seed: SEED,
   });
   const human = mk(0, 80);

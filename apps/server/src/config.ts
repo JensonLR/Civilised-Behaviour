@@ -1,4 +1,5 @@
 import { WORLD_CLOCK } from "@cb/shared";
+import { persistenceConfig, type PersistenceConfig } from "./persistence/saver.ts";
 
 /** Environment validation. Fails fast with a readable message rather than half-booting. */
 export interface ServerConfig {
@@ -23,6 +24,8 @@ export interface ServerConfig {
   dayMinutes: number;
   /** Artificial round-trip latency in ms for bad-network testing. Never set in production. */
   simulatedLatencyMs: number;
+  /** Where campaigns are saved (CAMPAIGN_STORE=memory|file|postgres, SAVE_DIR, DATABASE_URL, IDENTITY_PEPPER, SAVE_RETENTION_DAYS; D-035). Default: memory. */
+  persistence: PersistenceConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -59,6 +62,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   // Optional until persistence lands (M10); the server then runs campaigns in memory only.
   const databaseUrl = env.DATABASE_URL || undefined;
 
+  let persistence!: PersistenceConfig;
+  try {
+    persistence = persistenceConfig(env);
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message.replace(/^Invalid persistence configuration:\n - /, "").replace(/\n - /g, "; ") : "persistence configuration invalid");
+  }
+
   if (errors.length) throw new Error(`Invalid server configuration:\n - ${errors.join("\n - ")}`);
-  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs };
+  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs, persistence };
 }

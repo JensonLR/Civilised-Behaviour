@@ -73,8 +73,8 @@ const viewOf = (c: CampaignState, lv: Leverage, round: number, toll: number, moo
 });
 
 /** Round 1: she names the price, then either remembers your last visit or complains about what she lacks. */
-export function openParley(c: CampaignState, lv: Leverage, seed: number): ParleyView {
-  const toll = askingToll(c);
+export function openParley(c: CampaignState, lv: Leverage, seed: number, powers?: { flags: readonly string[] }): ParleyView {
+  const toll = askingToll(c, powers);
   const mood = stanceOf(c.factions.ward);
   const m = wardMemory(c);
   let line = fillTemplate(pickFrom(OPEN[mood], seed, 1, 0), { toll });
@@ -93,9 +93,9 @@ const done = (resolution: ResolutionId | "walked_away" | "hostile", toll: number
  * One answer. `option` indexes view.options. Anything invalid (bad index, option the current state no longer offers, garbage view)
  * re-issues the same round instead of throwing or advancing: a client cannot skip rounds or buy what it cannot afford.
  */
-export function answerParley(c: CampaignState, lv: Leverage, seed: number, view: ParleyView, option: number): ParleyStep {
+export function answerParley(c: CampaignState, lv: Leverage, seed: number, view: ParleyView, option: number, powers?: { flags: readonly string[] }): ParleyStep {
   const round = clampI(view?.round, 1, MAX_ROUND, 1);
-  const toll = clampI(view?.toll, 1, TOLL_CEIL, askingToll(c));
+  const toll = clampI(view?.toll, 1, TOLL_CEIL, askingToll(c, powers));
   const mood: FactionStance = STANCES.includes(view?.mood) ? view.mood : stanceOf(c.factions.ward);
   const offered = Array.isArray(view?.options) && Number.isInteger(option) ? view.options[option]?.id : undefined;
   const live = optionsFor(c, lv, round, toll, mood);
@@ -110,7 +110,7 @@ export function answerParley(c: CampaignState, lv: Leverage, seed: number, view:
 
   switch (chosen.id) {
     case "pay": {
-      const bargained = toll < askingToll(c);
+      const bargained = toll < askingToll(c, powers);
       return done(bargained ? "bargained" : "paid", toll, toll, say(bargained ? REPLY.bargained : REPLY.paid, 3, { cost: toll, toll }));
     }
     case "bribe":

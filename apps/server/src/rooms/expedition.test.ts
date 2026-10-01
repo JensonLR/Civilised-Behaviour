@@ -197,6 +197,7 @@ describe("the expedition through a real room: manifest, hired hands, orders, hor
 
   it("an unaffordable, overloaded manifest is trimmed at the ship's leaving in the fixed order, with a notice, and charged once", async () => {
     const { room, me } = await setup();
+    place(room, me.p, -6.15 + 1.3, -6.85, Math.PI / 2); // at the supply table
     me.send("loadoutSet", { loadout: { ammo: 2, medical: 3, provisions: 3, powder: 3, horses: 2, wagon: true } }); // £164 against a purse of £120
     await until(() => room.state.partyRev > 0, 2000, "the manifest");
     const purse0 = purse(room);
@@ -213,8 +214,28 @@ describe("the expedition through a real room: manifest, hired hands, orders, hor
     expect(kept.medical).toBe(3);
   }, 60000);
 
+  it("the manifest and the hire list are decided at the supply table: from across the camp they are ignored with one notice", async () => {
+    const { room, me } = await setup();
+    const campaign0 = room.state.campaign;
+    const party0 = room.state.party;
+    const cand = hirePool(SEED, parseCampaign(room.state.campaign)!.day, newParty())[0]!;
+    place(room, me.p, 20, 20); // 20 m and more from the pyramid
+    me.send("loadoutSet", { loadout: { ammo: 2, horses: 1 } });
+    me.send("hire", { id: cand.id, on: true });
+    await until(() => me.notices.some((n) => /cannot hear you/.test(n)), 2000, "the clerk's notice");
+    await sleep(300);
+    expect(room.state.party).toBe(party0);
+    expect(room.state.campaign).toBe(campaign0);
+    expect(me.notices.filter((n) => /cannot hear you/.test(n)).length).toBe(1);
+    place(room, me.p, -6.15 + 1.3, -6.85, Math.PI / 2);
+    await sleep(1300);
+    me.send("loadoutSet", { loadout: { ammo: 2, horses: 1 } });
+    await until(() => room.state.party !== party0, 2000, "the manifest at the table");
+  }, 30000);
+
   it("hostile loadout, hire and command messages from every wrong state change nothing and never throw; spam is bounded", async () => {
     const { room, me } = await setup();
+    place(room, me.p, -6.15 + 1.3, -6.85, Math.PI / 2); // at the supply table: the hostile payloads must be refused on their own merits
     const campaign0 = room.state.campaign;
     for (const bad of [null, "x", 7, [], { loadout: null }, { loadout: "everything" }, { loadout: { ammo: -5, horses: 1e12, wagon: "yes" } }]) me.send("loadoutSet", bad);
     for (const bad of [null, {}, { id: 7, on: true }, { id: "nobody-here", on: true }, { id: "../../etc", on: false }, { id: "x".repeat(5000), on: true }]) me.send("hire", bad);

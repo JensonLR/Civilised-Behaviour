@@ -4,7 +4,12 @@ export interface MenuHandlers {
   /** Found an expedition. `progress` names the stage reached ("Surveying the territory...") for the working card. */
   onCreate(name: string, rules: { dismemberment: boolean }, progress: (step: string) => void): Promise<void>;
   onJoin(code: string, name: string, progress: (step: string) => void): Promise<void>;
+  /** D-035: bring a saved expedition back by its code (the server answers a stranger and an unknown code alike). */
+  onResume?(code: string, name: string, progress: (step: string) => void): Promise<void>;
 }
+
+/** The join lookup found no live room for the code: a dormant campaign may be waiting, so the failure card offers to resume it. */
+export const isNoLiveCampaign = (message: string): boolean => /^No campaign with that code/i.test(message);
 
 import { describeError, stepAt } from "./menuLogic.ts";
 import { startPadNav } from "./PadNav.ts";
@@ -39,6 +44,8 @@ export class Menu {
   private workingSince = 0;
   private workingTimer = 0;
   private lastAction: (() => Promise<void>) | undefined;
+  /** True while the action in hand is a join (only a join that found nothing offers to resume). */
+  private lastWasJoin = false;
 
   constructor(
     private readonly root: HTMLElement,
@@ -88,7 +95,7 @@ export class Menu {
           <h2 id="consult-head">Consulting the Society...</h2>
           <p id="consult-step" role="status" aria-live="polite"></p>
           <div class="bar" aria-hidden="true"><div class="fill"></div></div>
-          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="back">Return to the door</button></div>
+          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="back">Return to the door</button></div>
         </div>
       </div>`;
     this.creatorHost = root.querySelector<HTMLElement>("#creator-host")!;
@@ -102,11 +109,15 @@ export class Menu {
     this.consultActions = root.querySelector<HTMLElement>(".consult .actions")!;
     root.querySelector(".consult .retry")!.addEventListener("click", () => this.lastAction && void this.run(this.lastAction));
     root.querySelector(".consult .back")!.addEventListener("click", () => this.closeConsult());
+    root.querySelector(".consult .resume")!.addEventListener("click", () => {
+      const code = this.codeInput.value.trim().toUpperCase();
+      if (isValidJoinCode(code) && handlers.onResume) void this.run(() => handlers.onResume!(code, this.name(), (t) => this.progress(t)), false);
+    });
     this.consult.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !this.consultActions.hidden) this.closeConsult();
     });
     root.addEventListener("padback", () => !this.consultActions.hidden && this.closeConsult());
-    root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t))));
+    root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t)), false));
     root.querySelector("#join")!.addEventListener("click", () => void this.join());
     root.querySelector<HTMLSelectElement>("#gore")!.addEventListener("change", (e) => setGore((e.target as HTMLSelectElement).value as (typeof GORE_LEVELS)[number]));
     const options = root.querySelector<HTMLButtonElement>("#options")!;
@@ -120,7 +131,7 @@ export class Menu {
     });
     this.codeInput.addEventListener("input", () => (this.codeInput.value = this.codeInput.value.toUpperCase()));
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
-    this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t))));
+    this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t)), false));
     startPadNav(root, () => !this.root.hidden && !anyModalOpen());
   }
 
@@ -146,7 +157,7 @@ export class Menu {
       this.setStatus("Codes are five characters, e.g. K7M2Q.", true);
       return;
     }
-    await this.run(() => this.handlers.onJoin(code, this.name(), (t) => this.progress(t)));
+    await this.run(() => this.handlers.onJoin(code, this.name(), (t) => this.progress(t)), true);
   }
 
   /** Names the stage the work has reached (the working card shows it instead of the patient phrases). */
@@ -155,7 +166,8 @@ export class Menu {
     this.consultStep.textContent = step;
   }
 
-  private async run(action: () => Promise<void>): Promise<void> {
+  private async run(action: () => Promise<void>, isJoin?: boolean): Promise<void> {
+    if (isJoin !== undefined) this.lastWasJoin = isJoin;
     this.lastAction = action;
     this.setBusy(true);
     this.setStatus("", false);
@@ -165,7 +177,8 @@ export class Menu {
       this.closeConsult(true);
       this.hide();
     } catch (e) {
-      this.showFailure(describeError(e));
+      const message = describeError(e);
+      this.showFailure(message, this.lastWasJoin && isNoLiveCampaign(message) && !!this.handlers.onResume);
       this.setBusy(false);
     }
   }
@@ -186,7 +199,8 @@ export class Menu {
     }, 1000);
   }
 
-  private showFailure(message: string): void {
+  private showFailure(message: string, resumable = false): void {
+    this.consultActions.querySelector<HTMLElement>(".resume")!.hidden = !resumable;
     window.clearInterval(this.workingTimer);
     this.consult.dataset.state = "error";
     this.consultHead.textContent = "The Society regrets...";

@@ -24,6 +24,8 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm --filter @cb/server dev",
+      // The specs found campaigns at a region / contract through the URL; the server honours that only with debug commands on.
+      env: { DEBUG_COMMANDS: "1" },
       url: "http://127.0.0.1:2567/health",
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

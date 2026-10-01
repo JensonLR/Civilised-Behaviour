@@ -1,4 +1,5 @@
 import type { Paper } from "@cb/shared";
+import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
 import "./newspaper.css";
 
@@ -39,6 +40,7 @@ export class NewspaperView {
       h("div", { class: "columns" }, ...stories.map((s) => h("article", {}, h("h4", {}, String(s.head ?? "")), h("p", { class: "slug" }, String(s.slug ?? "")), h("p", {}, String(s.body ?? ""))))),
       ...(notices.length ? [h("ul", { class: "notices", "aria-label": "Notices" }, ...notices.map((n) => h("li", {}, String(n))))] : []),
     );
+    playSfx("paper_rustle"); // the broadsheet is unfolded
     this.modal.open();
   }
 

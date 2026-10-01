@@ -23,7 +23,7 @@ describe("the sailing, from a client's point of view (prediction across a region
   let colyseus: ColyseusTestServer;
   beforeAll(async () => {
     configureLogger("error", { silent: true });
-    const server = createGameServer(loadConfig({ NODE_ENV: "test" } as never));
+    const server = createGameServer(loadConfig({ NODE_ENV: "test", DEBUG_COMMANDS: "1" } as never));
     await server.listen(PORT);
     colyseus = new ColyseusTestServer(server);
   });

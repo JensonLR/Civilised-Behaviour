@@ -53,7 +53,7 @@ describe("stations", () => {
   it("hollowmere: the map table, the notice board, the dock, the supply manifest", () => {
     const ids = stationsFor("hollowmere").map((s) => `${s.kind}:${s.id}`);
     expect(ids).toEqual(["map:map", "paper:paper", "dock:dock", "loadout:loadout"]);
-    expect(stationsFor("kessar").map((s) => s.kind).sort()).toEqual(["dock", "pier", "warden"]);
+    expect(stationsFor("kessar").map((s) => s.kind).sort()).toEqual(["dock", "foundation", "pier", "warden"]);
     expect(stationsFor("kessar")).not.toBe(stationsFor("kessar")); // (a copy: callers may not edit the table)
   });
 

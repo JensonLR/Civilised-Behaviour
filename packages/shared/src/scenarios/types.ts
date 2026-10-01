@@ -3,6 +3,7 @@ import type {
 } from "../campaignTypes.ts";
 import type { NpcSpec } from "../expeditionTypes.ts";
 import type { ScenarioInput } from "../scenario.ts";
+import type { RivalPresence } from "../worldTypes.ts";
 
 /**
  * The template contract (D-034 section 5). A template is a PURE state machine over what the server observed (`ScenarioInput`) that answers with
@@ -65,12 +66,12 @@ export interface TemplateDef<S extends BaseState> {
   id: ScenarioTemplateId;
   title: string;
   brief: string;
-  init(c: CampaignState, asking: number, seed: number): S;
+  init(c: CampaignState, asking: number, seed: number, presence?: RivalPresence): S;
   reduce(s: S, e: ScenarioInput): Reduction<S>;
   view(s: S, nowMs: number): ScenarioView;
   outcome(s: S): ScenarioOutcome | undefined;
   /** Every person the run may spawn. Groups starting "late:" are held back until `{k:"spawn", group}`. */
-  roster(c: CampaignState, seed: number, s: S): NpcSpec[];
+  roster(c: CampaignState, seed: number, s: S, presence?: RivalPresence): NpcSpec[];
   /** What sailing away now would commit (`undefined`: nothing happened, the run is dismissed and nothing is committed). */
   leave(s: S): ResolutionId | undefined;
   /** A template whose ledger says "not today" (only the crossing: SETTLED_DAYS). */

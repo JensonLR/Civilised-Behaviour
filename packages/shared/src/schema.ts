@@ -177,5 +177,12 @@ export const WorldState = schema({
   /** PartyState JSON (loadout manifest + hired roster, < 2 KB; parseParty) and its revision. */
   party: t.string(),
   partyRev: t.uint16(),
+  // --- the campaign grows a future (append-only, D-035) ---
+  /** PowersState JSON (the three minor powers, the relation map, the rival agent, flags and a short log; < 3 KB; parsePowers) and its revision. */
+  powers: t.string(),
+  powersRev: t.uint16(),
+  /** SettlementsState JSON (the outposts and the latched tech; < 2 KB; parseSettlements) and its revision. */
+  settlements: t.string(),
+  settlementsRev: t.uint16(),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

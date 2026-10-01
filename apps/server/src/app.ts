@@ -7,6 +7,7 @@ import { metrics } from "./metrics.ts";
 import { createOriginPolicy, installMatchmakingOriginPolicy, originUpgradeGuard } from "./origins.ts";
 import { RateLimiter } from "./ratelimit.ts";
 import { setRoomConfig } from "./roomConfig.ts";
+import { createPersistence } from "./persistence/runtime.ts";
 import { WorldRoom } from "./rooms/WorldRoom.ts";
 
 /** Code lookups are the only unauthenticated enumeration surface: 10 burst, then 1 per 6 s per IP. */
@@ -19,7 +20,8 @@ function clientIp(request: Request | undefined): string {
 
 export function createGameServer(config: ServerConfig): Server {
   const origins = createOriginPolicy(config.allowedOrigins);
-  setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment, friendlyFire: config.friendlyFire, dayStartHour: config.dayStartHour, dayMinutes: config.dayMinutes });
+  const persistence = createPersistence(config.persistence, log);
+  setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment, friendlyFire: config.friendlyFire, dayStartHour: config.dayStartHour, dayMinutes: config.dayMinutes, persistence });
   const health = createEndpoint("/health", { method: "GET" }, async (ctx) =>
     ctx.json({ ok: true, env: config.nodeEnv, uptimeS: Math.round(process.uptime()) }),
   );
@@ -57,8 +59,9 @@ export function createGameServer(config: ServerConfig): Server {
   server.router = createRouter({ health, metrics: metricsEndpoint, lookup }) as never;
   server.define(ROOM_WORLD, WorldRoom);
   const restoreMatchmaking = installMatchmakingOriginPolicy(origins);
-  server.onShutdown(() => {
+  server.onShutdown(async () => {
     restoreMatchmaking();
+    await persistence.close();
     log.info("server.shutdown");
   });
   if (config.allowedOrigins.length === 0) log.warn("server.origins_open", { note: "ALLOWED_ORIGINS empty: all browser origins accepted" });

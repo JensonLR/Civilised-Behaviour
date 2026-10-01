@@ -1,0 +1,26 @@
+/* The first-run orientation card: a field document in the top-right corner, never modal, never in the way of the heading strip. Colours come from the :root palette variables only. */
+.orientation { position: absolute; top: calc(var(--edge-t, 1rem) + 3.4rem); right: var(--edge-r, 1rem); width: min(21rem, 46vw); padding: 0.6rem 0.8rem 0.7rem; font-family: var(--serif); font-size: 0.92rem; line-height: 1.3; color: var(--ink); background: linear-gradient(var(--paper), var(--paper-2)); border: 2px solid var(--ink); box-shadow: var(--shadow); pointer-events: none; }
+.orientation[hidden] { display: none; }
+.orientation .society { margin: 0; font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--stamp); }
+.orientation h2 { margin: 0.1rem 0 0.1rem; font-family: var(--display); font-weight: normal; font-size: 1.15rem; letter-spacing: 0.05em; border-bottom: 1px solid var(--ink); padding-bottom: 0.2rem; }
+.orientation .tag { margin: 0.2rem 0 0.4rem; font-size: 0.8rem; font-style: italic; opacity: 0.85; }
+.orientation ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.orientation li { display: grid; grid-template-columns: 1.1rem 1fr; column-gap: 0.4rem; align-items: baseline; opacity: 0.8; transition: opacity 0.3s; }
+.orientation li .mark::before { content: "\2610"; font-family: var(--type); }
+.orientation li.done .mark::before { content: "\2612"; color: var(--stamp); }
+.orientation li.done .name { text-decoration: line-through; text-decoration-thickness: 1.5px; opacity: 0.7; }
+.orientation li .what { grid-column: 2; font-size: 0.84rem; }
+.orientation li:not(.current) .what { display: none; }
+.orientation li.current { opacity: 1; font-weight: 600; }
+.orientation li.current .what { font-weight: 400; }
+.orientation .foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin: 0.5rem 0 0; padding-top: 0.35rem; border-top: 1px dotted var(--ink); font-size: 0.78rem; }
+.orientation .hint { margin: 0; opacity: 0.85; }
+.orientation .skip { pointer-events: auto; flex: none; padding: 0.15rem 0.5rem; font-family: var(--display); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--stamp); background: transparent; border: 2px solid var(--stamp); border-radius: 2px; transform: rotate(-2deg); cursor: pointer; }
+.orientation .skip:focus-visible { outline: 3px solid var(--stamp); outline-offset: 2px; }
+.orientation .done-line { margin: 0.4rem 0 0; font-style: italic; }
+.orientation .done-line[hidden] { display: none; }
+.orientation .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .orientation li { transition: none; } }
+:root[data-motion="reduced"] .orientation li { transition: none; }
+:root[data-largeText] .orientation { width: min(26rem, 52vw); }
+@media (max-width: 62rem) { .orientation { width: min(18rem, 50vw); font-size: 0.86rem; } }

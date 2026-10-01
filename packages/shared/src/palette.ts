@@ -375,7 +375,7 @@ export const PALETTE = {
 
   /** Weapons and their furniture: browned barrels, walnut stocks, brass fittings, cavalry steel, cannon bronze. (Surfaces; the light of a discharge is `weaponFx`.) */
   weapons: {
-    brass: 0xc29a45,
+    brass: 0xb89c5c,
     brassDark: 0x8c6a2c,
     steel: 0x9aa0a6,
     steelDark: 0x6f747a,
@@ -460,6 +460,35 @@ export const PALETTE = {
     trunkPalm: 0x8a6a45,
     hull: 0x7a5238,
     awning: 0xc4a460,
+  },
+
+  /** The Society's outpost (D-035), from foundation stakes to a town: canvas, plank, palisade, stone, telegraph, the launch, road paint. Owned by outpost.ts and its views. */
+  outpost: {
+    stake: 0xb59a6a,
+    string: 0xe3d6b4,
+    canvas: 0xd9ceae,
+    canvasShade: 0xb6a888,
+    plank: 0x9a7448,
+    plankDark: 0x6e4f32,
+    thatch: 0xb59a58,
+    palisade: 0x7a5a38,
+    palisadeTop: 0x5e4329,
+    stoneHouse: 0xcbb68c,
+    stoneShade: 0xa89472,
+    slate: 0x6c675f,
+    clockFace: 0xe6dcc0,
+    brass: 0xb89c5c,
+    pole: 0x5d4a38,
+    wire: 0x3f3a35,
+    road: 0xc9b184,
+    roadEdge: 0xa88f64,
+    launchHull: 0x4e5f6a,
+    launchTrim: 0xc9bd9c,
+    steam: 0xdcd6cc,
+    pennantSociety: 0x7a8a50,
+    pennantRival: 0x3f6b57,
+    sign: 0xe0cfa2,
+    mud: 0x8a6d4a,
   },
 } as const;
 

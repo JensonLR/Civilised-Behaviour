@@ -69,7 +69,7 @@ export type ScenarioFx =
   | { k: "spawn"; group: string } | { k: "order"; group: string; order: CastOrder } | { k: "war"; a: NpcSide; b: NpcSide; on: boolean } | { k: "say"; text: string }
   | { k: "open"; what: "gate" | "cage" } | { k: "explode"; at: string } | { k: "bridge"; state: BridgeState } | { k: "commit" }
   | { k: "wagon"; op: "go" | "halt" | "seize" | "wreck" } | { k: "parley"; kind: ParleyKind; price: number };
-export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout";
+export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation";
 export interface UseStation { id: string; kind: StationKind; x: number; z: number; r: number; prompt: string }
 export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10 } as const;   // PlayerState.npc (append-only; D-034)
 export const NPC_CAP = 24, FOLLOWER_CAP = 4, SETTLED_DAYS = 3, HOSTAGE_DEADLINE_S = 480, CONVOY_DEPART_S = 60, BORDER_ESCALATE_S = 240, NAME_TAG_RANGE = 30, SAIL_SECONDS = 6, ARRIVE_TIMEOUT_S = 30, PROPOSE_TIMEOUT_S = 20, RIVAL_ARRIVES_S = 420, RIVAL_PARLEY_S = 60, RESOLVED_LINGER_S = 45;

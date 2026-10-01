@@ -1,4 +1,5 @@
 import type { ParleyView } from "@cb/shared";
+import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
 import "./parley.css";
 
@@ -22,7 +23,7 @@ export class Parley {
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= this.count) {
       e.preventDefault();
-      this.pick?.(n - 1);
+      this.choose(n - 1);
     }
   };
 
@@ -34,6 +35,12 @@ export class Parley {
       this.quiet = false;
     };
     window.addEventListener("keydown", this.onKey);
+  }
+
+  /** An option taken (a click or its number key): the deal is stamped, then the server hears of it. */
+  private choose(i: number): void {
+    playSfx("parley_stamp");
+    this.pick?.(i);
   }
 
   get isOpen(): boolean {
@@ -84,7 +91,7 @@ export class Parley {
         Number(o.cost) > 0 ? h("span", { class: "cost" }, `£${Math.round(Number(o.cost))}`) : null,
         h("span", { class: "hint" }, String(o.hint ?? "")),
       );
-      b.addEventListener("click", () => this.pick?.(i));
+      b.addEventListener("click", () => this.choose(i));
       this.options.appendChild(b);
     });
     (this.options.querySelector<HTMLElement>(`button[data-i="${focused ?? 0}"]`) ?? this.options.querySelector<HTMLElement>("button"))?.focus();

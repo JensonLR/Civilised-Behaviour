@@ -25,7 +25,7 @@ interface Rig {
   brains: Map<string, NpcBrainState>;
   roles: Map<string, number>;
   log: { notices: [string, string][]; spent: number[]; dressed: string[]; revived: string[]; held: string[]; dropped: string[]; setParty: string[] };
-  s: { purse: number; day: number; now: number; open: boolean; dead: Set<string>; props: Map<string, { x: number; z: number }>; party: string; holdOk: boolean; reviveOk: boolean; dressOk: boolean; despawned: string[] };
+  s: { purse: number; day: number; now: number; open: boolean; at: boolean; dead: Set<string>; props: Map<string, { x: number; z: number }>; party: string; holdOk: boolean; reviveOk: boolean; dressOk: boolean; despawned: string[] };
   human(id: string, x?: number, z?: number, o?: Partial<Row>): Row;
   tick(n?: number): void;
 }
@@ -35,7 +35,7 @@ function rig(opts: { party?: string } = {}): Rig {
   const brains = new Map<string, NpcBrainState>();
   const roles = new Map<string, number>();
   const log: Rig["log"] = { notices: [], spent: [], dressed: [], revived: [], held: [], dropped: [], setParty: [] };
-  const s: Rig["s"] = { purse: 200, day: DAY, now: 1000, open: true, dead: new Set(), props: new Map(), party: opts.party ?? "", holdOk: true, reviveOk: true, dressOk: true, despawned: [] };
+  const s: Rig["s"] = { purse: 200, day: DAY, now: 1000, open: true, at: true, dead: new Set(), props: new Map(), party: opts.party ?? "", holdOk: true, reviveOk: true, dressOk: true, despawned: [] };
   const cast: CastApi = {
     spawn: (specs: readonly NpcSpec[]) => {
       let n = 0;
@@ -67,6 +67,7 @@ function rig(opts: { party?: string } = {}): Rig {
     dropProp: (k) => { log.dropped.push(k); },
     notice: (sid, text) => { log.notices.push([sid, text]); },
     prepOpen: () => s.open,
+    atSupply: () => s.at,
     inBounds: (x, z) => Math.abs(x) <= 120 && Math.abs(z) <= 120,
     day: () => s.day,
     nowS: () => s.now,
@@ -96,6 +97,40 @@ function landed(...picks: number[]): Rig {
 }
 const handIds = (r: Rig): string[] => r.f.party.roster.map((h) => h.id);
 const MSG_FREEZE = (r: Rig): string => JSON.stringify([r.s.party, r.s.purse, [...r.brains.values()].map((b) => [b.intent, b.mode])]);
+
+describe("the supply table gate: the manifest and the hire list are decided at the table", () => {
+  it("from across the camp loadoutSet and hire change nothing, charge nothing, and give ONE notice per few seconds; at the table they are taken", () => {
+    const r = rig();
+    r.human("p1");
+    r.s.at = false;
+    const party0 = r.s.party;
+    const c = hirePool(SEED, DAY)[0]!;
+    for (let i = 0; i < 6; i++) {
+      expect(r.f.onLoadoutSet("p1", { loadout: { ammo: 1 } })).toBe(false);
+      expect(r.f.onHire("p1", { id: c.id, on: true })).toBe(false);
+      r.s.now += 0.3;
+    }
+    expect(r.s.party).toBe(party0);
+    expect(r.s.purse).toBe(200);
+    expect(r.log.spent).toEqual([]);
+    const far = r.log.notices.filter(([, t]) => t === "The supply clerk cannot hear you from there.");
+    expect(far.length).toBeGreaterThanOrEqual(1);
+    expect(far.length).toBeLessThanOrEqual(2); // 1.8 s of spam against a 4 s gap
+    r.s.now += 5;
+    r.s.at = true;
+    expect(r.f.onLoadoutSet("p1", { loadout: { ammo: 1 } })).toBe(true);
+    expect(r.f.onHire("p1", { id: c.id, on: true })).toBe(true);
+  });
+
+  it("when prep is closed there is no clerk to complain to: silent", () => {
+    const r = rig();
+    r.human("p1");
+    r.s.open = false;
+    r.s.at = false;
+    expect(r.f.onLoadoutSet("p1", { loadout: { ammo: 1 } })).toBe(false);
+    expect(r.log.notices).toEqual([]);
+  });
+});
 
 describe("hire / loadout messages", () => {
   it("hire: charged once (the signing fee), published, noticed; dismiss pays what is owed", () => {

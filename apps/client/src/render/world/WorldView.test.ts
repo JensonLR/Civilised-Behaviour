@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Scene, Vector3 } from "three";
-import { CollisionWorld, createArena, createDayState, dayState } from "@cb/shared";
+import { CollisionWorld, applyOutcome, createArena, createDayState, dayState, historyPieces, newCampaign, newSettlements } from "@cb/shared";
 import { MAX_PUSHERS, pushers, worldTime } from "./toon.ts";
 import { PRESETS } from "../Stage.ts";
 import { WorldView } from "./WorldView.ts";
@@ -30,7 +30,9 @@ describe("WorldView budget", () => {
       // and the wild ones now share one collapsing mesh per group: 4 draws, as before). Measured: low 36, medium 64, high 64. Everything else that is new rides
       // inside an existing mesh: the HQ marquee, the windmill and the snow range (hills), the lit windows (lantern glass), the dragonflies (butterflies),
       // the swallows (birds).)
-      expect(view.stats.meshes).toBeLessThanOrEqual(name === "test" ? 28 : name === "low" ? 37 : 66);
+      // (2026-10-01, D-035: the finger-posts of the HQ route are 2 draws (the posts and boards, the lettering): 28 / 37 / 66 -> 30 / 39 / 68. HQ's history pieces are 1-2 more
+      // when the campaign has any: asserted separately below.)
+      expect(view.stats.meshes).toBeLessThanOrEqual(name === "test" ? 30 : name === "low" ? 39 : 68);
       // (2026-09-30: 150k / 300k / 380k -> 160k / 330k / 440k. The Observatory is now a walk-in ruin of real stone courses with a ribbed copper dome
       // (+8k), the hill tree line has proper lumpy crowns instead of paper hexagons (+~15k medium), the camp cloth is its own mesh, and rain is one
       // pooled quad set (+4k medium, 7k high, vertex-culled when it is dry). See docs/PERFORMANCE.md.)
@@ -129,5 +131,30 @@ describe("three.js warnings", () => {
       warn.mockRestore();
       error.mockRestore();
     }
+  });
+
+  it("HQ history (D-035) is one merged solid and its ink hull: at most two more draws, and none when the campaign has nothing to show", () => {
+    const view = new WorldView(new Scene(), createArena(7), PRESETS.medium, sun);
+    const before = view.stats.meshes;
+    const camp = newCampaign(3);
+    let c = camp;
+    for (const r of ["forced", "sabotaged", "seized", "rescued", "paid", "mediated"] as const) c = applyOutcome(c, { scenario: "secure_crossing", resolution: r, toll: 30, paid: 0, bridge: "intact", brokePromise: false, seconds: 1, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 } });
+    const pieces = historyPieces(c, newSettlements());
+    expect(pieces.length).toBeGreaterThan(3);
+    view.applyHistory(pieces);
+    let draws = 0;
+    view.root.traverse((o) => {
+      if (o.name.startsWith("hq-history") && (o as { isMesh?: boolean }).isMesh) draws++;
+    });
+    expect(draws).toBeLessThanOrEqual(2);
+    expect(draws).toBeGreaterThan(0);
+    view.applyHistory([]); // takes everything down and frees it
+    let left = 0;
+    view.root.traverse((o) => {
+      if (o.name.startsWith("hq-history") && (o as { isMesh?: boolean }).isMesh) left++;
+    });
+    expect(left).toBe(0);
+    expect(before).toBeLessThanOrEqual(68);
+    view.dispose();
   });
 });

@@ -1,10 +1,17 @@
+import { CAMP, hqPins } from "@cb/shared";
 import { DEG, TICKS, distanceText, headingDegrees, headingName, headingName16, isCardinal, isPoint, landmarks, stackRows, stripPlace, wrapPi, yawTo, type Landmark, type StripPlace } from "./compassLogic.ts";
+
+/** The strip's places: the three the expedition knows from the first minute, and the two it keeps asking about: the map room (the survey table) and the dock (the boat). */
+export const compassPins = (): readonly Landmark[] => [...landmarks(), ...hqPins(CAMP.mapTable)];
 
 /** Marks for the three known places: a tent, a house with a chimney, a domed tower. Shapes, not colours, tell them apart. */
 const ICONS: Record<string, string> = {
   camp: `<path d="M2 15 12 3l10 12z"/><path d="M12 15v-5" class="k"/>`,
   village: `<path d="M3 14 12 6l9 8v6H3z"/><path d="M16 4v5h3V6z"/>`,
   observatory: `<path d="M6 21V11a6 6 0 0 1 12 0v10z"/><path d="M12 5v-3" class="k"/>`,
+  // a survey unrolled on a table, and a pier running out over water: shapes, never colours
+  map: `<path d="M3 6h18v12H3z"/><path d="M7 10h6M7 13h10" class="k"/>`,
+  dock: `<path d="M3 11h18v3H3z"/><path d="M6 14v6M12 14v6M18 14v6" class="k"/>`,
 };
 
 /**
@@ -24,7 +31,7 @@ export class Compass {
   private readonly place: StripPlace = { x: 0, inside: true };
   private lastX = NaN;
   private lastZ = NaN;
-  private readonly chips = landmarks().map(() => ({ x: 0, width: 0 }));
+  private readonly chips = compassPins().map(() => ({ x: 0, width: 0 }));
   private readonly rows: number[] = [];
   /** The strip's width in em (chips are sized in em); measured after the first layout and on every resize. */
   private stripEm = 0;
@@ -50,7 +57,7 @@ export class Compass {
       strip.appendChild(el);
       this.ticks.push({ deg, el });
     }
-    for (const lm of landmarks()) {
+    for (const lm of compassPins()) {
       const el = document.createElement("div");
       el.className = "mark";
       el.dataset.id = lm.id;

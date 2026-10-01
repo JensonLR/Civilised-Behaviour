@@ -1,3 +1,4 @@
+import { persistenceStats } from "./persistence/stats.ts";
 /**
  * Lightweight in-process metrics exposed at /metrics (see docs/NETWORKING.md). Counters are
  * plain numbers - no per-frame allocation - and tick timings use a fixed-size ring buffer.
@@ -55,6 +56,7 @@ class Metrics {
       shotsFired: this.shotsFired,
       hitsLanded: this.hitsLanded,
       tick: this.tickStats(),
+      persistence: { ...persistenceStats },
       heapMB: Math.round(mem.heapUsed / 1048576),
       rssMB: Math.round(mem.rss / 1048576),
     };

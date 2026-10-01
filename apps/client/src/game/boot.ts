@@ -79,9 +79,11 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     }
   };
   // `?region=kessar` founds the expedition already at that shore (dev, tests, screenshots); in play the party sails from the map room
-  const startRegion: RegionId | undefined = isRegionId(params.get("region")) ? (params.get("region") as RegionId) : undefined;
+  // Dev and test builds only: a production build never sends the levers (the server ignores them without debug commands anyway).
+  const devBuild = import.meta.env.MODE !== "production";
+  const startRegion: RegionId | undefined = devBuild && isRegionId(params.get("region")) ? (params.get("region") as RegionId) : undefined;
   // `&scenario=<template id>` picks the contract offered at Kessar (dev, tests): in play the campaign ledger decides (shared/scenarios/registry.ts)
-  const startScenario: ScenarioTemplateId | undefined = isTemplateId(params.get("scenario")) ? (params.get("scenario") as ScenarioTemplateId) : undefined;
+  const startScenario: ScenarioTemplateId | undefined = devBuild && isTemplateId(params.get("scenario")) ? (params.get("scenario") as ScenarioTemplateId) : undefined;
   const realPlayers = (s: Session): number => {
     let n = 0;
     s.room.state.players.forEach((p) => {
@@ -182,6 +184,14 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       progress("Presenting your code...");
       const s = await Session.join(code, name, look);
       progress("Reply received. Packing the trunks...");
+      await enter(s);
+    },
+    // a dormant campaign comes back by its code, for a former member only (D-035): the expedition resumes at HQ with its ledger
+    onResume: async (code, name, progress) => {
+      backdropWanted = false;
+      progress("Consulting the Society's files...");
+      const s = await Session.create(name, look, { resume: code });
+      progress("The file is found. Packing the trunks...");
       await enter(s);
     },
   });

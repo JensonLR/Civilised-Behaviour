@@ -12,3 +12,6 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 .wrangler/
+
+# campaign saves (CAMPAIGN_STORE=file default SAVE_DIR=./data/saves): identity keys, never commit
+data/

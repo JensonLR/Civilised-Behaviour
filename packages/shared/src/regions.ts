@@ -7,6 +7,8 @@ import { createKessarWorld, kessarProps, kessarSpawn } from "./kessar.ts";
 import { JETTY } from "./landscape.ts";
 import { angleDelta } from "./math.ts";
 import { INTERACT, scatterProps, type PropSpawn } from "./props.ts";
+import { OUTPOST_SITES, YARD_R } from "./outpost.ts";
+import type { RegionWorldOpts } from "./worldTypes.ts";
 
 /**
  * The regions of the campaign and the four questions the rest of the game asks of one: what is it (REGIONS), what does it look like to walk on
@@ -39,9 +41,9 @@ export const REGIONS: Record<RegionId, RegionDef> = {
   },
 };
 
-/** The collision world of a region. `opts.bridge` only matters to Kessar (a collapsed bridge has no deck). */
-export function createRegionWorld(id: RegionId, seed: number, opts?: { bridge?: BridgeState }): CollisionWorld {
-  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact") : createArena(seed);
+/** The collision world of a region. `opts` (bridge, outpost stage, telegraph) only matter to Kessar: the world is a pure function of (seed, those). */
+export function createRegionWorld(id: RegionId, seed: number, opts?: RegionWorldOpts): CollisionWorld {
+  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : createArena(seed);
 }
 
 /** Where player `index` of `count` arrives. */
@@ -67,6 +69,8 @@ const KESSAR_STATIONS: readonly UseStation[] = [
   { id: "pier", kind: "pier", x: A.pier.x, z: A.pier.z, r: 2.2, prompt: "Inspect the pier" },
   { id: "warden", kind: "warden", x: A.wardenPost.x, z: A.wardenPost.z, r: 2.6, prompt: "Parley with the Warden" },
   { id: "dock", kind: "dock", x: A.landing.x, z: A.landing.z, r: 4, prompt: "Take the boat home" },
+  // D-035: the foundation of the Society's outpost. Acted on server-side by INTERACT while carrying a prop (no sheet); the client words its prompt from the settlements state.
+  { id: "foundation", kind: "foundation", x: OUTPOST_SITES.kessar!.site.x, z: OUTPOST_SITES.kessar!.site.z, r: YARD_R - 1, prompt: "Deliver a crate to the foundation" },
 ];
 
 export function stationsFor(id: RegionId): UseStation[] {

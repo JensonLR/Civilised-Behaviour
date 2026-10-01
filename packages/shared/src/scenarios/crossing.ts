@@ -3,6 +3,7 @@ import { KESSAR_ANCHORS, SETTLED_DAYS } from "../campaignTypes.ts";
 import type { NpcSpec } from "../expeditionTypes.ts";
 import { garrisonRoster } from "../garrison.ts";
 import { RIVAL_ROUTE } from "../garrison.ts";
+import type { RivalPresence } from "../worldTypes.ts";
 import {
   SCENARIO, newScenario, reduceScenario, scenarioOutcome, scenarioView, type ScenarioInput, type ScenarioState,
 } from "../scenario.ts";
@@ -51,11 +52,11 @@ const mirror = (core: ScenarioState, x: { settledStart: boolean; detonated: bool
   settledStart: x.settledStart, detonated: x.detonated, daysLeft: x.daysLeft,
 });
 
-function init(c: CampaignState, asking: number): CrossingRun {
+function init(c: CampaignState, asking: number, _seed?: number, presence?: RivalPresence): CrossingRun {
   const settled = crossingSettled(c);
   // a lapsed toll is the asking price again; a settled crossing starts RESOLVED with no resolution (nothing to win, nothing to commit)
   const base = lapsed(c) ? { ...c, crossing: { ...c.crossing, toll: 0 } } : c;
-  let core = newScenario(base, asking);
+  let core = newScenario(base, asking, presence);
   if (settled && core.phase !== "resolved") core = { ...core, phase: "resolved", parley: false };
   return mirror(core, { settledStart: settled, detonated: false, daysLeft: settledDaysLeft(c) });
 }
@@ -173,9 +174,9 @@ export const crossingTemplate: TemplateDef<CrossingRun> = {
   id: "secure_crossing", title: "Secure the River Crossing",
   brief: "The Ward owns the only bridge for forty miles and charges for the privilege. Cross it, by whatever means: pay, haggle, bribe, break the garrison, or drop the bridge in the river.",
   init, reduce, view, outcome,
-  roster: (c, seed): NpcSpec[] => {
+  roster: (c, seed, _s, presence): NpcSpec[] => {
     const ruined = c.crossing.bridge === "collapsed";
-    return garrisonRoster(c, seed).filter((sp) => !(ruined && sp.faction === "rival"));
+    return garrisonRoster(c, seed, presence).filter((sp) => !(ruined && sp.faction === "rival"));
   },
   leave, settled, observe,
   routes: { rival: RIVAL_ROUTE },

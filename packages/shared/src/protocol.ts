@@ -1,6 +1,7 @@
 /** Room names and JSON-ish message contracts shared by client and server. */
 import type { ParleyView, RegionId, ScenarioTemplateId } from "./campaignTypes.ts";
 import type { CommandMsg, Loadout } from "./expeditionTypes.ts";
+import type { PowerId } from "./worldTypes.ts";
 
 export const ROOM_WORLD = "world";
 
@@ -23,6 +24,11 @@ export interface JoinOptions {
   region?: RegionId;
   /** Contract offered at Kessar (create only; dev, tests and screenshots: in play the campaign ledger picks it). Validated server-side. */
   scenario?: ScenarioTemplateId;
+  /**
+   * RESUME a saved campaign by its join code (create only; D-035). The server loads the record, requires that `token` was a member, restores seed + ledger and starts at HQ.
+   * A production feature (not dev-gated); a non-member and an unknown code get the SAME error. Ignored when joining.
+   */
+  resume?: string;
 }
 
 /** Client -> server messages other than the input stream. */
@@ -45,6 +51,8 @@ export interface ClientMessages {
   hire: { id: string; on: boolean };
   /** An order to the hired hands. Hostile until the server's parser accepts it. */
   command: CommandMsg;
+  /** Ask for an audience with a power at HQ (D-035): only the map table or dock, only for a power that is pending today; the answers reuse `parleyPick`/`parleyClose` and the `parley` message. */
+  audienceOpen: { power: PowerId };
 }
 
 /** Minimum gap between accepted setLook messages per client. */

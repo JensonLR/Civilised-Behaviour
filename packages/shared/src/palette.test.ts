@@ -19,6 +19,7 @@ const worldColours: Record<string, readonly number[]> = {
   hair: PALETTE.hair,
   cloth: PALETTE.cloth,
   iris: PALETTE.iris,
+  outpost: Object.values(PALETTE.outpost),
 };
 
 const dist = (a: number, b: number): number =>
@@ -37,7 +38,7 @@ describe("art direction: the palette", () => {
 
   it("world surfaces are dusty, not neon: chroma is capped per group", () => {
     // Chroma caps by group: terrain, props and cloth are muted; metals, hair and irises may be a little richer.
-    const caps: Record<string, number> = { world: 0.4, props: 0.4, camp: 0.4, campLight: 0.7, material: 0.3, weapons: 0.5, weaponFx: 0.7, trim: 0.5, metal: 0.6, skin: 0.4, hair: 0.55, cloth: 0.5, iris: 0.4 };
+    const caps: Record<string, number> = { world: 0.4, props: 0.4, camp: 0.4, campLight: 0.7, material: 0.3, weapons: 0.5, weaponFx: 0.7, trim: 0.5, metal: 0.6, skin: 0.4, hair: 0.55, cloth: 0.5, iris: 0.4, outpost: 0.4 };
     for (const [group, colours] of Object.entries(worldColours)) {
       for (const c of colours) expect(chroma(c), `${group} ${cssHex(c)}`).toBeLessThanOrEqual(caps[group]!);
     }

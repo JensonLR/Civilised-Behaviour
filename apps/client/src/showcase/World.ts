@@ -1,10 +1,11 @@
 import { Vector3 } from "three";
-import { standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
+import { OUTPOST_STAGES, TEMPLATE_RESOLUTIONS, PropKind, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
 import { PRESETS, Stage } from "../render/Stage.ts";
 import { createRegionView, type RegionView } from "../render/world/regionView.ts";
+import { KESSAR_OUTPOST as KO } from "@cb/shared";
 import { KESSAR_ANCHORS as KA, createRegionWorld, regionProps, regionSpawn, type RegionId } from "../render/world/kessar/shared.ts";
 import { folkHints } from "../render/world/villagers.ts";
 
@@ -22,6 +23,8 @@ import { folkHints } from "../render/world/villagers.ts";
  *   push=x,z;x,z   up to four invisible walkers the grass bends away from (the figures are pushers too)
  *   i=N        which tree/rock/snag for view=tree|rock|snag
  *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat, bridge=collapsed (the span down)
+ *   outpost=none|camp|trading_post|fortified_outpost|settlement|town [&telegraph=1&road=0|1|2&launch=1&rivalpost=0|1|2]   (region=kessar, view=outpost|rivalpost|wire|landing) THE SOCIETY'S OUTPOST (D-035)
+ *   history=N [&outpost=<stage>]   (view=table|game, Hollowmere) HQ keeps the first N endings of a scripted campaign on the planning table, the strongbox and the back wall
  *   seed=N     arena seed (default 7)
  *   cam=x,y,z&at=x,y,z   explicit camera and target (metres)
  *   fov=N      vertical field of view (default 65 like the game)
@@ -36,13 +39,37 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   const stage = new Stage(canvas, (params.get("gfx") as import("../render/Stage.ts").PresetName | null) ?? "medium");
   const seed = Number(params.get("seed") ?? 7);
   const region: RegionId = params.get("region") === "kessar" ? "kessar" : "hollowmere";
-  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact" }) : createArena(seed);
+  // D-035: the Society's outpost and what comes of it. outpost=none|camp|trading_post|fortified_outpost|settlement|town, telegraph=1, road=0|1|2, launch=1, rivalpost=0|1|2
+  const stageParam = params.get("outpost");
+  const outpost: OutpostStage = (OUTPOST_STAGES as readonly string[]).includes(stageParam ?? "") ? (stageParam as OutpostStage) : "none";
+  const telegraph = params.get("telegraph") === "1" && outpost !== "none";
+  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph }) : createArena(seed);
   if (region === "kessar") {
     // (the Stage builds Hollowmere's WorldView itself; until it builds through createRegionView, the region's own view is handed to it here)
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
     inner.builtFor = world;
     inner.worldView = createRegionView("kessar", stage.scene, world, PRESETS[(params.get("gfx") as keyof typeof PRESETS | null) ?? "medium"], inner.lightDir);
-  } else stage.buildWorld(world);
+    inner.worldView.applyDress?.({
+      outpost, rivalPost: Math.min(2, Math.max(0, Number(params.get("rivalpost") ?? 0))) as 0 | 1 | 2, road: Math.min(2, Math.max(0, Number(params.get("road") ?? 0))) as 0 | 1 | 2,
+      telegraph, launch: params.get("launch") === "1", name: "Quim's Rest",
+    });
+  } else {
+    stage.buildWorld(world);
+    // history=N: HQ keeps what the campaign has done (the first N endings of a scripted run), on the planning table, the strongbox and the back wall
+    const n = Math.min(12, Math.max(0, Number(params.get("history") ?? 0)));
+    if (n > 0) {
+      const order = ["forced", "sabotaged", "seized", "rescued", "paid", "mediated", "burned", "bribed", "sided_ward", "provoked", "ransomed", "passed"] as const;
+      const t = (r: string): ScenarioTemplateId => (Object.keys(TEMPLATE_RESOLUTIONS) as ScenarioTemplateId[]).find((k) => (TEMPLATE_RESOLUTIONS[k] as readonly string[]).includes(r)) ?? "secure_crossing";
+      let c = newCampaign(seed);
+      for (const r of order.slice(0, n)) c = applyOutcome(c, { scenario: t(r), resolution: r, toll: 30, paid: 0, bridge: "intact", brokePromise: false, seconds: 1, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 } });
+      let s = newSettlements();
+      if (outpost !== "none") {
+        for (let i = 0; i < 4; i++) s = deliverTo(s, "kessar", PropKind.CRATE, c, 1).s;
+        s = { ...s, posts: { kessar: { ...s.posts.kessar!, stage: outpost } }, tech: { road: Number(params.get("road") ?? 0) as 0 | 1 | 2, telegraph, launch: params.get("launch") === "1", since: { road: 1, telegraph: 1, launch: 1 } } };
+      }
+      stage.setHistory(historyPieces(c, s));
+    }
+  }
 
   const props = new PropViews(stage.scene, stage.outlines);
   const line = params.get("propline") === "1"; // one of each kind in a row, for reviewing the props
@@ -185,6 +212,9 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   const ky = (x: number, z: number): number => world.terrainHeight(x, z);
   const kviews: Record<string, [Vector3, Vector3]> = {
     landing: [new Vector3(3, ky(0, 90) + 1.9, 97), new Vector3(0, ky(0, 70) + 4, 40)],
+    outpost: [new Vector3(KO.site.x - 30, ky(KO.site.x - 30, KO.site.z + 6) + 11, KO.site.z + 20), new Vector3(KO.site.x, ky(KO.site.x, KO.site.z) + 1.5, KO.site.z)],
+    rivalpost: [new Vector3(KO.rivalSite.x - 14, ky(KO.rivalSite.x - 14, KO.rivalSite.z + 8) + 5, KO.rivalSite.z + 12), new Vector3(KO.rivalSite.x, ky(KO.rivalSite.x, KO.rivalSite.z) + 2, KO.rivalSite.z)],
+    wire: [new Vector3(14, ky(14, 70) + 3, 76), new Vector3(6, ky(6, 52) + 5, 50)],
     pier: [new Vector3(1.4, 1.9, 94), new Vector3(0, 0.6, 112)],
     boat: [new Vector3(-3, 1.6, 100), new Vector3(4.6, 1.2, 105)],
     bridge: [new Vector3(2.5, ky(0, 36) + 2.2, 38), new Vector3(0, 1.4, 20)],
