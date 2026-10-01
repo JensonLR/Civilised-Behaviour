@@ -92,9 +92,9 @@ export function buildHqRouteLettering(signs: readonly HqSign[], ground: (x: numb
         const zf = side > 0 ? BOARD_DEPTH / 2 + 0.006 : -BOARD_DEPTH / 2 - 0.006;
         const x0 = -0.04;
         const x1 = x0 + textLen;
-        // corners CCW seen from the face; the back face's strip is mirrored so the lettering reads correctly from behind
+        // corners CCW seen from the face; the back face lists its corners from the far end, which turns the strip around
         const corners: [number, number][] = side > 0 ? [[x0, -BOARD_HALF_H + 0.02], [x1, -BOARD_HALF_H + 0.02], [x1, BOARD_HALF_H - 0.02], [x0, BOARD_HALF_H - 0.02]] : [[x1, -BOARD_HALF_H + 0.02], [x0, -BOARD_HALF_H + 0.02], [x0, BOARD_HALF_H - 0.02], [x1, BOARD_HALF_H - 0.02]];
-        const uvs: [number, number][] = side > 0 ? [[u0, v0], [u1, v0], [u1, v1], [u0, v1]] : [[u1, v0], [u0, v0], [u0, v1], [u1, v1]];
+        const uvs: [number, number][] = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]; // same strip order on both faces: the back face's corners already run x1 -> x0, so u runs against x there and the lettering reads left to right from behind
         const wp = corners.map(([x, y]) => v.set(x, y, zf).applyMatrix4(m4).toArray() as [number, number, number]);
         n.set(0, 0, side).applyQuaternion(q);
         for (const t of [0, 1, 2, 0, 2, 3] as const) {

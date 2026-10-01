@@ -15,7 +15,7 @@ import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { buildKessarCloth, createKessarAtlas, kessarClothMaterial } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover } from "./ground.ts";
-import { palmGeometry } from "./palms.ts";
+import { palmGeometry, palmHullGeometry } from "./palms.ts";
 import { buildKessarSites } from "./sites.ts";
 import { buildOutpostGeometry, buildRoadRibbon } from "./outpost.ts";
 import { kessarPlan, type KessarTerrain } from "./shared.ts";
@@ -32,6 +32,8 @@ interface SetOptions {
   wind?: "none" | "tree" | "grass";
   noCull?: boolean;
   lod?: Lod;
+  /** A cheaper or cleaner shape for the ink hull than the lod-0 mesh (palms: the trunk, not the thin fronds). */
+  hull?: (lod: Lod) => BufferGeometry;
 }
 
 /**
@@ -143,7 +145,7 @@ export class KessarView implements RegionView {
     const mats = items.map((it) => composeInstance(new Matrix4(), it.x, it.y, it.z, it.yaw, it.sx, it.sy, it.sz, it.tiltX ?? 0, it.tiltZ ?? 0));
     const geo = this.track(build(o.lod ?? 1));
     const ink = this.detail.outlines && o.ink !== undefined;
-    const hull = ink ? this.track(build(0)) : undefined;
+    const hull = ink ? this.track((o.hull ?? build)(0)) : undefined;
     const set = makeInstances(this.root, geo, material, mats, colours, { name, castShadow: o.shadow ?? false, outline: ink, ink: o.ink, wind: o.wind, hullGeometry: hull });
     if (set && o.noCull) set.mesh.frustumCulled = false;
     return set;
@@ -174,7 +176,7 @@ export class KessarView implements RegionView {
 
   private addPalms(): void {
     const items: Item[] = kessarPlan().palms.map((p, i) => ({ x: p.x, y: this.world.terrainHeight(p.x, p.z), z: p.z, yaw: p.yaw, sx: p.s, sy: p.s, sz: p.s, cls: 0, v: fract(i * 0.618) }));
-    this.instanced("palms", palmGeometry, this.track(toonMaterial({ wind: "tree" })), items, items.map((i) => this.varied(i.v, 0.14)), { shadow: true, ink: "large", wind: "tree", lod: this.detail.treeLod });
+    this.instanced("palms", palmGeometry, this.track(toonMaterial({ wind: "tree" })), items, items.map((i) => this.varied(i.v, 0.14)), { shadow: true, ink: "large", wind: "tree", hull: palmHullGeometry, lod: this.detail.treeLod });
   }
 
   // ---- the solid things, the cloth, the water ---------------------------------------------------------------------------------------------------

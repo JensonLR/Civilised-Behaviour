@@ -12,8 +12,14 @@ export const PALM_HEIGHT = 7.5;
  * A date palm at the origin: a leaning ringed trunk, a crown of drooping fronds (each a few flat leaf-blades bending down), a knot of dates.
  * Instanced (one draw + one ink hull for every palm in the region), wind-swayed by the tree shader like any tree.
  */
-export function palmGeometry(lod: Lod): BufferGeometry {
+/** The ink hull of a palm: trunk and crown knob only. Hulls grow along face normals, and on the 4 cm frond blades that reads as black slabs hanging in the crown, so the fronds go unlined. */
+export function palmHullGeometry(lod: Lod): BufferGeometry {
   const k = new Kit();
+  palmTrunk(k, lod);
+  return k.build()!;
+}
+
+function palmTrunk(k: Kit, lod: Lod): V3 {
   const segs = lod ? 6 : 4;
   const lean = 0.9;
   const at = (t: number): V3 => [lean * t * t, PALM_HEIGHT * t, 0.2 * t * t];
@@ -24,6 +30,12 @@ export function palmGeometry(lod: Lod): BufferGeometry {
   }
   const top = at(1);
   k.add(new SphereGeometry(0.34, 7, 5), { at: [top[0], top[1] + 0.05, top[2]], colour: K.frondDark, flat: true });
+  return top;
+}
+
+export function palmGeometry(lod: Lod): BufferGeometry {
+  const k = new Kit();
+  const top = palmTrunk(k, lod);
   const fronds = lod ? 9 : 6;
   for (let f = 0; f < fronds; f++) {
     const a = (f / fronds) * Math.PI * 2 + 0.3;
