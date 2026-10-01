@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FLAG, PropKind, hash3, answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, generatePaper, npcKey, weatherAt,
-  KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
+  HIGHMARK_RESOLUTIONS, KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
   type BridgeState, type CampaignState, type ParleyView, type PlayerStateType, type ResolutionId, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
 } from "@cb/shared";
 import type { CastApi, CastCount, CastOrder, MountApi, NpcSide, NpcSpec } from "@cb/shared";
@@ -732,7 +732,8 @@ describe("leave: the room calls it before dispose", () => {
 
 describe("all 20 resolutions: one scripted run each through the runner; distinct outcomes, distinct papers", () => {
   /** Plays the resolution out on a fresh fake and returns what was committed. */
-  const play: Record<ResolutionId, (f: Fake) => { id: ScenarioTemplateId; go: (s: Scenario) => void }> = {
+  // D-036: Kessar's twenty endings. Highmark's five (HIGHMARK_RESOLUTIONS) are driven through the runner by package G (systems/Succession.test.ts).
+  const play: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number]>, (f: Fake) => { id: ScenarioTemplateId; go: (s: Scenario) => void }> = {
     paid: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); } }),
     bargained: (f) => ({ id: "secure_crossing", go: (s) => { f.players.set("p2", row("p2", bar.x + 2, bar.z)); put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "haggle_threaten")); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); } }),
     bribed: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "bribe")); } }),
@@ -783,7 +784,7 @@ describe("all 20 resolutions: one scripted run each through the runner; distinct
     const campaigns = new Set<string>();
     const heads = new Set<string>();
     const base = quiet();
-    for (const r of Object.keys(play) as ResolutionId[]) {
+    for (const r of Object.keys(play) as (keyof typeof play)[]) {
       const f = fake(base);
       if (r === "bargained") f.host.seed = threatSeed(base);
       f.players.set("p1", row("p1", 0, 88));

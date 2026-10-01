@@ -407,6 +407,16 @@ export function regionMountSpots(id: RegionId): RegionMountSpots {
       wagon: { x: 0, z: 74, yaw: 0 },
     };
   }
+  // D-036: Highmark: a ring behind the Reed Landing (z <= 108), on the open quay-side grass. G proves each open (mount.test.ts runs every region in REGION_IDS).
+  if (id === "highmark") {
+    return {
+      horses: [
+        { x: -5, z: 108, yaw: 0.4 },
+        { x: 5, z: 108, yaw: -0.4 },
+      ],
+      wagon: { x: 0, z: 102, yaw: 0 },
+    };
+  }
   // The open ground west of the marquee is the stable (the camp is crowded: this is the nearest spot to the supply pyramid with room for a wagon, 1.6 m clear on every seed).
   return {
     horses: [

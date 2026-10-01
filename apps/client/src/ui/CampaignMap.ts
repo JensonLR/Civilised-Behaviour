@@ -1,4 +1,4 @@
-import { OUTPOST_STAGES, PRIORITY_LABEL, STAGE_LABEL, type CampaignMapData, type OutpostStage, type PowerId } from "@cb/shared";
+import { OUTPOST_STAGES, PRIORITY_LABEL, REGION_IDS, STAGE_LABEL, type CampaignMapData, type OutpostStage, type PowerId, type RegionId } from "@cb/shared";
 import { h } from "./modal.ts";
 import "./campaignMap.css";
 
@@ -26,8 +26,21 @@ const rank = (s: OutpostStage): number => OUTPOST_STAGES.indexOf(s);
 const roadWord = (n: number): string => (n >= 2 ? "a made road" : n === 1 ? "a track worn into a road" : "no road");
 const ageWord = (n: number): string => (n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`);
 
-/** Where the chart marks sit (the same 320 x 200 sheet as MapRoom's chart). */
-const KESSAR_AT = { x: 232, y: 62 };
+/** Where each region's mark sits on the chart (a 320 x 200 sheet): home on the near shore, the colony across the water to the north-east, the highlands to the south-east (D-036). */
+export const CHART_AT: Readonly<Record<RegionId, { x: number; y: number }>> = { hollowmere: { x: 84, y: 138 }, kessar: { x: 232, y: 62 }, highmark: { x: 252, y: 156 } };
+const KESSAR_AT = CHART_AT.kessar;
+const HIGHMARK_AT = CHART_AT.highmark;
+
+/** The sea lane between two regions as a quadratic curve: its path, and the point half way along it (where its sailing time is written). Pure; the same curve for either direction. */
+const BEND: Record<string, { x: number; y: number }> = { "hollowmere|kessar": { x: 150, y: 60 }, "hollowmere|highmark": { x: 160, y: 176 }, "kessar|highmark": { x: 286, y: 112 } };
+function lane(a: RegionId, b: RegionId): { d: string; mid: { x: number; y: number } } {
+  const [p, q] = REGION_IDS.indexOf(a) <= REGION_IDS.indexOf(b) ? [a, b] : [b, a];
+  const A = CHART_AT[p], B = CHART_AT[q], C = BEND[`${p}|${q}`]!;
+  return { d: `M${A.x} ${A.y} Q ${C.x} ${C.y} ${B.x} ${B.y}`, mid: { x: 0.25 * A.x + 0.5 * C.x + 0.25 * B.x, y: 0.25 * A.y + 0.5 * C.y + 0.25 * B.y } };
+}
+export const chartRoute = (a: RegionId, b: RegionId): string => lane(a, b).d;
+export const chartRouteMid = (a: RegionId, b: RegionId): { x: number; y: number } => lane(a, b).mid;
+export const regionPair = (a: RegionId, b: RegionId): string => (REGION_IDS.indexOf(a) <= REGION_IDS.indexOf(b) ? `${a}|${b}` : `${b}|${a}`);
 
 /** The chart's campaign layer: an outpost stamp by Kessar, the Syndicate's marker with its age, the sailing time on the lane. Drawn into `g` (cleared first). */
 export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undefined): void {
@@ -61,9 +74,23 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
     s.append(t);
     g.append(s);
   }
-  for (const lane of data.lanes) {
-    const t = svg("text", { x: 150, y: 90, "text-anchor": "middle", class: "lane" });
-    t.textContent = `${lane.seconds} s by sail`;
+  // the Reapers' Granges climb Highmark's lower terraces: once the Society has heard of them, the chart says so
+  const grange = data.pins.find((p) => p.id === "reapers" && p.known);
+  if (grange && data.regions.some((r) => r.id === "highmark")) {
+    const s = svg("g", { class: "stamp granges", transform: `translate(${HIGHMARK_AT.x - 18} ${HIGHMARK_AT.y - 18})` });
+    s.append(svg("path", { d: "M-4 4 L-4 -3 M0 4 L0 -5 M4 4 L4 -3 M-6 4 L6 4" }));
+    const t = svg("text", { x: -10, y: 4, "text-anchor": "end" });
+    t.textContent = "Thornfield Granges";
+    s.append(t);
+    g.append(s);
+  }
+  // each sailing time is written on its own lane, from where the party stands
+  const here = data.regions.find((r) => r.here)?.id;
+  for (const l of data.lanes) {
+    if (!here) continue;
+    const m = chartRouteMid(here, l.to);
+    const t = svg("text", { x: m.x, y: m.y - 5, "text-anchor": "middle", class: "lane" });
+    t.textContent = `${l.seconds} s by sail`;
     g.append(t);
   }
 }

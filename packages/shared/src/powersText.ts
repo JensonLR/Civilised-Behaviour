@@ -272,6 +272,27 @@ export const NEWS: Record<string, NewsDef> = {
     head: ["Lamentation Guild Enjoys a Busy Season", "Business at the Long Cloister Picks Up", "The Guild Sends Its Compliments"],
     body: ["The Guild wishes to thank the Society for the sudden uptick in custom. It has hired two additional mutes.", "It would not presume to say the expedition caused anything. It will, however, say it was in the neighbourhood.", "A basket of lilies has arrived at the Depot, unsolicited, and invoiced."],
   },
+  // Highmark's chair (D-036): one dispatch per ending, printed from the Reapers' log entry `chair_<ending>`. {a} is the Reapers, {b} the Guild (the Houses at a sale).
+  chair_backed_elder: {
+    head: ["Assembly Ratifies Princess Orla; Barley Unaffected", "Highmark Seats the Elder, by a Show of Hands", "Reapers Vote Seniority, Then Go Home to the Harvest"],
+    body: ["{A} raised two scythes, then three, and the chair at Highmark has an occupant who would like it noted that she is the elder. The Guild will certify the King's death at a fee, and the King will remain, for administrative purposes, in the building.", "The Assembly carried the vote by a majority of scythes. The Guild has begun drafting a certificate of pendingness, with a black border and a surcharge.", "The new reign began at the harvest bell and is expected to last until the next form. {A} has asked to be thanked in writing, in a large hand."],
+  },
+  chair_backed_younger: {
+    head: ["Reapers Acclaim Prince Dunstan, Mostly Aloud", "Highmark Crowns the Young; Seniority Files a Complaint", "The Assembly Votes With Its Ears"],
+    body: ["{A} was fed, and voted, in that order, for a prince who stood nearest the buffet. The Guild has agreed to certify the King, and has applied to certify the Princess's disappointment too.", "The vote was carried by acclamation, which is a number that only goes up. The band has been paid and will be paid again.", "Observers described the chair's new occupant as 'confident'. The Grange described him as 'a lot of band'."],
+  },
+  chair_regency: {
+    head: ["Highmark Settles on Three Signatures and No Chair", "Regency at Highmark; the King Remains Pending", "Assembly Votes for a Committee, Which Is Called Stability"],
+    body: ["{A} ratified a regency of three signatures, the barley-hands up in a show that the Guild declined to certify as a death. Nobody sits in the chair, which is the compromise.", "It is the first agreement the court has reached in six years and it is an agreement to keep disagreeing, in a nice room.", "The Chamberlain is said to be delighted, and has been seen to smile, which is being investigated."],
+  },
+  chair_usurped: {
+    head: ["Chair at Highmark Occupied Overnight; Court Seeks Adjectives", "Palace Calls the Matter 'an Early Succession'", "Reapers Look Away, Politely, as the Guard Is Rearranged"],
+    body: ["The chair changed hands in a manner the court is still deciding how to spell. {A} abstained; the Guild has been asked to certify something and has asked for a larger black border.", "The Assembly voted after the fact, which in Highmark is a form of procedure. The guard has been reassigned, mostly to the floor.", "Everyone has agreed it was irregular. Everyone has agreed to call it early. The Society was 'in the building'."],
+  },
+  chair_crown_sold: {
+    head: ["Crown's Concession Sold to the Syndicate; Hat Retained", "Highmark's Chair Auctioned Subject to Contract", "Houses Furious: the Syndicate Has Their Concession"],
+    body: ["A cheque changed hands and so, by the end of the afternoon, did the Crown. {A} took the news in silence and the barley in the usual way; {b} wanted to know who had priced it.", "The Chamberlain countersigned in the full seal of the court, which is large and has a stag on it. The Assembly was consulted, in the sense that it was in the room.", "The Houses have taken a meeting. The meeting has taken a long time, and a larger room."],
+  },
   settle_founded: {
     head: ["Society Plants a Flag at Kessar", "A Post Is Founded; Brine Houses Pleased", "Foundation Laid, Syndicate Displeased"],
     body: ["A foundation of four crates has been laid south of the bridge. The Houses call it a market in waiting. The Syndicate calls it a competitor in waiting. The Ward calls it an assessment.", "The Society has a new post. It also has a new neighbour, who has just been told.", "The first crate went down at dawn. The fourth, by lunchtime, with a speech."],

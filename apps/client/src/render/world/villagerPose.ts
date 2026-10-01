@@ -86,10 +86,11 @@ export class FolkBody {
   /** The height the body sits at on a bench (world metres above the ground). */
   static readonly SEAT = 0.45;
 
-  constructor(readonly spec: CharacterSpec, scale: number, lod: Lod, outline: boolean, parent: Object3D) {
+  /** `merged` (default: yes): levels 1 and 2 are one skinned draw each (the crowd LOD, D-036; `false` is the old per-bone meshes, kept for the equivalence tests and the bench). */
+  constructor(readonly spec: CharacterSpec, scale: number, lod: Lod, outline: boolean, parent: Object3D, merged = true) {
     this.outline = outline;
     this.lodNow = lod;
-    this.rig = buildCharacter(spec, { outline: outline && lod === 0, lod });
+    this.rig = buildCharacter(spec, { outline: outline && lod === 0, lod, merged });
     this.anim = new CharacterAnimator(this.rig);
     this.hands = new HandPoser(this.rig);
     this.scale = scale;

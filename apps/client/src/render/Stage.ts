@@ -208,12 +208,13 @@ export class Stage {
   }
 
   /** Builds the world (painted terrain, hills, trees, rocks, ground cover, the camp) from the same deterministic data the server simulates. */
-  buildWorld(world: CollisionWorld, region: RegionId = "hollowmere"): void {
+  buildWorld(world: CollisionWorld, region: RegionId = "hollowmere", seed?: number): void {
     this.builtFor = world;
     this.builtRegion = region;
+    this.builtSeed = seed; // (Highmark's herds and signs are a pure function of the world seed; a preset change rebuilds with the same one)
     // (the new world first, then the old one goes: programs both use stay linked instead of being destroyed and compiled again)
     const old = this.worldView;
-    this.worldView = createRegionView(region, this.scene, world, this.preset, this.lightDir);
+    this.worldView = createRegionView(region, this.scene, world, this.preset, this.lightDir, seed);
     old?.dispose();
     this.worldView.applyDay(this.day);
     // what the campaign has built (D-035) is re-applied to every new view, so a preset change or a region change never loses it
@@ -247,9 +248,9 @@ export class Stage {
   }
 
   /** `buildWorld`, then reveal it once its shaders are linked (the world is hidden until then so the frames in between never stall on a compile). */
-  async buildWorldAsync(world: CollisionWorld, wanted: () => boolean = () => true, region: RegionId = "hollowmere"): Promise<void> {
+  async buildWorldAsync(world: CollisionWorld, wanted: () => boolean = () => true, region: RegionId = "hollowmere", seed?: number): Promise<void> {
     if (!wanted()) return;
-    this.buildWorld(world, region);
+    this.buildWorld(world, region, seed);
     const view = this.worldView;
     if (!view) return;
     view.root.visible = false;
@@ -259,6 +260,7 @@ export class Stage {
 
   /** The world last passed to `buildWorld`, kept so the graphics preset can be changed live (settings screen). */
   private builtFor?: CollisionWorld;
+  private builtSeed: number | undefined;
   private builtRegion: RegionId = "hollowmere";
 
   /**
@@ -295,7 +297,7 @@ export class Stage {
       const m = (o as Mesh).material as { needsUpdate: boolean } | { needsUpdate: boolean }[] | undefined; // programs differ with and without shadow sampling
       for (const x of Array.isArray(m) ? m : m ? [m] : []) x.needsUpdate = true;
     });
-    if (this.builtFor) this.buildWorld(this.builtFor, this.builtRegion);
+    if (this.builtFor) this.buildWorld(this.builtFor, this.builtRegion, this.builtSeed);
   }
 
   /** Draw/triangle counts of the built world, for docs/PERFORMANCE.md. */

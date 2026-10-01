@@ -1,4 +1,5 @@
 import type { PersistenceRuntime } from "./persistence/runtime.ts";
+import type { DemoConfig } from "./systems/Demo.ts";
 /**
  * Process-wide settings that rooms need from the validated server config. Rooms are constructed by
  * Colyseus (no constructor injection), so createGameServer() publishes these once at startup.
@@ -18,6 +19,8 @@ export interface RoomConfig {
   dayMinutes?: number;
   /** The campaign store (D-035). Absent = rooms keep their campaign in memory only (unit rigs that build a room without a server). */
   persistence?: PersistenceRuntime;
+  /** The bounded web demo (D-036; env `DEMO_MODE`). Absent or disabled = the full game. A demo room saves nothing and refuses `resume`. */
+  demo?: DemoConfig;
 }
 
 let current: RoomConfig = { debugCommands: false, routSeconds: 8, dismemberment: true, friendlyFire: true, dayStartHour: 9, dayMinutes: 30 };

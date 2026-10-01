@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, CircleGeometry, Color, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, SphereGeometry, type DataTexture, type Material } from "three";
+import { BufferAttribute, BufferGeometry, CircleGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMaterial, SphereGeometry, type DataTexture, type Material, type Object3D } from "three";
 import { PALETTE } from "@cb/shared";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import * as K from "../catalog.ts";
@@ -63,6 +63,11 @@ export interface FaceBuild {
   root: Group;
   /** Level of detail of the face parts: 0 full (round eyeballs, catch-lights), 1 mid distance (coarser eyes, lids, brows, the lip seam only). Cheap: swaps cached geometry. */
   setDetail(level: 0 | 1): void;
+  /**
+   * The mid-distance (detail 1) face as static geometry in the head bone's frame, in the pose it was built in (eyes open, brows and mouth neutral): the white, iris and upper lid of
+   * each eye, the brows, the lip seam. A crowd rig bakes these into its merged level-1 mesh (merged.ts), which does not animate the face. Shared geometry: never dispose it.
+   */
+  statics: { geometry: BufferGeometry; matrix: Matrix4 }[];
 }
 
 export interface FaceCtx {
@@ -616,7 +621,17 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
     }
     eL.glint.visible = eRr.glint.visible = level === 0;
   };
-  return { face: faceParts, root, setDetail };
+  // the level-1 face frozen as it stands now (construction pose); each part's matrix up to the head bone, mirrored brows included
+  const toHead = (mesh: Object3D): Matrix4 => {
+    const m = new Matrix4();
+    for (let n: Object3D | null = mesh; n && n !== parent; n = n.parent) {
+      n.updateMatrix();
+      m.premultiply(n.matrix);
+    }
+    return m;
+  };
+  const statics = swaps.filter(([m]) => m.visible).map(([m, , g1]) => ({ geometry: g1, matrix: toHead(m) }));
+  return { face: faceParts, root, setDetail, statics };
 }
 
 export { greyed } from "./look.ts";

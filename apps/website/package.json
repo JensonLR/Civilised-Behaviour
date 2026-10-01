@@ -1,0 +1,20 @@
+{
+  "name": "@cb/website",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Static landing page and press kit for Civilised Behaviour. Plain files plus a dependency-free build script; colours come from the shared palette; no tracker, no cookie, no account.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc --noEmit && node --experimental-strip-types scripts/build.mjs",
+    "site": "node --experimental-strip-types scripts/build.mjs",
+    "preview": "node scripts/preview.mjs"
+  },
+  "dependencies": {
+    "@cb/shared": "workspace:*",
+    "@fontsource/im-fell-english": "^5.3.0",
+    "@fontsource/im-fell-english-sc": "^5.3.0",
+    "@fontsource/special-elite": "^5.3.0"
+  }
+}

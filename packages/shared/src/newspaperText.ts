@@ -149,6 +149,37 @@ export const HEADLINES: Record<HeadKey, readonly string[]> = {
     "Ford Closed for Ballistic Maintenance",
     "Two Powers Settle a Boundary the Old-Fashioned Way, Loudly",
   ],
+  // ---- D-036: Highmark's empty chair ----
+  backed_elder: [
+    "Society Backs the Elder Claimant; Court Calls It \"Seniority, Again\"",
+    "Highmark's Chair Goes to the Elder, With the Society's Compliments",
+    "Elder Heir Seated at Highmark; Younger Heir Seated Nearby, Less Happily",
+    "Seniority Wins at Highmark, as It Has Every Time It Was Tried",
+  ],
+  backed_younger: [
+    "Society Backs the Younger Claimant; Highmark Calls It \"Fresh Thinking\"",
+    "Younger Heir Takes the Chair; Elder Heir Reviews Her Options",
+    "Highmark Crowns the Young: Seniority Files a Complaint",
+    "Band Plays, Prince Accedes: Highmark Votes by Volume",
+  ],
+  regency: [
+    "Highmark Settles on a Regency; Everyone Is Slightly Disappointed, Which Is Called Consensus",
+    "Three Chairs, One Throne: the Society Brokers a Council",
+    "Regency Declared at Highmark; the King Remains Pending",
+    "Nobody Wins at Highmark, and the Court Calls It a Settlement",
+  ],
+  usurped: [
+    "Highmark's Chair Changes Hands in a Manner the Court Is Still Naming",
+    "Palace Calls Overnight Events \"an Early Succession\"",
+    "A Throne Is Occupied at Highmark; the Society Was \"in the Building\"",
+    "Guard Rearranged at Highmark; Chair Has Opinions About Its New Occupant",
+  ],
+  crown_sold: [
+    "Syndicate Acquires the Crown's Concession; the Crown Retains the Hat",
+    "Highmark's Chair Sold, Subject to Contract and a Small Coronation",
+    "Dunmarrow-Vesk Buys Into Highmark; the Court Says It Was Consulted, Briefly",
+    "Crown Concession Sold, Cheque Honoured, Hat Retained",
+  ],
   none: [
     "Society Announces Bold New Programme of Improving Places",
     "Expedition Fund Open; Prospectuses at the Depot",
@@ -267,6 +298,32 @@ export const STANDFIRSTS: Record<HeadKey, readonly string[]> = {
     "A border dispute has become a border incident, which in the language of the Committee is a promotion. {spin}",
     "The ford is closed to the public, the press and about a third of the Marker Stone. {spin}",
   ],
+  // ---- D-036: Highmark's empty chair ----
+  backed_elder: [
+    "At Highmark the Society put its weight behind the elder heir, and the Grange raised its scythes in what the Court agrees was a vote. Purse: £{purse}. {spin}",
+    "The elder claimant was seated after a long afternoon of protocol and a short one of arithmetic. Purse: £{purse}. {spin}",
+    "Highmark has a ruler again, or at least a seating plan that names one. The elder heir is delighted; the Society is billed. Purse: £{purse}. {spin}",
+  ],
+  backed_younger: [
+    "At Highmark the Society backed the younger heir, whom the crowds prefer and the Chamberlain's Office has not yet found a form for. Purse: £{purse}. {spin}",
+    "The younger claimant was seated to cheering, mostly from the Society's own side of the hall. Purse: £{purse}. {spin}",
+    "Highmark's chair has a new occupant, who is said to be \"looking forward to the paperwork\". Purse: £{purse}. {spin}",
+  ],
+  regency: [
+    "Highmark has a regency: three signatures, one chair that nobody sits in, and a King who remains pending. Purse: £{purse}. {spin}",
+    "The Society brokered a council of three at Highmark, which the Court describes as \"a solution\" and the heirs as \"a delay\". Purse: £{purse}. {spin}",
+    "Neither heir won and both were thanked, which is how regencies begin. Purse: £{purse}. {spin}",
+  ],
+  usurped: [
+    "The chair at Highmark was taken overnight, and the Court has called a meeting to decide what to call it. Purse: £{purse}. {spin}",
+    "Somebody sat down at Highmark before the Chamberlain had finished the order of precedence. The Society says it was merely present. Purse: £{purse}. {spin}",
+    "An early succession occurred at Highmark. Officials stress that it was early, not irregular. Purse: £{purse}. {spin}",
+  ],
+  crown_sold: [
+    "The Syndicate has bought the Crown's concession at Highmark, and the Crown has kept the hat. Purse: £{purse}. {spin}",
+    "A cheque changed hands at Highmark and so, by the end of the afternoon, did the chair. Purse: £{purse}. {spin}",
+    "Highmark's court was \"consulted\" about the sale, in the sense that it was in the room. Purse: £{purse}. {spin}",
+  ],
   none: [
     "The Society's programme for Kessar Reach is \"fully costed\", apart from the costs. The Ward's asking toll is £{toll}; the bridge is {bridge}.",
     "Expeditions depart at the Depot's convenience. Kessar's toll is reported at £{toll}; the bridge is {bridge}.",
@@ -322,6 +379,7 @@ export const STORY_HEADS = {
   cage: ["The Cartwright's Cage", "Hangman's Orchard: A Ledger", "Insured Persons, Briefly"],
   convoy: ["The Dry Cut Affair", "Syndicate Wagon: the Figures", "Notes on a Convoy"],
   marker: ["Marker Stone No. 4", "The Stone in the Ford", "On the Matter of a Border"],
+  chair: ["The Vacant Chair, in Figures", "Highmark: the Court Reports", "On the Matter of a Throne"],
 } as const;
 
 /** The ledger story's euphemism per new resolution: what happened, in the Society's own words. */
@@ -334,6 +392,12 @@ export const SITE_LINES: Partial<Record<ResolutionId, readonly string[]>> = {
   tipped_off: ["Information was \"shared in a spirit of neighbourly vigilance\".", "A picket \"exercised initiative on a rumour\"."],
   burned: ["A wagon underwent \"unscheduled thermal retirement\".", "A powder barrel \"expressed itself\"."],
   passed: ["A convoy was \"permitted to proceed\", in the absence of an alternative.", "The Society \"respected the Syndicate's right of way\", having no other."],
+  // Highmark's chair (D-036)
+  backed_elder: ["The Society \"supported a succession on grounds of seniority\", with a receipt.", "An heir was \"encouraged into office\", and the barley was \"consulted\"."],
+  backed_younger: ["The Society \"supported a succession by acclamation\", which was audible.", "A prince was \"welcomed to the chair\" by a band that had been told when to start."],
+  regency: ["The Society \"facilitated a shared stewardship\" of an item of furniture.", "Three signatures were \"harmonised\" on a single sheet."],
+  usurped: ["The Society \"was present at an early succession\", in a supporting capacity and from fairly close.", "A chair was \"reassigned in the night\", with the assistance of the night."],
+  crown_sold: ["The Society \"was not unduly obstructive\" about the sale of a concession.", "A cheque was \"honoured\", along with a considerable number of formalities."],
   mediated: ["Two powers \"aligned their rulers\".", "A border was \"reimagined as a shared challenge\"."],
   sided_ward: ["The Society \"supported the lawful patrol\" with information and its own detention.", "A Syndicate party \"relocated to a less contested ford\"."],
   sided_syndicate: ["A boundary marker was \"adjusted for clarity\".", "An envelope was \"received in a private capacity\"."],

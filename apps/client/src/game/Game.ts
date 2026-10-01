@@ -1,5 +1,9 @@
 import { Vector3 } from "three";
-import { FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { isDemo, wishlistLink } from "../platform/flags.ts";
+import type { PlatformLink } from "../platform/PlatformLink.ts";
+import { DemoBanner } from "../ui/DemoBanner.ts";
+import { Wishlist } from "../ui/Wishlist.ts";
+import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -131,6 +135,10 @@ export class Game {
   private lastWorldMs = 0;
   private lastWorldPerf = 0;
   private trackerClock = 0;
+  /** D-036: the demo's countdown tag and the card it ends on (the SERVER enforces the session and closes the room with `DEMO.closeCode`; this only shows it), and the storefront seam. */
+  private readonly demoBanner: DemoBanner | undefined;
+  private wishlist: Wishlist | undefined;
+  private presenceSig = "";
 
   constructor(
     private readonly stage: Stage,
@@ -138,6 +146,7 @@ export class Game {
     private readonly controls: Controls,
     hud: HTMLElement,
     debugEl: HTMLElement,
+    private readonly link?: PlatformLink,
   ) {
     this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1, headBob: getHeadBob() ? 1 : 0 });
     this.rig.setView(getView(), true);
@@ -169,7 +178,7 @@ export class Game {
     });
     controls.onToggleDebug = () => this.overlay.toggle();
     controls.onToggleView = () => setView(this.rig.toggleView());
-    stage.buildWorld(session.world, session.region);
+    stage.buildWorld(session.world, session.region, session.room.state.seed);
     this.loadRagdolls();
     this.mapRoom = new MapRoom(document.body);
     this.sailing = new Sailing(document.body);
@@ -189,7 +198,14 @@ export class Game {
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
 
+    if (isDemo()) {
+      this.demoBanner = new DemoBanner(document.body);
+      session.room.onLeave((code) => {
+        if (code === DEMO.closeCode) this.endDemo();
+      });
+    }
     session.room.onMessage("notice", (m: { text: string }) => {
+      this.demoBanner?.notice(m.text); // (a demo warning re-synchronises the countdown to the server's; it is still shown as the telegram it is)
       // The hands' answer to an order ("Obeyed." / "Refused. ...") is the wheel's own plain line, not a notice.
       if (/^(Obeyed|Refused)\b/.test(m.text)) this.wheel.setResult(m.text);
       else this.hud.showNotice(m.text);
@@ -199,6 +215,29 @@ export class Game {
       const rtt = performance.now() - m.t;
       session.rttMs = session.rttMs === 0 ? rtt : session.rttMs * 0.8 + rtt * 0.2;
     });
+  }
+
+  /** The server closed the demo room: the licence has expired. The card is a Modal (Escape, pad B), and closing it returns to the front door. */
+  endDemo(): void {
+    if (this.wishlist) return;
+    this.demoBanner?.hide();
+    this.wishlist = new Wishlist({ url: wishlistLink(), onClose: () => location.assign(location.pathname) });
+    this.wishlist.show();
+  }
+
+  /** Where the player is, as plain data for the storefront's presence line: only sent when something it shows changed. */
+  private syncPresence(): void {
+    if (!this.link) return;
+    const st = this.session.room.state;
+    const sig = `${st.region}|${st.travelPhase}|${st.partyRev}|${st.campaignRev}|${st.players.size}`;
+    if (sig === this.presenceSig) return;
+    this.presenceSig = sig;
+    let party = 0;
+    st.players.forEach((p) => {
+      if (!p.npc && p.connected) party++;
+    });
+    const region = this.session.region;
+    this.link.presence({ where: (st.travelPhase ?? 0) >= 2 ? "sailing" : region === "hollowmere" ? "hq" : "region", region, party: Math.max(1, party), day: this.campaign?.day ?? 0, joinCode: st.code });
   }
 
   /** Loads (or reloads, after a region change) the ragdoll physics world for the ground the local player stands on. */
@@ -247,9 +286,15 @@ export class Game {
     const s = this.settlements ?? newSettlements();
     const intel = techEffects(s.tech).intelDays + powerEffects(p).intelDays;
     const asking = audiencesAt(c, p).map((a) => a.power);
-    const offer = pickTemplate(c, "kessar", st.seed, rivalPresence(c, p));
+    // the contract on offer in each place the party can sail to (the same pure rule the server runs on landfall; the hub has none)
+    const presence = rivalPresence(c, p);
+    const offers: Partial<Record<RegionId, { title: string; brief: string }>> = {};
+    for (const id of reachableRegions()) {
+      const offer = id === "hollowmere" ? undefined : pickTemplate(c, id, st.seed, presence);
+      if (offer) offers[id] = templateNote(offer);
+    }
     const here = isRegionId(st.region) ? st.region : "hollowmere";
-    return campaignMapOf(c, s, rivalSighting(c, p, intel), mapPins(c, p, asking), offer ? { region: "kessar", ...templateNote(offer) } : undefined, s.tech, here, p.rival.posts);
+    return campaignMapOf(c, s, rivalSighting(c, p, intel), mapPins(c, p, asking), offers, s.tech, here, p.rival.posts);
   }
 
   /** What HQ keeps of the campaign, and what is built in the field: pushed to the Stage whenever the ledger, the powers or the settlements move. */
@@ -418,7 +463,7 @@ export class Game {
     }
     if (!m?.view) return;
     if (this.parley.isOpen) this.parley.update(m.view);
-    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}));
+    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion);
   }
 
   /** Follows the room's campaign fields: the sailing card, a new region or a fallen bridge (rebuild the world), the orders of the day, the map room. */
@@ -447,7 +492,9 @@ export class Game {
     if (visuals || this.campaignRevSeen !== this.campaignRev) {
       this.campaignRevSeen = this.campaignRev;
       this.applyCampaignVisuals();
+      this.link?.campaign(st.campaign, st.powers, st.settlements); // each newly earned achievement is unlocked once (a no-op on the web)
     }
+    this.syncPresence();
     if ((st.partyRev ?? 0) !== this.partyRev) {
       this.partyRev = st.partyRev ?? 0;
       this.party = parseParty(st.party) ?? newParty();
@@ -522,7 +569,7 @@ export class Game {
       const world = this.session.refreshWorld();
       this.rig.setWorld(world);
       this.combat.setWorld();
-      this.stage.buildWorld(world, region);
+      this.stage.buildWorld(world, region, st.seed);
       this.builtRegion = region;
       this.builtKey = NetSession.worldKeyOf(st);
       this.applyCampaignVisuals();
@@ -544,6 +591,7 @@ export class Game {
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
+    this.demoBanner?.start();
   }
 
   stop(): void {
@@ -576,6 +624,8 @@ export class Game {
     this.wheel.dispose();
     this.tags.dispose();
     this.mountView.dispose();
+    this.demoBanner?.dispose();
+    this.wishlist?.dispose();
     this.controls.onCommand = undefined;
     this.controls.wheelOpen = false;
   }
@@ -619,6 +669,7 @@ export class Game {
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
     this.updatePrompt();
     this.syncCampaign(now);
+    this.demoBanner?.tick();
     this.content.update(dt, this.session.room.state);
     if (this.orientation.active) {
       const pf = this.session.predicted;
@@ -726,7 +777,7 @@ export class Game {
       prompt = `${use}  ${mp}     ${throwKey}  Throw`;
     } else if ((flags & FLAG.CARRYING) !== 0) {
       // a barrel at the pier is a fuse waiting to be lit (the server checks the barrel and the range; this only says what the key will do)
-      const spot = this.builtRegion === "kessar" ? findStation("kessar", this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
+      const spot = this.builtRegion !== "hollowmere" ? findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
       const heldKind = this.heldKind();
       prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw` : `${use}  Drop     ${throwKey}  Throw`;
     } else if ((flags & FLAG.DOWNED) === 0) {

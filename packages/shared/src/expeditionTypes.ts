@@ -14,6 +14,8 @@ export type NpcSide = "ward" | "rival" | "outlaw" | "party" | "neutral";
 export const NPC_SIDE: Readonly<Record<number, NpcSide>> = {
   [NPC.SENTRY]: "ward", [NPC.WARDEN]: "ward", [NPC.RIVAL_GUARD]: "rival", [NPC.RIVAL_SURVEYOR]: "rival", [NPC.DESERTER]: "outlaw",
   [NPC.HOSTAGE]: "neutral", [NPC.DRIVER]: "neutral", [NPC.PORTER]: "party", [NPC.HIRED_RIFLE]: "party", [NPC.SURGEON]: "party",
+  // D-036: Highmark. The "ward" side is the local authority of whatever region you are in: here the Crown's household. Claimants and herders keep out of it.
+  [NPC.CHAMBERLAIN]: "ward", [NPC.COURT_GUARD]: "ward", [NPC.CLAIMANT]: "neutral", [NPC.HERDER]: "neutral",
 };
 export type BrainId = "garrison" | "follower" | "civil";   // civil = hostage, driver: never fights, flees, follows when freed
 export interface NpcSpec {

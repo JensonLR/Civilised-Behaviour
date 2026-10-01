@@ -15,3 +15,9 @@ test-results/
 
 # campaign saves (CAMPAIGN_STORE=file default SAVE_DIR=./data/saves): identity keys, never commit
 data/
+
+# desktop packaging output (electron-builder `directories.output`), never commit installers
+apps/desktop/release/
+# the desktop shell's client build (vite --mode desktop), never the web deploy
+dist-desktop/
+soak*.json

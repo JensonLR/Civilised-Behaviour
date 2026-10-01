@@ -1,0 +1,14 @@
+/* The demonstration licence tag and the wish-list card. Colours come from the :root palette variables only. */
+.demo-banner { position: fixed; left: 50%; bottom: max(0.5rem, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30; display: flex; gap: 0.7rem; align-items: baseline; padding: 0.2rem 0.9rem; pointer-events: none; font-family: var(--type); font-size: 0.82rem; letter-spacing: 0.08em; color: var(--text); background: color-mix(in srgb, var(--leather) 88%, transparent); border: 1.5px solid var(--brass-dark); box-shadow: 0 2px 8px color-mix(in srgb, var(--scrim) 50%, transparent); }
+.demo-banner[hidden] { display: none; }
+.demo-banner .tag { text-transform: uppercase; font-family: var(--display); font-size: 0.78rem; }
+.demo-banner .time { min-width: 3.2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.demo-banner.warn { background: color-mix(in srgb, var(--stamp-dark) 90%, transparent); border-color: var(--brass); }
+.demo-banner.last, .demo-banner.over { background: var(--stamp); border-color: var(--text); }
+.demo-banner { transition: background-color 0.4s; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.panel.sheet.wishlist { width: min(92vw, 30rem); text-align: center; overflow-y: auto; }
+.wishlist .body-line { margin: 0.5rem 0.6rem 0; line-height: 1.4; }
+.wishlist .soon { margin: 0.8rem 0.6rem 0; font-family: var(--type); font-size: 0.88rem; color: var(--stamp); }
+.wishlist .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 1.1rem; }
+@media (prefers-reduced-motion: reduce) { .demo-banner { transition: none; } }

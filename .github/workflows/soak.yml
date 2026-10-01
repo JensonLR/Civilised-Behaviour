@@ -1,0 +1,66 @@
+# Server soak (D-036, package Q). Dispatch or nightly ONLY: it runs minutes of real rooms and real bots, so it is not part of every push (ci.yml runs the 20 s version
+# inside `pnpm test`: apps/server/src/rooms/tickBudget.test.ts). No secret is referenced: the harness uses an in-process server on :2583, a temp save directory and a made-up pepper.
+# The report (JSON) is kept as an artifact for 30 days and the job fails when a budget in packages/shared/src/budgets.ts is broken. Shared runners are noisy: the time budgets
+# are given CB_BUDGET_SLACK (default 2 here), the memory and bandwidth budgets never are.
+name: Soak
+on:
+  workflow_dispatch:
+    inputs:
+      rooms:
+        description: "Rooms in the one process"
+        default: "4"
+      bots:
+        description: "Bots per room (1-4)"
+        default: "4"
+      npcs:
+        description: "NPC rows per room (0-24)"
+        default: "24"
+      seconds:
+        description: "Measured seconds (after the warm-up)"
+        default: "300"
+      scenario:
+        description: "town | garrison | mixed"
+        default: "mixed"
+      slack:
+        description: "CB_BUDGET_SLACK for the time budgets (1-10)"
+        default: "2"
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CB_BUDGET_SLACK: ${{ inputs.slack || '2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Soak
+        env:
+          ROOMS: ${{ inputs.rooms || '4' }}
+          BOTS: ${{ inputs.bots || '4' }}
+          NPCS: ${{ inputs.npcs || '24' }}
+          SECONDS_MEASURED: ${{ inputs.seconds || '300' }}
+          SCENARIO: ${{ inputs.scenario || 'mixed' }}
+        run: node scripts/soak.mjs --rooms "$ROOMS" --bots "$BOTS" --npcs "$NPCS" --seconds "$SECONDS_MEASURED" --scenario "$SCENARIO" --out soak.json
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f soak.json ]; then
+            node -e 'const r=require("./soak.json");const t=r.tick.all;console.log(`## Soak\n\n${r.rooms} rooms x ${r.botsPerRoom} bots, ${r.npcRows} NPC rows, ${r.scenario}, ${r.durationS}s, Node ${r.node}\n\ntick p50 ${t.p50Ms.toFixed(2)} / p95 ${t.p95Ms.toFixed(2)} / p99 ${t.p99Ms.toFixed(2)} / max ${t.maxMs.toFixed(2)} ms\n\nheap growth ${r.heap.growthMBPerHour.toFixed(1)} MB/h, rss ${r.rssMB.toFixed(0)} MB\n\nwire down ${r.net.downBytesPerClientPerS.toFixed(0)} B/client/s, up ${r.net.upBytesPerClientPerS.toFixed(0)} B/client/s\n\nfailures: ${r.failures.length ? r.failures.join("; ") : "none"}`)' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-report
+          path: soak.json
+          retention-days: 30

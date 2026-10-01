@@ -123,6 +123,12 @@ export const HISTORY_PIECE: Record<ResolutionId, { kind: HqPieceKind; surface: H
   sided_syndicate: { kind: "pennant", surface: "wall", label: "A Syndicate pennant. It has been hung low." },
   provoked: { kind: "barrel", surface: "table", label: "A bent rifle barrel, a lesson in diplomacy." },
   escalated: { kind: "stone", surface: "table", label: "A cracked piece of a marker stone, after the argument." },
+  // D-036: what HQ keeps of Highmark's chair (the existing piece kinds: a seating plan, a council's sheet, a key, a counterfoil)
+  backed_elder: { kind: "frame", surface: "wall", label: "A seating plan of Highmark's court, the elder heir's name underlined twice." },
+  backed_younger: { kind: "frame", surface: "wall", label: "A seating plan of Highmark's court, the younger heir's name underlined, then crossed out, then underlined." },
+  regency: { kind: "envelope", surface: "chest", label: "A council's three signatures on one sheet, in three different inks, and a fourth for luck." },
+  usurped: { kind: "key", surface: "chest", label: "A key to a door at Highmark that the Society says it found open." },
+  crown_sold: { kind: "envelope", surface: "chest", label: "A counterfoil from the Syndicate's cheque for a crown. It cleared; the Society wishes it knew how." },
 };
 export const MODEL_LABEL = "A scale model of the outpost, to the scale of a prospectus.";
 export const PENNANT_LABEL: Record<"road" | "telegraph" | "launch", string> = {

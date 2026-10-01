@@ -13,6 +13,7 @@ export const isNoLiveCampaign = (message: string): boolean => /^No campaign with
 
 import { describeError, stepAt } from "./menuLogic.ts";
 import { startPadNav } from "./PadNav.ts";
+import { REACH_RETRY } from "../platform/reachCopy.ts";
 import { anyModalOpen } from "./modal.ts";
 import { openHowTo, hasSeenHowTo } from "./HowTo.ts";
 import { openSettings } from "./Settings.ts";
@@ -85,6 +86,7 @@ export class Menu {
         </label>
         <p id="gore-note" class="fine">Off replaces all blood with bandages and iodine. Wounds stay just as readable.</p>
         <p id="status" role="status" aria-live="polite"></p>
+        <p id="reach" class="fine reach" role="status" aria-live="polite" hidden></p>
         <p class="fine">Mature content: strong violence, coarse language and dark satire.</p>
         <p class="fine version">${versionLabel()}</p>
       </div>
@@ -158,6 +160,28 @@ export class Menu {
       return;
     }
     await this.run(() => this.handlers.onJoin(code, this.name(), (t) => this.progress(t)), true);
+  }
+
+  /** The desktop build opens offline: say whether the Society's offices (the server) can be reached, and offer to ask again when they cannot (D-036). */
+  setReach(text: string, retry?: () => void): void {
+    const el = this.root.querySelector<HTMLElement>("#reach")!;
+    el.hidden = false;
+    el.textContent = text;
+    if (retry) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "quiet";
+      b.textContent = REACH_RETRY;
+      b.addEventListener("click", retry);
+      el.append(" ", b);
+    }
+  }
+
+  /** A friend's invite (the storefront's overlay) arrived as a valid join code: fill it in and join. */
+  async joinWith(code: string): Promise<void> {
+    if (!isValidJoinCode(code)) return;
+    this.codeInput.value = code.toUpperCase();
+    await this.join();
   }
 
   /** Names the stage the work has reached (the working card shows it instead of the patient phrases). */

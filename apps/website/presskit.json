@@ -1,0 +1,28 @@
+{
+  "title": "Civilised Behaviour",
+  "titleNote": "working title",
+  "tagline": "A charter for expeditions into territories not yet improved.",
+  "genre": "Satirical co-operative expedition sandbox",
+  "players": { "min": 1, "max": 4, "mode": "online co-op, server authoritative" },
+  "stage": "pre-alpha",
+  "developer": "one developer, working with AI assistance",
+  "platforms": { "planned": ["Windows", "macOS", "Linux"], "published": [] },
+  "technology": ["TypeScript", "Three.js", "authoritative multiplayer server", "Electron desktop shell"],
+  "releaseDate": null,
+  "price": null,
+  "storeUrl": null,
+  "demo": null,
+  "contact": "not yet set up",
+  "monetisation": { "model": "single premium purchase intended, through storefronts", "ads": false, "energyTimers": false, "payToWin": false, "gambling": false, "lootBoxes": false },
+  "matureContent": {
+    "violence": "heavy, cartoonish and bloody, including injury and dismemberment",
+    "language": "profanity",
+    "themes": "dark satire of imperial and bureaucratic institutions; all peoples, places, faiths and institutions are invented",
+    "goreSettings": ["Full", "Reduced", "Off"],
+    "dismembermentToggle": true,
+    "gameplayDependsOnGore": false
+  },
+  "web": { "cookies": false, "scripts": false, "analytics": false, "externalRequests": false },
+  "pages": { "home": "index.html", "press": "press.html" },
+  "aiContent": null
+}

@@ -1,0 +1,40 @@
+# The static site (D-036): build, test, keep the output as an artifact. It does NOT deploy anywhere (hosting is a decision in docs/DEPLOYMENT.md, not built).
+name: Website
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "apps/website/**"
+      - "packages/shared/src/palette.ts"
+      - "docs/AI_CONTENT_REGISTER.md"
+      - ".github/workflows/website.yml"
+  pull_request:
+    paths:
+      - "apps/website/**"
+      - "packages/shared/src/palette.ts"
+      - "docs/AI_CONTENT_REGISTER.md"
+      - ".github/workflows/website.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cb/website typecheck
+      # the claims test reads docs/AI_CONTENT_REGISTER.md: a new kind of AI content with no disclosure line fails here
+      - run: pnpm --filter @cb/website test
+      - run: pnpm --filter @cb/website run site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: website-dist
+          path: apps/website/dist/
+          retention-days: 14

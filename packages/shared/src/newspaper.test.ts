@@ -5,7 +5,7 @@ import { PAPER_LIMITS, generatePaper, type Paper } from "./newspaper.ts";
 import { HEADLINES, NOTICES, SPIN_DEAD, STANDFIRSTS } from "./newspaperText.ts";
 
 const tally = (t: Partial<CasualtyTally> = {}): CasualtyTally => ({ wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0, ...t });
-const templateOf = (r: ResolutionId): ScenarioTemplateId => (["hostage_rescue", "convoy_ambush", "border_incident"] as const).find((t) => TEMPLATE_RESOLUTIONS[t].includes(r) && r !== "abandoned") ?? "secure_crossing";
+const templateOf = (r: ResolutionId): ScenarioTemplateId => (["hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute"] as const).find((t) => TEMPLATE_RESOLUTIONS[t].includes(r) && r !== "abandoned") ?? "secure_crossing";
 const out = (resolution: ResolutionId, o: Partial<ScenarioOutcome> = {}): ScenarioOutcome => ({
   scenario: templateOf(resolution), resolution, toll: 50, paid: 0, bridge: "intact", tally: tally(), brokePromise: false, seconds: 100, ...o,
 });
@@ -22,7 +22,12 @@ const NEW_CASES: [ResolutionId, Partial<ScenarioOutcome>][] = [
   ["seized", { loot: 60 }], ["tipped_off", {}], ["burned", { tally: tally({ rivalKilled: 2 }) }], ["passed", {}],
   ["mediated", {}], ["sided_ward", {}], ["sided_syndicate", { brokePromise: true }], ["provoked", { tally: tally({ garrisonKilled: 1 }) }], ["escalated", {}],
 ];
-const ALL_CASES = [...CASES, ...NEW_CASES];
+/** The five endings of Highmark's chair (D-036). */
+const CHAIR_CASES: [ResolutionId, Partial<ScenarioOutcome>][] = [
+  ["backed_elder", { paid: 70, region: "highmark" }], ["backed_younger", { paid: 45, region: "highmark" }], ["regency", { paid: 25, region: "highmark" }],
+  ["usurped", { tally: tally({ wounded: 2, garrisonKilled: 2 }), region: "highmark" }], ["crown_sold", { loot: 100, region: "highmark" }],
+];
+const ALL_CASES = [...CASES, ...NEW_CASES, ...CHAIR_CASES];
 
 describe("generatePaper", () => {
   it("is deterministic: equal input, equal paper; a different world seed changes the wording", () => {
@@ -40,7 +45,7 @@ describe("generatePaper", () => {
     expect(eds).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it("all 20 resolutions print distinct headlines, each with at least 3 templates and real variety", () => {
+  it("all 25 resolutions print distinct headlines, each with at least 3 templates and real variety", () => {
     const all = new Map<ResolutionId, Set<string>>();
     for (const [r, o] of ALL_CASES) {
       const heads = new Set<string>();
@@ -50,7 +55,7 @@ describe("generatePaper", () => {
       expect(STANDFIRSTS[r].length).toBeGreaterThanOrEqual(3);
       all.set(r, heads);
     }
-    expect(all.size).toBe(RESOLUTIONS.length);
+    expect(all.size).toBe(RESOLUTIONS.length);   // every ending, Highmark's five included (ALL_CASES covers them all)
     const keys = [...all.keys()];
     for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
       for (const h of all.get(keys[i]!)!) expect(all.get(keys[j]!)!.has(h), `${keys[i]} vs ${keys[j]}: ${h}`).toBe(false);
@@ -58,8 +63,8 @@ describe("generatePaper", () => {
   });
 
   it("the newer contracts get a ledger story named for the place, with the Society's own euphemism", () => {
-    const heads: Record<string, RegExp> = { hostage_rescue: /Cage|Orchard|Insured/, convoy_ambush: /Cut|Syndicate Wagon|Convoy/, border_incident: /Marker Stone|Stone in the Ford|Border/ };
-    for (const [r, o] of NEW_CASES) {
+    const heads: Record<string, RegExp> = { hostage_rescue: /Cage|Orchard|Insured/, convoy_ambush: /Cut|Syndicate Wagon|Convoy/, border_incident: /Marker Stone|Stone in the Ford|Border/, succession_dispute: /Chair|Highmark|Throne/ };
+    for (const [r, o] of [...NEW_CASES, ...CHAIR_CASES]) {
       const c = after(r, o);
       const led = generatePaper(c, 7).stories.find((x) => x.slug === "ledger");
       expect(led, r).toBeDefined();

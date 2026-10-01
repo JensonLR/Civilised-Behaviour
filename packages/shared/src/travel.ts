@@ -1,5 +1,5 @@
-import { ARRIVE_TIMEOUT_S, PROPOSE_TIMEOUT_S, isRegionId, type RegionId } from "./campaignTypes.ts";
-import { REGIONS } from "./regions.ts";
+import { ARRIVE_TIMEOUT_S, PROPOSE_TIMEOUT_S, type RegionId } from "./campaignTypes.ts";
+import { REGIONS, isReachableRegion } from "./regions.ts";
 
 /**
  * The sailing state machine: pure, no I/O, no clock. The server's Travel system feeds it events and ticks and applies the effect it returns.
@@ -37,9 +37,9 @@ function settle(s: TravelState, connected: number, secs?: number): TravelStep {
   return { s };
 }
 
-/** `slot` proposes sailing to `to` from `current`. Only from idle, to a real, different region; the proposer has said yes. */
+/** `slot` proposes sailing to `to` from `current`. Only from idle, to a real, REACHABLE (D-036: `REGIONS[to].reachable`), different region; the proposer has said yes. */
 export function travelPropose(s: TravelState, current: RegionId, to: unknown, slot: number, connected: number, secs?: number): TravelStep {
-  if (s.phase !== 0 || !isRegionId(to) || to === current || bit(slot) === 0 || (connected & bit(slot)) === 0) return { s };
+  if (s.phase !== 0 || !isReachableRegion(to) || to === current || bit(slot) === 0 || (connected & bit(slot)) === 0) return { s };
   return settle({ phase: 1, to, ready: bit(slot), left: PROPOSE_TIMEOUT_S }, connected, secs);
 }
 

@@ -5,6 +5,7 @@ import { borderTemplate } from "./border.ts";
 import { convoyTemplate } from "./convoy.ts";
 import { crossingTemplate, crossingSettled } from "./crossing.ts";
 import { hostageTemplate } from "./hostage.ts";
+import { successionTemplate } from "./succession.ts";
 import type { AnyTemplate } from "./types.ts";
 
 export * from "./types.ts";
@@ -16,8 +17,15 @@ export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
   hostage_rescue: hostageTemplate as unknown as AnyTemplate,
   convoy_ambush: convoyTemplate as unknown as AnyTemplate,
   border_incident: borderTemplate as unknown as AnyTemplate,
+  succession_dispute: successionTemplate as unknown as AnyTemplate,   // D-036: Highmark's (a stub until package G)
 };
-export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"];
+export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute"];
+/** D-036: the contracts each region offers (the ledger weights WITHIN a region's list; Kessar's four are unchanged, Highmark's family is one template for now). */
+export const REGION_TEMPLATES: Readonly<Record<RegionId, readonly ScenarioTemplateId[]>> = {
+  hollowmere: [],
+  kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"],
+  highmark: ["succession_dispute"],
+};
 export const isTemplateId = (v: unknown): v is ScenarioTemplateId => typeof v === "string" && (TEMPLATE_IDS as readonly string[]).includes(v);
 
 /** What the map room shows as the region's note: the offered contract. */
@@ -34,6 +42,7 @@ const RECENT = 4;
  * another is eligible; weighted ties are broken by hash3(seed, day), so the same ledger always offers the same thing.
  */
 export function pickTemplate(c: CampaignState, region: RegionId, seed: number, presence?: RivalPresence): ScenarioTemplateId | undefined {
+  if (region === "highmark") return "succession_dispute";   // D-036: one family so far; G may weight more templates here WITHOUT touching Kessar's weights (backcompat.test.ts hashes them)
   if (region !== "kessar") return undefined;
   if (c.history.length === 0) return "secure_crossing";
   const recent = c.history.slice(-RECENT);
@@ -45,6 +54,7 @@ export function pickTemplate(c: CampaignState, region: RegionId, seed: number, p
     hostage_rescue: 1 + (had("forced") ? 4 : 0) + (had("abandoned") ? 3 : 0) + (w.militaryStrength <= 40 ? 2 : 0),
     convoy_ambush: 1 + (w.rivalInfluence >= 50 ? 4 : 0) + (had("rival_secured") ? 3 : 0) + (presence?.wagon ? 6 : 0),   // the Syndicate runs a wagon while it has goods to move
     border_incident: 1 + (w.militaryStrength >= 55 && w.rivalInfluence >= 35 ? 4 : 0) + (presence !== undefined && presence.postStage > 0 ? 3 : 0),
+    succession_dispute: 0,   // never offered at Kessar
   };
   const last = c.history[c.history.length - 1]!.template;
   const ids = TEMPLATE_IDS.filter((id) => weights[id] > 0);

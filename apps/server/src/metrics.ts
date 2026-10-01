@@ -1,11 +1,13 @@
+import { percentile } from "@cb/shared";
 import { persistenceStats } from "./persistence/stats.ts";
+import { tickProbe } from "./tickProbe.ts";
 /**
  * Lightweight in-process metrics exposed at /metrics (see docs/NETWORKING.md). Counters are
  * plain numbers - no per-frame allocation - and tick timings use a fixed-size ring buffer.
  */
 const TICK_RING = 512;
 
-class Metrics {
+export class Metrics {
   rooms = 0;
   players = 0;
   messagesRejected = 0;
@@ -27,17 +29,21 @@ class Metrics {
     this.ticks[this.tickCount++ % TICK_RING] = ms;
   }
 
-  tickStats(): { samples: number; avgMs: number; p99Ms: number; maxMs: number } {
+  /** Over the last TICK_RING ticks of every room in the process (rooms share one thread, so this is the thread's view). */
+  tickStats(): { samples: number; avgMs: number; p50Ms: number; p95Ms: number; p99Ms: number; maxMs: number } {
     const n = Math.min(this.tickCount, TICK_RING);
-    if (n === 0) return { samples: 0, avgMs: 0, p99Ms: 0, maxMs: 0 };
+    if (n === 0) return { samples: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0, maxMs: 0 };
     const sorted = Array.from(this.ticks.subarray(0, n)).sort((a, b) => a - b);
     const sum = sorted.reduce((a, b) => a + b, 0);
-    return {
-      samples: n,
-      avgMs: sum / n,
-      p99Ms: sorted[Math.min(n - 1, Math.floor(n * 0.99))] ?? 0,
-      maxMs: sorted[n - 1] ?? 0,
-    };
+    return { samples: n, avgMs: sum / n, p50Ms: percentile(sorted, 0.5), p95Ms: percentile(sorted, 0.95), p99Ms: percentile(sorted, 0.99), maxMs: sorted[n - 1] ?? 0 };
+  }
+
+  /** Where a tick's time goes (`tickProbe`, since the process started): average and p95 per section, ms rounded to a microsecond. */
+  sectionStats(): Record<string, { avgMs: number; p95Ms: number }> {
+    const out: Record<string, { avgMs: number; p95Ms: number }> = {};
+    const round = (v: number): number => Math.round(v * 1000) / 1000;
+    for (const [name, s] of Object.entries(tickProbe.stats())) out[name] = { avgMs: round(s.avgMs), p95Ms: round(s.p95Ms) };
+    return out;
   }
 
   snapshot() {
@@ -56,6 +62,7 @@ class Metrics {
       shotsFired: this.shotsFired,
       hitsLanded: this.hitsLanded,
       tick: this.tickStats(),
+      sections: this.sectionStats(),
       persistence: { ...persistenceStats },
       heapMB: Math.round(mem.heapUsed / 1048576),
       rssMB: Math.round(mem.rss / 1048576),

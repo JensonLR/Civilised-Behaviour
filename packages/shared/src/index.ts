@@ -32,6 +32,7 @@ export * from "./factions.ts";
 export * from "./negotiation.ts";
 export * from "./newspaper.ts";
 export * from "./kessar.ts";
+export * from "./highmark.ts";
 export * from "./regions.ts";
 export * from "./travel.ts";
 export * from "./scenario.ts";
@@ -65,3 +66,9 @@ export * from "./outpost.ts";
 export * from "./settlement.ts";
 export * from "./mapData.ts";
 export * from "./hqHistory.ts";
+// ---- D-036 ship slice ----
+export * from "./demo.ts";
+export * from "./platform.ts";
+export * from "./achievements.ts";
+export * from "./platformText.ts";
+export * from "./budgets.ts";

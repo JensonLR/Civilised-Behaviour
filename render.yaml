@@ -18,6 +18,8 @@ services:
         value: 22
       - key: LOG_LEVEL
         value: info
+      # ALLOWED_ORIGINS is a comma list, exact match: the hosted client's origin AND `app://game` (the desktop shell's renderer; docs/DEPLOYMENT.md). Without app:// every desktop
+      # connection is refused with 403. The demo is a SEPARATE service with DEMO_MODE=1 (and a client built with VITE_DEMO=1); this blueprint has no demo service.
       - key: ALLOWED_ORIGINS
         sync: false
   - type: web

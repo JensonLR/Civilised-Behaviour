@@ -14,6 +14,7 @@ export const COMPLICATION_POOL: Record<ScenarioTemplateId, readonly Complication
   hostage_rescue: ["reinforcements", "rival_bid", "rain"],
   convoy_ambush: ["outriders", "ward_patrol", "rain"],
   border_incident: ["fog", "stray_shot", "reinforcements"],
+  succession_dispute: ["rain", "fog", "outriders"],   // D-036: rain hurries the harvest bell, fog delays it, outriders shorten the Syndicate's patience (scenarios/succession.ts)
 };
 /** Complications that need a Syndicate worth the name. */
 const RIVAL_ONLY: ReadonlySet<ComplicationId> = new Set(["rival_scouts", "rival_bid"]);
@@ -24,7 +25,7 @@ const NONE_WEIGHT = 3, ENTRY_WEIGHT = 3;
 /** The crossing's own rule, unchanged since slice 1: the Syndicate turns up early when it smells a precedent. */
 const crossingScouts = (c: CampaignState): boolean => c.factions.ward.rivalInfluence >= 45 || hash3(c.seed, Math.max(0, Math.round(c.day)), 0x5c07) % 100 < 35;
 
-const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4 };
+const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5 };
 
 export function dealComplication(c: CampaignState, id: ScenarioTemplateId, seed: number, presence?: RivalPresence): ComplicationId {
   if (id === "secure_crossing") return crossingScouts(c) ? "rival_scouts" : "none";

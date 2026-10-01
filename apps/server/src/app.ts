@@ -21,7 +21,7 @@ function clientIp(request: Request | undefined): string {
 export function createGameServer(config: ServerConfig): Server {
   const origins = createOriginPolicy(config.allowedOrigins);
   const persistence = createPersistence(config.persistence, log);
-  setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment, friendlyFire: config.friendlyFire, dayStartHour: config.dayStartHour, dayMinutes: config.dayMinutes, persistence });
+  setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment, friendlyFire: config.friendlyFire, dayStartHour: config.dayStartHour, dayMinutes: config.dayMinutes, persistence, demo: config.demo });
   const health = createEndpoint("/health", { method: "GET" }, async (ctx) =>
     ctx.json({ ok: true, env: config.nodeEnv, uptimeS: Math.round(process.uptime()) }),
   );

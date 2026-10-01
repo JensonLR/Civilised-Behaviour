@@ -4,7 +4,7 @@ import { generatePaper } from "./newspaper.ts";
 import { newScenario } from "./scenario.ts";
 import { dealComplication } from "./chaos.ts";
 import { garrisonRoster } from "./garrison.ts";
-import { pickTemplate, TEMPLATE_IDS } from "./scenarios/registry.ts";
+import { pickTemplate, REGION_TEMPLATES } from "./scenarios/registry.ts";
 import { hash3 } from "./rng.ts";
 import type { CampaignState, ScenarioTemplateId } from "./campaignTypes.ts";
 
@@ -16,7 +16,8 @@ export function campaignFor(seed: number): CampaignState {
   let c = newCampaign(seed);
   const n = hash3(seed, 1, 0xbeef) % 7;
   for (let i = 0; i < n; i++) {
-    const tpl = TEMPLATE_IDS[hash3(seed, i, 0xa1) % TEMPLATE_IDS.length] as ScenarioTemplateId;
+    // D-036: Kessar's four only (the golden digest was recorded before Highmark existed)
+    const tpl = REGION_TEMPLATES.kessar[hash3(seed, i, 0xa1) % REGION_TEMPLATES.kessar.length] as ScenarioTemplateId;
     const list = TEMPLATE_RESOLUTIONS[tpl];
     const resolution = list[hash3(seed, i, 0xa2) % list.length]!;
     c = applyOutcome(c, {
@@ -35,14 +36,14 @@ export function goldenDigest(): string {
   for (let seed = 1; seed <= 200; seed++) {
     const c = campaignFor(seed);
     mix(JSON.stringify([askingToll(c), pickTemplate(c, "kessar", seed), newScenario(c, 40), generatePaper(c, seed), garrisonRoster(c, seed)]));
-    for (const id of TEMPLATE_IDS) mix(dealComplication(c, id, seed));
+    for (const id of REGION_TEMPLATES.kessar) mix(dealComplication(c, id, seed));
   }
   return h.toString(16);
 }
 
 describe("D-035 back-compat", () => {
   it("absent extras / presence leave every old output byte-identical", () => {
-    expect(RESOLUTIONS.length).toBe(20);
+    expect(RESOLUTIONS.length).toBe(25);   // 20 at Kessar + 5 at Highmark (D-036); the digest covers Kessar's only
     expect(goldenDigest()).toBe("e36d8edd");
   });
 });

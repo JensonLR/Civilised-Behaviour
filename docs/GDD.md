@@ -28,6 +28,7 @@ than its characters do; local societies have agency, factions, leaders and humou
 - >=12 reusable scenario templates that resolve multiple ways (missing expedition, river-crossing negotiation, convoy, survey,
   diplomatic audience, hunt, outpost defence, rival race, sabotage, hostage, border incident, siege, labour dispute,
   smuggling, succession dispute). Not all involve combat.
+- **Region two is Highmark (D-036), the savannah and highland kingdom**: five terraces climbed by a switchback Processional Road, a grassland of herds, a river quay, a stepped palace; its contract family is the Succession Dispute "The Vacant Chair" (an heir by Seniority, an heir by Acclamation, a Chamberlain, the Thornfield Reapers' Assembly voting at the harvest bell, a Syndicate cheque), resolving six ways (backed elder, backed younger, regency, usurped, crown sold, abandoned). Two more regions remain to be built.
 - Tech emerges from campaign state: horses/wagons/canoes/dirt roads/messengers/basic firearms/tents -> better roads,
   artillery, telegraph, steam launches -> railway, better guns, early machine weapons, industrial extraction. No tech-tree UI.
 

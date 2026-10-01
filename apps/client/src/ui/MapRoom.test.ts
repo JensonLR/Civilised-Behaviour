@@ -131,6 +131,62 @@ describe("MapRoom", () => {
   });
 });
 
+describe("MapRoom: three shores (D-036)", () => {
+  const three = (here: "hollowmere" | "kessar" | "highmark" = "hollowmere", o: Partial<MapRoomView> = {}): MapRoomView =>
+    view({
+      regions: [
+        { id: "hollowmere", name: "Hollowmere Depot", blurb: "Home.", note: "", here: here === "hollowmere" },
+        { id: "kessar", name: "Kessar Reach", blurb: "A bridge with opinions.", note: "", here: here === "kessar" },
+        { id: "highmark", name: "Highmark", blurb: "A court, a chair and a hill.", note: "The chair is vacant in a procedural sense.", here: here === "highmark" },
+      ],
+      ...o,
+    });
+  const routes = (): { pair: string; active: boolean }[] => [...document.querySelectorAll<SVGElement>("path.route")].map((r) => ({ pair: r.getAttribute("data-lane")!, active: r.classList.contains("active") }));
+
+  it("draws three marks with their names and a lane between every pair", () => {
+    const room = new MapRoom(host);
+    room.open(three(), cbs());
+    expect([...document.querySelectorAll("g.mark")].map((g) => g.getAttribute("data-region"))).toEqual(["hollowmere", "kessar", "highmark"]);
+    expect([...document.querySelectorAll("g.mark text")].map((t) => t.textContent)).toEqual(["Hollowmere", "Kessar", "Highmark"]);
+    expect(routes().map((r) => r.pair).sort()).toEqual(["hollowmere|highmark", "hollowmere|kessar", "kessar|highmark"]);
+    expect(document.querySelector("svg")?.getAttribute("aria-label")).toMatch(/three shores/);
+    expect(radios().map((r) => r.value)).toEqual(["hollowmere", "kessar", "highmark"]);
+    room.dispose();
+  });
+
+  it("the lane between where you stand and where you are bound lights up, from every shore", () => {
+    for (const here of ["hollowmere", "kessar", "highmark"] as const) {
+      const room = new MapRoom(host);
+      room.open(three(here), cbs());
+      for (const dest of (["hollowmere", "kessar", "highmark"] as const).filter((r) => r !== here)) {
+        const input = radios().find((r) => r.value === dest)!;
+        input.checked = true;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const lit = routes().filter((r) => r.active).map((r) => r.pair);
+        expect(lit, `${here} -> ${dest}`).toEqual([[here, dest].sort((a, b) => ["hollowmere", "kessar", "highmark"].indexOf(a) - ["hollowmere", "kessar", "highmark"].indexOf(b)).join("|")]);
+      }
+      room.dispose();
+    }
+  });
+
+  it("proposing Highmark sends it; its note is written beside it; a vote for it locks the destination", () => {
+    const room = new MapRoom(host);
+    const cb = cbs();
+    room.open(three(), cb);
+    const hm = radios().find((r) => r.value === "highmark")!;
+    hm.checked = true;
+    hm.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(document.body.textContent).toContain("The chair is vacant in a procedural sense.");
+    button(/Propose sailing/).click();
+    expect(cb.propose).toHaveBeenCalledWith("highmark");
+    room.update(three("hollowmere", { phase: 1, to: "highmark" }));
+    expect(radios().find((r) => r.checked)?.value).toBe("highmark");
+    expect(radios().find((r) => r.value === "kessar")!.disabled).toBe(true);
+    expect(routes().filter((r) => r.active).map((r) => r.pair)).toEqual(["hollowmere|highmark"]);
+    room.dispose();
+  });
+});
+
 describe("Sailing", () => {
   it("shows the destination and the seconds, changes its line, then the arrival card, then goes away", () => {
     const s = new Sailing(host);
@@ -138,6 +194,9 @@ describe("Sailing", () => {
     s.show("kessar", 5.2);
     expect(s.visible).toBe(true);
     expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Kessar Reach");
+    s.show("highmark", 3);
+    expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Highmark");
+    s.show("kessar", 5.2);
     expect(document.querySelector(".sailing .clock")?.textContent).toBe("Landfall in 6 seconds");
     s.show("Somewhere <b>else</b>", 1);
     expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Somewhere <b>else</b>");

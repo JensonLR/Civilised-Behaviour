@@ -5,7 +5,8 @@ import { applyOutcome, newCampaign } from "../factions.ts";
 import { generatePaper } from "../newspaper.ts";
 import { Rng } from "../rng.ts";
 import { answerSiteParley, openSiteParley } from "./parleys.ts";
-import { TEMPLATES, TEMPLATE_IDS } from "./registry.ts";
+import { HIGHMARK_RESOLUTIONS, HIGHMARK_STATUS } from "../highmark.ts";
+import { REGION_TEMPLATES, TEMPLATES, TEMPLATE_IDS } from "./registry.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import type { AnyTemplate, BaseState, Fx } from "./types.ts";
 import { lingerDone } from "./common.ts";
@@ -44,7 +45,8 @@ const count = (group: string, alive: number, routed: number, down: number, total
 const talk = (kind: Extract<ScenarioInput, { t: "talk" }>["kind"], result: Extract<ScenarioInput, { t: "talk" }>["result"], paid = 0): ScenarioInput => ({ t: "talk", kind, result, paid });
 
 const T = TEMPLATES;
-const SCRIPTS: Record<ResolutionId, (c: CampaignState) => { id: ScenarioTemplateId; events: ScenarioInput[] } | undefined> = {
+// D-036: these scripts are KESSAR's twenty endings. Highmark's five (HIGHMARK_RESOLUTIONS) are scripted by package G in succession.test.ts.
+const SCRIPTS: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number]>, (c: CampaignState) => { id: ScenarioTemplateId; events: ScenarioInput[] } | undefined> = {
   paid: () => ({ id: "secure_crossing", events: [{ t: "arrive", party: 2 }, { t: "parley_open" }, { t: "deal", resolution: "paid", toll: 40, paid: 40 }] }),
   bargained: () => ({ id: "secure_crossing", events: [{ t: "arrive", party: 2 }, { t: "parley_open" }, { t: "deal", resolution: "bargained", toll: 30, paid: 30 }] }),
   bribed: () => ({ id: "secure_crossing", events: [{ t: "arrive", party: 2 }, { t: "parley_open" }, { t: "deal", resolution: "bribed", toll: 20, paid: 20 }] }),
@@ -68,7 +70,7 @@ const SCRIPTS: Record<ResolutionId, (c: CampaignState) => { id: ScenarioTemplate
 };
 
 describe("templates: one scripted run per resolution on the pure reducers", () => {
-  for (const r of Object.keys(SCRIPTS) as ResolutionId[]) {
+  for (const r of Object.keys(SCRIPTS) as (keyof typeof SCRIPTS)[]) {
     it(`${r}: resolves, commits exactly once, and the first resolution wins`, () => {
       const pre = SCRIPTS[r]!(cm(7))!;
       const def = T[pre.id];
@@ -89,7 +91,7 @@ describe("templates: one scripted run per resolution on the pure reducers", () =
     const states = new Map<string, Set<string>>();
     const campaigns = new Set<string>();
     const heads = new Set<string>();
-    for (const r of Object.keys(SCRIPTS) as ResolutionId[]) {
+    for (const r of Object.keys(SCRIPTS) as (keyof typeof SCRIPTS)[]) {
       const pre = SCRIPTS[r]!(cm(7))!;
       const def = T[pre.id];
       const c = pre.id === "secure_crossing" && r === "rival_secured" ? calm(pre.id) : cm(7);
@@ -100,7 +102,7 @@ describe("templates: one scripted run per resolution on the pure reducers", () =
       campaigns.add(JSON.stringify(after));
       heads.add(generatePaper(after, 5).headline);
     }
-    for (const id of TEMPLATE_IDS) expect(states.get(id)!.size, id).toBeGreaterThanOrEqual(3);
+    for (const id of REGION_TEMPLATES.kessar) expect(states.get(id)!.size, id).toBeGreaterThanOrEqual(3);
     expect(campaigns.size).toBe(20);
     expect(heads.size).toBe(20);
   });
@@ -529,7 +531,7 @@ describe("determinism, views and the linger", () => {
         expect(v.template).toBe(id);
         expect(v.title).toBe(def.title);
         expect(new Set(v.objectives.map((o) => o.id)).size).toBe(v.objectives.length);
-        expect(v.objectives.length).toBeGreaterThan(1);
+        expect(v.objectives.length).toBeGreaterThan(id === "succession_dispute" && HIGHMARK_STATUS.stub ? 0 : 1);   // D-036: the stub has one; G's has several
         expect(v.hint.length).toBeGreaterThan(30);
         const comp = (s as unknown as { complication?: string }).complication;
         if (comp && comp !== "none" && id !== "secure_crossing") expect(v.complication).toBe(comp);
@@ -570,7 +572,7 @@ describe("determinism, views and the linger", () => {
   it("the fx a template emits are all runner-known shapes", () => {
     const known = new Set(["spawn", "order", "war", "say", "open", "explode", "bridge", "commit", "wagon", "parley"]);
     for (const [, run] of Object.entries(SCRIPTS)) void run;
-    for (const r of Object.keys(SCRIPTS) as ResolutionId[]) {
+    for (const r of Object.keys(SCRIPTS) as (keyof typeof SCRIPTS)[]) {
       const pre = SCRIPTS[r]!(cm(7))!;
       const out = drive(T[pre.id], cm(7), pre.events);
       for (const f of out.fx) {

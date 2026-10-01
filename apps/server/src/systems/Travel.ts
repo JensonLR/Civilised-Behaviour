@@ -1,4 +1,4 @@
-import { REGIONS, travelArrived, travelCancel, travelIdle, travelPropose, travelReady, travelReconcile, travelTick, type RegionId, type TravelState, type TravelStep } from "@cb/shared";
+import { REGIONS, isRegionId, travelArrived, travelCancel, travelIdle, travelPropose, travelReady, travelReconcile, travelTick, type RegionId, type TravelState, type TravelStep } from "@cb/shared";
 
 /** What the sailing needs from the room; keeps it testable and WorldRoom slim. */
 export interface TravelHost {
@@ -64,7 +64,7 @@ export class Travel {
   }
 
   private secs(to: unknown): number | undefined {
-    return typeof to === "string" && (to === "hollowmere" || to === "kessar") ? this.host.sailSeconds?.(to) : undefined;
+    return typeof to === "string" && isRegionId(to) ? this.host.sailSeconds?.(to) : undefined;
   }
 
   private apply(step: TravelStep): void {

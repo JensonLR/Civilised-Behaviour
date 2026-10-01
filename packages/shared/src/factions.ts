@@ -19,14 +19,16 @@ export const NEEDS: readonly NeedId[] = ["coin", "arms", "medicine", "deference"
 export const RESOLUTIONS: readonly ResolutionId[] = [
   "paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned",
   "ransomed", "rescued", "slipped_away", "hostage_lost", "seized", "tipped_off", "burned", "passed", "mediated", "sided_ward", "sided_syndicate", "provoked", "escalated",
+  "backed_elder", "backed_younger", "regency", "usurped", "crown_sold",
 ];
 export const TEMPLATE_RESOLUTIONS: Readonly<Record<ScenarioTemplateId, readonly ResolutionId[]>> = {
   secure_crossing: ["paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned"],
   hostage_rescue: ["ransomed", "rescued", "slipped_away", "hostage_lost", "abandoned"],
   convoy_ambush: ["seized", "tipped_off", "burned", "passed", "abandoned"],
   border_incident: ["mediated", "sided_ward", "sided_syndicate", "provoked", "escalated", "abandoned"],
+  succession_dispute: ["backed_elder", "backed_younger", "regency", "usurped", "crown_sold", "abandoned"],
 };
-const TEMPLATES_LIST: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"];
+const TEMPLATES_LIST: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute"];
 const COMPLICATIONS: readonly ComplicationId[] = ["none", "rival_scouts", "rain", "reinforcements", "rival_bid", "outriders", "ward_patrol", "fog", "stray_shot"];
 const BRIDGES: readonly BridgeState[] = ["intact", "rigged", "collapsed"];
 const CONTROLS: readonly CrossingControl[] = ["ward", "society", "rival", "contested"];
@@ -60,7 +62,7 @@ export const POWERS: readonly LocalPower[] = [
     temperament: { pride: 55, greed: 85, caution: 40, humour: 60 }, need: "arms", rivals: ["ward", "rival"],
   },
   {
-    id: "reapers", name: "Thornfield Reapers' Compact", seat: "Thornfield Granges", region: null, motto: "Harvest first. Grievances can be threshed later.",
+    id: "reapers", name: "Thornfield Reapers' Compact", seat: "Thornfield Granges", region: "highmark",   /* D-036: their Granges are the lower terraces of Highmark; their Assembly ratifies the succession */ motto: "Harvest first. Grievances can be threshed later.",
     blurb: "A farming co-operative with a scythe-militia and a strike fund. Polite until the barley is in, then astonishing.",
     temperament: { pride: 35, greed: 30, caution: 70, humour: 65 }, need: "medicine", rivals: ["choir", "brine"],
   },
@@ -112,7 +114,7 @@ function defaultFaction(id: FactionId): FactionState {
     : { id, trust: 10, fear: 0, grievance: 0, playerInfluence: 20, rivalInfluence: 30, militaryStrength: 45, prosperity: 60, need: "coin" };
 }
 
-export const newSites = (): SiteLedger => ({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none" });
+export const newSites = (): SiteLedger => ({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open" });
 
 export function newCampaign(seed: number): CampaignState {
   return {
@@ -177,6 +179,7 @@ function parseSites(raw: unknown): SiteLedger {
   return {
     lastDay, hostage: oneOf(r.hostage, ["none", "freed", "lost"] as const, "none"), convoy: oneOf(r.convoy, ["none", "seized", "tipped", "burned", "passed"] as const, "none"),
     border: oneOf(r.border, ["quiet", "mediated", "ward", "syndicate", "war"] as const, "quiet"), lastComplication: oneOf(r.lastComplication, COMPLICATIONS, "none"),
+    succession: oneOf(r.succession, ["open", "elder", "younger", "regency", "usurped", "sold"] as const, "open"),
   };
 }
 
@@ -233,6 +236,13 @@ const MEMORY: Record<ResolutionId, { gratitude: number; resentment: number; cont
   sided_syndicate: { gratitude: 0, resentment: 45, contempt: 30 },
   provoked: { gratitude: 0, resentment: 35, contempt: 15 },
   escalated: { gratitude: 0, resentment: 15, contempt: 20 },
+  // D-036: Highmark. News from the highlands reaches the Lamp-Warden late and secondhand, and she files it under the Society's character, not the Crown's:
+  // a seated heir is a Society that picks sides (a little respect, a little contempt); a regency is a committee she can approve of; a seizure is one she has met in her own garrison; a sold crown is the Syndicate's.
+  backed_elder: { gratitude: 3, resentment: 0, contempt: 5 },
+  backed_younger: { gratitude: 0, resentment: 4, contempt: 8 },
+  regency: { gratitude: 8, resentment: 0, contempt: 2 },
+  usurped: { gratitude: 0, resentment: 18, contempt: 12 },
+  crown_sold: { gratitude: 0, resentment: 10, contempt: 22 },
 };
 const MEMORY_DECAY = 0.6;
 
@@ -267,11 +277,11 @@ export function leverageOf(c: CampaignState, live: { armed: number; garrisonAliv
 
 type WardDelta = { trust: number; fear: number; grievance: number; prosperity: number; playerInfluence: number; rivalInfluence: number };
 interface Rule {
-  control: CrossingControl | undefined; toll: "asked" | "paid" | "zero" | "rival" | "keep"; ward: WardDelta; need: NeedId; lies: number; rivalProsperity: number; rivalGrievance: number;
+  control: CrossingControl | undefined; toll: "asked" | "paid" | "zero" | "rival" | "keep"; ward: WardDelta; /** Absent: the Ward's need is left as it was (Highmark's endings are not Kessar's business). */ need?: NeedId; lies: number; rivalProsperity: number; rivalGrievance: number;
   /** Swings in the two powers' garrisons beyond what the tally says (the Syndicate's wagon armed, deserters dead, two sides trading fire). */
   wardMil?: number; rivalMil?: number;
   /** What the site ledger remembers. */
-  site?: Partial<Pick<SiteLedger, "hostage" | "convoy" | "border">>;
+  site?: Partial<Pick<SiteLedger, "hostage" | "convoy" | "border" | "succession">>;
 }
 
 const RULES: Record<ResolutionId, Rule> = {
@@ -298,12 +308,22 @@ const RULES: Record<ResolutionId, Rule> = {
   sided_syndicate: { control: undefined, toll: "keep", ward: { trust: -12, fear: 4,  grievance: 14, prosperity: -2, playerInfluence: -4, rivalInfluence: 14 }, need: "deference", lies: 1, rivalProsperity: 4,  rivalGrievance: -6,  wardMil: -3, rivalMil: 3, site: { border: "syndicate" } },
   provoked:        { control: undefined, toll: "keep", ward: { trust: -8,  fear: 8,  grievance: 10, prosperity: -3, playerInfluence: -6, rivalInfluence: 3 },  need: "medicine",  lies: 0, rivalProsperity: 0,  rivalGrievance: 6,   site: { border: "war" } },
   escalated:       { control: undefined, toll: "keep", ward: { trust: -2,  fear: 6,  grievance: 4,  prosperity: -8, playerInfluence: -4, rivalInfluence: 2 },  need: "medicine",  lies: 0, rivalProsperity: -4, rivalGrievance: 4,   wardMil: -8, rivalMil: -8, site: { border: "war" } },
+  // ---- D-036: Highmark's chair. Crossing, toll, bridge, the Ward and the Syndicate are untouched (`keep`, zero deltas, no `need`): they react in MEMORY / GRUDGE_FX (a throne nobody at Kessar can see),
+  // the Reapers in powers.ts, the ledger's `succession` is the real state. (A broken promise at court still costs a lie, in applyOutcome.) ----
+  backed_elder:    { control: undefined, toll: "keep", ward: { trust: 0, fear: 0, grievance: 0, prosperity: 0, playerInfluence: 0, rivalInfluence: 0 }, lies: 0, rivalProsperity: 0, rivalGrievance: 0, site: { succession: "elder" } },
+  backed_younger:  { control: undefined, toll: "keep", ward: { trust: 0, fear: 0, grievance: 0, prosperity: 0, playerInfluence: 0, rivalInfluence: 0 }, lies: 0, rivalProsperity: 0, rivalGrievance: 0, site: { succession: "younger" } },
+  regency:         { control: undefined, toll: "keep", ward: { trust: 0, fear: 0, grievance: 0, prosperity: 0, playerInfluence: 0, rivalInfluence: 0 }, lies: 0, rivalProsperity: 0, rivalGrievance: 0, site: { succession: "regency" } },
+  usurped:         { control: undefined, toll: "keep", ward: { trust: 0, fear: 0, grievance: 0, prosperity: 0, playerInfluence: 0, rivalInfluence: 0 }, lies: 0, rivalProsperity: 0, rivalGrievance: 0, site: { succession: "usurped" } },
+  crown_sold:      { control: undefined, toll: "keep", ward: { trust: 0, fear: 0, grievance: 0, prosperity: 0, playerInfluence: 0, rivalInfluence: 0 }, lies: 0, rivalProsperity: 0, rivalGrievance: 0, site: { succession: "sold" } },
 };
 
 /** Needs from each resolution are applied to whatever the Ward lacked next; "abandoned" leaves the standing toll and control alone. */
 export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignState {
   const rule = RULES[o.resolution];
   const crossingRun = o.scenario === "secure_crossing";
+  // D-036: a contract played AWAY from Kessar (Highmark) is not the Lamp-Warden's business: her garrison, her crowd and her trust are not what the dead and the broken promises of a court two terraces
+  // from the sea cost. She only ages a day (and hears of it in her memory); every Kessar outcome has no `region` and takes the branch it always took.
+  const away = o.region !== undefined && o.region !== "kessar";
   const w0 = c.factions.ward, r0 = c.factions.rival;
   const t = o.tally;
   const add = (base: number, d: number): number => clampI(base + d, 0, 100, base);
@@ -313,19 +333,19 @@ export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignStat
   const lateGrievance = lands ? 20 : 0, lateTrust = lands ? -10 : 0;
 
   // One day of drift (fear cools, grudges soften slightly), then the outcome, then what the dead and the crowd cost her.
-  const civ = Math.min(5, t.civiliansHarmed);
+  const civ = away ? 0 : Math.min(5, t.civiliansHarmed);
   // No trust farming: a Ward that has seen the same ending twice running is not moved by a third (defence in depth beside the settled window).
   const gain = rule.ward.trust > 0 && wardMemory(c).repeat >= 2 ? Math.floor(rule.ward.trust / 2) : rule.ward.trust;
   const ward: FactionState = {
     ...w0,
-    trust: add(w0.trust, gain + lateTrust - (o.brokePromise ? 10 : 0)),
-    fear: add(w0.fear, rule.ward.fear - 2 + Math.min(10, t.limbsLost * 2)),
+    trust: add(w0.trust, gain + lateTrust - (o.brokePromise && !away ? 10 : 0)),
+    fear: add(w0.fear, rule.ward.fear - 2 + (away ? 0 : Math.min(10, t.limbsLost * 2))),
     grievance: add(w0.grievance, rule.ward.grievance - 1 + lateGrievance + civ * 3),
     prosperity: add(w0.prosperity, rule.ward.prosperity - civ * 2),
     playerInfluence: add(w0.playerInfluence, rule.ward.playerInfluence),
     rivalInfluence: add(w0.rivalInfluence, rule.ward.rivalInfluence),
-    militaryStrength: add(w0.militaryStrength, -6 * t.garrisonKilled - 2 * t.garrisonRouted + (rule.wardMil ?? 0)),
-    need: rule.need,
+    militaryStrength: add(w0.militaryStrength, (away ? 0 : -6 * t.garrisonKilled - 2 * t.garrisonRouted) + (rule.wardMil ?? 0)),
+    need: rule.need ?? w0.need,
   };
   const rival: FactionState = {
     ...r0,
@@ -355,7 +375,7 @@ export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignStat
   const tally = zeroTally();
   for (const k of TALLY_KEYS) tally[k] = clampI(c.tally[k] + clampI(t[k], 0, 999, 0), 0, 9999, 0);
 
-  const history = c.history.concat({ seq: c.expeditions + 1, region: "kessar", resolution: o.resolution, day: c.day + 1, template: o.scenario });
+  const history = c.history.concat({ seq: c.expeditions + 1, region: o.region ?? "kessar", resolution: o.resolution, day: c.day + 1, template: o.scenario });
   if (history.length > HISTORY_CAP) history.splice(0, history.length - HISTORY_CAP);
 
   return {
@@ -374,6 +394,11 @@ const CONVOY_TEXT: Record<Exclude<SiteLedger["convoy"], "none">, string> = {
 const BORDER_TEXT: Record<Exclude<SiteLedger["border"], "quiet">, string> = {
   mediated: "Marker Stone No. 4 is under joint survey and nobody is shooting.", ward: "The Syndicate is gone from the ford; the Ward has you in the ledger as a witness.",
   syndicate: "Marker Stone No. 4 is out of the ford. The Ward holds you responsible.", war: "The ford is a border and a war, in that order.",
+};
+const SUCCESSION_TEXT: Record<Exclude<SiteLedger["succession"], "open">, string> = {
+  elder: "Princess Orla sits the chair of Highmark, by Seniority, and has asked for the receipts.", younger: "Prince Dunstan sits the chair of Highmark, by Acclamation, to a band.",
+  regency: "Highmark has a regency of three signatures and a chair nobody sits in.", usurped: "Somebody sat down in Highmark's chair, and the court is calling it an early succession.",
+  sold: "Highmark's Crown has sold its concession to the Syndicate, and kept the hat.",
 };
 const CONTROL_TEXT: Record<CrossingControl, string> = {
   ward: "The Ward holds the crossing.", society: "The Society holds the crossing, which the Ward will remember.",
@@ -398,6 +423,7 @@ export function consequenceLines(before: CampaignState, after: CampaignState): s
   if (a.hostage !== b.hostage && a.hostage !== "none") out.push(a.hostage === "freed" ? "Mr. Quim is home, insured and aggrieved." : "Mr. Quim did not come home. His insurers are drafting a letter.");
   if (a.convoy !== b.convoy && a.convoy !== "none") out.push(CONVOY_TEXT[a.convoy]);
   if (a.border !== b.border && a.border !== "quiet") out.push(BORDER_TEXT[a.border]);
+  if (a.succession !== b.succession && a.succession !== "open") out.push(SUCCESSION_TEXT[a.succession]);
   const dr = before.factions.rival.militaryStrength - after.factions.rival.militaryStrength;
   if (dr > 0) out.push(`The Syndicate's escort is weaker by ${dr}.`);
   if (dr < 0) out.push(`The Syndicate is better armed by ${-dr}.`);

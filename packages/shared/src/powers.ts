@@ -1,5 +1,6 @@
 import type { CampaignState, FactionStance, NeedId, RegionId, ScenarioOutcome } from "./campaignTypes.ts";
 import { NEEDS, POWERS, WARD, clampI, stanceOf, type Temperament } from "./factions.ts";
+import { HIGHMARK_RESOLUTIONS } from "./highmark.ts";
 import { rivalAfterOutcome, newRival, rivalDispatch, rivalEventItem } from "./rival.ts";
 import { REL_BASE, applyRelationFx, cloneState, hasFlag, pairEnds, pairKey, pairState, withFlag, withLog, withoutFlag, type RelVec } from "./relations.ts";
 import { hash3 } from "./rng.ts";
@@ -156,6 +157,21 @@ const FAVOUR_OF: Record<MinorPowerId, { flag: string; hook: HookDef }> = {
   brine: { flag: "errand_brine", hook: HOOKS.brine[1] }, reapers: { flag: "errand_reapers", hook: HOOKS.reapers[1] }, choir: { flag: "errand_choir", hook: HOOKS.choir[1] },
 };
 
+/**
+ * What Highmark's chair means to each minor power (D-036). The Reapers' Assembly holds the ratifying vote, so every ending moves them; the Guild certifies the King's death (and bills for
+ * it) and the Houses want the concession, so they move on the endings that touch those. Integer deltas (applied after the day's drift), distinct per ending.
+ */
+type ChairKey = (typeof HIGHMARK_RESOLUTIONS)[number];
+type MinorDelta = Partial<Pick<PowerState, "trust" | "fear" | "grievance" | "playerInfluence" | "rivalInfluence" | "militaryStrength" | "prosperity">>;
+const CHAIR_FX: Record<ChairKey, Record<MinorPowerId, MinorDelta>> = {
+  backed_elder:   { reapers: { trust: 6, grievance: -2, playerInfluence: 4, prosperity: 3 }, choir: { prosperity: 6, trust: 2 }, brine: { trust: 1 } },
+  backed_younger: { reapers: { trust: 4, playerInfluence: 3, prosperity: 5, militaryStrength: 2 }, choir: { prosperity: 6 }, brine: { trust: -3, rivalInfluence: 2 } },
+  regency:        { reapers: { trust: 9, grievance: -4, playerInfluence: 6, prosperity: 2 }, choir: { trust: 3 }, brine: { trust: 2 } },
+  usurped:        { reapers: { trust: -10, grievance: 12, fear: 6, militaryStrength: 5, playerInfluence: -4 }, choir: { prosperity: 12, trust: 3 }, brine: { trust: -4, fear: 3 } },
+  crown_sold:     { reapers: { trust: -8, grievance: 10, prosperity: -6, rivalInfluence: 8, playerInfluence: -3 }, choir: { prosperity: 3 }, brine: { trust: -6, grievance: 8, rivalInfluence: 10 } },
+};
+const isChair = (r: string): r is ChairKey => (HIGHMARK_RESOLUTIONS as readonly string[]).includes(r);
+
 /** One day of the minors' drift (fear cools by 2, grudges soften by 1, as the Ward's do) and what this ending meant to each. */
 function minorAfter(m: PowerState, o: ScenarioOutcome): PowerState {
   const t = o.tally;
@@ -172,6 +188,10 @@ function minorAfter(m: PowerState, o: ScenarioOutcome): PowerState {
     n.trust = pct(n.trust + (r === "paid" || r === "bargained" || r === "bribed" ? 3 : 0) - (r === "sabotaged" || r === "forced" ? 4 : 0), n.trust);
   }
   if (r === "sided_syndicate" || r === "passed" || r === "rival_secured") n.rivalInfluence = pct(n.rivalInfluence + 3, n.rivalInfluence);
+  if (isChair(r)) {
+    const d = CHAIR_FX[r][m.id];
+    for (const k of Object.keys(d) as (keyof MinorDelta)[]) n[k] = pct(n[k] + (d[k] ?? 0), n[k]);
+  }
   return n;
 }
 
@@ -204,6 +224,8 @@ export function powersAfterOutcome(before: CampaignState, after: CampaignState, 
     const s1 = pairState(p.rel[k], militaryOf(after, p, a), militaryOf(after, p, b));
     if (s0 !== s1) p.log = withLog(p.log, { day: after.day, kind: `rel_${s1}`, a, b, n: p.rel[k] });
   }
+  // the chair's own dispatch goes last, so it is the newest and the paper (and the six-line cap) keep it
+  if (isChair(o.resolution)) p.log = withLog(p.log, { day: after.day, kind: `chair_${o.resolution}`, a: "reapers", b: o.resolution === "crown_sold" ? "brine" : "choir", n: Math.max(0, Math.min(999, Math.round(o.paid))) });
   return p;
 }
 const clampRelI = (v: number): number => Math.min(100, Math.max(-100, Math.round(v)));

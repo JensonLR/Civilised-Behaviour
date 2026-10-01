@@ -1,0 +1,45 @@
+# Desktop shell package check (D-036). Dispatch or a `desktop-v*` tag ONLY: it is not part of every push. UNSIGNED: `electron-builder --dir` on each OS produces the unpacked app;
+# no certificate, no notarisation, no store upload, no publishing, and no secret is referenced anywhere in this file. Artifacts are the unpacked apps (for a human to try), kept 14 days.
+name: Desktop (unsigned)
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: "Game server the build points at (a public address, not a secret). Empty = the hosted test server."
+        required: false
+        default: ""
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      CB_SERVER_URL: ${{ inputs.server_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cb/desktop typecheck
+      - run: pnpm --filter @cb/desktop test
+      - name: Build the client and the shell, then package unpacked (no installer, no signing)
+        shell: bash
+        run: pnpm --filter @cb/desktop run dist:dir
+      - uses: actions/upload-artifact@v4
+        with:
+          name: civilised-behaviour-desktop-${{ matrix.os }}-unsigned
+          path: apps/desktop/release/
+          retention-days: 14
+          if-no-files-found: error

@@ -15,7 +15,11 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "eslint .",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "desktop:build": "pnpm --filter @cb/desktop build",
+    "desktop:dist": "pnpm --filter @cb/desktop dist:dir",
+    "site": "pnpm --filter @cb/website site",
+    "soak": "node scripts/soak.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

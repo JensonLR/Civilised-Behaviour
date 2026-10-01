@@ -7,6 +7,9 @@ import {
   NearestFilter,
   RedFormat,
   Matrix4,
+  Skeleton,
+  SkinnedMesh,
+  type Bone,
   type Material,
 } from "three";
 import { LIMB, PALETTE, ZONE, ZONE_COUNT, woundLevel, zoneLimb, type LimbId, type ZoneId } from "@cb/shared";
@@ -17,6 +20,7 @@ import { buildHead } from "./head.ts";
 import { morphOutlineMaterial } from "./faceMorph.ts";
 import { buildFace, clearFaceCaches, inertFace, irisColour, type FaceBuild, type FaceParts } from "./faceRig.ts";
 import { outlineMaterial } from "./outline.ts";
+import { mergeRigid, posedBounds, type RigidPart } from "./merged.ts";
 import { PartBuilder, singe, type Lod } from "./parts.ts";
 import { buildProsthesis } from "./prosthetics.ts";
 import { buildStump, buildForeArm, buildHandBone, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
@@ -113,7 +117,12 @@ const clothMaterial = (): MeshToonMaterial => (sharedMaterial ??= new MeshToonMa
 
 function cached(key: string, make: () => BufferGeometry | undefined): BufferGeometry | undefined {
   const hit = geometryCache.get(key);
-  if (hit !== undefined) return hit ?? undefined;
+  if (hit !== undefined) {
+    // least-recently-USED, not first-built: a person's geometry that is still in play is never the one evicted (the village's rebuild hitch, docs/PERFORMANCE.md)
+    geometryCache.delete(key);
+    geometryCache.set(key, hit);
+    return hit ?? undefined;
+  }
   const g = make() ?? null;
   geometryCache.set(key, g);
   if (geometryCache.size > MAX_CACHE) {
@@ -122,6 +131,11 @@ function cached(key: string, make: () => BufferGeometry | undefined): BufferGeom
     if (first !== undefined) geometryCache.delete(first);
   }
   return g ?? undefined;
+}
+
+/** Entries in the shared bone-geometry cache (tests and the crowd's budget check: a crowd person must stay a few dozen entries, not hundreds). */
+export function characterCacheSize(): number {
+  return geometryCache.size;
 }
 
 export function clearCharacterCaches(): void {
@@ -149,6 +163,12 @@ export interface BuildOptions {
   outline?: boolean;
   /** Level of detail (default 0): 1 drops fine detail and small accessories, 2 is a cheap far-crowd silhouette. See `CharacterRig.setLod`. */
   lod?: Lod;
+  /**
+   * CROWD rig (scenery people; D-036): levels 1 and 2 are each drawn as ONE skinned mesh weighted rigidly to this rig's own joints (merged.ts), so a person costs 1 draw there instead of
+   * 21 / 11. Level 1 carries a frozen neutral face (no blinks or brows at 20-45 m). Level 0 is unchanged. Not for people who are wounded, maimed or ink-lined at a distance: at levels
+   * 1 and 2 a merged rig draws no outline hulls, no wound dressings and no stumps (the crowd is scenery; heroes and ragdolls do not use this).
+   */
+  merged?: boolean;
 }
 
 interface Attachment {
@@ -211,6 +231,16 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const kneeR = mk("kneeR", hipR, 0, -P.legUpper, 0);
   torso.rotation.x = -P.lean;
 
+  // CROWD rigs (options.merged): the rest pose, captured now while nobody has posed anything and the root is the identity, is what the merged meshes are built and bound in.
+  const mergedOn = options.merged === true;
+  const boneList: Group[] = [pelvis, torso, head, shoulderL, elbowL, wristL, shoulderR, elbowR, wristR, hipL, kneeL, hipR, kneeR];
+  const restOf = new Map<Group, Matrix4>();
+  let skeleton: Skeleton | undefined;
+  if (mergedOn) {
+    root.updateMatrixWorld(true);
+    for (const b of boneList) restOf.set(b, b.matrixWorld.clone());
+  }
+
   let lod: Lod = options.lod ?? 0;
   let outlineOn = options.outline ?? true;
   const attachments: Attachment[] = [];
@@ -256,7 +286,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined, morphs = false): void => {
     const a: Attachment = { bone, parent, make, morphs };
     attachments.push(a);
-    ensureMesh(a);
+    if (!(mergedOn && lod >= 1)) ensureMesh(a); // (a merged crowd rig never builds per-bone geometry at levels 1 and 2)
   };
 
   const body: BodyCtx = { spec, P, skin, jacketC, trouserC, shirtC, armC, accent, burnt, footH, leather: leatherC };
@@ -289,19 +319,29 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   // throughout (filled in place), so references to `rig.face` stay valid. Their geometry and materials are shared between rigs (faceRig.ts).
   const faceParts: FaceParts = inertFace();
   let faceBuild: FaceBuild | undefined;
+  const ensureFace = (): FaceBuild => {
+    if (!faceBuild) {
+      PartBuilder.auditTag = "face";
+      faceBuild = buildFace(faceCtx, head);
+      Object.assign(faceParts, faceBuild.face);
+    }
+    return faceBuild;
+  };
   const applyFaceLod = (): void => {
     if (lod >= 2) {
       if (faceBuild) faceBuild.root.visible = false;
       faceParts.active = false;
       return;
     }
-    if (!faceBuild) {
-      PartBuilder.auditTag = "face";
-      faceBuild = buildFace(faceCtx, head);
-      Object.assign(faceParts, faceBuild.face);
+    ensureFace();
+    if (mergedOn && lod === 1) {
+      // the merged level-1 mesh carries a frozen copy of this face; the live parts stay built (level 0 needs them) but hidden and un-animated
+      faceBuild!.root.visible = false;
+      faceParts.active = false;
+      return;
     }
-    faceBuild.root.visible = true;
-    faceBuild.setDetail(lod === 0 ? 0 : 1);
+    faceBuild!.root.visible = true;
+    faceBuild!.setDetail(lod === 0 ? 0 : 1);
     faceParts.active = true;
     // mid distance: drop the catch-lights, pupils and lower lids (a pixel or two), keep eyes, lids and brows
     for (const iris of [faceParts.pupilL, faceParts.pupilR]) for (const c of iris.children) c.visible = lod === 0;
@@ -463,9 +503,67 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     applyGrip(side);
   };
 
+  // ---- merged crowd levels: one skinned mesh per level, built on first use from the same bone builders (and, at level 1, the frozen face), cached by (spec, level) ---------------
+  const mergedMeshes: (SkinnedMesh | undefined)[] = [undefined, undefined, undefined];
+  const mergedGeometry = (level: 1 | 2): BufferGeometry | undefined =>
+    cached(`merged|${key}|L${level}`, () => {
+      const parts: RigidPart[] = [];
+      for (const a of attachments) {
+        PartBuilder.auditTag = a.bone;
+        const g = withMode(level, false, a.make);
+        if (g) parts.push({ geometry: g, bone: boneList.indexOf(a.parent), matrix: restOf.get(a.parent)! });
+      }
+      if (level === 1) {
+        const headRest = restOf.get(head)!;
+        for (const s of ensureFace().statics) parts.push({ geometry: s.geometry, bone: boneList.indexOf(head), matrix: new Matrix4().multiplyMatrices(headRest, s.matrix) });
+      }
+      const merged = mergeRigid(parts);
+      for (const p of parts) if (!ownedByFace(p.geometry)) p.geometry.dispose(); // (bone geometry was built just for this; the face's belongs to the face cache)
+      return merged;
+    });
+  const faceGeometries = new Set<BufferGeometry>();
+  const ownedByFace = (g: BufferGeometry): boolean => faceGeometries.has(g);
+  const ensureMerged = (level: 1 | 2): void => {
+    if (mergedMeshes[level]) return;
+    if (level === 1) for (const s of ensureFace().statics) faceGeometries.add(s.geometry);
+    const geo = mergedGeometry(level);
+    if (!geo) return;
+    if (!skeleton) skeleton = new Skeleton(boneList as unknown as Bone[], boneList.map((b) => restOf.get(b)!.clone().invert()));
+    const m = new SkinnedMesh(geo, material);
+    m.name = `merged_L${level}`;
+    m.castShadow = level === 1;
+    m.receiveShadow = false;
+    m.boundingSphere = posedBounds(geo);
+    root.add(m);
+    m.bind(skeleton, new Matrix4()); // identity bind: the vertices already are in the rig-root frame (merged.ts)
+    mergedMeshes[level] = m;
+  };
+  const showMerged = (): void => {
+    if (!mergedOn) return;
+    for (const level of [1, 2] as const) {
+      if (lod === level) ensureMerged(level);
+      const m = mergedMeshes[level];
+      if (m) m.visible = lod === level;
+    }
+  };
+
   const setLod = (next: Lod): void => {
     if (next === lod) return;
     lod = next;
+    if (mergedOn && lod >= 1) {
+      // a crowd level: the per-bone meshes (and their hulls) are put away, never rebuilt at this level; the merged mesh below draws instead
+      for (const a of attachments) {
+        if (a.mesh) {
+          a.mesh.userData.lodOff = true;
+          a.mesh.visible = false;
+        }
+        if (a.hull) a.hull.visible = false;
+      }
+      applyFaceLod();
+      showMerged();
+      return;
+    }
+    showMerged(); // (back at level 0, or never merged: hides the merged meshes)
     for (const a of attachments) {
       const g = meshGeometry(a);
       if (a.mesh) {
@@ -491,6 +589,8 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     applyGrip("L");
     applyGrip("R");
   };
+
+  if (mergedOn && lod >= 1) showMerged(); // (a rig BUILT at a crowd level)
 
   const isShown = (o: Mesh): boolean => {
     for (let n: Group | Mesh | null = o; n; n = n.parent as Group | null) if (!n.visible) return false;
@@ -521,7 +621,11 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     handGrip: (side) => grip[side],
     detachLimb,
     dispose() {
-      // Bone and face geometry and materials belong to the shared caches (freed by clearCharacterCaches); a rig owns only its scene-graph objects.
+      // Bone and face geometry and materials belong to the shared caches (freed by clearCharacterCaches); a rig owns only its scene-graph objects (and a merged rig's bone texture).
+      for (const m of mergedMeshes) m?.removeFromParent();
+      mergedMeshes.fill(undefined);
+      skeleton?.dispose();
+      skeleton = undefined;
       root.removeFromParent();
     },
   };

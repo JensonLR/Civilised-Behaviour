@@ -24,6 +24,35 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+describe("CampaignMap on three shores (D-036)", () => {
+  it("the shores list says what each region offers, and Highmark's Granges are on the chart once the Reapers are known", () => {
+    const offers = { kessar: { title: "Secure the River Crossing", brief: "x" }, highmark: { title: "The Vacant Chair", brief: "y" } };
+    const known = { ...c, expeditions: 3 };
+    const m = campaignMapOf(known, newSettlements(), undefined, mapPins(known, p, []), offers, newSettlements().tech, "hollowmere");
+    const panel = new CampaignMap();
+    panel.render(m);
+    expect(panel.root.textContent).toContain("Highmark: on offer: The Vacant Chair");
+    expect(panel.root.textContent).toContain("Sailing to Highmark: 6 seconds");
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    drawCampaignOverlay(g, m);
+    expect([...g.querySelectorAll("text")].map((t) => t.textContent)).toContain("Thornfield Granges");
+    // one sailing time per lane, written on that lane, from where the party stands
+    const lanes = [...g.querySelectorAll("text.lane")];
+    expect(lanes).toHaveLength(2);
+    expect(new Set(lanes.map((t) => `${t.getAttribute("x")},${t.getAttribute("y")}`)).size).toBe(2);
+    // an unmet Reapers' Compact is not on the chart
+    const early = campaignMapOf(c, newSettlements(), undefined, mapPins({ ...c, expeditions: 0 }, p, []), offers, newSettlements().tech, "hollowmere");
+    const g2 = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    drawCampaignOverlay(g2, early);
+    expect([...g2.querySelectorAll("text")].map((t) => t.textContent)).not.toContain("Thornfield Granges");
+    // lanes from Highmark point at the other two
+    const from = campaignMapOf(c, newSettlements(), undefined, mapPins(c, p, []), offers, newSettlements().tech, "highmark");
+    const g3 = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    drawCampaignOverlay(g3, from);
+    expect(g3.querySelectorAll("text.lane")).toHaveLength(2);
+  });
+});
+
 describe("CampaignMap", () => {
   it("states the shores, the infrastructure, the Syndicate's sighting with its age, and the powers, in words", () => {
     const m = new CampaignMap();

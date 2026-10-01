@@ -23,6 +23,8 @@ import { folkHints } from "../render/world/villagers.ts";
  *   push=x,z;x,z   up to four invisible walkers the grass bends away from (the figures are pushers too)
  *   i=N        which tree/rock/snag for view=tree|rock|snag
  *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat, bridge=collapsed (the span down)
+ *   region=highmark HIGHMARK (D-036; the savannah and its hill-capital): view=landing|road|grass|herds|waiting|foot|terraces|granary|market|ramp|gate|window|court|throne|palace|capital|capitalfar|plateau|top|quay|camp
+ *     (time=dusk is the harvest bell hour: the lamps burn); herds are a function of seed and the world clock (wms=N sits it)
  *   outpost=none|camp|trading_post|fortified_outpost|settlement|town [&telegraph=1&road=0|1|2&launch=1&rivalpost=0|1|2]   (region=kessar, view=outpost|rivalpost|wire|landing) THE SOCIETY'S OUTPOST (D-035)
  *   history=N [&outpost=<stage>]   (view=table|game, Hollowmere) HQ keeps the first N endings of a scripted campaign on the planning table, the strongbox and the back wall
  *   seed=N     arena seed (default 7)
@@ -38,13 +40,17 @@ import { folkHints } from "../render/world/villagers.ts";
 export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): void {
   const stage = new Stage(canvas, (params.get("gfx") as import("../render/Stage.ts").PresetName | null) ?? "medium");
   const seed = Number(params.get("seed") ?? 7);
-  const region: RegionId = params.get("region") === "kessar" ? "kessar" : "hollowmere";
+  const region: RegionId = params.get("region") === "kessar" ? "kessar" : params.get("region") === "highmark" ? "highmark" : "hollowmere";
   // D-035: the Society's outpost and what comes of it. outpost=none|camp|trading_post|fortified_outpost|settlement|town, telegraph=1, road=0|1|2, launch=1, rivalpost=0|1|2
   const stageParam = params.get("outpost");
   const outpost: OutpostStage = (OUTPOST_STAGES as readonly string[]).includes(stageParam ?? "") ? (stageParam as OutpostStage) : "none";
   const telegraph = params.get("telegraph") === "1" && outpost !== "none";
-  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph }) : createArena(seed);
-  if (region === "kessar") {
+  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph }) : region === "highmark" ? createRegionWorld("highmark", seed) : createArena(seed);
+  if (region === "highmark") {
+    const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
+    inner.builtFor = world;
+    inner.worldView = createRegionView("highmark", stage.scene, world, PRESETS[(params.get("gfx") as keyof typeof PRESETS | null) ?? "medium"], inner.lightDir, seed);
+  } else if (region === "kessar") {
     // (the Stage builds Hollowmere's WorldView itself; until it builds through createRegionView, the region's own view is handed to it here)
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
     inner.builtFor = world;
@@ -73,7 +79,7 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
 
   const props = new PropViews(stage.scene, stage.outlines);
   const line = params.get("propline") === "1"; // one of each kind in a row, for reviewing the props
-  const fake = params.get("props") === "0" ? [] : (line ? [0, 1, 2, 3].map((k, i) => ({ kind: k as 0 | 1 | 2 | 3, x: -0.9 + i * 0.6, z: -3, yaw: 0.6 })) : region === "kessar" ? regionProps("kessar", seed, world) : scatterProps(seed, world.terrain, 14)).map((s, i) => ({ id: String(i), kind: s.kind, x: s.x, y: world.terrainHeight(s.x, s.z) + 0.4, z: s.z, yaw: s.yaw }));
+  const fake = params.get("props") === "0" ? [] : (line ? [0, 1, 2, 3].map((k, i) => ({ kind: k as 0 | 1 | 2 | 3, x: -0.9 + i * 0.6, z: -3, yaw: 0.6 })) : region !== "hollowmere" ? regionProps(region, seed, world) : scatterProps(seed, world.terrain, 14)).map((s, i) => ({ id: String(i), kind: s.kind, x: s.x, y: world.terrainHeight(s.x, s.z) + 0.4, z: s.z, yaw: s.yaw }));
   const byId = new Map(fake.map((p) => [p.id, p]));
   const syncProps = (): void =>
     props.sync({ forEach: (cb) => fake.forEach((p) => cb({ kind: p.kind, id: p.id } as never, p.id)) }, (p, f) => {
@@ -95,18 +101,26 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     });
   syncProps();
 
+  // (the animator rewrites `root.position.y` with its own offset on every update, as CharacterActor knows: the ground is added back after it, or a figure on ground above 0 stands sunk in it. That was the
+  // 'lineup figures sunk to the chest in region=kessar' finding: Kessar's ground is 0.5 m up and Hollowmere's spawn is at 0)
   const anims: CharacterAnimator[] = [];
+  const standY: number[] = [];
+  const rigs: { root: { position: { y: number } } }[] = [];
   const folkView = (params.get("view") ?? "game").startsWith("folk") || params.get("who") !== null;
   if (params.get("figures") !== "0" && !folkView) {
     for (let i = 0; i < 4; i++) {
       const rig = buildCharacter(generateCharacter(seed * 31 + i * 7919, i), { outline: stage.outlines });
-      const sp = region === "kessar" ? regionSpawn("kessar", i, 4) : spawnPoint(i, 4);
-      rig.root.position.set(sp.x, world.terrainHeight(sp.x, sp.z), sp.z);
+      const sp = region !== "hollowmere" ? regionSpawn(region, i, 4) : spawnPoint(i, 4);
+      const gy = world.terrainHeight(sp.x, sp.z);
+      rig.root.position.set(sp.x, gy, sp.z);
       rig.root.rotation.y = Math.PI + (i - 1.5) * 0.35;
       stage.scene.add(rig.root);
       const anim = new CharacterAnimator(rig);
       for (let k = 0; k < 60; k++) anim.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+      rig.root.position.y += gy;
       anims.push(anim);
+      standY.push(gy);
+      rigs.push(rig);
     }
   }
 
@@ -229,7 +243,31 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     rim: [new Vector3(-30, 3.2, 38), new Vector3(-40, 0.4, 8)],
     top: [new Vector3(0, 150, 20), new Vector3(0, 0, 20)],
   };
-  const [defCam, defAt] = (region === "kessar" ? kviews[params.get("view") ?? "landing"] : undefined) ?? views[params.get("view") ?? "game"] ?? views.game!;
+  // Highmark: named vantage points (the quay you arrive at, the road across the grass, the herds, the foot of the hill and its five terraces, the gate and its Window, the court)
+  const hviews: Record<string, [Vector3, Vector3]> = {
+    landing: [new Vector3(3.2, ky(0, 118) + 1.9, 124), new Vector3(0, ky(0, 60) + 4, 40)],
+    quay: [new Vector3(6, ky(0, 118) + 3.2, 112), new Vector3(2, 0.8, 128)],
+    road: [new Vector3(5, ky(0, 70) + 2.2, 82), new Vector3(0, 11, -60)],
+    grass: [new Vector3(-24, ky(-24, 36) + 2.4, 38), new Vector3(-46, 1.2, 22)],
+    herds: [new Vector3(30, ky(30, 70) + 3.4, 76), new Vector3(52, 1.0, 50)],
+    waiting: [new Vector3(-1, ky(-4, 70) + 1.9, 74), new Vector3(-8, 1.0, 62)],
+    camp: [new Vector3(-44, ky(-44, 40) + 2.4, 40), new Vector3(-53, 1.3, 50)],
+    foot: [new Vector3(14, ky(14, -4) + 2.0, -2), new Vector3(0, ky(0, -34) + 5, -34)],
+    terraces: [new Vector3(46, ky(46, 14) + 3.4, 16), new Vector3(0, 7, -66)],
+    granary: [new Vector3(-26, ky(-26, -26) + 2.6, -20), new Vector3(-44, 4.5, -52)],
+    market: [new Vector3(-22, 8.4, -33), new Vector3(0, 6.5, -50)],
+    ramp: [new Vector3(2.6, 8.4, -30), new Vector3(0, 8, -48)],
+    gate: [new Vector3(3, 9.6, -42), new Vector3(0, 11.5, -58)],
+    window: [new Vector3(-1.6, 11.2, -64), new Vector3(-4.2, 11, -59.8)],
+    court: [new Vector3(0, 14.2, -76), new Vector3(0, 12.8, -97)],
+    throne: [new Vector3(3.6, 13.0, -96), new Vector3(0, 12.8, -101.5)],
+    palace: [new Vector3(0, 13.2, -83), new Vector3(0, 17, -107)],
+    capital: [new Vector3(0, 5.2, 58), new Vector3(0, 12, -92)],
+    capitalfar: [new Vector3(0, 8, 110), new Vector3(0, 11, -92)],
+    plateau: [new Vector3(0, 40, -40), new Vector3(0, 8, -96)],
+    top: [new Vector3(0, 190, 10), new Vector3(0, 0, 10)],
+  };
+  const [defCam, defAt] = (region === "kessar" ? kviews[params.get("view") ?? "landing"] : region === "highmark" ? hviews[params.get("view") ?? "capital"] : undefined) ?? views[params.get("view") ?? "game"] ?? views.game!;
   const cam = vec(params.get("cam")) ?? defCam;
   const at = vec(params.get("at")) ?? defAt;
   stage.camera.fov = Number(params.get("fov") ?? 65);
@@ -289,7 +327,7 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     if (Number.isInteger(n) && who.trim() !== "") return n;
     return people.folk.roster.findIndex((v) => `${v.occupation} ${v.title} ${v.name}`.toLowerCase().includes(who.toLowerCase()));
   };
-  const walkers: { x: number; z: number }[] = anims.length ? [0, 1, 2, 3].map((i) => (region === "kessar" ? regionSpawn("kessar", i, 4) : spawnPoint(i, 4))) : [];
+  const walkers: { x: number; z: number }[] = anims.length ? [0, 1, 2, 3].map((i) => (region !== "hollowmere" ? regionSpawn(region, i, 4) : spawnPoint(i, 4))) : [];
   for (const chunk of (params.get("push") ?? "").split(";")) {
     const [px, pz] = chunk.split(",").map(Number);
     if (Number.isFinite(px) && Number.isFinite(pz) && walkers.length < 4) walkers.push({ x: px!, z: pz! });
@@ -297,7 +335,10 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   const info = stage.renderer.info;
   let frames = 0;
   const loop = (): void => {
-    for (const a of anims) a.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+    anims.forEach((a, i) => {
+      a.update(1 / 30, { speed: 0, flags: FLAG.GROUNDED, vy: 0 });
+      rigs[i]!.root.position.y += standY[i]!;
+    });
     const target = followId();
     const people = target >= 0 ? folkOf() : undefined;
     const pose = people?.poses[target];

@@ -24,6 +24,8 @@ export function tagRange(role: number, inSight: boolean): number {
     case NPC.SURGEON:
       return TAG_RANGE.party;
     case NPC.WARDEN:
+    case NPC.CHAMBERLAIN:
+    case NPC.CLAIMANT:
     case NPC.HOSTAGE:
     case NPC.DRIVER:
       return TAG_RANGE.notable;

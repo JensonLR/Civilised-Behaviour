@@ -1,0 +1,83 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "game.civilisedbehaviour.desktop",
+  "productName": "Civilised Behaviour",
+  "copyright": "Civilised Behaviour",
+  "asar": true,
+  "publish": null,
+  "directories": {
+    "output": "release",
+    "buildResources": "build"
+  },
+  "files": [
+    "dist/main.cjs",
+    "dist/preload.cjs",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "../client/dist-desktop",
+      "to": "client",
+      "filter": [
+        "**/*",
+        "!**/*.map"
+      ]
+    }
+  ],
+  "electronFuses": {
+    "runAsNode": false,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableCookieEncryption": true,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true,
+    "grantFileProtocolExtraPrivileges": false
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
+    ],
+    "identity": null,
+    "category": "public.app-category.games"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "deb",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "category": "Game",
+    "maintainer": "Civilised Behaviour <maintainers@civilised-behaviour.invalid>",
+    "executableName": "civilised-behaviour"
+  }
+}

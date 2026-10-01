@@ -1,6 +1,6 @@
 import type { CampaignMapData, PowerId, RegionId } from "@cb/shared";
 import { Modal, h } from "./modal.ts";
-import { CampaignMap, drawCampaignOverlay } from "./CampaignMap.ts";
+import { CHART_AT, CampaignMap, chartRoute, drawCampaignOverlay, regionPair } from "./CampaignMap.ts";
 import "./mapRoom.css";
 
 export interface MapRoomRegion {
@@ -38,8 +38,9 @@ export interface MapRoomCallbacks {
   audience?(power: PowerId): void;
 }
 
-/** Where each region's marker sits on the chart (a 320 x 200 sheet): home on the near shore, the colony across the water. */
-const CHART: Record<string, { x: number; y: number }> = { hollowmere: { x: 84, y: 138 }, kessar: { x: 232, y: 62 } };
+/** The names written under the marks (a region the chart does not know is written as its id). */
+const CHART_LABEL: Record<string, string> = { hollowmere: "Hollowmere", kessar: "Kessar", highmark: "Highmark" };
+const LANES: readonly [RegionId, RegionId][] = [["hollowmere", "kessar"], ["hollowmere", "highmark"], ["kessar", "highmark"]];
 const SVG = "http://www.w3.org/2000/svg";
 const svg = (tag: string, attrs: Record<string, string | number>): SVGElement => {
   const el = document.createElementNS(SVG, tag);
@@ -48,14 +49,14 @@ const svg = (tag: string, attrs: Record<string, string | number>): SVGElement =>
 };
 
 /**
- * The map room: the survey table under the HQ marquee, or the quay's chart board. A painted chart of the two shores, a destination for each region the
+ * The map room: the survey table under the HQ marquee, or the quay's chart board. A painted chart of the three shores, a destination for each region the
  * Society has charted (what the campaign remembers about it written beside), the crew and who is ready, and the three acts of a sailing: propose,
  * agree, cancel. The server owns the vote (Travel); this only shows it and sends intentions. Every string from the wire goes in as text, never markup.
  * A sheet like the others: focus trapped, Escape and pad B close it, the game's controls held off while it is open.
  */
 export class MapRoom {
   private readonly modal = new Modal("maproom", "maproom", "maproom-title");
-  private readonly chart = svg("svg", { viewBox: "0 0 320 200", role: "img", "aria-label": "Chart of the Society's two shores" });
+  private readonly chart = svg("svg", { viewBox: "0 0 320 200", role: "img", "aria-label": "Chart of the Society's three shores" });
   private readonly list = h("div", { class: "dests", role: "radiogroup", "aria-label": "Destination" });
   private readonly crew = h("ul", { class: "crew", "aria-label": "Crew" });
   private readonly status = h("p", { class: "status", role: "status", "aria-live": "polite" });
@@ -146,18 +147,19 @@ export class MapRoom {
       svg("rect", { class: "sea", x: 0, y: 0, width: 320, height: 200 }),
       svg("path", { class: "land", d: "M0 120 C30 104 52 112 74 108 C102 103 118 128 112 152 C108 172 70 186 34 184 L0 200 Z" }),
       svg("path", { class: "land", d: "M190 0 L320 0 L320 96 C300 92 286 104 262 100 C236 96 232 76 214 72 C196 68 178 40 190 0 Z" }),
-      svg("path", { class: "wave", d: "M130 40 q8 -6 16 0 t16 0 M150 170 q8 -6 16 0 t16 0 M236 150 q8 -6 16 0 t16 0 M20 40 q8 -6 16 0 t16 0" }),
+      svg("path", { class: "land", d: "M204 200 L320 200 L320 132 C302 126 290 138 268 134 C246 130 238 146 222 152 C208 158 198 180 204 200 Z" }),
+      svg("path", { class: "wave", d: "M130 40 q8 -6 16 0 t16 0 M120 130 q8 -6 16 0 t16 0 M150 190 q8 -6 16 0 t16 0 M236 108 q8 -6 16 0 t16 0 M20 40 q8 -6 16 0 t16 0" }),
     );
-    for (const [id, p] of Object.entries(CHART)) {
-      const route = svg("path", { class: "route", d: `M${CHART.hollowmere!.x} ${CHART.hollowmere!.y} Q 150 60 ${CHART.kessar!.x} ${CHART.kessar!.y}` });
-      if (id === "kessar") {
-        c.appendChild(route);
-        this.routes.set(id, route);
-      }
+    for (const [a, b] of LANES) {
+      const route = svg("path", { class: "route", d: chartRoute(a, b), "data-lane": regionPair(a, b) });
+      c.appendChild(route);
+      this.routes.set(regionPair(a, b), route);
+    }
+    for (const [id, p] of Object.entries(CHART_AT)) {
       const g = svg("g", { class: "mark", "data-region": id, transform: `translate(${p.x} ${p.y})` });
       g.append(svg("circle", { r: 9 }), svg("path", { d: "M0 -5 L0 6 M-4 2 Q0 9 4 2 M-3 -2 L3 -2" }));
       const label = svg("text", { x: 0, y: 24, "text-anchor": "middle" });
-      label.textContent = id === "hollowmere" ? "Hollowmere" : "Kessar";
+      label.textContent = CHART_LABEL[id] ?? id;
       g.appendChild(label);
       c.appendChild(g);
     }
@@ -199,10 +201,12 @@ export class MapRoom {
     }
     if (focusedId) this.list.querySelector<HTMLInputElement>(`input[value="${focusedId}"]`)?.focus();
     // the chart follows the selection
+    const here = v.regions.find((r) => r.here);
     for (const g of this.chart.querySelectorAll("g.mark")) g.classList.toggle("sel", g.getAttribute("data-region") === this.selected);
     for (const g of this.chart.querySelectorAll("g.mark")) g.classList.toggle("here", v.regions.some((r) => r.here && r.id === g.getAttribute("data-region")));
-    const route = this.routes.get("kessar");
-    route?.classList.toggle("active", v.phase === 1 || this.canPropose());
+    // the lane between where the party stands and where it is bound lights up
+    const lit = here && this.selected && here.id !== this.selected && (v.phase === 1 || this.canPropose()) ? regionPair(here.id, this.selected) : "";
+    for (const [pair, route] of this.routes) route.classList.toggle("active", pair === lit);
     // the campaign layer: outposts, the Syndicate's marker, the powers and their audiences (D-035)
     drawCampaignOverlay(this.overlay, v.campaign);
     const focusedAudience = (document.activeElement as HTMLElement | null)?.getAttribute?.("data-power");
@@ -221,7 +225,6 @@ export class MapRoom {
     this.ready.hidden = v.phase !== 1;
     this.cancel.hidden = v.phase !== 1;
     const dest = v.regions.find((r) => r.id === this.selected);
-    const here = v.regions.find((r) => r.here);
     if (v.phase === 1) {
       const yes = v.ready.filter((c) => c.ready).length;
       this.status.textContent = `A sailing to ${dest?.name ?? "the far shore"} is proposed: ${yes} of ${v.ready.length} ready. Everyone aboard must agree, or the kettle goes cold.`;

@@ -77,6 +77,12 @@ export const MEMORY_LINE: Record<ResolutionId, readonly string[]> = {
   sided_syndicate: ["You pulled Marker Stone No. 4 for the Syndicate. The stone has been reported missing. So has my patience.", "I know about the envelope. I know its thickness."],
   provoked: ["Somebody fired on a border patrol last time. A surveyor and a sergeant are still not on speaking terms.", "You fired first at the ford. Nobody has forgotten whose idea it was."],
   escalated: ["The ford went up in smoke last time, while you stood and watched. Observation is a skill, I suppose.", "My patrol and the Syndicate fought at the Stone, and the Society took notes."],
+  // D-036: news from the highlands reaches Kessar late and secondhand; the Lamp-Warden files it under the Society's character
+  backed_elder: ["I hear the Society has been to the highlands, and sat an elder heir in a chair. We have no opinion, officially.", "News came down from Highmark: a seniority was honoured. I approve of seniority, in principle."],
+  backed_younger: ["I hear the Society put a younger heir on a throne in the highlands. Youth is a gamble; I keep a lamp for gamblers.", "They say you crowned the young one at Highmark. My lamps have no view, and neither do I."],
+  regency: ["A regency at Highmark, I hear. Three signatures. We shall see which one holds the pen.", "You settled the highlands with a committee. I am impressed and a little afraid."],
+  usurped: ["Something happened to a chair at Highmark and the Society was in the room. I have seen that look before, in my own garrison.", "I am told the highland throne changed hands in the night. The night is a poor witness."],
+  crown_sold: ["The Syndicate bought a crown in the highlands. They will want a bridge next; they always do.", "A crown for a cheque. I have seen cheaper, but not much."],
 };
 export const LIES_LINE: readonly string[] = [" I am told you do not always keep your word.", " Your promises have been discussed at some length."];
 

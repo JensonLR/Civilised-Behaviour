@@ -87,7 +87,9 @@ import {
   isNpcKey,
   isRegionId,
   isTemplateId,
-  kessarNavOptions,
+  regionNavOptions,
+  regionLanding,
+  DEMO,
   npcThink,
   followerThink,
   pickTemplate,
@@ -96,7 +98,6 @@ import {
   NO_COMMAND,
   newParty,
   serializeParty,
-  KESSAR_ANCHORS,
   PropKind,
   REGIONS,
   hash3,
@@ -120,6 +121,8 @@ import {
 import { HISTORY_KEYS, applyClientAppearance, decodeSpec, encodeSpec, generateCharacter, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
+import { Demo } from "../systems/Demo.ts";
+import { tickProbe } from "../tickProbe.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
 import { Casualties, type HitInfo } from "../systems/Casualties.ts";
@@ -242,6 +245,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private static readonly campaignClaims = new Map<string, { closing: boolean }>();
   private claim: { code: string; mine: { closing: boolean } } | undefined;
   private travel!: Travel;
+  /** The bounded web demo (D-036), enforced here: a region gate, warnings, a hard close, no persistence. Absent in every other room. */
+  private demo: Demo | undefined;
   private scenario: Scenario | undefined;
   private cast!: Cast;
   private mounts!: Mounts;
@@ -308,6 +313,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.powersRev = 0;
     this.state.settlements = serializeSettlements(this.settlements);
     this.state.settlementsRev = 0;
+    const demoCfg = cfg.demo;
+    if (demoCfg?.enabled) {
+      this.demo = new Demo(
+        { now: () => Date.now(), startedAtMs: Date.now(), notice: (text) => this.broadcast("notice", { text }), closeAll: (code) => this.clients.forEach((c) => c.leave(code)) },
+        { sessionSeconds: demoCfg.sessionSeconds },
+      );
+    }
     await this.bindSaver(options, resume);
     this.forcedTemplate = dev && isTemplateId(options?.scenario) ? options.scenario : undefined;
     this.buildRegion(region);
@@ -393,7 +405,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       seed,
       fear: () => this.campaign.factions.ward.fear,
       brains: { garrison: npcThink, follower: followerThink },
-      navOptions: (w) => (this.state.region === "kessar" ? kessarNavOptions(w) : {}),
+      navOptions: (w) => regionNavOptions(this.state.region as RegionId, w),
     });
     this.mounts = new Mounts({
       players: this.state.players,
@@ -506,6 +518,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
     this.setFixedTimestep((ctx) => {
       const t0 = performance.now();
+      tickProbe.start();
+      this.demo?.tick();
       this.tickDt = ctx.dt;
       this.simT += ctx.dt;
       this.outposts.tick(ctx.dt);
@@ -555,20 +569,31 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
           }
         }
       });
+      tickProbe.lap("inputs");
       if (!sailing) this.mounts.tick(ctx.dt); // after the players stepped, before the physics (a ridden horse copies its rider; a wagon trails its horse)
+      tickProbe.lap("mounts");
       this.carryNpcProps();
       this.syncClock(false);
+      tickProbe.lap("other");
       if (!sailing) {
         this.scenario?.tick(ctx.dt);
+        tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
+        tickProbe.lap("cast");
         this.followers.tick(ctx.dt);
+        tickProbe.lap("followers");
       }
       this.reapNpcs();
       this.casualties.tick(ctx.dt);
+      tickProbe.lap("casualties");
       this.combat.tick(ctx.dt);
+      tickProbe.lap("combat");
       this.physics.step(ctx.dt);
+      tickProbe.lap("physics");
       for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
+      tickProbe.lap("props");
       this.travel.tick(ctx.dt); // last: a landfall swaps the world, which nothing above may still be holding
+      tickProbe.lap("travel");
       const ms = performance.now() - t0;
       metrics.recordTick(ms);
       if (ms > ctx.dtMs) {
@@ -596,6 +621,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         const chk = this.followers.check();
         if (!chk.ok) this.refuse(client.sessionId, `The quartermaster notes: ${chk.problems.join(" ")} What does not fit stays on the quay.`);
       }
+      if (this.demo && !this.demo.regionAllowed(msg?.to)) return; // the demo's region gate lives here, on the server
       this.travel.propose(client.sessionId, p.slot, msg?.to);
     });
     this.onMessage("travelReady", (client, msg: { ready?: unknown }) => {
@@ -627,6 +653,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   }
 
   override onJoin(client: Client, options: JoinOptions): void {
+    if (this.demo?.ended) throw new ServerError(DEMO.closeCode, "This demo session has ended."); // (the clock does not restart for a rejoin)
     const slot = this.freeSlot();
     this.usedSlots.add(slot);
     const player = new PlayerState();
@@ -672,7 +699,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   override async onLeave(client: Client, code?: number): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    const consented = code === CloseCode.CONSENTED;
+    const consented = code === CloseCode.CONSENTED || (this.demo !== undefined && code === DEMO.closeCode); // (a demo's end is a close nobody reconnects into)
     if (!consented) {
       player.connected = false;
       this.travel.onLeave(player.slot); // a vote this player was blocking, or a landfall they were holding up, may now be complete
@@ -724,6 +751,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       throw new ServerError(4004, "No expedition by that code is waiting for you.");
     };
     const rt = getRoomConfig().persistence;
+    if (getRoomConfig().demo?.enabled) return deny("demo"); // a demo saves nothing, so there is nothing to resume
     const code = typeof options.resume === "string" ? options.resume.toUpperCase() : "";
     const id = parseIdentity(options.token);
     if (!rt || !isValidJoinCode(code) || !id) return deny("request");
@@ -777,7 +805,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private async bindSaver(options: JoinOptions, resume: { rec: CampaignRecord } | undefined): Promise<void> {
     const rt = getRoomConfig().persistence;
     const id = parseIdentity(options?.token);
-    if (!rt || !id) return;
+    if (!rt || !id || getRoomConfig().demo?.enabled) return; // (a demo campaign is never saved: no record, no claim, nothing to find later)
     try {
       const store = await rt.store();
       const saver = new CampaignSaver(store, { now: () => Date.now(), log, pepper: rt.cfg.pepper });
@@ -1306,7 +1334,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.pendingPrep = undefined;
     if (!prep) return;
     const fx = prep.effects;
-    const land = KESSAR_ANCHORS.landing;
+    const land = regionLanding(to);
     this.followers.landfall(land);
     this.state.players.forEach((p, sid) => {
       if (!p.npc && fx.reserveMul > 1) this.combat.scaleReserve(sid, fx.reserveMul);
@@ -1487,7 +1515,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (!(RESOLUTIONS as readonly string[]).includes(r)) return;
       const template = (Object.keys(TEMPLATE_RESOLUTIONS) as ScenarioTemplateId[]).find((t) => (TEMPLATE_RESOLUTIONS[t] as readonly string[]).includes(r)) ?? "secure_crossing";
       this.commitOutcome({
-        scenario: template, resolution: r as ResolutionId, toll: 40, paid: 0, bridge: this.campaign.crossing.bridge, brokePromise: false, seconds: 1,
+        scenario: template, ...(template === "succession_dispute" ? { region: "highmark" as const } : {}), resolution: r as ResolutionId, toll: 40, paid: 0, bridge: this.campaign.crossing.bridge, brokePromise: false, seconds: 1,
         tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 },
       });
     }

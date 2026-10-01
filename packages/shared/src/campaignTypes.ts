@@ -1,6 +1,6 @@
 import type { CastOrder, NpcSide } from "./expeditionTypes.ts";
 /** Campaign contract (docs/_notes/slice.md section 1). Types and constants only; frozen. */
-export const REGION_IDS = ["hollowmere", "kessar"] as const;           // append-only
+export const REGION_IDS = ["hollowmere", "kessar", "highmark"] as const;           // append-only (D-036: highmark, region two)
 export type RegionId = (typeof REGION_IDS)[number];
 export const isRegionId = (v: unknown): v is RegionId => typeof v === "string" && (REGION_IDS as readonly string[]).includes(v);
 export type FactionId = "ward" | "rival";                               // ward = the fort's Ward of the Nine Lamps; rival = the Dunmarrow-Vesk Syndicate (foreign expedition)
@@ -12,10 +12,12 @@ export interface FactionState {                                          // ever
 }
 export type BridgeState = "intact" | "rigged" | "collapsed";
 export type CrossingControl = "ward" | "society" | "rival" | "contested";
-export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_ambush" | "border_incident";
+export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_ambush" | "border_incident" | "succession_dispute";
 export type ResolutionId =
   | "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned"
-  | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated";
+  | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated"
+  // D-036, Highmark's succession dispute (append-only): who sits the chair, and how
+  | "backed_elder" | "backed_younger" | "regency" | "usurped" | "crown_sold";
 export type ComplicationId = "none" | "rival_scouts" | "rain" | "reinforcements" | "rival_bid" | "outriders" | "ward_patrol" | "fog" | "stray_shot";
 export interface CrossingState { bridge: BridgeState; control: CrossingControl; toll: number; tollPaidTotal: number; bribed: boolean; exposed: boolean }  // toll in pounds per crossing (0 = free)
 export interface CasualtyTally { wounded: number; downed: number; limbsLost: number; garrisonKilled: number; garrisonRouted: number; civiliansHarmed: number; rivalKilled: number }
@@ -24,6 +26,8 @@ export interface HistoryEntry { seq: number; region: RegionId; resolution: Resol
 export interface SiteLedger {
   lastDay: Partial<Record<ScenarioTemplateId, number>>; hostage: "none" | "freed" | "lost"; convoy: "none" | "seized" | "tipped" | "burned" | "passed";
   border: "quiet" | "mediated" | "ward" | "syndicate" | "war"; lastComplication: ComplicationId;
+  /** D-036: who holds Highmark's chair. `parseCampaign` defaults it to "open" (a campaign saved before D-036 has no such field). */
+  succession: "open" | "elder" | "younger" | "regency" | "usurped" | "sold";
 }
 export interface CampaignState {
   v: 1; seed: number; day: number; expeditions: number; purse: number; lies: number;   // purse in pounds; lies = promises broken (negotiation leverage)
@@ -37,6 +41,8 @@ export interface ScenarioOutcome {                                       // what
   loot?: number;
   /** The complication this run was dealt (recorded in `sites.lastComplication` so it is never dealt twice running). */
   complication?: ComplicationId;
+  /** D-036: where the contract was played (absent = Kessar, which is every outcome before Highmark). `applyOutcome` writes it into the history entry. */
+  region?: RegionId;
 }
 // ---- negotiation (types here so C never imports A's code) ----
 export interface Leverage { purse: number; armed: number; garrisonAlive: number; garrisonTotal: number; partyWounded: number; rivalInfluence: number; lies: number }
@@ -61,7 +67,7 @@ export type ScenarioEvent =
   | { t: "prop"; what: "delivered" | "destroyed" | "seized"; at: string; n: number } | { t: "actor"; id: string; state: "down" | "free" | "arrived" } | { t: "leave" }
   | { t: "talk"; kind: ParleyKind; result: TalkResult; paid: number };
 /** Who a site parley is with. "warden" is the crossing's (negotiation.ts); the rest are authored in scenarios/parleys.ts. */
-export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_post";
+export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_post" | "chamberlain" | "claimant_elder" | "claimant_younger";   // D-036: the last three are Highmark's
 export type TalkResult = "open" | "close" | "hostile" | "paid" | "bargained" | "bribed" | "ransom" | "survey" | "learn" | "tell" | "envelope" | "tip";
 export type ScenarioEffect = "garrison_alert" | "garrison_stand_down" | "gate_open" | "arm_charge" | "rival_advance" | "commit";
 /** What a template asks the server to DO (the runner turns each into Cast / Mounts / host calls). Sites are named in KESSAR_SITES / KESSAR_ANCHORS. */
@@ -69,9 +75,9 @@ export type ScenarioFx =
   | { k: "spawn"; group: string } | { k: "order"; group: string; order: CastOrder } | { k: "war"; a: NpcSide; b: NpcSide; on: boolean } | { k: "say"; text: string }
   | { k: "open"; what: "gate" | "cage" } | { k: "explode"; at: string } | { k: "bridge"; state: BridgeState } | { k: "commit" }
   | { k: "wagon"; op: "go" | "halt" | "seize" | "wreck" } | { k: "parley"; kind: ParleyKind; price: number };
-export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation";
+export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation" | "court";   // D-036: "court" = a person of Highmark's court (the chamberlain, a claimant), acted on through the scenario
 export interface UseStation { id: string; kind: StationKind; x: number; z: number; r: number; prompt: string }
-export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10 } as const;   // PlayerState.npc (append-only; D-034)
+export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10, CHAMBERLAIN: 11, CLAIMANT: 12, COURT_GUARD: 13, HERDER: 14 } as const;   // PlayerState.npc (append-only; D-034, D-036)
 export const NPC_CAP = 24, FOLLOWER_CAP = 4, SETTLED_DAYS = 3, HOSTAGE_DEADLINE_S = 480, CONVOY_DEPART_S = 60, BORDER_ESCALATE_S = 240, NAME_TAG_RANGE = 30, SAIL_SECONDS = 6, ARRIVE_TIMEOUT_S = 30, PROPOSE_TIMEOUT_S = 20, RIVAL_ARRIVES_S = 420, RIVAL_PARLEY_S = 60, RESOLVED_LINGER_S = 45;
 /** Story coordinates of Kessar Reach (metres, x east, z south, y from terrain). B builds the geometry around them; C puts people on them. Frozen. */
 export const KESSAR_ANCHORS = {

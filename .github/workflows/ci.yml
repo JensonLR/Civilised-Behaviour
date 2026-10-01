@@ -18,6 +18,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # D-036: named explicitly so a failure points at the right package (they also run inside `pnpm test` / `pnpm build`)
+      - run: pnpm --filter @cb/desktop typecheck
+      - run: pnpm --filter @cb/website test
 
   e2e:
     runs-on: ubuntu-latest

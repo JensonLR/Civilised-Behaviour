@@ -1,9 +1,12 @@
 import { ARENA_RADIUS, createArena, spawnPoint } from "./arena.ts";
 import { CAMP, hqPlan } from "./camp.ts";
-import { KESSAR_ANCHORS as A, SAIL_SECONDS, type BridgeState, type RegionId, type UseStation } from "./campaignTypes.ts";
+import { KESSAR_ANCHORS as A, REGION_IDS, SAIL_SECONDS, isRegionId, type RegionId, type UseStation } from "./campaignTypes.ts";
 import type { CollisionWorld } from "./collision.ts";
 import { CHARACTER } from "./constants.ts";
+import { kessarNavOptions } from "./garrison.ts";
+import { HIGHMARK_ANCHORS as H, HIGHMARK_SITES as HS, createHighmarkWorld, highmarkProps, highmarkNavOptions, highmarkSpawn } from "./highmark.ts";
 import { createKessarWorld, kessarProps, kessarSpawn } from "./kessar.ts";
+import type { NavOptions } from "./nav.ts";
 import { JETTY } from "./landscape.ts";
 import { angleDelta } from "./math.ts";
 import { INTERACT, scatterProps, type PropSpawn } from "./props.ts";
@@ -22,6 +25,11 @@ export interface RegionDef {
   blurb: string;
   bounds: number;
   sailSeconds: number;
+  /**
+   * D-036: can a party SAIL here? false = the region exists in the contract (ids, worlds, stations, a dev start `?region=<id>`) but is not on the map room's chart and the
+   * travel machine refuses it. Package G flips highmark to true as its LAST act, when its acceptance tests pass.
+   */
+  reachable: boolean;
 }
 
 export const REGIONS: Record<RegionId, RegionDef> = {
@@ -31,6 +39,7 @@ export const REGIONS: Record<RegionId, RegionDef> = {
     blurb: "Home. The Society's depot, the notice board, the cannon and a village that has learned to smile at invoices.",
     bounds: ARENA_RADIUS,
     sailSeconds: SAIL_SECONDS,
+    reachable: true,
   },
   kessar: {
     id: "kessar",
@@ -38,22 +47,45 @@ export const REGIONS: Record<RegionId, RegionDef> = {
     blurb: "An ochre coast, one stone bridge and a hill-fort whose Ward of the Nine Lamps charges a toll to be crossed. A rival syndicate has also noticed the bridge.",
     bounds: A.bounds,
     sailSeconds: SAIL_SECONDS,
+    reachable: true,
+  },
+  highmark: {
+    id: "highmark",
+    name: "Highmark",
+    blurb: "A golden grassland, a processional road and a hill-capital built like a wedding cake. The King has been pending for six years; two heirs have opinions about the chair.",
+    bounds: H.bounds,
+    sailSeconds: SAIL_SECONDS,
+    reachable: true,
   },
 };
 
+/** The regions a party may sail to (D-036): the chart, the map room's list and the travel machine all read this, never REGION_IDS. */
+export const isReachableRegion = (v: unknown): v is RegionId => isRegionId(v) && REGIONS[v].reachable;
+export const reachableRegions = (): RegionId[] => REGION_IDS.filter((id) => REGIONS[id].reachable);
+
+/** Where the ship puts everybody ashore (the integrator's landfall: manifest effects, kegs, hands, horses are placed around it). Hollowmere's is the jetty's foot. */
+export function regionLanding(id: RegionId): { x: number; z: number } {
+  return id === "kessar" ? { x: A.landing.x, z: A.landing.z } : id === "highmark" ? { x: H.landing.x, z: H.landing.z } : { x: JETTY.x0, z: JETTY.z0 };
+}
+
+/** Navigation options of a region's nav grid (Kessar closes the gorge and prunes the sealed courtyard; Highmark the river). Hollowmere: none. */
+export function regionNavOptions(id: RegionId, world: CollisionWorld): NavOptions {
+  return id === "kessar" ? kessarNavOptions(world) : id === "highmark" ? highmarkNavOptions(world) : {};
+}
+
 /** The collision world of a region. `opts` (bridge, outpost stage, telegraph) only matter to Kessar: the world is a pure function of (seed, those). */
 export function createRegionWorld(id: RegionId, seed: number, opts?: RegionWorldOpts): CollisionWorld {
-  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : createArena(seed);
+  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : id === "highmark" ? createHighmarkWorld(seed) : createArena(seed);
 }
 
 /** Where player `index` of `count` arrives. */
 export function regionSpawn(id: RegionId, index: number, count = 4): { x: number; z: number } {
-  return id === "kessar" ? kessarSpawn(index, count) : spawnPoint(index, count);
+  return id === "kessar" ? kessarSpawn(index, count) : id === "highmark" ? highmarkSpawn(index, count) : spawnPoint(index, count);
 }
 
 /** The props a region starts with (the integrator spawns them in the physics world). */
 export function regionProps(id: RegionId, seed: number, world: CollisionWorld): PropSpawn[] {
-  return id === "kessar" ? kessarProps(seed, world) : scatterProps(seed, world.terrain, 14);
+  return id === "kessar" ? kessarProps(seed, world) : id === "highmark" ? highmarkProps(seed, world) : scatterProps(seed, world.terrain, 14);
 }
 
 // ---- stations: the places you can USE (map table, notice board, the dock, the pier, the Warden) ------------------------------------------------------
@@ -73,8 +105,18 @@ const KESSAR_STATIONS: readonly UseStation[] = [
   { id: "foundation", kind: "foundation", x: OUTPOST_SITES.kessar!.site.x, z: OUTPOST_SITES.kessar!.site.z, r: YARD_R - 1, prompt: "Deliver a crate to the foundation" },
 ];
 
+// D-036: Highmark's court. The people are the scenario's (NPC rows); these are the HUD's prompts and the server's "court" use points (kind "court", acted on through the scenario).
+const HIGHMARK_STATIONS: readonly UseStation[] = [
+  { id: "dock", kind: "dock", x: H.landing.x, z: H.landing.z, r: 4, prompt: "Take the barge home" },
+  { id: "chamberlain", kind: "court", x: HS.chamberlain.x, z: HS.chamberlain.z, r: 2.6, prompt: "Address the Chamberlain" },
+  { id: "elder", kind: "court", x: HS.claimants.elder.x, z: HS.claimants.elder.z, r: 2.6, prompt: "Hear the elder claimant" },
+  { id: "younger", kind: "court", x: HS.claimants.younger.x, z: HS.claimants.younger.z, r: 2.6, prompt: "Hear the younger claimant" },
+];
+
+const stationList = (id: RegionId): readonly UseStation[] => (id === "kessar" ? KESSAR_STATIONS : id === "highmark" ? HIGHMARK_STATIONS : HOLLOWMERE_STATIONS);
+
 export function stationsFor(id: RegionId): UseStation[] {
-  return [...(id === "kessar" ? KESSAR_STATIONS : HOLLOWMERE_STATIONS)];
+  return [...stationList(id)];
 }
 
 /**
@@ -82,7 +124,7 @@ export function stationsFor(id: RegionId): UseStation[] {
  * cone (the same rule as props, INTERACT). The nearest and most centred wins. Pure, allocation-free; the returned object is shared, do not mutate it.
  */
 export function findStation(id: RegionId, x: number, z: number, facing: number): UseStation | undefined {
-  const list = id === "kessar" ? KESSAR_STATIONS : HOLLOWMERE_STATIONS;
+  const list = stationList(id);
   let best: UseStation | undefined;
   let bestScore = Infinity;
   for (let i = 0; i < list.length; i++) {

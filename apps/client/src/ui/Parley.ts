@@ -1,4 +1,4 @@
-import type { ParleyView } from "@cb/shared";
+import type { ParleyView, RegionId } from "@cb/shared";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
 import "./parley.css";
@@ -10,10 +10,13 @@ import "./parley.css";
  */
 export class Parley {
   private readonly modal = new Modal("parley", "parley", "parley-title");
+  private readonly society = h("p", { class: "society" }, "An audience at the toll bar");
   private readonly speaker = h("h2", { id: "parley-title" });
   private readonly line = h("p", { class: "line", role: "status", "aria-live": "polite" });
   private readonly meta = h("p", { class: "meta" });
   private readonly options = h("div", { class: "options", role: "group", "aria-label": "Your reply" });
+  /** Where the talks are held: the heading and the asked line follow the place (Kessar's toll bar, Highmark's court). */
+  private region: RegionId = "kessar";
   private pick: ((i: number) => void) | undefined;
   private close: (() => void) | undefined;
   private quiet = false;
@@ -29,7 +32,7 @@ export class Parley {
 
   constructor(root: HTMLElement) {
     root.appendChild(this.modal.root);
-    this.modal.panel.append(h("p", { class: "society" }, "An audience at the toll bar"), this.speaker, this.line, this.meta, this.options);
+    this.modal.panel.append(this.society, this.speaker, this.line, this.meta, this.options);
     this.modal.onClose = () => {
       if (!this.quiet) this.close?.();
       this.quiet = false;
@@ -47,7 +50,8 @@ export class Parley {
     return this.modal.isOpen;
   }
 
-  open(v: ParleyView, pick: (i: number) => void, close: () => void): void {
+  open(v: ParleyView, pick: (i: number) => void, close: () => void, region: RegionId = "kessar"): void {
+    this.region = region;
     this.pick = pick;
     this.close = close;
     this.render(v);
@@ -77,7 +81,12 @@ export class Parley {
     this.speaker.textContent = String(v.speaker ?? "");
     this.line.textContent = String(v.line ?? "");
     const toll = Number.isFinite(v.toll) ? Math.max(0, Math.round(v.toll)) : 0;
-    this.meta.textContent = `Toll asked: £${toll}   Round ${Math.max(1, v.round | 0)}   She seems ${String(v.mood ?? "neutral")}.`;
+    const round = Math.max(1, v.round | 0);
+    const mood = String(v.mood ?? "neutral");
+    // (the court asks a price, not a toll, and nobody there is a "she")
+    const court = this.region === "highmark";
+    this.society.textContent = court ? "An audience at court" : "An audience at the toll bar";
+    this.meta.textContent = court ? `Price asked: £${toll}   Round ${round}   The court seems ${mood}.` : `Toll asked: £${toll}   Round ${round}   She seems ${mood}.`;
     const focused = this.options.querySelector<HTMLElement>("button:focus")?.dataset.i;
     this.options.replaceChildren();
     const list = Array.isArray(v.options) ? v.options.slice(0, 9) : [];

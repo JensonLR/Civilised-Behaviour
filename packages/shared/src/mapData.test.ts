@@ -10,14 +10,14 @@ import { REGIONS } from "./regions.ts";
 describe("campaignMapOf", () => {
   const c = newCampaign(2), p = newPowers(2);
   const pins = mapPins(c, p, ["brine"]);
-  it("a fresh campaign: both regions, no outposts, no rival marker, the lanes from where you stand, unmet powers unknown", () => {
+  it("a fresh campaign: all three regions, no outposts, no rival marker, the lanes from where you stand, unmet powers unknown", () => {
     const m = campaignMapOf(c, newSettlements(), undefined, pins, { title: "Secure the River Crossing", brief: "x" }, newSettlements().tech);
-    expect(m.regions.map((r) => r.id)).toEqual(["hollowmere", "kessar"]);
+    expect(m.regions.map((r) => r.id)).toEqual(["hollowmere", "kessar", "highmark"]);
     expect(m.regions[0]!.here).toBe(true);
     expect(m.regions[1]!.offered?.title).toBe("Secure the River Crossing");
     expect(m.regions.every((r) => r.outpost === undefined && r.rivalPost === 0)).toBe(true);
     expect(m.rival).toBeUndefined();
-    expect(m.lanes).toEqual([{ to: "kessar", seconds: REGIONS.kessar.sailSeconds }]);
+    expect(m.lanes).toEqual([{ to: "kessar", seconds: REGIONS.kessar.sailSeconds }, { to: "highmark", seconds: REGIONS.highmark.sailSeconds }]);
     expect(m.pins.length).toBe(5);
     expect(m.pins.find((x) => x.id === "choir")!.known).toBe(false);
     expect(m.pins.find((x) => x.id === "brine")!.audience).toBe(true);
@@ -33,11 +33,18 @@ describe("campaignMapOf", () => {
     expect(m.regions[1]!.rivalPost).toBe(2);
     expect(m.rival).toMatchObject({ age: 2, where: "at the ford" });
     expect(m.rival!.goal).toBeTruthy();
-    expect(m.lanes).toEqual([{ to: "hollowmere", seconds: REGIONS.hollowmere.sailSeconds / 2 }]);
+    expect(m.lanes).toEqual([{ to: "hollowmere", seconds: REGIONS.hollowmere.sailSeconds / 2 }, { to: "highmark", seconds: REGIONS.highmark.sailSeconds / 2 }]);
     expect(m.tech).toEqual(tech);
     // the data is a copy: mutating it leaves the state alone
     m.tech.since.road = 99;
     expect(tech.since.road).toBe(1);
+  });
+  it("each region carries its own offer: a Partial<Record<RegionId, ...>>, and the old one-offer shape still reads", () => {
+    const offers = { kessar: { title: "Secure the River Crossing", brief: "x" }, highmark: { title: "The Vacant Chair", brief: "y" } };
+    const m = campaignMapOf(c, newSettlements(), undefined, pins, offers, newSettlements().tech);
+    expect(m.regions.map((r) => r.offered?.title)).toEqual([undefined, "Secure the River Crossing", "The Vacant Chair"]);
+    expect(campaignMapOf(c, newSettlements(), undefined, pins, { region: "highmark", title: "The Vacant Chair", brief: "y" }, newSettlements().tech).regions[2]!.offered?.title).toBe("The Vacant Chair");
+    expect(campaignMapOf(c, newSettlements(), undefined, pins, undefined, newSettlements().tech).regions.every((r) => r.offered === undefined)).toBe(true);
   });
   it("no rival goal without intel", () => {
     const seen = { ...p, rival: { ...p.rival, seenDay: 3, day: 5 } };

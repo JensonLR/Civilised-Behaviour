@@ -2,9 +2,15 @@ import { attachUiSounds, startAmbience, startMusic } from "../audio/index.ts";
 import { Controls } from "../input/Controls.ts";
 import { applyDisplaySettings, getGfx, getReduceMotion, onSettingChange } from "../settings.ts";
 import { motion, motionScale } from "../render/world/atmosphere.ts";
-import { Session } from "../net/Session.ts";
+import { Session, serverUrl } from "../net/Session.ts";
+import { pickPlatform } from "../platform/Platform.ts";
+import { PlatformLink } from "../platform/PlatformLink.ts";
+import { isDemo, isDesktop, wishlistLink } from "../platform/flags.ts";
+import { probeServer, reachText } from "../platform/serverReach.ts";
+import { REACH_CHECKING } from "../platform/reachCopy.ts";
+import { Wishlist } from "../ui/Wishlist.ts";
 import { Stage } from "../render/Stage.ts";
-import { createArena, isRegionId, isTemplateId, type RegionId, type ScenarioTemplateId } from "@cb/shared";
+import { DEMO, createArena, isRegionId, isTemplateId, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import { decodeSpec, encodeSpec, generateCharacter } from "@cb/procedural";
 import { CreatorPreview } from "../render/CreatorPreview.ts";
 import { Captions } from "../ui/Captions.ts";
@@ -60,6 +66,14 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   let pause!: Pause;
   let game: Game | undefined;
   let session: Session | undefined;
+  // D-036: the storefront seam (a no-op on the web). A friend's invite arrives as a valid join code and nothing else: at the front door it joins, in a game it returns to the door with
+  // the code filled in (leaving a live expedition is never done on a click from outside).
+  const link = new PlatformLink(pickPlatform(), (code) => {
+    if (session) location.assign(`${location.pathname}?join=${code}`);
+    else void menu?.joinWith(code);
+  });
+  link.presence({ where: "menu", party: 1, day: 0 });
+  window.addEventListener("pagehide", () => link.dispose());
 
   // ---- character look: remembered per browser, random for first-time players ----
   const loadLook = (): string => {
@@ -116,6 +130,8 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     pause = new Pause({
       canvas,
       invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: realPlayers(session) } : undefined),
+      // the demo's pause sheet carries a way to the wish-list card
+      ...(isDemo() ? { wishlist: () => new Wishlist({ url: wishlistLink() }).show() } : {}),
       leave: () => {
         session?.leave();
         location.assign(location.pathname); // back to the front door with a clean slate (the world, sockets and audio all restart)
@@ -150,13 +166,19 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
 
   async function enter(s: Session): Promise<void> {
     backdropWanted = false;
+    // (a demo that ran out while the world was still being built: the close has already happened, so the card is shown the moment the game exists)
+    let demoClosed = false;
+    s.room.onLeave((code) => {
+      if (code === DEMO.closeCode) demoClosed = true;
+    });
     menu.progress("Surveying the territory...");
     await ready;
     // let the working card paint before the (synchronous) world build blocks the page
     await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));
     preview.stop();
     session = s;
-    game = new Game(stage, s, controls, hud, debugEl);
+    game = new Game(stage, s, controls, hud, debugEl, link);
+    if (demoClosed) game.endDemo();
     showHud(s);
     s.room.onLeave((code) => {
       if (code !== 4000) console.warn("Left room", code);
@@ -171,7 +193,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     }
   }
 
-  const menu = new Menu(menuEl, {
+  const menu: Menu = new Menu(menuEl, {
     onCreate: async (name, rules, progress) => {
       backdropWanted = false; // (from the click, not from the session: the camp behind the door is not worth building now)
       progress("Posting the telegram...");
@@ -187,12 +209,25 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       await enter(s);
     },
     // a dormant campaign comes back by its code, for a former member only (D-035): the expedition resumes at HQ with its ledger
-    onResume: async (code, name, progress) => {
-      backdropWanted = false;
-      progress("Consulting the Society's files...");
-      const s = await Session.create(name, look, { resume: code });
-      progress("The file is found. Packing the trunks...");
-      await enter(s);
-    },
+    // (a demo saves nothing, so there is nothing to resume: the handler is absent and the door never offers it)
+    ...(isDemo()
+      ? {}
+      : {
+          onResume: async (code: string, name: string, progress: (step: string) => void) => {
+            backdropWanted = false;
+            progress("Consulting the Society's files...");
+            const s = await Session.create(name, look, { resume: code });
+            progress("The file is found. Packing the trunks...");
+            await enter(s);
+          },
+        }),
   });
+  // The desktop build loads from disk with no network at all: the door says whether a server can be reached, and asks again on request.
+  if (isDesktop()) {
+    const ask = (): void => {
+      menu.setReach(REACH_CHECKING);
+      void probeServer(serverUrl()).then((r) => menu.setReach(reachText(r), r === "down" ? ask : undefined));
+    };
+    ask();
+  }
 }

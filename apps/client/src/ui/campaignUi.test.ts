@@ -110,7 +110,7 @@ describe("what the map room is told", () => {
     ];
     const st = { region: "hollowmere", travelPhase: 1, travelTo: "kessar", travelReady: 0b10, players: { forEach: (cb: (p: (typeof players)[number]) => void) => players.forEach(cb) } };
     const v = mapRoomView(st, newCampaign(1), 0);
-    expect(v.regions.map((r) => [r.id, r.here])).toEqual([["hollowmere", true], ["kessar", false]]);
+    expect(v.regions.map((r) => [r.id, r.here])).toEqual([["hollowmere", true], ["kessar", false], ["highmark", false]]);
     expect(v.ready).toEqual([{ slot: 0, name: "Ada", ready: false }, { slot: 1, name: "Bo", ready: true }]); // no NPCs, no dropped connections
     expect(v.to).toBe("kessar");
     expect(v.you).toBe(0);
@@ -119,6 +119,25 @@ describe("what the map room is told", () => {
     c.history.push({ seq: 1, region: "kessar", resolution: "paid", day: 1, template: "secure_crossing" });
     c.crossing.toll = 55;
     expect(regionNote("kessar", c)).toContain("£55");
+  });
+
+  it("Highmark has its own voice on the chart: unvisited, then the chair as the ledger left it, and the contract on offer", () => {
+    const fresh = newCampaign(1);
+    expect(regionNote("highmark", fresh)).toMatch(/Not yet visited.*switchback road.*six years/);
+    expect(regionNote("highmark", fresh)).not.toMatch(/bridge|toll|fort/);
+    expect(regionNote("highmark", fresh, 1)).toContain("On offer: The Vacant Chair.");
+    const want: Record<string, RegExp> = { open: /vacant in a procedural sense/, elder: /Princess Orla sits the chair/, younger: /Prince Dunstan sits/, regency: /regency of three signatures/, usurped: /early succession/, sold: /concession is the Syndicate's/ };
+    for (const [state, re] of Object.entries(want)) {
+      const c = newCampaign(1);
+      c.history.push({ seq: 1, region: "highmark", resolution: "regency", day: 3, template: "succession_dispute" });
+      c.sites.succession = state as typeof c.sites.succession;
+      expect(regionNote("highmark", c), state).toMatch(re);
+      expect(regionNote("highmark", c, 2), state).toContain("Last visit: day 3.");
+    }
+    // Kessar's note is untouched by a Highmark visit
+    const c = newCampaign(1);
+    c.history.push({ seq: 1, region: "highmark", resolution: "regency", day: 3, template: "succession_dispute" });
+    expect(regionNote("kessar", c)).toMatch(/Not yet visited. A bridge/);
   });
 
   it("the map note names the contract the ledger offers next (the same pure rule the server runs at landfall), and nothing without a seed", () => {

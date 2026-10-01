@@ -9,6 +9,8 @@ export interface PauseDeps {
   invite(): { code: string; link: string; present: number } | undefined;
   /** Leave the expedition (the page returns to the front door). */
   leave(): void;
+  /** The demo only (D-036): a button that opens the wish-list card. Absent in the full game. */
+  wishlist?(): void;
 }
 
 /**
@@ -37,11 +39,13 @@ export class Pause {
     opts.addEventListener("click", () => openSettings(opts));
     this.copy.addEventListener("click", () => this.copyInvite());
     this.leaveBtn.addEventListener("click", () => this.leaveClicked());
+    const wish = deps.wishlist ? h("button", { type: "button" }, "The full expedition") : undefined;
+    wish?.addEventListener("click", () => deps.wishlist!());
     this.modal.panel.append(
       h("p", { class: "society" }, "The Imperial Cartographic & Improvement Society"),
       h("h2", { id: "pause-title" }, "Expedition Halted"),
       this.info,
-      h("div", { class: "menu" }, resume, how, opts, this.copy, this.leaveBtn),
+      h("div", { class: "menu" }, resume, how, opts, ...(wish ? [wish] : []), this.copy, this.leaveBtn),
       h("p", { class: "fine" }, "The world does not wait for you. Your comrades are still on the march."),
     );
     this.modal.onClose = () => {

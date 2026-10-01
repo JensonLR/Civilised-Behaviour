@@ -15,6 +15,8 @@ import { rivalDispatch } from "./rival.ts";
 import { RIVAL_GOALS } from "./rival.ts";
 import * as powersText from "./powersText.ts";
 import * as rivalText from "./rivalText.ts";
+import { HIGHMARK_SIGNS } from "./highmark.ts";
+import { REGIONS } from "./regions.ts";
 
 /** The world is fictional. This scans the authored text of the campaign layer (and any other authored-text file that exists) for real-world names. */
 const BANNED = [
@@ -47,7 +49,7 @@ describe("no real-world terms in authored text", () => {
   });
 
   it("exported data tables are clean", () => {
-    const all = [...strings(factions.POWERS), ...strings(factions.WARD), ...strings(negText), ...strings(newsText), ...strings(COMPLICATION_HINT)];
+    const all = [...strings(factions.POWERS), ...strings(factions.WARD), ...strings(negText), ...strings(newsText), ...strings(COMPLICATION_HINT), ...HIGHMARK_SIGNS, ...strings(REGIONS.highmark)];
     for (const id of TEMPLATE_IDS) all.push(TEMPLATES[id].title, TEMPLATES[id].brief);
     expect(all.length).toBeGreaterThan(200);
     for (const s of all) expect(RE.test(s), s).toBe(false);
@@ -69,7 +71,7 @@ describe("no real-world terms in authored text", () => {
   });
 
   it("the people, parleys and hints of every template are clean", () => {
-    const kinds: SiteParleyKind[] = ["ransom", "ward_post", "surveyor", "ford_post"];
+    const kinds: SiteParleyKind[] = ["ransom", "ward_post", "surveyor", "ford_post", "chamberlain", "claimant_elder", "claimant_younger"];
     for (const kind of kinds) {
       for (let seed = 0; seed < 20; seed++) {
         const ctx = { price: 30 + seed, purse: 200, seed, day: seed };
@@ -101,7 +103,9 @@ describe("no real-world terms in authored text", () => {
       // the hired hands, their orders and the manifest (D-034): authored names, grumbles, refusals, stores
       "followers.ts", "command.ts", "loadout.ts", "partyState.ts", "mount.ts", "morale.ts", "expeditionTypes.ts",
       // D-035: the powers, the rival agent, the audiences and the relation map
-      "powers.ts", "powersText.ts", "rival.ts", "rivalText.ts", "audiences.ts", "relations.ts", "worldTypes.ts"]) {
+      "powers.ts", "powersText.ts", "rival.ts", "rivalText.ts", "audiences.ts", "relations.ts", "worldTypes.ts",
+      // D-036: Highmark (region two): the plan and its signs, the succession dispute, the chart
+      "highmark.ts", "scenarios/succession.ts", "mapData.ts", "outpostText.ts"]) {
       const url = new URL(f, dir);
       expect(existsSync(url), f).toBe(true);
       const hit = readFileSync(url, "utf8").split("\n").findIndex((l) => RE.test(l));

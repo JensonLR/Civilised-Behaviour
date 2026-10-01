@@ -49,6 +49,13 @@ export const RELATION_FX: Record<ResolutionId, Partial<Record<PairKey, number>>>
   sided_syndicate: { "ward|rival": -10, "rival|brine": 4, "rival|choir": 3, "ward|reapers": -4 },
   provoked:        { "ward|rival": -12, "ward|brine": -4, "rival|brine": -4, "brine|choir": 4 },
   escalated:       { "ward|rival": -6, "ward|brine": -6, "rival|brine": -6, "ward|reapers": -6, "rival|reapers": -6 },
+  // the chair at Highmark (D-036). The Reapers' Assembly ratifies, the Guild certifies the King's death (and bills for it), the Houses want the concession. The story is carried by reapers|choir and
+  // reapers|brine; no two endings read alike (each differs from every other in at least two pairs).
+  backed_elder:    { "reapers|choir": -6, "brine|reapers": 3, "ward|reapers": 2, "brine|choir": 2 },
+  backed_younger:  { "reapers|choir": -4, "brine|reapers": -5, "rival|reapers": 2, "ward|choir": -2 },
+  regency:         { "reapers|choir": 3, "brine|reapers": 4, "brine|choir": 3, "ward|reapers": 4 },
+  usurped:         { "reapers|choir": -10, "brine|reapers": -6, "ward|choir": -3, "rival|reapers": -4, "ward|rival": 3 },
+  crown_sold:      { "reapers|choir": 2, "brine|reapers": -3, "rival|brine": -10, "rival|reapers": -8, "ward|rival": 4 },
 };
 
 export const clampRel = (v: number): number => Math.min(100, Math.max(-100, Math.round(v)));
