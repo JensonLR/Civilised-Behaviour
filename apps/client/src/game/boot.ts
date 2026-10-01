@@ -4,7 +4,7 @@ import { applyDisplaySettings, getGfx, getReduceMotion, onSettingChange } from "
 import { motion, motionScale } from "../render/world/atmosphere.ts";
 import { Session } from "../net/Session.ts";
 import { Stage } from "../render/Stage.ts";
-import { createArena, isRegionId, type RegionId } from "@cb/shared";
+import { createArena, isRegionId, isTemplateId, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import { decodeSpec, encodeSpec, generateCharacter } from "@cb/procedural";
 import { CreatorPreview } from "../render/CreatorPreview.ts";
 import { Captions } from "../ui/Captions.ts";
@@ -80,6 +80,8 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   };
   // `?region=kessar` founds the expedition already at that shore (dev, tests, screenshots); in play the party sails from the map room
   const startRegion: RegionId | undefined = isRegionId(params.get("region")) ? (params.get("region") as RegionId) : undefined;
+  // `&scenario=<template id>` picks the contract offered at Kessar (dev, tests): in play the campaign ledger decides (shared/scenarios/registry.ts)
+  const startScenario: ScenarioTemplateId | undefined = isTemplateId(params.get("scenario")) ? (params.get("scenario") as ScenarioTemplateId) : undefined;
   const realPlayers = (s: Session): number => {
     let n = 0;
     s.room.state.players.forEach((p) => {
@@ -171,7 +173,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     onCreate: async (name, rules, progress) => {
       backdropWanted = false; // (from the click, not from the session: the camp behind the door is not worth building now)
       progress("Posting the telegram...");
-      const s = await Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}) });
+      const s = await Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}), ...(startScenario ? { scenario: startScenario } : {}) });
       progress("Reply received. Packing the trunks...");
       await enter(s);
     },

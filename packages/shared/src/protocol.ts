@@ -1,5 +1,6 @@
 /** Room names and JSON-ish message contracts shared by client and server. */
-import type { ParleyView, RegionId } from "./campaignTypes.ts";
+import type { ParleyView, RegionId, ScenarioTemplateId } from "./campaignTypes.ts";
+import type { CommandMsg, Loadout } from "./expeditionTypes.ts";
 
 export const ROOM_WORLD = "world";
 
@@ -20,6 +21,8 @@ export interface JoinOptions {
   friendlyFire?: boolean;
   /** Region the campaign starts in (create only; default hollowmere; validated server-side). Dev, tests and screenshots: in play the party sails. */
   region?: RegionId;
+  /** Contract offered at Kessar (create only; dev, tests and screenshots: in play the campaign ledger picks it). Validated server-side. */
+  scenario?: ScenarioTemplateId;
 }
 
 /** Client -> server messages other than the input stream. */
@@ -36,6 +39,12 @@ export interface ClientMessages {
   /** Parley with the Lamp-Warden: pick option `option` of the open view / walk away. Only the session that owns the parley is heard. */
   parleyPick: { option: number };
   parleyClose: Record<string, never>;
+  /** The manifest at the supply table (edited freely by anyone at the table; the server normalises and re-validates it at propose and at sail). */
+  loadoutSet: { loadout: Loadout };
+  /** Hire (`on`) or dismiss a hand by roster/pool id. Only at the table. */
+  hire: { id: string; on: boolean };
+  /** An order to the hired hands. Hostile until the server's parser accepts it. */
+  command: CommandMsg;
 }
 
 /** Minimum gap between accepted setLook messages per client. */
@@ -58,7 +67,7 @@ export interface ServerMessages {
   /** Sent only to the shooter: their shot found somebody. Drives the hit marker. */
   hitmark: HitMarkEvent;
   /** Open a station UI for this player (the map room, or the paper at the notice board). */
-  station: { kind: "map" | "paper" };
+  station: { kind: "map" | "paper" | "loadout" };
   /** The parley's state for its owner: a new view, or it closed (with the closing line). */
   parley: { view?: ParleyView; line?: string; closed?: boolean };
 }

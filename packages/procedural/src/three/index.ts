@@ -8,3 +8,7 @@ export * from "./loft.ts";
 export * from "./sweep.ts";
 export * from "./animatorExtras.ts";
 export * from "./weaponPose.ts";
+export * from "./horse.ts";
+export * from "./horseAnimator.ts";
+export * from "./ridePose.ts";
+export * from "./wagon.ts";

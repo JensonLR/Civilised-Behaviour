@@ -4,6 +4,7 @@ import { FaceAnimator } from "./faceAnimate.ts";
 import type { ExpressionId } from "./expressions.ts";
 import type { CharacterRig } from "./rig.ts";
 import { armRestAbduction, crouchObstruction, kneeFlexLimit } from "./armClearance.ts";
+import { applyRidePose, newRideInput, type RideInput } from "./ridePose.ts";
 import { HAND_CENTRE, applyMatrix, forearmMatrix, computeHold, newHoldOut, rotateByQuat, solveArm, solveWrist, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
 
 // The expression set (ids, targets, per-expression face poses) lives in expressions.ts; the face itself is driven by faceAnimate.ts.
@@ -23,6 +24,11 @@ export interface PoseInput {
   yawRate?: number;
   /** What is in the hands and what they are doing (aim, recoil, reload, a blow, working a cannon). Optional: absent = empty hands. See weaponPose.ts. */
   weapon?: WeaponPoseInput;
+  /**
+   * Sitting a horse (ridePose.ts): the animator writes its own pose as usual, then blends the riding pose over it (`weight` is eased here, so mounting and dismounting never snap).
+   * Absent = on foot; the last values are kept while the blend eases out.
+   */
+  ride?: RideInput;
 }
 
 const damp = (current: number, target: number, rate: number, dt: number): number => current + (target - current) * (1 - Math.exp(-rate * dt));
@@ -136,6 +142,9 @@ export class CharacterAnimator {
   /** The axis error (radians) left after the wrist turned the fist onto the handle, per side (L, R); 0 when nothing is held. */
   readonly gripError = [0, 0];
   private readonly holdInput: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
+  /** How far the riding pose is blended in (0 on foot .. 1 in the saddle) and the last ride input (kept while the blend eases out). */
+  private rideBlend = 0;
+  private readonly rideIn: RideInput = newRideInput();
   private readonly emptyWeapon: WeaponPoseInput = { id: -1, aim: 0, elev: 0, fire: 0, reload: 0, swing: -1, swingKind: 0, fp: 0, crew: 0, hidden: false };
 
   constructor(private readonly rig: CharacterRig) {
@@ -571,6 +580,9 @@ export class CharacterAnimator {
     j.elbowR.rotation.x = clamp(elR, 0, 2.42);
     this.applyHold(dt, pose, busy, speed);
     this.applyWrists(dt);
+    if (pose.ride) Object.assign(this.rideIn, pose.ride);
+    this.rideBlend = damp(this.rideBlend, pose.ride ? clamp(pose.ride.weight ?? 1, 0, 1) : 0, pose.ride ? 8 : 10, dt);
+    if (this.rideBlend > 0.002) applyRidePose(this.rig, this.rideIn, this.rideBlend);
 
     // ---- head: stays level against the torso, glances, leads the turn, takes the mood ---------------------------------------------------------
     j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1);

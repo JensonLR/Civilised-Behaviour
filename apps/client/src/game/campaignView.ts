@@ -1,16 +1,19 @@
-import { REGIONS, REGION_IDS, isRegionId, type CampaignState, type RegionId } from "@cb/shared";
+import { REGIONS, REGION_IDS, isRegionId, pickTemplate, templateNote, type CampaignState, type RegionId } from "@cb/shared";
 import type { MapRoomView } from "../ui/MapRoom.ts";
 
 /** What the campaign remembers about a region, written beside it on the chart. Plain text; no markup. */
-export function regionNote(id: RegionId, c: CampaignState | undefined): string {
+export function regionNote(id: RegionId, c: CampaignState | undefined, seed?: number): string {
   if (!c) return "";
   if (id === "hollowmere") return `Day ${c.day}. Purse: £${c.purse}. Expeditions out: ${c.expeditions}.`;
+  // The contract the ledger offers next (the same pure rule the server runs when the party lands; a dev-forced contract is the server's business).
+  const offer = seed === undefined ? undefined : pickTemplate(c, id, seed);
+  const contract = offer ? ` On offer: ${templateNote(offer).title}. ${templateNote(offer).brief}` : "";
   const cr = c.crossing;
-  if (!c.history.some((h) => h.region === id)) return "Not yet visited. A bridge, a toll bar and a fort with opinions.";
+  if (!c.history.some((h) => h.region === id)) return `Not yet visited. A bridge, a toll bar and a fort with opinions.${contract}`;
   const bridge = cr.bridge === "collapsed" ? "The bridge is down" : cr.bridge === "rigged" ? "The bridge is rigged" : "The bridge stands";
   const control = cr.control === "ward" ? "the Ward holds it" : cr.control === "society" ? "the Society holds it" : cr.control === "rival" ? "the Syndicate holds it" : "it is contested";
   const toll = cr.toll > 0 ? `toll £${cr.toll}` : "no toll";
-  return `${bridge}; ${control}; ${toll}.`;
+  return `${bridge}; ${control}; ${toll}.${contract}`;
 }
 
 /** The slice of the room state the map room needs (structural, so tests need no Colyseus). */
@@ -19,6 +22,7 @@ export interface MapState {
   travelPhase: number;
   travelTo: string;
   travelReady: number;
+  seed?: number;
   players: { forEach(cb: (p: { name: string; slot: number; connected: boolean; npc: number }) => void): void };
 }
 
@@ -33,7 +37,7 @@ export function mapRoomView(st: MapState, campaign: CampaignState | undefined, y
   });
   ready.sort((a, b) => a.slot - b.slot);
   return {
-    regions: REGION_IDS.map((id) => ({ id, name: REGIONS[id].name, blurb: REGIONS[id].blurb, note: regionNote(id, campaign), here: id === here })),
+    regions: REGION_IDS.map((id) => ({ id, name: REGIONS[id].name, blurb: REGIONS[id].blurb, note: regionNote(id, campaign, st.seed), here: id === here })),
     ready,
     phase,
     ...(phase >= 1 && isRegionId(st.travelTo) ? { to: st.travelTo } : {}),

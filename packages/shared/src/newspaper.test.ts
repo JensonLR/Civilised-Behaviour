@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { CampaignState, CasualtyTally, ResolutionId, ScenarioOutcome } from "./campaignTypes.ts";
-import { RESOLUTIONS, applyOutcome, newCampaign } from "./factions.ts";
+import type { CampaignState, CasualtyTally, ResolutionId, ScenarioOutcome, ScenarioTemplateId } from "./campaignTypes.ts";
+import { RESOLUTIONS, TEMPLATE_RESOLUTIONS, applyOutcome, newCampaign } from "./factions.ts";
 import { PAPER_LIMITS, generatePaper, type Paper } from "./newspaper.ts";
 import { HEADLINES, NOTICES, SPIN_DEAD, STANDFIRSTS } from "./newspaperText.ts";
 
 const tally = (t: Partial<CasualtyTally> = {}): CasualtyTally => ({ wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0, ...t });
+const templateOf = (r: ResolutionId): ScenarioTemplateId => (["hostage_rescue", "convoy_ambush", "border_incident"] as const).find((t) => TEMPLATE_RESOLUTIONS[t].includes(r) && r !== "abandoned") ?? "secure_crossing";
 const out = (resolution: ResolutionId, o: Partial<ScenarioOutcome> = {}): ScenarioOutcome => ({
-  scenario: "secure_crossing", resolution, toll: 50, paid: 0, bridge: "intact", tally: tally(), brokePromise: false, seconds: 100, ...o,
+  scenario: templateOf(resolution), resolution, toll: 50, paid: 0, bridge: "intact", tally: tally(), brokePromise: false, seconds: 100, ...o,
 });
 const paperText = (p: Paper): string => [p.masthead, p.dateline, p.headline, p.standfirst, ...p.stories.flatMap((s) => [s.head, s.body]), ...p.notices].join("\n");
 const after = (r: ResolutionId, o: Partial<ScenarioOutcome> = {}, seed = 4): CampaignState => applyOutcome(newCampaign(seed), out(r, o));
@@ -15,6 +16,13 @@ const CASES: [ResolutionId, Partial<ScenarioOutcome>][] = [
   ["paid", { paid: 50 }], ["bargained", { paid: 33 }], ["bribed", { paid: 24 }], ["forced", { tally: tally({ garrisonKilled: 5, garrisonRouted: 2, wounded: 3 }) }],
   ["sabotaged", { bridge: "collapsed", tally: tally({ limbsLost: 2 }) }], ["rival_secured", {}], ["abandoned", { tally: tally({ wounded: 1 }) }],
 ];
+/** The thirteen newer endings (D-034): hostage, convoy, border. */
+const NEW_CASES: [ResolutionId, Partial<ScenarioOutcome>][] = [
+  ["ransomed", { paid: 45 }], ["rescued", { tally: tally({ wounded: 2 }) }], ["slipped_away", {}], ["hostage_lost", { tally: tally({ civiliansHarmed: 1 }) }],
+  ["seized", { loot: 60 }], ["tipped_off", {}], ["burned", { tally: tally({ rivalKilled: 2 }) }], ["passed", {}],
+  ["mediated", {}], ["sided_ward", {}], ["sided_syndicate", { brokePromise: true }], ["provoked", { tally: tally({ garrisonKilled: 1 }) }], ["escalated", {}],
+];
+const ALL_CASES = [...CASES, ...NEW_CASES];
 
 describe("generatePaper", () => {
   it("is deterministic: equal input, equal paper; a different world seed changes the wording", () => {
@@ -32,9 +40,9 @@ describe("generatePaper", () => {
     expect(eds).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it("all 7 resolutions print distinct headlines, each with at least 3 templates and real variety", () => {
+  it("all 20 resolutions print distinct headlines, each with at least 3 templates and real variety", () => {
     const all = new Map<ResolutionId, Set<string>>();
-    for (const [r, o] of CASES) {
+    for (const [r, o] of ALL_CASES) {
       const heads = new Set<string>();
       for (let s = 0; s < 80; s++) heads.add(generatePaper(after(r, o), s).headline);
       expect(heads.size, r).toBeGreaterThanOrEqual(3);
@@ -49,8 +57,21 @@ describe("generatePaper", () => {
     }
   });
 
+  it("the newer contracts get a ledger story named for the place, with the Society's own euphemism", () => {
+    const heads: Record<string, RegExp> = { hostage_rescue: /Cage|Orchard|Insured/, convoy_ambush: /Cut|Syndicate Wagon|Convoy/, border_incident: /Marker Stone|Stone in the Ford|Border/ };
+    for (const [r, o] of NEW_CASES) {
+      const c = after(r, o);
+      const led = generatePaper(c, 7).stories.find((x) => x.slug === "ledger");
+      expect(led, r).toBeDefined();
+      expect(led!.head, r).toMatch(heads[templateOf(r)]!);
+      expect(led!.body, r).toContain(`Purse: \u00a3${c.purse}`);
+      expect(led!.body, r).not.toMatch(/Toll:|Bridge:/);
+    }
+  });
+
   it("states the material facts: toll amount, bridge state and the dead count", () => {
-    for (const [r, o] of CASES) {
+    for (const [r, o] of ALL_CASES) {
+      if (templateOf(r) !== "secure_crossing") continue;
       const c = after(r, o);
       const text = generatePaper(c, 5).stories.map((s) => s.body).join(" ") + generatePaper(c, 5).standfirst;
       const dead = c.tally.garrisonKilled + c.tally.rivalKilled;
@@ -111,7 +132,7 @@ describe("generatePaper", () => {
     let n = 0;
     const tallies = [tally(), tally({ garrisonKilled: 1 }), tally({ garrisonKilled: 4, limbsLost: 3, civiliansHarmed: 2 }), tally({ garrisonRouted: 5, wounded: 4, rivalKilled: 2 }), tally({ garrisonKilled: 40, garrisonRouted: 40, wounded: 40, limbsLost: 40, civiliansHarmed: 40, rivalKilled: 40 })];
     const pools = new Set<string>();
-    for (const [r, o] of CASES) for (const t of tallies) for (const rivalInf of [5, 40, 90]) for (const bribeFirst of [false, true]) for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    for (const [r, o] of ALL_CASES) for (const t of tallies) for (const rivalInf of [5, 40, 90]) for (const bribeFirst of [false, true]) for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       let c = newCampaign(seed * 31);
       c.factions.ward.rivalInfluence = rivalInf;
       if (bribeFirst) c = applyOutcome(c, out("bribed", { paid: 20 }));

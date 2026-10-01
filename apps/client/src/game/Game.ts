@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { BUTTON, CASUALTY, FLAG, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, isRegionId, newCampaign, parseCampaign, PropKind, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
+import { BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId } from "@cb/shared";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
@@ -14,12 +14,17 @@ import { getBindings, keyLabel } from "../input/bindings.ts";
 import { FIRST_PERSON } from "../render/firstPerson.ts";
 import { GameAudio } from "./GameAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
+import { MountView, type RiderPoseLike } from "../render/mounts/MountView.ts";
+import { mountPrompt } from "../render/mounts/mountPrompt.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { noteFolk } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
+import { CommandWheel, WHEEL_STAMPS } from "../ui/CommandWheel.ts";
 import { Hud } from "../ui/Hud.ts";
+import { LoadoutSheet } from "../ui/Loadout.ts";
 import { MapRoom } from "../ui/MapRoom.ts";
+import { NameTags } from "../ui/nameTags.ts";
 import { NewspaperView } from "../ui/Newspaper.ts";
 import { ObjectiveTracker } from "../ui/ObjectiveTracker.ts";
 import { Parley } from "../ui/Parley.ts";
@@ -31,7 +36,6 @@ import { CombatView } from "./CombatView.ts";
 
 interface Actor {
   body: CharacterActor;
-  tag: HTMLDivElement;
 }
 
 const tmp = new Vector3();
@@ -40,6 +44,11 @@ const eyeSample = newEyeSample();
 const walkers = [0, 1, 2, 3].map(() => ({ x: 0, z: 0 }));
 
 const injuries = createInjuryMods();
+const aimHit = newWorldHit();
+const camDir = new Vector3();
+/** Sides a hired hand may be sent at (never the party, never a bystander). */
+const FOE_SIDES: ReadonlySet<string> = new Set(["ward", "rival", "outlaw"]);
+const HAND_ROLES: ReadonlySet<number> = new Set([NPC.PORTER, NPC.HIRED_RIFLE, NPC.SURGEON]);
 
 /** Prompt for dressing a standing comrade's worst dressable wound. */
 function dressPrompt(use: string, patient: PlayerStateType | undefined): string {
@@ -53,6 +62,16 @@ export class Game {
   readonly overlay: DebugOverlay;
   private readonly actors = new Map<string, Actor>();
   private readonly tagLayer: HTMLElement;
+  /** Name plates: culled, never clamped (shared/nameTag.ts). */
+  private readonly tags: NameTags;
+  /** Horses and wagons: drawn from `WorldState.mounts`, a ridden horse from its rider's predicted state. */
+  private readonly mountView: MountView;
+  private readonly riderScratch: RiderPoseLike = { x: 0, y: 0, z: 0, facing: 0, vx: 0, vz: 0, vy: 0, flags: 0 };
+  /** The supply manifest sheet (station "loadout") and the command wheel for the hired hands. */
+  private readonly loadout: LoadoutSheet;
+  private readonly wheel: CommandWheel;
+  private partyRev = -1;
+  private party: PartyState = newParty();
   private readonly props: PropViews;
   private readonly hud: Hud;
   private readonly hitFx: HitFx;
@@ -112,6 +131,8 @@ export class Game {
     this.offSettings = onSettingChange(() => this.applySettings());
     this.tagLayer = hud;
     this.props = new PropViews(stage.scene, stage.outlines);
+    this.tags = new NameTags(hud);
+    this.mountView = new MountView(stage.scene, { outline: stage.outlines });
     this.hud = new Hud(hud);
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
@@ -136,16 +157,22 @@ export class Game {
     this.parley = new Parley(document.body);
     this.paper = new NewspaperView(document.body);
     this.tracker = new ObjectiveTracker(hud);
+    this.loadout = new LoadoutSheet(document.body);
+    this.wheel = new CommandWheel(document.body, (c) => this.sendCommand(c));
+    controls.onCommand = (phase) => this.onCommandKey(phase);
     session.room.onMessage("station", (m: { kind?: string }) => {
       if (m?.kind === "map") this.openMap();
       else if (m?.kind === "paper") this.openPaper();
+      else if (m?.kind === "loadout") this.openLoadout();
     });
     session.room.onMessage("parley", (m: { view?: ParleyView; line?: string; closed?: boolean }) => this.onParley(m));
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
 
     session.room.onMessage("notice", (m: { text: string }) => {
-      this.hud.showNotice(m.text);
+      // The hands' answer to an order ("Obeyed." / "Refused. ...") is the wheel's own plain line, not a notice.
+      if (/^(Obeyed|Refused)\b/.test(m.text)) this.wheel.setResult(m.text);
+      else this.hud.showNotice(m.text);
       playSfx("notice");
     });
     session.room.onMessage("pong", (m: { t: number }) => {
@@ -185,6 +212,143 @@ export class Game {
     });
   }
 
+  // ---- the expedition: the manifest sheet, the hired hands, the command wheel -------------------------------------------------------------------
+
+  private loadoutView(): Parameters<LoadoutSheet["open"]>[0] {
+    const st = this.session.room.state;
+    let humans = 0;
+    st.players.forEach((p) => {
+      if (!p.npc && p.connected) humans++;
+    });
+    return {
+      loadout: this.party.loadout,
+      purse: this.campaign?.purse ?? 0,
+      humans,
+      roster: this.party.roster,
+      pool: hirePool(st.seed, this.campaign?.day ?? 0, this.party),
+    };
+  }
+
+  private openLoadout(): void {
+    const room = this.session.room;
+    this.loadout.open(this.loadoutView(), {
+      set: (loadout) => room.send("loadoutSet", { loadout }),
+      hire: (id, on) => room.send("hire", { id, on }),
+      confirm: () => this.hud.showNotice("Manifest filed. It is charged when the ship leaves, and not before."),
+      close: () => {},
+    });
+  }
+
+  /** Hired hands on the ground now, and which orders they can take (a porter is the only hand that fetches). */
+  private hands(): { count: number; porter: boolean } {
+    let count = 0;
+    let porter = false;
+    this.session.room.state.players.forEach((p) => {
+      if (!HAND_ROLES.has(p.npc) || (p.flags & FLAG.DOWNED) !== 0) return;
+      count++;
+      if (p.npc === NPC.PORTER) porter = true;
+    });
+    return { count, porter };
+  }
+
+  private onCommandKey(phase: "down" | "up"): void {
+    if (phase === "up") {
+      this.wheel.release();
+      this.controls.wheelOpen = this.wheel.isOpen;
+      return;
+    }
+    if (this.wheel.isOpen || this.controls.blocked) return;
+    const me = this.session.predicted;
+    if (!me || (me.flags & FLAG.DOWNED) !== 0) return;
+    const hands = this.hands();
+    if (hands.count === 0) {
+      this.hud.showNotice("There is nobody on the payroll to command. This is, for once, the Society's fault.");
+      return;
+    }
+    this.wheel.setAvailable(WHEEL_STAMPS.map((s) => s.id).filter((id) => id !== "fetch" || hands.porter));
+    this.wheel.open();
+    this.controls.wheelOpen = true;
+  }
+
+  /** An order from the wheel: the point or the target comes from where the camera looks. The server re-checks everything (range, standing, targets). */
+  private sendCommand(c: CommandId): void {
+    const st = this.session.room.state;
+    const me = this.session.predicted;
+    if (!me) return;
+    const msg: CommandMsg = { intent: c };
+    const cam = this.stage.camera;
+    cam.getWorldDirection(camDir);
+    if (c === "hold") {
+      const x = this.session.value(me, "x") - Math.sin(this.rig.yaw) * 8;
+      const z = this.session.value(me, "z") - Math.cos(this.rig.yaw) * 8;
+      msg.at = { x, z };
+    } else if (c === "attack") {
+      let best = 0.985;
+      let id: string | undefined;
+      st.players.forEach((p, key) => {
+        const side = NPC_SIDE[p.npc];
+        if (!p.npc || side === undefined || !FOE_SIDES.has(side) || (p.flags & FLAG.DOWNED) !== 0) return;
+        const d = this.aim(p.x, p.y + 1.2, p.z, 60);
+        if (d > best) {
+          best = d;
+          id = key;
+        }
+      });
+      if (id === undefined) {
+        this.hud.showNotice("Nobody in the sights to be attacked. The hands await a more specific grievance.");
+        return;
+      }
+      msg.target = id;
+    } else if (c === "fetch") {
+      let best = 0.97;
+      let id: string | undefined;
+      st.props.forEach((p, key) => {
+        if (p.holder !== "") return;
+        const d = this.aim(p.x, p.y, p.z, 30);
+        if (d > best) {
+          best = d;
+          id = key;
+        }
+      });
+      if (id === undefined) {
+        this.hud.showNotice("Nothing in the sights to fetch.");
+        return;
+      }
+      msg.target = id;
+    }
+    this.session.room.send("command", msg);
+  }
+
+  /** How squarely the camera looks at a point (cosine of the angle off its axis; 0 when too far, behind, or behind a wall). */
+  private aim(x: number, y: number, z: number, maxDist: number): number {
+    const cam = this.stage.camera.position;
+    const dx = x - cam.x;
+    const dy = y - cam.y;
+    const dz = z - cam.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 0.5 || d > maxDist) return 0;
+    const dot = (dx * camDir.x + dy * camDir.y + dz * camDir.z) / d;
+    if (dot < 0.9) return 0;
+    if (rayWorld(this.session.world, cam.x, cam.y, cam.z, dx / d, dy / d, dz / d, d - 0.6, aimHit)) return 0;
+    return dot;
+  }
+
+  private riderPose = (sid: string): RiderPoseLike | undefined => {
+    const p = this.session.room.state.players.get(sid);
+    if (!p) return undefined;
+    const r = this.riderScratch;
+    const me = sid === this.session.sessionId;
+    r.x = this.session.value(p, "x");
+    r.y = this.session.value(p, "y");
+    r.z = this.session.value(p, "z");
+    r.facing = this.session.value(p, "facing");
+    r.vx = this.session.value(p, "vx");
+    r.vz = this.session.value(p, "vz");
+    r.vy = this.session.value(p, "vy");
+    r.flags = me ? (this.session.predicted?.flags ?? p.flags) : p.flags;
+    return r;
+  };
+
   private openPaper(): void {
     const c = this.campaign ?? newCampaign(this.session.room.state.seed);
     this.paper.show(generatePaper(c, this.session.room.state.seed), () => {});
@@ -212,6 +376,12 @@ export class Game {
     if ((st.campaignRev ?? 0) !== this.campaignRev) {
       this.campaignRev = st.campaignRev ?? 0;
       this.campaign = st.campaign ? parseCampaign(st.campaign) : undefined;
+      if (this.loadout.isOpen) this.loadout.update(this.loadoutView());
+    }
+    if ((st.partyRev ?? 0) !== this.partyRev) {
+      this.partyRev = st.partyRev ?? 0;
+      this.party = parseParty(st.party) ?? newParty();
+      if (this.loadout.isOpen) this.loadout.update(this.loadoutView());
     }
     if ((st.scenarioRev ?? 0) !== this.scenarioRev) {
       this.scenarioRev = st.scenarioRev ?? 0;
@@ -237,6 +407,9 @@ export class Game {
         this.sailRelease ??= holdInput();
         this.parley.closeUi();
         this.paper.hide();
+        this.loadout.closeUi();
+        this.wheel.cancel();
+        this.controls.wheelOpen = false;
         if (phase === 2) this.sailing.show(st.travelTo, st.travelLeft ?? 0);
         else this.sailing.arriving();
       } else if (this.sailRelease) {
@@ -325,6 +498,12 @@ export class Game {
     this.parley.dispose();
     this.paper.dispose();
     this.tracker.dispose();
+    this.loadout.dispose();
+    this.wheel.dispose();
+    this.tags.dispose();
+    this.mountView.dispose();
+    this.controls.onCommand = undefined;
+    this.controls.wheelOpen = false;
   }
 
   private frame(now: number): void {
@@ -332,7 +511,12 @@ export class Game {
     this.last = now;
 
     const [lx, ly] = this.controls.drainLook(dt);
-    this.rig.look(lx, ly);
+    this.controls.wheelOpen = this.wheel.isOpen;
+    if (this.wheel.isOpen) {
+      // while the command wheel is held the mouse (or the right stick) chooses a stamp, and the camera stays put
+      if (this.controls.usingGamepad) this.wheel.stick(this.controls.padStick.x, this.controls.padStick.y);
+      else this.wheel.nudge(lx, ly);
+    } else this.rig.look(lx, ly);
 
     const me = this.session.bindLocalPlayer();
     if (me) {
@@ -353,6 +537,7 @@ export class Game {
     }
 
     this.ragdolls?.step(dt);
+    this.mountView.update(dt, this.session.room.state.mounts, this.riderPose);
     this.syncActors(dt);
     this.hitFx.update(dt);
     this.debris.update(dt);
@@ -364,6 +549,9 @@ export class Game {
     if (me) {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
       setListener(tmp, this.rig.yaw);
+      const pf = this.session.predicted;
+      this.rig.mounted = pf !== undefined && (pf.flags & FLAG.MOUNTED) !== 0;
+      this.rig.mountSpeed01 = pf ? Math.hypot(this.session.value(pf, "vx"), this.session.value(pf, "vz")) / MOUNT.gallop : 0;
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
       this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample), ((this.session.predicted?.flags ?? 0) & FLAG.DOWNED) !== 0);
       this.stage.followShadow(tmp);
@@ -430,7 +618,11 @@ export class Game {
     let patientId: string | undefined;
 
     if (mine.reviver) reviverName = players.get(mine.reviver)?.name ?? "";
-    if ((flags & FLAG.REVIVING) !== 0) {
+    // horses and wagons (the same rules, in the same order, as the server's Mounts.onInteract)
+    const mp = this.mountPromptNow(me, mine, flags);
+    if ((flags & FLAG.MOUNTED) !== 0) {
+      prompt = `${use}  ${mp ?? "Dismount"}`;
+    } else if ((flags & FLAG.REVIVING) !== 0) {
       // Find whoever I am reviving: the downed player whose reviver is me.
       players.forEach((o, id) => {
         if (o.reviver === this.session.sessionId) {
@@ -442,7 +634,9 @@ export class Game {
       prompt = `Hold ${use}...`;
       dressing = patientId !== undefined && (players.get(patientId)!.flags & FLAG.DOWNED) === 0;
     } else if ((flags & FLAG.DRAGGING) !== 0) {
-      prompt = `${grab}  Let go`;
+      prompt = mp !== undefined ? `${use}  ${mp}     ${grab}  Let go` : `${grab}  Let go`;
+    } else if ((flags & FLAG.CARRYING) !== 0 && mp !== undefined) {
+      prompt = `${use}  ${mp}     ${throwKey}  Throw`;
     } else if ((flags & FLAG.CARRYING) !== 0) {
       // a barrel at the pier is a fuse waiting to be lit (the server checks the barrel and the range; this only says what the key will do)
       const spot = this.builtRegion === "kessar" ? findStation("kessar", this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
@@ -454,6 +648,8 @@ export class Game {
       );
       if (downedId !== undefined) {
         prompt = `Hold ${use}  Revive ${players.get(downedId)?.name ?? "comrade"}      ${grab}  Drag`;
+      } else if (mp !== undefined) {
+        prompt = `${use}  ${mp}`;
       } else {
         const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
         const woundedId = findWoundedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
@@ -498,6 +694,33 @@ export class Game {
     this.audio.revive(byMe >= 0 ? byMe : mine.reviveProgress > 0 ? mine.reviveProgress : -1);
   }
 
+  private mountPromptNow(me: NonNullable<Game["session"]["predicted"]>, mine: PlayerStateType, flags: number): string | undefined {
+    const st = this.session.room.state;
+    if (st.mounts.size === 0) return undefined;
+    const rows: (readonly [string, Parameters<typeof mountPrompt>[1] extends Iterable<readonly [string, infer R]> ? R : never])[] = [];
+    st.mounts.forEach((row, id) => rows.push([id, row]));
+    return mountPrompt(
+      { x: this.session.value(me, "x"), z: this.session.value(me, "z"), facing: me.facing, flags, missing: mine.missing, sessionId: this.session.sessionId, holding: (flags & FLAG.CARRYING) !== 0 },
+      rows,
+      {
+        props: (wid) => {
+          let n = 0;
+          st.props.forEach((p) => {
+            if (p.holder === `wagon:${wid}`) n++;
+          });
+          return n;
+        },
+        bodies: (wid) => {
+          let n = 0;
+          st.players.forEach((p) => {
+            if (p.dragger === `wagon:${wid}`) n++;
+          });
+          return n;
+        },
+      },
+    );
+  }
+
   /** The kind of prop the local player is holding, if any. */
   private heldKind(): number | undefined {
     let kind: number | undefined;
@@ -524,6 +747,7 @@ export class Game {
     // the graphics preset, live: effect density, and the ink line on the figures already standing in the scene
     this.combat?.setPreset();
     for (const a of this.actors.values()) a.body.setOutline(this.stage.outlines);
+    this.mountView?.setOutline(this.stage.outlines);
   }
 
   private syncActors(dt: number): void {
@@ -540,7 +764,8 @@ export class Game {
       const isMe = id === this.session.sessionId;
       const flags = isMe ? (this.session.predicted?.flags ?? p.flags) : p.flags;
       const x = this.session.value(p, "x");
-      const y = this.session.value(p, "y");
+      // a downed body strapped to a wagon's rack rides above the boards
+      const y = this.session.value(p, "y") + this.mountView.bodyLift(p.dragger);
       const z = this.session.value(p, "z");
       if (walkerCount < walkers.length && !p.npc && (p.flags & FLAG.DOWNED) === 0) {
         walkers[walkerCount]!.x = x;
@@ -551,19 +776,13 @@ export class Game {
       if (isMe) a.body.setFirstPerson(this.rig.headHidden, this.rig.yaw); // own head, never the others'
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt) },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id) },
         getGore(),
         getShowLimbs(),
       );
-      const status = (p.flags & FLAG.DOWNED) !== 0 ? " ✚ DOWN" : "";
-      a.tag.textContent = (p.connected ? p.name : `${p.name} (reconnecting)`) + status;
-      tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
-      const visible = tmp.z < 1 && Math.abs(tmp.x) < 1.2 && Math.abs(tmp.y) < 1.2 && !isMe;
-      a.tag.style.display = visible ? "block" : "none";
-      if (visible) {
-        a.tag.style.transform = `translate(-50%, -100%) translate(${((tmp.x + 1) / 2) * window.innerWidth}px, ${((1 - tmp.y) / 2) * window.innerHeight}px)`;
-      }
+      if (!isMe) this.plate(id, p, a, x, y, z);
     });
+    this.tags.sweep(seen);
     this.stage.setPushers(walkers, walkerCount);
     this.audio.sweep();
     const clock = this.session.room.state; // the server-owned world clock: every player sees the same hour and the same weather
@@ -577,6 +796,23 @@ export class Game {
         this.actors.delete(id);
       }
     }
+  }
+
+  /** One name plate: the shared rule says whether it can sit where it points (never clamped); hired hands carry their order and their nerve. */
+  private plate(id: string, p: PlayerStateType, a: Actor, x: number, y: number, z: number): void {
+    const down = (p.flags & FLAG.DOWNED) !== 0;
+    let text = (p.connected ? p.name : `${p.name} (reconnecting)`) + (down ? " ✚ DOWN" : "");
+    if (HAND_ROLES.has(p.npc) && !down) {
+      const order = p.cmd < COMMAND_IDS.length ? COMMAND_IDS[p.cmd]! : "follow";
+      text += ` · ${order} · ${moraleBand(p.morale)}`;
+    }
+    tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
+    const cam = this.stage.camera.position;
+    const dist = Math.hypot(x - cam.x, y - cam.y, z - cam.z);
+    const topPx = ((1 - tmp.y) / 2) * window.innerHeight;
+    // a soldier's plate reaches farther while the camera can see him (a wall in between keeps it short)
+    const inSight = p.npc !== 0 && dist <= 26 && !rayWorld(this.session.world, cam.x, cam.y, cam.z, (x - cam.x) / dist, (y + 1.2 - cam.y) / dist, (z - cam.z) / dist, dist - 0.6, aimHit);
+    this.tags.update(id, text, p.npc, down, dist, tmp, topPx, inSight);
   }
 
   /** A blow landed (server event, cosmetic): spray, flinch, maybe a ragdoll fall, and a camera jolt if it was me. */
@@ -614,14 +850,10 @@ export class Game {
 
   private addActor(p: PlayerStateType): Actor {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
-    const tag = document.createElement("div");
-    tag.className = "nametag";
-    this.tagLayer.appendChild(tag);
-    return { body, tag };
+    return { body };
   }
 
   private removeActor(a: Actor): void {
     a.body.dispose();
-    a.tag.remove();
   }
 }

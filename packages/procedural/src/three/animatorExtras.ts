@@ -23,6 +23,9 @@ export interface HandInput {
   holdR?: number | undefined;
 }
 
+/** FLAG.MOUNTED (the shared contract's bit; mount.ts `MOUNT_FLAG`). */
+const MOUNTED_BIT = 4096;
+
 /** Target grips for both hands, before easing. */
 export function handGripTargets(input: HandInput): { L: number; R: number } {
   const { flags, speed, expression } = input;
@@ -36,6 +39,7 @@ export function handGripTargets(input: HandInput): { L: number; R: number } {
   let L = base;
   let R = base;
   if (reviving) L = R = 0.3; // hands pressing on a patient
+  if ((flags & MOUNTED_BIT) !== 0) L = R = 0.8; // hands closed on the reins (a weapon in the hand still wins, below)
   if (carrying) L = R = 0.85; // holding a load
   if (dragging) L = R = 0.92; // gripping a body under the arms
   switch (expression) {

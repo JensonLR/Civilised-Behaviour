@@ -1,0 +1,29 @@
+/* The command wheel. Colours come from the :root palette variables only; sizes are rem so larger text scales the ring. */
+.command-wheel { position: fixed; inset: 0; z-index: 30; pointer-events: none; font-size: max(12px, min(calc(16px * var(--ui-scale, 1)), 4.9vh)); }
+.command-wheel .ring { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: auto; }
+.command-wheel .ring[hidden] { display: none; }
+.command-wheel .ring::before { content: ""; position: absolute; width: 21rem; height: 21rem; left: -10.5rem; top: -10.5rem; border-radius: 50%; border: 3px double var(--brass-dark); background: color-mix(in srgb, var(--scrim) 58%, transparent); }
+.command-wheel .centre { position: absolute; left: -2.6rem; top: -2.6rem; width: 5.2rem; height: 5.2rem; display: grid; place-items: center; border-radius: 50%; border: 2px dashed var(--brass); color: var(--text); font-family: var(--type); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.command-wheel .centre.on { border-style: solid; background: color-mix(in srgb, var(--stamp-dark) 70%, transparent); }
+.command-wheel .stamp { position: absolute; left: -4.1rem; top: -1.9rem; width: 8.2rem; min-height: 3.8rem; padding: 0.3rem 0.4rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  background: linear-gradient(var(--paper), var(--paper-2)); color: var(--ink); border: 2px solid var(--ink); border-radius: 3px; cursor: pointer;
+  transform: rotate(var(--a)) translateY(-8.2rem) rotate(calc(-1 * var(--a))); }
+.command-wheel .stamp .key { position: absolute; top: 0.1rem; left: 0.3rem; font-family: var(--type); font-size: 0.72rem; color: var(--stamp); }
+.command-wheel .stamp .label { font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.05; }
+.command-wheel .stamp .hint { font-size: 0.72rem; font-style: italic; line-height: 1.15; }
+.command-wheel .stamp.on, .command-wheel .stamp:focus-visible { border-width: 4px; border-color: var(--stamp); outline: 3px solid var(--ink); outline-offset: 2px; }
+.command-wheel .stamp.on .label::after { content: " \25C0"; }
+.command-wheel .stamp.off { opacity: 0.55; text-decoration: line-through; cursor: not-allowed; }
+.command-wheel .result { position: absolute; left: 50%; bottom: 7.5rem; transform: translateX(-50%); max-width: min(92vw, 34rem); margin: 0; padding: 0.45rem 0.9rem; display: flex; gap: 0.6rem; align-items: baseline;
+  background: linear-gradient(var(--paper), var(--paper-2)); color: var(--ink); border: 2px solid var(--ink); font-size: 1rem; line-height: 1.3; }
+.command-wheel .result[hidden] { display: none; }
+.command-wheel .result .verdict { padding: 0 0.4rem; border: 2px solid var(--ink); font-family: var(--display); letter-spacing: 0.12em; text-transform: uppercase; }
+.command-wheel .result[data-verdict="refused"] { border-style: dashed; }
+.command-wheel .result[data-verdict="refused"] .verdict { border-style: double; border-width: 4px; color: var(--stamp); }
+@media (prefers-reduced-motion: no-preference) {
+  .command-wheel[data-open="true"] .ring::before { animation: wheel-in 0.12s ease-out; }
+  @keyframes wheel-in { from { transform: scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+@media (max-height: 34rem) {
+  .command-wheel .ring { transform: scale(0.8); }
+}

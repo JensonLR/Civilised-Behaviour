@@ -16,6 +16,7 @@ import type { RegionView } from "../regionView.ts";
 import { buildKessarCloth, createKessarAtlas, kessarClothMaterial } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover } from "./ground.ts";
 import { palmGeometry } from "./palms.ts";
+import { buildKessarSites } from "./sites.ts";
 import { kessarPlan, type KessarTerrain } from "./shared.ts";
 import { buildKessarSolid } from "./structures.ts";
 import { buildKessarWater } from "./water.ts";
@@ -181,6 +182,17 @@ export class KessarView implements RegionView {
     this.track(solid.geometry);
     if (hull) this.track(hull);
     makeSolid(this.root, solid.geometry, this.track(toonMaterial({ wetDark: 0.8 })), { name: "kessar", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    this.addSites(lod);
+  }
+
+  /** The three contract sites (the deserters' camp with its cage, the Dry Cut's keg, Marker Stone No. 4 and its flags): one merged solid + its ink hull, whichever contract is on offer. */
+  private addSites(lod: Lod): void {
+    const sites = buildKessarSites(this.world, lod);
+    if (!sites) return;
+    const hull = this.detail.outlines ? buildKessarSites(this.world, 0) : undefined;
+    this.track(sites);
+    if (hull) this.track(hull);
+    makeSolid(this.root, sites, this.track(toonMaterial({ wetDark: 0.8 })), { name: "kessar-sites", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
   }
 
   private addCloth(terrain: KessarTerrain): void {

@@ -1,34 +1,43 @@
 import {
-  FLAG, PropKind, createWeather, hash3, weatherAt, type MoveCommand, type PlayerStateType,
-  KESSAR_ANCHORS, NPC, SCENARIO, garrisonRoster, isNpcKey, lingerOver, newBrain, newScenario, npcDecide, npcKey, reduceScenario, scenarioOutcome, scenarioView,
-  type BridgeState, type CampaignState, type CasualtyTally, type Leverage, type NpcBrain, type NpcBody, type NpcSenses, type NpcSpec, type ParleyStep, type ParleyView,
-  type ScenarioEffect, type ScenarioInput, type ScenarioOutcome, type ScenarioState, type ScenarioView,
+  FLAG, PropKind, SCENARIO, createWeather, hash3, isNpcKey, npcKey, weatherAt,
+  type BridgeState, type CampaignState, type CasualtyTally, type Leverage, type ParleyKind, type ParleyStep, type ParleyView, type PlayerStateType,
+  type ScenarioFx, type ScenarioInput, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
 } from "@cb/shared";
+// New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
+import type { CastApi, MountApi, NpcSpec, PlayersView } from "@cb/shared";
+import { lingerDone } from "../../../../packages/shared/src/scenarios/common.ts";
+import { answerSiteParley, openSiteParley, type SiteParleyKind } from "@cb/shared";
+import { TEMPLATES } from "@cb/shared";
+import type { AnyTemplate, BaseState, UseSpec } from "@cb/shared";
 
 /**
- * "Secure the river crossing" on the server. The pure machine (shared/scenario.ts) owns every phase decision; this class observes the room,
- * feeds it events, acts on its effects and runs the cast through the same movement + combat path a player uses. Clients only ever see
- * `publish(view)` and their own `parley` messages; nothing a client sends is an event. Every entry point validates who is asking and from where.
+ * The scenario RUNNER (D-034). Template-agnostic: it knows no scenario rules. Each template (shared/scenarios/*) is a pure state machine; this class
+ * (1) spawns the template's people through the Cast, (2) turns what it observes in the room (who is near what, group counts, who saw whom, shots, deaths,
+ * a wagon arriving) into the template's events, (3) carries out the effects the template answers with (orders, parleys, wagon, explosions, the commit),
+ * and (4) publishes the view. Clients never send events: they send INTERACT and a parley option index, and every entry point validates who is asking
+ * and from where. The Cast (not this class) runs every NPC row; the room ticks `cast.tick(dt)` once per server tick, before or after `tick` here.
  */
 
 export interface ScenarioHost {
-  players: { forEach(cb: (p: PlayerStateType, id: string) => void): void; get(id: string): PlayerStateType | undefined };
+  players: PlayersView;
   worldMs(): number;
   campaign(): CampaignState;
-  /** Called exactly once, when a run resolves (never for a run that started already resolved). */
+  /** Called exactly once, when a run resolves (never for a run that was dismissed or started already resolved). */
   commit(o: ScenarioOutcome): void;
-  /** Creates the NPC row keyed `npcKey(spec.id)`; false when at NPC_CAP. `removeNpc` / `stepNpc` take that row key. */
-  spawnNpc(spec: NpcSpec): boolean;
-  removeNpc(key: string): void;
-  /** stepCharacter + Combat.onFrame for that row. The command object is reused by the caller: copy it if you keep it. */
-  stepNpc(key: string, cmd: MoveCommand): void;
-  explode(x: number, y: number, z: number, radius: number): void;
+  cast: CastApi;
+  /** Absent in a room without mounts: a template that needs the wagon then simply has no wagon to use. */
+  mounts?: MountApi;
   consumeProp(id: string): void;
   propKind(id: string): number | undefined;
-  rebuildBridge(state: BridgeState): void;
-  publish(view: ScenarioView): void;
+  propPos(id: string): { x: number; y: number; z: number } | undefined;
+  propsNear(x: number, z: number, r: number, kind?: number): string[];
+  spawnProp(kind: number, x: number, z: number): string | undefined;
+  rebuildBridge(b: BridgeState): void;
+  /** `owner` is the session id of whoever lit it ("" when nobody did): the blast follows the normal damage rules for that owner. */
+  explode(x: number, y: number, z: number, radius: number, owner: string): void;
+  publish(v: ScenarioView): void;
   send(sid: string, type: string, msg: unknown): void;
-  /** Package A's functions, injected so this file never imports them. */
+  /** The Ward's own parley (negotiation.ts), injected so this file imports none of it. */
   negotiation: {
     askingToll(c: CampaignState): number;
     leverageOf(c: CampaignState, live: { armed: number; garrisonAlive: number; garrisonTotal: number; partyWounded: number }): Leverage;
@@ -36,49 +45,52 @@ export interface ScenarioHost {
     answerParley(c: CampaignState, lv: Leverage, seed: number, view: ParleyView, option: number): ParleyStep;
   };
   seed: number;
-  /** Terrain height for the blast; 0 when the host has none to give. */
-  groundY?(x: number, z: number): number;
+  groundY(x: number, z: number): number;
 }
 
-interface Rec { spec: NpcSpec; key: string; brain: NpcBrain }
-
-const TICK_ARRIVE = 1, TICK_WEATHER = 1, TICK_WATCH = 0.25;
-const SIGHT_CLEAR = 28, SIGHT_WET = 16, ALLY_RANGE = 15;
+const TICK_WATCH = 0.25, TICK_WEATHER = 1;
 const PARLEY_LEASH = 6;
+const WET_SIGHT = 0.6, FOG_SIGHT = 0.5;
 const LINE_HOSTILE = "You have made your point, with a bullet.";
 const LINE_FUSE = "The Lamp-Warden hears a fuse, closes her ledger, and ends the audience.";
 const LINE_RIVAL = "A gentleman from the Syndicate is waiting behind you with a cheque and a pen.";
-const LINE_WANDER = "You wander off mid-sentence. She notes the time.";
-const LINE_EXCUSED = "You excuse yourself. She does not excuse you.";
+const LINE_WANDER = "You wander off mid-sentence. The other party notes the time.";
+const LINE_EXCUSED = "You excuse yourself. Nobody excuses you.";
+const LINE_OVER = "Events have overtaken the conversation.";
 const popcount = (n: number): number => { let c = 0; for (let v = n & 0xff; v; v &= v - 1) c++; return c; };
 
+interface ParleyRun { owner: string; kind: ParleyKind; view: ParleyView; at: string; price: number }
+
 export class Scenario {
-  private s!: ScenarioState;
-  private recs: Rec[] = [];
-  private byKey = new Map<string, Rec>();
+  private readonly def: AnyTemplate;
+  private s!: BaseState;
+  private specs: NpcSpec[] = [];
+  private bySpecKey = new Map<string, NpcSpec>();
+  private spawned = new Set<string>();
   private started = false;
   private committed = false;
   private despawned = false;
-  private detonated = false;
-  private wardAlert = false;
-  private rivalAlert = false;
-  private standDown = false;
-  private parley: { owner: string; view: ParleyView } | undefined;
+  private parley: ParleyRun | undefined;
   private parleySeed = 0;
+  private wagonId: string | undefined;
+  private props = new Map<string, { id: string; x: number; z: number }>();
   private woundedSeen = new Set<string>();
   private limbs = new Map<string, number>();
-  private routedReported = 0;
-  private gSig = "";
+  private nearSig = new Map<string, number>();
+  private countSig = new Map<string, string>();
+  private routedSeen = new Map<string, number>();
+  private seeing = new Map<string, boolean>();
+  private actorDone = new Set<string>();
   private wasWet = false;
+  private complication = "none";
   private lastView = "";
   private lastEnds = 0;
-  private acc = { arrive: 0, weather: 0, watch: 0 };
-  private fear = 10;
-  // scratch (the per-tick path allocates nothing)
-  private cmd: MoveCommand = { moveF: 0, moveR: 0, yaw: 0, buttons: 0 };
-  private body: NpcBody = { x: 0, z: 0, facing: 0, health: 100, weapon: 0, ammo: 0, flags: 0 };
-  private enemy = { id: "", x: 0, z: 0, armed: false, down: false };
-  private senses: NpcSenses = { enemy: undefined, allies: 0, alert: false, standDown: false, fear: 0 };
+  private acc = { weather: 0, watch: 0 };
+  /** Who pressed INTERACT last (the blast's owner, whom a freed hostage follows) and who a `say` should go to during a press (undefined: everybody). */
+  private actor = "";
+  private audience: string | undefined;
+  /** Who opened the parley being set up (the `parley` effect arrives while the press is still being handled). */
+  private talker: { sid: string; at: string } | undefined;
   private wx = createWeather();
   private real: PlayerStateType[] = [];
   private realIds: string[] = [];
@@ -88,24 +100,34 @@ export class Scenario {
     this.realIds.push(id);
   };
 
-  constructor(private readonly host: ScenarioHost) {}
+  constructor(private readonly host: ScenarioHost, id: ScenarioTemplateId) {
+    this.def = TEMPLATES[id];
+  }
+
+  get template(): ScenarioTemplateId { return this.def.id; }
+  /** The phase on show ("" before start): the HUD and the room read it. */
+  get phase(): string { return this.started ? this.s.phase : ""; }
+  get resolution(): string | undefined { return this.started ? this.s.resolution : undefined; }
 
   start(): void {
     if (this.started) return;
     const c = this.host.campaign();
-    this.s = newScenario(c, this.host.negotiation.askingToll(c));
-    this.fear = c.factions.ward.fear;
+    const def = this.def;
+    this.s = def.init(c, this.host.negotiation.askingToll(c), this.host.seed);
     this.parleySeed = hash3(this.host.seed, c.day, 0x7a11);
     this.started = true;
-    const ruined = this.s.phase === "resolved";
-    for (const spec of garrisonRoster(c, this.host.seed)) {
-      if (ruined && spec.faction === "rival") continue; // nobody is buying a ruin
-      if (!this.host.spawnNpc(spec)) continue;
-      const rec: Rec = { spec, key: npcKey(spec.id), brain: newBrain(spec) };
-      this.recs.push(rec);
-      this.byKey.set(rec.key, rec);
+    for (const [name, pts] of Object.entries(def.routes ?? {})) this.host.cast.defineRoute(name, pts);
+    this.specs = def.roster(c, this.host.seed, this.s);
+    for (const sp of this.specs) this.bySpecKey.set(npcKey(sp.id), sp);
+    this.spawnGroups((g) => !g.startsWith("late:"));
+    if (def.wagon && this.host.mounts) {
+      this.wagonId = this.host.mounts.spawnWagon(def.wagon.at, { coat: hash3(this.host.seed, c.day, 0xc0a7), crates: def.wagon.crates, horse: true });
     }
-    if (ruined) this.standDown = true;
+    for (const p of def.props ?? []) {
+      const id = this.host.spawnProp(p.kind, p.x, p.z);
+      if (id !== undefined) this.props.set(p.id, { id, x: p.x, z: p.z });
+    }
+    for (const f of def.opening?.(this.s) ?? []) this.fx(f);
     this.publish(true);
   }
 
@@ -116,78 +138,81 @@ export class Scenario {
     if (!this.started || isNpcKey(sid) || !p || (p.flags & FLAG.DOWNED) !== 0 || this.s.phase === "resolved") return false;
     this.refresh();
     const carrying = (p.flags & FLAG.CARRYING) !== 0;
-    const pier = KESSAR_ANCHORS.pier;
-    if (carrying && carriedProp !== undefined && Math.hypot(p.x - pier.x, p.z - pier.z) <= SCENARIO.pierRange) {
-      if (this.host.propKind(carriedProp) !== PropKind.BARREL) return false;
-      if (this.s.chargeArmed) {
-        this.host.send(sid, "notice", { text: "There is already a fuse burning. Two would be showing off." });
-        return true;
+    for (const u of this.def.observe.use) {
+      const at = this.locate(u);
+      if (!at || Math.hypot(p.x - at.x, p.z - at.z) > u.r) continue;
+      if (u.carry === "barrel") {
+        if (!carrying || carriedProp === undefined || this.host.propKind(carriedProp) !== PropKind.BARREL) continue;
+      } else if (u.carry === "none" && carrying) continue;
+      this.actor = sid;
+      this.audience = sid;
+      try {
+        if (u.talk) this.talk(sid, u);
+        else {
+          this.observeNear();
+          const before = this.s;
+          this.apply({ t: "use", target: u.id, slot: Number.isInteger(p.slot) ? p.slot : 0 });
+          if (this.s !== before && u.consume && carriedProp !== undefined) this.host.consumeProp(carriedProp);
+        }
+      } finally {
+        this.audience = undefined;
       }
-      this.host.consumeProp(carriedProp);
-      this.apply({ t: "charge_set" });
-      this.tellAll("The fuse is lit. Ten seconds, give or take the weather. Clear the deck.");
       this.publish(false);
       return true;
     }
-    if (carrying) return false;
-    const warden = this.byKey.get(npcKey("warden"));
-    const row = warden && this.host.players.get(warden.key);
-    if (!warden || !row || Math.hypot(p.x - row.x, p.z - row.z) > SCENARIO.talkRange) return false;
-    if ((row.flags & FLAG.DOWNED) !== 0) return false;
-    if (this.parley) {
-      if (this.parley.owner !== sid) this.host.send(sid, "notice", { text: "The Lamp-Warden is already dealing with one of your party. She can only ignore so many of you at once." });
-      return true;
-    }
-    if (this.s.hostile || this.s.chargeArmed) {
-      this.host.send(sid, "notice", { text: this.s.chargeArmed ? "She will not negotiate with a lit fuse in the vicinity." : "She is not taking audiences at the moment. She is taking cover." });
-      return true;
-    }
-    this.apply({ t: "arrive", party: Math.max(1, this.countNear()) });
-    this.apply({ t: "parley_open" });
-    if (this.s.phase !== "parley") return true;
-    const c = this.host.campaign();
-    const view = this.host.negotiation.openParley(c, this.leverage(c), this.parleySeed);
-    this.parley = { owner: sid, view };
-    this.host.send(sid, "parley", { view });
-    this.publish(false);
-    return true;
+    return false;
   }
 
   onPick(sid: string, option: number): void {
     const pr = this.parley;
-    if (!this.started || !pr || pr.owner !== sid || this.s.phase !== "parley") return;
+    if (!this.started || !pr || pr.owner !== sid) return;
     if (!Number.isInteger(option) || option < 0 || option >= pr.view.options.length) return;
     this.refresh();
     const c = this.host.campaign();
-    const step = this.host.negotiation.answerParley(c, this.leverage(c), this.parleySeed, pr.view, option);
+    this.actor = sid;
+    if (pr.kind === "warden") {
+      const step = this.host.negotiation.answerParley(c, this.leverage(c), this.parleySeed, pr.view, option);
+      if (step.view) {
+        pr.view = step.view;
+        this.host.send(sid, "parley", { view: step.view });
+        return;
+      }
+      const d = step.done;
+      this.closeParley(step.line);
+      if (d.resolution === "paid" || d.resolution === "bargained" || d.resolution === "bribed") this.apply({ t: "deal", resolution: d.resolution, toll: d.toll, paid: d.paid });
+      else if (d.resolution === "hostile") {
+        this.apply({ t: "parley_close" });
+        this.apply({ t: "hostile", at: "ward" });
+      } else this.apply({ t: "parley_close" });
+      this.publish(false);
+      return;
+    }
+    const step = answerSiteParley(pr.kind as SiteParleyKind, { price: pr.price, purse: c.purse, seed: this.parleySeed, day: c.day }, pr.view, option);
     if (step.view) {
       pr.view = step.view;
       this.host.send(sid, "parley", { view: step.view });
+      if (step.emit) this.apply({ t: "talk", kind: pr.kind, result: step.emit, paid: 0 });
+      this.publish(false);
       return;
     }
-    const d = step.done;
-    if (d.resolution === "paid" || d.resolution === "bargained" || d.resolution === "bribed") {
-      this.closeParley(step.line);
-      this.apply({ t: "deal", resolution: d.resolution, toll: d.toll, paid: d.paid });
-    } else if (d.resolution === "hostile") {
-      this.closeParley(step.line);
-      this.apply({ t: "parley_close" });
-      this.apply({ t: "hostile" });
-    } else {
-      this.closeParley(step.line);
-      this.apply({ t: "parley_close" });
-    }
+    const kind = pr.kind;
+    this.audience = sid;
+    this.closeParley(step.line);
+    if (step.done.result === "walked") this.apply({ t: "talk", kind, result: "close", paid: 0 });
+    else this.apply({ t: "talk", kind, result: step.done.result, paid: step.done.paid });
+    this.audience = undefined;
     this.publish(false);
   }
 
   onParleyClose(sid: string): void {
-    if (!this.started || !this.parley || this.parley.owner !== sid) return;
+    const pr = this.parley;
+    if (!this.started || !pr || pr.owner !== sid) return;
     this.closeParley(LINE_EXCUSED);
-    this.apply({ t: "parley_close" });
+    this.endTalk(pr.kind);
     this.publish(false);
   }
 
-  /** A hit landed (Casualties.damage). `down` = this hit put the victim down. */
+  /** A hit landed (Casualties.damage). `down` = this hit put the victim down. Tallies and first blood are counted from here. */
   onDamage(victim: string, attacker: string, _zone: number, down: boolean): void {
     if (!this.started || this.s.phase === "resolved") return;
     const add: Partial<CasualtyTally> = {};
@@ -196,36 +221,63 @@ export class Scenario {
       add.wounded = 1;
     }
     if (down) add.downed = 1;
-    const rec = this.byKey.get(victim);
-    if (rec && down) {
-      if (rec.spec.faction === "ward") add.garrisonKilled = 1;
-      else add.rivalKilled = 1;
+    const sp = this.bySpecKey.get(victim);
+    if (sp && down) {
+      if (sp.side === "ward") add.garrisonKilled = 1;
+      else if (sp.side === "rival") add.rivalKilled = 1;
+      else if (sp.side === "neutral") add.civiliansHarmed = 1;
     }
     if (add.wounded || add.downed) this.apply({ t: "tally", add });
-    if (rec && !isNpcKey(attacker)) {
-      // first blood on anyone the Ward employs is the declaration of war; on the Syndicate it merely annoys them
-      if (rec.spec.faction === "ward") this.hostile();
-      else this.rivalAlert = true;
+    if (sp && !isNpcKey(attacker) && attacker !== "") {
+      // first blood on anyone who is somebody's side is the declaration; a hostage or a driver is a bystander, but a bystander who is downed is a loss
+      if (sp.id === "hostage" && down) this.apply({ t: "actor", id: "hostage", state: "down" });
+      else if (this.def.observe.hostileGroups.includes(sp.group)) this.apply({ t: "hostile", at: sp.group });
     }
     this.publish(false);
   }
 
+  /** A report carried `radius` metres from (x, z) (a shot, a blast). The site hears it as `noise`, loudest at its centre. */
+  onNoise(x: number, z: number, radius: number, _src: string): void {
+    const n = this.def.observe.noise;
+    if (!this.started || !n || this.s.phase === "resolved" || !Number.isFinite(x + z + radius) || radius <= 0) return;
+    const d = Math.hypot(x - n.x, z - n.z);
+    if (d > radius) return;
+    const level = Math.round(100 * (1 - d / radius));
+    if (level >= 1) {
+      this.apply({ t: "noise", level });
+      this.publish(false);
+    }
+  }
+
+  /** Something happened to a prop (`destroyed` before the room removes it). A barrel that goes up within reach of the wagon is the convoy's third ending. */
+  onProp(what: "delivered" | "destroyed" | "seized", id: string): void {
+    if (!this.started || this.s.phase === "resolved" || what !== "destroyed") return;
+    let name = "";
+    let pos: { x: number; z: number } | undefined = this.host.propPos(id);
+    for (const [n, p] of this.props) if (p.id === id) { name = n; pos ??= p; }
+    if (name === "" && this.host.propKind(id) === PropKind.BARREL) name = "barrel";
+    if (name === "" || !pos) return;
+    const w = this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : undefined;
+    if (!w) return;
+    this.apply({ t: "prop", what: "destroyed", at: name, n: Math.round(Math.hypot(pos.x - w.x, pos.z - w.z)) });
+    this.publish(false);
+  }
+
+  /** The party sails away (the room calls this BEFORE `dispose`). The template says what that commits: nothing when nothing happened, else its own ending. */
+  leave(): void {
+    if (!this.started || this.s.phase === "resolved") return;
+    this.refresh();
+    this.apply({ t: "leave" });
+    this.publish(true);
+  }
+
   tick(dt: number): void {
     if (!this.started) return;
-    const step = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), SCENARIO.maxDt) : 0;
+    const step = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), 5) : 0;
     this.refresh();
     this.apply({ t: "tick", dt: step });
-    const s = this.s;
-    if (s.chargeArmed && s.fuse <= 0 && !this.detonated) this.detonate();
-    if (this.s.chargeArmed && !this.s.hostile) this.checkChargeAlarm();
-
-    this.acc.arrive += step;
     this.acc.weather += step;
     this.acc.watch += step;
-    if (this.acc.arrive >= TICK_ARRIVE) {
-      this.acc.arrive = 0;
-      if (this.s.phase === "approach" || this.s.phase === "standoff") this.apply({ t: "arrive", party: this.countNear() });
-    }
     if (this.acc.weather >= TICK_WEATHER) {
       this.acc.weather = 0;
       this.readWeather();
@@ -235,8 +287,7 @@ export class Scenario {
       this.watch();
       this.publish(false);
     }
-    this.runCast(step);
-    if (!this.despawned && lingerOver(this.s)) this.despawnAll();
+    if (!this.despawned && lingerDone(this.s)) this.despawnAll();
   }
 
   dispose(): void {
@@ -248,116 +299,218 @@ export class Scenario {
   // ---- the machine -----------------------------------------------------------------------------------------------------------------------
 
   private apply(e: ScenarioInput): void {
-    const r = reduceScenario(this.s, e);
+    const r = this.def.reduce(this.s, e);
     this.s = r.s;
-    for (const f of r.fx) this.effect(f);
-    if (this.parley && !this.s.parley) this.closeParley(e.t === "hostile" ? LINE_HOSTILE : e.t === "charge_set" ? LINE_FUSE : e.t === "tick" ? LINE_RIVAL : LINE_EXCUSED);
+    for (const f of r.fx) this.fx(f);
+    if (this.parley && this.s.parley === undefined) {
+      const crossing = this.def.id === "secure_crossing";
+      this.closeParley(e.t === "hostile" ? LINE_HOSTILE : e.t === "use" || e.t === "charge_set" ? LINE_FUSE : e.t === "tick" ? (crossing ? LINE_RIVAL : LINE_OVER) : LINE_EXCUSED);
+    }
   }
 
-  private effect(f: ScenarioEffect): void {
-    switch (f) {
-      case "garrison_alert":
-        this.wardAlert = true;
-        this.tellAll("The horn on the gatehouse sounds. The Ward would like a word, and it is not the gentle one.");
+  private fx(f: ScenarioFx | string): void {
+    if (typeof f === "string") {
+      if (f === "commit") this.commitOnce();
+      return;
+    }
+    const cast = this.host.cast;
+    switch (f.k) {
+      case "spawn": this.spawnGroups((g) => g === f.group); break;
+      case "order": cast.order(f.group, f.order); break;
+      case "war": cast.setWar(f.a, f.b, f.on); break;
+      case "say": this.tell(f.text); break;
+      case "open":
+        if (f.what === "cage") cast.order("hostage", { o: "follow", target: this.actor });
         break;
-      case "garrison_stand_down":
-        this.standDown = true;
+      case "explode": {
+        const at = f.at === "wagon" && this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : this.def.sites?.[f.at];
+        if (at) this.host.explode(at.x, this.host.groundY(at.x, at.z), at.z, f.at === "pier" ? SCENARIO.chargeRadius : 6, this.actor);
         break;
-      case "gate_open":
-        this.tellAll("The toll bar swings up. A sentry salutes, unsure whom.");
-        break;
-      case "rival_advance":
-        for (const r of this.recs) if (r.spec.faction === "rival") {
-          r.brain.mode = "march";
-          r.brain.route = 0;
-        }
-        this.tellAll("A Dunmarrow-Vesk surveyor has left the Syndicate camp with a measuring chain and an entourage. They intend to buy the crossing.");
-        break;
-      case "commit":
-        this.commitOnce();
-        break;
-      case "arm_charge":
-        break;
+      }
+      case "bridge": this.host.rebuildBridge(f.state); break;
+      case "wagon": this.wagon(f.op); break;
+      case "parley": this.openParley(f.kind, f.price); break;
+      case "commit": this.commitOnce(); break;
+    }
+  }
+
+  private wagon(op: "go" | "halt" | "seize" | "wreck"): void {
+    const m = this.host.mounts, id = this.wagonId;
+    if (!m || id === undefined || !this.def.wagon) return;
+    switch (op) {
+      case "go": m.route(id, this.def.wagon.route); break;
+      case "halt": m.route(id, ""); break;
+      case "wreck": m.wreck(id, true); break;
+      case "seize": this.apply({ t: "prop", what: "seized", at: "wagon", n: Math.max(0, Math.round(m.seize(id, this.actor))) }); break;
     }
   }
 
   private commitOnce(): void {
-    const o = scenarioOutcome(this.s);
+    const o = this.def.outcome(this.s);
     if (!o || this.committed) return;
     this.committed = true;
     this.host.commit(o);
   }
 
-  private hostile(): void {
-    if (this.s.hostile) return;
-    this.apply({ t: "hostile" });
+  private spawnGroups(want: (group: string) => boolean): void {
+    const list: NpcSpec[] = [];
+    for (const sp of this.specs) if (want(sp.group) && !this.spawned.has(sp.id)) { this.spawned.add(sp.id); list.push(sp); }
+    if (list.length > 0) this.host.cast.spawn(list);
   }
 
-  private detonate(): void {
-    this.detonated = true;
-    const p = KESSAR_ANCHORS.pier, b = KESSAR_ANCHORS.bridge;
-    this.host.explode(p.x, this.host.groundY?.(p.x, p.z) ?? 0, p.z, SCENARIO.chargeRadius);
-    // bodies on the deck who are not the party (the party is told to clear it): they go into the river with the masonry
-    let onBridge = 0;
-    for (const r of this.recs) {
-      const row = this.host.players.get(r.key);
-      if (row && (row.flags & FLAG.DOWNED) === 0 && Math.abs(row.x - b.x) <= b.width / 2 + 0.5 && Math.abs(row.z - b.z) <= b.length / 2) onBridge++;
+  // ---- talking ---------------------------------------------------------------------------------------------------------------------------
+
+  private talk(sid: string, u: UseSpec): void {
+    const kind = u.talk!;
+    if (this.parley) {
+      if (this.parley.owner !== sid) this.host.send(sid, "notice", { text: "Somebody in your party is already talking to them. They can only ignore so many of you at once." });
+      return;
     }
-    this.host.rebuildBridge("collapsed");
-    this.apply({ t: "bridge_fell", onBridge });
-    this.tellAll("The bridge leaves. The paper will call it a structural event.");
+    this.talker = { sid, at: u.npc ?? u.id };
+    if (kind === "warden") {
+      this.apply({ t: "arrive", party: Math.max(1, this.countNear(this.def.observe.near.find((n) => n.id === "bar"))) });
+      this.apply({ t: "parley_open" });
+    } else this.apply({ t: "talk", kind, result: "open", paid: 0 });
+    this.talker = undefined;
   }
 
-  private checkChargeAlarm(): void {
-    const p = KESSAR_ANCHORS.pier;
-    for (const r of this.recs) {
-      if (r.spec.faction !== "ward" || r.brain.mode === "flee") continue;
-      const row = this.host.players.get(r.key);
-      if (row && (row.flags & FLAG.DOWNED) === 0 && Math.hypot(row.x - p.x, row.z - p.z) <= SCENARIO.chargeAlarmRange) {
-        this.hostile();
-        return;
-      }
-    }
+  private openParley(kind: ParleyKind, price: number): void {
+    const who = this.talker;
+    if (!who || this.parley) return;
+    const c = this.host.campaign();
+    const view = kind === "warden"
+      ? this.host.negotiation.openParley(c, this.leverage(c), this.parleySeed)
+      : openSiteParley(kind as SiteParleyKind, { price, purse: c.purse, seed: this.parleySeed, day: c.day });
+    this.parley = { owner: who.sid, kind, view, at: who.at, price };
+    this.host.send(who.sid, "parley", { view });
   }
 
-  private readWeather(): void {
-    weatherAt(this.host.seed, this.host.worldMs(), this.wx);
-    const wet = this.wx.rain >= SCENARIO.wetRain;
-    if (wet === this.wasWet) return;
-    this.wasWet = wet;
-    this.apply({ t: "weather", rain: wet ? this.wx.rain : 0 });
-    if (this.s.phase !== "resolved") this.tellAll(wet ? "Rain. Fuses sputter; sentries squint and see rather less." : "The rain eases. Everyone sees rather more.");
+  /** The conversation is over without a deal. */
+  private endTalk(kind: ParleyKind): void {
+    if (kind === "warden") this.apply({ t: "parley_close" });
+    else this.apply({ t: "talk", kind, result: "close", paid: 0 });
   }
 
-  /** 4 Hz: limbs lost (tally), the whole-party-down check, parley leash, garrison count. */
+  private closeParley(line: string): void {
+    const pr = this.parley;
+    if (!pr) return;
+    this.parley = undefined;
+    this.host.send(pr.owner, "parley", { closed: true, line });
+  }
+
+  // ---- observation (4 Hz) ----------------------------------------------------------------------------------------------------------------
+
   private watch(): void {
+    this.noteLimbsAll();
+    if (this.s.phase === "resolved") return;
     let connected = 0, down = 0;
-    for (let i = 0; i < this.real.length; i++) {
-      const p = this.real[i]!;
-      this.noteLimbs(this.realIds[i]!, p);
+    for (const p of this.real) {
       if (!p.connected) continue;
       connected++;
       if ((p.flags & FLAG.DOWNED) !== 0) down++;
     }
-    for (const r of this.recs) {
-      const row = this.host.players.get(r.key);
-      if (row) this.noteLimbs(r.key, row);
-    }
-    if (this.s.phase === "resolved") return;
     if (connected > 0 && down === connected) {
       this.apply({ t: "party_down" });
       return;
     }
-    const pr = this.parley;
-    if (pr) {
-      const owner = this.host.players.get(pr.owner);
-      const w = this.host.players.get(npcKey("warden"));
-      if (!owner || !owner.connected || (owner.flags & FLAG.DOWNED) !== 0 || !w || (w.flags & FLAG.DOWNED) !== 0 || Math.hypot(owner.x - w.x, owner.z - w.z) > PARLEY_LEASH) {
-        this.closeParley(LINE_WANDER);
-        this.apply({ t: "parley_close" });
+    this.leash();
+    this.observeNear();
+    this.observeCounts();
+    this.observeSeen();
+    this.observeActors();
+  }
+
+  private observeNear(): void {
+    for (const n of this.def.observe.near) {
+      const k = this.countNear(n);
+      const was = this.nearSig.get(n.id);
+      if (was === k || (was === undefined && k === 0)) continue;
+      this.nearSig.set(n.id, k);
+      this.apply({ t: "near", at: n.id, party: k });
+    }
+  }
+
+  private observeCounts(): void {
+    for (const o of this.def.observe.count) {
+      const c = this.host.cast.count(o.group);
+      const sig = `${c.alive}/${c.routed}/${c.down}/${c.total}`;
+      if (sig === this.countSig.get(o.group)) continue;
+      this.countSig.set(o.group, sig);
+      const prev = this.routedSeen.get(o.group) ?? 0;
+      if (o.routed && c.routed > prev) {
+        this.apply({ t: "tally", add: { [o.routed]: c.routed - prev } as Partial<CasualtyTally> });
+        this.routedSeen.set(o.group, c.routed);
+      }
+      this.apply({ t: "count", group: o.group, alive: c.alive, routed: c.routed, down: c.down, total: c.total });
+    }
+  }
+
+  /** Who has seen the party: a standing member of the group within `sight` metres of a standing human (shorter in rain and fog). Edge-triggered. */
+  private observeSeen(): void {
+    if (this.def.observe.seen.length === 0) return;
+    const k = (this.wasWet ? WET_SIGHT : 1) * (this.complication === "fog" ? FOG_SIGHT : 1) * (this.complication === "rain" ? WET_SIGHT : 1);
+    for (const o of this.def.observe.seen) {
+      const range = o.sight * k;
+      let sees = false;
+      for (const sp of this.specs) {
+        if (sp.group !== o.group || !this.spawned.has(sp.id)) continue;
+        const row = this.host.cast.row(sp.id);
+        if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
+        for (const p of this.real) {
+          if (!p.connected || (p.flags & FLAG.DOWNED) !== 0) continue;
+          if (Math.hypot(p.x - row.x, p.z - row.z) <= range) { sees = true; break; }
+        }
+        if (sees) break;
+      }
+      const was = this.seeing.get(o.group) ?? false;
+      this.seeing.set(o.group, sees);
+      if (sees && !was) this.apply({ t: "seen", group: o.group });
+    }
+  }
+
+  private observeActors(): void {
+    for (const a of this.def.observe.actors) {
+      let pos: { x: number; z: number } | undefined;
+      let isDown = false;
+      if (a.id === "wagon") pos = this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : undefined;
+      else {
+        const row = this.host.cast.row(a.id);
+        if (row) { pos = row; isDown = (row.flags & FLAG.DOWNED) !== 0; }
+      }
+      if (!pos) continue;
+      if (isDown) {
+        if (!this.actorDone.has(`${a.id}:down`)) {
+          this.actorDone.add(`${a.id}:down`);
+          this.apply({ t: "actor", id: a.id, state: "down" });
+        }
+        continue;
+      }
+      if (a.goal && !this.actorDone.has(`${a.id}:arrived`) && Math.hypot(pos.x - a.goal.x, pos.z - a.goal.z) <= a.goal.r) {
+        this.actorDone.add(`${a.id}:arrived`);
+        this.apply({ t: "actor", id: a.id, state: "arrived" });
       }
     }
-    this.reportGarrison();
+  }
+
+  /** A parley is leashed to its speaker: walk off, go down or lose the speaker and it closes. */
+  private leash(): void {
+    const pr = this.parley;
+    if (!pr) return;
+    const owner = this.host.players.get(pr.owner);
+    const them = this.host.cast.row(pr.at);
+    if (!owner || !owner.connected || (owner.flags & FLAG.DOWNED) !== 0 || !them || (them.flags & FLAG.DOWNED) !== 0 || Math.hypot(owner.x - them.x, owner.z - them.z) > PARLEY_LEASH) {
+      this.closeParley(LINE_WANDER);
+      this.endTalk(pr.kind);
+    }
+  }
+
+  private noteLimbsAll(): void {
+    for (let i = 0; i < this.real.length; i++) this.noteLimbs(this.realIds[i]!, this.real[i]!);
+    for (const sp of this.specs) {
+      if (!this.spawned.has(sp.id) || this.despawned) continue;
+      const row = this.host.cast.row(sp.id);
+      if (row) this.noteLimbs(npcKey(sp.id), row);
+    }
   }
 
   private noteLimbs(id: string, p: PlayerStateType): void {
@@ -367,82 +520,38 @@ export class Scenario {
     if (before !== undefined && n > before && this.s.phase !== "resolved") this.apply({ t: "tally", add: { limbsLost: n - before } });
   }
 
-  private reportGarrison(): void {
-    let total = 0, alive = 0, routed = 0;
-    for (const r of this.recs) {
-      if (r.spec.role !== NPC.SENTRY) continue;
-      total++;
-      const row = this.host.players.get(r.key);
-      if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
-      if (r.brain.mode === "flee") routed++;
-      else alive++;
-    }
-    const sig = `${alive}/${routed}/${total}`;
-    if (sig === this.gSig) return;
-    this.gSig = sig;
-    if (routed > this.routedReported) {
-      this.apply({ t: "tally", add: { garrisonRouted: routed - this.routedReported } });
-      this.routedReported = routed;
-    }
-    this.apply({ t: "garrison", alive, routed, total });
-  }
-
-  // ---- the cast --------------------------------------------------------------------------------------------------------------------------
-
-  private runCast(dt: number): void {
-    const wet = this.wasWet;
-    const sight = wet ? SIGHT_WET : SIGHT_CLEAR;
-    const sn = this.senses;
-    const me = this.body;
-    for (const r of this.recs) {
-      const row = this.host.players.get(r.key);
-      if (!row) continue;
-      me.x = row.x; me.z = row.z; me.facing = row.facing; me.health = row.health; me.weapon = row.weapon; me.ammo = row.ammo; me.flags = row.flags;
-      // nearest live player in sight
-      let best = Infinity;
-      let bi = -1;
-      for (let i = 0; i < this.real.length; i++) {
-        const p = this.real[i]!;
-        if (!p.connected || (p.flags & FLAG.DOWNED) !== 0) continue;
-        const d = Math.hypot(p.x - row.x, p.z - row.z);
-        if (d < best && d <= sight) { best = d; bi = i; }
-      }
-      if (bi >= 0) {
-        const p = this.real[bi]!;
-        this.enemy.id = this.realIds[bi]!; this.enemy.x = p.x; this.enemy.z = p.z; this.enemy.armed = p.weapon !== 0; this.enemy.down = false;
-        sn.enemy = this.enemy;
-      } else sn.enemy = undefined;
-      let allies = 0;
-      for (const o of this.recs) {
-        if (o === r || o.spec.faction !== r.spec.faction || o.brain.mode === "flee") continue;
-        const orow = this.host.players.get(o.key);
-        if (orow && (orow.flags & FLAG.DOWNED) === 0 && Math.hypot(orow.x - row.x, orow.z - row.z) <= ALLY_RANGE) allies++;
-      }
-      const ward = r.spec.faction === "ward";
-      sn.allies = allies;
-      sn.alert = ward ? this.wardAlert : this.rivalAlert;
-      sn.standDown = this.standDown;
-      sn.fear = ward ? this.fear : 10;
-      npcDecide(r.brain, me, sn, dt, this.cmd);
-      this.host.stepNpc(r.key, this.cmd);
+  private readWeather(): void {
+    weatherAt(this.host.seed, this.host.worldMs(), this.wx);
+    const wet = this.wx.rain >= SCENARIO.wetRain;
+    if (wet === this.wasWet) return;
+    this.wasWet = wet;
+    this.apply({ t: "weather", rain: wet ? this.wx.rain : 0 });
+    if (this.s.phase !== "resolved") {
+      const crossing = this.def.id === "secure_crossing";
+      this.tell(wet ? (crossing ? "Rain. Fuses sputter; sentries squint and see rather less." : "Rain. Footsteps carry less and everybody sees rather less.") : "The rain eases. Everyone sees rather more.");
     }
   }
 
   private despawnAll(): void {
     if (this.despawned) return;
     this.despawned = true;
-    for (const r of this.recs) this.host.removeNpc(r.key);
-    this.recs.length = 0;
-    this.byKey.clear();
+    // only OUR groups: hired hands and their like belong to somebody else
+    const groups = new Set<string>();
+    for (const sp of this.specs) groups.add(sp.group);
+    for (const g of groups) this.host.cast.despawn(g);
+    if (this.wagonId !== undefined) this.host.mounts?.remove(this.wagonId);
+    this.wagonId = undefined;
   }
 
   // ---- helpers ---------------------------------------------------------------------------------------------------------------------------
 
-  private closeParley(line: string): void {
-    const pr = this.parley;
-    if (!pr) return;
-    this.parley = undefined;
-    this.host.send(pr.owner, "parley", { closed: true, line });
+  private locate(u: UseSpec): { x: number; z: number } | undefined {
+    if (u.npc !== undefined) {
+      const row = this.host.cast.row(u.npc);
+      return row && (row.flags & FLAG.DOWNED) === 0 ? row : undefined;
+    }
+    if (u.mount) return this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : undefined;
+    return u.at;
   }
 
   private refresh(): void {
@@ -451,16 +560,20 @@ export class Scenario {
     this.host.players.forEach(this.collect);
   }
 
-  private tellAll(text: string): void {
+  private tell(text: string): void {
+    if (this.audience !== undefined) {
+      this.host.send(this.audience, "notice", { text });
+      return;
+    }
     this.refresh();
     for (const id of this.realIds) this.host.send(id, "notice", { text });
   }
 
-  private countNear(): number {
-    const t = KESSAR_ANCHORS.tollBar;
-    let n = 0;
-    for (const p of this.real) if (p.connected && Math.hypot(p.x - t.x, p.z - t.z) <= SCENARIO.arriveRange) n++;
-    return n;
+  private countNear(n: { x: number; z: number; r: number } | undefined): number {
+    if (!n) return 0;
+    let k = 0;
+    for (const p of this.real) if (p.connected && (p.flags & FLAG.DOWNED) === 0 && Math.hypot(p.x - n.x, p.z - n.z) <= n.r) k++;
+    return k;
   }
 
   private leverage(c: CampaignState): Leverage {
@@ -470,13 +583,15 @@ export class Scenario {
       if (p.weapon !== 0 && (p.flags & FLAG.DOWNED) === 0) armed++;
       if (p.wounds !== 0 || p.missing !== 0) wounded++;
     }
-    return this.host.negotiation.leverageOf(c, { armed, garrisonAlive: this.s.alive, garrisonTotal: this.s.total, partyWounded: wounded });
+    const g = this.host.cast.count("ward");
+    return this.host.negotiation.leverageOf(c, { armed, garrisonAlive: g.alive, garrisonTotal: g.total, partyWounded: wounded });
   }
 
   /** Republish only when the picture changed (or the timer moved by more than half a second). */
   private publish(force: boolean): void {
-    const v = scenarioView(this.s, this.host.worldMs());
-    const sig = JSON.stringify([v.phase, v.objectives, v.hint, v.timerLabel, v.resolution ?? ""]);
+    const v = this.def.view(this.s, this.host.worldMs());
+    this.complication = v.complication ?? "none";
+    const sig = JSON.stringify([v.phase, v.objectives, v.hint, v.timerLabel, v.resolution ?? "", v.title]);
     if (!force && sig === this.lastView && Math.abs(v.endsAtWorldMs - this.lastEnds) < 600) return;
     this.lastView = sig;
     this.lastEnds = v.endsAtWorldMs;

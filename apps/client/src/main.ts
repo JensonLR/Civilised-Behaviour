@@ -35,6 +35,10 @@ if (params.get("showcase") === "lineup") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWorld } = await import("./showcase/World.ts");
   runWorld(canvas, params);
+} else if (params.get("showcase") === "horses") {
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runHorses } = await import("./showcase/Horses.ts");
+  runHorses(canvas, params);
 } else {
   const { bootGame } = await import("./game/boot.ts");
   bootGame(canvas, params);

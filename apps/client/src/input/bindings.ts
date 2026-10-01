@@ -11,7 +11,7 @@ import { emitSetting, readStored, registerReset, writeStored } from "../settings
 export type ActionId =
   | "forward" | "back" | "left" | "right"
   | "sprint" | "crouch" | "jump"
-  | "interact" | "reload" | "melee" | "throw" | "grab"
+  | "interact" | "reload" | "melee" | "throw" | "grab" | "command"
   | "view";
 
 export type Slot = 0 | 1;
@@ -43,6 +43,8 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: "melee", label: "Melee", group: "Actions", defaults: ["KeyV", ""], button: BUTTON.MELEE, tap: true },
   { id: "throw", label: "Throw", group: "Actions", defaults: ["KeyG", ""], button: BUTTON.THROW, tap: true },
   { id: "grab", label: "Grab / drag", group: "Actions", defaults: ["KeyF", ""], button: BUTTON.GRAB, tap: true },
+  /** HOLD to open the command wheel for the hired hands, release to send (no wire button: the order is its own message). */
+  { id: "command", label: "Command the hands (hold)", group: "Actions", defaults: ["KeyT", ""] },
   { id: "view", label: "Switch first / third person", group: "Camera", defaults: ["KeyX", ""] },
 ];
 

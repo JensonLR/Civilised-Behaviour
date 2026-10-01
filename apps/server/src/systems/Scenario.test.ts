@@ -1,265 +1,303 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUTTON, FLAG, PropKind, weatherAt, yawFromWire, type MoveCommand, type PlayerStateType,
-  answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, serializeCampaign, generatePaper,
-  KESSAR_ANCHORS, NPC_CAP, RESOLVED_LINGER_S, RIVAL_ARRIVES_S, RIVAL_PARLEY_S, SCENARIO, npcKey,
-  type BridgeState, type CampaignState, type ParleyView, type ResolutionId, type ScenarioOutcome, type ScenarioView,
+  FLAG, PropKind, hash3, answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, generatePaper, npcKey, weatherAt,
+  KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
+  type BridgeState, type CampaignState, type ParleyView, type PlayerStateType, type ResolutionId, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
 } from "@cb/shared";
+import type { CastApi, CastCount, CastOrder, MountApi, NpcSide, NpcSpec } from "@cb/shared";
 import { Scenario, type ScenarioHost } from "./Scenario.ts";
 
-const DT = 0.05;
+/**
+ * The runner against a FAKE host with a fake Cast and fake Mounts (the real Cast has its own tests; here the runner is judged on what it observes and what it
+ * asks for). One scripted run per resolution (all 20), the leave table, the settled crossing's start, and hostile input at every entry point.
+ */
+
+const DT = 0.25;
 type Row = PlayerStateType & { id: string };
 const row = (id: string, x: number, z: number, o: Partial<PlayerStateType> = {}): Row =>
   ({ id, name: id, x, y: 0, z, facing: 0, flags: FLAG.GROUNDED, health: 100, wounds: 0, missing: 0, weapon: 2, ammo: 5, slot: 0, connected: true, ...o }) as unknown as Row;
 
+class FakeCast implements CastApi {
+  specs: NpcSpec[] = [];
+  orders: { group: string; order: CastOrder }[] = [];
+  wars: { a: NpcSide; b: NpcSide; on: boolean }[] = [];
+  routes = new Map<string, readonly { x: number; z: number }[]>();
+  counts = new Map<string, CastCount>();
+  despawned: string[] = [];
+  cap = 99;
+  constructor(readonly players: Map<string, Row>) {}
+  spawn(specs: readonly NpcSpec[]): number {
+    let n = 0;
+    for (const sp of specs) {
+      if (this.players.size >= this.cap || this.players.has(npcKey(sp.id))) continue;
+      this.players.set(npcKey(sp.id), row(npcKey(sp.id), sp.post.x, sp.post.z, { weapon: sp.weapon + 1, ammo: 6, npc: sp.role } as Partial<PlayerStateType>));
+      this.specs.push(sp);
+      n++;
+    }
+    return n;
+  }
+  order(group: string, o: CastOrder): void { this.orders.push({ group, order: o }); }
+  setWar(a: NpcSide, b: NpcSide, on: boolean): void { this.wars.push({ a, b, on }); }
+  count(group: string): CastCount {
+    const o = this.counts.get(group);
+    if (o) return o;
+    let alive = 0, down = 0, total = 0;
+    for (const sp of this.specs) {
+      if (sp.group !== group) continue;
+      total++;
+      const r = this.players.get(npcKey(sp.id));
+      if (!r || (r.flags & FLAG.DOWNED) !== 0) down++;
+      else alive++;
+    }
+    return { alive, routed: 0, down, total };
+  }
+  row(id: string): PlayerStateType | undefined { return this.players.get(npcKey(id)); }
+  defineRoute(name: string, pts: readonly { x: number; z: number }[]): void { this.routes.set(name, pts); }
+  noise(): void {}
+  despawn(group?: string): void {
+    for (const sp of [...this.specs]) {
+      if (group !== undefined && sp.group !== group) continue;
+      this.players.delete(npcKey(sp.id));
+      this.specs.splice(this.specs.indexOf(sp), 1);
+    }
+    this.despawned.push(group ?? "*");
+  }
+  tick(): void {}
+  setWorld(): void {}
+  atWar(): boolean { return false; }
+  groupOrders(group: string): string[] { return this.orders.filter((o) => o.group === group).map((o) => o.order.o); }
+}
+
+class FakeMounts implements MountApi {
+  at = { x: -32, z: 52 };
+  routeName = "";
+  seized: string[] = [];
+  wrecked: boolean[] = [];
+  removed: string[] = [];
+  cargo = 60;
+  spawned: { at: { x: number; z: number; yaw: number }; crates: number }[] = [];
+  spawnWagon(at: { x: number; z: number; yaw: number }, o: { coat: number; crates: number; horse?: boolean }): string { this.spawned.push({ at, crates: o.crates }); this.at = { x: at.x, z: at.z }; return "wagon-1"; }
+  lead(): void {}
+  route(_id: string, name: string): void { this.routeName = name; }
+  pos(id: string): { x: number; z: number } | undefined { return id === "wagon-1" && this.removed.length === 0 ? this.at : undefined; }
+  wreck(_id: string, burn: boolean): void { this.wrecked.push(burn); }
+  seize(_id: string, by: string): number { this.seized.push(by); const n = this.cargo; this.cargo = 0; return n; }
+  remove(id: string): void { this.removed.push(id); }
+}
+
 interface Fake {
   host: ScenarioHost;
   players: Map<string, Row>;
+  cast: FakeCast;
+  mounts: FakeMounts;
   commits: ScenarioOutcome[];
   sent: { sid: string; type: string; msg: any }[];
   views: ScenarioView[];
-  booms: { x: number; z: number; r: number }[];
+  booms: { x: number; z: number; r: number; owner: string }[];
   bridges: BridgeState[];
   consumed: string[];
-  removed: string[];
-  steps: Map<string, MoveCommand[]>;
-  props: Map<string, number>;
+  props: Map<string, { kind: number; x: number; z: number }>;
   clock: { ms: number };
-  cap: { n: number };
 }
 
-function fake(campaign: CampaignState = newCampaign(11), startMs = 0): Fake {
+function fake(campaign: CampaignState = newCampaign(11), startMs = 0, withMounts = true): Fake {
   const players = new Map<string, Row>();
-  const f: Fake = {
-    players, commits: [], sent: [], views: [], booms: [], bridges: [], consumed: [], removed: [], steps: new Map(), props: new Map(), clock: { ms: startMs }, cap: { n: 99 }, host: undefined as never,
-  };
+  const cast = new FakeCast(players);
+  const mounts = new FakeMounts();
+  let propN = 0;
+  const f: Fake = { players, cast, mounts, commits: [], sent: [], views: [], booms: [], bridges: [], consumed: [], props: new Map(), clock: { ms: startMs }, host: undefined as never };
   f.host = {
     players: players as unknown as ScenarioHost["players"],
     worldMs: () => f.clock.ms,
     campaign: () => campaign,
     commit: (o) => void f.commits.push(o),
-    spawnNpc: (spec) => {
-      if (players.size >= f.cap.n) return false;
-      players.set(npcKey(spec.id), row(npcKey(spec.id), spec.post.x, spec.post.z, { weapon: spec.weapon + 1, ammo: 6 }));
-      return true;
-    },
-    removeNpc: (k) => { players.delete(k); f.removed.push(k); },
-    stepNpc: (k, cmd) => {
-      const r = players.get(k);
-      if (!r) return;
-      const list = f.steps.get(k) ?? [];
-      list.push({ ...cmd });
-      f.steps.set(k, list);
-      if ((r.flags & FLAG.DOWNED) !== 0) return;
-      const y = yawFromWire(cmd.yaw), fw = cmd.moveF / 127, rt = cmd.moveR / 127;
-      r.x += (-Math.sin(y) * fw + Math.cos(y) * rt) * 4.4 * DT;
-      r.z += (-Math.cos(y) * fw - Math.sin(y) * rt) * 4.4 * DT;
-    },
-    explode: (x, _y, z, r) => void f.booms.push({ x, z, r }),
+    cast,
+    mounts: withMounts ? mounts : undefined,
     consumeProp: (id) => void f.consumed.push(id),
-    propKind: (id) => f.props.get(id),
+    propKind: (id) => f.props.get(id)?.kind,
+    propPos: (id) => { const p = f.props.get(id); return p ? { x: p.x, y: 0, z: p.z } : undefined; },
+    propsNear: () => [],
+    spawnProp: (kind, x, z) => { const id = `prop-${++propN}`; f.props.set(id, { kind, x, z }); return id; },
     rebuildBridge: (s) => void f.bridges.push(s),
+    explode: (x, _y, z, r, owner) => void f.booms.push({ x, z, r, owner }),
     publish: (v) => void f.views.push(v),
     send: (sid, type, msg) => void f.sent.push({ sid, type, msg }),
     negotiation: { askingToll, leverageOf, openParley, answerParley },
     seed: 424242,
+    groundY: () => 0,
   };
   return f;
 }
-const setup = (f: Fake, ...ps: Row[]): Scenario => {
+
+const setup = (f: Fake, id: ScenarioTemplateId, ...ps: Row[]): Scenario => {
   for (const p of ps) f.players.set(p.id, p);
-  const s = new Scenario(f.host);
+  const s = new Scenario(f.host, id);
   s.start();
   return s;
 };
-const run = (f: Fake, s: Scenario, seconds: number): void => {
-  for (let t = 0; t < seconds; t += DT) {
-    f.clock.ms += DT * 1000;
-    s.tick(DT);
+const run = (f: Fake, s: Scenario, seconds: number, dt = DT): void => {
+  for (let t = 0; t < seconds; t += dt) {
+    f.clock.ms += dt * 1000;
+    s.tick(dt);
   }
 };
-const warden = KESSAR_ANCHORS.wardenPost;
-const atWarden = (id = "p1"): Row => row(id, warden.x - 0.7, warden.z - 0.5);
+const me = (f: Fake, id = "p1"): Row => f.players.get(id)!;
+const put = (f: Fake, id: string, x: number, z: number): void => { const r = f.players.get(id)!; r.x = x; r.z = z; };
+const beside = (f: Fake, id: string, npc: string, dx = 0.8): void => { const r = f.players.get(npcKey(npc))!; put(f, id, r.x + dx, r.z); };
 const lastParley = (f: Fake, sid: string): { view?: ParleyView; closed?: boolean; line?: string } | undefined => [...f.sent].reverse().find((m) => m.sid === sid && m.type === "parley")?.msg;
 const optionIndex = (v: ParleyView, id: string): number => v.options.findIndex((o) => o.id === id);
+const labelIndex = (v: ParleyView, re: RegExp): number => v.options.findIndex((o) => re.test(o.label));
 const down = (f: Fake, key: string): void => { const r = f.players.get(key)!; r.flags |= FLAG.DOWNED; r.health = 0; };
-const frozen = (f: Fake, key: string, from: number): boolean => (f.steps.get(key) ?? []).slice(from).every((c) => c.moveF === 0 && c.moveR === 0 && c.buttons === 0);
+const lastView = (f: Fake): ScenarioView => f.views.at(-1)!;
+const press = (f: Fake, s: Scenario, id = "p1", prop?: string): boolean => s.onInteract(id, me(f, id), prop);
+const npcKeys = (f: Fake): string[] => [...f.players.keys()].filter((k) => k.startsWith("npc:"));
+const bar = KESSAR_ANCHORS.wardenPost;
 
-describe("the cast", () => {
-  it("spawns the garrison, the Warden and the Syndicate within NPC_CAP, and starts unresolved", () => {
+describe("the runner: start, publish, dispose", () => {
+  it("spawns the template's people through the cast within NPC_CAP, starts unresolved, and registers routes", () => {
+    for (const [id, minNpcs] of [["secure_crossing", 8], ["hostage_rescue", 6], ["convoy_ambush", 5], ["border_incident", 5]] as const) {
+      const f = fake();
+      const s = setup(f, id, row("p1", 0, 88));
+      expect(npcKeys(f).length, id).toBeGreaterThanOrEqual(minNpcs);
+      expect(npcKeys(f).length).toBeLessThanOrEqual(NPC_CAP);
+      expect(f.commits).toEqual([]);
+      expect(lastView(f).template).toBe(id);
+      expect(s.template).toBe(id);
+      expect(lastView(f).phase).not.toBe("resolved");
+      s.dispose();
+      expect(npcKeys(f)).toEqual([]);
+    }
     const f = fake();
-    const s = setup(f, row("p1", 0, 88));
-    const npcs = [...f.players.keys()].filter((k) => k.startsWith("npc:"));
-    expect(npcs.length).toBeGreaterThanOrEqual(8);
-    expect(npcs.length).toBeLessThanOrEqual(NPC_CAP);
-    expect(npcs).toContain("npc:warden");
-    expect(f.views.at(-1)!.phase).toBe("approach");
-    expect(f.commits).toEqual([]);
+    setup(f, "convoy_ambush", row("p1", 0, 88));
+    expect(f.cast.routes.get("convoy")!.length).toBeGreaterThan(4);
+    expect(f.mounts.spawned).toHaveLength(1);
+    expect(f.mounts.spawned[0]!.crates).toBe(3);
+    expect([...f.props.values()].some((p) => p.kind === PropKind.BARREL)).toBe(true);
+  });
+
+  it("holds the late groups back, and despawns only its own groups (a hired hand is somebody else's)", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", 0, 88));
+    f.cast.spawn([{ id: "porter-1", role: 8, faction: "ward", side: "party", group: "party", post: { x: 1, z: 86 }, weapon: 4, lookSeed: 1, name: "Porter", skill: 10, bravery: 30, brain: "follower" }]);
+    expect(f.players.has("npc:reinf-0")).toBe(false);
     s.dispose();
-    expect([...f.players.keys()].filter((k) => k.startsWith("npc:"))).toEqual([]);
+    expect(f.players.has("npc:porter-1")).toBe(true);
+    expect(f.cast.despawned).not.toContain("*");
+    expect(f.players.has("npc:deserter-0")).toBe(false);
   });
 
-  it("copes with the room refusing spawns at the cap", () => {
+  it("copes with the cast refusing spawns at the cap", () => {
     const f = fake();
-    f.cap.n = 3;
-    const s = setup(f, row("p1", 0, 88));
+    f.cast.cap = 4;
+    const s = setup(f, "secure_crossing", row("p1", 0, 88));
     run(f, s, 2);
-    expect([...f.players.keys()].filter((k) => k.startsWith("npc:")).length).toBe(2);
+    expect(npcKeys(f).length).toBe(3);
   });
 
-  it("moves to standoff when the party reaches the bar, and republishes only on change", () => {
+  it("republishes only on change", () => {
     const f = fake();
-    const s = setup(f, row("p1", 0, 30));
+    const s = setup(f, "secure_crossing", row("p1", 0, 30));
     run(f, s, 3);
-    expect(f.views.at(-1)!.phase).toBe("standoff");
+    expect(lastView(f).phase).toBe("standoff");
     const n = f.views.length;
     run(f, s, 5);
-    expect(f.views.length).toBeLessThan(n + 6); // only the ticking timer moves it, and only every half second or so
+    expect(f.views.length).toBeLessThan(n + 12);
   });
 });
 
-describe("way 1: negotiate", () => {
-  it("pays the asking toll and the crossing is settled (paid), committed once", () => {
+describe("the crossing through the runner", () => {
+  it("pays the asking toll: parley by INTERACT at the Warden, a pick, one commit, and the cast leaves after the linger", () => {
     const f = fake();
-    const s = setup(f, atWarden());
+    const s = setup(f, "secure_crossing", row("p1", bar.x - 0.7, bar.z - 0.5));
     run(f, s, 1.5);
-    expect(s.onInteract("p1", f.players.get("p1")!)).toBe(true);
+    expect(press(f, s)).toBe(true);
     const view = lastParley(f, "p1")!.view!;
     expect(view.toll).toBe(askingToll(newCampaign(11)));
     s.onPick("p1", optionIndex(view, "pay"));
-    const closed = lastParley(f, "p1")!;
-    expect(closed.closed).toBe(true);
+    expect(lastParley(f, "p1")!.closed).toBe(true);
     expect(f.commits).toHaveLength(1);
-    expect(f.commits[0]).toMatchObject({ resolution: "paid", paid: view.toll, bridge: "intact", brokePromise: false });
-    const before = f.steps.get("npc:sentry-0")!.length;
+    expect(f.commits[0]).toMatchObject({ scenario: "secure_crossing", resolution: "paid", paid: view.toll, bridge: "intact", brokePromise: false });
     run(f, s, RESOLVED_LINGER_S + 5);
     expect(f.commits).toHaveLength(1);
-    expect(frozen(f, "npc:sentry-0", before - 1) || f.removed.includes("npc:sentry-0")).toBe(true);
-    expect(f.removed).toContain("npc:warden"); // the cast leaves after the linger
+    expect(f.players.has("npc:warden")).toBe(false);
   });
 
-  it("walking away closes the parley and leaves the standoff open", () => {
+  it("walking away leaves the standoff open; a bribe is committed as bribed; the parley is leashed", () => {
     const f = fake();
-    const s = setup(f, atWarden());
+    const s = setup(f, "secure_crossing", row("p1", bar.x - 0.7, bar.z - 0.5));
     run(f, s, 1.5);
-    s.onInteract("p1", f.players.get("p1")!);
+    press(f, s);
     s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "walk_away"));
     expect(lastParley(f, "p1")!.closed).toBe(true);
-    expect(f.commits).toEqual([]);
-    expect(f.views.at(-1)!.phase).toBe("standoff");
-    s.onInteract("p1", f.players.get("p1")!); // she will talk again
+    expect(lastView(f).phase).toBe("standoff");
+    press(f, s);
     expect(lastParley(f, "p1")!.view).toBeDefined();
-  });
-
-  it("a bribe spends less than the toll and is committed as bribed", () => {
-    const f = fake();
-    const s = setup(f, atWarden());
-    run(f, s, 1.5);
-    s.onInteract("p1", f.players.get("p1")!);
+    me(f).x += 12;
+    run(f, s, 0.6);
+    expect(lastParley(f, "p1")!.closed).toBe(true);
+    expect(f.commits).toEqual([]);
+    put(f, "p1", bar.x - 0.7, bar.z - 0.5);
+    press(f, s);
     const v = lastParley(f, "p1")!.view!;
-    const i = optionIndex(v, "bribe");
-    expect(i).toBeGreaterThanOrEqual(0);
-    s.onPick("p1", i);
+    s.onPick("p1", optionIndex(v, "bribe"));
     expect(f.commits[0]).toMatchObject({ resolution: "bribed" });
     expect(f.commits[0]!.paid).toBeLessThan(v.toll);
   });
 
-  it("the parley is leashed: walking off mid-sentence closes it", () => {
+  it("first blood alerts the ward group; breaking 60% of it is forced, with the dead and the routed counted", () => {
     const f = fake();
-    const s = setup(f, atWarden());
+    const s = setup(f, "secure_crossing", row("p1", 0, 22));
     run(f, s, 1.5);
-    s.onInteract("p1", f.players.get("p1")!);
-    f.players.get("p1")!.x += 12;
-    run(f, s, 0.6);
-    expect(lastParley(f, "p1")!.closed).toBe(true);
-    expect(f.commits).toEqual([]);
-  });
-});
-
-describe("way 2: force the garrison", () => {
-  it("first blood alerts the garrison, who fight back; breaking 60% of them is forced, with the dead counted", () => {
-    const f = fake();
-    const p1 = row("p1", 0, 22);
-    const s = setup(f, p1);
-    run(f, s, 1.5);
-    expect(f.views.at(-1)!.phase).toBe("standoff");
+    expect(lastView(f).phase).toBe("standoff");
     s.onDamage("npc:sentry-0", "p1", 1, false);
-    expect(f.views.at(-1)!.phase).toBe("fighting");
-    run(f, s, 2);
-    const shots = [...f.steps.entries()].filter(([k]) => k.startsWith("npc:sentry")).reduce((n, [, cs]) => n + cs.filter((c) => (c.buttons & BUTTON.FIRE) !== 0).length, 0);
-    expect(shots).toBeGreaterThan(0); // they shoot back through the ordinary command path
-    expect(f.commits).toEqual([]);
-    for (let i = 0; i < 4; i++) {
-      down(f, `npc:sentry-${i}`);
-      s.onDamage(`npc:sentry-${i}`, "p1", 1, true);
-    }
+    expect(lastView(f).phase).toBe("fighting");
+    expect(f.cast.groupOrders("ward")).toContain("alert");
+    f.cast.counts.set("ward", { alive: 3, routed: 2, down: 3, total: 8 });
+    for (let i = 0; i < 3; i++) { down(f, `npc:sentry-${i}`); s.onDamage(`npc:sentry-${i}`, "p1", 1, true); }
     run(f, s, 1);
     expect(f.commits).toHaveLength(1);
-    expect(f.commits[0]).toMatchObject({ resolution: "forced", paid: 0, bridge: "intact" });
-    expect(f.commits[0]!.tally.garrisonKilled).toBe(4);
-    expect(f.commits[0]!.tally.downed).toBe(4);
-    expect(f.commits[0]!.brokePromise).toBe(false);
-    const n = f.steps.get("npc:sentry-5")!.length;
-    run(f, s, 3);
-    expect(frozen(f, "npc:sentry-5", n)).toBe(true); // survivors stand down
+    expect(f.commits[0]).toMatchObject({ resolution: "forced", paid: 0 });
+    expect(f.commits[0]!.tally).toMatchObject({ garrisonKilled: 3, downed: 3, garrisonRouted: 2 });
+    expect(f.cast.groupOrders("ward")).toContain("stand_down");
   });
 
-  it("a rout counts as much as a death: sentries that flee are tallied as routed", () => {
+  it("shooting the Syndicate annoys them (they are alerted) but is not war on the Ward; talking first and then shooting her is a broken promise", () => {
     const f = fake();
-    const p1 = row("p1", 0, 22);
-    const s = setup(f, p1);
-    run(f, s, 1.5);
-    s.onDamage("npc:warden", "p1", 1, false);
-    // wound four sentries badly enough that they break
-    for (let i = 0; i < 4; i++) f.players.get(`npc:sentry-${i}`)!.health = 8;
-    run(f, s, 6);
-    expect(f.commits).toHaveLength(1);
-    expect(f.commits[0]!.resolution).toBe("forced");
-    expect(f.commits[0]!.tally.garrisonRouted).toBeGreaterThanOrEqual(3);
-  });
-
-  it("talking first and then shooting her is a broken promise", () => {
-    const f = fake();
-    const s = setup(f, atWarden());
-    run(f, s, 1.5);
-    s.onInteract("p1", f.players.get("p1")!);
-    s.onDamage("npc:warden", "p1", 1, false);
-    expect(lastParley(f, "p1")).toMatchObject({ closed: true, line: "You have made your point, with a bullet." });
-    for (let i = 0; i < 4; i++) {
-      down(f, `npc:sentry-${i}`);
-      s.onDamage(`npc:sentry-${i}`, "p1", 1, true);
-    }
-    run(f, s, 1);
-    expect(f.commits[0]).toMatchObject({ resolution: "forced", brokePromise: true });
-  });
-
-  it("rivals shot at fight back, but shooting them is not war on the Ward", () => {
-    const f = fake();
-    const s = setup(f, row("p1", 0, 60));
+    const s = setup(f, "secure_crossing", row("p1", 0, 60));
     run(f, s, 1.5);
     s.onDamage("npc:rival-0", "p1", 1, true);
-    expect(f.views.at(-1)!.phase).not.toBe("fighting");
+    expect(lastView(f).phase).not.toBe("fighting");
+    expect(f.cast.groupOrders("rival")).toContain("alert");
+    const g = fake();
+    const t = setup(g, "secure_crossing", row("p1", bar.x - 0.7, bar.z - 0.5));
+    run(g, t, 1.5);
+    press(g, t);
+    t.onDamage("npc:warden", "p1", 1, false);
+    expect(lastParley(g, "p1")).toMatchObject({ closed: true, line: "You have made your point, with a bullet." });
+    g.cast.counts.set("ward", { alive: 3, routed: 0, down: 5, total: 8 });
+    run(g, t, 1);
+    expect(g.commits[0]).toMatchObject({ resolution: "forced", brokePromise: true });
   });
-});
 
-describe("way 3: sabotage", () => {
-  const pier = KESSAR_ANCHORS.pier;
-  const carrier = (): Row => row("p1", pier.x + 1, pier.z, { flags: FLAG.GROUNDED | FLAG.CARRYING });
-
-  it("a barrel at the pier with a lit fuse drops the bridge ten seconds later (sabotaged), committed once", () => {
+  it("a barrel at the pier with a lit fuse drops the bridge ten seconds later (sabotaged), blast owned by the lighter, committed once", () => {
+    const pier = KESSAR_ANCHORS.pier;
     const f = fake();
-    f.props.set("b1", PropKind.BARREL);
-    const s = setup(f, carrier());
+    f.props.set("b1", { kind: PropKind.BARREL, x: 0, z: 0 });
+    const s = setup(f, "secure_crossing", row("p1", pier.x + 1, pier.z, { flags: FLAG.GROUNDED | FLAG.CARRYING }));
     run(f, s, 1.2);
-    expect(s.onInteract("p1", f.players.get("p1")!, "b1")).toBe(true);
+    expect(s.onInteract("p1", me(f), "b1")).toBe(true);
     expect(f.consumed).toEqual(["b1"]);
-    expect(f.views.at(-1)!.phase).toBe("rigging");
-    expect(f.views.at(-1)!.timerLabel).toBe("Fuse");
+    expect(lastView(f).phase).toBe("rigging");
+    expect(lastView(f).timerLabel).toBe("Fuse");
+    // a second barrel does not double the fuse and is not consumed
+    f.props.set("b2", { kind: PropKind.BARREL, x: 0, z: 0 });
+    s.onInteract("p1", me(f), "b2");
+    expect(f.consumed).toEqual(["b1"]);
     run(f, s, SCENARIO.fuseSeconds - 1);
     expect(f.booms).toEqual([]);
     run(f, s, 2);
     expect(f.booms).toHaveLength(1);
-    expect(f.booms[0]).toMatchObject({ x: pier.x, z: pier.z, r: SCENARIO.chargeRadius });
+    expect(f.booms[0]).toMatchObject({ x: pier.x, z: pier.z, r: SCENARIO.chargeRadius, owner: "p1" });
     expect(f.bridges).toEqual(["collapsed"]);
     expect(f.commits).toHaveLength(1);
     expect(f.commits[0]).toMatchObject({ resolution: "sabotaged", bridge: "collapsed" });
@@ -268,55 +306,42 @@ describe("way 3: sabotage", () => {
     expect(f.booms).toHaveLength(1);
   });
 
-  it("the sentries near the pier notice the fuse and go hostile", () => {
+  it("the pier press is only taken with a BARREL in hand and in reach; a crate, empty hands or the wrong place do nothing", () => {
+    const pier = KESSAR_ANCHORS.pier;
     const f = fake();
-    f.props.set("b1", PropKind.BARREL);
-    const s = setup(f, carrier());
+    f.props.set("crate", { kind: PropKind.CRATE, x: 0, z: 0 });
+    f.props.set("b1", { kind: PropKind.BARREL, x: 0, z: 0 });
+    const s = setup(f, "secure_crossing", row("p1", pier.x + 1, pier.z, { flags: FLAG.GROUNDED | FLAG.CARRYING }));
     run(f, s, 1.2);
-    s.onInteract("p1", f.players.get("p1")!, "b1");
-    run(f, s, 1);
-    const fired = (f.steps.get("npc:sentry-0") ?? []).some((c) => (c.buttons & (BUTTON.FIRE | BUTTON.AIM)) !== 0) || (f.steps.get("npc:sentry-1") ?? []).some((c) => (c.buttons & (BUTTON.FIRE | BUTTON.AIM)) !== 0);
-    expect(fired).toBe(true);
+    expect(s.onInteract("p1", me(f), "crate")).toBe(false);
+    expect(s.onInteract("p1", me(f), undefined)).toBe(false);
+    expect(s.onInteract("p1", me(f), "nonsense")).toBe(false);
+    put(f, "p1", pier.x + 30, pier.z);
+    expect(s.onInteract("p1", me(f), "b1")).toBe(false);
+    expect(f.consumed).toEqual([]);
+    expect(lastView(f).phase).not.toBe("rigging");
   });
 
   it("the weather matters: in heavy rain the same fuse takes twice as long", () => {
-    // find a stretch of world time where it rains hard for the next minute
+    const pier = KESSAR_ANCHORS.pier;
     let ms = -1;
     for (let t = 0; t < 6 * 3600_000 && ms < 0; t += 30_000) if (weatherAt(424242, t).rain >= 0.7 && weatherAt(424242, t + 45_000).rain >= 0.7) ms = t;
     expect(ms).toBeGreaterThan(0);
     const f = fake(newCampaign(11), ms);
-    f.props.set("b1", PropKind.BARREL);
-    const s = setup(f, carrier());
-    run(f, s, 2.1); // the weather reading is taken once a second
-    s.onInteract("p1", f.players.get("p1")!, "b1");
+    f.props.set("b1", { kind: PropKind.BARREL, x: 0, z: 0 });
+    const s = setup(f, "secure_crossing", row("p1", pier.x + 1, pier.z, { flags: FLAG.GROUNDED | FLAG.CARRYING }));
+    run(f, s, 2.1);
+    s.onInteract("p1", me(f), "b1");
     run(f, s, SCENARIO.fuseSeconds + 1);
     expect(f.booms).toEqual([]);
     run(f, s, SCENARIO.fuseSeconds + 2);
     expect(f.booms).toHaveLength(1);
     expect(f.sent.some((m) => m.type === "notice" && /Rain/.test(m.msg.text))).toBe(true);
   });
-});
-
-describe("way 4: dawdle (the Syndicate) and the wipe", () => {
-  it("the Syndicate marches to the parley spot and buys the crossing (rival_secured)", () => {
-    const f = fake();
-    const s = setup(f, row("p1", 0, 88));
-    // (the chaos director may bring them 120 s early for this campaign; either way never before the earliest walk + their minute)
-    const earliest = RIVAL_ARRIVES_S - SCENARIO.rivalEarlyBy + RIVAL_PARLEY_S;
-    run(f, s, earliest - 10);
-    expect(f.commits).toEqual([]);
-    for (let i = 0; i < 60 && f.commits.length === 0; i++) run(f, s, 10);
-    expect(f.commits).toHaveLength(1);
-    expect(f.commits[0]!.seconds).toBeGreaterThanOrEqual(earliest - 1);
-    expect(f.commits[0]).toMatchObject({ resolution: "rival_secured" });
-    const r = f.players.get("npc:rival-0")!;
-    if (r) expect(Math.hypot(r.x - KESSAR_ANCHORS.rivalParley.x, r.z - KESSAR_ANCHORS.rivalParley.z)).toBeLessThan(6);
-    expect(f.sent.some((m) => m.type === "notice" && /Syndicate/.test(m.msg.text))).toBe(true);
-  });
 
   it("the whole party down is abandoned", () => {
     const f = fake();
-    const s = setup(f, row("p1", 0, 60), row("p2", 3, 60));
+    const s = setup(f, "secure_crossing", row("p1", 0, 60), row("p2", 3, 60));
     run(f, s, 1);
     down(f, "p1");
     run(f, s, 1);
@@ -327,154 +352,533 @@ describe("way 4: dawdle (the Syndicate) and the wipe", () => {
     expect(f.commits[0]!.resolution).toBe("abandoned");
   });
 
-  it("a bridge that is already a ruin resolves nothing and commits nothing", () => {
-    const c = newCampaign(11);
-    c.crossing.bridge = "collapsed";
-    const f = fake(c);
-    const s = setup(f, atWarden());
-    run(f, s, RIVAL_ARRIVES_S + RIVAL_PARLEY_S + 60);
-    expect(f.commits).toEqual([]);
-    expect(f.views.at(-1)!.phase).toBe("resolved");
-    expect([...f.players.keys()].some((k) => k.startsWith("npc:rival"))).toBe(false);
-    expect(f.removed).toEqual([]);
-    expect(s.onInteract("p1", f.players.get("p1")!)).toBe(false);
-  });
-});
-
-describe("distinct end states", () => {
-  const ways: Record<string, () => ScenarioOutcome> = {
-    paid: () => {
-      const f = fake(); const s = setup(f, atWarden()); run(f, s, 1.5); s.onInteract("p1", f.players.get("p1")!);
-      s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); return f.commits[0]!;
-    },
-    forced: () => {
-      const f = fake(); const s = setup(f, row("p1", 0, 22)); run(f, s, 1.5); s.onDamage("npc:sentry-0", "p1", 1, false);
-      for (let i = 0; i < 4; i++) { down(f, `npc:sentry-${i}`); s.onDamage(`npc:sentry-${i}`, "p1", 1, true); }
-      run(f, s, 1); return f.commits[0]!;
-    },
-    sabotaged: () => {
-      const pier = KESSAR_ANCHORS.pier;
-      const f = fake(); f.props.set("b", PropKind.BARREL);
-      const s = setup(f, row("p1", pier.x + 1, pier.z, { flags: FLAG.GROUNDED | FLAG.CARRYING })); run(f, s, 1.2);
-      s.onInteract("p1", f.players.get("p1")!, "b"); run(f, s, 12); return f.commits[0]!;
-    },
-    rival_secured: () => { const f = fake(); const s = setup(f, row("p1", 0, 88)); run(f, s, RIVAL_ARRIVES_S + RIVAL_PARLEY_S + 2); return f.commits[0]!; },
-    abandoned: () => { const f = fake(); const s = setup(f, row("p1", 0, 60)); run(f, s, 1); down(f, "p1"); run(f, s, 1); return f.commits[0]!; },
-  };
-
-  it("each path commits a different outcome, which the campaign and the newspaper then tell differently", () => {
-    const outcomes = Object.fromEntries(Object.entries(ways).map(([k, run_]) => [k, run_()]));
-    const campaigns: string[] = [];
-    const headlines: string[] = [];
-    for (const [k, o] of Object.entries(outcomes)) {
-      expect(o.resolution, k).toBe(k as ResolutionId);
-      const after = applyOutcome(newCampaign(11), o);
-      campaigns.push(serializeCampaign(after));
-      headlines.push(generatePaper(after, 424242).headline);
+  it("a ruined bridge, and a settled crossing, start resolved: nothing to win, nothing committed, the cast stands down, re-paying is impossible", () => {
+    const ruined = newCampaign(11);
+    ruined.crossing.bridge = "collapsed";
+    const settled = applyOutcome(newCampaign(11), { scenario: "secure_crossing", resolution: "paid", toll: 40, paid: 40, bridge: "intact", brokePromise: false, seconds: 5, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 } });
+    for (const c of [ruined, settled]) {
+      const f = fake(c);
+      const s = setup(f, "secure_crossing", row("p1", bar.x - 0.7, bar.z - 0.5));
+      expect(lastView(f).phase).toBe("resolved");
+      expect(f.cast.groupOrders("ward")).toContain("stand_down");
+      run(f, s, 3);
+      expect(press(f, s)).toBe(false);
+      expect(f.commits).toEqual([]);
+      s.leave();
+      expect(f.commits).toEqual([]);
     }
-    expect(new Set(campaigns).size).toBe(campaigns.length);
-    expect(new Set(headlines).size).toBe(headlines.length);
-    expect(outcomes.sabotaged!.bridge).toBe("collapsed");
-    expect(outcomes.paid!.paid).toBeGreaterThan(0);
   });
 });
 
-describe("a client cannot force a resolution", () => {
-  it("ignores picks from anyone but the owner, and options that do not exist", () => {
+describe("hostage rescue through the runner", () => {
+  const H = KESSAR_SITES.hostage;
+  const landing = KESSAR_ANCHORS.landing;
+  const walkHome = (f: Fake): void => { const h = f.players.get("npc:hostage")!; h.x = landing.x; h.z = landing.z - 3; };
+
+  it("slips away: a quiet cage, a walk to the dock, no alarm, no shots", () => {
     const f = fake();
-    const s = setup(f, atWarden("p1"), row("p2", warden.x - 1, warden.z - 1));
+    const s = setup(f, "hostage_rescue", row("p1", H.cage.x, H.cage.z + 1.5));
     run(f, s, 1.5);
-    s.onInteract("p1", f.players.get("p1")!);
+    expect(press(f, s)).toBe(true);
+    expect(f.cast.orders.some((o) => o.group === "hostage" && o.order.o === "follow")).toBe(true);
+    expect(f.cast.groupOrders("deserters")).not.toContain("alert");
+    walkHome(f);
+    run(f, s, 1);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ scenario: "hostage_rescue", resolution: "slipped_away", paid: 0 });
+  });
+
+  it("the ransom: talk to the colour-sergeant, pay from the purse, no shots", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", H.posts[0]!.x + 0.8, H.posts[0]!.z));
+    run(f, s, 1.5);
+    expect(press(f, s)).toBe(true);
     const v = lastParley(f, "p1")!.view!;
-    const pay = optionIndex(v, "pay");
-    s.onPick("p2", pay);
-    s.onPick("ghost", pay);
-    for (const bad of [-1, v.options.length, 99, 1.5, Number.NaN, Infinity, "0" as unknown as number, undefined as unknown as number]) s.onPick("p1", bad);
-    s.onParleyClose("p2");
-    expect(f.commits).toEqual([]);
-    expect(lastParley(f, "p2")).toBeUndefined();
-    expect(lastParley(f, "p1")!.closed).toBeUndefined();
+    expect(v.speaker).toMatch(/Cull/);
+    const pay = labelIndex(v, /^Pay/);
     s.onPick("p1", pay);
     expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "ransomed", paid: v.toll });
+    expect(f.commits[0]!.tally.downed).toBe(0);
   });
 
-  it("a second player cannot open a parley over the first, or at all when the place is at war", () => {
+  it("haggling: flattery changes the price once; a forged pick buys nothing; threatening raises the alarm", () => {
     const f = fake();
-    const s = setup(f, atWarden("p1"), row("p2", warden.x - 1, warden.z - 1));
+    const s = setup(f, "hostage_rescue", row("p1", H.posts[0]!.x + 0.8, H.posts[0]!.z), row("p2", 0, 88));
     run(f, s, 1.5);
-    s.onInteract("p1", f.players.get("p1")!);
-    expect(s.onInteract("p2", f.players.get("p2")!)).toBe(true);
-    expect(lastParley(f, "p2")).toBeUndefined();
-    expect(f.sent.some((m) => m.sid === "p2" && m.type === "notice")).toBe(true);
-    s.onDamage("npc:sentry-0", "p1", 1, false);
-    expect(s.onInteract("p2", f.players.get("p2")!)).toBe(true);
-    expect(lastParley(f, "p2")).toBeUndefined();
-  });
-
-  it("picks with no parley open, and after the crossing is settled, do nothing", () => {
-    const f = fake();
-    const s = setup(f, atWarden());
-    run(f, s, 1.5);
-    s.onPick("p1", 0);
+    press(f, s);
+    const v1 = lastParley(f, "p1")!.view!;
+    s.onPick("p2", 0);   // not the owner
+    s.onPick("p1", 99);  // out of range
+    s.onPick("p1", -1);
+    s.onPick("p1", 1.5);
     expect(f.commits).toEqual([]);
-    s.onInteract("p1", f.players.get("p1")!);
-    s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay"));
-    const sent = f.sent.length;
-    s.onPick("p1", 0);
-    s.onParleyClose("p1");
-    expect(s.onInteract("p1", f.players.get("p1")!)).toBe(false);
-    expect(f.sent.length).toBe(sent);
+    s.onPick("p1", labelIndex(v1, /^Flatter/));
+    const v2 = lastParley(f, "p1")!.view!;
+    expect(v2.round).toBe(2);
+    expect(v2.toll).not.toBe(v1.toll);
+    s.onPick("p1", labelIndex(v2, /^Flatter/));   // not offered in round 2: the round is re-issued
+    expect(lastParley(f, "p1")!.view!.round).toBeGreaterThanOrEqual(2);
+    expect(f.commits).toEqual([]);
+    const g = fake();
+    const t = setup(g, "hostage_rescue", row("p1", H.posts[0]!.x + 0.8, H.posts[0]!.z));
+    run(g, t, 1.5);
+    press(g, t);
+    t.onPick("p1", labelIndex(lastParley(g, "p1")!.view!, /^Threaten/));
+    expect(g.cast.groupOrders("deserters")).toContain("alert");
+    expect(lastView(g).phase).toBe("fighting");
+  });
+
+  it("rescued: the alarm, three of four broken, the cage opened, the surveyor at the dock alive", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", H.cage.x, H.cage.z + 1.5));
+    run(f, s, 1);
+    s.onDamage("npc:deserter-1", "p1", 1, true);
+    down(f, "npc:deserter-1");
+    for (const i of [2, 3]) down(f, `npc:deserter-${i}`);
+    press(f, s);
+    expect(f.cast.groupOrders("deserters")).toContain("alert");
+    walkHome(f);
+    run(f, s, 1);
     expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "rescued" });
+    expect(f.commits[0]!.tally.downed).toBeGreaterThanOrEqual(1);
   });
 
-  it("the charge: no barrel, wrong prop, unknown prop, not carrying, too far, downed, an NPC, a second fuse: all ignored", () => {
-    const pier = KESSAR_ANCHORS.pier;
+  it("noise: a shot heard at the camp raises the alarm; the same report from far away does nothing", () => {
     const f = fake();
-    f.props.set("b1", PropKind.BARREL);
-    f.props.set("c1", PropKind.CRATE);
-    const carry = GROUNDED_CARRY();
-    const s = setup(f, row("p1", pier.x + 1, pier.z, { flags: carry }), row("p2", pier.x + 1, pier.z, { flags: FLAG.GROUNDED }), row("p3", 0, 80, { flags: carry }), row("p4", pier.x, pier.z, { flags: carry | FLAG.DOWNED }));
-    run(f, s, 1.2);
-    const p = (id: string): Row => f.players.get(id)!;
-    expect(s.onInteract("p1", p("p1"))).toBe(false);          // carrying, but nothing named
-    expect(s.onInteract("p1", p("p1"), "c1")).toBe(false);     // a crate
-    expect(s.onInteract("p1", p("p1"), "nope")).toBe(false);   // not a prop
-    expect(s.onInteract("p2", p("p2"), "b1")).toBe(false);     // not carrying
-    expect(s.onInteract("p3", p("p3"), "b1")).toBe(false);     // nowhere near the pier
-    expect(s.onInteract("p4", p("p4"), "b1")).toBe(false);     // downed
-    expect(s.onInteract("npc:warden", p("p1"), "b1")).toBe(false);
-    expect(f.consumed).toEqual([]);
-    run(f, s, SCENARIO.fuseSeconds + 3);
-    expect(f.booms).toEqual([]);
+    const s = setup(f, "hostage_rescue", row("p1", 0, 88));
+    run(f, s, 1);
+    s.onNoise(H.cage.x + 150, H.cage.z, 40, "p1");
+    expect(f.cast.groupOrders("deserters")).not.toContain("alert");
+    s.onNoise(H.cage.x + 8, H.cage.z, 60, "p1");
+    expect(f.cast.groupOrders("deserters")).toContain("alert");
+  });
+
+  it("the lookout sees you from 14 m and the alarm goes up, and a deserter does not see you from 8 m", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", H.lookout.x + 20, H.lookout.z));
+    run(f, s, 1);
+    expect(f.cast.groupOrders("lookout")).not.toContain("alert");
+    put(f, "p1", H.lookout.x + 10, H.lookout.z);
+    run(f, s, 1);
+    expect(f.cast.groupOrders("lookout")).toContain("alert");
+    const g = fake();
+    const t = setup(g, "hostage_rescue", row("p1", H.cage.x, H.cage.z + 1.5));
+    run(g, t, 2);
+    expect(g.cast.groupOrders("deserters")).not.toContain("alert");
+  });
+
+  it("the deadline buys him; a hostage downed is a loss; shooting him is a civilian harmed", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", 0, 88));
+    run(f, s, HOSTAGE_DEADLINE_S + 4, 2);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "hostage_lost" });
+    const g = fake();
+    const t = setup(g, "hostage_rescue", row("p1", 0, 88));
+    run(g, t, 1);
+    down(g, "npc:hostage");
+    t.onDamage("npc:hostage", "p1", 1, true);
+    expect(g.commits).toHaveLength(1);
+    expect(g.commits[0]!.resolution).toBe("hostage_lost");
+    expect(g.commits[0]!.tally.civiliansHarmed).toBe(1);
+  });
+});
+
+describe("convoy ambush through the runner", () => {
+  const route = KESSAR_SITES.convoy.route;
+  const cut = KESSAR_SITES.convoy.cut;
+
+  it("the convoy leaves at CONVOY_DEPART_S: the wagon is sent along the route and the guards march", () => {
+    const f = fake();
+    const s = setup(f, "convoy_ambush", row("p1", 0, 88));
+    run(f, s, CONVOY_DEPART_S - 3);
+    expect(f.mounts.routeName).toBe("");
+    run(f, s, 6);
+    expect(f.mounts.routeName).toBe("convoy");
+    expect(f.cast.orders.some((o) => o.group === "guards" && o.order.o === "march")).toBe(true);
+    expect(lastView(f).phase).toBe("waiting");
+  });
+
+  it("seized: down the guards, INTERACT the wagon, the cargo's value is the outcome's loot", () => {
+    const f = fake();
+    const s = setup(f, "convoy_ambush", row("p1", cut.x, cut.z - 5));
+    run(f, s, CONVOY_DEPART_S + 2);
+    f.mounts.at = { x: cut.x, z: cut.z };
+    put(f, "p1", cut.x + 1, cut.z + 1);
+    expect(press(f, s)).toBe(true);   // taken (the guards still stand), but nothing is seized
+    expect(f.mounts.seized).toEqual([]);
+    s.onDamage("npc:guard-0", "p1", 1, true);
+    down(f, "npc:guard-0");
+    down(f, "npc:guard-1");
+    expect(f.cast.groupOrders("guards")).toContain("alert");
+    expect(f.mounts.routeName).toBe("");
+    run(f, s, 1);
+    expect(press(f, s)).toBe(true);
+    expect(f.mounts.seized).toEqual(["p1"]);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "seized", loot: 60 });
+  });
+
+  it("burned: a barrel destroyed near the wagon wrecks it; one destroyed far away does nothing", () => {
+    const f = fake();
+    const s = setup(f, "convoy_ambush", row("p1", 0, 88));
+    run(f, s, 2);
+    const keg = [...f.props.entries()].find(([, p]) => p.kind === PropKind.BARREL)![0];
+    s.onProp("destroyed", keg);
     expect(f.commits).toEqual([]);
-    expect(s.onInteract("p1", p("p1"), "b1")).toBe(true);
-    expect(s.onInteract("p1", p("p1"), "b1")).toBe(true);      // told off, nothing consumed
-    expect(f.consumed).toEqual(["b1"]);
-    run(f, s, SCENARIO.fuseSeconds + 3);
+    f.mounts.at = { x: cut.x + 3, z: cut.z };
+    s.onProp("destroyed", "nonsense");
+    s.onProp("seized", keg);
+    s.onProp("destroyed", keg);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "burned" });
+    expect(f.mounts.wrecked).toEqual([true]);
     expect(f.booms).toHaveLength(1);
   });
 
-  it("garbage damage reports never throw or resolve anything", () => {
+  it("tipped off: the Ward's ford post is told; the soldiers go to the Cut under war; the guards fall; no player shot a thing", () => {
     const f = fake();
-    const s = setup(f, row("p1", 0, 60));
+    const s = setup(f, "convoy_ambush", row("p1", 0, 88));
     run(f, s, 1);
-    for (const [v, a] of [["", ""], ["nobody", "nobody"], ["npc:sentry-0", "npc:warden"], ["p1", "npc:sentry-0"], ["npc:ghost", "p1"]] as const) s.onDamage(v, a, 99, false);
-    expect(f.commits).toEqual([]);
-    expect(f.views.at(-1)!.phase).not.toBe("resolved");
+    beside(f, "p1", "post-0");
+    expect(press(f, s)).toBe(true);
+    const v = lastParley(f, "p1")!.view!;
+    expect(v.speaker).toMatch(/Aldous/);
+    s.onPick("p1", 0);
+    expect(f.cast.wars).toContainEqual({ a: "ward", b: "rival", on: true });
+    expect(f.cast.orders.some((o) => o.group === "ward_post" && o.order.o === "guard")).toBe(true);
+    down(f, "npc:guard-0");
+    down(f, "npc:guard-1");
+    run(f, s, 1);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "tipped_off", tally: { downed: 0 } });
   });
 
-  it("does nothing before start and after dispose", () => {
+  it("passed: the wagon reaches the ford landing", () => {
     const f = fake();
-    f.players.set("p1", atWarden());
-    const s = new Scenario(f.host);
-    s.tick(1);
-    expect(s.onInteract("p1", f.players.get("p1")!)).toBe(false);
-    s.start();
-    s.dispose();
-    s.tick(1);
-    s.onPick("p1", 0);
+    const s = setup(f, "convoy_ambush", row("p1", 0, 88));
+    run(f, s, CONVOY_DEPART_S + 1);
+    f.mounts.at = { x: route[route.length - 1]!.x - 1, z: route[route.length - 1]!.z };
+    run(f, s, 1);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "passed" });
+    run(f, s, RESOLVED_LINGER_S + 2);
+    expect(f.mounts.removed).toEqual(["wagon-1"]);
+  });
+
+  it("without a mounts host there is simply no wagon to use (and nothing throws)", () => {
+    const f = fake(newCampaign(11), 0, false);
+    const s = setup(f, "convoy_ambush", row("p1", cut.x, cut.z));
+    run(f, s, CONVOY_DEPART_S + 5);
+    expect(press(f, s)).toBe(false);
     expect(f.commits).toEqual([]);
   });
 });
 
-function GROUNDED_CARRY(): number { return FLAG.GROUNDED | FLAG.CARRYING; }
+describe("border incident through the runner", () => {
+  const B = KESSAR_SITES.border;
+  const talkTo = (f: Fake, s: Scenario, npc: string): ParleyView => { beside(f, "p1", npc); expect(press(f, s)).toBe(true); return lastParley(f, "p1")!.view!; };
+
+  it("mediated: both sides agree to a joint survey and stand down", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", 0, 88));
+    run(f, s, 1);
+    const w = talkTo(f, s, "ward-0");
+    s.onPick("p1", labelIndex(w, /joint survey/));
+    expect(f.commits).toEqual([]);
+    const r = talkTo(f, s, "rival-0");
+    s.onPick("p1", labelIndex(r, /joint survey/));
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ scenario: "border_incident", resolution: "mediated" });
+    expect(f.cast.groupOrders("ward")).toContain("stand_down");
+  });
+
+  it("sided_ward: learn the plan from the surveyor, tell the patrol; the Syndicate leaves", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", 0, 88));
+    run(f, s, 1);
+    const r = talkTo(f, s, "rival-0");
+    s.onPick("p1", labelIndex(r, /really measuring/));
+    const r2 = lastParley(f, "p1")!.view!;
+    expect(r2.round).toBe(2);
+    expect(r2.line).toMatch(/envelope/);
+    s.onPick("p1", labelIndex(r2, /Walk away/));
+    const w = talkTo(f, s, "ward-0");
+    s.onPick("p1", labelIndex(w, /Syndicate's plan/));
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "sided_ward" });
+    expect(f.cast.groupOrders("rival")).toContain("flee");
+  });
+
+  it("sided_syndicate: the envelope, then pull the Stone; the Ward goes alert against you", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", 0, 88));
+    run(f, s, 1);
+    const r = talkTo(f, s, "rival-0");
+    s.onPick("p1", labelIndex(r, /really measuring/));
+    s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /envelope/i));
+    put(f, "p1", B.marker.x + 1.5, B.marker.z);
+    run(f, s, 1);
+    expect(press(f, s)).toBe(true);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "sided_syndicate" });
+    expect(f.cast.groupOrders("ward")).toContain("alert");
+  });
+
+  it("provoked: the first player shot; the wronged side fights, the other holds its fire", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", B.ward[0]!.x, B.ward[0]!.z + 8));
+    run(f, s, 1);
+    s.onDamage("npc:ward-0", "p1", 1, false);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "provoked", tally: { wounded: 1 } });
+    expect(f.cast.orders).toContainEqual({ group: "ward", order: { o: "attack", side: "party" } });
+    expect(f.cast.orders).toContainEqual({ group: "rival", order: { o: "hold_fire" } });
+  });
+
+  it("a shot of NPC on NPC is not provoked (only a player's shot is)", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", 0, 88));
+    run(f, s, 1);
+    s.onDamage("npc:ward-0", "npc:rival-1", 1, false);
+    expect(f.commits).toEqual([]);
+  });
+
+  it("escalated: time wins; the sides fight under war and the players watch", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", 0, 88));
+    run(f, s, BORDER_ESCALATE_S + 3, 1);
+    expect(f.cast.wars).toContainEqual({ a: "ward", b: "rival", on: true });
+    expect(lastView(f).phase).toBe("escalated");
+    expect(f.commits).toEqual([]);
+    f.cast.counts.set("rival", { alive: 0, routed: 0, down: 3, total: 3 });
+    run(f, s, 1);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "escalated" });
+  });
+
+  it("noise raises the tension: a volley near the Stone escalates a quiet border early", () => {
+    const f = fake();
+    const s = setup(f, "border_incident", row("p1", 0, 88));
+    run(f, s, 1);
+    for (let i = 0; i < 5; i++) s.onNoise(B.marker.x + 5, B.marker.z, 80, "p1");
+    expect(lastView(f).phase).toBe("escalated");
+  });
+});
+
+describe("leave: the room calls it before dispose", () => {
+  it("dismissed when nothing happened: nothing committed; anything else commits the template's own ending with the tally so far", () => {
+    const cases: [ScenarioTemplateId, (f: Fake, s: Scenario) => void, ResolutionId | undefined][] = [
+      ["secure_crossing", () => {}, undefined],
+      ["secure_crossing", (f, s) => { put(f, "p1", 0, 22); run(f, s, 1.5); }, "abandoned"],
+      ["hostage_rescue", () => {}, undefined],
+      ["hostage_rescue", (f, s) => { s.onDamage("npc:deserter-0", "p1", 1, true); }, "hostage_lost"],
+      ["convoy_ambush", (f, s) => { run(f, s, 20); }, undefined],
+      ["convoy_ambush", (f, s) => { run(f, s, CONVOY_DEPART_S + 2); }, "passed"],
+      ["border_incident", () => {}, undefined],
+      ["border_incident", (f, s) => { put(f, "p1", KESSAR_SITES.border.marker.x + 2, KESSAR_SITES.border.marker.z); run(f, s, 1); }, "escalated"],
+    ];
+    for (const [id, act, want] of cases) {
+      const f = fake();
+      const s = setup(f, id, row("p1", 0, 88));
+      run(f, s, 0.5);
+      act(f, s);
+      s.leave();
+      if (want === undefined) expect(f.commits, id).toEqual([]);
+      else {
+        expect(f.commits, `${id} ${want}`).toHaveLength(1);
+        expect(f.commits[0]!.resolution).toBe(want);
+      }
+      s.dispose();
+      expect(f.commits.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("a lit fuse falls unwatched (sabotaged, bridge collapsed); fighting is abandoned with the tally and the broken promise", () => {
+    const pier = KESSAR_ANCHORS.pier;
+    const f = fake();
+    f.props.set("b1", { kind: PropKind.BARREL, x: 0, z: 0 });
+    const s = setup(f, "secure_crossing", row("p1", pier.x + 1, pier.z, { flags: FLAG.GROUNDED | FLAG.CARRYING }));
+    run(f, s, 1.2);
+    s.onInteract("p1", me(f), "b1");
+    s.leave();
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "sabotaged", bridge: "collapsed" });
+    const g = fake();
+    const t = setup(g, "secure_crossing", row("p1", bar.x - 0.7, bar.z - 0.5));
+    run(g, t, 1.5);
+    press(g, t);
+    t.onDamage("npc:warden", "p1", 1, false);
+    t.onDamage("npc:sentry-0", "p1", 1, true);
+    t.leave();
+    expect(g.commits).toHaveLength(1);
+    expect(g.commits[0]).toMatchObject({ resolution: "abandoned", brokePromise: true, tally: { downed: 1, garrisonKilled: 1 } });
+  });
+
+  it("leave after the end, or twice, commits nothing more", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", 0, 88));
+    run(f, s, 1);
+    down(f, "p1");
+    run(f, s, 1);
+    expect(f.commits).toHaveLength(1);
+    s.leave();
+    s.leave();
+    expect(f.commits).toHaveLength(1);
+  });
+});
+
+describe("all 20 resolutions: one scripted run each through the runner; distinct outcomes, distinct papers", () => {
+  /** Plays the resolution out on a fresh fake and returns what was committed. */
+  const play: Record<ResolutionId, (f: Fake) => { id: ScenarioTemplateId; go: (s: Scenario) => void }> = {
+    paid: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); } }),
+    bargained: (f) => ({ id: "secure_crossing", go: (s) => { f.players.set("p2", row("p2", bar.x + 2, bar.z)); put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "haggle_threaten")); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); } }),
+    bribed: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "bribe")); } }),
+    forced: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", 0, 22); run(f, s, 1.5); f.cast.counts.set("ward", { alive: 2, routed: 1, down: 5, total: 8 }); s.onDamage("npc:sentry-0", "p1", 1, true); run(f, s, 1); } }),
+    sabotaged: (f) => ({ id: "secure_crossing", go: (s) => { const p = KESSAR_ANCHORS.pier; f.props.set("b1", { kind: PropKind.BARREL, x: 0, z: 0 }); put(f, "p1", p.x + 1, p.z); me(f).flags |= FLAG.CARRYING; run(f, s, 1.2); s.onInteract("p1", me(f), "b1"); run(f, s, SCENARIO.fuseSeconds + 2); } }),
+    rival_secured: (f) => ({ id: "secure_crossing", go: (s) => { run(f, s, 700, 2); } }),
+    abandoned: (f) => ({ id: "secure_crossing", go: (s) => { run(f, s, 1); down(f, "p1"); run(f, s, 1); } }),
+    ransomed: (f) => ({ id: "hostage_rescue", go: (s) => { beside(f, "p1", "deserter-0"); run(f, s, 1.5); press(f, s); const v = lastParley(f, "p1")!.view!; s.onPick("p1", labelIndex(v, /^Pay/)); } }),
+    rescued: (f) => ({ id: "hostage_rescue", go: (s) => { put(f, "p1", KESSAR_SITES.hostage.cage.x, KESSAR_SITES.hostage.cage.z + 1.5); run(f, s, 1); s.onDamage("npc:deserter-1", "p1", 1, true); for (const i of [1, 2, 3]) down(f, `npc:deserter-${i}`); press(f, s); const h = f.players.get("npc:hostage")!; h.x = 0; h.z = 85; run(f, s, 1); } }),
+    slipped_away: (f) => ({ id: "hostage_rescue", go: (s) => { put(f, "p1", KESSAR_SITES.hostage.cage.x, KESSAR_SITES.hostage.cage.z + 1.5); run(f, s, 1); press(f, s); const h = f.players.get("npc:hostage")!; h.x = 0; h.z = 85; run(f, s, 1); } }),
+    hostage_lost: (f) => ({ id: "hostage_rescue", go: (s) => { run(f, s, HOSTAGE_DEADLINE_S + 4, 2); } }),
+    seized: (f) => ({ id: "convoy_ambush", go: (s) => { const c = KESSAR_SITES.convoy.cut; run(f, s, CONVOY_DEPART_S + 2); f.mounts.at = { x: c.x, z: c.z }; put(f, "p1", c.x + 1, c.z + 1); s.onDamage("npc:guard-0", "p1", 1, true); down(f, "npc:guard-0"); down(f, "npc:guard-1"); run(f, s, 1); press(f, s); } }),
+    tipped_off: (f) => ({ id: "convoy_ambush", go: (s) => { run(f, s, 1); beside(f, "p1", "post-0"); press(f, s); s.onPick("p1", 0); down(f, "npc:guard-0"); down(f, "npc:guard-1"); run(f, s, 1); } }),
+    burned: (f) => ({ id: "convoy_ambush", go: (s) => { const c = KESSAR_SITES.convoy.cut; run(f, s, 1); f.mounts.at = { x: c.x + 3, z: c.z }; const keg = [...f.props.entries()].find(([, p]) => p.kind === PropKind.BARREL)![0]; s.onProp("destroyed", keg); } }),
+    passed: (f) => ({ id: "convoy_ambush", go: (s) => { const r = KESSAR_SITES.convoy.route; run(f, s, CONVOY_DEPART_S + 1); f.mounts.at = { x: r[r.length - 1]!.x, z: r[r.length - 1]!.z }; run(f, s, 1); } }),
+    mediated: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "ward-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /joint survey/)); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /joint survey/)); } }),
+    sided_ward: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /really measuring/)); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /Walk away/)); beside(f, "p1", "ward-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /Syndicate's plan/)); } }),
+    sided_syndicate: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /really measuring/)); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /envelope/i)); put(f, "p1", KESSAR_SITES.border.marker.x + 1.5, KESSAR_SITES.border.marker.z); run(f, s, 1); press(f, s); } }),
+    provoked: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); s.onDamage("npc:rival-1", "p1", 1, false); } }),
+    escalated: (f) => ({ id: "border_incident", go: (s) => { run(f, s, BORDER_ESCALATE_S + 3, 1); f.cast.counts.set("ward", { alive: 0, routed: 0, down: 2, total: 2 }); run(f, s, 1); } }),
+  };
+  /** A campaign where the Syndicate does not come early, so the crossing's slow endings are unaffected by the chaos director. */
+  const quiet = (): CampaignState => {
+    for (let seed = 1; seed < 200; seed++) {
+      const c = newCampaign(seed);
+      const f = fake(c);
+      const s = new Scenario(f.host, "secure_crossing");
+      s.start();
+      if (!lastViewComplication(f)) return c;
+    }
+    throw new Error("no quiet seed");
+  };
+  const lastViewComplication = (f: Fake): boolean => lastView(f).complication !== undefined;
+
+  /** A world seed whose first threat works on the Lamp-Warden (two armed in the party, a full garrison), so "bargained" is reachable by a script that does not gamble. */
+  const threatSeed = (c: CampaignState): number => {
+    const lv = leverageOf(c, { armed: 2, garrisonAlive: 7, garrisonTotal: 7, partyWounded: 0 });
+    for (let sd = 1; sd < 800; sd++) {
+      const ps = hash3(sd, c.day, 0x7a11);
+      const v = openParley(c, lv, ps);
+      const st = answerParley(c, lv, ps, v, v.options.findIndex((o) => o.id === "haggle_threaten"));
+      if (st.view && st.view.toll < v.toll) return sd;
+    }
+    throw new Error("no threatening seed");
+  };
+
+  it("each commits exactly one outcome with its resolution; all 20 are distinct campaigns and distinct headlines", () => {
+    const campaigns = new Set<string>();
+    const heads = new Set<string>();
+    const base = quiet();
+    for (const r of Object.keys(play) as ResolutionId[]) {
+      const f = fake(base);
+      if (r === "bargained") f.host.seed = threatSeed(base);
+      f.players.set("p1", row("p1", 0, 88));
+      const { id, go } = play[r](f);
+      const s = new Scenario(f.host, id);
+      s.start();
+      go(s);
+      expect(f.commits, `${r}: ${JSON.stringify(f.commits.map((c) => c.resolution))}`).toHaveLength(1);
+      expect(f.commits[0]!.resolution).toBe(r);
+      expect(f.commits[0]!.scenario).toBe(id);
+      expect(TEMPLATE_RESOLUTIONS[id]).toContain(r);
+      run(f, s, 5);
+      expect(f.commits).toHaveLength(1);
+      const after = applyOutcome(base, f.commits[0]!);
+      campaigns.add(JSON.stringify(after));
+      heads.add(generatePaper(after, 5).headline);
+      s.dispose();
+    }
+    expect(campaigns.size).toBe(20);
+    expect(heads.size).toBe(20);
+  });
+});
+
+describe("hostile input at every entry point", () => {
+  it("INTERACT out of range, from NPC keys, from the downed, in the wrong state, or after the end: not taken, nothing committed", () => {
+    for (const id of ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"] as const) {
+      const f = fake();
+      const s = setup(f, id, row("p1", 0, 88), row("p2", 3, 88));
+      run(f, s, 1);
+      expect(press(f, s), `${id} far from everything`).toBe(false);
+      expect(s.onInteract("npc:sentry-0", me(f, "p1"))).toBe(false);
+      expect(s.onInteract("p1", undefined as never)).toBe(false);
+      down(f, "p2");
+      expect(s.onInteract("p2", me(f, "p2"))).toBe(false);
+      expect(f.commits).toEqual([]);
+      s.dispose();
+      expect(s.onInteract("p1", me(f), undefined)).toBe(false);
+    }
+  });
+
+  it("onPick and onParleyClose with no parley, from a non-owner, with garbage options, or after the end do nothing", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", 0, 88), row("p2", 3, 88));
+    for (const o of [0, 1, -1, 1.5, NaN, Infinity, "x" as never, undefined as never]) { s.onPick("p1", o); s.onPick("p2", o); }
+    s.onParleyClose("p1");
+    s.onParleyClose("p2");
+    s.onParleyClose("nobody");
+    expect(f.commits).toEqual([]);
+    // an open parley belongs to its owner
+    beside(f, "p1", "deserter-0");
+    expect(press(f, s)).toBe(true);
+    expect(lastParley(f, "p1")!.view).toBeDefined();
+    const sent = f.sent.length;
+    s.onPick("p2", 0);
+    s.onParleyClose("p2");
+    beside(f, "p2", "deserter-0", -0.8);
+    expect(press(f, s, "p2")).toBe(true);   // the press is taken (nobody picks the prop up) but a second parley is not opened
+    expect(lastParley(f, "p2")).toBeUndefined();
+    expect(f.sent.slice(sent).some((m) => m.sid === "p2" && m.type === "notice")).toBe(true);
+    expect(f.commits).toEqual([]);
+    // after the end: nothing
+    down(f, "p1");
+    down(f, "p2");
+    run(f, s, 1);
+    expect(f.commits).toHaveLength(1);
+    s.onPick("p1", 0);
+    s.onNoise(0, 0, 100, "p1");
+    s.onProp("destroyed", "x");
+    s.onDamage("npc:deserter-0", "p1", 1, true);
+    expect(f.commits).toHaveLength(1);
+  });
+
+  it("a flood of forged inputs (3000 sequences) never reaches an ending a client could not earn", () => {
+    // Client-reachable inputs only: INTERACT from anywhere with any carried id, picks and closes from non-owners and with garbage, noise reports of absurd size,
+    // props named at random, damage claims against nobody. Players stay far from every story point, so the only way to an ending is the clock.
+    let seed = 0x5eed;
+    const rnd = (): number => { seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x297a2d39) >>> 0; return seed / 4294967296; };
+    const ids = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"] as const;
+    for (let i = 0; i < 3000; i++) {
+      const id = ids[i % 4]!;
+      const f = fake(newCampaign(1 + (i % 40)));
+      const s = setup(f, id, row("p1", 0, 88), row("p2", 4, 90));
+      const garbage = [undefined, "", "b1", "npc:warden", "__proto__", "prop-1", "prop-2"];
+      for (let k = 0; k < 12; k++) {
+        const roll = Math.floor(rnd() * 8);
+        if (roll === 0) s.onInteract(rnd() < 0.5 ? "p1" : "p2", me(f, rnd() < 0.5 ? "p1" : "p2"), garbage[Math.floor(rnd() * garbage.length)]);
+        else if (roll === 1) s.onPick(rnd() < 0.5 ? "p1" : "p2", Math.floor(rnd() * 9) - 2);
+        else if (roll === 2) s.onParleyClose(rnd() < 0.5 ? "p1" : "p2");
+        else if (roll === 3) s.onNoise((rnd() - 0.5) * 1e6, (rnd() - 0.5) * 1e6, rnd() * 1e6, "p1");
+        else if (roll === 4) s.onProp(rnd() < 0.5 ? "destroyed" : "seized", garbage[Math.floor(rnd() * garbage.length)] ?? "x");
+        else if (roll === 5) s.onDamage(garbage[1 + Math.floor(rnd() * 3)]!, "p1", 1, rnd() < 0.5);
+        else run(f, s, rnd() * 3 + 0.25);
+      }
+      for (const c of f.commits) expect(c.resolution, `${id} #${i}`).toBe("abandoned");
+      expect(f.commits.length).toBeLessThanOrEqual(1);
+    }
+  });
+});

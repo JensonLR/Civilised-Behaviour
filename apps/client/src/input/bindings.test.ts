@@ -23,6 +23,15 @@ describe("key bindings: rules", () => {
     expect(b.view[0]).toBe("KeyX");
   });
 
+  it("the Command action (hold to open the wheel for the hired hands) is T, has no wire button, and is rebindable like the rest", () => {
+    const b = defaultBindings();
+    expect(b.command[0]).toBe("KeyT");
+    expect(ACTIONS.find((a) => a.id === "command")!.button).toBeUndefined(); // the order is its own message, not a MoveInput button
+    const r = assign(b, "command", 0, "KeyZ");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.bindings.command[0]).toBe("KeyZ");
+  });
+
   it("finds conflicts in either slot of any other action, and ignores the slot being assigned", () => {
     const b = defaultBindings();
     expect(findConflict(b, "jump", 0, "KeyE")).toEqual({ action: "interact", slot: 0 });

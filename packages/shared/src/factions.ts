@@ -1,6 +1,6 @@
 import type {
-  BridgeState, CampaignState, CasualtyTally, CrossingControl, CrossingState, FactionId, FactionState, HistoryEntry, Leverage, NeedId,
-  RegionId, ResolutionId, ScenarioOutcome, FactionStance,
+  BridgeState, CampaignState, CasualtyTally, ComplicationId, CrossingControl, CrossingState, FactionId, FactionState, HistoryEntry, Leverage, NeedId,
+  RegionId, ResolutionId, ScenarioOutcome, ScenarioTemplateId, SiteLedger, FactionStance,
 } from "./campaignTypes.ts";
 import { isRegionId } from "./campaignTypes.ts";
 import { hash3 } from "./rng.ts";
@@ -15,7 +15,18 @@ import { hash3 } from "./rng.ts";
 
 export const STANCES: readonly FactionStance[] = ["hostile", "wary", "neutral", "warm", "allied"];
 export const NEEDS: readonly NeedId[] = ["coin", "arms", "medicine", "deference"];
-export const RESOLUTIONS: readonly ResolutionId[] = ["paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned"];
+export const RESOLUTIONS: readonly ResolutionId[] = [
+  "paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned",
+  "ransomed", "rescued", "slipped_away", "hostage_lost", "seized", "tipped_off", "burned", "passed", "mediated", "sided_ward", "sided_syndicate", "provoked", "escalated",
+];
+export const TEMPLATE_RESOLUTIONS: Readonly<Record<ScenarioTemplateId, readonly ResolutionId[]>> = {
+  secure_crossing: ["paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned"],
+  hostage_rescue: ["ransomed", "rescued", "slipped_away", "hostage_lost", "abandoned"],
+  convoy_ambush: ["seized", "tipped_off", "burned", "passed", "abandoned"],
+  border_incident: ["mediated", "sided_ward", "sided_syndicate", "provoked", "escalated", "abandoned"],
+};
+const TEMPLATES_LIST: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"];
+const COMPLICATIONS: readonly ComplicationId[] = ["none", "rival_scouts", "rain", "reinforcements", "rival_bid", "outriders", "ward_patrol", "fog", "stray_shot"];
 const BRIDGES: readonly BridgeState[] = ["intact", "rigged", "collapsed"];
 const CONTROLS: readonly CrossingControl[] = ["ward", "society", "rival", "contested"];
 const FACTION_IDS: readonly FactionId[] = ["ward", "rival"];
@@ -100,12 +111,14 @@ function defaultFaction(id: FactionId): FactionState {
     : { id, trust: 10, fear: 0, grievance: 0, playerInfluence: 20, rivalInfluence: 30, militaryStrength: 45, prosperity: 60, need: "coin" };
 }
 
+export const newSites = (): SiteLedger => ({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none" });
+
 export function newCampaign(seed: number): CampaignState {
   return {
     v: 1, seed: seed >>> 0, day: 1, expeditions: 0, purse: 120, lies: 0,
     factions: { ward: defaultFaction("ward"), rival: defaultFaction("rival") },
     crossing: { bridge: "intact", control: "ward", toll: 0, tollPaidTotal: 0, bribed: false, exposed: false },
-    tally: zeroTally(), history: [],
+    tally: zeroTally(), history: [], sites: newSites(),
   };
 }
 
@@ -137,7 +150,10 @@ export function parseCampaign(json: string): CampaignState | undefined {
   if (Array.isArray(raw.history)) {
     for (const h of raw.history.slice(-HISTORY_CAP)) {
       if (!isObj(h) || !isRegionId(h.region)) continue;
-      history.push({ seq: clampI(h.seq, 0, 9999, 0), region: h.region, resolution: oneOf(h.resolution, RESOLUTIONS, "abandoned"), day: clampI(h.day, 1, 9999, 1) });
+      history.push({
+        seq: clampI(h.seq, 0, 9999, 0), region: h.region, resolution: oneOf(h.resolution, RESOLUTIONS, "abandoned"), day: clampI(h.day, 1, 9999, 1),
+        template: oneOf(h.template, TEMPLATES_LIST, "secure_crossing"),
+      });
     }
   }
   return {
@@ -148,7 +164,18 @@ export function parseCampaign(json: string): CampaignState | undefined {
       bridge: oneOf(cr.bridge, BRIDGES, "intact"), control: oneOf(cr.control, CONTROLS, "ward"), toll: clampI(cr.toll, 0, 200, 0),
       tollPaidTotal: clampI(cr.tollPaidTotal, 0, 99999, 0), bribed: cr.bribed === true, exposed: cr.exposed === true,
     },
-    tally, history,
+    tally, history, sites: parseSites(raw.sites),
+  };
+}
+
+function parseSites(raw: unknown): SiteLedger {
+  const r = isObj(raw) ? raw : {};
+  const ld = isObj(r.lastDay) ? r.lastDay : {};
+  const lastDay: SiteLedger["lastDay"] = {};
+  for (const id of TEMPLATES_LIST) if (typeof ld[id] === "number") lastDay[id] = clampI(ld[id], 0, 9999, 0);
+  return {
+    lastDay, hostage: oneOf(r.hostage, ["none", "freed", "lost"] as const, "none"), convoy: oneOf(r.convoy, ["none", "seized", "tipped", "burned", "passed"] as const, "none"),
+    border: oneOf(r.border, ["quiet", "mediated", "ward", "syndicate", "war"] as const, "quiet"), lastComplication: oneOf(r.lastComplication, COMPLICATIONS, "none"),
   };
 }
 
@@ -189,6 +216,20 @@ const MEMORY: Record<ResolutionId, { gratitude: number; resentment: number; cont
   sabotaged: { gratitude: 0, resentment: 35, contempt: 15 },
   rival_secured: { gratitude: 0, resentment: 10, contempt: 25 },
   abandoned: { gratitude: 0, resentment: 10, contempt: 15 },
+  // the other business at Kessar (D-034): she keeps a ledger of everybody's trouble, and of who made it
+  ransomed: { gratitude: 5, resentment: 0, contempt: 10 },
+  rescued: { gratitude: 10, resentment: 10, contempt: 0 },
+  slipped_away: { gratitude: 12, resentment: 0, contempt: 0 },
+  hostage_lost: { gratitude: 0, resentment: 5, contempt: 20 },
+  seized: { gratitude: 0, resentment: 15, contempt: 10 },
+  tipped_off: { gratitude: 25, resentment: 0, contempt: 0 },
+  burned: { gratitude: 0, resentment: 20, contempt: 15 },
+  passed: { gratitude: 0, resentment: 5, contempt: 25 },
+  mediated: { gratitude: 30, resentment: 0, contempt: 0 },
+  sided_ward: { gratitude: 30, resentment: 0, contempt: 0 },
+  sided_syndicate: { gratitude: 0, resentment: 45, contempt: 30 },
+  provoked: { gratitude: 0, resentment: 35, contempt: 15 },
+  escalated: { gratitude: 0, resentment: 15, contempt: 20 },
 };
 const MEMORY_DECAY = 0.6;
 
@@ -222,7 +263,13 @@ export function leverageOf(c: CampaignState, live: { armed: number; garrisonAliv
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 
 type WardDelta = { trust: number; fear: number; grievance: number; prosperity: number; playerInfluence: number; rivalInfluence: number };
-interface Rule { control: CrossingControl | undefined; toll: "asked" | "paid" | "zero" | "rival"; ward: WardDelta; need: NeedId; lies: number; rivalProsperity: number; rivalGrievance: number }
+interface Rule {
+  control: CrossingControl | undefined; toll: "asked" | "paid" | "zero" | "rival" | "keep"; ward: WardDelta; need: NeedId; lies: number; rivalProsperity: number; rivalGrievance: number;
+  /** Swings in the two powers' garrisons beyond what the tally says (the Syndicate's wagon armed, deserters dead, two sides trading fire). */
+  wardMil?: number; rivalMil?: number;
+  /** What the site ledger remembers. */
+  site?: Partial<Pick<SiteLedger, "hostage" | "convoy" | "border">>;
+}
 
 const RULES: Record<ResolutionId, Rule> = {
   //                                                     trust fear grievance prosperity playerInf rivalInf
@@ -233,11 +280,27 @@ const RULES: Record<ResolutionId, Rule> = {
   sabotaged:     { control: "contested", toll: "zero",  ward: { trust: -10, fear: 5,  grievance: 15, prosperity: -12, playerInfluence: -8, rivalInfluence: 10 }, need: "coin",      lies: 0, rivalProsperity: 5, rivalGrievance: 0 },
   rival_secured: { control: "rival",     toll: "rival", ward: { trust: -4,  fear: 0,  grievance: 4,  prosperity: -2,  playerInfluence: -10, rivalInfluence: 18 }, need: "deference", lies: 0, rivalProsperity: 8, rivalGrievance: -5 },
   abandoned:     { control: undefined,   toll: "asked", ward: { trust: 0,   fear: 0,  grievance: 8,  prosperity: 0,   playerInfluence: -3, rivalInfluence: 4 },  need: "deference", lies: 0, rivalProsperity: 0, rivalGrievance: 0 },
+  // ---- D-034: the other three contracts. Crossing, toll and bridge are untouched by any of them (`keep`). ----
+  //                                                          trust fear grievance prosperity playerInf rivalInf
+  ransomed:        { control: undefined, toll: "keep", ward: { trust: 0,   fear: 0,  grievance: 0,  prosperity: 0,  playerInfluence: 4,  rivalInfluence: -4 }, need: "coin",      lies: 0, rivalProsperity: 2,  rivalGrievance: 0,   site: { hostage: "freed" } },
+  rescued:         { control: undefined, toll: "keep", ward: { trust: 4,   fear: 6,  grievance: 0,  prosperity: 0,  playerInfluence: 6,  rivalInfluence: -6 }, need: "arms",      lies: 0, rivalProsperity: 0,  rivalGrievance: 6,   rivalMil: -4, site: { hostage: "freed" } },
+  slipped_away:    { control: undefined, toll: "keep", ward: { trust: 6,   fear: -4, grievance: -3, prosperity: 0,  playerInfluence: 8,  rivalInfluence: -2 }, need: "deference", lies: 0, rivalProsperity: 0,  rivalGrievance: 0,   site: { hostage: "freed" } },
+  hostage_lost:    { control: undefined, toll: "keep", ward: { trust: -4,  fear: 0,  grievance: 6,  prosperity: -2, playerInfluence: -8, rivalInfluence: 8 },  need: "medicine",  lies: 0, rivalProsperity: 4,  rivalGrievance: 0,   rivalMil: 4, site: { hostage: "lost" } },
+  seized:          { control: undefined, toll: "keep", ward: { trust: -2,  fear: 4,  grievance: 4,  prosperity: 0,  playerInfluence: 4,  rivalInfluence: -8 }, need: "arms",      lies: 0, rivalProsperity: -6, rivalGrievance: 10,  rivalMil: -6, site: { convoy: "seized" } },
+  tipped_off:      { control: undefined, toll: "keep", ward: { trust: 8,   fear: 0,  grievance: -6, prosperity: 3,  playerInfluence: 6,  rivalInfluence: -6 }, need: "arms",      lies: 0, rivalProsperity: -3, rivalGrievance: 6,   rivalMil: -4, wardMil: -2, site: { convoy: "tipped" } },
+  burned:          { control: undefined, toll: "keep", ward: { trust: -3,  fear: 8,  grievance: 4,  prosperity: -3, playerInfluence: -2, rivalInfluence: -4 }, need: "coin",      lies: 0, rivalProsperity: -8, rivalGrievance: 8,   rivalMil: -2, site: { convoy: "burned" } },
+  passed:          { control: undefined, toll: "keep", ward: { trust: 0,   fear: 0,  grievance: 4,  prosperity: 0,  playerInfluence: -6, rivalInfluence: 8 },  need: "deference", lies: 0, rivalProsperity: 6,  rivalGrievance: 0,   rivalMil: 6, site: { convoy: "passed" } },
+  mediated:        { control: undefined, toll: "keep", ward: { trust: 6,   fear: -4, grievance: -8, prosperity: 4,  playerInfluence: 8,  rivalInfluence: -4 }, need: "coin",      lies: 0, rivalProsperity: 2,  rivalGrievance: -4,  site: { border: "mediated" } },
+  sided_ward:      { control: undefined, toll: "keep", ward: { trust: 10,  fear: 0,  grievance: -4, prosperity: 2,  playerInfluence: 4,  rivalInfluence: -10 }, need: "arms",     lies: 0, rivalProsperity: 0,  rivalGrievance: 8,   rivalMil: -3, site: { border: "ward" } },
+  sided_syndicate: { control: undefined, toll: "keep", ward: { trust: -12, fear: 4,  grievance: 14, prosperity: -2, playerInfluence: -4, rivalInfluence: 14 }, need: "deference", lies: 1, rivalProsperity: 4,  rivalGrievance: -6,  wardMil: -3, rivalMil: 3, site: { border: "syndicate" } },
+  provoked:        { control: undefined, toll: "keep", ward: { trust: -8,  fear: 8,  grievance: 10, prosperity: -3, playerInfluence: -6, rivalInfluence: 3 },  need: "medicine",  lies: 0, rivalProsperity: 0,  rivalGrievance: 6,   site: { border: "war" } },
+  escalated:       { control: undefined, toll: "keep", ward: { trust: -2,  fear: 6,  grievance: 4,  prosperity: -8, playerInfluence: -4, rivalInfluence: 2 },  need: "medicine",  lies: 0, rivalProsperity: -4, rivalGrievance: 4,   wardMil: -8, rivalMil: -8, site: { border: "war" } },
 };
 
 /** Needs from each resolution are applied to whatever the Ward lacked next; "abandoned" leaves the standing toll and control alone. */
 export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignState {
   const rule = RULES[o.resolution];
+  const crossingRun = o.scenario === "secure_crossing";
   const w0 = c.factions.ward, r0 = c.factions.rival;
   const t = o.tally;
   const add = (base: number, d: number): number => clampI(base + d, 0, 100, base);
@@ -248,15 +311,17 @@ export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignStat
 
   // One day of drift (fear cools, grudges soften slightly), then the outcome, then what the dead and the crowd cost her.
   const civ = Math.min(5, t.civiliansHarmed);
+  // No trust farming: a Ward that has seen the same ending twice running is not moved by a third (defence in depth beside the settled window).
+  const gain = rule.ward.trust > 0 && wardMemory(c).repeat >= 2 ? Math.floor(rule.ward.trust / 2) : rule.ward.trust;
   const ward: FactionState = {
     ...w0,
-    trust: add(w0.trust, rule.ward.trust + lateTrust - (o.brokePromise ? 10 : 0)),
+    trust: add(w0.trust, gain + lateTrust - (o.brokePromise ? 10 : 0)),
     fear: add(w0.fear, rule.ward.fear - 2 + Math.min(10, t.limbsLost * 2)),
     grievance: add(w0.grievance, rule.ward.grievance - 1 + lateGrievance + civ * 3),
     prosperity: add(w0.prosperity, rule.ward.prosperity - civ * 2),
     playerInfluence: add(w0.playerInfluence, rule.ward.playerInfluence),
     rivalInfluence: add(w0.rivalInfluence, rule.ward.rivalInfluence),
-    militaryStrength: add(w0.militaryStrength, -6 * t.garrisonKilled - 2 * t.garrisonRouted),
+    militaryStrength: add(w0.militaryStrength, -6 * t.garrisonKilled - 2 * t.garrisonRouted + (rule.wardMil ?? 0)),
     need: rule.need,
   };
   const rival: FactionState = {
@@ -264,14 +329,15 @@ export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignStat
     rivalInfluence: ward.rivalInfluence,
     prosperity: add(r0.prosperity, rule.rivalProsperity),
     grievance: add(r0.grievance, rule.rivalGrievance),
-    militaryStrength: add(r0.militaryStrength, -6 * t.rivalKilled),
+    militaryStrength: add(r0.militaryStrength, -6 * t.rivalKilled + (rule.rivalMil ?? 0)),
   };
 
-  const bridge: BridgeState = o.resolution === "sabotaged" || c.crossing.bridge === "collapsed" ? "collapsed" : o.bridge;
-  const toll = rule.toll === "asked" ? (o.resolution === "abandoned" ? c.crossing.toll : clampI(o.toll, 0, 200, 0))
+  const bridge: BridgeState = !crossingRun ? c.crossing.bridge : o.resolution === "sabotaged" || c.crossing.bridge === "collapsed" ? "collapsed" : o.bridge;
+  const toll = rule.toll === "keep" ? c.crossing.toll : rule.toll === "asked" ? (o.resolution === "abandoned" ? c.crossing.toll : clampI(o.toll, 0, 200, 0))
     : rule.toll === "paid" ? clampI(o.paid, 0, 200, 0)
     : rule.toll === "rival" ? clampI(o.toll + 15, 0, 200, 0) : 0;
   const paid = clampI(o.paid, 0, c.purse, 0);
+  const loot = clampI(o.loot, 0, 999, 0);
 
   let bribed = false, exposed = false;
   if (lands) exposed = true;   // the scandal has landed (bribed now false): the paper may say so once; a bribe that never surfaces is forgotten
@@ -280,23 +346,32 @@ export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignStat
     exposed = ward.rivalInfluence >= 50 || hash3(c.seed, c.expeditions, c.day, 77) / 4294967296 < 0.5;
   }
   const crossing: CrossingState = {
-    bridge, control: rule.control ?? c.crossing.control, toll, tollPaidTotal: clampI(c.crossing.tollPaidTotal + paid, 0, 99999, 0), bribed, exposed,
+    bridge, control: rule.control ?? c.crossing.control, toll, tollPaidTotal: clampI(c.crossing.tollPaidTotal + (crossingRun ? paid : 0), 0, 99999, 0), bribed, exposed,
   };
 
   const tally = zeroTally();
   for (const k of TALLY_KEYS) tally[k] = clampI(c.tally[k] + clampI(t[k], 0, 999, 0), 0, 9999, 0);
 
-  const history = c.history.concat({ seq: c.expeditions + 1, region: "kessar", resolution: o.resolution, day: c.day + 1 });
+  const history = c.history.concat({ seq: c.expeditions + 1, region: "kessar", resolution: o.resolution, day: c.day + 1, template: o.scenario });
   if (history.length > HISTORY_CAP) history.splice(0, history.length - HISTORY_CAP);
 
   return {
     ...c,
-    day: clampI(c.day + 1, 1, 9999, 1), expeditions: clampI(c.expeditions + 1, 0, 9999, 0), purse: c.purse - paid,
+    day: clampI(c.day + 1, 1, 9999, 1), expeditions: clampI(c.expeditions + 1, 0, 9999, 0), purse: clampI(c.purse - paid + loot, 0, 99999, 0),
     lies: clampI(c.lies + rule.lies + (o.brokePromise ? 1 : 0), 0, 99, 0),
     factions: { ward, rival }, crossing, tally, history,
+    sites: { ...c.sites, ...rule.site, lastDay: { ...c.sites.lastDay, [o.scenario]: clampI(c.day + 1, 1, 9999, 1) }, lastComplication: o.complication ?? "none" },
   };
 }
 
+const CONVOY_TEXT: Record<Exclude<SiteLedger["convoy"], "none">, string> = {
+  seized: "A Syndicate wagon is yours. The Syndicate has noticed.", tipped: "The Ward's pickets owe you a favour and will deny it.",
+  burned: "The Syndicate wagon is a bonfire, and nobody did it.", passed: "The Syndicate wagon reached the ford, and so did its cargo.",
+};
+const BORDER_TEXT: Record<Exclude<SiteLedger["border"], "quiet">, string> = {
+  mediated: "Marker Stone No. 4 is under joint survey and nobody is shooting.", ward: "The Syndicate is gone from the ford; the Ward has you in the ledger as a witness.",
+  syndicate: "Marker Stone No. 4 is out of the ford. The Ward holds you responsible.", war: "The ford is a border and a war, in that order.",
+};
 const CONTROL_TEXT: Record<CrossingControl, string> = {
   ward: "The Ward holds the crossing.", society: "The Society holds the crossing, which the Ward will remember.",
   rival: "The Syndicate holds the crossing and has put up a sign about it.", contested: "Nobody holds the crossing; there is nothing left to hold.",
@@ -316,5 +391,14 @@ export function consequenceLines(before: CampaignState, after: CampaignState): s
   const dm = before.factions.ward.militaryStrength - after.factions.ward.militaryStrength;
   if (dm > 0) out.push(`The Ward's garrison is weaker by ${dm}.`);
   if (after.factions.ward.need !== before.factions.ward.need) out.push(WARD.needs[after.factions.ward.need]);
+  const a = after.sites, b = before.sites;
+  if (a.hostage !== b.hostage && a.hostage !== "none") out.push(a.hostage === "freed" ? "Mr. Quim is home, insured and aggrieved." : "Mr. Quim did not come home. His insurers are drafting a letter.");
+  if (a.convoy !== b.convoy && a.convoy !== "none") out.push(CONVOY_TEXT[a.convoy]);
+  if (a.border !== b.border && a.border !== "quiet") out.push(BORDER_TEXT[a.border]);
+  const dr = before.factions.rival.militaryStrength - after.factions.rival.militaryStrength;
+  if (dr > 0) out.push(`The Syndicate's escort is weaker by ${dr}.`);
+  if (dr < 0) out.push(`The Syndicate is better armed by ${-dr}.`);
+  const di = after.factions.ward.rivalInfluence - before.factions.ward.rivalInfluence;
+  if (Math.abs(di) >= 8) out.push(di > 0 ? "The Syndicate's influence at Kessar has grown." : "The Syndicate's influence at Kessar has shrunk.");
   return out;
 }

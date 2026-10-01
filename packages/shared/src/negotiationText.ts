@@ -63,6 +63,20 @@ export const MEMORY_LINE: Record<ResolutionId, readonly string[]> = {
   sabotaged: ["You dropped my bridge. It is promised back by spring. It was an optimistic spring.", "I have a bridge-shaped hole in my accounts, and you were standing next to it."],
   rival_secured: ["Last time you dawdled, and the Syndicate bought the crossing from under us both.", "You were late, and the Syndicate was not. Think on that."],
   abandoned: ["Last time you walked away. Do it again and I shall stop setting a place.", "You left without paying. The lamps noticed, and so did I."],
+  // what she heard about the other business at Kessar (D-034): the Ward keeps a ledger of everybody's trouble
+  ransomed: ["You paid a gang of deserters to hand back a surveyor. They are now a going concern. Thank you for that.", "I hear you bought a man back from the Orchard. At what rate? I only ask for the file."],
+  rescued: ["You emptied the Orchard of deserters. The Ward would have done it, eventually, with paperwork.", "A surveyor came home by the ford with a rifleman on each side. We keep a form for that."],
+  slipped_away: ["You took a man out of the Orchard without a shot. I did not know the Society had it in it.", "Somebody tiptoed through my scrubland and left no receipts. I almost admire it."],
+  hostage_lost: ["Last time a man died in the Orchard, in your care. We keep a register for that sort of thing.", "Mr. Quim did not come home. The Society has since called it 'an unexpected resignation'."],
+  seized: ["Last time you took a Syndicate wagon in the Cut. We are not unhappy. We are formally neutral.", "That wagon was not yours. It was also not mine, so I am wondering how to feel."],
+  tipped_off: ["You told my ford post about a Syndicate wagon. We acted on it. I would call it a partnership, in private.", "Last time you sent me a tip, and I sent two soldiers. Consider us square."],
+  burned: ["A wagon went up in the Cut last time. I am told nobody did it. The barrel did it by itself.", "I smelled powder from the hill. The paper says 'spontaneous'. I am not a spontaneous woman."],
+  passed: ["Last time the Syndicate drove a wagon through my ford while you watched. I noticed that, and who watched.", "You let a Syndicate convoy past. We could have used the help, or at least the company."],
+  mediated: ["You got the Ward and the Syndicate to sign one sheet of paper. I have it framed, face to the wall.", "Last time you made peace at the Marker Stone. I would call it rude, if it had not worked."],
+  sided_ward: ["You told my patrol what the Syndicate meant to do. That was correct, and you are still not getting a discount.", "You came to us first, last time. We noticed, and we noted it."],
+  sided_syndicate: ["You pulled Marker Stone No. 4 for the Syndicate. The stone has been reported missing. So has my patience.", "I know about the envelope. I know its thickness."],
+  provoked: ["Somebody fired on a border patrol last time. A surveyor and a sergeant are still not on speaking terms.", "You fired first at the ford. Nobody has forgotten whose idea it was."],
+  escalated: ["The ford went up in smoke last time, while you stood and watched. Observation is a skill, I suppose.", "My patrol and the Syndicate fought at the Stone, and the Society took notes."],
 };
 export const LIES_LINE: readonly string[] = [" I am told you do not always keep your word.", " Your promises have been discussed at some length."];
 

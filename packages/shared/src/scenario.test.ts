@@ -4,7 +4,7 @@ import { RESOLVED_LINGER_S, RIVAL_ARRIVES_S, RIVAL_PARLEY_S } from "./campaignTy
 import { newCampaign } from "./factions.ts";
 import { Rng } from "./rng.ts";
 import {
-  SCENARIO, lingerOver, newScenario, reduceScenario, scenarioOutcome, scenarioView, zeroTally,
+  SCENARIO, lingerOver, newScenario, reduceScenario, scenarioOutcome, scenarioView, zeroTally, type CrossingPhase,
   type ScenarioInput, type ScenarioState,
 } from "./scenario.ts";
 
@@ -41,7 +41,7 @@ const calm = (): CampaignState => {
   throw new Error("no calm seed");
 };
 const base = (): ScenarioState => newScenario(calm(), 40);
-const at = (phase: ScenarioPhase): ScenarioState => {
+const at = (phase: ScenarioPhase & (CrossingPhase | "resolved")): ScenarioState => {
   const s = base();
   switch (phase) {
     case "approach": return s;
@@ -59,7 +59,7 @@ const EVENTS: ScenarioInput[] = [
   { t: "garrison", alive: 2, routed: 1, total: 6 }, { t: "charge_set" }, { t: "bridge_fell", onBridge: 0 }, { t: "party_down" },
   { t: "tally", add: { wounded: 1 } }, { t: "weather", rain: 0.9 },
 ];
-const PHASES: ScenarioPhase[] = ["approach", "standoff", "parley", "fighting", "rigging", "resolved"];
+const PHASES: (CrossingPhase | "resolved")[] = ["approach", "standoff", "parley", "fighting", "rigging", "resolved"];
 
 describe("reducer: every (phase, event) pair", () => {
   it("never throws, keeps a legal phase, and never reopens a resolution", () => {
@@ -80,7 +80,7 @@ describe("reducer: every (phase, event) pair", () => {
     }
   });
 
-  const next: [ScenarioPhase, ScenarioInput, ScenarioPhase][] = [
+  const next: [CrossingPhase | "resolved", ScenarioInput, CrossingPhase | "resolved"][] = [
     ["approach", { t: "arrive", party: 3 }, "standoff"],
     ["approach", { t: "arrive", party: 0 }, "approach"],
     ["approach", { t: "hostile" }, "fighting"],

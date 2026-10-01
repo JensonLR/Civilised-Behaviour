@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CampaignState, CasualtyTally, ResolutionId, ScenarioOutcome } from "./campaignTypes.ts";
-import { HISTORY_CAP, NEEDS, POWERS, RESOLUTIONS, STANCES, TOLL_MAX, TOLL_MIN, WARD, applyOutcome, askingToll, consequenceLines, leverageOf, newCampaign, parseCampaign, serializeCampaign, stanceOf, wardMemory } from "./factions.ts";
+import type { CampaignState, CasualtyTally, ResolutionId, ScenarioOutcome, ScenarioTemplateId } from "./campaignTypes.ts";
+import { HISTORY_CAP, NEEDS, POWERS, RESOLUTIONS, STANCES, TEMPLATE_RESOLUTIONS, TOLL_MAX, TOLL_MIN, WARD, applyOutcome, askingToll, consequenceLines, leverageOf, newCampaign, parseCampaign, serializeCampaign, stanceOf, wardMemory } from "./factions.ts";
 import { Rng } from "./rng.ts";
 
 const zero = (): CasualtyTally => ({ wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 });
@@ -217,5 +217,109 @@ describe("the Ward remembers", () => {
     const lines = consequenceLines(c, applyOutcome(c, typical("sabotaged"))).join(" ");
     expect(lines).toMatch(/bridge is collapsed/);
     expect(lines).toMatch(/Nobody holds the crossing/);
+  });
+});
+
+describe("applyOutcome: the three newer contracts (D-034)", () => {
+  const OTHERS = ["hostage_rescue", "convoy_ambush", "border_incident"] as const;
+  const FIELDS = (c: CampaignState): unknown[] => [
+    c.crossing.bridge, c.crossing.control, c.crossing.toll, c.factions.ward.trust, c.factions.ward.fear, c.factions.ward.grievance, c.factions.ward.prosperity, c.factions.ward.playerInfluence,
+    c.factions.ward.rivalInfluence, c.factions.ward.militaryStrength, c.factions.ward.need, c.factions.rival.militaryStrength, c.factions.rival.prosperity, c.factions.rival.grievance,
+    c.purse, c.lies, JSON.stringify(c.sites), c.history[c.history.length - 1]!.resolution,
+  ];
+  const run = (scenario: ScenarioTemplateId, r: ResolutionId, o: Partial<ScenarioOutcome> = {}, base = newCampaign(3)): CampaignState =>
+    applyOutcome(base, { scenario, resolution: r, toll: 0, paid: 0, bridge: "intact", tally: zero(), brokePromise: false, seconds: 100, ...o });
+
+  it("every pair of endings WITHIN a template differs in at least 3 campaign fields", () => {
+    for (const t of OTHERS) {
+      const rs = TEMPLATE_RESOLUTIONS[t];
+      expect(rs.length).toBeGreaterThanOrEqual(4);
+      for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+        const extra = (r: ResolutionId): Partial<ScenarioOutcome> => (r === "ransomed" ? { paid: 45 } : r === "seized" ? { loot: 60 } : {});
+        const a = FIELDS(run(t, rs[i]!, extra(rs[i]!))), b = FIELDS(run(t, rs[j]!, extra(rs[j]!)));
+        const diff = a.filter((v, k) => v !== b[k]).length;
+        expect(diff, `${t}: ${rs[i]} vs ${rs[j]}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it("never touches the crossing: bridge, control and toll stay, and the ledger and history say which template ran", () => {
+    const base = applyOutcome(newCampaign(3), { scenario: "secure_crossing", resolution: "paid", toll: 50, paid: 50, bridge: "intact", tally: zero(), brokePromise: false, seconds: 1 });
+    for (const t of OTHERS) for (const r of TEMPLATE_RESOLUTIONS[t]) {
+      const c = run(t, r, {}, base);
+      expect(c.crossing, `${t}/${r}`).toEqual({ ...base.crossing, bribed: false, exposed: false });
+      expect(c.history[c.history.length - 1]).toMatchObject({ template: t, resolution: r });
+      expect(c.sites.lastDay[t], `${t}/${r}`).toBe(base.day + 1);
+    }
+  });
+
+  it("money: a ransom is paid from the purse, seized cargo comes into it, neither is toll", () => {
+    const base = newCampaign(3);
+    expect(run("hostage_rescue", "ransomed", { paid: 45 }).purse).toBe(base.purse - 45);
+    expect(run("hostage_rescue", "ransomed", { paid: 45 }).crossing.tollPaidTotal).toBe(0);
+    expect(run("hostage_rescue", "ransomed", { paid: 9999 }).purse).toBe(0);
+    expect(run("convoy_ambush", "seized", { loot: 60 }).purse).toBe(base.purse + 60);
+    expect(run("convoy_ambush", "burned", { loot: 60 }).purse).toBe(base.purse + 60);   // the rule is the outcome's, not the resolution's: the scenario simply never offers it
+  });
+
+  it("the ledger remembers: hostage, convoy, border and the complication dealt", () => {
+    expect(run("hostage_rescue", "slipped_away", { complication: "rain" }).sites).toMatchObject({ hostage: "freed", convoy: "none", lastComplication: "rain" });
+    expect(run("hostage_rescue", "hostage_lost").sites.hostage).toBe("lost");
+    expect(run("convoy_ambush", "tipped_off").sites.convoy).toBe("tipped");
+    expect(run("convoy_ambush", "passed").sites.convoy).toBe("passed");
+    expect(run("border_incident", "sided_syndicate").sites.border).toBe("syndicate");
+    expect(run("border_incident", "provoked").sites.border).toBe("war");
+    expect(run("border_incident", "mediated", { complication: "none" }, run("border_incident", "escalated", { complication: "fog" })).sites).toMatchObject({ border: "mediated", lastComplication: "none" });
+  });
+
+  it("swings the powers: the Syndicate is armed by a passed wagon and weakened by a seized one; two sides trading fire weaken both", () => {
+    const base = newCampaign(3);
+    expect(run("convoy_ambush", "passed").factions.rival.militaryStrength).toBeGreaterThan(base.factions.rival.militaryStrength);
+    expect(run("convoy_ambush", "seized").factions.rival.militaryStrength).toBeLessThan(base.factions.rival.militaryStrength);
+    const esc = run("border_incident", "escalated");
+    expect(esc.factions.ward.militaryStrength).toBeLessThan(base.factions.ward.militaryStrength);
+    expect(esc.factions.rival.militaryStrength).toBeLessThan(base.factions.rival.militaryStrength);
+    expect(run("border_incident", "sided_syndicate").factions.ward.grievance).toBeGreaterThan(run("border_incident", "sided_ward").factions.ward.grievance);
+    expect(run("hostage_rescue", "hostage_lost").factions.ward.rivalInfluence).toBeGreaterThan(base.factions.ward.rivalInfluence);
+  });
+
+  it("no trust farming: the third identical good ending moves the Ward by half as much", () => {
+    let c = newCampaign(3);
+    const gains: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const before = c.factions.ward.trust;
+      c = run("border_incident", "sided_ward", {}, c);
+      gains.push(c.factions.ward.trust - before);
+    }
+    expect(gains[2]).toBeLessThan(gains[0]!);
+    expect(wardMemory(c).repeat).toBe(4);
+  });
+
+  it("parse: a hostile site ledger is clamped, and an old save (no sites, no template) loads with defaults", () => {
+    const c = run("convoy_ambush", "burned", { complication: "outriders" });
+    expect(parseCampaign(serializeCampaign(c))).toEqual(c);
+    const old = JSON.parse(serializeCampaign(newCampaign(2))) as Record<string, unknown>;
+    delete old.sites;
+    expect(parseCampaign(JSON.stringify(old))?.sites).toEqual({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none" });
+    const bad = { ...JSON.parse(serializeCampaign(c)), sites: { lastDay: { hostage_rescue: 1e9, nonsense: 4 }, hostage: "x", convoy: 7, border: null, lastComplication: "<script>" }, history: [{ seq: 1, region: "kessar", resolution: "paid", day: 2, template: "elsewhere" }] };
+    const p = parseCampaign(JSON.stringify(bad))!;
+    expect(p.sites).toEqual({ lastDay: { hostage_rescue: 9999 }, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none" });
+    expect(p.history[0]!.template).toBe("secure_crossing");
+  });
+
+  it("the ledger stays inside the wire budget after a long campaign across all four contracts", () => {
+    let c = newCampaign(11);
+    const all: [ScenarioTemplateId, ResolutionId][] = OTHERS.flatMap((t) => TEMPLATE_RESOLUTIONS[t].map((r): [ScenarioTemplateId, ResolutionId] => [t, r]));
+    for (let i = 0; i < 40; i++) { const [t, r] = all[i % all.length]!; c = run(t, r, { complication: "reinforcements" }, c); }
+    expect(c.history.length).toBe(HISTORY_CAP);
+    expect(serializeCampaign(c).length).toBeLessThan(4096);
+  });
+
+  it("consequence lines name what the newer contracts changed", () => {
+    const base = newCampaign(3);
+    expect(consequenceLines(base, run("hostage_rescue", "rescued")).join(" ")).toMatch(/Quim is home/);
+    expect(consequenceLines(base, run("hostage_rescue", "hostage_lost")).join(" ")).toMatch(/did not come home/);
+    expect(consequenceLines(base, run("convoy_ambush", "burned")).join(" ")).toMatch(/bonfire/);
+    expect(consequenceLines(base, run("border_incident", "mediated")).join(" ")).toMatch(/Marker Stone No. 4/);
   });
 });

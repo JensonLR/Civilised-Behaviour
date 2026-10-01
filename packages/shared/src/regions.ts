@@ -60,6 +60,7 @@ const HOLLOWMERE_STATIONS: readonly UseStation[] = [
   { id: "map", kind: "map", x: CAMP.mapTable.x, z: CAMP.mapTable.z, r: 2.4, prompt: "Consult the map room" },
   { id: "paper", kind: "paper", x: hqPlan().notice.x, z: hqPlan().notice.z, r: 2.4, prompt: "Read the notice board" },
   { id: "dock", kind: "dock", x: JETTY.x0, z: JETTY.z0, r: 3, prompt: "Take the boat: the map room" },
+  { id: "loadout", kind: "loadout", x: hqPlan().pyramid.tiers[0]!.x, z: hqPlan().pyramid.tiers[0]!.z, r: 2.4, prompt: "Draw up the supply manifest" },
 ];
 
 const KESSAR_STATIONS: readonly UseStation[] = [

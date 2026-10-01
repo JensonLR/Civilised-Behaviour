@@ -6,6 +6,7 @@ import {
   CARRIED_MASK,
   COMBAT,
   FLAG,
+  NPC_SIDE,
   SURFACE,
   WEAPON,
   WEAPONS,
@@ -27,6 +28,7 @@ import {
   rangedDamage,
   rayBody,
   rayWorld,
+  riderBodyLift,
   shotDirection,
   shotSeed,
   spreadFor,
@@ -75,6 +77,15 @@ export interface CombatHost {
   sendTo(sessionId: string, e: HitMarkEvent): void;
   /** Something loud happened at (x, z), audible to `radius` metres. Nothing listens yet (AI arrives with M4+); tests and metrics do. */
   noise?(x: number, z: number, radius: number, source: string): void;
+  /**
+   * Whether a round from the NPC row `shooter` may hurt `target` (the Cast's war rules: sides, alert, a hand's attack order). Absent: every row is an enemy of every other side.
+   * Rounds from people (players, the cannon, a scripted charge) are never asked: they reach enemies always and their own side under the friendly-fire rule.
+   */
+  hostile?(shooter: string, target: string): boolean;
+  /** A blast shoved `id` at `speed` m/s (a rider may be thrown: Mounts.onBlast). */
+  blasted?(id: string, speed: number): void;
+  /** A free prop was struck by a ranged round (the room blows a powder keg up). */
+  propShot?(propId: string, shooter: string): void;
 }
 
 /** A held button counts only while frames keep arriving (a stalled client cannot hold a rammer forever). */
@@ -84,6 +95,8 @@ const MAX_IMPACTS_PER_SHOT = 4;
 /** Hits within the reach of the cannon crew are ignored beyond this vertical tolerance. */
 const CREW_VERTICAL = 1.6;
 
+/** Who cannot work a gun: the downed, anyone whose arms or body are otherwise taken, and a rider (his INTERACT is the saddle's: it must dismount him, not join a crew). */
+const CREW_BLOCKED = FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED | FLAG.MOUNTED;
 const BUSY = FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.DRAGGED | FLAG.REVIVING | FLAG.OPERATING;
 
 interface Swing {
@@ -261,16 +274,29 @@ export class Combat {
     });
   }
 
+  /** The party's side: people, and the hired hands (who share its purse and its friendly-fire rule). */
+  private partySide(p: PlayerStateType | undefined): boolean {
+    return p === undefined || p.npc === 0 || NPC_SIDE[p.npc] === "party";
+  }
+
   /**
-   * Who a blow may land on. The party and the garrison are at war whenever either side strikes; the garrison never harms itself; and the
-   * party's own shots reach comrades only under the campaign's friendly-fire rule. (A shooter with no row, the cannon or a scripted charge, counts as the party.)
+   * Who a blow may land on. A person's own rounds (the party, its hired hands, the cannon, a scripted charge) reach their own side only under the campaign's
+   * friendly-fire rule, and everyone else always; an NPC's rounds reach whoever the Cast says it is fighting (sides, the alert, a hand's attack order) and
+   * pass through everyone else, so a sentry's shot does not kill the Syndicate man behind the player. (A shooter with no row counts as the party.)
    */
-  private hittable(shooter: string, t: PlayerStateType): boolean {
+  private hittable(shooter: string, targetId: string, t: PlayerStateType): boolean {
     const s = this.host.players.get(shooter);
-    const sn = s !== undefined && !!s.npc;
-    const tn = !!t.npc;
-    if (sn && tn) return false;
-    return sn !== tn || this.host.friendlyFire();
+    const ownSide = this.partySide(t);
+    if (this.partySide(s)) {
+      if (ownSide) return this.host.friendlyFire();
+      return s !== undefined && s.npc !== 0 && this.host.hostile ? this.host.hostile(shooter, targetId) : true; // a hand answers fire; he does not start it
+    }
+    return this.host.hostile ? this.host.hostile(shooter, targetId) : ownSide;
+  }
+
+  /** How far a mounted rider's body sits above the walker's: the hit zones and the muzzle rise with the saddle. */
+  private lift(flags: number): number {
+    return (flags & FLAG.MOUNTED) !== 0 ? riderBodyLift(0.9) : 0;
   }
 
   // ---- lifecycle -----------------------------------------------------------------------------------------------------------------
@@ -321,6 +347,35 @@ export class Combat {
     return true;
   }
 
+  /**
+   * The ammunition crate (loadout): every firearm's reserve is multiplied by `mul` (1.5 = half again as many rounds) and rounded up, capped at the wire's 255.
+   * Rounds already counted past the weapon's usual reserve are kept: a second crate is meant to be worth carrying.
+   */
+  scaleReserve(sessionId: string, mul: number): void {
+    const pc = this.pcs.get(sessionId);
+    if (!pc || !Number.isFinite(mul) || mul <= 1) return;
+    for (const w of WEAPON_LIST) {
+      if (WEAPONS[w].ranged === undefined) continue;
+      pc.reserve[w] = Math.min(255, Math.ceil(pc.reserve[w]! * mul));
+    }
+    const p = this.host.players.get(sessionId);
+    if (p) this.sync(p, pc);
+  }
+
+  /**
+   * NPC rows do not run out of powder mid-skirmish: when the firearm in hand is down to its last rounds the reserve is put back to the weapon's starting reserve.
+   * (The balance numbers were tuned this way; a human's reserve is the human's problem.) Cheap: nothing happens unless the weapon in hand is a firearm below `floor`.
+   */
+  topUp(sessionId: string, floor = 4): void {
+    const pc = this.pcs.get(sessionId);
+    if (!pc || pc.current < 0) return;
+    const r = WEAPONS[pc.current as WeaponId]?.ranged;
+    if (!r || pc.reserve[pc.current]! >= floor) return;
+    pc.reserve[pc.current] = r.startReserve;
+    const p = this.host.players.get(sessionId);
+    if (p) this.sync(p, pc);
+  }
+
   /** Read-only view for tests and diagnostics. */
   inspect(sessionId: string): { owned: number; current: number; mag: number[]; reserve: number[]; ready: number; reloadLeft: number; shots: number } | undefined {
     const pc = this.pcs.get(sessionId);
@@ -362,14 +417,14 @@ export class Combat {
 
     // A cannon crew takes the INTERACT press: the hold that follows is the work.
     let consumed = false;
-    if ((pressed & BUTTON.INTERACT) !== 0 && (p.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED)) === 0) {
+    if ((pressed & BUTTON.INTERACT) !== 0 && (p.flags & CREW_BLOCKED) === 0) {
       const c = this.cannonNear(p);
       if (c && c.st.phase !== 3) consumed = true;
     }
     // Lighting the fuse: FIRE while working a loaded gun.
     if ((pressed & BUTTON.FIRE) !== 0 && (cmd.buttons & BUTTON.INTERACT) !== 0) {
       const c = this.cannonNear(p);
-      if (c && c.st.phase === 2 && (p.flags & FLAG.DOWNED) === 0) {
+      if (c && c.st.phase === 2 && (p.flags & (FLAG.DOWNED | FLAG.MOUNTED)) === 0) {
         c.st.phase = 3;
         c.fuse = CANNON.fuseSeconds;
         c.lighter = sessionId;
@@ -434,7 +489,7 @@ export class Combat {
 
   private eye(p: PlayerStateType, out: { x: number; y: number; z: number }): void {
     out.x = p.x;
-    out.y = p.y + ((p.flags & FLAG.CROUCHING) !== 0 ? COMBAT.eyeHeightCrouch : COMBAT.eyeHeight);
+    out.y = p.y + this.lift(p.flags) + ((p.flags & FLAG.CROUCHING) !== 0 ? COMBAT.eyeHeightCrouch : COMBAT.eyeHeight);
     out.z = p.z;
   }
 
@@ -501,6 +556,7 @@ export class Combat {
       o.facing = p.facing;
       o.flags = p.flags;
     }
+    o.y += this.lift(o.flags); // a rider sits where the saddle puts him
     return o;
   }
 
@@ -536,7 +592,7 @@ export class Combat {
     // The garrison and the party are always targets for each other.
     {
       this.host.players.forEach((t, id) => {
-        if (id === shooter || (t.flags & FLAG.DOWNED) !== 0 || !t.connected || !this.hittable(shooter, t)) return;
+        if (id === shooter || (t.flags & FLAG.DOWNED) !== 0 || !t.connected || !this.hittable(shooter, id, t)) return;
         const pose = this.poseOf(t, view);
         if (rayBody(pose, ox, oy, oz, dx, dy, dz, best, radius, this.bodyHit) && this.bodyHit.t < best) {
           best = this.bodyHit.t;
@@ -591,6 +647,7 @@ export class Combat {
     if (c.kind === "prop") {
       this.host.physics.shoveProp(c.prop, dx, dy + 0.15, dz, r.propImpulse / r.pellets, c.x, c.y, c.z, COMBAT.maxPropSpeed);
       this.impact(shooter, c, def.id, key);
+      this.host.propShot?.(c.prop, shooter);
     } else {
       this.impact(shooter, c, def.id, key);
     }
@@ -649,7 +706,7 @@ export class Combat {
       dirZ /= len;
       const self = h.shooter === h.target;
       // ffScale softens a comrade's hit; the garrison is an enemy and takes the whole blow.
-      const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : t.npc ? 1 : def.ffScale);
+      const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : this.partySide(t) && this.partySide(this.host.players.get(h.shooter)) ? def.ffScale : 1);
       const before = t.missing;
       this.host.damage(h.target, damage, { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter });
       this.knock(t, dirX, dirZ, h.knock, h.stumble, 0);
@@ -776,12 +833,12 @@ export class Combat {
     const ox = p.x;
     const oz = p.z;
     const crouch = (p.flags & FLAG.CROUCHING) !== 0;
-    const oy = p.y + (crouch ? 0.8 : 1.2);
+    const oy = p.y + this.lift(p.flags) + (crouch ? 0.8 : 1.2);
     let struck = 0;
     const hits: { id: string; t: number; zone: number; x: number; y: number; z: number }[] = [];
     {
       this.host.players.forEach((t, id) => {
-        if (id === sessionId || (t.flags & FLAG.DOWNED) !== 0 || !t.connected || !this.hittable(sessionId, t)) return;
+        if (id === sessionId || (t.flags & FLAG.DOWNED) !== 0 || !t.connected || !this.hittable(sessionId, id, t)) return;
         const pose = this.poseOf(t, view);
         if (!meleeFan(pose, ox, oy, oz, s.yaw, s.elev, m.reach, m.arcHalf, 0.08, this.bodyHit)) return;
         // A wall between the blade and the man stops it.
@@ -834,7 +891,7 @@ export class Combat {
     this.host.players.forEach((t, id) => {
       if (id === direct || (t.flags & FLAG.DOWNED) !== 0 || !t.connected) return;
       const self = id === owner;
-      if (!self && !this.hittable(owner, t)) return;
+      if (!self && !this.hittable(owner, id, t)) return;
       const pose = this.poseOf(t, undefined);
       const d = blastDistance(pose, x, y, z);
       let f = blastFalloff(d, b.radius);
@@ -853,6 +910,7 @@ export class Combat {
       this.addHit(owner, id, weapon, b.damage * f, zone, dirX, dirZ, b.knock * f, Math.max(0.8, 1.2 * f), t.x, t.y + 1, t.z, key);
       // Lift: a blast throws people up as well as away.
       this.knock(t, 0, 0, 0, 0, b.knock * 0.55 * f);
+      this.host.blasted?.(id, b.knock * f);
     });
     // Props: everything within the radius is shoved away from the centre, lighter things faster.
     for (const [id, pb] of this.host.physics.props) {
@@ -887,7 +945,7 @@ export class Combat {
       this.host.players.forEach((p, id) => {
         const pc = this.pcs.get(id);
         if (!pc || !p.connected) return;
-        if ((p.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED)) !== 0) return;
+        if ((p.flags & CREW_BLOCKED) !== 0) return;
         if (Math.hypot(p.x - c.x, p.z - c.z) > CANNON.crewRange + 0.3 || Math.abs(p.y - c.y) > CREW_VERTICAL) return;
         if ((pc.held & BUTTON.INTERACT) === 0 || now - pc.heldAt > HOLD_STALE_MS) return;
         if (c.st.phase === 3) return; // once the fuse is lit, everybody get clear

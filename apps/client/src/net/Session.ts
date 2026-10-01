@@ -12,6 +12,7 @@ import {
   stepCharacter,
   type BridgeState,
   type RegionId,
+  type ScenarioTemplateId,
   type JoinOptions,
   type MoveCommand,
   type MoveInputType,
@@ -118,7 +119,7 @@ export class Session {
     });
   }
 
-  static async create(name: string, look?: string, rules: { dismemberment?: boolean; region?: RegionId } = {}): Promise<Session> {
+  static async create(name: string, look?: string, rules: { dismemberment?: boolean; region?: RegionId; scenario?: ScenarioTemplateId } = {}): Promise<Session> {
     const client = new Client(serverUrl());
     const options: JoinOptions = {
       name,
@@ -126,6 +127,7 @@ export class Session {
       ...(look ? { look } : {}),
       ...(rules.dismemberment === undefined ? {} : { dismemberment: rules.dismemberment }),
       ...(rules.region ? { region: rules.region } : {}),
+      ...(rules.scenario ? { scenario: rules.scenario } : {}),
     };
     const room = await client.create<WorldStateType>(ROOM_WORLD, options, WorldState as never);
     await Session.stateReady(room);

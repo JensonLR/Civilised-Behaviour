@@ -14,6 +14,7 @@ import {
   transitionStep,
   type EyeSample,
 } from "./firstPerson.ts";
+import { easeMountedCamera, newMountedCamera } from "./mounts/mountCamera.ts";
 
 export interface CameraSettings {
   fov: number;
@@ -43,6 +44,10 @@ export class CameraRig {
   yaw = 0;
   pitch = 0.32;
   distance = 5.6;
+  /** Set by the game each frame: the local body sits a horse, and how fast it goes as a fraction of a gallop. The follow camera pulls back and up, and widens a little at speed. */
+  mounted = false;
+  mountSpeed01 = 0;
+  private readonly mountCam = newMountedCamera();
   private view: ViewMode = "third";
   /** 0 = third person .. 1 = first person. */
   private fp = 0;
@@ -147,6 +152,7 @@ export class CameraRig {
   update(target: Vector3, dt: number, aiming: boolean, eye?: EyeSample, downed = false): void {
     dt = Math.max(0, dt); // the first frame's timestamp can precede the loop's `last`
     this.clock += dt;
+    easeMountedCamera(this.mountCam, dt, this.mounted, this.mountSpeed01);
     this.downedK = damp(this.downedK, downed ? 1 : 0, downed ? 2.2 : 3.5, dt);
     if (this.downedK < 1e-3) this.downedK = 0;
     this.updateThird(target, dt, aiming);
@@ -182,7 +188,7 @@ export class CameraRig {
     }
 
     const fpFov = (this.settings.firstPersonFov ?? FIRST_PERSON.fov) * this.fpFovScale;
-    const fov = this.settings.fov + (fpFov - this.settings.fov) * e;
+    const fov = this.settings.fov + this.mountCam.fov * (1 - e) + (fpFov - this.settings.fov) * e;
     const near = this.fp > 0 ? FIRST_PERSON.near : FIRST_PERSON.nearThird;
     if (Math.abs(this.camera.fov - fov) > 1e-3 || this.camera.near !== near) {
       this.camera.fov = fov;
@@ -199,7 +205,7 @@ export class CameraRig {
     // Downed: no kill-cam and no cut, just the same camera settling closer and lower, looking a little up at the sky and the faces bending over you,
     // with a slow unsteady drift (the player can still look around; this only moves the framing).
     const dk = this.downedK;
-    const dist = (aiming ? this.distance * 0.62 : this.distance) * (1 - 0.32 * dk);
+    const dist = ((aiming ? this.distance * 0.62 : this.distance) + this.mountCam.pull) * (1 - 0.32 * dk);
     const pitch = clamp(this.pitch - 0.3 * dk, -0.35, 1.25); // first person may look further than the follow camera can
     const cp = Math.cos(pitch);
     const sinY = Math.sin(this.yaw);
@@ -208,7 +214,7 @@ export class CameraRig {
     const shoulder = aiming ? 1.15 : 0.55; // aiming: wide enough that the weapon clears the wearer's head and reads beside the crosshair
     this.desired.set(
       this.focus.x + sinY * cp * dist + cosY * shoulder,
-      this.focus.y + 1.55 - 0.95 * dk + Math.sin(pitch) * dist,
+      this.focus.y + 1.55 + this.mountCam.rise - 0.95 * dk + Math.sin(pitch) * dist,
       this.focus.z + cosY * cp * dist - sinY * shoulder,
     );
     const floor = this.world.terrainHeight(this.desired.x, this.desired.z) + 0.4;

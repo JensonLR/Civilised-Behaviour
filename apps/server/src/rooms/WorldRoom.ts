@@ -49,6 +49,7 @@ import {
   WEAPON,
   isCarried,
   NPC_CAP,
+  NPC_SIDE,
   WEAPONS,
   applyOutcome,
   askingToll,
@@ -58,6 +59,21 @@ import {
   findStation,
   isNpcKey,
   isRegionId,
+  isTemplateId,
+  kessarNavOptions,
+  npcThink,
+  followerThink,
+  pickTemplate,
+  regionMountSpots,
+  MountState,
+  NO_COMMAND,
+  newParty,
+  serializeParty,
+  KESSAR_ANCHORS,
+  PropKind,
+  REGIONS,
+  hash3,
+  type ScenarioTemplateId,
   leverageOf,
   newCampaign,
   npcKey,
@@ -79,7 +95,10 @@ import { metrics } from "../metrics.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
 import { Casualties, type HitInfo } from "../systems/Casualties.ts";
+import { Cast } from "../systems/Cast.ts";
 import { Combat } from "../systems/Combat.ts";
+import { Followers } from "../systems/Followers.ts";
+import { Mounts } from "../systems/Mounts.ts";
 import { Scenario } from "../systems/Scenario.ts";
 import { Travel } from "../systems/Travel.ts";
 
@@ -169,6 +188,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private campaign!: CampaignState;
   private travel!: Travel;
   private scenario: Scenario | undefined;
+  private cast!: Cast;
+  private mounts!: Mounts;
+  private followers!: Followers;
+  /** Dev/test override of the contract offered at Kessar (JoinOptions.scenario); absent in play, where `pickTemplate` decides. */
+  private forcedTemplate: ScenarioTemplateId | undefined;
+  /** What the manifest brought, charged when the ship left Hollowmere and applied at landfall. */
+  private pendingPrep: ReturnType<Followers["prepCommit"]> | undefined;
   /** The last fixed step (s), and simulated seconds since the room began: NPC steps and the downed-NPC clock use them. */
   private tickDt = 1 / TICK_RATE;
   private simT = 0;
@@ -178,6 +204,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private readonly party = {
     forEach: (cb: (p: PlayerStateType, id: string) => void): void => this.state.players.forEach((p, id) => { if (!p.npc) cb(p, id); }),
     get: (id: string): PlayerStateType | undefined => this.state.players.get(id),
+  };
+
+  /** Who can be helped (revived, dressed, dragged): the party and its hired hands, never an enemy. */
+  private readonly helpable = {
+    forEach: (cb: (p: PlayerStateType, id: string) => void): void => this.state.players.forEach((p, id) => { if (!p.npc || NPC_SIDE[p.npc] === "party") cb(p, id); }),
   };
 
   override async onCreate(options: JoinOptions): Promise<void> {
@@ -208,6 +239,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.campaignRev = 0;
     this.state.scenario = "";
     this.state.scenarioRev = 0;
+    this.state.party = serializeParty(newParty());
+    this.state.partyRev = 0;
+    this.forcedTemplate = isTemplateId(options?.scenario) ? options.scenario : undefined;
     this.buildRegion(region);
     this.travel = new Travel({
       connectedSlots: () => this.connectedSlots(),
@@ -215,10 +249,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       enterRegion: (to) => this.enterRegion(to),
       notice: (text) => this.broadcast("notice", { text }),
       sync: (st) => {
+        const sailing = st.phase === 2 && this.state.travelPhase < 2;
         this.state.travelPhase = st.phase;
         this.state.travelTo = st.to;
         this.state.travelReady = st.ready & 0xff;
         this.state.travelLeft = Math.min(255, Math.max(0, Math.ceil(st.left)));
+        if (sailing) this.onSail();
       },
     });
     const room = this;
@@ -239,6 +275,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         emitSever: (e) => this.broadcast("sever", e),
         dismemberment: () => this.state.dismemberment,
         limbsChanged: (sid) => this.refreshProsthetic(sid),
+        scan: this.helpable,
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -265,8 +302,98 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       emitImpact: (e) => this.broadcast("impact", e),
       emitBoom: (e) => this.broadcast("boom", e),
       sendTo: (sid, e) => this.clients.getById(sid)?.send("hitmark", e),
+      // A report is heard by the cast (civilians bolt, soldiers start) and by the site (the noise meter).
+      noise: (x, z, radius, src) => {
+        this.cast.noise(x, z, radius, src);
+        this.scenario?.onNoise(x, z, radius, src);
+      },
+      hostile: (shooter, target) => this.cast.hostileTo(shooter, target),
+      blasted: (id, speed) => this.mounts.onBlast(id, speed),
+      propShot: (id, shooter) => this.propShot(id, shooter),
+    });
+    // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
+    this.cast = new Cast({
+      players: this.party,
+      spawnNpc: (spec) => this.spawnNpc(spec),
+      removeNpc: (key) => this.removeNpc(key),
+      stepNpc: (key, cmd) => this.stepNpc(key, cmd),
+      world: () => this.world,
+      worldMs: () => performance.now() - this.bornAt,
+      seed,
+      fear: () => this.campaign.factions.ward.fear,
+      brains: { garrison: npcThink, follower: followerThink },
+      navOptions: (w) => (this.state.region === "kessar" ? kessarNavOptions(w) : {}),
+    });
+    this.mounts = new Mounts({
+      players: this.state.players,
+      rows: this.state.mounts,
+      newRow: () => {
+        const r = new MountState();
+        r.kind = 0;
+        r.x = r.y = r.z = r.facing = r.speed = 0;
+        r.rider = "";
+        r.hitch = "";
+        r.coat = 0;
+        r.phase = 0;
+        r.hp = 100;
+        r.cargo = 0;
+        return r;
+      },
+      world: () => this.world,
+      get physics() {
+        return room.physics;
+      },
+      damage: (sid, amount, hit) => this.damagePlayer(sid, amount, hit),
+      notice: (sid, text) => this.clients.getById(sid)?.send("notice", { text }),
+      seed,
+      rowOf: (key) => this.state.players.get(key),
+      takeHeld: (sid) => {
+        const held = this.carrying.get(sid);
+        const p = this.state.players.get(sid);
+        if (!held || !p) return undefined;
+        this.physics.release(held, 0, 0, 0);
+        this.finishHold(sid, held, p);
+        return held;
+      },
+      setPropHolder: (id, holder) => {
+        const ps = this.state.props.get(id);
+        if (ps) ps.holder = holder;
+      },
+      propExists: (id) => this.state.props.has(id),
+      releaseDrag: (sid) => this.casualties.releaseDrag(sid),
+      routePoints: (name) => this.cast.routePoints(name),
+    });
+    this.followers = new Followers({
+      players: this.party,
+      cast: this.cast,
+      brainOf: (id) => this.cast.brainOf(id),
+      purse: () => this.campaign.purse,
+      spend: (n) => this.spend(n),
+      getParty: () => this.state.party,
+      setParty: (json) => {
+        this.state.party = json;
+        this.state.partyRev = (this.state.partyRev + 1) & 0xffff;
+      },
+      dress: (medic, target) => this.casualties.assist(medic, target, "dress"),
+      revive: (medic, target) => this.casualties.assist(medic, target, "revive"),
+      propPos: (id) => {
+        const ps = this.state.props.get(id);
+        return ps && ps.holder === "" ? { x: ps.x, z: ps.z } : undefined;
+      },
+      holdProp: (key, id) => this.npcHold(key, id),
+      dropProp: (key) => {
+        const p = this.state.players.get(key);
+        if (p) this.dropHeld(key, p);
+      },
+      notice: (sid, text) => (sid === "*" ? this.broadcast("notice", { text }) : this.clients.getById(sid)?.send("notice", { text })),
+      prepOpen: () => this.state.region === "hollowmere" && this.state.travelPhase < 2,
+      inBounds: (x, z) => Math.hypot(x, z) <= REGIONS[this.state.region as RegionId].bounds,
+      day: () => this.campaign.day,
+      nowS: () => this.simT,
+      seed,
     });
     this.startScenario(region);
+    this.landfall(region);
     void this.setMetadata({ code: this.state.code });
     // Campaigns are friends-first: unlisted, reachable only via join code or direct room id.
     void this.setPrivate(true);
@@ -323,8 +450,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
           }
         }
       });
+      if (!sailing) this.mounts.tick(ctx.dt); // after the players stepped, before the physics (a ridden horse copies its rider; a wagon trails its horse)
+      this.carryNpcProps();
       this.syncClock(false);
-      if (!sailing) this.scenario?.tick(ctx.dt);
+      if (!sailing) {
+        this.scenario?.tick(ctx.dt);
+        this.cast.tick(ctx.dt);
+        this.followers.tick(ctx.dt);
+      }
       this.reapNpcs();
       this.casualties.tick(ctx.dt);
       this.combat.tick(ctx.dt);
@@ -353,6 +486,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const now = performance.now();
       if (now - this.lastPropose < PROPOSE_COOLDOWN_MS) return; // propose/cancel is a broadcast: not a thing to loop
       this.lastPropose = now;
+      if (this.state.region === "hollowmere" && this.state.travelPhase === 0) {
+        // The manifest is checked again here, and again when the ship leaves; what does not fit is left on the quay then (trimLoadout), so this only warns.
+        const chk = this.followers.check();
+        if (!chk.ok) this.refuse(client.sessionId, `The quartermaster notes: ${chk.problems.join(" ")} What does not fit stays on the quay.`);
+      }
       this.travel.propose(client.sessionId, p.slot, msg?.to);
     });
     this.onMessage("travelReady", (client, msg: { ready?: unknown }) => {
@@ -368,6 +506,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (typeof msg?.option === "number") this.scenario?.onPick(client.sessionId, msg.option);
     });
     this.onMessage("parleyClose", (client) => this.scenario?.onParleyClose(client.sessionId));
+    // The expedition's prep and orders. Each is hostile until the Followers system's parsers and checks accept it (sender standing, rate, range, targets).
+    this.onMessage("loadoutSet", (client, msg: unknown) => void this.followers.onLoadoutSet(client.sessionId, msg));
+    this.onMessage("hire", (client, msg: unknown) => void this.followers.onHire(client.sessionId, msg));
+    this.onMessage("command", (client, msg: unknown) => void this.followers.onCommand(client.sessionId, msg));
 
     this.onMessage("ping", (client, msg: { t?: number }) => {
       client.send("pong", { t: typeof msg?.t === "number" ? msg.t : 0, serverTime: Date.now() });
@@ -401,6 +543,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.shots = 0; // numeric schema fields decode as undefined until first assigned
     player.aim = 0;
     player.npc = 0;
+    player.cmd = NO_COMMAND;
+    player.morale = 0;
     this.combat.onJoin(client.sessionId, player);
     this.syncClock(true); // a joiner's first state must carry a fresh world age
     metrics.players++;
@@ -426,6 +570,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         log.info("room.reconnect_expired", { roomId: this.roomId, sessionId: client.sessionId });
       }
     }
+    this.mounts.onLeave(client.sessionId); // a rider comes down where he is
+    this.followers.onLeave(client.sessionId);
     this.casualties.onLeave(client.sessionId);
     this.combat.onLeave(client.sessionId);
     this.dropHeld(client.sessionId, player);
@@ -455,6 +601,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   override onDispose(): void {
     this.scenario?.dispose();
     this.scenario = undefined;
+    this.mounts?.dispose();
     metrics.rooms--;
     if (this.physics) {
       metrics.physicsBodies -= this.physics.props.size; // player capsules are released in onLeave
@@ -477,6 +624,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (this.combat.onFrame(sessionId, player, cmd, pressed)) return;
     if (pressed === 0) return;
     const held = this.carrying.get(sessionId);
+    // Horses and wagons come before the places you can USE: a rider's INTERACT dismounts him however near the map table is.
+    if ((pressed & BUTTON.INTERACT) !== 0 && this.mounts.onInteract(sessionId, player, held)) return;
     // The places you can USE come before props: the Warden and the pier (scenario), then the map table, notice board and dock.
     if ((pressed & BUTTON.INTERACT) !== 0 && this.useStation(sessionId, player, held)) return;
 
@@ -527,6 +676,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (!st) return false;
     if (st.kind === "map" || st.kind === "dock") this.clients.getById(sessionId)?.send("station", { kind: "map" });
     else if (st.kind === "paper") this.clients.getById(sessionId)?.send("station", { kind: "paper" });
+    else if (st.kind === "loadout") this.clients.getById(sessionId)?.send("station", { kind: "loadout" });
     else return false; // pier / warden belong to the scenario
     return true;
   }
@@ -588,17 +738,24 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.combat?.rebuildCannons();
   }
 
-  /** Kessar Reach carries the crossing scenario; Hollowmere has none. Called once the room's systems exist (the cast is spawned through them). */
+  /** Kessar Reach carries one contract per visit (`pickTemplate`: the ledger decides, never the same one twice running); Hollowmere has none. Called once the room's systems exist (the cast is spawned through them). */
   private startScenario(id: RegionId): void {
-    if (id !== "kessar") return;
-    this.scenario = new Scenario(this.scenarioHost());
+    if (id === "hollowmere") return; // the hub carries no contract, whatever a dev override says
+    const template = this.forcedTemplate ?? pickTemplate(this.campaign, id, this.state.seed);
+    if (template === undefined) return;
+    this.scenario = new Scenario(this.scenarioHost(), template);
     this.scenario.start();
   }
 
   /** The sailing has finished: tear the old region down, stand the new one up, put everybody on its landing. Runs at the end of a server tick. */
   private enterRegion(to: RegionId): void {
+    // Sailing away COMMITS what happened (D-034 rule 1): the template decides (nothing, `abandoned`, `sabotaged`, its own ending); the hands are paid or not in the same breath.
+    this.scenario?.leave();
     this.scenario?.dispose();
     this.scenario = undefined;
+    this.followers.endExpedition();
+    this.cast.despawn();
+    this.mounts.dispose();
     this.npcDownedAt.clear();
     this.publishScenario("");
     // Nobody carries anything across the water; a revive or drag in progress is over.
@@ -616,6 +773,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.region = to;
     this.buildRegion(to);
     this.startScenario(to);
+    this.landfall(to);
     // Everyone lands on the arrival ring at rest. (The client snaps its prediction when the region changes; see net/Session.ts.)
     this.state.players.forEach((p) => {
       if (p.npc) return;
@@ -645,10 +803,23 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private commitOutcome(o: ScenarioOutcome): void {
     const before = this.campaign;
     this.campaign = applyOutcome(before, o);
+    this.publishCampaign();
+    for (const line of consequenceLines(before, this.campaign).slice(0, 3)) this.broadcast("notice", { text: line });
+    // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
+    for (const line of this.followers.settle(o).slice(0, 4)) this.broadcast("notice", { text: line });
+    log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
+  }
+
+  private publishCampaign(): void {
     this.state.campaign = serializeCampaign(this.campaign);
     this.state.campaignRev = (this.state.campaignRev + 1) & 0xffff;
-    for (const line of consequenceLines(before, this.campaign).slice(0, 3)) this.broadcast("notice", { text: line });
-    log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
+  }
+
+  /** Takes pounds out of the purse (the manifest at sailing, a signing fee). Never below zero. */
+  private spend(n: number): void {
+    if (!(n > 0)) return;
+    this.campaign = { ...this.campaign, purse: Math.max(0, this.campaign.purse - Math.floor(n)) };
+    this.publishCampaign();
   }
 
   private scenarioHost(): ConstructorParameters<typeof Scenario>[0] {
@@ -657,15 +828,26 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       worldMs: () => performance.now() - this.bornAt,
       campaign: () => this.campaign,
       commit: (o) => this.commitOutcome(o),
-      spawnNpc: (spec) => this.spawnNpc(spec),
-      removeNpc: (key) => this.removeNpc(key),
-      stepNpc: (key, cmd) => this.stepNpc(key, cmd),
-      explode: (x, y, z, radius) => {
+      cast: this.cast,
+      mounts: this.mounts,
+      explode: (x, y, z, radius, owner) => {
         const b = WEAPONS[WEAPON.CANNON].ranged!.blast!;
-        this.combat.explode("", WEAPON.CANNON, { ...b, radius }, x, y, z, "");
+        this.combat.explode(owner, WEAPON.CANNON, { ...b, radius }, x, y, z, "");
       },
       consumeProp: (id) => this.consumeProp(id),
       propKind: (id) => this.state.props.get(id)?.kind,
+      propPos: (id) => {
+        const ps = this.state.props.get(id);
+        return ps ? { x: ps.x, y: ps.y, z: ps.z } : undefined;
+      },
+      propsNear: (x, z, r, kind) => {
+        const out: string[] = [];
+        this.state.props.forEach((ps, id) => {
+          if (ps.holder === "" && (kind === undefined || ps.kind === kind) && Math.hypot(ps.x - x, ps.z - z) <= r) out.push(id);
+        });
+        return out;
+      },
+      spawnProp: (kind, x, z) => this.spawnPropAt(kind, x, z),
       rebuildBridge: (b) => this.rebuildBridge(b),
       publish: (v: ScenarioView) => this.publishScenario(JSON.stringify(v)),
       send: (sid, type, msg) => this.clients.getById(sid)?.send(type, msg),
@@ -696,6 +878,90 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     metrics.physicsBodies--;
   }
 
+  /** A free prop of `kind` at (x, z), on the ground (scenario sites, the powder kegs of the manifest). */
+  private spawnPropAt(kind: number, x: number, z: number): string | undefined {
+    if (!(kind in PROP_DEFS)) return undefined;
+    const body = this.physics.spawnProp({ kind: kind as PropKindId, x, z, yaw: hash3(this.state.seed, Math.round(x * 4), Math.round(z * 4)) / 4294967296 * Math.PI * 2 }, this.world.terrainHeight(x, z));
+    if (!body) return undefined;
+    const ps = new PropState();
+    ps.kind = kind;
+    ps.holder = "";
+    this.state.props.set(body.id, ps);
+    this.writeProp(body.id, true);
+    metrics.physicsBodies++;
+    return body.id;
+  }
+
+  /** A barrel is a powder keg: a ranged round into one sets it off (the convoy's `burned` ending, a very bad idea at the landing). The site hears of it before it goes. */
+  private propShot(id: string, shooter: string): void {
+    const ps = this.state.props.get(id);
+    if (!ps || ps.kind !== PropKind.BARREL || ps.holder !== "") return;
+    const at = { x: ps.x, y: ps.y, z: ps.z };
+    this.scenario?.onProp("destroyed", id);
+    this.consumeProp(id);
+    const b = WEAPONS[WEAPON.CANNON].ranged!.blast!;
+    this.combat.explode(shooter, WEAPON.CANNON, { ...b, radius: 5, damage: Math.round(b.damage * 0.6) }, at.x, at.y, at.z, "");
+  }
+
+  /** A hired porter picks a prop up (the same hold a player uses, keyed by the row). */
+  private npcHold(key: string, id: string): boolean {
+    const p = this.state.players.get(key);
+    const ps = this.state.props.get(id);
+    if (!p || !p.npc || !ps || ps.holder !== "" || this.carrying.has(key) || (p.flags & FLAG.DOWNED) !== 0) return false;
+    if (!this.physics.props.has(id)) return false;
+    if (!this.physics.hold(id, key)) return false;
+    this.carrying.set(key, id);
+    p.flags |= FLAG.CARRYING;
+    ps.holder = key;
+    return true;
+  }
+
+  /** Props carried by hired hands ride in their arms (the player loop does the same for people). */
+  private carryNpcProps(): void {
+    if (this.carrying.size === 0) return;
+    for (const [key, id] of this.carrying) {
+      if (!isNpcKey(key)) continue;
+      const p = this.state.players.get(key);
+      if (!p) continue;
+      holdPosition(p, this.hold);
+      this.physics.moveHeld(id, this.hold.x, this.hold.y, this.hold.z, p.facing);
+    }
+  }
+
+  /** The ship leaves Hollowmere: the manifest is trimmed to the purse and the load, charged ONCE, and its effects wait for landfall. Sailing home carries no manifest. */
+  private onSail(): void {
+    this.pendingPrep = this.state.region === "hollowmere" ? this.followers.prepCommit() : undefined;
+  }
+
+  /**
+   * Everybody is ashore. Hollowmere: the stable (two horses and a wagon by the supply pyramid, always there). Anywhere else: what the manifest brought: rounds for every
+   * firearm, kegs at the landing, the horses and the wagon on the ring behind it, and the hired hands round the party.
+   */
+  private landfall(to: RegionId): void {
+    const spots = regionMountSpots(to);
+    if (to === "hollowmere") {
+      for (const h of spots.horses) this.mounts.spawnHorse(h, { coat: hash3(this.state.seed, Math.round(h.x), 0x4c01) });
+      this.mounts.spawnWagon(spots.wagon, { coat: hash3(this.state.seed, 7, 0x4c02), crates: 0, horse: false });
+      return;
+    }
+    const prep = this.pendingPrep;
+    this.pendingPrep = undefined;
+    if (!prep) return;
+    const fx = prep.effects;
+    const land = KESSAR_ANCHORS.landing;
+    this.followers.landfall(land);
+    this.state.players.forEach((p, sid) => {
+      if (!p.npc && fx.reserveMul > 1) this.combat.scaleReserve(sid, fx.reserveMul);
+    });
+    for (let i = 0; i < fx.kegs; i++) this.spawnPropAt(PropKind.BARREL, land.x - 3 + i * 1.2, land.z - 4);
+    let free = fx.horses;
+    if (fx.wagon) {
+      this.mounts.spawnWagon(spots.wagon, { coat: hash3(this.state.seed, 7, 0x4c02), crates: 0, horse: true });
+      free = Math.max(0, free - 1);
+    }
+    for (let i = 0; i < free && i < spots.horses.length; i++) this.mounts.spawnHorse(spots.horses[i]!, { coat: hash3(this.state.seed, i, 0x4c03) });
+  }
+
   private spawnNpc(spec: NpcSpec): boolean {
     const key = npcKey(spec.id);
     if (this.state.players.has(key)) return false;
@@ -713,7 +979,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     p.name = spec.name;
     p.slot = slot;
     p.connected = true;
-    p.look = encodeSpec(generateCharacter(spec.lookSeed));
+    p.look = this.npcLook(spec);
     p.title = "";
     p.health = CASUALTY.maxHealth;
     p.reviveProgress = 0;
@@ -726,13 +992,28 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.players.set(key, p);
     p.shots = 0;
     p.aim = 0;
+    p.cmd = NO_COMMAND;
+    p.morale = 0;
     this.combat.onJoin(key, p);
     return true;
+  }
+
+  /** The authored look of an NPC: a seeded character with the spec's patch laid over it (clamped, canonical). */
+  private npcLook(spec: NpcSpec): string {
+    const base = generateCharacter(spec.lookSeed);
+    if (!spec.look) return encodeSpec(base);
+    try {
+      return encodeSpec(specFromUntrusted(encodeSpec({ ...base, ...spec.look }), spec.lookSeed));
+    } catch {
+      return encodeSpec(base);
+    }
   }
 
   private removeNpc(key: string): void {
     const p = this.state.players.get(key);
     if (!p) return;
+    const held = this.carrying.get(key);
+    if (held) this.dropHeld(key, p);
     this.casualties.onLeave(key);
     this.combat.onLeave(key);
     this.physics.removePlayer(key);
@@ -749,6 +1030,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const prev = this.prevButtons.get(key) ?? 0;
     this.prevButtons.set(key, cmd.buttons);
     this.combat.onFrame(key, p, cmd, cmd.buttons & ~prev);
+    this.combat.topUp(key); // an NPC's powder does not run out mid-skirmish (the balance was tuned so)
     this.physics.syncPlayer(key, p.x, p.y, p.z, (p.flags & (FLAG.CROUCHING | FLAG.DOWNED)) !== 0);
   }
 
@@ -761,7 +1043,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (!any) return;
     const gone: string[] = [];
     this.state.players.forEach((p, id) => {
-      if (!p.npc) return;
+      if (!p.npc || NPC_SIDE[p.npc] === "party") return; // a downed hired hand lies where he fell until someone revives him
       if ((p.flags & FLAG.DOWNED) === 0) return;
       const at = this.npcDownedAt.get(id);
       if (at === undefined) this.npcDownedAt.set(id, this.simT);
@@ -808,7 +1090,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const p = this.state.players.get(sessionId);
     const wasDown = p !== undefined && (p.flags & FLAG.DOWNED) !== 0;
     this.casualties.damage(sessionId, amount, hit);
-    if (p && !wasDown) this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, (p.flags & FLAG.DOWNED) !== 0);
+    if (p && !wasDown) {
+      const down = (p.flags & FLAG.DOWNED) !== 0;
+      this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
+      if (down) this.mounts.onDown(sessionId); // he slides from the saddle
+      else this.mounts.onHurt(sessionId, amount, hit); // a hard enough blow unseats him
+    }
   }
 
   /** QA-only commands (see docs/NETWORKING.md). Registered only when config.debugCommands is true. */

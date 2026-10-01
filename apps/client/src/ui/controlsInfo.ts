@@ -20,6 +20,7 @@ export const PAD_LAYOUT: readonly { glyph: string; what: string }[] = [
   { glyph: "RT", what: "Fire" },
   { glyph: "L3", what: "Sprint (press the left stick)" },
   { glyph: "R3", what: "Switch first / third person" },
+  { glyph: "D-pad down", what: "Hold: command the hands (right stick picks, release sends)" },
   { glyph: "Start", what: "Pause" },
 ];
 
@@ -37,6 +38,7 @@ export function keyboardRows(): ControlRow[] {
     { keys: b("crouch"), what: "Crouch" },
     { keys: b("interact"), what: "Use, pick up, revive" },
     { keys: b("grab"), what: "Grab or drag a comrade" },
+    { keys: b("command"), what: "Hold: command the hired hands (mouse picks, release sends)" },
     { keys: b("throw"), what: "Throw what you carry" },
     { keys: ["Left mouse"], what: "Fire" },
     { keys: ["Right mouse"], what: "Aim" },

@@ -61,6 +61,12 @@ export const FLAG = {
   AIMING: 1024,
   /** Server-set: this player is working a field cannon (loading, aiming); like REVIVING they hold their ground and lean into the work. */
   OPERATING: 2048,
+  /** Server-set (like CARRYING, predicted): the body is on a horse, so the movement step hands over to `stepMounted` (mount.ts). */
+  MOUNTED: 4096,
+  /** Server-set: a wagon is hitched behind the horse (slower, wider turns). */
+  HITCHED: 8192,
+  /** Derived by the mounted step: the horse is at a gallop, so remote clients pose it that way. */
+  GALLOPING: 16384,
 } as const;
 
 /** Bit flags packed into MoveInput.buttons (uint16). */

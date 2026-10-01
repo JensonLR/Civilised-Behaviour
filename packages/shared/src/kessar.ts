@@ -1,5 +1,5 @@
 import { CollisionWorld, type Obstacle } from "./collision.ts";
-import { KESSAR_ANCHORS as A, type BridgeState } from "./campaignTypes.ts";
+import { KESSAR_ANCHORS as A, KESSAR_SITES as SITES, type BridgeState } from "./campaignTypes.ts";
 import { segmentDistance } from "./landscape.ts";
 import { lerp, smoothstep } from "./math.ts";
 import { PropKind, type PropSpawn } from "./props.ts";
@@ -182,6 +182,14 @@ export const KESSAR_SIGNS = [
   "THE GATE OPENS WHEN THE LAMPS AGREE",
 ] as const;
 
+export interface KessarSites {
+  camp: { wagon: { x: number; z: number; yaw: number }; tents: { x: number; z: number; yaw: number }[]; fire: { x: number; z: number }; posts: { x: number; z: number }[]; flag: { x: number; z: number } };
+  /** The Dry Cut: where the convoy's wagon is wrecked if it burns, and the Syndicate's keg lies. */
+  cut: { x: number; z: number; yaw: number; keg: { x: number; z: number } };
+  /** Marker Stone No. 4 stands IN the ford, a flag on each bank. */
+  ford: { marker: { x: number; z: number }; flags: { x: number; z: number; yaw: number; kind: "ward" | "syndicate" }[] };
+}
+
 export interface KessarPlan {
   fort: {
     x: number;
@@ -204,6 +212,8 @@ export interface KessarPlan {
   boat: { x: number; z: number; yaw: number };
   camp: { tents: { x: number; z: number; yaw: number }[]; wagon: { x: number; z: number; yaw: number }; flag: { x: number; z: number }; crates: { x: number; z: number; yaw: number; half: number; height: number }[] };
   cart: { x: number; z: number; yaw: number };
+  /** The three newer sites (D-034): the deserters' camp at Hangman's Orchard, the Dry Cut, and Marker Stone No. 4 in the ford. Additive; nothing above moved. */
+  sites: KessarSites;
   banners: KessarBanner[];
   signs: KessarSign[];
   palms: { x: number; z: number; s: number; yaw: number }[];
@@ -318,6 +328,21 @@ export function kessarPlan(): KessarPlan {
       ],
     },
     cart: { x: 14, z: 44, yaw: 0.35 },
+    sites: {
+      camp: {
+        // the cage wagon stands behind the cage point (KESSAR_SITES.hostage.cage is its door); three tents round a fire; posts are where the deserters carouse
+        wagon: { x: SITES.hostage.cage.x, z: SITES.hostage.cage.z - 2.4, yaw: 0 },
+        tents: [{ x: 62.5, z: -20.5, yaw: 0.35 }, { x: 81, z: -22.5, yaw: -0.3 }, { x: 72, z: -31.5, yaw: 0.1 }],
+        fire: { x: 71.5, z: -25.5 },
+        posts: SITES.hostage.posts.map((p) => ({ x: p.x, z: p.z })),
+        flag: { x: 69, z: -12 },
+      },
+      cut: { x: SITES.convoy.cut.x, z: SITES.convoy.cut.z, yaw: Math.atan2(32 - 37, 46 - 24), keg: { x: SITES.convoy.cut.x + 2.4, z: SITES.convoy.cut.z - 2.6 } },
+      ford: {
+        marker: { x: SITES.border.marker.x, z: SITES.border.marker.z },
+        flags: [{ x: 52, z: 10, yaw: Math.PI / 2, kind: "ward" }, { x: 39, z: 32, yaw: -Math.PI / 2, kind: "syndicate" }],
+      },
+    },
     banners,
     signs,
     palms,
@@ -402,10 +427,21 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
   // palms
   for (const p of plan.palms) circle("pole", p.x, p.z, 0.3, 7.5 * p.s);
 
+  // the three newer sites (D-034): a cage wagon, three tents and a fire at Hangman's Orchard; Marker Stone No. 4 and a flag each side of the ford.
+  // Appended with no random draws at all, so the seeded dressing below differs only where it must keep clear of them.
+  const sc = plan.sites.camp;
+  box("cart", sc.wagon.x, sc.wagon.z, 1.45, 0.95, sc.wagon.yaw, 2.2);
+  for (const t of sc.tents) box("tent", t.x, t.z, 2, 1.6, t.yaw, 2.4);
+  circle("flag", sc.flag.x, sc.flag.z, 0.16, 5);
+  circle("fire", sc.fire.x, sc.fire.z, 0.55, 0.5);
+  circle("ruin", plan.sites.ford.marker.x, plan.sites.ford.marker.z, 0.45, 1.5);
+  for (const f of plan.sites.ford.flags) circle("flag", f.x, f.z, 0.16, 5);
+
   // seeded dressing: scrub trees, boulders and outcrops, kept off the roads, the river, the hill, the shore and every story anchor
   const anchors: [number, number][] = [
     [A.landing.x, A.landing.z], [A.tollBar.x, A.tollBar.z], [A.wardenPost.x, A.wardenPost.z], [A.pier.x, A.pier.z], ...A.sentries.map((s): [number, number] => [s.x, s.z]),
     [A.ford.x, A.ford.z], [A.fort.gate.x, A.fort.gate.z], [A.rivalCamp.x, A.rivalCamp.z], [A.rivalParley.x, A.rivalParley.z], [A.powder.x, A.powder.z],
+    ...kessarSitePoints().map((p): [number, number] => [p.x, p.z]),
   ];
   const rng = new Rng(seed ^ 0x6b355a7);
   const free = (x: number, z: number, gap: number): boolean => {
@@ -451,6 +487,16 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
     k++;
   }
   return out;
+}
+
+/** Every story point of the newer sites, named (the dressing keeps clear of them and the tests prove each is open and reachable). */
+export function kessarSitePoints(): { id: string; x: number; z: number }[] {
+  const H = SITES.hostage, C = SITES.convoy, B = SITES.border;
+  return [
+    { id: "hostage.cage", ...H.cage }, ...H.posts.map((p, i) => ({ id: `hostage.post${i}`, ...p })), { id: "hostage.lookout", ...H.lookout },
+    ...C.route.map((p, i) => ({ id: `convoy.route${i}`, ...p })), { id: "convoy.cut", ...C.cut },
+    { id: "border.marker", ...B.marker }, ...B.ward.map((p, i) => ({ id: `border.ward${i}`, ...p })), ...B.rival.map((p, i) => ({ id: `border.rival${i}`, ...p })),
+  ];
 }
 
 /** Kessar's collision world. `bridge: "collapsed"` rebuilds it without the deck (the integrator swaps worlds after the charge goes off). */

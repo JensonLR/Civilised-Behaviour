@@ -49,6 +49,14 @@ export class Controls {
   /** Switch between first and third person. V is taken (melee), so the keyboard key is VIEW_KEY; on a pad it is a click of the right stick. */
   onToggleView: (() => void) | undefined;
   private viewPadWas = false;
+  /** HOLD the Command action (T, or the d-pad's down) to open the wheel for the hired hands: `down` on press, `up` on release. The game owns what opens. */
+  onCommand: ((phase: "down" | "up") => void) | undefined;
+  /** While the wheel is open the number keys belong to it (not the weapon slots) and the pad's right stick is its pointer, not the camera. */
+  wheelOpen = false;
+  /** The right stick as last read (x right, y DOWN), for the wheel; zero when idle. */
+  padStick: { x: number; y: number } = { x: 0, y: 0 };
+  private commandPadWas = false;
+  private commandKeyDown = false;
   private isBlocked = false;
   /** The weapon the player wants in hand: a `WEAPON` id, or -1 for empty hands. Keys 1-5, the wheel and the d-pad change it; the game sends it with every input frame and the server has the final say. */
   weaponWish: WeaponId | -1 = -1;
@@ -87,13 +95,27 @@ export class Controls {
       }
       const action = actionForCode(e.code);
       if (action === "view" && !isTextEntry(e.target)) this.onToggleView?.();
-      if (!this.isBlocked && !isTextEntry(e.target)) this.weaponKey(e.code);
+      if (action === "command" && !this.isBlocked && !isTextEntry(e.target) && !this.commandKeyDown) {
+        this.commandKeyDown = true;
+        this.onCommand?.("down");
+      }
+      if (!this.isBlocked && !this.wheelOpen && !isTextEntry(e.target)) this.weaponKey(e.code);
       if (action === "sprint" && !this.settings.holdToSprint) this.sprintToggled = !this.sprintToggled;
     });
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keyup", (e) => {
+      this.keys.delete(e.code);
+      if (this.commandKeyDown && actionForCode(e.code) === "command") {
+        this.commandKeyDown = false;
+        this.onCommand?.("up");
+      }
+    });
     window.addEventListener("blur", () => {
       this.keys.clear();
       this.mouseButtons = 0;
+      if (this.commandKeyDown) {
+        this.commandKeyDown = false;
+        this.onCommand?.("up");
+      }
     });
     canvas.addEventListener("mousedown", (e) => {
       if (document.pointerLockElement !== canvas) void canvas.requestPointerLock?.();
@@ -140,6 +162,13 @@ export class Controls {
       this.onToggleView?.();
     }
     this.viewPadWas = viewNow;
+    // d-pad down is the Command action on a pad (the bumpers are all bound): hold to open the wheel, release to send
+    const cmdNow = !this.isBlocked && (p?.buttons[13]?.pressed ?? false);
+    if (cmdNow !== this.commandPadWas) {
+      this.commandPadWas = cmdNow;
+      if (p) this.usingGamepad = true;
+      this.onCommand?.(cmdNow ? "down" : "up");
+    }
     if (p && !this.isBlocked) {
       // d-pad: left / right cycle the weapons, up holsters (edge-triggered)
       const bits = (p.buttons[14]?.pressed ? 1 : 0) | (p.buttons[15]?.pressed ? 2 : 0) | (p.buttons[12]?.pressed ? 4 : 0);
@@ -152,11 +181,17 @@ export class Controls {
     }
     if (p) {
       const [rx, ry] = stick(p.axes[2] ?? 0, p.axes[3] ?? 0);
+      this.padStick.x = rx;
+      this.padStick.y = ry;
       if (rx || ry) this.usingGamepad = true;
+      if (this.wheelOpen) return [dx, dy]; // the wheel's pointer, not the camera
       // Pad look is in "pixel-equivalents per second" so one sensitivity scale serves both devices.
       const k = 900 * this.settings.padSensitivity * dt;
       dx += rx * k;
       dy += ry * k;
+    } else {
+      this.padStick.x = 0;
+      this.padStick.y = 0;
     }
     return [dx, dy];
   }

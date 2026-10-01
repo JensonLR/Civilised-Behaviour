@@ -50,6 +50,11 @@ export interface CasualtyHost {
   dismemberment(): boolean;
   /** The lost-limb mask of a player changed: refresh anything derived from it (the peg-leg flag). */
   limbsChanged(sessionId: string): void;
+  /**
+   * Who can be helped: the party AND its hired hands (a human may revive, dress and drag a fallen hand). Absent: `players`. The rout still counts `players` only,
+   * so a party of one downed human with a standing hand is still routed.
+   */
+  scan?: { forEach(cb: (p: PlayerStateType, id: string) => void): void };
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -73,6 +78,8 @@ interface Revive {
   target: string;
   /** 0..1 */
   progress: number;
+  /** A hired surgeon's work: it needs no held button (nobody is pressing one), everything else is checked as for a human. */
+  auto?: boolean;
 }
 
 /** A held button counts only while frames keep arriving (a stalled client cannot hold forever), but must tolerate real hitches. */
@@ -204,7 +211,7 @@ export class Casualties {
 
   private startRevive(reviverId: string, reviver: PlayerStateType): boolean {
     const targetId = findDownedTarget<string>(reviver, CASUALTY.reviveRange, (cb) =>
-      this.host.players.forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+      this.scan().forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
     );
     if (targetId === undefined) return false;
     this.revives.set(reviverId, { kind: "revive", target: targetId, progress: 0 });
@@ -222,13 +229,40 @@ export class Casualties {
   tryDress(reviverId: string, reviver: PlayerStateType): boolean {
     if ((reviver.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED)) !== 0 || this.revives.has(reviverId)) return false;
     const targetId = findWoundedTarget<string>(reviver, CASUALTY.reviveRange, (cb) =>
-      this.host.players.forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+      this.scan().forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
     );
     if (targetId === undefined) return false;
     this.revives.set(reviverId, { kind: "dress", target: targetId, progress: 0 });
     reviver.flags |= FLAG.REVIVING;
     const target = this.host.players.get(targetId)!;
     target.reviver = reviverId;
+    target.reviveProgress = 0;
+    return true;
+  }
+
+  private scan(): { forEach(cb: (p: PlayerStateType, id: string) => void): void } {
+    return this.host.scan ?? this.host.players;
+  }
+
+  /**
+   * A hired surgeon works on `targetId` (called every tick while he is in reach; no button is held). Returns true while the work is under way, or has just
+   * been started. Every rule of a human's revive/dress applies: standing medic, right patient, in reach, nobody else already on it.
+   */
+  assist(medicId: string, targetId: string, kind: "revive" | "dress"): boolean {
+    const medic = this.host.players.get(medicId);
+    const target = this.host.players.get(targetId);
+    if (!medic || !target || medicId === targetId) return false;
+    const cur = this.revives.get(medicId);
+    if (cur) return cur.target === targetId && cur.kind === kind;
+    if ((medic.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED)) !== 0 || this.isBeingRevived(targetId)) return false;
+    if (horizontal(medic, target) > CASUALTY.reviveRange || Math.abs(medic.y - target.y) > 1.6) return false;
+    const ok = kind === "revive"
+      ? (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED
+      : (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === 0 && dressableZone(target.wounds, target.missing) >= 0;
+    if (!ok) return false;
+    this.revives.set(medicId, { kind, target: targetId, progress: 0, auto: true });
+    medic.flags |= FLAG.REVIVING;
+    target.reviver = medicId;
     target.reviveProgress = 0;
     return true;
   }
@@ -256,7 +290,7 @@ export class Casualties {
   private startDrag(draggerId: string, dragger: PlayerStateType): void {
     if ((dragger.flags & (FLAG.CARRYING | FLAG.REVIVING)) !== 0) return;
     const targetId = findDownedTarget<string>(dragger, CASUALTY.dragRange, (cb) =>
-      this.host.players.forEach((o, id) => id !== draggerId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+      this.scan().forEach((o, id) => id !== draggerId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
     );
     if (targetId === undefined) return;
     const target = this.host.players.get(targetId)!;
@@ -266,7 +300,8 @@ export class Casualties {
     target.dragger = draggerId;
   }
 
-  private releaseDrag(draggerId: string): void {
+  /** Public so the mount system can free a body before loading it onto a wagon. */
+  releaseDrag(draggerId: string): void {
     const targetId = this.drags.get(draggerId);
     if (targetId === undefined) return;
     this.drags.delete(draggerId);
@@ -294,7 +329,7 @@ export class Casualties {
       const reviver = this.host.players.get(reviverId);
       const target = this.host.players.get(r.target);
       const held = this.buttons.get(reviverId);
-      const holding = held !== undefined && (held.bits & BUTTON.INTERACT) !== 0 && Date.now() - held.at < HOLD_STALE_MS;
+      const holding = r.auto === true || held !== undefined && (held.bits & BUTTON.INTERACT) !== 0 && Date.now() - held.at < HOLD_STALE_MS;
       // A revive needs a downed (not dragged) patient; a dressing needs a standing one who still has a wound worth dressing.
       const patientOk =
         target !== undefined &&

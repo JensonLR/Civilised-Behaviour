@@ -2,6 +2,7 @@ import { BUTTON, CHARACTER, FLAG, MOVEMENT } from "./constants.ts";
 import type { CollisionWorld, Vec2 } from "./collision.ts";
 import { TAU, approach, approachAngle, clamp } from "./math.ts";
 import { createInjuryMods, injuryMods } from "./injury.ts";
+import { stepMounted } from "./mount.ts";
 
 /**
  * The authoritative-and-predicted character state. Every field is a scalar so it maps 1:1 to
@@ -64,6 +65,11 @@ const mods = createInjuryMods();
  */
 export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world: CollisionWorld): void {
   const downed = (s.flags & FLAG.DOWNED) !== 0;
+  // A ridden horse is a second pure step with the same shape (mount.ts); the server flips MOUNTED like it flips CARRYING.
+  if ((s.flags & FLAG.MOUNTED) !== 0 && !downed && (s.flags & FLAG.DRAGGED) === 0) {
+    stepMounted(s, cmd, dt, world);
+    return;
+  }
   const wasGrounded = (s.flags & FLAG.GROUNDED) !== 0;
   const buttons = cmd.buttons;
   const camYaw = yawFromWire(cmd.yaw);

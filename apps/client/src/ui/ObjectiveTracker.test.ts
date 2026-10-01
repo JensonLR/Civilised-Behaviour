@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ScenarioView } from "@cb/shared";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ObjectiveTracker, URGENT_SECONDS, formatTimer } from "./ObjectiveTracker.ts";
+import { ObjectiveTracker, URGENT_SECONDS, formatTimer, DEFAULT_TITLE } from "./ObjectiveTracker.ts";
+import { newCampaign } from "@cb/shared";
+import { TEMPLATES, TEMPLATE_IDS } from "@cb/shared";
 
 const view = (o: Partial<ScenarioView> = {}): ScenarioView => ({
-  phase: "standoff", hint: "Talk to the Warden.", timerLabel: "Syndicate arrives", endsAtWorldMs: 100_000,
+  phase: "standoff", hint: "Talk to the Warden.", timerLabel: "Syndicate arrives", endsAtWorldMs: 100_000, template: "secure_crossing", title: "Secure the River Crossing",
   objectives: [
     { id: "reach", text: "Reach the Ward's toll bar", done: true },
     { id: "secure", text: "Secure the river crossing, by whatever means", done: false },
@@ -125,5 +127,47 @@ describe("stylesheet", () => {
     expect(css).toMatch(/data-motion="reduced"/);
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).not.toMatch(/\brgba?\(/);
+  });
+
+  it("the heading is the contract's own title (and the default for a server that sends none); the template and complication are data attributes", () => {
+    const t = new ObjectiveTracker(host);
+    t.update(view());
+    expect(host.querySelector("h2")!.textContent).toBe("Secure the River Crossing");
+    expect(host.querySelector("section")!.dataset.template).toBe("secure_crossing");
+    expect(host.querySelector("section")!.dataset.complication).toBeUndefined();
+    t.update(view({ template: "hostage_rescue", title: "The Cartwright's Cage", complication: "rain" }));
+    expect(host.querySelector("h2")!.textContent).toBe("The Cartwright's Cage");
+    expect(host.querySelector("section")!.dataset.complication).toBe("rain");
+    t.update(view({ title: "", complication: "none" }));
+    expect(host.querySelector("h2")!.textContent).toBe(DEFAULT_TITLE);
+    expect(host.querySelector("section")!.dataset.complication).toBeUndefined();
+    t.update({ ...view(), title: undefined as never, template: undefined as never });
+    expect(host.querySelector("h2")!.textContent).toBe(DEFAULT_TITLE);
+    t.update(view({ title: "<img src=x onerror=alert(1)>" }));
+    expect(host.querySelector("h2 img")).toBeNull();   // text, never markup
+  });
+
+  it("renders every template's real views (fresh, mid-run and resolved) with unique rows, a hint and its title", () => {
+    const c = newCampaign(4);
+    for (const id of TEMPLATE_IDS) {
+      const def = TEMPLATES[id];
+      const t = new ObjectiveTracker(host);
+      const s0 = def.init(c, 40, 4);
+      const mid = def.reduce(def.reduce(s0, { t: "tick", dt: 30 }).s, { t: "near", at: id === "hostage_rescue" ? "camp" : id === "convoy_ambush" ? "cut" : id === "border_incident" ? "marker" : "bar", party: 2 }).s;
+      const end = def.reduce(mid, { t: "party_down" }).s;
+      for (const s of [s0, mid, end]) {
+        const v = def.view(s, 5_000);
+        t.update(v);
+        expect(host.querySelector("h2")!.textContent, id).toBe(def.title);
+        const rows = [...host.querySelectorAll("li")];
+        expect(rows.length, id).toBe(v.objectives.length);
+        expect(rows.map((r) => r.querySelector(".text")!.textContent)).toEqual(v.objectives.map((o) => o.text));
+        expect(host.querySelector(".hint")!.textContent, id).toBe(v.hint);
+        expect(t.visibleOrders).toBe(v.phase);
+        t.tick(6_000);
+      }
+      expect(host.querySelector("section")!.dataset.template).toBe(id);
+      t.dispose();
+    }
   });
 });

@@ -68,6 +68,11 @@ export const PlayerState = schema({
   // --- campaign cast (append-only) ---
   /** 0 = a real player; else NPC.* (a garrison/rival row keyed `npc:<id>`, slot 16+, driven by the server through the same step). */
   npc: t.uint8(),
+  // --- expedition (append-only, D-034) ---
+  /** A hired hand's current order (CommandId index, 255 = none). Plates only. */
+  cmd: t.uint8(),
+  /** A hired hand's morale 0..100 (plates only). */
+  morale: t.uint8(),
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 
@@ -112,6 +117,27 @@ export const CannonState = schema({
 });
 export type CannonStateType = SchemaType<typeof CannonState>;
 
+/** A horse or a wagon (written by the server's Mounts system; a ridden horse is drawn from its rider's predicted state). `kind`/`phase`: see mount.ts MOUNT_KIND / MOUNT_PHASE. */
+export const MountState = schema({
+  kind: t.uint8(),
+  x: t.float32(),
+  y: t.float32(),
+  z: t.float32(),
+  facing: t.float32(),
+  speed: t.float32(),
+  /** Session id (or `npc:` key) of the rider, "" when nobody rides. */
+  rider: t.string(),
+  /** Wagon: id of the horse hitched to it; horse: id of the wagon behind it. */
+  hitch: t.string(),
+  /** Horse coat seed (decodeHorse / horseFromSeed). */
+  coat: t.uint32(),
+  phase: t.uint8(),
+  hp: t.uint8(),
+  /** Wagon: crates loaded (low nibble) and bodies loaded (high nibble). */
+  cargo: t.uint8(),
+});
+export type MountStateType = SchemaType<typeof MountState>;
+
 export const WorldState = schema({
   code: t.string(),
   seed: t.uint32(),
@@ -146,5 +172,10 @@ export const WorldState = schema({
   /** ScenarioView JSON ("" outside a scenario) and its revision. */
   scenario: t.string(),
   scenarioRev: t.uint16(),
+  // --- the expedition (append-only, D-034) ---
+  mounts: t.map(MountState),
+  /** PartyState JSON (loadout manifest + hired roster, < 2 KB; parseParty) and its revision. */
+  party: t.string(),
+  partyRev: t.uint16(),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

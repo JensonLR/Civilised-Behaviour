@@ -6,6 +6,8 @@ export function formatTimer(ms: number): string {
   const s = Number.isFinite(ms) && ms > 0 ? Math.ceil(ms / 1000) : 0;
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
+/** The card's heading before a contract names itself (and for an old server that sends no title). */
+export const DEFAULT_TITLE = "Orders of the Day";
 /** Under this many seconds the timer turns urgent (colour and weight, not just motion). */
 export const URGENT_SECONDS = 15;
 
@@ -16,6 +18,7 @@ export const URGENT_SECONDS = 15;
  */
 export class ObjectiveTracker {
   private readonly root: HTMLElement;
+  private readonly heading: HTMLElement;
   private readonly list: HTMLUListElement;
   private readonly hint: HTMLElement;
   private readonly timer: HTMLElement;
@@ -31,7 +34,8 @@ export class ObjectiveTracker {
     this.root.setAttribute("aria-label", "Expedition orders");
     this.root.hidden = true;
     const h = document.createElement("h2");
-    h.textContent = "Orders of the Day";
+    h.textContent = DEFAULT_TITLE;
+    this.heading = h;
     this.list = document.createElement("ul");
     this.hint = document.createElement("p");
     this.hint.className = "hint";
@@ -57,6 +61,12 @@ export class ObjectiveTracker {
     }
     this.root.hidden = false;
     this.root.dataset.phase = String(view.phase);
+    // the contract names itself ("The Cartwright's Cage", "Marker Stone No. 4"); data attributes let the stylesheet and the tests tell them apart
+    const title = typeof view.title === "string" && view.title.trim() !== "" ? view.title.slice(0, 60) : DEFAULT_TITLE;
+    if (this.heading.textContent !== title) this.heading.textContent = title;
+    this.root.dataset.template = typeof view.template === "string" ? view.template : "";
+    if (typeof view.complication === "string" && view.complication !== "none") this.root.dataset.complication = view.complication;
+    else delete this.root.dataset.complication;
     const keep = new Set<string>();
     let prev: HTMLLIElement | undefined;
     for (const o of view.objectives) {

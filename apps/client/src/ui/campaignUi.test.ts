@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { generatePaper, newCampaign, type ParleyView } from "@cb/shared";
+import { generatePaper, newCampaign, pickTemplate, templateNote, type ParleyView } from "@cb/shared";
 import { Parley } from "./Parley.ts";
 import { NewspaperView } from "./Newspaper.ts";
 import { mapRoomView, regionNote } from "../game/campaignView.ts";
@@ -116,8 +116,21 @@ describe("what the map room is told", () => {
     expect(v.you).toBe(0);
     expect(regionNote("kessar", newCampaign(1))).toMatch(/Not yet visited/);
     const c = newCampaign(1);
-    c.history.push({ seq: 1, region: "kessar", resolution: "paid", day: 1 });
+    c.history.push({ seq: 1, region: "kessar", resolution: "paid", day: 1, template: "secure_crossing" });
     c.crossing.toll = 55;
     expect(regionNote("kessar", c)).toContain("£55");
+  });
+
+  it("the map note names the contract the ledger offers next (the same pure rule the server runs at landfall), and nothing without a seed", () => {
+    const fresh = newCampaign(1);
+    expect(regionNote("kessar", fresh, 1)).toContain("On offer: Secure the River Crossing."); // the first visit is always the crossing
+    expect(regionNote("kessar", fresh)).not.toContain("On offer");
+    const c = newCampaign(7);
+    c.history.push({ seq: 1, region: "kessar", resolution: "forced", day: 1, template: "secure_crossing" });
+    c.day = 2;
+    const offer = pickTemplate(c, "kessar", 7)!;
+    expect(offer).not.toBe("secure_crossing"); // a bridge that was forced is on the books: another contract is offered
+    expect(regionNote("kessar", c, 7)).toContain(templateNote(offer).title);
+    expect(regionNote("hollowmere", c, 7)).not.toContain("On offer");
   });
 });

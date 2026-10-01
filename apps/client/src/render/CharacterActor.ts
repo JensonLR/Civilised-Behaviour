@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, SphereGeometry, type Group, type Scene, type Vector3 } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
-import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel } from "@cb/procedural/three";
+import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel, type RideInput } from "@cb/procedural/three";
 import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
@@ -55,6 +55,8 @@ export interface ActorPose {
   missing?: number;
   /** What is in the hands (replicated combat state). Absent = empty hands. */
   combat?: ActorCombat;
+  /** Sitting a horse (`MountView.rideInput`): the animator blends the riding pose over its own. Absent = on foot. */
+  ride?: RideInput;
 }
 
 /** The replicated combat state of one figure, as the actor needs it. */
@@ -301,7 +303,7 @@ export class CharacterActor {
       crew: (pose.flags & FLAG.OPERATING) !== 0 ? Math.max(c?.crew ?? 0, 1) : 0,
       fp: this.fpBlend,
     });
-    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi });
+    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride });
     this.weapons.apply(this.anim.hold);
     // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).
     const h = this.anim.hold;

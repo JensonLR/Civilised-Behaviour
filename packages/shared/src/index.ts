@@ -36,3 +36,17 @@ export * from "./regions.ts";
 export * from "./travel.ts";
 export * from "./scenario.ts";
 export * from "./garrison.ts";
+// ---- D-034 expedition slice ----
+export * from "./expeditionTypes.ts";
+export * from "./morale.ts";
+export * from "./nav.ts";
+export * from "./npcBrain.ts";
+export * from "./nameTag.ts";
+export * from "./mount.ts";
+export * from "./loadout.ts";
+export * from "./followers.ts";
+export * from "./command.ts";
+export * from "./partyState.ts";
+export * from "./chaos.ts";
+export * from "./scenarios/registry.ts";
+export * from "./scenarios/parleys.ts";

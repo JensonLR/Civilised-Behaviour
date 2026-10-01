@@ -8,6 +8,8 @@ Every external asset must be listed: filename, creator/source, licence, URL/sour
 
 Slice 1 (2026-09-30): no new files or fonts. Kessar Reach (terrain, fort, bridge, toll station, camps, palms, banner cloth, river and sea) is built from primitives at runtime in `apps/client/src/render/world/kessar/`; its signs are drawn on a `<canvas>` in the bundled IM Fell faces; its colours are the `kessar` group in `packages/shared/src/palette.ts`. The map room chart, Sailing card, parley sheet, broadsheet and objective card are CSS and inline SVG. Invented heraldry only (nine lamps, chevrons); no real flags or scripts.
 
+Expedition slice (D-034, 2026-10-01): no new files, fonts, audio or images. Horses (twelve coats, mane and tail styles, tack) and the wagon are built from primitives at runtime in `packages/procedural` (`horse.ts`, `three/horse.ts`, `three/wagon.ts`), the rider's seated pose is code (`three/ridePose.ts`), the three Kessar contract sites (the deserters' camp with its cage wagon, the Dry Cut keg, Marker Stone No. 4 and its flags) are merged geometry in `apps/client/src/render/world/kessar/sites.ts`, the manifest sheet and the command wheel are CSS (`loadout.css`, `commandWheel.css`). All colours come from `packages/shared/src/palette.ts`. Invented heraldry only. Still no audio for any of it.
+
 Fonts: system serif stack only so far (Georgia / Iowan Old Style / Palatino). No web fonts are loaded.
 
 ## Software dependencies

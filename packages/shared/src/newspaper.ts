@@ -3,7 +3,7 @@ import { POWERS, WARD, askingToll, stanceOf, wardMemory } from "./factions.ts";
 import { fillTemplate } from "./negotiationText.ts";
 import {
   BRIDGE_CASUAL, DATELINE_TAIL, FILLER, HEADLINES, LEDGER_TAIL, MASTHEADS, NOTICES, NOTICE_COND, PROMISES, RIVAL_TIERS, SCANDAL, SPIN_CIVIL, SPIN_DEAD,
-  SPIN_LIMBS, SPIN_ROUTED, SPIN_WOUNDED, STANDFIRSTS, STORY_HEADS, WARD_SAYS,
+  SITE_LINES, SPIN_LIMBS, SPIN_ROUTED, SPIN_WOUNDED, STANDFIRSTS, STORY_HEADS, WARD_SAYS,
   type HeadKey,
 } from "./newspaperText.ts";
 import { hash3 } from "./rng.ts";
@@ -49,7 +49,13 @@ export function generatePaper(c: CampaignState, worldSeed: number): Paper {
     cands.push({ slug, head: cap(pick(heads, tag), PAPER_LIMITS.head), body: cap(f(body), PAPER_LIMITS.body) });
   };
 
-  if (last) {
+  const lastTemplate = c.history.length ? c.history[c.history.length - 1]!.template : "secure_crossing";
+  if (last && lastTemplate !== "secure_crossing") {
+    // the other contracts: a ledger story named for the place ("The Cartwright's Cage", "Marker Stone No. 4") and the Society's own euphemism for what was done
+    const heads = lastTemplate === "hostage_rescue" ? STORY_HEADS.cage : lastTemplate === "convoy_ambush" ? STORY_HEADS.convoy : STORY_HEADS.marker;
+    const site = SITE_LINES[last];
+    story("ledger", heads, `${site ? pick(site, 20) : ""} Fallen: ${dead}. Wounded: ${t.wounded}. Limbs: ${t.limbsLost}. Purse: £${c.purse}. ${pick(LEDGER_TAIL, 21)}`, 22);
+  } else if (last) {
     story("ledger", STORY_HEADS.ledger,
       `Toll: £${toll}${toll === 0 ? " (waived)" : ""}. Bridge: ${c.crossing.bridge}. Fallen: ${dead}. Routed: ${t.garrisonRouted}. Purse: £${c.purse}. ${pick(BRIDGE_CASUAL[c.crossing.bridge], 20)} ${pick(LEDGER_TAIL, 21)}`, 22);
   } else {

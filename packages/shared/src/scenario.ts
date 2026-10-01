@@ -30,6 +30,9 @@ export const SCENARIO = {
 } as const;
 
 export type Complication = "none" | "rival_scouts";
+/** The crossing's own seven endings and five phases (the other templates have theirs: scenarios/*). */
+export type CrossingResolution = "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned";
+export type CrossingPhase = "approach" | "standoff" | "parley" | "fighting" | "rigging";
 /** The reducer accepts the frozen ScenarioEvent plus the host's weather reading. */
 export type ScenarioInput = ScenarioEvent | { t: "weather"; rain: number };
 
@@ -65,7 +68,7 @@ export function newScenario(c: CampaignState, asking = 0): ScenarioState {
   };
 }
 
-const RESOLVE_FX: Record<ResolutionId, readonly ScenarioEffect[]> = {
+const RESOLVE_FX: Record<CrossingResolution, readonly ScenarioEffect[]> = {
   paid: ["garrison_stand_down", "gate_open", "commit"],
   bargained: ["garrison_stand_down", "gate_open", "commit"],
   bribed: ["garrison_stand_down", "gate_open", "commit"],
@@ -78,7 +81,7 @@ const RESOLVE_FX: Record<ResolutionId, readonly ScenarioEffect[]> = {
 const NOFX: ScenarioEffect[] = [];
 const stay = (s: ScenarioState): { s: ScenarioState; fx: ScenarioEffect[] } => ({ s, fx: NOFX });
 
-function resolve(s: ScenarioState, r: ResolutionId, patch: Partial<ScenarioState> = {}): { s: ScenarioState; fx: ScenarioEffect[] } {
+function resolve(s: ScenarioState, r: CrossingResolution, patch: Partial<ScenarioState> = {}): { s: ScenarioState; fx: ScenarioEffect[] } {
   return {
     s: { ...s, ...patch, phase: "resolved", resolution: r, resolvedAt: s.t, parley: false, chargeArmed: false, fuse: 0 },
     fx: RESOLVE_FX[r].slice(),
@@ -172,14 +175,14 @@ export function scenarioOutcome(s: ScenarioState): ScenarioOutcome | undefined {
 
 // ---- what the HUD shows (authored) -------------------------------------------------------------------------------------------------------------
 
-const HINT: Record<Exclude<ScenarioPhase, "resolved">, string> = {
+const HINT: Record<CrossingPhase, string> = {
   approach: "Follow the road north to the toll bar. The Ward owns the only bridge for forty miles and has opinions about it.",
   standoff: "The Lamp-Warden is at her bar. Talk to her, or consider the alternatives: a rifle, or a barrel from the powder cart south of the bridge.",
   parley: "The Warden is listening. Mind what you promise; she keeps receipts.",
   fighting: "The garrison is armed and offended. Put six in ten of them down or to flight and the bar is yours.",
   rigging: "The fuse is lit. Nobody should be standing on the bridge, least of all you.",
 };
-const DONE_HINT: Record<ResolutionId, string> = {
+const DONE_HINT: Record<CrossingResolution, string> = {
   paid: "Toll paid, receipt stamped. The bar lifts. Sail home from the landing when you are ready.",
   bargained: "Toll haggled down. The bar lifts, resentfully. Sail home from the landing.",
   bribed: "A quiet word and a quiet envelope. The bar lifts. The Syndicate will hear of it. Sail home from the landing.",
@@ -210,7 +213,7 @@ export function scenarioView(s: ScenarioState, worldMsNow: number): ScenarioView
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
 
   const wet = s.rain >= SCENARIO.wetRain && s.phase !== "resolved";
-  let hint = s.phase === "resolved" ? (res ? DONE_HINT[res] : "The bridge is a ruin already. The ford will do.") : HINT[s.phase];
+  let hint = s.phase === "resolved" ? (res ? (DONE_HINT as Record<string, string>)[res] ?? "" : "The bridge is a ruin already. The ford will do.") : HINT[s.phase as CrossingPhase];
   if (wet) hint += " It is raining: fuses sputter and sentries squint.";
 
   let timerLabel = "";
@@ -229,7 +232,9 @@ export function scenarioView(s: ScenarioState, worldMsNow: number): ScenarioView
   }
   const v: ScenarioView = {
     phase: s.phase, objectives, hint, timerLabel: remain > 0 ? timerLabel : "", endsAtWorldMs: remain > 0 ? Math.round(worldMsNow + remain * 1000) : 0,
+    template: "secure_crossing", title: "Secure the River Crossing",
   };
+  if (s.complication !== "none") v.complication = s.complication;
   if (res !== undefined) v.resolution = res;
   return v;
 }
