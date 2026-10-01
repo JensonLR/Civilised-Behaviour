@@ -194,7 +194,7 @@ export class Stage {
     window.addEventListener("resize", () => this.resize());
   }
 
-  /** The gore setting (Full / Reduced / Off) for the persistent marks: Off leaves iodine-yellow stains and soot, never red. */
+  /** The gore setting (Full / Reduced / Off) for the persistent marks: Off hides spatter, spray and drag; a pool is only a small dirt-dark stain (never red); soot and mud stay. */
   setGore(level: GoreLevel): void {
     this.decals.setGore(level);
   }

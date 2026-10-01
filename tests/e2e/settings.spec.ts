@@ -155,7 +155,7 @@ test("the how-to card lists the keyboard controls, follows a rebind, and switche
   await expect(card).toContainText("Reload");
   await expect(card.locator("kbd", { hasText: /^Space$/ })).toBeVisible();
   await card.getByRole("button", { name: "Gamepad" }).click();
-  await expect(card.locator("kbd.pad", { hasText: /^RT$/ })).toBeVisible();
+  await expect(card.locator(".glyph-trigger", { hasText: /^RT$/ })).toBeVisible(); // (D-038: the pad layout is drawn as glyphs of the device in use, no longer plain key caps)
   await expect(card).toContainText("Fire");
   await card.getByRole("button", { name: "Understood" }).click();
   await expect(card).toBeHidden();

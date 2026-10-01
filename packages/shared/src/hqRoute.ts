@@ -133,6 +133,14 @@ export function hqRoute(): HqRoute {
   return cached;
 }
 
+/**
+ * The ferry lane, between the two stilt houses' steps, from the end of the street to the lane's north end (D-038: the level audit walks it as a `track`; nothing the forest places may stand on it or on the dock and map lines, `arena.ts`).
+ * Written from the dock line's own end, so it follows if the line moves.
+ */
+export function hqLane(): Pt[] {
+  return [{ ...hqRoute().dock[11]! }, { x: -21.5, z: -47.4 }, { x: -21.6, z: -42.4 }];
+}
+
 /** The posts' collision: one thin solid each, appended last to Hollowmere's obstacle list (arena.ts). */
 export function hqRouteObstacles(terrain: Terrain): Obstacle[] {
   const out: Obstacle[] = [];

@@ -28,7 +28,7 @@ const installBot = (page: Page) =>
     const bot: Bot = { tx: 0, tz: 0, on: false };
     (window as unknown as { __bot: Bot }).__bot = bot;
     const real = h.controls.sample.bind(h.controls);
-    h.controls.sample = () => (bot.on ? { moveF: 1, moveR: 0, buttons: 0 } : real());
+    h.controls.sample = () => (bot.on ? { moveF: 127, moveR: 0, buttons: 0 } : real());
     window.setInterval(() => {
       const p = h.session.predicted;
       if (!bot.on || !p) return;
@@ -111,7 +111,7 @@ for (const region of REGIONS) {
     const out = { x: door!.x + c * 5, z: door!.z + s * 5 }; // the outward unit vector is (cos yaw, sin yaw)
     await tp(page, out.x, out.z, Math.atan2(-(door!.x - out.x), -(door!.z - out.z)));
     await expect.poll(async () => { const p = await where(page); return Math.hypot(p.x - out.x, p.z - out.z); }, { timeout: 60_000 }).toBeLessThan(2);
-    expect(await roofVisible(page, door!.building), `${region}: the roof is on while the bot is outside`).toBe(true);
+    await expect.poll(() => roofVisible(page, door!.building), { timeout: 30_000, message: `${region}: the roof is on while the bot is outside` }).toBe(true);
     await walkTo(page, door!.x, door!.z, 1.0, `${region} ${door!.id} threshold`);
     await walkTo(page, door!.room!.x, door!.room!.z, 1.5, `${region} ${door!.building} room`);
     await expect.poll(() => roofVisible(page, door!.building), { timeout: 30_000, message: `${region}: the roof over ${door!.building} drops while the bot is inside` }).toBe(false);

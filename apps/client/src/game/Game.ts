@@ -104,7 +104,8 @@ export class Game {
   /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
   private readonly ledger = new BattleLedger();
   private readonly aftermath: Aftermath;
-  private aftermathSig = "";
+  /** What the last plan was made from (three scalars, compared every frame: no string is built in the frame loop). */
+  private aftermathFor = { region: "" as string, rev: -1, gore: "" as string };
   private aftermathSite: { key: string; site: AftermathSite } | undefined;
   /** The adaptive score hears the field through these (game/musicSignals.ts), once a frame. */
   private readonly signaller = new MusicSignaller();
@@ -619,7 +620,7 @@ export class Game {
         this.ledger.reset();
         this.signaller.reset();
         this.aftermath.show([], getGore());
-        this.aftermathSig = "";
+        this.aftermathFor.rev = -1;
         this.aftermathSite = undefined;
       }
       this.builtRegion = region;
@@ -830,9 +831,11 @@ export class Game {
   private syncAftermath(dt: number): void {
     void dt;
     const gore = getGore();
-    const sig = `${this.builtRegion}|${this.ledger.revision}|${gore}`;
-    if (sig === this.aftermathSig) return;
-    this.aftermathSig = sig;
+    const was = this.aftermathFor;
+    if (was.region === this.builtRegion && was.rev === this.ledger.revision && was.gore === gore) return;
+    was.region = this.builtRegion;
+    was.rev = this.ledger.revision;
+    was.gore = gore;
     const t = this.ledger.tally;
     let items: readonly AftermathItem[] = [];
     if (t.dead + t.downed + t.blasts > 0) {

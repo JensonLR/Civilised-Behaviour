@@ -130,9 +130,13 @@ export function promptText(verb: string, prompt: PromptId, device: InputDevice):
   return g.kind === "pad" && g.hold ? `Hold [${g.label}] to ${verb.charAt(0).toLowerCase()}${verb.slice(1)}` : `${verb} [${g.label}]`;
 }
 
-/** Classifies a `Gamepad.id` string: Sony pads report "054c" or "DualShock" / "DualSense" / "Wireless Controller"; everything else shows the Xbox set. */
+/**
+ * Classifies a `Gamepad.id` string: Sony pads report "054c" or "DualShock" / "DualSense" / a bare "Wireless Controller"; everything else shows the Xbox set. An id that NAMES Xbox (or Microsoft's
+ * vendor 045e) is Xbox first: Chrome calls the Xbox One and Series pads "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e ...)", which a plain "wireless controller" test would take for a Sony.
+ */
 export function padFamily(id: string): "xbox" | "playstation" {
-  return /054c|dualshock|dualsense|playstation|wireless controller/i.test(id) ? "playstation" : "xbox";
+  if (/xbox|xinput|vendor: 045e|^045e-/i.test(id)) return "xbox";
+  return /054c|dualshock|dualsense|playstation|^wireless controller/i.test(id) ? "playstation" : "xbox";
 }
 
 /**

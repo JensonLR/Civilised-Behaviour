@@ -33,7 +33,7 @@ const family = (): Exclude<InputDevice, "keyboard"> => (deviceTracker.effective 
 export function buildPadSection(pads: PadSource = defaultPads): PadSection {
   const root = h("section", { class: "padsection", "aria-label": "Gamepad" });
   const refreshers: (() => void)[] = [];
-  const status = h("p", { class: "status", role: "status", "aria-live": "polite" });
+  const status = h("p", { class: "padstatus", role: "status", "aria-live": "polite" });
   let learn: { action: PadAction; raf: number; held: Set<PadButton>; btn: HTMLButtonElement } | undefined;
 
   const row = (label: string, id: string, control: HTMLElement, note?: string, value?: HTMLElement): void => {

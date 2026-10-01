@@ -7,7 +7,9 @@ import { VILLAGE_PADS, villageKeepOut, villageObstacles } from "./village.ts";
 import { ruinObstacles } from "./ruins.ts";
 import { clearingObstacles } from "./clearing.ts";
 import { cannonObstacles } from "./weapons.ts";
-import { hqRouteObstacles } from "./hqRoute.ts";
+import type { Pt } from "./hqRoute.ts";
+import { hqLane, hqRoute, hqRouteObstacles } from "./hqRoute.ts";
+import { distToPaths } from "./levelPlan.ts";
 
 export const ARENA_RADIUS = 90;
 
@@ -16,6 +18,7 @@ export const ARENA_RADIUS = 90;
  * (docs/GDD.md) replace this with authored landmarks + seeded dressing; the collision model
  * stays the same.
  */
+let hqLinesCache: Pt[][] | undefined;
 export function createArena(seed: number): CollisionWorld {
   // Base noise + the Observatory hill + the stream and its pond (landscape.ts): the SAME terrain on the server and every client.
   const terrain = withLandscape(createTerrain(seed), VILLAGE_PADS);
@@ -122,9 +125,11 @@ export function createArena(seed: number): CollisionWorld {
   // randomness differently for it, so every tree, rock and stump keeps the place it always had; the few that would stand inside a fence or a well are
   // simply not there. (Moving the whole forest whenever a signpost is authored would break every test that fires along a fixed line.)
   const furniture = [...clearingObstacles(terrain), ...villageObstacles(terrain)];
+  const hqLines = (): Pt[][] => (hqLinesCache ??= [hqRoute().dock, hqRoute().map, hqLane()]);
   const clashesFurniture = (x: number, z: number, r: number): boolean =>
     villageKeepOut(x, z, r + 0.6) ||
     nearTrail(x, z, r + 0.3, "late") ||
+    distToPaths(hqLines(), x, z) < r + 1.4 || // (D-038: the expedition's own walked lines, which the level audit walks on every seed: no tree, rock or stump stands on them)
     furniture.some((f) => {
       const reach = r + (f.kind === "circle" ? f.r : Math.hypot(f.hx, f.hz)) + 0.6;
       return (x - f.x) ** 2 + (z - f.z) ** 2 < reach * reach;

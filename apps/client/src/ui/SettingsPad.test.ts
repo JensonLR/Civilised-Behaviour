@@ -39,7 +39,7 @@ describe("the pad section", () => {
     expect(getPadBindings().jump).toBe("x");
     expect(getPadBindings().interact).toBe("a");
     expect(sel(sec.el, "interact").value).toBe("a"); // the other row followed
-    expect(sec.el.querySelector(".status")!.textContent).toMatch(/Jump is now on the X button; Use \/ reload took the button it left/);
+    expect(sec.el.querySelector(".padstatus")!.textContent).toMatch(/Jump is now on the X button; Use \/ reload took the button it left/);
     sec.el.querySelector<HTMLButtonElement>("[data-act='reset-pad']")!.click();
     expect(getPadBindings()).toEqual(defaultPadBindings());
     sec.dispose();

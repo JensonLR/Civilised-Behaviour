@@ -7,7 +7,7 @@ import { KESSAR_ANCHORS } from "./campaignTypes.ts";
 import { CAMP, hqPlan } from "./camp.ts";
 import { createArena, spawnPoint } from "./arena.ts";
 import { HILL, JETTY, TRAILS } from "./landscape.ts";
-import { hqRoute } from "./hqRoute.ts";
+import { hqLane, hqRoute } from "./hqRoute.ts";
 import { WELL } from "./clearing.ts";
 import { SITES, villageLevel } from "./village.ts";
 import { HIGHMARK_TRACKS, highmarkLevel, highmarkPlan, highmarkRoad, highmarkSitePoints, hillPoint } from "./highmark.ts";
@@ -318,7 +318,7 @@ export function hollowmereAdapter(seed: number): RegionAuditInput {
     route("hq.dock.fire", "track", dock.slice(0, 4)),
     route("hq.dock.footbridge", "track", dock.slice(3, 6), 1.4),
     route("hq.dock.street", "street", dock.slice(5, 12)),
-    route("hq.dock.lane", "track", [dock[11]!, { x: -21.5, z: -47.4 }, { x: -21.6, z: -42.4 }]),
+    route("hq.dock.lane", "track", hqLane()),
     route("trail.coast", "track", trail("coast", 82)),
     // (the climb of the Observatory hill is a wild desire line through the arena's seeded rocks and crags, which `createArena` places by centre distance only: it is walked by the 20-seed run, not audited as a route)
     route("trail.village", "street", trail("village")),

@@ -76,6 +76,10 @@ describe("detection", () => {
     expect(padFamily("Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 09cc)")).toBe("playstation");
     expect(padFamily("DualSense Wireless Controller")).toBe("playstation");
     expect(padFamily("8BitDo Pro 2 (Vendor: 2dc8)")).toBe("xbox");
+    // Chrome and Firefox name the Xbox One / Series pads "Xbox Wireless Controller": that is NOT a Sony pad
+    expect(padFamily("Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)")).toBe("xbox");
+    expect(padFamily("045e-0b13-Xbox Wireless Controller")).toBe("xbox");
+    expect(padFamily("DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)")).toBe("playstation");
   });
   it("switches once per change, honours a pinned preference, and unsubscribes", () => {
     const t = new DeviceTracker();

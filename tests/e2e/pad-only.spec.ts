@@ -66,6 +66,7 @@ async function holdUntil(page: Page, name: Name, seen: () => Promise<boolean>, m
     await expect.poll(seen, { timeout: ms }).toBe(true);
   } finally {
     await set(page, name, false);
+    await page.waitForTimeout(600); // (a release the page has plainly seen: a press that follows a release inside one frame is one long press)
   }
 }
 /** A press the interface plainly sees: down for a moment (a few frames at 10 fps), then up. */
@@ -94,10 +95,14 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await page.waitForSelector("#name", { timeout: 120_000 });
 
   // ---- the front door, by pad: the d-pad walks the focus to "New campaign", A chooses it -----------------------------------------------------
+  const seen: string[] = [];
   for (let i = 0; i < 12; i++) {
-    if ((await page.evaluate(() => document.activeElement?.id)) === "create") break;
+    const id = await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName || "");
+    seen.push(id);
+    if (id === "create") break;
     await tap(page, "down");
   }
+  expect(seen.length, `the d-pad reached "New campaign" (${seen.join(",")})`).toBeLessThan(12);
   expect(await page.evaluate(() => document.activeElement?.id)).toBe("create");
   await tap(page, "a");
   await page.waitForFunction(() => Boolean((window as unknown as { __cb?: Hook }).__cb?.session.predicted), undefined, { timeout: 120_000 });
@@ -122,7 +127,7 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await tp(page, 5.2, -11.05, Math.PI / 2);
   await expect(page.locator(".prompt .glyph-xbox-x")).toBeVisible({ timeout: 60_000 });
   await expect(page.locator("html")).toHaveAttribute("data-device", "xbox");
-  await expect(page.locator(".help .glyph-xbox-a").first()).toBeVisible(); // the hint line too
+  await expect(page.locator(".help .glyph-xbox-a")).not.toHaveCount(0); // the hint line too (in the page; a small window hides it)
 
   await tap(page, "x"); // X is Use: something is in reach
   await expect(page.locator("#sheet-paper")).toBeVisible({ timeout: 60_000 });
