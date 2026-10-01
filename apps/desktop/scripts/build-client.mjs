@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..", "..", "..");
-const DEFAULT = "https://cb-server-86wx.onrender.com";
+const DEFAULT = "https://civilised-behaviour-server.onrender.com";
 
 let server = DEFAULT;
 try {

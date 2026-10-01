@@ -113,7 +113,7 @@ describe("the built preload bundle", () => {
       expect(pre).not.toMatch(/colyseus|node:fs|child_process|nodeIntegration/);
       const main = readFileSync(join(out, "main.cjs"), "utf8");
       expect(main).not.toMatch(/require\(["']steamworks/i);
-      expect(main).toContain("https://cb-server-86wx.onrender.com");
+      expect(main).toContain("https://civilised-behaviour-server.onrender.com");
     } finally {
       rmSync(out, { recursive: true, force: true });
     }

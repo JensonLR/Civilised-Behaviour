@@ -7,7 +7,7 @@ import { loadConfig } from "./config.ts";
 import { configureLogger } from "./log.ts";
 import { createOriginPolicy } from "./origins.ts";
 
-const GOOD = "https://cb-client-42gz.onrender.com";
+const GOOD = "https://civilised-behaviour.onrender.com";
 const EVIL = "https://evil.example";
 // Each integration test file needs its own port: vitest runs files in parallel workers.
 const PORT = 2571;
@@ -27,7 +27,7 @@ describe("createOriginPolicy", () => {
     const p = createOriginPolicy([GOOD]);
     expect(p.allows(EVIL)).toBe(false);
     expect(p.allows(GOOD + ".evil.example")).toBe(false);
-    expect(p.allows("http://cb-client-42gz.onrender.com")).toBe(false); // scheme matters
+    expect(p.allows("http://civilised-behaviour.onrender.com")).toBe(false); // scheme matters
     expect(p.allows("null")).toBe(false);
     expect(p.allows(undefined)).toBe(true);
     expect(p.allows(null)).toBe(true);

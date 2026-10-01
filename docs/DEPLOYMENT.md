@@ -8,10 +8,10 @@ Services `cb-server` (Node web service) and `cb-client` (static site), Frankfurt
 ### Live test deployment (created 2026-09-29)
 | Service | Type | URL | Render id |
 |---------|------|-----|-----------|
-| cb-server | Node web service, free, Frankfurt | https://cb-server-86wx.onrender.com (`/health`, `/metrics`) | srv-datqpblg1s2s73adt930 |
-| cb-client | Static site | https://cb-client-42gz.onrender.com | srv-datqpe0u01pc73a6rm5g |
+| cb-server | Node web service, free, Frankfurt | https://civilised-behaviour-server.onrender.com (`/health`, `/metrics`) | srv-datqpblg1s2s73adt930 |
+| cb-client | Static site | https://civilised-behaviour.onrender.com | srv-datqpe0u01pc73a6rm5g |
 
-Both auto-deploy on every push to the branch. Client is built with `VITE_SERVER_URL=wss://cb-server-86wx.onrender.com`.
+Both auto-deploy on every push to the branch. Client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onrender.com`.
 
 **Verified:** both deploys build and go live; `/health` 200; client page loads; matchmaking `POST /matchmake/create/world` works from the
 client origin; server logs show real joins/leaves from a curl WebSocket handshake and from the Colyseus Node SDK over `wss://`.
@@ -59,7 +59,7 @@ pnpm --filter @cb/desktop run dist           # the same, as installers (win nsis
 Env (build-time values are baked as defaults; the same names override at run time; none is a secret):
 | Variable | Meaning |
 |----------|---------|
-| `CB_SERVER_URL` | http(s)/ws(s) address of the game server. Default `https://cb-server-86wx.onrender.com` (the interim test server above). Also fixes the CSP `connect-src` and the request filter |
+| `CB_SERVER_URL` | http(s)/ws(s) address of the game server. Default `https://civilised-behaviour-server.onrender.com` (the interim test server above). Also fixes the CSP `connect-src` and the request filter |
 | `CB_WISHLIST_URL` | https store page. Absent = the wish-list card says "coming soon" and opens nothing. Opened in the system browser, never in the game window |
 | `CB_STEAM` | `stub` selects the in-process stand-in (`steam/StubSteam.ts`); unset = off; `real` is not implemented and falls back to off WITH a warning |
 | `CB_UPDATES` + `CB_UPDATE_FEED` | update checks. OFF by default; on only with `CB_UPDATES=1` AND an https feed. No updater library is installed: turning them on needs a release decision |

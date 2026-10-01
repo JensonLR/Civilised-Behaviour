@@ -166,7 +166,7 @@ Server: `rooms/WorldRoom.ts` (resume, saver, the commit pipeline, `rebuildWorld`
 | 14 | Store-facing: capsule art, trailer of real play, mature-content survey from the AI and asset registers | UNMET (after the hold) |
 
 ## Deployment (see DEPLOYMENT.md)
-Render free-tier test deploy is live: client https://cb-client-42gz.onrender.com, server https://cb-server-86wx.onrender.com.
+Render free-tier test deploy is live: client https://civilised-behaviour.onrender.com, server https://civilised-behaviour-server.onrender.com.
 Server-side WebSocket joins verified; end-to-end browser session against it NOT yet verified (sandbox Chromium gets 404 on wss upgrade).
 ALLOWED_ORIGINS now enforced (D-012). Open: set health-check path in Render dashboard.
 

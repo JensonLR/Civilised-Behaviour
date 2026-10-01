@@ -16,7 +16,7 @@ export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 export const APP_ENTRY = `${APP_ORIGIN}/index.html`;
 
 /** The hosted test server (docs/DEPLOYMENT.md). A configuration default, not a secret; override with `CB_SERVER_URL`. */
-export const DEFAULT_SERVER_URL = "https://cb-server-86wx.onrender.com";
+export const DEFAULT_SERVER_URL = "https://civilised-behaviour-server.onrender.com";
 
 export type SteamMode = "off" | "stub" | "real";
 
