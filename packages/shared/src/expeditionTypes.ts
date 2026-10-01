@@ -6,6 +6,7 @@ import type { FactionId } from "./campaignTypes.ts";
 import { NPC } from "./campaignTypes.ts";
 import type { CollisionWorld } from "./collision.ts";
 import type { MoveCommand } from "./movement.ts";
+import type { PeopleId } from "./peoples.ts";
 import type { PlayerStateType } from "./schema.ts";
 import type { WeaponId } from "./weapons.ts";
 
@@ -22,7 +23,7 @@ export const NPC_SIDE: Readonly<Record<number, NpcSide>> = {
 export type BrainId = "garrison" | "follower" | "civil";   // civil = hostage, driver: never fights, flees, follows when freed
 export interface NpcSpec {
   id: string; role: number; faction: FactionId; side: NpcSide; group: string; post: { x: number; z: number }; weapon: WeaponId; lookSeed: number;
-  look?: Record<string, number> /* authored CharacterSpec patch, run through specFromUntrusted */; name: string; skill: number; bravery: number; brain: BrainId;
+  look?: Record<string, number> /* authored CharacterSpec patch, run through specFromUntrusted */; people?: PeopleId /* D-038: which native people they are (peoples.ts `peopleForNpc`); the server lays the people's overlay under `look`; absent = colonial */; name: string; skill: number; bravery: number; brain: BrainId;
 }
 export type CastOrder =
   | { o: "post" } | { o: "alert" } | { o: "stand_down" } | { o: "hold_fire" } | { o: "flee" } | { o: "march"; route: string }

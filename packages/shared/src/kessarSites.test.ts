@@ -87,7 +87,7 @@ describe("Kessar sites: geometry", () => {
     expect(plan.sites.camp.wagon.z).toBeLessThan(S.hostage.cage.z);   // the cage is the wagon's door, not inside it
     expect(plan.sites.cut.x).toBe(S.convoy.cut.x);
     expect(plan.cart).toEqual({ x: 14, z: 44, yaw: 0.35 });
-    expect(plan.camp.wagon).toEqual({ x: -27, z: 54, yaw: -0.5 });
+    expect(plan.camp.wagon).toEqual({ x: -26, z: 50.4, yaw: -0.5 });   // (D-038: moved 3.5 m north, off the worn track into the camp)
   });
 
   it("the obstacles the sites add are solid, near the sites, and never on a story point", () => {

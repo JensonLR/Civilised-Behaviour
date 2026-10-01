@@ -10,6 +10,7 @@ import {
 } from "three";
 import type { GoreLevel } from "@cb/procedural/three";
 import { PALETTE } from "@cb/shared";
+import type { DecalField } from "./decals/DecalField.ts";
 
 export const HITFX = {
   /** Live particle cap (a hit spawns 6-18; four players can only produce so many per second). */
@@ -68,6 +69,9 @@ export class HitFx {
   private readonly dsize = new Float32Array(HITFX.maxDecals);
   private readonly dage = new Float32Array(HITFX.maxDecals).fill(Infinity);
   private nextDecal = 0;
+  /** The persistent field's decals (render/decals): when attached, blood that lands is left there (it stays, spreads and dries) instead of in this module's own short-lived stains. */
+  private field: DecalField | undefined;
+  private landed = 0;
 
   constructor(
     scene: Scene,
@@ -83,6 +87,14 @@ export class HitFx {
     this.decals.frustumCulled = false;
     this.decals.count = 0;
     scene.add(this.parts, this.decals);
+  }
+
+  /**
+   * Routes this module's stains to the persistent decal field (`Stage` creates the field; the integrator attaches it). With a field attached the short-lived
+   * stain pool here stays empty; without one nothing changes. The field applies the Full / Reduced / Off look itself.
+   */
+  attachDecals(field: DecalField | undefined): void {
+    this.field = field;
   }
 
   get liveParticles(): number {
@@ -104,6 +116,14 @@ export class HitFx {
   burst(x: number, y: number, z: number, dx: number, dz: number, power: number, gore: GoreLevel): void {
     if (!(power > 0) || !Number.isFinite(x + y + z + dx + dz)) return;
     const st = STYLES[gore];
+    if (this.field) {
+      // the blow leaves its mark where the victim stands: drops thrown along the push, and on a hard hit a fan of spray (the field hides what the gore level hides)
+      const len = Math.hypot(dx, dz) || 1;
+      const ground = this.groundAt(x, z);
+      const reach = 0.5 + 0.9 * Math.min(1, power);
+      this.field.spatterAt(x + (dx / len) * reach, z + (dz / len) * reach, dx, dz, 0.22 + 0.3 * Math.min(1, power));
+      if (power > 0.55 && y - ground < 1.9) this.field.sprayAt(x + (dx / len) * 0.2, z + (dz / len) * 0.2, dx, dz, 0.9 + 1.1 * power);
+    }
     const n = Math.round(st.count[0] + (st.count[1] - st.count[0]) * Math.min(1, power));
     for (let k = 0; k < n; k++) {
       const i = this.nextPart;
@@ -145,7 +165,11 @@ export class HitFx {
       this.pz[i]! += this.vz[i]! * dt;
       const ground = this.groundAt(this.px[i]!, this.pz[i]!);
       if (this.py[i]! <= ground + 0.01) {
-        if (this.stainable[i]) this.addDecal(this.px[i]!, ground, this.pz[i]!, this.size[i]!);
+        if (this.stainable[i]) {
+          // (with the field attached the drops of a burst land as small spatters, one in three: the burst itself already left its mark)
+          if (!this.field) this.addDecal(this.px[i]!, ground, this.pz[i]!, this.size[i]!);
+          else if (++this.landed % 3 === 0) this.field.spatterAt(this.px[i]!, this.pz[i]!, this.vx[i]!, this.vz[i]!, 0.1 + this.size[i]! * 3);
+        }
         this.life[i] = 0;
         continue;
       }
@@ -176,6 +200,11 @@ export class HitFx {
     }
     this.decals.count = decalMax;
     this.decals.instanceMatrix.needsUpdate = true;
+  }
+
+  /** A body bleeds out where it lies (a downed or dead victim): a pool that spreads for `seconds` of bleeding. A no-op without a field. */
+  bleedOut(x: number, z: number, radius: number): void {
+    this.field?.bloodPool(x, z, radius, 1.3);
   }
 
   private addDecal(x: number, y: number, z: number, size: number): void {

@@ -74,6 +74,9 @@ export class Projectiles {
     this.smoke[i] = 0;
   }
 
+  /** Told when a round stops at the static world (weapon, point, surface normal): the integrator scorches the ground under a cannon ball and chips a wall under a pellet. */
+  onImpact: ((weapon: number, x: number, y: number, z: number, nx: number, ny: number, nz: number) => void) | undefined;
+
   /** False while nothing is in flight: `update` then does no work and uploads nothing. */
   private active = false;
 
@@ -130,6 +133,7 @@ export class Projectiles {
       this.vz[i] = ball.vz;
       this.life[i]! -= dt;
       if (done || this.life[i]! <= 0) {
+        if (done) this.onImpact?.(w, ex, ey, ez, hit.nx, hit.ny, hit.nz);
         this.alive[i] = 0;
         dummy.scale.set(0, 0, 0);
         dummy.updateMatrix();

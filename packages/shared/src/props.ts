@@ -1,5 +1,6 @@
 import { CHARACTER } from "./constants.ts";
 import { inCampFootprint } from "./camp.ts";
+import { hqRoute } from "./hqRoute.ts";
 import { angleDelta } from "./math.ts";
 import { Rng } from "./rng.ts";
 import type { Terrain } from "./terrain.ts";
@@ -100,6 +101,26 @@ export interface PropSpawn {
   yaw: number;
 }
 
+let hqPosts: { x: number; z: number; r: number }[] | undefined;
+/** True near an HQ finger-post (its radius plus a prop's reach) or within 1.5 m of the two authored walking lines (hqRoute.ts). */
+function hqKeepOut(x: number, z: number): boolean {
+  const rt = hqRoute();
+  hqPosts ??= rt.signs.map((p) => ({ x: p.x, z: p.z, r: p.r }));
+  for (const p of hqPosts) if (Math.hypot(x - p.x, z - p.z) < p.r + 1.0) return true;
+  for (const line of [rt.map, rt.dock]) {
+    for (let i = 0; i + 1 < line.length; i++) {
+      const a = line[i]!;
+      const b = line[i + 1]!;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / l2));
+      if (Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t)) < 1.5) return true;
+    }
+  }
+  return false;
+}
+
 /** Deterministic prop scatter around the spawn clearing (no authored content yet). Never inside the camp's tents, cart, fire or wall. */
 export function scatterProps(seed: number, terrain: Terrain, count: number): PropSpawn[] {
   const rng = new Rng(seed ^ 0x51ed270b);
@@ -113,6 +134,7 @@ export function scatterProps(seed: number, terrain: Terrain, count: number): Pro
     const z = Math.sin(a) * d;
     // Keep clear of every authored landmark (wall, crates, tents, fire, flag, sign, luggage, cart) with room to grab a prop beside it.
     if (inCampFootprint(x, z, 0.9)) continue;
+    if (hqKeepOut(x, z)) continue;   // (D-038: the finger-posts and the two walking lines round HQ are furniture too)
     void terrain;
     out.push({ kind: rng.pick(kinds), x, z, yaw: rng.range(0, Math.PI * 2) });
   }

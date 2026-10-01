@@ -100,6 +100,9 @@ export class ViewModel {
   private drawn = false;
   private shots = 0;
   private wasAutoReset = true;
+  /** The hammer of a firearm: falls on a shot, is cocked again when the reload is done (see WeaponRig). */
+  private hammerTarget = 0;
+  private hammerNow = 0;
 
   constructor(private readonly host: ViewModelHost) {
     this.scene.add(this.root, this.hemi, this.sun, this.sun.target);
@@ -148,6 +151,8 @@ export class ViewModel {
 
   /** A shot left the barrel: the recoil picture begins. */
   fire(weapon: number): void {
+    this.hammerTarget = 1;
+    this.hammerNow = Math.max(this.hammerNow, 0.35);
     vmFire(this.state, weapon, this.shots++);
   }
 
@@ -260,6 +265,9 @@ export class ViewModel {
         m.group.position.set(out.px, out.py, out.pz);
         m.group.rotation.set(out.rx, out.ry, out.rz);
         m.setRod(out.rod);
+        if (f.reload >= 0.9 || out.weapon < 0) this.hammerTarget = 0;
+        this.hammerNow += (this.hammerTarget - this.hammerNow) * Math.min(1, dt * (this.hammerTarget > this.hammerNow ? 60 : 14));
+        m.setHammer(this.hammerNow);
       }
     }
     this.root.updateMatrixWorld(true);

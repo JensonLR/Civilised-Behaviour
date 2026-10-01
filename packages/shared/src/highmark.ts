@@ -3,6 +3,8 @@ import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { segmentDistance } from "./landscape.ts";
 import { TAU, angleDelta, smoothstep } from "./math.ts";
 import type { NavOptions } from "./nav.ts";
+import { distToPaths, levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
+import type { AuditDoor } from "./levelAudit.ts";
 import { PropKind, type PropKindId, type PropSpawn } from "./props.ts";
 import { Rng, hash3, hashFloat } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
@@ -313,6 +315,9 @@ function grassRoadX(z: number): number {
   return 0;
 }
 
+/** The worn tracks off the processional (D-038: authored here so the seeded scrub keeps clear of them and the audit walks them): the drovers' track, threading the Waiting Stones' gap. */
+export const HIGHMARK_TRACKS: readonly (readonly { x: number; z: number }[])[] = [[{ x: -4, z: 62 }, { x: -12, z: 62.3 }, { x: -52, z: 50 }]];
+
 export function highmarkPlan(): HighmarkPlan {
   if (cachedPlan) return cachedPlan;
   const A = HIGHMARK_ANCHORS;
@@ -350,7 +355,8 @@ export function highmarkPlan(): HighmarkPlan {
   }
 
   // ---- the hill's buildings
-  const granaries: HighmarkRound[] = [-45, -58, -71].map((d) => ({ ...hillPoint(65, d), r: 2.6, height: 5 }));
+  // (D-038: the granaries stand at r 66, not 65: at 65 their round flanks sank 0.2 m into the market's retaining wall)
+  const granaries: HighmarkRound[] = [-45, -58, -71].map((d) => ({ ...hillPoint(66, d), r: 2.6, height: 5 }));
   const stalls: HighmarkBox[] = [-25, -14, -3, 8, 19].map((d, i) => {
     const p = hillPoint(52.8, d);
     return { x: p.x, z: p.z, yaw: tangentYaw(d), hx: 1.5, hz: 1.0, height: 2.4 + (i % 2) * 0.3 };
@@ -433,6 +439,42 @@ export function highmarkPlan(): HighmarkPlan {
   return cachedPlan;
 }
 
+// ---- the level plan (D-038; docs/LEVEL_PLAN.md section 7) ----------------------------------------------------------------------------------------
+
+/** The sealed facades' notices, in the capital's own voice (the Grange's halls, the assay office, the Chamberlain's offices, the palace). */
+export const HIGHMARK_SEALED_SIGNS = {
+  grange: "SHUTTERS NAILED. HARVEST IN PROGRESS.",
+  assay: "CLOSED PENDING THE ASSAY",
+  chamberlain: "FORM 11 IS AT THE OTHER WINDOW",
+  palace: "THE KING IS PENDING",
+} as const;
+
+let cachedLevel: RegionLevel | undefined;
+/**
+ * What every building of the capital IS. hall0 (the guildhall of the guild terrace) is the Grange Assembly Hall: the one walkable interior, a double door 2.4 m wide at its end, benches, the harvest bell on a beam.
+ * The other six halls and the palace are `sealed` (a door painted or sealed shut on the long face the road passes, with its notice); the two gate towers are `solid` and the lintel between them is a `passage`
+ * (8.4 m clear, 3.6 m under the lintel). The granaries are round stores with a hatch up a ladder and no ground door; the stalls are open-front.
+ */
+export function highmarkLevel(): RegionLevel {
+  if (cachedLevel) return cachedLevel;
+  const p = highmarkPlan();
+  const H = p.halls;
+  // a sealed hall's door is on its long outward face: rotate the frame a quarter turn so local +x is the face the road passes
+  const facade = (b: HighmarkBox): { x: number; z: number; yaw: number; hx: number; hz: number } => ({ x: b.x, z: b.z, yaw: b.yaw + Math.PI / 2, hx: b.hz, hz: b.hx });
+  const signOf = (i: number): string => (i === 1 ? HIGHMARK_SEALED_SIGNS.assay : i >= 2 ? HIGHMARK_SEALED_SIGNS.chamberlain : HIGHMARK_SEALED_SIGNS.grange);
+  const buildings: LevelBuilding[] = [
+    planBuilding("hall0", "interior", { x: H[0]!.x, z: H[0]!.z, yaw: H[0]!.yaw, hx: H[0]!.hx, hz: H[0]!.hz }, { height: H[0]!.height, floor: 0.3, wallH: 4.4, door: 2.4, doorH: 3.0 }),
+    ...H.slice(1).map((b, i) => planBuilding(`hall${i + 1}`, "sealed", facade(b), { height: b.height, floor: 0, wallH: b.height, sign: signOf(i + 1) })),
+    planBuilding("palace", "sealed", { x: p.palace.x, z: p.palace.z, yaw: Math.PI / 2, hx: p.palace.hz, hz: p.palace.hx }, { height: p.palace.height, floor: 0.8, wallH: p.palace.height, door: 3.2, doorH: 4.0, sign: HIGHMARK_SEALED_SIGNS.palace }),
+    ...p.gate.towers.map((t, i) => planBuilding(`gate.tower${i}`, "solid", { x: t.x, z: t.z, yaw: t.yaw, hx: t.hx, hz: t.hz }, { height: t.height, floor: 0, wallH: t.height })),
+  ];
+  const l = p.gate.lintel;
+  // the passage: the road runs south to north through it; the threshold is on the lintel's south face, `through` is 1.6 m beyond its north face
+  const passage: AuditDoor = { id: "gate.passage", building: "gate", x: l.x, z: l.z + l.hz, yaw: Math.PI / 2, width: l.hx * 2, height: 3.6, leads: "passage", through: { x: l.x, z: l.z - l.hz - 1.6 }, wide: true };
+  cachedLevel = levelOf(buildings, [passage]);
+  return cachedLevel;
+}
+
 // ---- colliders ----------------------------------------------------------------------------------------------------------------------------
 
 /** Everything solid in Highmark: the walls, the ramps' sides, the buildings, the gatehouse, the court's furniture, the milestones, the camp, the quay, then the seeded scrub on its own Rng stream. */
@@ -453,9 +495,23 @@ export function highmarkObstacles(terrain: Terrain, seed: number): Obstacle[] {
     out.push({ kind: "box", tag: "wall", x: w.x, z: w.z, hx: w.hx, hz: w.hz, yaw: w.yaw, y0: w.lo - 1.5, y1: w.hi + (w.ramp ? HIGHMARK.sideWall : HIGHMARK.parapet) });
   }
   for (const s of plan.granaries) circle("house", s.x, s.z, s.r, s.height);
-  for (const s of plan.stalls) box("stall", s.x, s.z, s.hx, s.hz, s.yaw, s.height);
+  // the stalls are OPEN (D-038): a counter table across the middle (a body walks behind it) and the four awning poles; the awning is the view's, high above any head
+  for (const s of plan.stalls) {
+    box("stall", s.x, s.z, s.hx, s.hz * 0.7, s.yaw, 0.95);
+    const c = Math.cos(s.yaw), n = Math.sin(s.yaw);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const lx = sx * (s.hx - 0.1), lz = sz * (s.hz - 0.1);
+      circle("pole", s.x + lx * c - lz * n, s.z + lx * n + lz * c, 0.07, s.height);
+    }
+  }
   circle("well", plan.well.x, plan.well.z, plan.well.r, plan.well.height);
-  for (const h of plan.halls) box("house", h.x, h.z, h.hx, h.hz, h.yaw, h.height);
+  // the halls: hall0 is a room (walls with a double doorway, a plinth floor); the others are solid masses with a sealed facade
+  const lvl = highmarkLevel();
+  plan.halls.forEach((h, i) => {
+    const b = i === 0 ? lvl.buildings.find((x) => x.id === "hall0") : undefined;
+    if (b) out.push(...roomObstacles(b, g(b.x, b.z)));
+    else box("house", h.x, h.z, h.hx, h.hz, h.yaw, h.height);
+  });
   for (const t of plan.gate.towers) box("house", t.x, t.z, t.hx, t.hz, t.yaw, t.height);
   {
     const l = plan.gate.lintel;
@@ -488,6 +544,7 @@ export function highmarkObstacles(terrain: Terrain, seed: number): Obstacle[] {
     if (z > HIGHMARK.river.z - HIGHMARK.river.half - HIGHMARK.river.bank - 3) return false;
     if (Math.hypot(x - C.x, z - C.z) < RADII[0]! + RUN + 5) return false;
     if (highmarkRoadDistance(x, z) < HIGHMARK.roadHalf + 2.6 + gap) return false;
+    if (distToPaths(HIGHMARK_TRACKS, x, z) < 2.6 + gap) return false;
     for (const s of sites) if (Math.hypot(s.x - x, s.z - z) < 6 + gap) return false;
     for (const h of plan2.herds) if (Math.hypot(h.cx - x, h.cz - z) < h.r * 0.6) return false;
     for (const o of out) {

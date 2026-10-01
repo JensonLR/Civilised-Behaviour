@@ -1,7 +1,8 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
-import { PALETTE, hash3, type CollisionWorld } from "./shared.ts";
+import { CLOISTER, PALETTE, hash3, vesperLevel, type CollisionWorld } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
+import { RoofKits, interiorShell, sealedDoor, tentFlap, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
 import { vesperPlan, type VesperBox, type VesperPlan } from "./shared.ts";
 
 /**
@@ -89,49 +90,102 @@ export function frame(b: VesperBox, face: "n" | "e" | "s" | "w"): { yaw: number;
 
 // ---- the Long Cloister ----------------------------------------------------------------------------------------------------------------------
 
-/** The gallery: a long block cut into the cliff, seven arches, black crepe swagged between pilasters, a flat roof with a parapet and a bell-gable. Arch lamps are returned for the glow. */
-function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y: number; z: number }[]): void {
+/** The Records Room's inside: lime-wash the colour of old paper, plank floor, ledger shelves. The sealed buildings' boards and chain. */
+const RECORDS: ShellStyle = { outer: P.strataBone, inner: P.companyCream, floor: P.timberLight, floorDark: P.timber, trim: P.timber, leaf: P.timber, strap: P.iron, lamp: P.glowLamp, ceiling: P.timber };
+const SEAL: SealedStyle = { frame: P.chalk, door: P.timber, board: P.timberLight, boardDark: P.timber, iron: P.iron, brass: P.copper, paper: P.companyCream, wax: P.companyRed };
+
+/** What the buildings leave behind for the view: the doors drawn, the lamps burning inside, the roofs for the cutaway. */
+export interface VesperOut {
+  marks: DoorMark[];
+  roofs: RoofKits;
+}
+
+/**
+ * The Long Cloister (D-038): an `open-front` gallery. A mass of the cliff's own rock behind, a colonnade of eight broad piers with seven arches 2.4 m clear between them, a lit corridor 3.1 m deep behind the arches
+ * (a pavement that follows the ground, a lantern at every pier, crepe swagged across the openings), and at its north end the Records Room (a door 1.5 m wide, ledger shelves, a desk). The flat roof over the
+ * corridor and the Records Room's own roof are separate (the cutaway lifts the one over the viewer); the bell-gable stands over the cliff's mass. Drawn from the same constants as the collision.
+ */
+function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y: number; z: number }[], out: VesperOut): void {
   const c = vesperPlan().cloister;
+  const C = CLOISTER;
   const gy = world.terrainHeight(c.x, c.z);
-  const f = frame(c, "e");   // the door side looks east, to the road: local +z is world +x
-  k.setBase(c.x, gy, c.z, f.yaw);   // local x runs along the gorge (world z), local z across it
-  const L = f.lx, D = f.lz, H = c.height;
-  slab(k, [L * 2, H + 0.8, D * 2], [0, (H - 0.8) / 2, 0], stone(210), lod);
-  // cornice and parapet
-  box(k, [L * 2 + 0.5, 0.3, D * 2 + 0.7], [0, H - 0.05, 0.1], P.chalk);
-  box(k, [L * 2 + 0.2, 0.55, 0.3], [0, H + 0.4, D - 0.1], P.strataBone);
-  box(k, [L * 2 + 0.2, 0.55, 0.3], [0, H + 0.4, -D + 0.1], P.strataBone);
-  // the arches: dark mouths with a half-round head, pilasters between them, a stone sill and the dirge's step
-  const n = c.arches;
-  const pitch = (L * 2 - 1.6) / n;
-  for (let i = 0; i < n; i++) {
-    const x = -L + 0.8 + (i + 0.5) * pitch;
-    const w = pitch * 0.62;
+  const H = c.height;
+  const z0 = c.z - c.hz, z1 = c.z + c.hz;
+  const g = (x: number, z: number): number => world.terrainHeight(x, z);
+  k.setBase(0, 0, 0, 0);   // (world frame: x east, z south; every height is read from the terrain where its part stands)
+  // the cliff's mass behind the gallery, and the corridor's south end
+  const mx = (c.x - c.hx + C.backX) / 2;
+  slab(k, [C.backX - (c.x - c.hx), H + 0.8, c.hz * 2], [mx, gy + (H - 0.8) / 2, c.z], stone(210), lod);
+  slab(k, [C.pierIn - C.backX, H, 0.3], [(C.backX + C.pierIn) / 2, g((C.backX + C.pierIn) / 2, z1) + H / 2, z1 - 0.15], stone(211), lod);
+  // the colonnade: eight piers, a lintel over every arch (the openings are 2.4 clear and 3.7 high), pilasters, the cornice and the parapet along the face
+  const pitch = C.pierW + C.archClear;
+  const fx = (C.pierIn + C.frontX) / 2;
+  for (let i = 0; i <= C.arches; i++) {
+    const zc = z0 + C.pierW / 2 + i * pitch;
+    slab(k, [C.frontX - C.pierIn, H + 0.8, C.pierW], [fx, g(fx, zc) + (H - 0.8) / 2, zc], stone(212 + (i % 3)), lod);
+    k.limb([C.frontX + 0.12, g(C.frontX, zc), zc], [C.frontX + 0.12, g(C.frontX, zc) + H - 0.2, zc], 0.3, 0.26, P.chalk, lod ? 8 : 5);
+    k.add(new SphereGeometry(0.2, 6, 4), { at: [C.frontX + 0.12, g(C.frontX, zc) + H - 0.1, zc], colour: P.strataBone, flat: true });
+  }
+  for (let i = 0; i < C.arches; i++) {
+    const zc = z0 + C.pierW + C.archClear / 2 + i * pitch;
+    const yg = g(fx, zc);
     const hArch = 3.7;
-    box(k, [w, hArch, 0.5], [x, hArch / 2, D - 0.15], P.crepe);
-    const head = new CylinderGeometry(w / 2, w / 2, 0.5, lod ? 12 : 7, 1, false, 0, Math.PI);
-    k.add(head, { at: [x, hArch, D - 0.15], rot: [Math.PI / 2, 0, 0], colour: P.crepe, flat: true });
-    box(k, [w + 0.5, 0.18, 0.9], [x, 0.09, D + 0.3], P.chalk);
-    // the voussoirs: a ring of pale stones round the head
-    if (lod) for (let s = 0; s < 5; s++) {
-      const a = Math.PI * (s / 4);
-      k.add(new BoxGeometry(0.34, 0.5, 0.62), { at: [x + Math.cos(a) * (w / 2 + 0.25), hArch + Math.sin(a) * (w / 2 + 0.25), D - 0.1], rot: [0, 0, a - Math.PI / 2], colour: P.chalk, flat: true });
+    slab(k, [C.frontX - C.pierIn, H - hArch + 0.1, C.archClear], [fx, yg + hArch + (H - hArch) / 2, zc], stone(220 + i), lod);
+    // the voussoirs' keystone, the sill, the crepe swag and two streamers
+    box(k, [0.5, 0.5, 0.34], [C.frontX + 0.05, yg + hArch + 0.15, zc], P.chalk);
+    // the Guild's black crepe, hung as a valance under the lintel: a band and a fringe of tabs (no legs, nothing in the opening below head height)
+    box(k, [0.1, 0.3, C.archClear + 0.05], [C.frontX + 0.22, yg + hArch - 0.18, zc], P.crepeFold);
+    if (lod) for (let t = 0; t < 5; t++) box(k, [0.08, 0.22, 0.3], [C.frontX + 0.24, yg + hArch - 0.44, zc - C.archClear / 2 + 0.25 + t * ((C.archClear - 0.5) / 4)], P.crepe);
+    // the forecourt's paving at the arch (flat: no step the collision lacks)
+    box(k, [1.4, 0.05, C.archClear + 0.5], [C.frontX + 0.7, yg + 0.03, zc], P.chalk);
+  }
+  box(k, [1.6, 0.3, c.hz * 2 + 0.6], [C.frontX - 0.4, gy + H - 0.05, c.z], P.chalk);
+  // the corridor's pavement: a tile a pier-bay long, each on the ground where it stands
+  for (let i = 0; i < 6; i++) {
+    const zc = C.recordsZ1 + 2.4 + i * 4.8;
+    const px = (C.backX + C.pierIn) / 2;
+    box(k, [C.pierIn - C.backX, 0.06, 4.7], [px, g(px, zc) + 0.02, zc], i % 2 ? P.strataBuff : P.strataBone);
+    // a lantern hung from the beam at every second bay: the corridor is lit
+    if (i % 2 === 0) {
+      const ly = g(px, zc) + 2.7;
+      k.limb([px, gy + H, zc], [px, ly + 0.2, zc], 0.012, 0.012, P.iron, 3);
+      k.add(new SphereGeometry(0.13, 6, 4), { at: [px, ly, zc], colour: P.glowLamp });
+      glows.push({ x: px, y: ly, z: zc });
     }
-    // crepe: a long black swag hung across the mouth and two streamers either side
-    box(k, [w + 0.1, 0.5, 0.12], [x, hArch - 0.5, D + 0.26], P.crepeFold, [0, 0, (i % 2 ? 0.05 : -0.05)]);
-    for (const s of [-1, 1]) box(k, [0.16, 2.1, 0.09], [x + s * (w / 2 + 0.34), hArch - 1.5, D + 0.38], P.crepe, [0, 0, s * 0.04]);
-    glows.push({ x: c.x + D - 0.4, y: gy + 2.1, z: c.z - x });   // (local +x runs along world -z)
   }
-  for (let i = 0; i <= n; i++) {
-    const x = -L + 0.8 + i * pitch;
-    k.limb([x, 0, D + 0.1], [x, H - 0.2, D + 0.1], 0.3, 0.26, P.chalk, lod ? 8 : 5);
-    k.add(new SphereGeometry(0.2, 6, 4), { at: [x, H - 0.1, D + 0.1], colour: P.strataBone, flat: true });
+  // the roof over the corridor (flat stone, a parapet each side): its own piece, lifted while the viewer is in the gallery
+  const rk = out.roofs.begin("cloister");
+  rk.setBase(0, 0, 0, 0);
+  const rx = (C.backX + C.frontX) / 2;
+  const rz = (C.recordsZ1 + C.southEnd) / 2;
+  const rl = C.southEnd - C.recordsZ1 + 0.3;
+  box(rk, [C.frontX - C.backX + 0.6, 0.4, rl], [rx, gy + H + 0.0, rz], (p, n, o2) => (n.y < -0.5 ? o2.set(P.timberLight) : n.y > 0.5 ? o2.set(P.chalk) : o2.set(P.strataBone)));
+  box(rk, [0.3, 0.55, rl], [C.frontX - 0.1, gy + H + 0.4, rz], P.strataBone);
+  box(rk, [0.3, 0.55, rl], [C.backX + 0.2, gy + H + 0.4, rz], P.strataBone);
+  // the Records Room at the north end
+  const lb = vesperLevel().buildings.find((x) => x.id === "records")!;
+  const rg = g(lb.x, lb.z);
+  k.setBase(lb.x, rg, lb.z, lb.yaw);
+  interiorShell(k, { id: lb.id, hx: lb.hx, hz: lb.hz, floor: lb.floor, wallH: lb.wallH, door: lb.door, doorH: lb.doorH, steps: 0, t: lb.t ?? 0.3 }, { ...RECORDS, outer: stone(230) }, lod, out.marks, { x: lb.x, y: rg, z: lb.z, yaw: lb.yaw });
+  const fl = lb.floor;
+  // ledger shelves floor to ceiling along both long walls, a clerk's desk and stool at the far end, a lantern
+  for (const sz of [-1, 1]) for (let i = 0; i < 4; i++) {
+    const x = -lb.hx + 1.4 + i * 1.6;
+    box(k, [1.4, 3.2, 0.34], [x, fl + 1.6, sz * (lb.hz - 0.5)], P.timber);
+    for (let j = 0; j < 4; j++) box(k, [1.3, 0.34, 0.26], [x, fl + 0.5 + j * 0.8, sz * (lb.hz - 0.5) - sz * 0.02], [P.companyRed, P.crepe, P.copper, P.strataRust][(i + j) % 4]!);
   }
-  // the steps in front of the middle arches
-  for (let i = 0; i < 3; i++) box(k, [pitch * 3, 0.2, 1.4 - i * 0.4], [0, 0.1 + i * 0.2, D + 0.9 + (2 - i) * 0.0 + 0.4], P.chalk);
+  box(k, [0.8, 0.08, 1.4], [-lb.hx + 0.8, fl + 0.9, 0], P.timberLight);
+  box(k, [0.7, 0.9, 0.08], [-lb.hx + 0.8, fl + 0.45, 0.66], P.timber);
+  box(k, [0.7, 0.9, 0.08], [-lb.hx + 0.8, fl + 0.45, -0.66], P.timber);
+  box(k, [0.4, 0.45, 0.4], [-lb.hx + 1.5, fl + 0.22, 0.2], P.timber);
+  const lw = k.worldPoint(-lb.hx * 0.15, fl + 2.3, 0);
+  glows.push({ x: lw[0], y: lw[1], z: lw[2] });
+  const rrk = out.roofs.begin("records");
+  rrk.setBase(0, 0, 0, 0);
+  box(rrk, [C.pierIn - C.backX + 0.5, 0.4, C.recordsZ1 - C.recordsZ0 + 0.3], [(C.backX + C.pierIn) / 2, rg + fl + lb.wallH + 0.05, (C.recordsZ0 + C.recordsZ1) / 2], (p, n, o2) => (n.y < -0.5 ? o2.set(P.timberLight) : o2.set(P.chalk)));
   k.clearBase();
-  // the bell-gable: a slim tower on the roof with an open belfry and a bell of copper, a crepe-black roof
-  k.setBase(c.x, gy + H + 0.7, c.z, f.yaw);
+  // the bell-gable: a slim tower on the roof of the cliff's mass with an open belfry and a bell of copper, a crepe-black roof
+  k.setBase(c.x, gy + H + 0.7, c.z, 0);
   box(k, [2.6, 4.2, 2.6], [0, 2.1, 0], stone(215));
   box(k, [3.0, 0.3, 3.0], [0, 4.3, 0], P.chalk);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * 1.05, 4.4, sz * 1.05], [sx * 1.05, 7.0, sz * 1.05], 0.24, 0.2, P.chalk, 6);
@@ -144,7 +198,7 @@ function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y
 
 // ---- the Assay House ------------------------------------------------------------------------------------------------------------------
 
-function assay(k: Kit, world: CollisionWorld, lod: Lod): void {
+function assay(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
   const p = vesperPlan();
   const b = p.assay;
   const gy = world.terrainHeight(b.x, b.z);
@@ -172,14 +226,20 @@ function assay(k: Kit, world: CollisionWorld, lod: Lod): void {
   }
   const d = Math.floor(n / 2);
   const dx = -hx + ((d + 0.5) * hx * 2) / n;
-  box(k, [1.5, 2.5, 0.2], [dx, 1.2, hz + 0.04], P.timber);
-  box(k, [2.1, 0.16, 0.9], [dx, 2.75, hz + 0.4], P.iron, [0.18, 0, 0]);
-  for (let i = 0; i < 3; i++) box(k, [2.4, 0.2, 1.3 - i * 0.3], [dx, 0.1 + i * 0.2, hz + 0.9 - i * 0.12], P.chalk);
+  // (D-038: the door is SEALED, the iron grille shut: drawn below in the building's own frame)
   // the counter: a hatch with a brass grille and a shelf (where a claim is presented)
   box(k, [1.9, 1.1, 0.2], [dx - 3.3, 1.6, hz + 0.04], P.crepe);
   box(k, [2.4, 0.12, 0.7], [dx - 3.3, 1.05, hz + 0.4], P.timberLight);
   if (lod) for (let i = -3; i <= 3; i++) k.limb([dx - 3.3 + i * 0.24, 1.1, hz + 0.16], [dx - 3.3 + i * 0.24, 2.1, hz + 0.16], 0.02, 0.02, P.copper, 4);
   k.clearBase();
+  {
+    const lb = vesperLevel().buildings.find((x) => x.id === "assay")!;
+    k.setBase(b.x, gy, b.z, lb.yaw);
+    sealedDoor(k, `${lb.id}.door`, lb.hx, 0, lb.door, lb.doorH, SEAL, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
+    // the iron grille over the door's hood and a brass plate: the counter window beside it is where a claim is presented
+    box(k, [0.2, 0.16, lb.door + 1.0], [lb.hx + 0.4, lb.doorH + 0.4, 0], P.iron);
+    k.clearBase();
+  }
   // the scales: a pole, a beam, two pans on chains (the Assay House weighs everything, including opinions)
   k.setBase(b.x, gy + H + 1.1, b.z, 0);
   k.limb([0, 0, 0], [0, 2.7, 0], 0.1, 0.07, P.iron, 6);
@@ -206,7 +266,7 @@ function assay(k: Kit, world: CollisionWorld, lod: Lod): void {
 
 // ---- the Company's yard -----------------------------------------------------------------------------------------------------------------
 
-function yard(k: Kit, world: CollisionWorld, lod: Lod): void {
+function yard(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
   const p = vesperPlan();
   // the foreman's office: a plank hut on timber footings, a corrugated roof, a porch with a bell-pull and a ledger window, a stove pipe
   {
@@ -218,13 +278,17 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod): void {
     box(k, [hx * 2, H, hz * 2], [0, H / 2 + 0.2, 0], planks(250));
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.2), -0.6, sz * (hz - 0.2)], [sx * (hx - 0.2), 0.3, sz * (hz - 0.2)], 0.12, 0.1, P.timber, 5);
     gable(k, hx + 0.5, hz + 0.6, 1.5, [0, H + 0.25, 0]);
-    box(k, [1.1, 2.2, 0.16], [0.9, 1.4, hz + 0.02], P.timberLight);
-    box(k, [1.5, 0.9, 0.12], [-1.5, 2.1, hz + 0.02], P.crepe);
-    box(k, [1.9, 0.1, 0.5], [-1.5, 1.6, hz + 0.3], P.timberLight);
+    box(k, [1.3, 0.9, 0.12], [-2.0, 2.1, hz + 0.02], P.crepe);
+    box(k, [1.5, 0.1, 0.5], [-2.0, 1.6, hz + 0.3], P.timberLight);
     box(k, [3.4, 0.16, 1.5], [0.2, 0.15, hz + 0.9], P.timber);
     for (const sx of [-1, 1]) k.limb([sx * 1.55 + 0.2, 0.2, hz + 1.5], [sx * 1.55 + 0.2, 2.7, hz + 1.5], 0.07, 0.06, P.timber, 5);
     box(k, [3.6, 0.14, 1.8], [0.2, 2.75, hz + 0.9], P.iron, [0.1, 0, 0]);
     k.limb([-hx + 0.8, H + 0.5, -0.5], [-hx + 0.8, H + 2.1, -0.5], 0.14, 0.12, P.iron, 6);
+    k.clearBase();
+    // D-038: locked: the door (on the porch) is SEALED; the ledger window is the only way to talk to the Company
+    const lb = vesperLevel().buildings.find((x) => x.id === "office")!;
+    k.setBase(b.x, gy, b.z, lb.yaw);
+    sealedDoor(k, `${lb.id}.door`, lb.hx, 0.2, lb.door, lb.doorH, SEAL, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
     k.clearBase();
     // a sign-board on two posts: THE LOWER GALLERY COMPANY (the lettering is the cloth's)
   }
@@ -237,9 +301,12 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod): void {
     const hx = f.lx, hz = f.lz, H = b.height;
     slab(k, [hx * 2, H, hz * 2], [0, H / 2 - 0.1, 0], stone(260, P.strataBuff, P.strataRust), lod);
     k.add(new SphereGeometry(1, lod ? 12 : 6, lod ? 6 : 3, 0, Math.PI * 2, 0, Math.PI / 2), { at: [0, H - 0.1, 0], scale: [hx + 0.3, 0.8, hz + 0.3], colour: P.spoil, flat: true });
-    box(k, [1.3, 1.9, 0.18], [0, 0.95, hz + 0.02], P.iron);
-    for (let i = 0; i < 3; i++) box(k, [1.3, 0.1, 0.22], [0, 0.4 + i * 0.6, hz + 0.05], P.ironLight);
     box(k, [0.6, 0.6, 0.1], [hx - 0.7, 1.6, hz + 0.02], P.companyRed);
+    k.clearBase();
+    // D-038: the iron door is padlocked and sealed (the keg's source)
+    const lb = vesperLevel().buildings.find((x) => x.id === "magazine")!;
+    k.setBase(b.x, gy, b.z, lb.yaw);
+    sealedDoor(k, `${lb.id}.door`, lb.hx, 0, lb.door, lb.doorH, { ...SEAL, door: P.iron, board: P.ironLight, boardDark: P.iron }, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
     k.clearBase();
   }
   // the timber stack: pit-props and sleepers laid crosswise
@@ -269,7 +336,6 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod): void {
     gable(k, hx + 0.5, hz + 0.5, 1.8, [0, H + 0.05, 0]);
     box(k, [2.2, 1.7, 0.14], [0, 2.7, hz + 0.02], P.crepe);
     k.add(new CylinderGeometry(1.1, 1.1, 0.14, lod ? 14 : 8, 1, false, 0, Math.PI), { at: [0, 3.55, hz + 0.02], rot: [Math.PI / 2, 0, 0], colour: P.crepe, flat: true });
-    box(k, [1.2, 2.1, 0.14], [hx - 1.0, 1.1, hz + 0.02], P.timberLight);
     k.limb([-hx + 0.7, H + 0.8, 0.5], [-hx + 0.7, H + 3.0, 0.5], 0.16, 0.13, P.iron, 6);
     k.clearBase();
   }
@@ -300,7 +366,8 @@ function tent(k: Kit, x: number, y: number, z: number, yaw: number, kind: "syndi
     g.computeVertexNormals();
     k.add(g, { colour: a, flat: true });
   }
-  box(k, [0.05, 1.5, 1.0], [hx + 0.03, 0.75, 0], P.crepe);
+  // D-038: the flap is TIED SHUT (a canvas panel, two ties, a bedroll, a boot): nobody walks in
+  tentFlap(k, hx, 1.5, 1.0, { canvas: b, canvasDark: a, rope: P.timberLight, roll: P.companyRed, boot: P.timber }, Math.round(x));
   k.limb([hx, h, 0], [hx, h + 0.55, 0], 0.03, 0.025, P.timber, 4);
   if (lod) for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
     k.limb([sx * hx * 0.9, h * 0.2, sz * hz * 0.9], [sx * (hx + 1.4), 0.03, sz * (hz + 1.4)], 0.012, 0.012, P.plank, 3);
@@ -370,15 +437,19 @@ function needle(k: Kit, x: number, y: number, z: number, r: number, h: number, s
 
 export interface VesperSolidParts {
   glows: { x: number; y: number; z: number }[];
+  /** D-038: the doors drawn, and the roofs of the interiors (collected here, handed to the view by `buildVesperSolid`). */
+  marks: DoorMark[];
+  roofs: RoofKits;
 }
 
 /** The buildings, tents, carts, spoil, lamps and needles (the works: headframe, trestle, wharf, fall, rails are works.ts). */
 export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, parts: VesperSolidParts): void {
   const plan: VesperPlan = vesperPlan();
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
-  cloister(k, world, lod, parts.glows);
-  assay(k, world, lod);
-  yard(k, world, lod);
+  const out: VesperOut = { marks: parts.marks, roofs: parts.roofs };
+  cloister(k, world, lod, parts.glows, out);
+  assay(k, world, lod, out);
+  yard(k, world, lod, out);
   for (const t of plan.tents) tent(k, t.x, g(t.x, t.z), t.z, t.yaw, t.kind, lod);
   plan.carts.forEach((c, i) => cart(k, c.x, g(c.x, c.z), c.z, c.yaw, lod, 290 + i));
   spoil(k, world, lod);

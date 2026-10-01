@@ -33,6 +33,7 @@ import { VESPER_DEFAULT_VIEW, vesperViews } from "./vesper.ts";
  *   history=N [&outpost=<stage>]   (view=table|game, Hollowmere) HQ keeps the first N endings of a scripted campaign on the planning table, the strongbox and the back wall
  *   seed=N     arena seed (default 7)
  *   cam=x,y,z&at=x,y,z   explicit camera and target (metres)
+ *   viewer=x,z|none   D-038: where the cutaway thinks the player is (default: under the camera); a room's roof is lifted while the viewer is inside it
  *   fov=N      vertical field of view (default 65 like the game)
  *   gfx=low|medium|high
  *   view=folk|folkplaza|folkgate|folkmill|folkjetty|folkwell   HOLLOWMERE'S FOLK (the village at `time=`; try weather=drizzle). who=<id|trade> follows one villager (wd=metres away, wa=angle round them,
@@ -370,6 +371,12 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       stage.camera.lookAt(at);
     }
     stage.setPushers(walkers);
+    // D-038: the cutaway follows the camera (it is the "player" here) unless `viewer=x,z` puts it elsewhere or `viewer=none` switches it off
+    const wv = (stage as unknown as { worldView?: RegionView }).worldView;
+    if (wv?.setViewer && params.get("viewer") !== "none") {
+      const vv = vec(params.get("viewer"));
+      wv.setViewer(vv ? vv.x : cam.x, vv ? vv.z : cam.z);
+    }
     stage.followShadow(new Vector3(cam.x * 0.5 + at.x * 0.5, 0, cam.z * 0.5 + at.z * 0.5));
     stage.render();
     frames++;

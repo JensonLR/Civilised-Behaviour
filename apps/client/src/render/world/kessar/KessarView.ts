@@ -1,8 +1,8 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
+import { PALETTE, kessarLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
 import type { WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, motion } from "../atmosphere.ts";
-import { createAmbientUniforms, buildBirds, buildMotes, type AmbientUniforms } from "../ambient.ts";
+import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, type Lod } from "../flora.ts";
 import { buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
 import { disposeTree } from "../kit.ts";
@@ -13,6 +13,7 @@ import { WINDMILL } from "../windmill.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
+import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import { buildKessarCloth, createKessarAtlas, kessarClothMaterial } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover } from "./ground.ts";
 import { palmGeometry, palmHullGeometry } from "./palms.ts";
@@ -55,6 +56,10 @@ export class KessarView implements RegionView {
   private dressGroup?: Group;
   private dressDisposables: { dispose(): void }[] = [];
   private dressKey = "";
+  /** D-038: the toll booth's roof (the cutaway), the doors drawn, and the lamps hung inside the rooms. */
+  private roofSet?: RoofSet;
+  private doors: DoorMark[] = [];
+  private roomLamps: { x: number; y: number; z: number }[] = [];
 
   constructor(
     private readonly scene: Scene,
@@ -185,10 +190,20 @@ export class KessarView implements RegionView {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildKessarSolid(this.world, lod);
     if (!solid.geometry) return;
-    const hull = this.detail.outlines ? buildKessarSolid(this.world, 0).geometry : undefined;
+    const hullSolid = this.detail.outlines ? buildKessarSolid(this.world, 0) : undefined;
+    const hull = hullSolid?.geometry;
     this.track(solid.geometry);
     if (hull) this.track(hull);
-    makeSolid(this.root, solid.geometry, this.track(toonMaterial({ wetDark: 0.8 })), { name: "kessar", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    const mat = this.track(toonMaterial({ wetDark: 0.8 }));
+    makeSolid(this.root, solid.geometry, mat, { name: "kessar", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    // D-038: the doors drawn, the lamps hung in the rooms, and the roofs of the rooms (one mesh; the one over the viewer is dropped)
+    this.doors = solid.marks;
+    this.roomLamps = solid.lamps;
+    doorGroups(this.root, solid.marks);
+    if (solid.roofs) {
+      this.roofSet = new RoofSet(this.root, solid.roofs, hullSolid?.roofs, mat, { name: "roofs", outline: this.detail.outlines, ink: "medium" });
+      for (const g of this.roofSet.geometries) this.track(g);
+    }
     this.addSites(lod);
   }
 
@@ -242,6 +257,8 @@ export class KessarView implements RegionView {
       }
     }
     add(buildBirds(d.birds, this.ambientU, gulls));
+    // the lamp hung in the toll booth: a candle's glow by day, a flame at dusk (a lamp in a room burns bright even at noon)
+    add(buildLanternGlow(this.roomLamps.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.roomLamps.map(() => 0.7)));
     const rain = buildRain(d.rain, this.ambientU.uBaseY);
     if (rain) {
       this.track(rain.geometry);
@@ -327,6 +344,19 @@ export class KessarView implements RegionView {
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
+  }
+
+  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  setViewer(x: number, z: number): void {
+    this.roofSet?.setViewer(kessarLevel().rooms, x, z);
+  }
+
+  /** The doors the view drew, and the roof set (for tests and tools). */
+  get doorMarks(): readonly DoorMark[] {
+    return this.doors;
+  }
+  get roofs(): RoofSet | undefined {
+    return this.roofSet;
   }
 
   /** The grass and scrub bend away from up to four walkers (the same pusher slots the whole world uses). */

@@ -1,8 +1,9 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshToonMaterial, SRGBColorSpace } from "three";
-import { PALETTE, SALTMARKET_SIGNS, cssHex, saltmarketPlan, type SaltmarketBanner, type Terrain } from "./shared.ts";
+import { PALETTE, SALTMARKET_SEALED_SIGNS, SALTMARKET_SIGNS, cssHex, saltmarketLevel, saltmarketPlan, type SaltmarketBanner, type Terrain } from "./shared.ts";
 import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
 import { worldTime } from "../toon.ts";
+import { pushPlaques } from "../plaques.ts";
 
 /**
  * Banners and signboards for the delta: ONE canvas atlas (drawn at runtime from palette colours, in the game's bundled IM Fell faces: no image assets), ONE textured mesh with a `wave` weight per vertex that the
@@ -15,7 +16,9 @@ const BANNER_H = 448;
 const SMALL_H = 320;
 const SIGN_H = 96;
 const SIGN_Y = BANNER_H + SMALL_H;
-export const ATLAS_H = SIGN_Y + SIGN_H * SALTMARKET_SIGNS.length;
+/** D-038: the sealed warehouses' notices, one strip each after the signboards ("CLOSED FOR TIDE"): the door says why it is shut. */
+const PLAQUE_Y = SIGN_Y + SIGN_H * SALTMARKET_SIGNS.length;
+export const ATLAS_H = PLAQUE_Y + SIGN_H * SALTMARKET_SEALED_SIGNS.length;
 
 type Rect = readonly [number, number, number, number];
 const uvRect = (x: number, y: number, w: number, h: number): Rect => [x / ATLAS_W, 1 - (y + h) / ATLAS_H, (x + w) / ATLAS_W, 1 - y / ATLAS_H];
@@ -26,6 +29,7 @@ export const BANNER_UV: Record<SaltmarketBanner["kind"], Rect> = {
   society: uvRect(256, BANNER_H, 256, SMALL_H),
 };
 export const signUv = (i: number): Rect => uvRect(0, SIGN_Y + i * SIGN_H, ATLAS_W, SIGN_H);
+export const plaqueUv = (i: number): Rect => uvRect(0, PLAQUE_Y + i * SIGN_H, ATLAS_W, SIGN_H);
 
 const c = cssHex;
 const P = PALETTE.saltmarket;
@@ -209,7 +213,7 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
   // ---- the signboards: salt strips, tarred lettering
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  SALTMARKET_SIGNS.forEach((text, i) => {
+  [...SALTMARKET_SIGNS, ...SALTMARKET_SEALED_SIGNS].forEach((text, i) => {
     const y = SIGN_Y + i * SIGN_H;
     ctx.fillStyle = c(P.salt);
     ctx.fillRect(0, y, ATLAS_W, SIGN_H);
@@ -342,6 +346,8 @@ export function buildSaltmarketCloth(terrain: Terrain): BufferGeometry | undefin
       push(c3, u0, v1);
     }
   }
+  // the sealed doors' notices: a small plaque pinned across the boards of each, lettered "CLOSED FOR TIDE"
+  pushPlaques(saltmarketLevel().buildings, (x, z) => terrain.height(x, z), (b) => (b.sign === undefined ? undefined : plaqueUv(SALTMARKET_SEALED_SIGNS.indexOf(b.sign as (typeof SALTMARKET_SEALED_SIGNS)[number]))), { pos, nor, uv, wave });
   if (pos.length === 0) return undefined;
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));

@@ -190,3 +190,33 @@ describe("display attributes", () => {
     expect(s.effectiveShake()).toBe(0.1);
   });
 });
+
+describe("D-038 pad, aim, glyph and music settings", () => {
+  it("have the documented defaults, clamp, persist, notify and reset", async () => {
+    const { s, store } = await load();
+    expect([s.getPadDeadzone(), s.getPadCurve(), s.getPadAimSensitivity()]).toEqual([0.18, 1.6, 0.6]);
+    expect([s.getAimAssist(), s.getHoldToAim(), s.getPadRumble(), s.getAdaptiveMusic()]).toEqual([true, true, true, true]);
+    expect(s.getGlyphPreference()).toBe("auto");
+    const seen: string[] = [];
+    s.onSettingChange((k) => seen.push(k));
+    s.setPadDeadzone(9);
+    expect(s.getPadDeadzone()).toBe(0.4);
+    s.setPadAimSensitivity(0.8);
+    s.setAimAssist(false);
+    s.setHoldToAim(false);
+    s.setGlyphPreference("playstation");
+    expect(store["cb.glyphs"]).toBe("playstation");
+    expect(seen).toEqual(["padDeadzone", "padAimSensitivity", "aimAssist", "holdToAim", "glyphs"]);
+    s.resetAllSettings();
+    expect([s.getPadDeadzone(), s.getPadAimSensitivity(), s.getAimAssist(), s.getHoldToAim(), s.getGlyphPreference()]).toEqual([0.18, 0.6, true, true, "auto"]);
+    expect(store["cb.glyphs"]).toBeUndefined();
+  });
+  it("a URL override applies for the session and a bad glyph value is ignored", async () => {
+    const { s } = await load({ search: "?glyphs=xbox&aimassist=0&paddead=0.3" });
+    expect(s.getGlyphPreference()).toBe("xbox");
+    expect(s.getAimAssist()).toBe(false);
+    expect(s.getPadDeadzone()).toBe(0.3);
+    const bad = await load({ search: "?glyphs=nintendo" });
+    expect(bad.s.getGlyphPreference()).toBe("auto");
+  });
+});

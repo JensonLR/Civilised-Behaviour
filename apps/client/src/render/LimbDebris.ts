@@ -49,6 +49,8 @@ const along = new Vector3();
  */
 export class LimbDebris {
   private readonly pieces: Piece[] = [];
+  /** Told once when a limb first hits the ground (x, z, heading vx, vz): the integrator leaves a pool and a spatter there (render/decals). */
+  onLand: ((x: number, z: number, vx: number, vz: number) => void) | undefined;
 
   constructor(
     private readonly scene: { add(o: Object3D): unknown },
@@ -112,6 +114,7 @@ export class LimbDebris {
         const drag = Math.exp(-4 * dt);
         s.vx *= drag;
         s.vz *= drag;
+        if (!s.landed) this.onLand?.(g.position.x, g.position.z, s.vx, s.vz);
         s.landed = true;
         s.wx *= 0.5;
         s.wy *= 0.5;

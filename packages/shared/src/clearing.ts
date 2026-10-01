@@ -174,7 +174,15 @@ export function bridgeDeck(terrain: Terrain): number {
   const b = getBridge();
   const first = b.segments[0]!;
   const last = b.segments[b.segments.length - 1]!;
-  const bank = Math.min(terrain.height(first.x0, first.z0), terrain.height(last.x1, last.z1));
+  // the lower bank, measured where a walker really steps on: at each end and a metre and a quarter before it (the approach slopes)
+  const dirA = { x: first.x1 - first.x0, z: first.z1 - first.z0 };
+  const la = Math.hypot(dirA.x, dirA.z) || 1;
+  const dirB = { x: last.x1 - last.x0, z: last.z1 - last.z0 };
+  const lb = Math.hypot(dirB.x, dirB.z) || 1;
+  const bank = Math.min(
+    terrain.height(first.x0, first.z0), terrain.height(last.x1, last.z1),
+    terrain.height(first.x0 - (dirA.x / la) * 1.25, first.z0 - (dirA.z / la) * 1.25), terrain.height(last.x1 + (dirB.x / lb) * 1.25, last.z1 + (dirB.z / lb) * 1.25),
+  );
   let water = -Infinity;
   const l = terrain as Partial<LandscapeTerrain>;
   if (typeof l.waterDepth === "function") {
@@ -185,7 +193,8 @@ export function bridgeDeck(terrain: Terrain): number {
       if (d > 0) water = Math.max(water, terrain.height(mx, mz) + d);
     }
   }
-  return Math.max(bank + 0.14, water + 0.4);
+  // D-038: a hand above the lower bank and clear of the water, but never more than a step (0.42) above that bank: on seeds where the stream stands high against its banks the deck used to sit 0.53 m up and the way across was a wall
+  return Math.min(Math.max(bank + 0.14, water + 0.4), bank + 0.42);
 }
 
 export interface FordStone {

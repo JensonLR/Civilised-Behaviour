@@ -2,7 +2,7 @@ import { Scene } from "three";
 import { describe, expect, it } from "vitest";
 import { SURFACE, WEAPON } from "@cb/shared";
 import { setAtmosphere } from "../world/atmosphere.ts";
-import { SHOTFX, ShotFx, WHIZZ_RANGE, smokeWind, windAt, windGain } from "./ShotFx.ts";
+import { SHOTFX, ShotFx, WHIZZ_RANGE, seedShotFx, smokeWind, windAt, windGain } from "./ShotFx.ts";
 
 const ground = () => 0;
 const make = (scale = 1) => new ShotFx(new Scene(), ground, scale);
@@ -39,6 +39,7 @@ describe("wind on the smoke", () => {
   it("a puff of muzzle smoke drifts further downwind in a gale than in a calm (the atmosphere's wind is read every frame)", () => {
     const drift = (wind: number): number => {
       setAtmosphere({ wind });
+      seedShotFx(7); // (the same dice in both weathers: the only difference left is the wind, so the comparison cannot flake)
       const fx = make();
       const x0 = 0;
       fx.muzzle(WEAPON.RIFLE, x0, 1.4, 0, 0, 0, -1);

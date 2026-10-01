@@ -323,6 +323,54 @@ const holdToSprint = flagSetting("holdToSprint", "cb.holdToSprint", "holdsprint"
 export const getHoldToSprint = (): boolean => holdToSprint.get();
 export const setHoldToSprint = (on: boolean): void => holdToSprint.set(on);
 
+// ---- D-038: pad, aim, glyph and music settings (contract landed by the architect; package I owns the pad UI in ui/SettingsPad.ts, package A the adaptive music) ----
+/** Radial deadzone of both sticks, and the response curve exponent (1 = linear; higher = finer control near the centre). */
+const padDeadzone = numSetting("padDeadzone", "cb.padDeadzone", "paddead", 0.18, 0.05, 0.4, 0.01);
+export const getPadDeadzone = (): number => padDeadzone.get();
+export const setPadDeadzone = (v: number): void => padDeadzone.set(v);
+export const padDeadzoneSpec = padDeadzone;
+const padCurve = numSetting("padCurve", "cb.padCurve", "padcurve", 1.6, 1, 3, 0.1);
+export const getPadCurve = (): number => padCurve.get();
+export const setPadCurve = (v: number): void => padCurve.set(v);
+export const padCurveSpec = padCurve;
+/** Look-speed multiplier on the pad while aiming (the pad's normal sensitivity is `padSensitivity`). */
+const padAimSensitivity = numSetting("padAimSensitivity", "cb.padAimSensitivity", "padaimsens", 0.6, 0.2, 1.5, 0.05);
+export const getPadAimSensitivity = (): number => padAimSensitivity.get();
+export const setPadAimSensitivity = (v: number): void => padAimSensitivity.set(v);
+export const padAimSensitivitySpec = padAimSensitivity;
+/** Soft aim assist: PAD ONLY, client-side, inside the server's aim slack (input/aim.ts). */
+const aimAssist = flagSetting("aimAssist", "cb.aimAssist", "aimassist", () => true);
+export const getAimAssist = (): boolean => aimAssist.get();
+export const setAimAssist = (on: boolean): void => aimAssist.set(on);
+/** Aim is HELD (default) or toggled by the aim button. */
+const holdToAim = flagSetting("holdToAim", "cb.holdToAim", "holdaim", () => true);
+export const getHoldToAim = (): boolean => holdToAim.get();
+export const setHoldToAim = (on: boolean): void => holdToAim.set(on);
+/** Gamepad rumble on shots, hits, explosions and being hurt (where the browser exposes `vibrationActuator`). */
+const padRumble = flagSetting("padRumble", "cb.padRumble", "rumble", () => true);
+export const getPadRumble = (): boolean => padRumble.get();
+export const setPadRumble = (on: boolean): void => padRumble.set(on);
+/** The layered, state-driven score (calm / tension / combat / aftermath). Off = the plain bed only. The volume sliders are unchanged. */
+const adaptiveMusic = flagSetting("adaptiveMusic", "cb.adaptiveMusic", "adaptivemusic", () => true);
+export const getAdaptiveMusic = (): boolean => adaptiveMusic.get();
+export const setAdaptiveMusic = (on: boolean): void => adaptiveMusic.set(on);
+
+/** Which button glyphs the interface prints: follow the last-used device ("auto"), or always one family (input/devices.ts). */
+export type GlyphPreference = "auto" | "keyboard" | "xbox" | "playstation";
+export const GLYPH_PREFERENCES: readonly GlyphPreference[] = ["auto", "keyboard", "xbox", "playstation"];
+const isGlyphPref = (v: unknown): v is GlyphPreference => typeof v === "string" && (GLYPH_PREFERENCES as readonly string[]).includes(v);
+let glyphPref: GlyphPreference | undefined;
+export function getGlyphPreference(): GlyphPreference {
+  if (glyphPref) return glyphPref;
+  const v = readStored("cb.glyphs", "glyphs");
+  return (glyphPref = isGlyphPref(v) ? v : "auto");
+}
+export function setGlyphPreference(p: GlyphPreference): void {
+  glyphPref = p;
+  writeStored("cb.glyphs", p === "auto" ? null : p);
+  emitSetting("glyphs");
+}
+
 // ---- accessibility ---------------------------------------------------------------------------------------------------------------------
 
 const cvd = flagSetting("cvd", "cb.cvd", "cvd", () => false);
@@ -375,6 +423,7 @@ export function resetAllSettings(): void {
   showLimbs = undefined;
   view = undefined;
   headBob = undefined;
-  for (const k of ["cb.gore", "cb.showLimbs", "cb.view", "cb.headBob"]) writeStored(k, null);
+  glyphPref = undefined;
+  for (const k of ["cb.gore", "cb.showLimbs", "cb.view", "cb.headBob", "cb.glyphs"]) writeStored(k, null);
   emitSetting("all");
 }

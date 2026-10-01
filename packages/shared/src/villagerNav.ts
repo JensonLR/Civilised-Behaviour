@@ -313,9 +313,9 @@ function stationDefs(plan: VillagePlan, terrainY: (x: number, z: number) => numb
     const mc = plan.props.find((p) => p.kind === "cart" && Math.hypot(p.x - mill.x, p.z - mill.z) < 6);
     const px = sx + Math.cos(mill.yaw) * 0.2;
     const pz = sz + Math.sin(mill.yaw) * 0.2;
-    // beside the sack pile, on the side away from the wall
-    const ox = px + Math.cos(mill.yaw + Math.PI / 2) * 1.0;
-    const oz = pz + Math.sin(mill.yaw + Math.PI / 2) * 1.0;
+    // in front of the sack pile, on the side away from the wall (D-038: the pile now stands to the right of the door, so "beside" would be on the sacks)
+    const ox = px + Math.cos(mill.yaw) * 1.2;
+    const oz = pz + Math.sin(mill.yaw) * 1.2;
     add({ key: "mill-sacks", x: ox, z: oz, facing: faceTo(ox, oz, sx, sz), reach: 5 });
     if (mc) {
       const cx = mc.x + Math.cos(mc.yaw + Math.PI / 2) * 1.6;

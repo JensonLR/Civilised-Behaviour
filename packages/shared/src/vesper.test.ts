@@ -123,6 +123,8 @@ describe("Vesper Gorge: the world", () => {
     for (let i = 0; i < items.length; i++) {
       for (let j = i + 1; j < items.length; j++) {
         const a = items[i]!, b = items[j]!;
+        // (D-038: the cloister's back mass, piers and end wall, and the records room's walls, are parts of one structure each; `levelAuditRegions.test.ts` audits them as such)
+        if (a.tag === "house" && b.tag === "house" && ((a.x < -41 && b.x < -41 && a.z > 25 && a.z < 63 && b.z > 25 && b.z < 63))) continue;
         if (a.kind === "box" && b.kind === "box") {
           // (boxes: no centre inside the other)
           const dx = Math.abs(a.x - b.x), dz = Math.abs(a.z - b.z);
@@ -255,10 +257,10 @@ describe("Vesper Gorge: everything is reachable on foot except the pocket behind
 
   it("the trestle is a floor: the tipple ledge is reached by the deck (the ramps under its two ends are hidden by it), and the road passes underneath", () => {
     const p = vesperPlan();
-    expect(r.at(-36, -62), "the tipple ledge is reachable").toBe(true);
+    expect(r.at(-33, -57.5), "the tipple ledge is reachable").toBe(true);   // (D-038: the tipple moved onto the ledge's flat; this is the ledge beside it)
     expect(r.onDeck(0, p.trestle.z), "on the deck").toBe(true);
     expect(r.onDeck(-26, p.trestle.z), "on the deck over the landing's ramp").toBe(true);
-    expect(r.at(-36, -62), "on the ledge, level with the deck").toBe(true);
+    expect(r.at(-33, -62), "on the ledge, level with the deck").toBe(true);   // (D-038: (-36,-62) is inside the tipple now)
     expect(r.at(0, -50), "and the floor under it is walked too").toBe(true);
     expect(r.at(vesperRoadX(-66), -66), "the road under the deck").toBe(true);
     // walking the deck: the real step carries a walker from the terrace to the ledge and up to the deck's level

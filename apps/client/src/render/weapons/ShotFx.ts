@@ -63,7 +63,20 @@ const LOCK_BACK: Record<number, number> = { [WEAPON.PISTOL]: 0.3, [WEAPON.RIFLE]
 /** How near (metres) a round must pass the listener to be heard and seen going by. */
 export const WHIZZ_RANGE = 3.2;
 
-const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
+// (presentation randomness, seedable: a still or a test can repeat a fight's smoke exactly; the default seed is whatever the clock gave, so play looks different every time)
+let rs = (Math.random() * 4294967296) >>> 0;
+/** Fixes the effects' dice so the same calls draw the same smoke (review stills, tests). Presentation only: nothing in the simulation reads it. */
+export function seedShotFx(seed: number): void {
+  rs = seed >>> 0;
+}
+function rand(): number {
+  rs = (rs + 0x6d2b79f5) >>> 0;
+  let t = rs;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const rnd = (a: number, b: number): number => a + rand() * (b - a);
 const hex = (n: number): number => n;
 
 // ---- instanced billboards ---------------------------------------------------------------------------------------------------------------
@@ -451,7 +464,7 @@ export class ShotFx {
     this.pdrag[i] = drag;
     this.prise[i] = rise;
     this.prot[i] = rnd(0, 6.28);
-    this.prs[i] = Math.random();
+    this.prs[i] = rand();
   }
 
   private flashAt(x: number, y: number, z: number, size: number, life: number, color: number = FX.flashOuter): void {
@@ -664,13 +677,13 @@ export class ShotFx {
     this.mz[i] = z;
     this.msize[i] = size;
     this.mage[i] = 0;
-    this.mseed[i] = Math.random();
+    this.mseed[i] = rand();
   }
 
   /** The cannon's fuse: a stream of sparks at the touch hole. */
   fuse(x: number, y: number, z: number): void {
     this.debris(x, y, z, rnd(-0.6, 0.6), rnd(1.2, 3), rnd(-0.6, 0.6), 0.012, 0.012, 0.03, FX.spark, 0.35);
-    if (Math.random() < 0.4) this.puff(x, y, z, rnd(-0.1, 0.1), rnd(0.4, 0.8), rnd(-0.1, 0.1), 0.05, 0.2, 0.7, FX.smokeLight, FX.smokeDark, 0.5, 1, 0.2);
+    if (rand() < 0.4) this.puff(x, y, z, rnd(-0.1, 0.1), rnd(0.4, 0.8), rnd(-0.1, 0.1), 0.05, 0.2, 0.7, FX.smokeLight, FX.smokeDark, 0.5, 1, 0.2);
   }
 
   /**

@@ -32,10 +32,10 @@ export interface Anchors {
 
 export const WEAPON_ANCHORS: Record<number, Anchors> = {
   // (the pistol's walnut grip and the small of a stock lean back: the handle's axis rises and tilts forward; a hilt and a cane's shaft lie along the blade)
-  [WEAPON.PISTOL]: { left: [0, -0.02, -0.12], muzzle: [0, 0.035, -0.36], lock: [0, 0.055, -0.03], butt: [0, -0.1, 0.075], rod: 0.28, grip: [0, 0.95, -0.31] },
+  [WEAPON.PISTOL]: { left: [0, -0.02, -0.12], muzzle: [0, 0.022, -0.36], lock: [0, 0.04, -0.03], butt: [0, -0.1, 0.075], rod: 0.28, grip: [0, 0.95, -0.31] },
   [WEAPON.RIFLE]: { left: [0, -0.05, -0.36], muzzle: [0, 0.03, -1.0], lock: [0, 0.06, -0.03], butt: [0, -0.02, 0.24], rod: 0.7, grip: [0, 0.94, -0.34], gripL: [0, 0, -1] },
   [WEAPON.BLUNDERBUSS]: { left: [0, -0.05, -0.27], muzzle: [0, 0.03, -0.66], lock: [0, 0.06, -0.03], butt: [0, -0.02, 0.24], rod: 0.4, grip: [0, 0.94, -0.34], gripL: [0, 0, -1] },
-  [WEAPON.SABRE]: { left: [0, 0, 0.09], muzzle: [0, 0.02, -0.98], lock: [0, 0, 0], butt: [0, 0, 0.09], rod: 0, grip: [0, 0, -1] },
+  [WEAPON.SABRE]: { left: [0, 0, 0.09], muzzle: [0, -0.05, -0.98], lock: [0, 0, 0], butt: [0, 0, 0.09], rod: 0, grip: [0, 0, -1] },
   [WEAPON.UMBRELLA]: { left: [0, 0, 0.08], muzzle: [0, 0, -0.95], lock: [0, 0, 0], butt: [0, 0, 0.1], rod: 0, grip: [0, 0, -1] },
 };
 
@@ -590,7 +590,23 @@ function fitRight(out: HoldOut, body: HoldBody): void {
   const dy = out.right.y - body.sy;
   const dz = out.right.z;
   const d = Math.hypot(dx, dy, dz);
-  if (d <= reach) return;
+  if (d <= reach) {
+    // ...and not nearer than the elbow can fold (a long arm with the butt pulled into the shoulder: the fist would have to be inside the bent arm, and it
+    // stops short of the grip); the piece is pushed out from the shoulder until the arm can bend to it
+    const u = body.upper;
+    const l = body.lower;
+    // (a fist bigger than the default 8 cm sits further from the wrist, so the wrist must be that much further from the shoulder's fold)
+    const near = Math.sqrt(u * u + l * l + 2 * u * l * Math.cos(ELBOW_FOLD)) + Math.max(0, (body.hand ?? 0.08) - 0.08) * HAND_CENTRE * 3;
+    if (d >= near || d < 1e-6) return;
+    const push = Math.min(0.3, near - d) / d;
+    out.px += dx * push;
+    out.py += dy * push;
+    out.pz += dz * push;
+    out.right.x += dx * push;
+    out.right.y += dy * push;
+    out.right.z += dz * push;
+    return;
+  }
   const k = Math.min(0.35, d - reach) / d;
   out.px -= dx * k;
   out.py -= dy * k;
@@ -599,6 +615,9 @@ function fitRight(out: HoldOut, body: HoldBody): void {
   out.right.y -= dy * k;
   out.right.z -= dz * k;
 }
+
+/** How far a held fist may be folded in toward its shoulder (elbow flexion, radians; the rig's own stop is 2.3). */
+const ELBOW_FOLD = 2.2;
 
 /** The left hand's place on a two-handed piece: the fore-end, or as far along toward the grip as this arm (shoulder at -hw) can reach. */
 function foreGrip(out: HoldOut, body: HoldBody, a: Anchors, o: { x: number; y: number; z: number }): void {

@@ -11,7 +11,7 @@ export const CAMP = {
   /** Two elliptical bell tents west of the spawn, doors (local +x end) facing the fire. */
   tents: [
     { x: -8, z: 3, yaw: 0.28 },
-    { x: -8.4, z: -4, yaw: -0.2 },
+    { x: -8.9, z: -3.8, yaw: -0.2 },
   ],
   tentHalf: { hx: 2, hz: 1.6, height: 2.4 },
   fire: { x: 7, z: -4, r: 0.6, height: 0.45 },
@@ -22,7 +22,7 @@ export const CAMP = {
   /** The old authored step-up crates. */
   crates: [
     { x: 4, z: 6, half: 0.6, yaw: 0.3, height: 0.45 },
-    { x: 5.2, z: 6.4, half: 0.6, yaw: -0.2, height: 0.9 },
+    { x: 5.35, z: 6.5, half: 0.6, yaw: -0.2, height: 0.9 },
   ],
   /** The ruined wall north of the camp. */
   wall: { x: 0, z: -12, hx: 6, hz: 0.4, height: 2.2 },

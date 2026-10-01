@@ -3,7 +3,8 @@ import { KESSAR_ANCHORS as A } from "./campaignTypes.ts";
 import { createArena } from "./arena.ts";
 import { BUTTON, FLAG } from "./constants.ts";
 import { PALETTE, chroma, contrast, hsl } from "./palette.ts";
-import { KESSAR, KESSAR_SIGNS, createKessarWorld, kessarPlan, kessarProps, kessarRiverZ, kessarRoad, kessarSpawn } from "./kessar.ts";
+import { buildingIdAt } from "./levelPlan.ts";
+import { KESSAR, KESSAR_SIGNS, createKessarWorld, kessarLevel, kessarPlan, kessarProps, kessarRiverZ, kessarRoad, kessarSpawn } from "./kessar.ts";
 import { createCharState, stepCharacter, yawToWire, type CharState } from "./movement.ts";
 import { PropKind } from "./props.ts";
 import type { CollisionWorld } from "./collision.ts";
@@ -83,6 +84,9 @@ describe("Kessar Reach: the world", () => {
       for (let j = i + 1; j < items.length; j++) {
         const a = items[i]!;
         const b = items[j]!;
+        // (D-038: the toll booth is a room, several wall boxes of ONE building)
+        const ia = buildingIdAt(kessarLevel(), a.x, a.z, 0.2), ib = buildingIdAt(kessarLevel(), b.x, b.z, 0.2);
+        if (a.tag === "house" && b.tag === "house" && ia !== undefined && ia === ib) continue;
         expect(Math.hypot(a.x - b.x, a.z - b.z), `${a.tag}@${a.x.toFixed(1)},${a.z.toFixed(1)} vs ${b.tag}@${b.x.toFixed(1)},${b.z.toFixed(1)}`).toBeGreaterThan(reach(a) + reach(b));
       }
     }

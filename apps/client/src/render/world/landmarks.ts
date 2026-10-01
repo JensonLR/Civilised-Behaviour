@@ -82,7 +82,15 @@ export function tent(k: Kit, lod: Lod): void {
     (7 * Math.PI) / 16,
     Math.PI / 8,
   );
-  k.add(door, { scale: [hx, 1, hz], colour: C.tentDoor, flat: true });
+  // D-038: the flap is TIED SHUT (canvas, not a dark opening: nobody walks in; the tent is a small solid box): a seam, two ties, a bedroll against the canvas and, on alternate tents, a boot
+  k.add(door, { scale: [hx, 1, hz], colour: (p, _n, out) => blend(out, C.canvas, C.canvasShade, 0.65 + 0.2 * Math.sin(p.y * 9)), flat: true });
+  k.limb([hx * 0.985, 0.22, 0], [hx * 0.83, 1.55, 0], 0.012, 0.012, C.canvasTrim, 3);
+  for (const y of [0.55, 1.0]) {
+    k.limb([hx * (1 - y * 0.075), y, -0.18], [hx * (1 - y * 0.075) + 0.05, y - 0.03, 0.18], 0.014, 0.014, C.rope, 3);
+    k.add(new SphereGeometry(0.035, 4, 3), { at: [hx * (1 - y * 0.075) + 0.05, y - 0.03, 0], colour: C.rope });
+  }
+  k.limb([hx - 0.03, 0.14, 0.55], [hx - 0.03, 0.14, 1.35], 0.13, 0.13, C.tentDoor, 6, true);   // (against the canvas: inside the tent's collision footprint)
+  if (Math.round(k.yaw * 10) % 2 === 0) box(k, [0.16, 0.2, 0.3], [hx - 0.05, 0.1, -0.6], C.charred, [0, 0.4, 0]);
   // finial
   k.limb([0, 2.2, 0], [0, 2.42, 0], 0.025, 0.02, C.pole, 5);
   k.add(new SphereGeometry(0.05, 6, 4), { at: [0, 2.45, 0], colour: C.brass });

@@ -1,7 +1,8 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
-import { PALETTE, hash3, type CollisionWorld } from "@cb/shared";
+import { PALETTE, hash3, highmarkLevel, type CollisionWorld } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
+import { RoofKits, interiorShell, sealedDoor, type DoorMark, type LevelBuilding, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
 import { tent } from "../landmarks.ts";
 import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, highmarkPlan, type HighmarkBox, type HighmarkRound, type HighmarkWall } from "./shared.ts";
 import { BELL_GABLE, GATE_MAST, LANTERN_TOWER, PALACE_MAST, TERRACE_MAST, TIER2_PINNACLE, palaceHeights, terraceMasts } from "./skyline.ts";
@@ -172,8 +173,10 @@ function granary(k: Kit, g: HighmarkRound, gy: number, lod: Lod, seed: number): 
   k.add(new CylinderGeometry(g.r + 0.2, g.r + 0.2, 0.3, radial), { at: [0, g.height - 0.15, 0], colour: P.chalkCap, flat: true });
   k.add(new ConeGeometry(g.r + 0.75, 2.5, radial, 1), { at: [0, g.height + 1.1, 0], colour: roofColour, flat: true, perFace: true });
   k.add(new SphereGeometry(0.22, 6, 4), { at: [0, g.height + 2.45, 0], colour: P.sunGold });
-  // a plank door and a window slit; sacks at the foot
-  box(k, [1.1, 2.0, 0.2], [g.r - 0.05, 0.9, 0], P.timber, [0, 0, 0]);
+  // D-038: a granary has NO ground door: a hatch high in the drum, up a ladder, and a window slit; sacks at the foot
+  box(k, [0.12, 0.9, 0.8], [g.r - 0.02, 3.3, 0], P.timber);
+  for (const sz of [-0.38, 0.38]) k.limb([g.r + 0.45, 0, sz], [g.r + 0.03, 3.0, sz], 0.035, 0.035, P.timberLight, 4);
+  if (lod) for (let i = 0; i < 6; i++) { const t = (i + 0.5) / 6; box(k, [0.04, 0.04, 0.8], [g.r + 0.45 - 0.42 * t, 0.15 + t * 2.85, 0], P.timberLight); }
   if (lod) {
     box(k, [0.2, 0.5, 0.12], [0, g.height - 1.2, g.r - 0.05], P.iron);
     for (let i = 0; i < 3; i++) k.add(new SphereGeometry(0.34, 6, 4), { at: [g.r * 0.6 + i * 0.35, 0.28, g.r * 0.7 - i * 0.2], scale: [1, 0.8, 1], colour: P.grangeWheat, flat: true });
@@ -200,35 +203,84 @@ function stall(k: Kit, s: HighmarkBox, gy: number, lod: Lod, i: number): void {
   k.clearBase();
 }
 
-function hall(k: Kit, b: HighmarkBox, gy: number, lod: Lod, seed: number, big: boolean): void {
+/** The Assembly Hall's inside: cream lime-wash, plank floor, timber; the sealed halls' boards, chain and seal. */
+const HALL: ShellStyle = { outer: P.chalk, inner: P.crownCream, floor: P.timberLight, floorDark: P.timber, trim: P.timber, leaf: P.timber, strap: P.iron, lamp: P.lampGlow, ceiling: P.timber };
+const SEAL: SealedStyle = { frame: P.chalkCap, door: P.timber, board: P.timberLight, boardDark: P.timber, iron: P.iron, brass: P.bell, paper: P.crownCream, wax: P.crownRed };
+
+interface HighmarkOut {
+  marks: DoorMark[];
+  lamps: { x: number; y: number; z: number }[];
+  roofs: RoofKits;
+}
+
+/**
+ * A hall of the capital by what the plan says it IS: hall0 (the Grange Assembly Hall) is a walkable room with a double door at its end, benches, the harvest bell on a beam and a dais; every other hall is a solid mass
+ * with a SEALED facade on the long face the road passes (a door painted shut with the Grange's mark: boards, a chain, a seal; the notice is the cloth mesh's plaque).
+ */
+function hall(k: Kit, b: HighmarkBox, gy: number, lod: Lod, seed: number, index: number, out: HighmarkOut): void {
+  const lb = highmarkLevel().buildings.find((x) => x.id === `hall${index}`)!;
+  const big = index === 0;
+  if (lb.kind === "interior") {
+    k.setBase(b.x, gy, b.z, b.yaw);
+    interiorShell(k, { id: lb.id, hx: b.hx, hz: b.hz, floor: lb.floor, wallH: lb.wallH, door: lb.door, doorH: lb.doorH, steps: 0, t: lb.t ?? 0.3 }, { ...HALL, outer: masonry(seed) }, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: b.yaw });
+    const lw = k.worldPoint(-b.hx * 0.15, lb.floor + 2.4, 0);
+    out.lamps.push({ x: lw[0], y: lw[1], z: lw[2] });
+    const fl = lb.floor;
+    // benches in two rows along the hall, the aisle to the dais kept clear; the dais and the Chair of the Assembly at the far end; the harvest bell on its beam
+    for (const sz of [-1, 1]) for (const lx of [-3.6, -1.6, 0.4, 2.4]) {
+      box(k, [1.4, 0.08, 0.5], [lx, fl + 0.45, sz * 1.5], P.timberLight);
+      for (const e of [-1, 1]) box(k, [0.08, 0.45, 0.4], [lx + e * 0.55, fl + 0.22, sz * 1.5], P.timber);
+    }
+    box(k, [1.6, 0.3, b.hz * 2 - 1.2], [-b.hx + 1.1, fl + 0.15, 0], P.timberLight);
+    box(k, [0.7, 0.9, 0.7], [-b.hx + 0.95, fl + 0.75, 0], P.timber);
+    box(k, [0.14, 1.4, 0.8], [-b.hx + 0.6, fl + 1.1, 0], P.timber);
+    box(k, [b.hx * 0.2, 0.2, 0.2], [-b.hx * 0.35, fl + lb.wallH - 0.4, 0], P.timber);
+    k.add(new ConeGeometry(0.34, 0.62, 8, 1), { at: [-b.hx * 0.35, fl + lb.wallH - 1.0, 0], colour: P.bell, flat: true });
+    // windows with iron grilles in the long walls (lit at the harvest bell hour by the lamp within)
+    const n = Math.max(2, Math.round(b.hx / 1.7));
+    for (let i = 0; i < n; i++) for (const sz of [-1, 1]) {
+      const x = -b.hx + ((i + 0.5) * b.hx * 2) / n;
+      box(k, [0.7, 1.1, 0.12], [x, lb.floor + lb.wallH * 0.55, sz * (b.hz + 0.02)], P.iron);
+      box(k, [0.9, 0.12, 0.2], [x, lb.floor + lb.wallH * 0.55 - 0.62, sz * (b.hz + 0.06)], P.chalkCap);
+    }
+    // the double door's gilt sun and posts at the gable end
+    box(k, [0.2, 0.3, lb.door + 0.6], [b.hx + 0.04, lb.floor + lb.doorH + 0.5, 0], P.sunGold);
+    k.clearBase();
+    // the roof (the cutaway lifts it): a gable along the hall, a crest, and a belfry
+    const rk = out.roofs.begin(lb.id);
+    rk.setBase(b.x, gy, b.z, b.yaw);
+    const ey = lb.floor + lb.wallH;
+    box(rk, [b.hx * 2 + 0.3, 0.25, b.hz * 2 + 0.3], [0, ey - 0.05, 0], P.chalkCap);
+    gable(rk, b.hx + 0.5, b.hz + 0.55, 2.6, [0, ey + 0.05, 0]);
+    crest(rk, (b.hx + 0.5) * 2 - 1.2, [0, ey + 0.05 + 2.6, 0], P.verdigrisLight, lod);
+    if (lod) rk.add(new CylinderGeometry(0.28, 0.32, 1.6, 6), { at: [b.hx * 0.6, ey + 2.2, 0], colour: masonry(seed + 3), flat: true });
+    sun(k, b.x - Math.sin(b.yaw) * (b.hz + 0.1), gy + lb.floor + lb.wallH * 0.8, b.z + Math.cos(b.yaw) * (b.hz + 0.1), b.yaw, 0.4, 0);
+    return;
+  }
   k.setBase(b.x, gy, b.z, b.yaw);
   slab(k, [b.hx * 2, b.height + 0.7, b.hz * 2], [0, (b.height - 0.7) / 2, 0], masonry(seed), lod);
   box(k, [b.hx * 2 + 0.3, 0.25, b.hz * 2 + 0.3], [0, b.height - 0.05, 0], P.chalkCap);
-  gable(k, b.hx + 0.5, b.hz + 0.55, big ? 3.2 : 2.5, [0, b.height + 0.05, 0]);
-  crest(k, (b.hx + 0.5) * 2 - 1.2, [0, b.height + 0.05 + (big ? 3.2 : 2.5), 0], P.verdigrisLight, lod);
-  // windows (dark, lit at dusk by the lamps), a door on the face the road passes (local +z), a gilt sun over it
+  gable(k, b.hx + 0.5, b.hz + 0.55, 2.5, [0, b.height + 0.05, 0]);
+  crest(k, (b.hx + 0.5) * 2 - 1.2, [0, b.height + 0.05 + 2.5, 0], P.verdigrisLight, lod);
+  // windows, SHUTTERED (nailed shut); the door slot in the middle of the long face is the sealed door's
   const n = Math.max(2, Math.round(b.hx / 1.7));
   for (let i = 0; i < n; i++) {
     const x = -b.hx + ((i + 0.5) * b.hx * 2) / n;
     if (i === Math.floor(n / 2)) continue;
-    box(k, [0.7, 1.1, 0.12], [x, b.height * 0.55, b.hz + 0.02], P.iron);
+    box(k, [0.7, 1.1, 0.12], [x, b.height * 0.55, b.hz + 0.02], P.timber);
     box(k, [0.9, 0.12, 0.2], [x, b.height * 0.55 - 0.62, b.hz + 0.06], P.chalkCap);
-  }
-  const d = Math.floor(n / 2);
-  const dx = -b.hx + ((d + 0.5) * b.hx * 2) / n;
-  box(k, [1.4, 2.4, 0.16], [dx, 1.1, b.hz + 0.03], P.timber);
-  box(k, [1.7, 0.25, 0.3], [dx, 2.45, b.hz + 0.08], P.chalkCap);
-  if (lod) {
-    for (const sx of [-1, 1]) k.limb([dx + sx * 0.95, 0, b.hz + 0.4], [dx + sx * 0.95, 2.4, b.hz + 0.4], 0.09, 0.08, P.chalkCap, 6);
-    if (big) k.add(new CylinderGeometry(0.28, 0.32, 1.6, 6), { at: [b.hx * 0.6, b.height + 2.2, 0], colour: masonry(seed + 3), flat: true });
+    if (lod) for (const y of [-0.3, 0, 0.3]) box(k, [0.08, 0.06, 0.8], [x, b.height * 0.55 + y, b.hz + 0.09], P.timberLight);   // planks nailed across
   }
   k.clearBase();
-  if (big) sun(k, b.x - Math.sin(b.yaw) * (b.hz + 0.1), gy + b.height * 0.8, b.z + Math.cos(b.yaw) * (b.hz + 0.1), b.yaw, 0.4, 0);
+  // the sealed door, on the long face the road passes (the frame turned a quarter so local +x is that face)
+  k.setBase(b.x, gy, b.z, lb.yaw);
+  sealedDoor(k, `${lb.id}.door`, lb.hx, 0, lb.door, lb.doorH, SEAL, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
+  k.clearBase();
 }
 
 // ---- the gatehouse -------------------------------------------------------------------------------------------------------------------
 
-function gatehouse(k: Kit, world: CollisionWorld, lod: Lod): void {
+function gatehouse(k: Kit, world: CollisionWorld, lod: Lod, out: HighmarkOut): void {
   const plan = highmarkPlan();
   const gate = plan.gate;
   const y = (x: number, z: number): number => world.terrainHeight(x, z);
@@ -252,6 +304,8 @@ function gatehouse(k: Kit, world: CollisionWorld, lod: Lod): void {
   // the lintel and its arch: a chalk block high enough to walk under, a cornice, the sun of the Crown on its face
   const l = gate.lintel;
   const gy = gate.y;
+  // D-038: the gatehouse is a PASSAGE (8.4 m clear, 3.6 m under the lintel): drawn open, no leaf
+  out.marks.push({ id: "gate.passage", leads: "passage", leaf: false, x: l.x, y: gy, z: l.z + l.hz, yaw: Math.PI / 2, width: l.hx * 2 });
   k.setBase(l.x, gy, l.z, 0);
   slab(k, [l.hx * 2, l.height - 3.6, l.hz * 2], [0, 3.6 + (l.height - 3.6) / 2, 0], masonry(51), lod);
   box(k, [l.hx * 2 + 0.5, 0.3, l.hz * 2 + 0.5], [0, l.height + 0.1, 0], P.chalkCap);
@@ -276,7 +330,7 @@ function gatehouse(k: Kit, world: CollisionWorld, lod: Lod): void {
 
 // ---- the palace ----------------------------------------------------------------------------------------------------------------------
 
-function palace(k: Kit, world: CollisionWorld, lod: Lod): void {
+function palace(k: Kit, world: CollisionWorld, lod: Lod, out: HighmarkOut): void {
   const p = highmarkPlan();
   const b = p.palace;
   const gy = world.terrainHeight(b.x, b.z);
@@ -338,10 +392,16 @@ function palace(k: Kit, world: CollisionWorld, lod: Lod): void {
   // the front: a flight of steps, a colonnade of slim columns, the great door, and the Crown's sun over it
   k.setBase(b.x, gy, b.z + b.hz, 0);
   for (let i = 0; i < 4; i++) box(k, [5.4 - i * 0.5, 0.2, 1.6 - i * 0.28], [0, 0.1 + i * 0.2, 1.1 - i * 0.14], P.chalkCap);
-  box(k, [2.2, 3.2, 0.2], [0, 1.6 + 0.8, 0.04], P.timber);
   for (let i = -2; i <= 2; i++) if (i !== 0) k.limb([i * 3.1, 0.8, 0.9], [i * 3.1, b.height - 0.3, 0.9], 0.24, 0.2, P.chalkCap, lod ? 8 : 6);
   box(k, [b.hx * 2 + 0.3, 0.3, 1.4], [0, b.height - 0.05, 0.6], P.chalkCap);
   k.clearBase();
+  // D-038: the great door is SEALED with the Chamberlain's paper seal ("the king is pending"): boards, a chain, a seal across it
+  {
+    const pb = highmarkLevel().buildings.find((x) => x.id === "palace")!;
+    k.setBase(b.x, gy, b.z + b.hz, Math.PI / 2);
+    sealedDoor(k, `${pb.id}.door`, 0.1, 0.8, pb.door, pb.doorH, SEAL, lod, out.marks, { x: b.x, y: gy, z: b.z + b.hz, yaw: Math.PI / 2 });
+    k.clearBase();
+  }
   sun(k, b.x, gy + b.height * 0.74, b.z + b.hz + 0.12, 0, 0.55, lod);
   // the Vacant Chair on its dais, the plinths with their stags, the sun medallion's rays
   const th = p.throne;
@@ -512,19 +572,20 @@ export function lanternRoom(world: CollisionWorld): LanternRoom {
 }
 
 /** Everything solid in Highmark, merged. `lod` 0 is the cheap shape the ink hull and the low preset use. */
-export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; lamps: { x: number; y: number; z: number }[]; lantern: LanternRoom } {
+export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; lamps: { x: number; y: number; z: number }[]; lantern: LanternRoom; marks: DoorMark[]; roofs: RoofSource | undefined } {
   const plan = highmarkPlan();
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
   const k = new Kit();
+  const out: HighmarkOut = { marks: [], lamps: [], roofs: new RoofKits() };
   plan.walls.forEach((w, i) => wall(k, w, lod, 10 + (i % 17)));
   plan.granaries.forEach((s, i) => granary(k, s, g(s.x, s.z), lod, 30 + i));
   plan.stalls.forEach((s, i) => stall(k, s, g(s.x, s.z), lod, i));
   wellAt(k, world, lod);
-  plan.halls.forEach((b, i) => hall(k, b, g(b.x, b.z), lod, 100 + i * 5, i === 0));
-  gatehouse(k, world, lod);
-  palace(k, world, lod);
+  plan.halls.forEach((b, i) => hall(k, b, g(b.x, b.z), lod, 100 + i * 5, i, out));
+  gatehouse(k, world, lod, out);
+  palace(k, world, lod, out);
   // lamps: a post, a lantern and the point of light the view adds
-  const lamps: { x: number; y: number; z: number }[] = [];
+  const lamps: { x: number; y: number; z: number }[] = [...out.lamps];   // (the lamp hung in the Assembly Hall burns with the street's)
   for (const l of plan.lamps) {
     const y = g(l.x, l.z);
     lamp(k, l.x, l.z, y, l.h);
@@ -537,5 +598,5 @@ export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry:
   poles(k, world);
   void HIGHMARK_SITES;
   k.clearBase();
-  return { geometry: k.build(), lamps, lantern: lanternRoom(world) };
+  return { geometry: k.build(), lamps, lantern: lanternRoom(world), marks: out.marks, roofs: out.roofs.finish() };
 }

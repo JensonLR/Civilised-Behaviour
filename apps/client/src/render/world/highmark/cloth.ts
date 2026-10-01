@@ -3,7 +3,8 @@ import { PALETTE, cssHex, type Terrain } from "@cb/shared";
 import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
 import { worldTime } from "../toon.ts";
-import { HIGHMARK_SIGNS, highmarkPlan, type HighmarkBanner } from "./shared.ts";
+import { HIGHMARK_SEALED_SIGNS, HIGHMARK_SIGNS, highmarkLevel, highmarkPlan, type HighmarkBanner } from "./shared.ts";
+import { pushPlaques } from "../plaques.ts";
 import { skylineBanners } from "./skyline.ts";
 
 /**
@@ -17,7 +18,10 @@ const BANNER_H = 448;
 const SYN_H = 320;
 const SIGN_H = 96;
 const SIGN_Y = BANNER_H + SYN_H;
-export const ATLAS_H = SIGN_Y + SIGN_H * HIGHMARK_SIGNS.length;
+/** D-038: the sealed facades' notices (the Grange's, the assay office's, the Chamberlain's, the palace's), one strip each after the signboards. */
+const SEALED_TEXTS: readonly string[] = [HIGHMARK_SEALED_SIGNS.grange, HIGHMARK_SEALED_SIGNS.assay, HIGHMARK_SEALED_SIGNS.chamberlain, HIGHMARK_SEALED_SIGNS.palace];
+const PLAQUE_Y = SIGN_Y + SIGN_H * HIGHMARK_SIGNS.length;
+export const ATLAS_H = PLAQUE_Y + SIGN_H * SEALED_TEXTS.length;
 
 type Rect = readonly [number, number, number, number];
 const uvRect = (x: number, y: number, w: number, h: number): Rect => [x / ATLAS_W, 1 - (y + h) / ATLAS_H, (x + w) / ATLAS_W, 1 - y / ATLAS_H];
@@ -27,6 +31,7 @@ export const BANNER_UV: Record<HighmarkBanner["kind"], Rect> = {
   syndicate: uvRect(0, BANNER_H, 256, SYN_H),
 };
 export const signUv = (i: number): Rect => uvRect(0, SIGN_Y + i * SIGN_H, ATLAS_W, SIGN_H);
+export const plaqueUv = (i: number): Rect => uvRect(0, PLAQUE_Y + i * SIGN_H, ATLAS_W, SIGN_H);
 
 const c = cssHex;
 const P = PALETTE.highmark;
@@ -189,7 +194,7 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
   // ---- the signboards: chalk strips, brown lettering
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  HIGHMARK_SIGNS.forEach((text, i) => {
+  [...HIGHMARK_SIGNS, ...SEALED_TEXTS].forEach((text, i) => {
     const y = SIGN_Y + i * SIGN_H;
     ctx.fillStyle = c(P.chalk);
     ctx.fillRect(0, y, ATLAS_W, SIGN_H);
@@ -305,6 +310,7 @@ export function buildHighmarkCloth(terrain: Terrain): BufferGeometry | undefined
       push(c3, u0, v1);
     }
   }
+  pushPlaques(highmarkLevel().buildings, (x, z) => terrain.height(x, z), (b) => (b.sign === undefined ? undefined : plaqueUv(SEALED_TEXTS.indexOf(b.sign))), { pos, nor, uv, wave });
   if (pos.length === 0) return undefined;
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));

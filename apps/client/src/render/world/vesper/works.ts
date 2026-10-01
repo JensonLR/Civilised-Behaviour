@@ -138,7 +138,9 @@ function tipple(k: Kit, world: CollisionWorld, lod: Lod): void {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.1), -0.8, sz * (hz - 0.1)], [sx * (hx - 0.1), H - 0.6, sz * (hz - 0.1)], 0.16, 0.14, P.timber, 5);
   gable(k, hx + 0.5, hz + 0.6, 1.5, [0, H - 0.6, 0]);
   // the tipping hatch where the deck ends: a dark mouth with an iron lip, and an iron-banded bin below
-  box(k, [2.2, 1.7, 0.18], [0, 1.2, hz + 0.02], P.crepe);
+  // (D-038: a hopper, not a door: an iron-lipped chute under the deck's end, nothing a person could use)
+  box(k, [1.4, 0.3, 1.6], [0, 1.9, hz + 0.3], P.iron, [-0.5, 0, 0]);
+  box(k, [2.2, 0.14, 0.3], [0, 1.45, hz + 0.9], P.ironLight);
   box(k, [2.6, 0.14, 0.9], [0, 0.4, hz + 0.45], P.iron, [-0.25, 0, 0]);
   for (let i = 0; i < 3; i++) box(k, [hx * 2 + 0.1, 0.1, hz * 2 + 0.1], [0, 0.7 + i * 1.4, 0], P.iron);
   // a chute out of the side wall, leaning

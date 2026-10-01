@@ -1,5 +1,6 @@
 import type { UseStation } from "./campaignTypes.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
+import { distToPaths, inDoorApron, levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import { TAU, smoothstep } from "./math.ts";
 import type { RegionMountSpots } from "./mount.ts";
 import type { NavOptions } from "./nav.ts";
@@ -285,14 +286,19 @@ export interface SaltmarketPlan {
   lamps: { x: number; z: number; h: number }[];
 }
 
+/**
+ * D-038: the warehouses (2-4 were raised from 3.1-3.2 m to 4.4-4.5 m so a door 2.4 m high fits under the eave). 0 and 1 are the two quayside sheds the plan makes enterable (`interior`: the Brine Counting-Shed and the Society Bonded Shed, a door 1.5 m wide up a three-step landing, a lit floor);
+ * 2-4 are shuttered stilt warehouses with the loading door chained (`sealed`); 5-7 are reed-cutters' huts with no door at all (`solid`). `height` is the highest point (the ridge) above the ground.
+ * Shed 1 faces WEST (yaw PI) so its door looks at the boardwalk instead of the open silt.
+ */
 const HOUSES: readonly SaltmarketBox[] = [
   // the quay row: two warehouses south of the Customs Cut (the Houses' goods wait here for the tide)
-  { x: -44, z: 108, yaw: 0, hx: 6.5, hz: 4, height: 3.9 },
-  { x: 46, z: 110, yaw: 0, hx: 6, hz: 4, height: 4.3 },
+  { x: -44, z: 108, yaw: 0, hx: 6.5, hz: 4, height: 5.1 },
+  { x: 46, z: 110, yaw: Math.PI, hx: 6, hz: 4, height: 5.3 },
   // reed-cutters' stilt huts on the isthmus and beyond: low, thatched, the roof hardly above a standing walker's eye
-  { x: -26, z: -2, yaw: 0.3, hx: 2.6, hz: 2, height: 3.1 },
-  { x: 20, z: -26, yaw: 0.5, hx: 2.6, hz: 2.0, height: 3.2 },
-  { x: 70, z: -22, yaw: 0.25, hx: 3.2, hz: 2.4, height: 3.2 },
+  { x: -26, z: -2, yaw: 0.3, hx: 2.6, hz: 2, height: 4.4 },
+  { x: 20, z: -26, yaw: 0.5, hx: 2.6, hz: 2.0, height: 4.5 },
+  { x: 70, z: -22, yaw: 0.25, hx: 3.2, hz: 2.4, height: 4.5 },
   { x: 96, z: 30, yaw: -0.4, hx: 2.8, hz: 2.2, height: 3.1 },
   { x: -92, z: 22, yaw: 0.2, hx: 3.0, hz: 2.4, height: 3.2 },
   { x: -80, z: -92, yaw: -0.3, hx: 2.6, hz: 2.0, height: 3.0 },
@@ -308,8 +314,12 @@ export function saltmarketPlan(): SaltmarketPlan {
   const boardwalks: SaltmarketPlan["boardwalks"] = [
     { id: "main", pts: [{ x: 0, z: 119 }, { x: 0, z: 112 }, { x: 0, z: 104 }, { x: 0, z: 80 }, { x: -4, z: 78 }, { x: -14, z: 70 }, { x: -12, z: 55 }, { x: -10, z: 40 }, { x: -4, z: 26 }, { x: 0, z: 12 }, { x: 0, z: -14 }, { x: 0, z: -34 }] },
     { id: "cove", pts: [{ x: 0, z: 12 }, { x: 14, z: 6 }, { x: 26, z: -2 }, { x: 31, z: -6 }, { x: 41, z: -6 }, { x: 50, z: -6 }, { x: 58, z: -6 }] },
-    { id: "drop", pts: [{ x: 0, z: -14 }, { x: -18, z: -18 }, { x: -34, z: -22 }, { x: -49, z: -24 }, { x: -59, z: -24 }, { x: -67, z: -33 }, { x: -69, z: -46 }, { x: -64, z: -52 }, { x: -62.5, z: -58 }] },
+    { id: "drop", pts: [{ x: 0, z: -14 }, { x: -18, z: -18 }, { x: -34, z: -22 }, { x: -49, z: -24 }, { x: -59, z: -24 }, { x: -65.5, z: -24 }, { x: -67, z: -33 }, { x: -69, z: -46 }, { x: -64, z: -52 }, { x: -61.8, z: -58 }] },
     { id: "customs", pts: [{ x: -14, z: 70 }, { x: -26, z: 70 }, { x: -34, z: 70 }, { x: -40, z: 73 }, { x: -44, z: 76 }] },
+    // D-038: the spurs that carry the plank walk to the three doors a visitor is meant to use (each ends a landing's depth short of the steps)
+    { id: "customsDoor", pts: [{ x: -40, z: 73 }, { x: -40, z: 67.4 }] },
+    { id: "shedW", pts: [{ x: 0, z: 108 }, { x: -12, z: 108 }, { x: -24, z: 108 }, { x: -34.4, z: 108 }] },
+    { id: "shedE", pts: [{ x: 0, z: 110 }, { x: 12, z: 110 }, { x: 24, z: 110 }, { x: 36.4, z: 110 }] },
   ];
   const bridges: SaltmarketBridge[] = [
     { id: "customsBridge", channel: "customs", at: 0, x: 0, z: 92, hl: 0, yaw: 0 },
@@ -320,8 +330,9 @@ export function saltmarketPlan(): SaltmarketPlan {
     return { ...b, hl: ch.half + SALTMARKET.bridgeRun + 0.3 + ch.amp * 0 };
   });
   const quay = { x: 0, z0: 120, z1: 134, half: 1.7, bollards: [{ x: -2.3, z: 122 }, { x: 2.3, z: 122 }, { x: -2.3, z: 132 }, { x: 2.3, z: 132 }] };
-  const customsHouse: SaltmarketBox = { x: -40, z: 61, yaw: 0, hx: 4.2, hz: 3.0, height: 4.2 };
-  const dropHouse: SaltmarketBox = { x: -69, z: -58, yaw: 0, hx: 4.5, hz: 3.2, height: 3.8 };
+  // (the Customs House turns its door to the boardwalk (south, +z): local +x is the front, so it is yawed a quarter turn)
+  const customsHouse: SaltmarketBox = { x: -40, z: 61, yaw: Math.PI / 2, hx: 3.0, hz: 4.2, height: 5.6 };
+  const dropHouse: SaltmarketBox = { x: -69, z: -58, yaw: 0, hx: 4.5, hz: 3.2, height: 4.3 };
   const E = A.exchange;
   const hx = 15, hz = 13;
   const zf = E.z + 11, zb = E.z - 15;   // the hall: front colonnade at z = -33, back wall at z = -59
@@ -337,7 +348,7 @@ export function saltmarketPlan(): SaltmarketPlan {
   void hz;
   const hairs: SaltmarketHair[] = [
     { x: 21, z: -35, kind: "campanile", r: 1.4, height: 14 },
-    { x: -36.4, z: 60, kind: "flagpole", r: 0.28, height: 7.6 },
+    { x: -34.4, z: 61, kind: "flagpole", r: 0.28, height: 7.6 },
     { x: -31, z: 106, kind: "crane", r: 0.7, height: 11 },
     { x: 32.5, z: 106.5, kind: "crane", r: 0.7, height: 11 },
     { x: 54, z: -1, kind: "derrick", r: 0.6, height: 9 },
@@ -360,7 +371,7 @@ export function saltmarketPlan(): SaltmarketPlan {
     { x: 4.4, z: 104, yaw: Math.PI / 2, text: 3 },
   ];
   const banners: SaltmarketBanner[] = [
-    { x: -35.1, z: 60.2, yaw: Math.PI / 2, top: 7.3, w: 2.0, h: 3.0, kind: "customs" },
+    { x: -33.1, z: 60.2, yaw: Math.PI / 2, top: 7.3, w: 2.0, h: 3.0, kind: "customs" },
     { x: 21, z: -33.4, yaw: Math.PI / 2, top: 12.8, w: 2.2, h: 4, kind: "house" },
     { x: 0, z: -33.2, yaw: Math.PI / 2, top: 5.0, w: 4.0, h: 1.8, kind: "house" },
     { x: 8, z: 104, yaw: Math.PI / 2, top: 5.4, w: 1.8, h: 2.8, kind: "society" },
@@ -385,6 +396,8 @@ export function saltmarketPlan(): SaltmarketPlan {
         if (b.id === "main" && ((z > 78 && z < 108) || z < -30)) continue;
         if (Math.hypot(x - A.walk[3].x, z - A.walk[3].z) < 12) continue;   // (the walker's own eye-level view of a lantern is not a skyline)
         if (Math.hypot(x - 36, z + 6) < 9 || Math.hypot(x + 54, z + 24) < 9 || Math.hypot(x - 59, z + 6) < 6 || Math.hypot(x + 62, z + 58) < 6) continue;
+        // (D-038: nor beside another plank walk, which is where the spurs leave the main one)
+        if (distToPaths(boardwalks.filter((o) => o !== b).map((o) => o.pts), x, z) < 2.6) continue;
         lamps.push({ x: Math.round(x * 2) / 2, z: Math.round(z * 2) / 2, h: 2.7 });
       }
       acc -= len;
@@ -396,6 +409,32 @@ export function saltmarketPlan(): SaltmarketPlan {
     covePier: { x0: 60, x1: 69, z: -6, half: 1.1 }, berthPier: { x: -44, z0: 79, z1: 90, half: 1.1 }, racks, saltPans, lamps,
   };
   return cachedPlan;
+}
+
+// ---- the level plan (D-038; docs/LEVEL_PLAN.md section 7) ------------------------------------------------------------------------------------
+
+/**
+ * Every building of the delta and what it IS: the two quayside sheds, the Customs counting-house and the drop house are walkable rooms (walls with a 1.5 m doorway, a deck on stilts up a landing and steps, a
+ * lit floor, a roof the cutaway lifts); three shuttered warehouses are `sealed` (the loading door is chained and says why); three huts are `solid` (no door drawn). The collision, the view and the audit read this.
+ */
+export const SALTMARKET_SEALED_SIGNS = ["CLOSED FOR TIDE", "BONDED. CHAIN BY ORDER.", "LOT WITHDRAWN"] as const;
+
+let cachedLevel: RegionLevel | undefined;
+export function saltmarketLevel(): RegionLevel {
+  if (cachedLevel) return cachedLevel;
+  const p = saltmarketPlan();
+  const at = (b: SaltmarketBox): { x: number; z: number; yaw: number; hx: number; hz: number } => ({ x: b.x, z: b.z, yaw: b.yaw, hx: b.hx, hz: b.hz });
+  const H = p.houses;
+  const buildings: LevelBuilding[] = [
+    planBuilding("warehouse0", "interior", at(H[0]!), { height: H[0]!.height, floor: 0.9, wallH: 2.9, steps: 3 }),
+    planBuilding("warehouse1", "interior", at(H[1]!), { height: H[1]!.height, floor: 0.9, wallH: 3.0, steps: 3 }),
+    ...[2, 3, 4].map((i) => planBuilding(`warehouse${i}`, "sealed", at(H[i]!), { height: H[i]!.height, floor: 0.9, wallH: H[i]!.height - 0.9, sign: SALTMARKET_SEALED_SIGNS[i - 2] })),
+    ...[5, 6, 7].map((i) => planBuilding(`warehouse${i}`, "solid", at(H[i]!), { height: H[i]!.height, floor: 0.9, wallH: H[i]!.height - 0.9 })),
+    planBuilding("customs", "interior", at(p.customsHouse), { height: p.customsHouse.height, floor: 0.9, wallH: 2.8, steps: 3 }),
+    planBuilding("dropHouse", "interior", at(p.dropHouse), { height: p.dropHouse.height, floor: 0.6, wallH: 2.8, steps: 2 }),
+  ];
+  cachedLevel = levelOf(buildings);
+  return cachedLevel;
 }
 
 // ---- colliders ------------------------------------------------------------------------------------------------------------------------
@@ -483,10 +522,11 @@ export function saltmarketObstacles(terrain: Terrain, seed: number): Obstacle[] 
   }
   // the revetment along the deep channels
   for (const w of saltmarketRim(seed)) out.push({ kind: "box", tag: "fence", x: w.x, z: w.z, hx: w.hx, hz: w.hz, yaw: w.yaw, y0: L - 3.4, y1: L + SALTMARKET.rimHeight });
-  // houses on stilts: solid from the ground to the eaves (the stilts and the floor are drawn; the view and the ink read the same box)
-  for (const h of plan.houses) box("house", h.x, h.z, h.hx, h.hz, h.yaw, h.height);
-  box("house", plan.customsHouse.x, plan.customsHouse.z, plan.customsHouse.hx, plan.customsHouse.hz, plan.customsHouse.yaw, plan.customsHouse.height);
-  box("house", plan.dropHouse.x, plan.dropHouse.z, plan.dropHouse.hx, plan.dropHouse.hz, plan.dropHouse.yaw, plan.dropHouse.height);
+  // buildings: the enterable ones are rooms (walls with a doorway, a deck up steps); the sealed and the solid are boxes to the ridge (the stilts and the floor are drawn; the view and the ink read the same box)
+  for (const b of saltmarketLevel().buildings) {
+    if (b.kind === "interior") out.push(...roomObstacles(b, g(b.x, b.z)));
+    else box("house", b.x, b.z, b.hx, b.hz, b.yaw, b.height);
+  }
   // the Exchange: a colonnade, a back wall, the rostrum (the hall is open at the front; the roof is the view's)
   const ex = plan.exchange;
   for (const p of ex.pillars) circle("ruin", p.x, p.z, 0.7, ex.eave);
@@ -524,6 +564,8 @@ export function saltmarketProps(seed: number, world: CollisionWorld): PropSpawn[
   const pos = { x: 0, z: 0 };
   const wd = (world.terrain as Partial<SaltmarketTerrain>).waterDepth;
   const L0 = SALTMARKET_ANCHORS.landing;
+  const doors = saltmarketLevel().doors;
+  const walks = saltmarketPlan().boardwalks.map((b) => b.pts);
   const spots: { x: number; z: number; r: number; n: number; kinds: PropKindId[] }[] = [
     { x: L0.x, z: L0.z - 7, r: 6, n: 5, kinds: [PropKind.BARREL, PropKind.BOTTLE, PropKind.BARREL, PropKind.CHAIR, PropKind.BOTTLE] },
     { x: -26, z: -2, r: 5, n: 2, kinds: [PropKind.BARREL, PropKind.BOTTLE] },
@@ -538,6 +580,7 @@ export function saltmarketProps(seed: number, world: CollisionWorld): PropSpawn[
       pos.x = x;
       pos.z = z;
       if (world.resolveXZ(pos, world.terrainHeight(x, z), 0.6, 1.2) || (wd !== undefined && wd(x, z) > 0)) continue;
+      if (inDoorApron(doors, x, z, 0.9) || distToPaths(walks, x, z) < 1.5) continue;   // (D-038: never in a doorway, never on the planks)
       out.push({ kind: s.kinds[i % s.kinds.length]!, x, z, yaw: rng.range(0, TAU) });
       i++;
     }

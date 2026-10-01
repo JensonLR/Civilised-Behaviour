@@ -321,14 +321,14 @@ const TRAIL_DEFS: readonly TrailDef[] = [
   { name: "ferry-lane", width: 1.35, wear: 0.84, late: true, pts: [[-23.3, -51.4], [-23.1, -47.4], [-22.9, -44.6], [-22.9, -42.4]] },
   { name: "hall-steps", width: 1.7, wear: 0.8, late: true, pts: [[-21, -52], [-21, -55.3], [-21, -58.5]] },
   // doorsteps: short lanes from each door to the street
-  { name: "door-cot-a", width: 1.05, wear: 0.78, late: true, pts: [[5.9, -41.3], [6.0, -42.4], [6.2, -43.4]] },
+  { name: "door-cot-a", width: 1.5, wear: 0.78, late: true, pts: [[5.9, -41.3], [6.0, -42.4], [6.2, -43.4]] },
   { name: "door-shop", width: 1.4, wear: 0.8, late: true, pts: [[-6.5, -52.5], [-6.7, -50.8], [-6.9, -49.4]] },
   { name: "door-gran-a", width: 1.0, wear: 0.75, late: true, pts: [[-9.3, -48.4], [-9.5, -49.1], [-9.6, -49.8]] },
   { name: "door-gran-b", width: 1.0, wear: 0.75, late: true, pts: [[-32.7, -53.1], [-32.1, -51.4], [-31.5, -49.9]] },
-  { name: "door-cot-b", width: 1.0, wear: 0.75, late: true, pts: [[-37.9, -49.1], [-36.7, -47.8], [-35.9, -47.0]] },
-  { name: "door-cot-c", width: 1.0, wear: 0.75, late: true, pts: [[-38.0, -32.5], [-39.6, -33.0]] },
-  { name: "door-stilt-w", width: 0.9, wear: 0.75, late: true, pts: [[-23.7, -46.4], [-23.0, -46.5]] },
-  { name: "door-stilt-e", width: 0.9, wear: 0.75, late: true, pts: [[-19.4, -46.2], [-22.6, -46.3]] },
+  { name: "door-cot-b", width: 1.5, wear: 0.75, late: true, pts: [[-37.9, -49.1], [-36.7, -47.8], [-35.9, -47.0]] },
+  { name: "door-cot-c", width: 1.5, wear: 0.75, late: true, pts: [[-38.0, -32.5], [-39.6, -33.0]] },
+  { name: "door-stilt-w", width: 1.4, wear: 0.75, late: true, pts: [[-23.7, -46.4], [-23.0, -46.5]] },
+  { name: "door-stilt-e", width: 1.4, wear: 0.75, late: true, pts: [[-19.4, -46.2], [-22.6, -46.3]] },
 ];
 
 function buildTrail(d: TrailDef): Trail {

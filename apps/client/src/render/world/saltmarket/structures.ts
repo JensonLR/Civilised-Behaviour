@@ -1,7 +1,8 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
-import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, hash3, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
+import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry, TorusGeometry } from "three";
+import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, hash3, saltmarketLevel, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
+import { RoofKits, interiorShell, sealedDoor, type DoorMark, type LevelBuilding, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
 
 /**
  * Every solid thing in the Saltmarket Delta merged into a few vertex-coloured geometries (one draw and one ink hull each, split four ways over the map so the frustum can cull): the quay and its pontoon, the three
@@ -81,80 +82,137 @@ const pile = (k: Kit, x: number, z: number, y0: number, y1: number, r = 0.13, se
 
 type HouseStyle = "warehouse" | "hut" | "customs" | "dropHouse";
 
+/** The warm inside of a stilt house: tarred plank lightened, a floor of silvered boards, a lantern. Never `INTERIOR` black. */
+const SHELL: ShellStyle = { outer: P.tarPlank, inner: P.tarPlankLight, floor: P.tarPlankLight, floorDark: P.tarPlank, trim: P.pilingDark, leaf: P.tarPlankDark, strap: P.iron, lamp: P.glowWindow, ceiling: P.thatch };
+const SEALED: SealedStyle = { frame: P.pilingDark, door: P.tarPlankDark, board: P.tarPlankLight, boardDark: P.piling, iron: P.iron, brass: P.brass, paper: P.salt, wax: P.coralDark };
+
+/** What `stiltHouse` leaves behind: the doors drawn, the lamps lit inside, the roofs for the cutaway. */
+export interface HouseOut {
+  marks: DoorMark[];
+  lamps: { x: number; y: number; z: number }[];
+  roofs: RoofKits;
+}
+
+/** The furniture of an enterable house, in its frame, floor at `fl`: kept to 1.2 m, with the 1.0 m strip from the door to the middle clear (LEVEL_PLAN section 4). */
+function furnish(k: Kit, lb: LevelBuilding, fl: number, lod: Lod): void {
+  const { hx, hz } = lb;
+  const crate = (x: number, z: number, h = 0.7, w = 0.7): void => box(k, [w, h, w], [x, fl + h / 2, z], P.tarPlankLight);
+  const barrel = (x: number, z: number): void => void k.add(new CylinderGeometry(0.3, 0.3, 0.8, lod ? 8 : 6), { at: [x, fl + 0.4, z], colour: P.tarPlank, flat: true });
+  const shelf = (x: number, z: number, along: "x" | "z", len: number): void => {
+    for (const y of [0.5, 1.0, 1.5]) box(k, along === "x" ? [len, 0.06, 0.35] : [0.35, 0.06, len], [x, fl + y, z], P.tarPlankLight);
+    for (const e of [-1, 1]) box(k, [0.08, 1.6, 0.08], along === "x" ? [x + e * len / 2, fl + 0.8, z] : [x, fl + 0.8, z + e * len / 2], P.pilingDark);
+  };
+  if (lb.id === "warehouse0" || lb.id === "warehouse1") {
+    // goods against the walls: crates stacked two high, barrels in a row, a hoist sling over a hatch; the middle and the aisle to the door stay clear
+    for (let i = 0; i < 3; i++) crate(-hx + 0.9, -hz + 0.9 + i * 0.85, 0.7 + (i === 1 ? 0.7 : 0));
+    for (let i = 0; i < 4; i++) barrel(-hx + 1.0 + i * 0.75, hz - 0.7);
+    crate(hx * 0.2, -hz + 0.7, 0.9, 0.8);
+    if (lb.id === "warehouse0") {
+      // the Brine Counting-Shed: a counting table, a stool and a ledger
+      box(k, [1.6, 0.08, 0.8], [-hx * 0.3, fl + 0.9, -hz * 0.45], P.tarPlankLight);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(k, [0.08, 0.9, 0.08], [-hx * 0.3 + sx * 0.7, fl + 0.45, -hz * 0.45 + sz * 0.33], P.pilingDark);
+      box(k, [0.4, 0.06, 0.3], [-hx * 0.3, fl + 0.97, -hz * 0.45], P.salt);
+    } else {
+      // the Society Bonded Shed: the smuggling run's cargo is "inside" — the stencilled stacks and a bonded-stores cage
+      for (let i = 0; i < 3; i++) crate(-hx * 0.2 + i * 0.85, -hz + 0.7, 0.7, 0.75);
+      box(k, [0.06, 1.4, 1.8], [hx * 0.3, fl + 0.7, hz - 1.0], P.iron);
+    }
+    return;
+  }
+  if (lb.id === "customs") {
+    // the Constabulary's counting-house: a long desk across the back with the Tide-Reeve's chair, a ledger rack, a stamp and a brass lamp; benches for the parley
+    box(k, [0.9, 0.08, 2.4], [-hx + 1.0, fl + 0.95, 0], P.tarPlankLight);
+    for (const sz of [-1, 1]) box(k, [0.8, 0.9, 0.08], [-hx + 1.0, fl + 0.47, sz * 1.1], P.tarPlank);
+    box(k, [0.4, 0.5, 0.4], [-hx + 0.5, fl + 0.25, -0.2], P.tarPlankDark);
+    shelf(-hx + 0.3, hz - 0.5, "z", 1.4);
+    box(k, [0.14, 0.14, 0.14], [-hx + 1.0, fl + 1.05, 0.6], P.brass);
+    for (const sz of [-1, 1]) box(k, [0.4, 0.4, 1.2], [hx * 0.4, fl + 0.2, sz * (hz - 0.8)], P.tarPlankLight);
+    return;
+  }
+  // the drop house: a bare room, a hatch in the floor with a ring, a crate or two, a lantern on a hook
+  box(k, [1.0, 0.04, 1.0], [-hx * 0.35, fl + 0.02, hz * 0.35], P.tarPlankDark);
+  k.add(new TorusGeometry(0.09, 0.02, 4, 8), { at: [-hx * 0.35, fl + 0.06, hz * 0.35], rot: [Math.PI / 2, 0, 0], colour: P.iron, flat: true });
+  crate(-hx + 0.7, -hz + 0.7);
+  crate(-hx + 0.7, -hz + 1.5, 0.5, 0.6);
+}
+
 /**
- * A house on stilts. `b.height` is the highest point above the ground (the collision box's top): the stilts, the floor, the walls and the roof all stand inside it. A warehouse has a canvas roof, a loading hatch and
- * a hoist beam over the water; a hut a thatch hip and reed matting; the Customs House the Constabulary's coral and indigo with a brass lantern; the drop-house a low tarred shed with its door on the east.
+ * A house on stilts, by what the plan says it IS (docs/LEVEL_PLAN.md section 7). `interior`: stilts, a deck with the landing and steps the collision has, hollow walls with a doorway of the declared width, warm inner
+ * faces, a lantern, furniture, and a roof drawn into its own kit for the cutaway. `sealed`: a mass with its loading door SHUT (boards, a chain and a seal). `solid`: a mass with no door at all (windows only).
+ * `b.height` is the highest point above the ground (the ridge): everything stands inside it. The door is on local +x for every kind.
  */
-function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lod: Lod, seed: number): void {
+function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb: LevelBuilding, lod: Lod, seed: number, out: HouseOut): void {
   const total = b.height - (style === "customs" ? 0.75 : 0);   // (the Customs House's brass lantern stands on the ridge, inside the collider's top)
-  const stilt = style === "hut" ? 0.7 : 0.9;
-  const rise = style === "hut" ? Math.min(1.3, total * 0.34) : Math.min(1.2, (total - stilt) * 0.34);
-  const wallH = Math.max(1.5, total - stilt - rise);
-  const fy = stilt;
+  const fy = lb.floor;
+  // (a sealed hut's wall stands 2.6 m, tall enough for the door it shows; a solid hut keeps the low reed wall it always had)
+  const wallH = lb.kind === "interior" || lb.kind === "sealed" ? (lb.kind === "sealed" ? 2.6 : lb.wallH) : Math.max(1.5, total - fy - (style === "hut" ? Math.min(1.3, total * 0.34) : Math.min(1.2, (total - fy) * 0.34)));
+  const rise = Math.max(0.5, total - fy - 0.08 - wallH);
   k.setBase(b.x, gy, b.z, b.yaw);
-  // stilts: two rows, braced
+  // stilts: two rows, braced (the front row stops short of the landing)
   const n = Math.max(2, Math.round((b.hx * 2) / 2.4) + 1);
   for (let i = 0; i < n; i++) {
     const x = -b.hx + 0.3 + (i * (b.hx * 2 - 0.6)) / (n - 1);
     for (const z of [-1, 1]) pile(k, x, z * (b.hz - 0.3), -0.5, fy + 0.05, 0.12, seed + i * 3 + (z > 0 ? 1 : 0), lod ? 5 : 4);
   }
   if (lod) for (const s of [-1, 1]) {
-    k.limb([s * (b.hx - 0.3), -0.2, -(b.hz - 0.3)], [s * (b.hx - 1.5), fy, -(b.hz - 0.3)], 0.045, 0.045, P.pilingDark, 4);
-    k.limb([s * (b.hx - 0.3), -0.2, b.hz - 0.3], [s * (b.hx - 1.5), fy, b.hz - 0.3], 0.045, 0.045, P.pilingDark, 4);
+    k.limb([-b.hx + 0.3, -0.2, s * (b.hz - 0.3)], [-b.hx + 1.5, fy, s * (b.hz - 0.3)], 0.045, 0.045, P.pilingDark, 4);
+    k.limb([b.hx - 0.3, -0.2, s * (b.hz - 0.3)], [b.hx - 1.5, fy, s * (b.hz - 0.3)], 0.045, 0.045, P.pilingDark, 4);
   }
-  // floor and walls
-  box(k, [b.hx * 2 + 0.3, 0.16, b.hz * 2 + 0.3], [0, fy, 0], style === "dropHouse" ? P.tarPlankDark : P.tarPlankLight);
-  const wallCol = style === "hut" ? stripes(P.reed, P.reedDark, 3.4) : style === "customs" ? planks(seed, P.coralDark, P.tarPlankDark, P.coralCanvas) : planks(seed);
-  box(k, [b.hx * 2, wallH, b.hz * 2], [0, fy + 0.08 + wallH / 2, 0], wallCol);
-  // roof
+  const roofKit = lb.kind === "interior" ? out.roofs.begin(lb.id) : k;
+  if (roofKit !== k) roofKit.setBase(b.x, gy, b.z, b.yaw);
   const eaveY = fy + 0.08 + wallH;
+  if (lb.kind === "interior") {
+    interiorShell(k, { id: lb.id, hx: b.hx, hz: b.hz, floor: fy, wallH, door: lb.door, doorH: lb.doorH, steps: lb.steps, t: lb.t ?? 0.3 }, { ...SHELL, outer: style === "customs" ? planks(seed, P.coralDark, P.tarPlankDark, P.coralCanvas) : planks(seed) }, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: b.yaw });
+    const lw = k.worldPoint(-b.hx * 0.15, fy + Math.min(wallH - 0.5, 2.3), 0);
+    out.lamps.push({ x: lw[0], y: lw[1], z: lw[2] });
+    furnish(k, lb, fy, lod);
+  } else {
+    // a floor and a mass of wall: the hut's reed matting or the warehouse's planks
+    box(k, [b.hx * 2 + 0.3, 0.16, b.hz * 2 + 0.3], [0, fy, 0], P.tarPlankLight);
+    const wallCol = style === "hut" ? stripes(P.reed, P.reedDark, 3.4) : planks(seed);
+    box(k, [b.hx * 2, wallH, b.hz * 2], [0, fy + 0.08 + wallH / 2, 0], wallCol);
+  }
+  // the roof (the roof kit: the cutaway lifts it when the viewer is inside)
   if (style === "hut") {
-    hip(k, b.hx + 0.5, b.hz + 0.5, rise, [0, eaveY, 0], thatch(seed));
+    hip(roofKit, b.hx + 0.5, b.hz + 0.5, rise, [0, eaveY, 0], thatch(seed));
   } else {
     const roofCol = style === "customs" ? canvas(P.indigoCanvas, P.indigoDark, 1.3) : style === "dropHouse" ? canvas(P.tarPlank, P.tarPlankDark, 1.1) : canvas(P.indigoCanvas, P.indigoLight, 1.2);
-    box(k, [b.hx * 2 + 0.5, 0.14, b.hz * 2 + 0.5], [0, eaveY + 0.03, 0], P.tarPlankDark);
-    gable(k, b.hx + 0.45, b.hz + 0.45, rise, [0, eaveY + 0.08, 0], roofCol);
-    // a coral ridge cap
-    box(k, [b.hx * 2 + 0.9, 0.09, 0.2], [0, eaveY + 0.08 + rise + 0.02, 0], P.coralCanvas);
+    box(roofKit, [b.hx * 2 + 0.5, 0.14, b.hz * 2 + 0.5], [0, eaveY + 0.03, 0], P.tarPlankDark);
+    gable(roofKit, b.hx + 0.45, b.hz + 0.45, rise, [0, eaveY + 0.08, 0], roofCol);
+    box(roofKit, [b.hx * 2 + 0.9, 0.09, 0.2], [0, eaveY + 0.08 + rise + 0.02, 0], P.coralCanvas);   // a coral ridge cap
   }
-  // the door on the south face (local +z), its lintel and step, a window either side
-  const doorX = style === "dropHouse" ? 0 : -b.hx * 0.35;
-  box(k, [1.0, Math.min(1.9, wallH - 0.1), 0.12], [doorX, fy + 0.08 + Math.min(1.9, wallH - 0.1) / 2, b.hz + 0.03], P.tarPlankDark);
-  box(k, [1.3, 0.12, 0.2], [doorX, fy + 0.1 + Math.min(1.9, wallH - 0.1), b.hz + 0.06], P.pilingDark);
-  box(k, [1.2, 0.1, 0.5], [doorX, fy - 0.12, b.hz + 0.4], P.tarPlankLight);
-  if (lod) {
-    for (const sx of [-1, 1]) {
-      const wx = b.hx * 0.55 * sx + (sx > 0 ? 0.2 : 0);
-      if (Math.abs(wx - doorX) < 1.1 || Math.abs(wx) > b.hx - 0.6) continue;
-      box(k, [0.6, 0.6, 0.1], [wx, fy + 0.08 + wallH * 0.6, b.hz + 0.03], P.iron);
-      box(k, [0.8, 0.08, 0.16], [wx, fy + 0.08 + wallH * 0.6 - 0.36, b.hz + 0.06], P.pilingLight);
+  if (lb.kind === "interior") {
+    // (the roof kit shares the base: re-base it so its parts land on the house)
+    // windows: shuttered openings in the long walls, glowing at dusk with the room's lantern
+    if (lod) for (const sz of [-1, 1]) for (const sx of [-0.5, 0.35]) {
+      box(k, [0.7, 0.6, 0.08], [sx * b.hx * 0.8, fy + 0.08 + wallH * 0.62, sz * (b.hz + 0.02)], P.iron);
+      box(k, [0.9, 0.08, 0.16], [sx * b.hx * 0.8, fy + 0.08 + wallH * 0.62 - 0.36, sz * (b.hz + 0.05)], P.pilingLight);
     }
-  }
-  // an awning over the door (coral and salt) on the busier houses
-  if (style === "warehouse" || style === "customs") {
-    k.add(new BoxGeometry(1.9, 0.06, 1.0), { at: [doorX, fy + 0.08 + wallH * 0.78, b.hz + 0.6], rot: [0.28, 0, 0], colour: stripes(P.coralCanvas, P.salt, 3.4), flat: true, perFace: true });
-  }
-  if (style === "warehouse") {
-    // a loading hatch under the gable, and a hoist beam out over the water with its block and hook
-    box(k, [1.1, 1.2, 0.1], [b.hx * 0.45, fy + 0.08 + wallH * 0.5, b.hz + 0.03], P.tarPlankDark);
-    box(k, [0.14, 0.14, 1.9], [b.hx * 0.45, eaveY + 0.1, b.hz + 0.8], P.tarPlankDark);
-    k.limb([b.hx * 0.45, eaveY + 0.1, b.hz + 1.7], [b.hx * 0.45, eaveY - 1.4, b.hz + 1.7], 0.012, 0.012, P.rope, 3);
-    box(k, [0.2, 0.2, 0.2], [b.hx * 0.45, eaveY - 1.5, b.hz + 1.7], P.iron);
-    // stacked barrels and a crate on the floor deck
-    k.add(new CylinderGeometry(0.3, 0.3, 0.7, lod ? 8 : 6), { at: [-b.hx * 0.75, fy + 0.5, b.hz + 0.35], colour: P.tarPlank, flat: true });
-    k.add(new CylinderGeometry(0.3, 0.3, 0.7, lod ? 8 : 6), { at: [-b.hx * 0.75 + 0.62, fy + 0.5, b.hz + 0.35], colour: P.tarPlankLight, flat: true });
-    box(k, [0.7, 0.5, 0.6], [-b.hx * 0.75 + 0.3, fy + 1.1, b.hz + 0.35], P.tarPlankLight);
-  }
-  if (style === "customs") {
-    // a brass lantern on the ridge and a plaque of the Constabulary's stamp over the door
-    k.limb([0, eaveY + rise + 0.05, 0], [0, eaveY + rise + 0.5, 0], 0.05, 0.05, P.iron, 4);
-    k.add(new SphereGeometry(0.2, 6, 5), { at: [0, eaveY + rise + 0.62, 0], colour: P.glowLantern });
-    box(k, [1.6, 0.5, 0.08], [doorX, fy + 0.08 + wallH * 0.92, b.hz + 0.06], P.brass);
-  }
-  if (style === "hut") {
-    // a ladder to the door, and a drying line
-    k.limb([doorX + 0.5, -0.1, b.hz + 0.9], [doorX + 0.5, fy, b.hz + 0.2], 0.03, 0.03, P.tarPlankLight, 4);
-    k.limb([doorX + 0.9, -0.1, b.hz + 0.9], [doorX + 0.9, fy, b.hz + 0.2], 0.03, 0.03, P.tarPlankLight, 4);
+    // an awning over the door (coral and salt) and the hoist beam of a warehouse
+    if (style === "warehouse" || style === "customs") k.add(new BoxGeometry(1.0, 0.06, Math.max(2.2, lb.door + 0.9)), { at: [b.hx + 0.65, fy + 0.08 + Math.min(wallH, lb.doorH + 0.35), 0], rot: [0, 0, -0.28], colour: stripes(P.coralCanvas, P.salt, 3.4), flat: true, perFace: true });
+    if (style === "warehouse") {
+      box(k, [1.9, 0.14, 0.14], [b.hx + 0.6, eaveY + 0.1, b.hz * 0.5], P.tarPlankDark);
+      k.limb([b.hx + 1.5, eaveY + 0.1, b.hz * 0.5], [b.hx + 1.5, eaveY - 1.4, b.hz * 0.5], 0.012, 0.012, P.rope, 3);
+      box(k, [0.2, 0.2, 0.2], [b.hx + 1.5, eaveY - 1.5, b.hz * 0.5], P.iron);
+    }
+    if (style === "customs") {
+      // a brass lantern on the ridge and a plaque of the Constabulary's stamp over the door
+      k.limb([0, eaveY + rise + 0.05, 0], [0, eaveY + rise + 0.5, 0], 0.05, 0.05, P.iron, 4);
+      k.add(new SphereGeometry(0.2, 6, 5), { at: [0, eaveY + rise + 0.62, 0], colour: P.glowLantern });
+      box(k, [0.08, 0.5, 1.6], [b.hx + 0.04, fy + 0.08 + Math.min(wallH - 0.2, lb.doorH + 0.5), 0], P.brass);
+    }
+  } else if (lb.kind === "sealed") {
+    sealedDoor(k, `${lb.id}.door`, b.hx, fy + 0.08, lb.door, lb.doorH, SEALED, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: b.yaw });
+    // a stepless ladder to the door, as on every hut, but pulled up (leaned against the wall beside it): shut means shut
+    if (lod) {
+      k.limb([b.hx + 0.35, -0.1, b.hz * 0.6], [b.hx + 0.05, fy + 1.4, b.hz * 0.6], 0.03, 0.03, P.tarPlankLight, 4);
+      k.limb([b.hx + 0.65, -0.1, b.hz * 0.6], [b.hx + 0.05, fy + 1.4, b.hz * 0.6 + 0.35], 0.03, 0.03, P.tarPlankLight, 4);
+    }
+    if (lod) for (const sz of [-1, 1]) box(k, [0.08, 0.6, 0.7], [0.3, fy + 0.08 + wallH * 0.62, sz * (b.hz + 0.02)], P.iron);
+  } else if (lod) {
+    // a solid hut: windows, never a door
+    for (const sz of [-1, 1]) box(k, [0.08, 0.6, 0.7], [0.3, fy + 0.08 + wallH * 0.62, sz * (b.hz + 0.02)], P.iron);
+    box(k, [0.7, 0.6, 0.08], [b.hx + 0.02, fy + 0.08 + wallH * 0.62, b.hz * 0.4], P.iron);
   }
   k.clearBase();
 }
@@ -548,8 +606,11 @@ function lamp(k: Kit, x: number, z: number, gy: number, h: number): void {
 export interface SaltmarketSolid {
   /** One geometry per quarter of the map (so the frustum can cull); undefined where a quarter has nothing. */
   geometries: (BufferGeometry | undefined)[];
-  /** Where the lanterns burn (the view adds a point of light at each). */
+  /** Where the lanterns burn (the view adds a point of light at each): the street's, and one hung inside every room. */
   lamps: { x: number; y: number; z: number }[];
+  /** D-038: the doors drawn (one per declared door), and the roofs of the interiors (the cutaway's). */
+  marks: DoorMark[];
+  roofs: RoofSource | undefined;
 }
 
 /** Everything solid in the delta, merged four ways. `lod` 0 is the cheap shape the ink hull and the low preset use. */
@@ -568,9 +629,12 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   const bp = plan.berthPier;
   pier(kitAt(bp.x, bp.z0), bp.x, bp.z0, bp.x, bp.z1, bp.half, lod, 520);
   revetment(kitAt, world, lod);
-  plan.houses.forEach((b, i) => stiltHouse(kitAt(b.x, b.z), b, g(b.x, b.z), b.height > 3.6 ? "warehouse" : "hut", lod, 200 + i * 7));
-  stiltHouse(kitAt(plan.customsHouse.x, plan.customsHouse.z), plan.customsHouse, g(plan.customsHouse.x, plan.customsHouse.z), "customs", lod, 300);
-  stiltHouse(kitAt(plan.dropHouse.x, plan.dropHouse.z), plan.dropHouse, g(plan.dropHouse.x, plan.dropHouse.z), "dropHouse", lod, 310);
+  const level = saltmarketLevel();
+  const lbOf = (id: string): LevelBuilding => level.buildings.find((x) => x.id === id)!;
+  const houseOut: HouseOut = { marks: [], lamps, roofs: new RoofKits() };
+  plan.houses.forEach((b, i) => stiltHouse(kitAt(b.x, b.z), b, g(b.x, b.z), i < 2 ? "warehouse" : "hut", lbOf(`warehouse${i}`), lod, 200 + i * 7, houseOut));
+  stiltHouse(kitAt(plan.customsHouse.x, plan.customsHouse.z), plan.customsHouse, g(plan.customsHouse.x, plan.customsHouse.z), "customs", lbOf("customs"), lod, 300, houseOut);
+  stiltHouse(kitAt(plan.dropHouse.x, plan.dropHouse.z), plan.dropHouse, g(plan.dropHouse.x, plan.dropHouse.z), "dropHouse", lbOf("dropHouse"), lod, 310, houseOut);
   exchange(kitAt(plan.exchange.x, plan.exchange.z), world, lod);
   plan.hairs.forEach((h, i) => hair(kitAt(h.x, h.z), h, g(h.x, h.z), lod, i));
   plan.boats.forEach((b, i) => boat(kitAt(b.x, b.z), b, lod, i));
@@ -604,7 +668,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   for (const s of [-1, 1]) lamps.push({ x: customs.x + s * (SALTMARKET.deckHalf + 0.8), y: L + 2.5, z: customs.z + customs.hl - 1.0 });
   for (const x of [-10, -3, 3, 10]) lamps.push({ x, y: g(0, -46) + plan.exchange.eave - 1.0, z: -33.5 });
   plan.boats.filter((b) => b.kind === "barge" || b.kind === "cutter").forEach((b) => lamps.push({ x: b.x, y: SALTMARKET.waterY + 1.45, z: b.z + (b.kind === "barge" ? 4.2 : 3.4) }));
-  return { geometries: kits.map((k) => k.build()), lamps };
+  return { geometries: kits.map((k) => k.build()), lamps, marks: houseOut.marks, roofs: houseOut.roofs.finish() };
 }
 
 /** The boardwalk's planks, as their own merged geometries: a plank is only 3 vertices of cost per 0.46 m, but a path across a quarter of the map is never culled whole. */

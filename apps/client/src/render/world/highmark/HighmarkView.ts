@@ -1,5 +1,5 @@
 import { BoxGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
+import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
 import { atmoUniforms, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, type Lod } from "../flora.ts";
@@ -12,6 +12,7 @@ import { WINDMILL } from "../windmill.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
+import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import type { WaterUniforms } from "../water.ts";
 import { buildHighmarkCloth, createHighmarkAtlas, highmarkClothMaterial } from "./cloth.ts";
 import { buildHighmarkGround, buildHighmarkSkirt } from "./ground.ts";
@@ -190,11 +191,20 @@ export class HighmarkView implements RegionView {
     this.lamps = [...solid.lamps, { x: solid.lantern.x, y: solid.lantern.y, z: solid.lantern.z }]; // (the lit tower's lantern burns with the lamps)
     this.addLantern(solid.lantern);
     if (!solid.geometry) return;
-    const hull = this.detail.outlines ? buildHighmarkSolid(this.world, 0).geometry : undefined;
+    const hullSolid = this.detail.outlines ? buildHighmarkSolid(this.world, 0) : undefined;
+    const hull = hullSolid?.geometry;
     this.track(solid.geometry);
     if (hull) this.track(hull);
     // the capital is a LANDMARK (landmark.ts): it keeps a share of its colour through the haze and its ink does not thin to nothing at 200 m
-    makeSolid(this.root, solid.geometry, landmarkFog(this.track(toonMaterial({ wetDark: 0.8 }))), { name: "highmark", outline: false, castShadow: true });
+    const mat = landmarkFog(this.track(toonMaterial({ wetDark: 0.8 })));
+    makeSolid(this.root, solid.geometry, mat, { name: "highmark", outline: false, castShadow: true });
+    // D-038: the doors drawn, and the Assembly Hall's roof (one mesh with its own ink hull; the roof over the viewer is dropped)
+    this.doors = solid.marks;
+    doorGroups(this.root, solid.marks);
+    if (solid.roofs) {
+      this.roofSet = new RoofSet(this.root, solid.roofs, hullSolid?.roofs, mat, { name: "roofs", outline: this.detail.outlines, ink: "large", hullMaterial: this.detail.outlines ? landmarkInk() : undefined });
+      for (const g of this.roofSet.geometries) this.track(g);
+    }
     if (this.detail.outlines && hull) {
       const ink = new Mesh(hull, landmarkInk());
       ink.name = "highmark_outline";
@@ -202,6 +212,20 @@ export class HighmarkView implements RegionView {
     }
   }
   private lamps: { x: number; y: number; z: number }[] = [];
+  private roofSet?: RoofSet;
+  private doors: DoorMark[] = [];
+
+  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  setViewer(x: number, z: number): void {
+    this.roofSet?.setViewer(highmarkLevel().rooms, x, z);
+  }
+  /** The doors the view drew, and the roof set (for tests and tools). */
+  get doorMarks(): readonly DoorMark[] {
+    return this.doors;
+  }
+  get roofs(): RoofSet | undefined {
+    return this.roofSet;
+  }
 
   /** The lit tower's glass: an unlit pane that is slate by day and the lamps' amber at the harvest bell hour (`applyDay`), the one lit thing in the capital from the plain. */
   private addLantern(l: LanternRoom): void {

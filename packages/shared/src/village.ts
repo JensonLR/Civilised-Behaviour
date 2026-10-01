@@ -3,6 +3,8 @@ import type { Obstacle } from "./collision.ts";
 import { JETTY, MILL, RIVER, WEIR, riverCentre, riverHalfWidth, type LandscapeTerrain } from "./landscape.ts";
 import { hashFloat } from "./rng.ts";
 import type { Terrain } from "./terrain.ts";
+import type { AuditDoor } from "./levelAudit.ts";
+import { levelOf, planBuilding, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 
 /**
  * HOLLOWMERE: the local society's village, a hill-and-river community with its own architecture and manners. ONE authored plan feeds the
@@ -33,12 +35,13 @@ export interface KindSpec {
 }
 
 export const KIND: Record<BuildingKind, KindSpec> = {
-  cottage: { hx: 2.4, hz: 2.05, wall: 2.45, door: 1.15, floor: 0.2 },
-  stilt: { hx: 1.95, hz: 1.95, wall: 2.35, door: 0.95, floor: 1.2 },
+  // D-038: doors are a person's width (1.5 clear, 1.4 on a stilt house's 3.9 m front) and 2.4 high, so the walls are 2.8 (they were 1.15 / 0.95 wide and 2.45 / 2.35 high: a body with a hat could not use them)
+  cottage: { hx: 2.4, hz: 2.05, wall: 2.8, door: 1.5, floor: 0.2 },
+  stilt: { hx: 1.95, hz: 1.95, wall: 2.8, door: 1.4, floor: 1.2 },
   granary: { hx: 2.0, hz: 2.0, wall: 3.0, door: 0, floor: 0.6 },
-  hall: { hx: 4.1, hz: 5.3, wall: 3.7, door: 2.3, floor: 0.9 },
+  hall: { hx: 4.1, hz: 5.3, wall: 3.7, door: 2.4, floor: 0.9 },
   workshop: { hx: 2.7, hz: 3.2, wall: 2.7, door: 0, floor: 0.12 },
-  mill: { hx: MILL.hx, hz: MILL.hz, wall: 3.6, door: 1.35, floor: 0.3 },
+  mill: { hx: MILL.hx, hz: MILL.hz, wall: 3.6, door: 1.5, floor: 0.3 },
   clock: { hx: 1.9, hz: 1.4, wall: 10.4, door: 3.2, floor: 0 },
   stall: { hx: 1.1, hz: 1.6, wall: 2.3, door: 0, floor: 0 },
 };
@@ -101,7 +104,8 @@ export interface Pad {
 export const VILLAGE_PADS: readonly Pad[] = SITES.filter((s) => s.kind !== "clock" && s.kind !== "stall").map((s) => {
   // (the hall's pad is the whole plaza, so the market stalls stand on level ground too)
   const r = s.kind === "granary" ? 3.0 : Math.hypot(s.hx, s.hz) + (s.kind === "hall" ? 6.2 : s.kind === "stilt" ? 2.7 : 1.3);
-  return { x: s.x, z: s.z, r, blend: 3.4 };
+  // (D-038: the plaza's pad blends out over 8 m, not 3.4: on seeds where the plaza stands 1.7 m above the stream bank the blend was a 1.2 slope, a wall to a walker)
+  return { x: s.x, z: s.z, r, blend: s.kind === "hall" ? 8 : 3.4 };
 });
 
 // ---- the plan ---------------------------------------------------------------------------------------------------------------------
@@ -370,7 +374,7 @@ export function villagePlan(terrain: Terrain): VillagePlan {
         const lamp = L(b, b.hx + 0.25, k.door / 2 + 0.45);
         lanterns.push({ x: lamp.x, z: lamp.z, y: 2.3, kind: 0, ax: -Math.cos(b.yaw), az: -Math.sin(b.yaw), mount: 0 });
         for (let i = 0; i < 4; i++) {
-          const s = L(b, b.hx + 0.8 + (i % 2) * 0.55, -1.7 - Math.floor(i / 2) * 0.5 - (i % 2) * 0.3);
+          const s = L(b, b.hx + 0.8 + (i % 2) * 0.7, 1.4 + Math.floor(i / 2) * 0.7);   // (D-038: 0.7 m apart, on the right of the door and away from the cart: sacks 0.5 m apart sank into each other)
           P("sack", s.x, s.z, 0, 1);
         }
         const cart = L(b, b.hx + 2.6, -3.2);
@@ -403,7 +407,8 @@ export function villagePlan(terrain: Terrain): VillagePlan {
 
   // ---- the street and the plaza ---------------------------------------------------------------------------------------------------
   // lantern posts along the way in, on alternate sides
-  const posts: [number, number][] = [[10.2, -38.0], [6.4, -49.0], [-5.6, -44.6], [-8.0, -53.2], [-14.0, -47.5], [-17.2, -54.8], [-25.2, -54.6], [-30.4, -48.0], [-37.2, -47.4], [-42.0, -33.0]];
+  // (D-038: three posts stood inside a building or on the well and moved to the open street: (-8,-53.2) in the smithy, (-14,-47.5) in the east stilt house, (-17.2,-54.8) on the well)
+  const posts: [number, number][] = [[10.2, -38.0], [6.4, -49.0], [-5.6, -44.6], [-10.0, -48.2], [-13.5, -49.4], [-19.0, -50.0], [-25.2, -54.6], [-30.4, -48.0], [-37.2, -47.4], [-42.0, -33.0]];
   for (const [x, z] of posts) {
     props.push({ kind: "post", x, z, yaw: 0, s: 1.1, v: 0 });
     lanterns.push({ x: x + 0.34, z, y: 2.4, kind: 0, ax: 0, az: 0, mount: 1 });
@@ -723,4 +728,38 @@ export function villageKeepOut(x: number, z: number, margin: number): boolean {
   cachedFlat ??= villageObstacles(flat);
   for (const o of cachedFlat) if (insideObstacle(o, x, z, margin)) return true;
   return false;
+}
+
+
+// ---- the level plan (D-038; docs/LEVEL_PLAN.md section 7) ---------------------------------------------------------------------------------------
+
+/** The hub's door height (every village door is 2.4 clear; the hall's double door is 3.0). */
+const VILLAGE_DOOR_H = 2.4;
+
+let cachedLevel: RegionLevel | undefined;
+/**
+ * What every building of Hollowmere IS (read by the audit and the view): the three cottages, the two stilt houses, the mill and the hall are walkable rooms (the doors are `KIND`'s: 1.5, 1.4, 1.5, 2.4 m clear);
+ * the smithy and the four stalls are `open-front`; the two granaries are round stores with a hatch up a ladder and no ground door (`solid`). The clock gate is a passage (the audit's `AuditDoor`), declared here too.
+ * The collision is `villageObstacles` (ringWalls with the same doorways); the `RoomRect`s are inside its walls (`WALL_T`).
+ */
+export function villageLevel(): RegionLevel {
+  if (cachedLevel) return cachedLevel;
+  const buildings: LevelBuilding[] = [];
+  for (const s of SITES) {
+    const k = KIND[s.kind];
+    const at = { x: s.x, z: s.z, yaw: s.yaw, hx: s.hx, hz: s.hz };
+    if (s.kind === "cottage" || s.kind === "stilt" || s.kind === "mill" || s.kind === "hall") {
+      buildings.push(planBuilding(s.id, "interior", at, { height: k.floor + k.wall + (s.kind === "hall" ? 5.2 : s.kind === "mill" ? 2.4 : 2.0), floor: k.floor, wallH: k.wall, door: k.door, doorH: s.kind === "hall" ? 3.0 : VILLAGE_DOOR_H, steps: 0, t: WALL_T }));
+    } else if (s.kind === "workshop" || s.kind === "stall") buildings.push(planBuilding(s.id, "open-front", at, { height: k.floor + k.wall + 1.5, floor: k.floor, wallH: k.wall, door: 0 }));
+    else if (s.kind === "granary") buildings.push(planBuilding(s.id, "solid", at, { height: k.wall + k.floor + 3.1, floor: k.floor, wallH: k.wall, door: 0 }));
+  }
+  // the clock gate: two piers with the street between them; the passage's threshold is on the front (+x) face, `through` is 1.6 m beyond the back
+  const g = SITES.find((x) => x.kind === "clock")!;
+  const gk = KIND.clock;
+  const f = { x: g.x, z: g.z, yaw: g.yaw };
+  const front = toWorld(f, g.hx, 0);
+  const far = toWorld(f, -g.hx - 1.6, 0);
+  const passage: AuditDoor = { id: "gate.passage", building: "gate", x: front.x, z: front.z, yaw: g.yaw, width: gk.door, height: 3.7, leads: "passage", through: far, wide: true };
+  cachedLevel = levelOf(buildings, [passage]);
+  return cachedLevel;
 }

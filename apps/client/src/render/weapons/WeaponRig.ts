@@ -2,7 +2,9 @@ import { Vector3 } from "three";
 import { WEAPON, WEAPONS, type WeaponId } from "@cb/shared";
 import { newWeaponPoseInput, type CharacterAnimator, type CharacterRig, type HoldOut, type WeaponPoseInput } from "@cb/procedural/three";
 import { ghostTree } from "../ghost.ts";
+import type { WeaponLod } from "./gunParts.ts";
 import { WeaponModel } from "./WeaponModels.ts";
+import { Holsters } from "./WeaponMounts.ts";
 
 /** How long the recoil picture of a shot takes to settle, by weapon (seconds). */
 const KICK_SECONDS: Record<number, number> = { [WEAPON.PISTOL]: 0.24, [WEAPON.RIFLE]: 0.36, [WEAPON.BLUNDERBUSS]: 0.42 };
@@ -22,6 +24,8 @@ export interface WieldContext {
   crew: number;
   /** First person blend (0..1). */
   fp: number;
+  /** The weapons this body carries (`WEAPON` ids); the ones not in the hands hang on it (pistol and sabre on the hips, long guns on the back). Omit to draw none. */
+  carried?: readonly number[];
 }
 
 /**
@@ -40,6 +44,11 @@ export class WeaponRig {
   private swingSeconds = 0.5;
   private swingCount = 0;
   private readonly tmp = new Vector3();
+  private holsters: Holsters | undefined;
+  private lod: WeaponLod = 0;
+  /** The hammer: 1 the instant a shot falls it, kept until the reload ends and it is cocked again; `hammerNow` follows with a snap (a hammer falls in a few frames). */
+  private hammerTarget = 0;
+  private hammerNow = 0;
 
   constructor(
     private readonly rig: CharacterRig,
@@ -51,6 +60,7 @@ export class WeaponRig {
   setOutline(on: boolean): void {
     this.outline = on;
     for (const m of this.models.values()) m.setOutline(on);
+    this.holsters?.setOutline(on);
   }
 
   get weaponId(): number {
@@ -65,6 +75,8 @@ export class WeaponRig {
   /** A shot just left the barrel: recoil, at once. */
   fire(weapon: number): void {
     this.kick = 1;
+    this.hammerTarget = 1;
+    this.hammerNow = Math.max(this.hammerNow, 0.35);
     this.kickSeconds = KICK_SECONDS[weapon] ?? 0.3;
   }
 
@@ -85,7 +97,12 @@ export class WeaponRig {
   /** Advances the timers and fills `input`. Call before `anim.update(dt, { ..., weapon: rig.input })`. */
   update(dt: number, c: WieldContext): WeaponPoseInput {
     const i = this.input;
+    // the weapon follows the body's crowd level of detail (a far wielder carries the plain silhouette)
+    const lod = Math.min(2, this.rig.lod) as WeaponLod;
+    if (lod !== this.lod) this.setLod(lod);
     if (c.weapon !== i.id) this.setWeapon(c.weapon);
+    if (c.carried) (this.holsters ??= new Holsters(this.rig, this.outline)).show(c.carried, c.hidden ? -1 : c.weapon);
+    else this.holsters?.show([], -1);
     i.id = c.weapon;
     i.aim = c.aiming ? 1 : 0;
     i.elev = c.elev;
@@ -95,12 +112,30 @@ export class WeaponRig {
     i.fp = c.fp;
     this.kick = Math.max(0, this.kick - dt / this.kickSeconds);
     i.fire = this.kick;
+    // the hammer is cocked when the reload is done (the last tenth of it), or when another weapon is drawn
+    if (c.reload >= 0.9 || c.weapon < 0) this.hammerTarget = 0;
+    this.hammerNow += (this.hammerTarget - this.hammerNow) * Math.min(1, dt * (this.hammerTarget > this.hammerNow ? 60 : 14));
+    this.model?.setHammer(this.hammerNow);
     if (this.swingT >= 0) {
       this.swingT += dt;
       if (this.swingT >= this.swingSeconds || c.hidden) this.swingT = -1;
     }
     i.swing = this.swingT >= 0 ? this.swingT / this.swingSeconds : -1;
     return i;
+  }
+
+  private setLod(lod: WeaponLod): void {
+    this.lod = lod;
+    for (const m of this.models.values()) m.dispose();
+    this.models.clear();
+    this.model = undefined;
+    this.holsters?.setLod(lod);
+    if (this.input.id >= 0) this.setWeapon(this.input.id);
+    this.applyHammer();
+  }
+
+  private applyHammer(): void {
+    this.model?.setHammer(this.hammerNow);
   }
 
   private setWeapon(id: number): void {
@@ -110,7 +145,7 @@ export class WeaponRig {
     if (id < 0) return;
     let m = this.models.get(id);
     if (!m) {
-      m = new WeaponModel(id, this.outline);
+      m = new WeaponModel(id, this.outline, false, this.lod);
       if (m.group.children.length > 1) {
         this.rig.joints.torso.add(m.group);
         this.models.set(id, m);
@@ -166,6 +201,7 @@ export class WeaponRig {
     for (const m of this.models.values()) m.dispose();
     this.models.clear();
     this.model = undefined;
+    this.holsters?.dispose();
     void this.anim;
   }
 }

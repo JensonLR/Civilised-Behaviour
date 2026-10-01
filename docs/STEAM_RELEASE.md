@@ -1,5 +1,7 @@
 # Steam release plan
 
+**ON HOLD (D-038, 2026-10-01): do not start Steamworks, the Steam page, a Playtest app or a Demo app until the owner says.** The game is to be in a VERY good state first (polish pass 2: `_notes/polish2.md`). The adapter seam and the desktop shell stay as they are, isolated behind config; nothing below is scheduled.
+
 Status: DRAFT checklist. Facts about Steamworks fees, waiting periods and review timings are from memory and **must be verified
 against current Steamworks documentation before acting** (they change). No App ID exists; all Steam code sits behind adapters.
 

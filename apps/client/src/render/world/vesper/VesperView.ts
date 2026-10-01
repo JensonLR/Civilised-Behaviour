@@ -1,5 +1,5 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, smoothstep, type CollisionWorld, type DayState, type ScenarioView } from "@cb/shared";
+import { PALETTE, smoothstep, vesperLevel, type CollisionWorld, type DayState, type ScenarioView } from "@cb/shared";
 import { atmoUniforms, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, snagGeometry, type Lod } from "../flora.ts";
@@ -17,6 +17,7 @@ import { vesperBoulderGeometry, vesperSlabGeometry } from "./rocks.ts";
 import { planVesperScatter, type VesperScatter } from "./scatter.ts";
 import type { VesperTerrain } from "./shared.ts";
 import { buildVesperSolid } from "./solid.ts";
+import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import { sheaveAt, sheaveGeometry } from "./works.ts";
 
 const WHITE = new Color(1, 1, 1);
@@ -49,6 +50,20 @@ export class VesperView implements RegionView {
   private sheaveHull?: Mesh;
   private dress?: VesperDress;
   private glows: { x: number; y: number; z: number }[] = [];
+  private roofSet?: RoofSet;
+  private doors: DoorMark[] = [];
+
+  /** Once a frame for the local player: the roof of the room (or the gallery) the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  setViewer(x: number, z: number): void {
+    this.roofSet?.setViewer(vesperLevel().rooms, x, z);
+  }
+  /** The doors the view drew, and the roof set (for tests and tools). */
+  get doorMarks(): readonly DoorMark[] {
+    return this.doors;
+  }
+  get roofs(): RoofSet | undefined {
+    return this.roofSet;
+  }
 
   constructor(
     private readonly scene: Scene,
@@ -156,10 +171,19 @@ export class VesperView implements RegionView {
     const solid = buildVesperSolid(this.world, lod);
     this.glows = solid.glows;
     if (!solid.geometry) return;
-    const hull = this.detail.outlines ? buildVesperSolid(this.world, 0).geometry : undefined;
+    const hullSolid = this.detail.outlines ? buildVesperSolid(this.world, 0) : undefined;
+    const hull = hullSolid?.geometry;
     this.track(solid.geometry);
     if (hull) this.track(hull);
-    makeSolid(this.root, solid.geometry, this.track(toonMaterial({ wetDark: 0.8 })), { name: "vesper", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    const mat = this.track(toonMaterial({ wetDark: 0.8 }));
+    makeSolid(this.root, solid.geometry, mat, { name: "vesper", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    // D-038: the doors drawn, and the roofs of the cloister's gallery and the Records Room (one mesh; the one over the viewer is dropped)
+    this.doors = solid.marks;
+    doorGroups(this.root, solid.marks);
+    if (solid.roofs) {
+      this.roofSet = new RoofSet(this.root, solid.roofs, hullSolid?.roofs, mat, { name: "roofs", outline: this.detail.outlines, ink: "medium" });
+      for (const g of this.roofSet.geometries) this.track(g);
+    }
   }
 
   /** The headframe's sheave wheel: its own mesh (and ink hull), turned by `update`. */

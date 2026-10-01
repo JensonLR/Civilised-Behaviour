@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, Matrix4, Mesh, MeshToonMaterial, SphereGeometry, Vector3, type Object3D, type Scene, type ShaderMaterial } from "three";
-import { PALETTE, SALTMARKET_ANCHORS, smoothstep, type CollisionWorld, type DayState, type RegionDress, type SaltmarketTerrain, type ScenarioView } from "./shared.ts";
+import { PALETTE, SALTMARKET_ANCHORS, saltmarketLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type SaltmarketTerrain, type ScenarioView } from "./shared.ts";
 import { atmoUniforms, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { grassTuftGeometry, reedGeometry, type Lod } from "../flora.ts";
@@ -10,6 +10,7 @@ import { setRgb } from "../sky.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
+import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import type { WaterUniforms } from "../water.ts";
 import { buildSaltmarketCloth, createSaltmarketAtlas, saltmarketClothMaterial } from "./cloth.ts";
 import { FLOOD, buildFloodMesh, floodTarget } from "./flood.ts";
@@ -65,6 +66,9 @@ export class SaltmarketView implements RegionView {
   /** The flood's level now (metres above the hall's floor): `floodTarget`'s, held once the sale has ended. */
   private level: number = FLOOD.base;
   private lamps: { x: number; y: number; z: number }[] = [];
+  /** D-038: the roofs of the interiors (the cutaway), and the doors the view drew. */
+  private roofSet?: RoofSet;
+  private doors: DoorMark[] = [];
 
   constructor(
     private readonly scene: Scene,
@@ -195,8 +199,16 @@ export class SaltmarketView implements RegionView {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildSaltmarketSolid(this.world, lod);
     this.lamps = solid.lamps;
-    const hulls = this.detail.outlines ? buildSaltmarketSolid(this.world, 0).geometries : undefined;
+    this.doors = solid.marks;
+    doorGroups(this.root, solid.marks);
+    const hullSolid = this.detail.outlines ? buildSaltmarketSolid(this.world, 0) : undefined;
+    const hulls = hullSolid?.geometries;
     const mat = this.track(toonMaterial({ wetDark: 0.8 }));
+    // the interiors' roofs: one mesh (and one ink hull) in which the roof over the room the viewer is in is dropped
+    if (solid.roofs) {
+      this.roofSet = new RoofSet(this.root, solid.roofs, hullSolid?.roofs, mat, { name: "roofs", outline: this.detail.outlines, ink: "medium" });
+      for (const g of this.roofSet.geometries) this.track(g);
+    }
     solid.geometries.forEach((g, i) => {
       if (!g) return;
       this.track(g);
@@ -285,6 +297,21 @@ export class SaltmarketView implements RegionView {
     this.scenario = v;
     if (!v || v.template !== "flooded_market") this.level = FLOOD.base;
     this.setLevel(this.level);
+  }
+
+  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  setViewer(x: number, z: number): void {
+    this.roofSet?.setViewer(saltmarketLevel().rooms, x, z);
+  }
+
+  /** The doors the view drew (for tests and tools). */
+  get doorMarks(): readonly DoorMark[] {
+    return this.doors;
+  }
+
+  /** The roof set (for tests and tools). */
+  get roofs(): RoofSet | undefined {
+    return this.roofSet;
   }
 
   /** The flood's current level above the hall's floor, metres (for tests and tooling). */

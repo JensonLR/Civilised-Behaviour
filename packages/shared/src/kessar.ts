@@ -2,6 +2,8 @@ import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { KESSAR_ANCHORS as A, KESSAR_SITES as SITES, type BridgeState } from "./campaignTypes.ts";
 import { segmentDistance } from "./landscape.ts";
 import { lerp, smoothstep } from "./math.ts";
+import { propRadius } from "./levelAudit.ts";
+import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import { PropKind, type PropSpawn } from "./props.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
@@ -311,7 +313,8 @@ export function kessarPlan(): KessarPlan {
     stubs,
     toll: {
       posts: [{ x: bx - 3.9, z: 7 }, { x: bx + 3.9, z: 7 }],
-      booth: { x: -6.6, z: 6.4, yaw: 0, hx: 1.4, hz: 1.2, height: 2.6 },
+      // (D-038: the toll booth is the region's one walkable interior, 4.8 x 4.0, its door facing the customs yard; nudged 2.8 m from (-6.6, 6.4) to keep the sentries' posts and the parley spot clear of it)
+      booth: { x: -8.8, z: 4.6, yaw: 0, hx: 2.4, hz: 2.0, height: 3.6 },
       desk: { x: 5.4, z: 5.0, yaw: 0.2, hx: 0.8, hz: 0.5, height: 0.9 },
     },
     pier: { x: A.landing.x, z0: SHORE_Z - 4, z1: SHORE_Z + 16, half: 1.6 },
@@ -322,7 +325,8 @@ export function kessarPlan(): KessarPlan {
         { x: -29, z: 46.5, yaw: -0.25 },
         { x: -36, z: 55.5, yaw: 0.1 },
       ],
-      wagon: { x: -27, z: 54, yaw: -0.5 },
+      // (D-038: the wagon moved 3.5 m north, off the worn track into the camp, which it narrowed to a squeeze)
+      wagon: { x: -26, z: 50.4, yaw: -0.5 },
       flag: { x: -31, z: 50 },
       crates: [
         { x: -32.5, z: 55.5, yaw: 0.4, half: 0.45, height: 0.8 },
@@ -350,6 +354,32 @@ export function kessarPlan(): KessarPlan {
     palms,
   };
   return cached;
+}
+
+// ---- the level plan (D-038; docs/LEVEL_PLAN.md section 7) -----------------------------------------------------------------------------------
+
+/**
+ * What every building of Kessar IS. The toll booth is the one walkable room (the reward beside the set-piece); the fort's gate is `sealed` (the portcullis is down and chained, the Ward's paper seal across it:
+ * the gate "opens when the lamps agree"); the two bastions are `solid`; every tent is `tent` (its flap tied shut, a bedroll or a boot outside). The keep and the halls inside the curtain are drawn only (no collision,
+ * not reachable): they are backdrop and are not listed.
+ */
+let cachedLevel: RegionLevel | undefined;
+export function kessarLevel(): RegionLevel {
+  if (cachedLevel) return cachedLevel;
+  const p = kessarPlan();
+  const bo = p.toll.booth;
+  const bx = (b: KessarBox): { x: number; z: number; yaw: number; hx: number; hz: number } => ({ x: b.x, z: b.z, yaw: b.yaw, hx: b.hx, hz: b.hz });
+  const g = p.fort.door;
+  const buildings: LevelBuilding[] = [
+    planBuilding("toll.booth", "interior", bx(bo), { height: bo.height, floor: 0.2, wallH: 2.6 }),
+    // the gate: a wall box 6 wide and 1.2 thick facing south; its door is the sealed portcullis (3.6 clear, a wagon's width)
+    planBuilding("fort.gate", "sealed", { x: g.x, z: g.z, yaw: Math.PI / 2, hx: g.hz, hz: g.hx }, { height: g.height, floor: 0, wallH: g.height, door: 3.6, doorH: 3.4, wide: true, sign: KESSAR_SIGNS[5] }),
+    ...p.fort.bastions.map((b, i) => planBuilding(`fort.bastion${i}`, "solid", bx(b), { height: b.height, floor: 0, wallH: b.height })),
+    ...p.camp.tents.map((t, i) => planBuilding(`syndicate.tent${i}`, "tent", { x: t.x, z: t.z, yaw: t.yaw, hx: 2, hz: 1.6 }, { height: 2.4, floor: 0, wallH: 2.4 })),
+    ...p.sites.camp.tents.map((t, i) => planBuilding(`orchard.tent${i}`, "tent", { x: t.x, z: t.z, yaw: t.yaw, hx: 2, hz: 1.6 }, { height: 2.4, floor: 0, wallH: 2.4 })),
+  ];
+  cachedLevel = levelOf(buildings);
+  return cachedLevel;
 }
 
 // ---- colliders -------------------------------------------------------------------------------------------------------------------------
@@ -402,8 +432,7 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
 
   // the toll station
   for (const p of plan.toll.posts) circle("pole", p.x, p.z, 0.22, 2.7);
-  const bo = plan.toll.booth;
-  box("house", bo.x, bo.z, bo.hx, bo.hz, bo.yaw, bo.height);
+  for (const b of kessarLevel().buildings) if (b.id === "toll.booth") out.push(...roomObstacles(b, g(b.x, b.z)));
   const de = plan.toll.desk;
   box("stall", de.x, de.z, de.hx, de.hz, de.yaw, de.height);
   for (const s of plan.signs) circle("sign", s.x, s.z, 0.12, 2);
@@ -473,6 +502,7 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
     const cz = rng.range(-A.bounds + 10, SHORE_Z - 8);
     if (!free(cx, cz, 1.6)) continue;
     const r0 = rng.range(1.3, 2.1);
+    if (!free(cx, cz, 1.6 + r0 * 0.6)) continue;   // (D-038: a boulder's own radius counts, or it sinks into a neighbour)
     const y = g(cx, cz);
     out.push({ kind: "circle", tag: ROCK_TAG, x: cx, z: cz, r: r0, y0: y - 1.2, y1: y + r0 * 1.4 });
     for (let j = 0, n = rng.int(2, 4), t2 = 0; j < n && t2 < 20; t2++) {
@@ -482,6 +512,7 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
       const z = cz + Math.sin(a) * d;
       if (!free(x, z, 0.3)) continue;
       const r = rng.range(0.5, 1.1);
+      if (!free(x, z, 0.3 + r)) continue;
       const yy = g(x, z);
       out.push({ kind: "circle", tag: ROCK_TAG, x, z, r, y0: yy - 1.2, y1: yy + r * 1.4 });
       j++;
@@ -540,7 +571,7 @@ export function kessarProps(seed: number, world: CollisionWorld): PropSpawn[] {
     pos.x = x;
     pos.z = z;
     const y = world.terrainHeight(x, z);
-    if (z > SHORE_Z - 3 || world.resolveXZ(pos, y, 0.6, 1.2)) continue;
+    if (z > SHORE_Z - 3 || kessarRoad(x, z) > 0.05 || world.resolveXZ(pos, y, propRadius(kinds[i % kinds.length]!) + 0.2, 1.2)) continue;   // (D-038: stores lie beside the road, never on it)
     out.push({ kind: kinds[i % kinds.length]!, x, z, yaw: rng.range(0, Math.PI * 2) });
     i++;
   }

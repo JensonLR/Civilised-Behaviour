@@ -2,6 +2,7 @@ import { BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Eul
 import { GATE_CLOCK_Y, MILL, PALETTE, RIVER, hash3, villagePlan, type Building, type CollisionWorld, type Lantern, type LandscapeTerrain, type VProp, type VillagePlan } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
 import { crateSlim } from "./objects.ts";
+import { RoofKits, type DoorMark, type RoofSource } from "./rooms.ts";
 import type { WindowPane } from "./camplife.ts";
 import type { Lod } from "./flora.ts";
 
@@ -21,7 +22,8 @@ const C = PALETTE.camp;
 const M = PALETTE.material;
 const f01 = (seed: number, a: number, b = 0, c = 0): number => hash3(seed, a, b, c) / 4294967296;
 const WALL_T = 0.28;
-const INTERIOR = new Color(W.ruinInterior);
+// D-038: the inside of a room is warm timber, never black (LEVEL_PLAN section 4, rule 6): the village's rooms are lit by their windows and a lamp
+const INTERIOR = new Color(W.vlTimber);
 const cStoneDark = new Color(W.vlStoneDark);
 const cMoss = new Color(W.moss);
 
@@ -234,6 +236,10 @@ function shell(k: Kit, b: { hx: number; hz: number }, y0: number, y1: number, dw
 
 /** A doorway's dressing: timber frame, a lintel with the sun-disc every Hollowmere door wears, and a plank leaf hung ajar into the dark. */
 function doorway(k: Kit, lod: Lod, hx: number, floor: number, dw: number, dh: number, leaf: number, seed: number, disc = true): void {
+  if (markSink) {
+    const m = k.worldPoint(hx, floor, 0);
+    markSink.push({ id: `${markFor}.door`, leads: "interior", leaf: true, x: m[0], y: m[1], z: m[2], yaw: k.yaw, width: dw });
+  }
   if (!lod) return;
   const post = 0.13;
   for (const s of [-1, 1]) bx(k, [0.16, dh + 0.06, post], [hx + 0.03, floor + dh / 2, s * (dw / 2 + post / 2 - 0.02)], timberC(W.vlTimber, seed));
@@ -261,6 +267,9 @@ function doorway(k: Kit, lod: Lod, hx: number, floor: number, dw: number, dh: nu
 
 /** A window in a wall whose OUTER face is at `face` along the axis (fx, fz): dark glass, a frame, a sill, and a pair of shutters folded back. */
 let paneSink: WindowPane[] | undefined;
+/** D-038: the doors the village drew (`doorway` pushes one per call; the building being drawn names it). */
+let markSink: DoorMark[] | undefined;
+let markFor = "";
 
 function windowOn(k: Kit, lod: Lod, fx: number, fz: number, lx: number, lz: number, y: number, w: number, h: number, shutter: number, seed: number, box = false): void {
   if (!lod) return; // (details do not carry an ink line)
@@ -329,13 +338,13 @@ function chimney(k: Kit, lod: Lod, x: number, z: number, y0: number, y1: number,
   }
 }
 
-function cottage(k: Kit, lod: Lod, b: Building, st: Style): void {
+function cottage(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   const s = b.spec;
   const seed = Math.floor(b.x * 7 + b.z * 13);
   footing(k, lod, b.hx, b.hz, s.floor, seed);
   const y0 = s.floor;
   const y1 = s.floor + s.wall;
-  shell(k, b, y0, y1, s.door, (inw, cy) => plaster(st.wall, seed, cy, inw), y0 + 2.2);
+  shell(k, b, y0, y1, s.door, (inw, cy) => plaster(st.wall, seed, cy, inw), y0 + 2.4);
   // timber framing: a plate under the eaves and corner posts
   if (lod) {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(k, [0.2, s.wall, 0.2], [sx * (b.hx - 0.04), y0 + s.wall / 2, sz * (b.hz - 0.04)], timberC(W.vlTimber, seed));
@@ -343,12 +352,12 @@ function cottage(k: Kit, lod: Lod, b: Building, st: Style): void {
     bx(k, [b.hx * 2 + 0.16, 0.16, 0.14], [0, y1 - 0.08, -b.hz - 0.02], timberC(W.vlTimber, seed + 1));
     for (const sx of [-1, 1]) bx(k, [0.14, 0.16, b.hz * 2 + 0.16], [sx * (b.hx + 0.02), y1 - 0.08, 0], timberC(W.vlTimber, seed + 2));
   }
-  doorway(k, lod, b.hx, y0, s.door, 2.05, st.door, seed);
+  doorway(k, lod, b.hx, y0, s.door, 2.4, st.door, seed);
   windowOn(k, lod, 1, 0, b.hx, s.door / 2 + 0.95, y0 + 1.35, 0.5, 0.62, st.shutter, seed + 3, true);
   windowOn(k, lod, 1, 0, b.hx, -s.door / 2 - 0.95, y0 + 1.35, 0.5, 0.62, st.shutter, seed + 4, false);
   windowOn(k, lod, 0, 1, -0.3, b.hz, y0 + 1.35, 0.55, 0.62, st.shutter, seed + 5, true);
   windowOn(k, lod, 0, -1, 0.4, -b.hz, y0 + 1.35, 0.55, 0.62, st.shutter, seed + 6, false);
-  gableRoof(k, lod, b, y1, 1.55, 0.5, st.roof, seed + 10, st.wall);
+  gableRoof(kr, lod, b, y1, 1.55, 0.5, st.roof, seed + 10, st.wall);   // (the roof is its own piece: the cutaway lifts it)
   chimney(k, lod, -b.hx * 0.4, 0.6, y1 - 0.3, y1 + 2.0, seed + 11);
   // the room: a table, a stool and a bed on the floor (dark; you see them from the door)
   if (lod) {
@@ -361,7 +370,7 @@ function cottage(k: Kit, lod: Lod, b: Building, st: Style): void {
   if (lod) for (let i = 0; i < 5; i++) k.add(new SphereGeometry(0.28 + f01(seed, i) * 0.14, 5, 4), { at: [-b.hx * 0.3 - i * 0.16, y0 + 0.5 + i * 0.5 + f01(seed, i, 2) * 0.3, -b.hz - 0.12], scale: [1, 1, 0.5], colour: i % 2 ? W.vine : W.vineLight, flat: true });
 }
 
-function stilt(k: Kit, lod: Lod, b: Building, st: Style): void {
+function stilt(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   const s = b.spec;
   const seed = Math.floor(b.x * 5 + b.z * 11);
   const fl = s.floor;
@@ -402,13 +411,13 @@ function stilt(k: Kit, lod: Lod, b: Building, st: Style): void {
     blend(out, st.wall, W.vlTimber, 0.1 + 0.4 * f01(seed, Math.floor((p.x + p.z) * 7)) + (((Math.floor((p.x + p.z) * 7)) & 1) ? 0.08 : 0));
     void cy;
   };
-  shell(k, b, fl, fl + s.wall, s.door, (inw, cy) => boards(inw, cy), fl + 2.1);
-  doorway(k, lod, b.hx, fl, s.door, 1.95, st.door, seed, true);
+  shell(k, b, fl, fl + s.wall, s.door, (inw, cy) => boards(inw, cy), fl + 2.4);
+  doorway(k, lod, b.hx, fl, s.door, 2.4, st.door, seed, true);
   windowOn(k, lod, 1, 0, b.hx, s.door / 2 + 0.8, fl + 1.3, 0.42, 0.5, st.shutter, seed + 3, true);
   windowOn(k, lod, 0, 1, 0.2, b.hz, fl + 1.3, 0.5, 0.5, st.shutter, seed + 4, false);
   windowOn(k, lod, 0, -1, 0.2, -b.hz, fl + 1.3, 0.5, 0.5, st.shutter, seed + 5, true);
   // a steep thatched roof, ridge along the door axis, hanging low over the porch
-  gableRoof(k, lod, b, fl + s.wall, 1.9, 0.55, st.roof, seed + 10, st.wall, "x");
+  gableRoof(kr, lod, b, fl + s.wall, 1.9, 0.55, st.roof, seed + 10, st.wall, "x");
   // porch: two posts and a small lean-to over it
   for (const sz of [-1, 1]) cyl(k, 0.06, 0.07, 2.2, [b.hx + 1.1, fl + 1.1, sz * (b.hz - 0.2)], timberC(W.vlTimber, seed + 8), 6);
   roofPlane(k, lod, st.roof, seed + 20, 1.7, b.hz * 2 + 0.3, [b.hx + 0.75, fl + s.wall - 0.02, 0], [0, Math.PI / 2, 0.16], 0.16);
@@ -493,7 +502,7 @@ function granary(k: Kit, lod: Lod, b: Building, st: Style): void {
   k.add(win, { at: [r + 0.02, top - 0.55, 0], colour: W.vlSoot, flat: true });
 }
 
-function hall(k: Kit, lod: Lod, b: Building, st: Style): void {
+function hall(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   const s = b.spec;
   const seed = 900;
   const fl = s.floor;
@@ -525,7 +534,7 @@ function hall(k: Kit, lod: Lod, b: Building, st: Style): void {
   // tier one: broad walls with a great double doorway between timber posts
   const y0 = fl;
   const y1 = fl + s.wall;
-  shell(k, b, y0, y1, s.door, (inw, cy) => plaster(st.wall, seed, cy, inw), y0 + 2.2);
+  shell(k, b, y0, y1, s.door, (inw, cy) => plaster(st.wall, seed, cy, inw), y0 + 3.0);
   // timber frame with cross-bracing panels on the long sides
   if (lod) for (const sz of [-1, 1]) {
     for (let i = -3; i <= 3; i++) bx(k, [0.14, s.wall, 0.14], [i * (b.hx * 0.3), y0 + s.wall / 2, sz * (b.hz + 0.0)], timberC(W.vlTimber, seed + i + 4));
@@ -534,27 +543,27 @@ function hall(k: Kit, lod: Lod, b: Building, st: Style): void {
   }
   for (const sx of [-1, 1]) bx(k, [0.16, 0.2, b.hz * 2 + 0.2], [sx * (b.hx + 0.02), y1 - 0.1, 0], timberC(W.vlTimber, seed + 2));
   // the double door, standing open into the great room
-  doorway(k, lod, b.hx, y0, s.door, 2.8, st.door, seed + 20, true);
-  bx(k, [0.16, 0.2, s.door + 0.6], [b.hx + 0.05, y0 + 2.95, 0], W.vlHeraldGold);
+  doorway(k, lod, b.hx, y0, s.door, 3.0, st.door, seed + 20, true);
+  bx(k, [0.16, 0.2, s.door + 0.6], [b.hx + 0.05, y0 + 3.15, 0], W.vlHeraldGold);
   for (const sz of [-1, 1]) {
     windowOn(k, lod, 1, 0, b.hx, sz * (s.door / 2 + 1.5), y0 + 1.9, 0.6, 1.0, st.shutter, seed + 5 + sz, false);
     for (const lx of [-2.4, 0, 2.4]) windowOn(k, lod, 0, sz, lx, sz * b.hz, y0 + 1.9, 0.6, 1.0, st.shutter, seed + 9 + lx, lx === 0);
   }
   // roof tier one: a broad hip
-  hipRoof(k, lod, b.hx + 0.65, b.hz + 0.65, y1 - 0.05, 1.5, 0.62, st.roof, seed + 30);
+  hipRoof(kr, lod, b.hx + 0.65, b.hz + 0.65, y1 - 0.05, 1.5, 0.62, st.roof, seed + 30);
   // tier two: a clerestory drum with slit windows and its own roof
   const hx2 = b.hx * 0.55;
   const hz2 = b.hz * 0.5;
   const t2 = y1 + 1.35;
-  bx(k, [hx2 * 2, 1.4, hz2 * 2], [0, y1 + 0.75, 0], plaster(st.wall, seed + 40, y1 + 0.75, undefined));
-  bx(k, [hx2 * 2 + 0.16, 0.14, hz2 * 2 + 0.16], [0, y1 + 1.5, 0], W.vlTimber);
-  if (lod) for (const sz of [-1, 1]) for (let i = -2; i <= 2; i++) bx(k, [0.4, 0.5, 0.06], [i * (hx2 * 0.4), y1 + 0.85, sz * (hz2 + 0.02)], W.vlSoot);
-  hipRoof(k, lod, hx2 + 0.55, hz2 + 0.55, t2 + 0.1, 1.2, 0.42, st.roof, seed + 31);
+  bx(kr, [hx2 * 2, 1.4, hz2 * 2], [0, y1 + 0.75, 0], plaster(st.wall, seed + 40, y1 + 0.75, undefined));
+  bx(kr, [hx2 * 2 + 0.16, 0.14, hz2 * 2 + 0.16], [0, y1 + 1.5, 0], W.vlTimber);
+  if (lod) for (const sz of [-1, 1]) for (let i = -2; i <= 2; i++) bx(kr, [0.4, 0.5, 0.06], [i * (hx2 * 0.4), y1 + 0.85, sz * (hz2 + 0.02)], W.vlSoot);
+  hipRoof(kr, lod, hx2 + 0.55, hz2 + 0.55, t2 + 0.1, 1.2, 0.42, st.roof, seed + 31);
   // tier three: a cupola with a gilded finial and a flag
-  bx(k, [1.3, 0.9, 1.3], [0, t2 + 1.55, 0], plaster(st.wall, seed + 41, t2 + 1.55, undefined));
-  hipRoof(k, lod, 1.1, 1.1, t2 + 1.9, 1.0, 0.0, st.roof, seed + 32);
-  k.limb([0, t2 + 2.85, 0], [0, t2 + 4.0, 0], 0.03, 0.02, W.vlTimber, 4);
-  k.add(new SphereGeometry(0.1, 6, 4), { at: [0, t2 + 3.9, 0], colour: W.vlHeraldGold, flat: true });
+  bx(kr, [1.3, 0.9, 1.3], [0, t2 + 1.55, 0], plaster(st.wall, seed + 41, t2 + 1.55, undefined));
+  hipRoof(kr, lod, 1.1, 1.1, t2 + 1.9, 1.0, 0.0, st.roof, seed + 32);
+  kr.limb([0, t2 + 2.85, 0], [0, t2 + 4.0, 0], 0.03, 0.02, W.vlTimber, 4);
+  kr.add(new SphereGeometry(0.1, 6, 4), { at: [0, t2 + 3.9, 0], colour: W.vlHeraldGold, flat: true });
   // benches on the porch, either side of the doors
   for (const sg of [-1, 1]) {
     bx(k, [0.46, 0.06, 1.6], [b.hx + 0.6, fl + 0.42, sg * (s.door / 2 + 1.9)], timberC(W.vlTimberLight, seed + 51));
@@ -632,29 +641,29 @@ function workshop(k: Kit, lod: Lod, b: Building, st: Style): void {
   k.limb([b.hx + 0.05, y1 - 0.4, -0.7], [b.hx + 0.5, y1 - 0.4, -0.7], 0.025, 0.025, C.iron, 4);
 }
 
-function mill(k: Kit, lod: Lod, b: Building, st: Style): void {
+function mill(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   const s = b.spec;
   const seed = 1500;
   const fl = s.floor;
   footing(k, lod, b.hx, b.hz, fl, seed, 0, 1.0);
   const y0 = fl;
-  const midY = fl + 2.3;
+  const midY = fl + 2.7;
   const y1 = fl + s.wall;
   // lower storey in river-stone (the wet wall, with the doorway), upper in lime-wash
   shell(k, b, y0, midY, s.door, (inw, cy) => (p, n, out) => {
     if (n.x * inw[0] + n.z * inw[1] > 0.55) out.copy(INTERIOR).lerp(cStoneDark, 0.2);
     else stoneC(seed + 1, cy - 0.6, 0.35)(p, n, out);
-  }, y0 + 2.1);
+  }, y0 + 2.4);
   shell(k, b, midY, y1, 0, (inw, cy) => plaster(st.wall, seed + 2, cy, inw));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(k, [0.2, s.wall, 0.2], [sx * (b.hx - 0.04), y0 + s.wall / 2, sz * (b.hz - 0.04)], timberC(W.vlTimber, seed));
   for (const sz of [-1, 1]) bx(k, [b.hx * 2 + 0.16, 0.16, 0.14], [0, midY, sz * (b.hz + 0.02)], timberC(W.vlTimber, seed + 1));
   bx(k, [0.14, 0.16, b.hz * 2 + 0.16], [b.hx + 0.02, midY, 0], timberC(W.vlTimber, seed + 1));
-  doorway(k, lod, b.hx, y0, s.door, 2.05, st.door, seed, true);
-  windowOn(k, lod, 1, 0, b.hx, s.door / 2 + 1.0, y0 + 2.5, 0.5, 0.6, st.shutter, seed + 4, false);
-  windowOn(k, lod, 1, 0, b.hx, -s.door / 2 - 1.0, y0 + 2.5, 0.5, 0.6, st.shutter, seed + 5, true);
-  windowOn(k, lod, 0, 1, 0.4, b.hz, y0 + 2.5, 0.5, 0.6, st.shutter, seed + 6, false);
+  doorway(k, lod, b.hx, y0, s.door, 2.4, st.door, seed, true);
+  windowOn(k, lod, 1, 0, b.hx, s.door / 2 + 1.0, y0 + 2.9, 0.5, 0.6, st.shutter, seed + 4, false);
+  windowOn(k, lod, 1, 0, b.hx, -s.door / 2 - 1.0, y0 + 2.9, 0.5, 0.6, st.shutter, seed + 5, true);
+  windowOn(k, lod, 0, 1, 0.4, b.hz, y0 + 2.9, 0.5, 0.6, st.shutter, seed + 6, false);
   // the hoist door in the gable, with a beam and pulley
-  gableRoof(k, lod, b, y1, 1.9, 0.5, st.roof, seed + 10, st.wall);
+  gableRoof(kr, lod, b, y1, 1.9, 0.5, st.roof, seed + 10, st.wall);
   bx(k, [0.06, 0.9, 0.7], [b.hx + 0.02, y1 + 0.6, 0], W.vlDoor);
   k.limb([b.hx - 0.2, y1 + 1.2, 0], [b.hx + 1.0, y1 + 1.25, 0], 0.05, 0.05, W.vlTimber, 5);
   k.limb([b.hx + 0.95, y1 + 1.2, 0], [b.hx + 0.95, y1 + 0.2, 0], 0.01, 0.01, C.rope, 3);
@@ -712,6 +721,11 @@ export function millWheel(k: Kit, lod: Lod, plan: VillagePlan): void {
 /** The gate: two piers with a semicircular arch between them carrying a tower, a clock on each face, a belfry and a verdigris spire. */
 function gateTower(k: Kit, lod: Lod, b: Building, plan: VillagePlan): void {
   const s = b.spec;
+  // D-038: the clock gate is a PASSAGE (the arch you walk through): it is drawn open, with no leaf
+  if (markSink) {
+    const m = k.worldPoint(b.hx, 0, 0);
+    markSink.push({ id: "gate.passage", leads: "passage", leaf: false, x: m[0], y: m[1], z: m[2], yaw: k.yaw, width: s.door });
+  }
   const seed = 1800;
   const pier = s.door / 2 + 0.7;
   const archTop = 3.7;
@@ -1193,11 +1207,14 @@ function waterside(k: Kit, world: CollisionWorld, plan: VillagePlan, lod: Lod): 
 // ---- assembly ---------------------------------------------------------------------------------------------------------------------------------
 
 /** Where a sway-carrying hanging sign or awning belongs is handled by the pieces themselves; this puts everything together. Undefined off the arena. */
-export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<string, number>, panes?: WindowPane[]): BufferGeometry | undefined {
+export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<string, number>, panes?: WindowPane[], roofsOut?: { roofs?: RoofSource; marks?: DoorMark[] }): BufferGeometry | undefined {
   if (world.obstacles.length === 0) return undefined;
   paneSink = panes;
+  const marks: DoorMark[] = [];
+  markSink = marks;
   const plan = villagePlan(world.terrain);
   const k = new Kit({ sway: true });
+  const roofKits = new RoofKits();
   let last = 0;
   const mark = (name: string): void => {
     if (!stats) return;
@@ -1208,24 +1225,29 @@ export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<str
   for (const b of plan.buildings) {
     k.setBase(b.x, b.ground, b.z, b.yaw);
     const st = styleOf(b);
+    markFor = b.id;
+    // D-038: the roofs of the rooms (cottages, stilt houses, the mill, the hall) are their own pieces, lifted while the viewer is inside
+    const roomy = roofsOut !== undefined && (b.kind === "cottage" || b.kind === "stilt" || b.kind === "mill" || b.kind === "hall");
+    const kr = roomy ? roofKits.begin(b.id, { sway: true }) : k;
+    if (roomy) kr.setBase(b.x, b.ground, b.z, b.yaw);
     switch (b.kind) {
       case "cottage":
-        cottage(k, lod, b, st);
+        cottage(k, kr, lod, b, st);
         break;
       case "stilt":
-        stilt(k, lod, b, st);
+        stilt(k, kr, lod, b, st);
         break;
       case "granary":
         granary(k, lod, b, st);
         break;
       case "hall":
-        hall(k, lod, b, st);
+        hall(k, kr, lod, b, st);
         break;
       case "workshop":
         workshop(k, lod, b, st);
         break;
       case "mill":
-        mill(k, lod, b, st);
+        mill(k, kr, lod, b, st);
         break;
       case "clock":
         gateTower(k, lod, b, plan);
@@ -1255,6 +1277,11 @@ export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<str
   for (const l of plan.lanterns) lamp(k, world, l, lod);
   mark("lamps");
   paneSink = undefined;
+  markSink = undefined;
+  if (roofsOut) {
+    roofsOut.roofs = roofKits.finish();
+    roofsOut.marks = marks;
+  }
   return k.build();
 }
 

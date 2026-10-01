@@ -6,11 +6,12 @@ import { createKessarWorld } from "./kessar.ts";
 import { KESSAR_ANCHORS } from "./campaignTypes.ts";
 import { createCharState, stepCharacter, yawToWire, type CharState } from "./movement.ts";
 import { buildNavGrid } from "./nav.ts";
+import { buildingIdAt } from "./levelPlan.ts";
 import { PropKind } from "./props.ts";
 import {
   SALTMARKET, SALTMARKET_ANCHORS as A, SALTMARKET_BASINS, SALTMARKET_CHANNELS, SALTMARKET_MOUNT_SPOTS, SALTMARKET_SITES as S, SALTMARKET_SPOTS, SALTMARKET_STATIONS, SALTMARKET_VIEW_BUDGET,
   createSaltmarketTerrain, createSaltmarketWorld, saltmarketCentre, saltmarketMask, saltmarketNavOptions, saltmarketObstacles, saltmarketPlan, saltmarketProps, saltmarketRim, saltmarketRun,
-  saltmarketSitePoints, saltmarketSpawn, type SaltmarketTerrain,
+  saltmarketLevel, saltmarketSitePoints, saltmarketSpawn, type SaltmarketTerrain,
 } from "./saltmarket.ts";
 import { skylineFrom, skylineStats, type SkylineStats } from "./skyline.ts";
 
@@ -228,6 +229,9 @@ describe("Saltmarket: the world", () => {
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
       const a = items[i]!, b = items[j]!;
       if (a.tag === "table" || b.tag === "table") continue;   // (the rostrum stands in the hall, against the back wall)
+      // (D-038: the sheds, the Customs House and the drop house are rooms: several wall boxes, a deck and steps of ONE building)
+      const ia = buildingIdAt(saltmarketLevel(), a.x, a.z, 0.2), ib = buildingIdAt(saltmarketLevel(), b.x, b.z, 0.2);
+      if (a.tag === "house" && b.tag === "house" && ia !== undefined && ia === ib) continue;
       expect(Math.hypot(a.x - b.x, a.z - b.z), `${a.tag}@${a.x.toFixed(1)},${a.z.toFixed(1)} vs ${b.tag}@${b.x.toFixed(1)},${b.z.toFixed(1)}`).toBeGreaterThan(reach(a) + reach(b) - 0.01);
     }
     // nothing solid sits on a plank path (the bridges, the quay, the pier and the revetment excepted)

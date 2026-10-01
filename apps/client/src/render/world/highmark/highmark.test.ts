@@ -2,7 +2,7 @@ import vm from "node:vm";
 import v8 from "node:v8";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
-import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, herdAt, herdCount, herdPlan, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
+import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildHighmarkCloth } from "./cloth.ts";
@@ -154,7 +154,7 @@ describe("Highmark view: geometry", () => {
     const col = full.geometry!.attributes.color!;
     for (let i = 0; i < col.count; i++) for (const k of [0, 1, 2]) expect(col.array[i * 3 + k]!).toBeLessThanOrEqual(1.0001);
     // the lamps are the plan's lamps, standing above the ground they are on
-    expect(full.lamps.length).toBe(highmarkPlan().lamps.length);
+    expect(full.lamps.length).toBe(highmarkPlan().lamps.length + highmarkLevel().rooms.length);   // (D-038: and one lantern hung inside the Assembly Hall)
     for (const l of full.lamps) expect(l.y).toBeGreaterThan(world.terrainHeight(l.x, l.z) + 2.5);
   });
 

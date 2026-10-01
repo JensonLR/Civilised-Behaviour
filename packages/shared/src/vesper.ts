@@ -4,6 +4,7 @@ import { segmentDistance } from "./landscape.ts";
 import { TAU, smoothstep } from "./math.ts";
 import type { RegionMountSpots } from "./mount.ts";
 import type { NavOptions } from "./nav.ts";
+import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import { PropKind, type PropSpawn } from "./props.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, valueNoise, type Terrain } from "./terrain.ts";
@@ -316,14 +317,16 @@ export function vesperPlan(): VesperPlan {
   const cloister = { x: -47.5, z: 44, yaw: 0, hx: 5.5, hz: 18, height: 7.2, arches: 7 };
   const assay: VesperBox = { x: 39, z: 16, yaw: 0, hx: 5.5, hz: 5, height: 6.4 };
   const chimney: VesperRound = { x: 43.5, z: 10, r: 0.9, height: 17 };
-  const office: VesperBox = { x: -19, z: -84, yaw: 0, hx: 3.6, hz: 3, height: 3.6 };
+  // (D-038: the office moved 4 m east and 3 m south: at (-19,-84) its north-west corner stood in the cliff's foot, on a 3.5 m slope)
+  const office: VesperBox = { x: -15, z: -81, yaw: 0, hx: 3.6, hz: 3, height: 3.6 };
   const magazine: VesperBox = { x: -24, z: -73, yaw: 0, hx: 2.4, hz: 2, height: 2.6 };
   const timberStack: VesperBox = { x: -22, z: -78.4, yaw: 0.1, hx: 1.8, hz: 1.2, height: 1.4 };
   const winding: VesperBox = { x: 31, z: -77, yaw: 0, hx: 3, hz: 3, height: 4.4 };
   const headframe = { x: A.headframe.x + 6, z: A.headframe.z, yaw: 0, hx: 2.4, hz: 2.4, height: 24, y: T };
   const trestle = { z: TRESTLE_Z, x0: -34, x1: headframe.x - headframe.hx, hz: 1.5, y: T, piles: [] as { x: number; z: number }[] };
   for (let x = 10; x >= -26; x -= 9) for (const s of [-1, 1]) trestle.piles.push({ x, z: TRESTLE_Z + s * 1.15 });
-  const tipple: VesperBox = { x: -38, z: -66, yaw: 0, hx: 3, hz: 3.2, height: 5.2 };
+  // (D-038: the tipple moved 2.8 m south, onto the ledge's flat: its north half stood on the cliff's slope)
+  const tipple: VesperBox = { x: -38, z: -63.2, yaw: 0, hx: 3, hz: 3.2, height: 5.2 };
   const fall = { x: 0, z: -96, hx: 16, hz: 1.9, height: 6 };
 
   const lamps: { x: number; z: number; h: number }[] = [];
@@ -331,27 +334,28 @@ export function vesperPlan(): VesperPlan {
     const x = vesperRoadX(z);
     for (const [lx, lz] of [[x + 4.4, z], [vesperRoadX(z - 14) - 4.4, z - 14]] as const) if (trackDistance(lx, lz) > 3.2) lamps.push({ x: lx, z: lz, h: 3.4 });
   }
-  lamps.push({ x: -31, z: 52, h: 3.2 }, { x: -31, z: 34, h: 3.2 }, { x: 33, z: 22, h: 3.2 }, { x: -36, z: -22, h: 3.2 }, { x: -16, z: -80, h: 3.4 }, { x: 6, z: -90, h: 3.4 }, { x: -6, z: -90, h: 3.4 });
+  lamps.push({ x: -31, z: 52, h: 3.2 }, { x: -31, z: 34, h: 3.2 }, { x: 33, z: 22, h: 3.2 }, { x: -36, z: -22, h: 3.2 }, { x: -12.5, z: -87.6, h: 3.4 }, { x: 6, z: -90, h: 3.4 }, { x: -6, z: -90, h: 3.4 });
 
   const signs: VesperSign[] = [
     { x: 4.4, z: 112.5, yaw: Math.PI / 2, text: 0 },
     { x: -25, z: 49, yaw: 0, text: 1 },
     { x: 26, z: 12, yaw: Math.PI, text: 2 },
-    { x: 7, z: -88, yaw: Math.PI / 2, text: 3 },
+    { x: 5.3, z: -88, yaw: Math.PI / 2, text: 3 },
     { x: -13, z: -22, yaw: 0, text: 4 },
-    { x: -9.5, z: -80, yaw: 0, text: 5 },
+    { x: -8.6, z: -86.6, yaw: 0, text: 5 },
   ];
   const banners: VesperBanner[] = [
     { x: cloister.x + cloister.hx + 0.08, z: 33, yaw: 0, top: 6.6, w: 2.2, h: 4.8, kind: "guild" },
     { x: cloister.x + cloister.hx + 0.08, z: 55, yaw: 0, top: 6.6, w: 2.2, h: 4.8, kind: "guild" },
     { x: S.dirgeMaster.x + 3.6, z: S.dirgeMaster.z - 2.6, yaw: Math.PI / 2, top: 4.6, w: 1.6, h: 3.1, kind: "guild" },
-    { x: office.x + office.hx + 0.08, z: office.z, yaw: 0, top: 3.4, w: 1.5, h: 2.4, kind: "company" },
+    // (D-038: hung beside the office's door, no longer across it)
+    { x: office.x + office.hx + 0.08, z: office.z + 2.1, yaw: 0, top: 3.4, w: 1.5, h: 2.4, kind: "company" },
     { x: S.rivalSurveyors[0]!.x - 3.4, z: S.rivalSurveyors[0]!.z - 3.2, yaw: Math.PI / 2, top: 4.8, w: 1.9, h: 3.2, kind: "syndicate" },
     { x: S.guards[1]!.x + 3.5, z: S.guards[1]!.z + 1, yaw: Math.PI / 2, top: 5.2, w: 1.9, h: 3.2, kind: "syndicate" },
   ];
   const tents: VesperPlan["tents"] = [
     { x: -23, z: -42, yaw: 0.3, kind: "syndicate" }, { x: -17, z: -35, yaw: -0.25, kind: "syndicate" },
-    { x: 19.5, z: -84.5, yaw: 0.2, kind: "syndicate" },
+    { x: 22.5, z: -84.5, yaw: 0.2, kind: "syndicate" },
   ];
   const carts = [{ x: vesperRoadX(-34) + 5.6, z: -34, yaw: 0.3 }, { x: vesperRoadX(22) - 5.6, z: 22, yaw: -0.2 }, { x: vesperRoadX(66) + 5.6, z: 66, yaw: 0.1 }];
   const spoil: VesperRound[] = [{ x: 9.5, z: -88, r: 2.6, height: 2.2 }, { x: 12, z: -78, r: 2.0, height: 1.6 }, { x: -9.5, z: -91, r: 1.8, height: 1.4 }];
@@ -373,6 +377,68 @@ export function vesperPlan(): VesperPlan {
   return cachedPlan;
 }
 
+// ---- the level plan (D-038; docs/LEVEL_PLAN.md section 7) ------------------------------------------------------------------------------------
+
+/** The Long Cloister's gallery, built from the plan's box: a back mass (the cliff's own rock), a colonnade of eight broad piers with seven arches 2.4 m clear between them, and a corridor 3.1 m deep behind. */
+export const CLOISTER = {
+  /** The back mass's front face and the piers' two faces (x), the corridor between them. */
+  backX: -46, pierIn: -42.9, frontX: -42,
+  arches: 7, archClear: 2.4, pierW: 2.4,
+  /** The records room at the north end: z0..z1, and the corridor's two ends. */
+  recordsZ0: 26, recordsZ1: 33.2, southEnd: 61.7,
+} as const;
+
+/** The sealed facades' notices (the Guild's, the Company's), in the gorge's voice. */
+export const VESPER_SEALED_SIGNS = { assay: "CLAIMS WINDOW: SEE WINDOW", office: "CLOSED. THE LEDGER IS OPEN.", magazine: "NO NAMING OF POWDER" } as const;
+
+let cachedLevel: RegionLevel | undefined;
+/**
+ * What every building of the gorge IS. The Long Cloister is `open-front`: seven arches open onto a lit gallery (the hero reward) with the Records Room (an `interior`, a door 1.5 m wide) at its north end; the Assay House,
+ * the Company's office and the magazine are `sealed` (iron grille, locked, padlocked: each with its notice); the winding house and the tipple are `solid`; the Syndicate's three tents are `tent`s.
+ */
+export function vesperLevel(): RegionLevel {
+  if (cachedLevel) return cachedLevel;
+  const p = vesperPlan();
+  const c = p.cloister;
+  const C = CLOISTER;
+  const at = (b: VesperBox, yaw = b.yaw): { x: number; z: number; yaw: number; hx: number; hz: number } => ({ x: b.x, z: b.z, yaw, hx: yaw === b.yaw ? b.hx : b.hx, hz: b.hz });
+  const gz0 = C.recordsZ1, gz1 = C.southEnd;
+  const buildings: LevelBuilding[] = [
+    planBuilding("cloister", "open-front", at(c), { height: c.height, floor: 0, wallH: c.height, rect: { x: (C.backX + C.pierIn) / 2, z: (gz0 + gz1) / 2, hx: (C.pierIn - C.backX) / 2, hz: (gz1 - gz0) / 2 } }),
+    planBuilding("records", "interior", { x: (C.backX + C.pierIn) / 2, z: (C.recordsZ0 + C.recordsZ1) / 2, yaw: Math.PI / 2, hx: (C.recordsZ1 - C.recordsZ0) / 2, hz: (C.pierIn - C.backX) / 2 }, { height: 7.2, floor: 0.25, wallH: 6.9 }),
+    planBuilding("assay", "sealed", at(p.assay, Math.PI), { height: p.assay.height, floor: 0, wallH: p.assay.height, sign: VESPER_SEALED_SIGNS.assay }),
+    planBuilding("office", "sealed", at(p.office), { height: p.office.height, floor: 0, wallH: p.office.height, sign: VESPER_SEALED_SIGNS.office }),
+    planBuilding("magazine", "sealed", at(p.magazine), { height: p.magazine.height, floor: 0, wallH: p.magazine.height, sign: VESPER_SEALED_SIGNS.magazine }),
+    planBuilding("winding", "solid", at(p.winding), { height: p.winding.height, floor: 0, wallH: p.winding.height }),
+    planBuilding("tipple", "solid", at(p.tipple), { height: p.tipple.height, floor: 0, wallH: p.tipple.height }),
+    ...p.tents.map((t, i) => planBuilding(`syndicate.tent${i}`, "tent", { x: t.x, z: t.z, yaw: t.yaw, hx: 2, hz: 1.6 }, { height: 2.4, floor: 0, wallH: 2.4 })),
+  ];
+  cachedLevel = levelOf(buildings);
+  return cachedLevel;
+}
+
+/** The solids of the Long Cloister: back mass, eight piers, the corridor's south end, and the records room (its own walls, a lintel over its door). */
+function cloisterObstacles(terrain: Terrain, out: Obstacle[]): void {
+  const c = vesperPlan().cloister;
+  const C = CLOISTER;
+  const g = (x: number, z: number): number => terrain.height(x, z);
+  const box = (x: number, z: number, hx: number, hz: number, h: number): void => {
+    const y = g(x, z);
+    out.push({ kind: "box", tag: "house", x, z, hx, hz, yaw: 0, y0: y - 1, y1: y + h });
+  };
+  const z0 = c.z - c.hz, z1 = c.z + c.hz;
+  // the cliff's mass behind the gallery (the cloister is cut into it)
+  box((c.x - c.hx + C.backX) / 2, c.z, (C.backX - (c.x - c.hx)) / 2, c.hz, c.height);
+  // the colonnade: eight broad piers, an arch between each pair
+  const pitch = C.pierW + C.archClear;
+  for (let i = 0; i <= C.arches; i++) box((C.pierIn + C.frontX) / 2, z0 + C.pierW / 2 + i * pitch, (C.frontX - C.pierIn) / 2, C.pierW / 2, c.height);
+  // the corridor's south end
+  box((C.backX + C.pierIn) / 2, z1 - 0.15, (C.pierIn - C.backX) / 2, 0.15, c.height);
+  // the records room at the north end
+  const rec = vesperLevel().buildings.find((b) => b.id === "records")!;
+  out.push(...roomObstacles(rec, g(rec.x, rec.z)));
+}
+
 // ---- colliders --------------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -391,8 +457,7 @@ export function vesperObstacles(terrain: Terrain, seed: number): Obstacle[] {
     const y = g(x, z);
     out.push({ kind: "circle", tag, x, z, r, y0: y - 1, y1: y + h });
   };
-  const c = plan.cloister;
-  box("house", c.x, c.z, c.hx, c.hz, c.yaw, c.height);
+  cloisterObstacles(terrain, out);
   box("house", plan.assay.x, plan.assay.z, plan.assay.hx, plan.assay.hz, 0, plan.assay.height);
   circle("pole", plan.chimney.x, plan.chimney.z, plan.chimney.r, plan.chimney.height);
   for (const b of [plan.office, plan.magazine, plan.winding, plan.tipple]) box("house", b.x, b.z, b.hx, b.hz, b.yaw, b.height);

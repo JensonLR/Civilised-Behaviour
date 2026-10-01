@@ -27,6 +27,11 @@ export interface RegionView {
    * seed and never changes with a scenario, and nothing here is replicated. Called on every scenario revision and again on every rebuild.
    */
   applyScenario?(v: ScenarioView | undefined): void;
+  /**
+   * D-038 (docs/LEVEL_PLAN.md section 4, rule 7): where the local player stands, once a frame. A region with walkable interiors lifts the roof of the room the viewer is in (the third-person camera never sits under
+   * a ceiling) and puts it back when they leave. The integrator calls it from Game.ts with the local player's x and z.
+   */
+  setViewer?(x: number, z: number): void;
   /** D-035: what HQ keeps of the campaign, on the planning table, the strongbox and the marquee's back wall (Hollowmere). */
   applyHistory?(pieces: readonly HqHistoryPiece[]): void;
   dispose(): void;

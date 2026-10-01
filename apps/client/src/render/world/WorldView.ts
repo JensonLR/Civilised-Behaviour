@@ -17,7 +17,7 @@ import {
   type Scene,
   type Texture,
 } from "three";
-import { CanopyIndex, GATE_CLOCK_Y, PALETTE, RIVER, autumnAt, buildFlock, classifyObstacle, riverCentre, smoothstep, villagePlan, type CollisionWorld, type DayState, type HqHistoryPiece, type LandscapeTerrain } from "@cb/shared";
+import { CanopyIndex, GATE_CLOCK_Y, PALETTE, RIVER, autumnAt, buildFlock, classifyObstacle, riverCentre, smoothstep, villageLevel, villagePlan, type CollisionWorld, type DayState, type HqHistoryPiece, type LandscapeTerrain } from "@cb/shared";
 import { sharedToonRamp, type WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, motion } from "./atmosphere.ts";
 import { createAtlasTexture, createGlowTexture } from "./atlas.ts";
@@ -59,6 +59,7 @@ import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
 import { buildVillage } from "./village.ts";
+import { RoofSet, doorGroups, type DoorMark, type RoofSource } from "./rooms.ts";
 import { Villagers, folkBudget } from "./villagers.ts";
 import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 import { setRgb } from "./sky.ts";
@@ -447,11 +448,27 @@ export class WorldView {
   // ---- Hollowmere, the village -----------------------------------------------------------------------------------------------------------
 
   private windowPanes: import("./camplife.ts").WindowPane[] = [];
+  private roofSet?: RoofSet;
+  private doors: DoorMark[] = [];
+  /** The doors the village drew (for tests and tools). */
+  get doorMarks(): readonly DoorMark[] {
+    return this.doors;
+  }
+
+  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  setViewer(x: number, z: number): void {
+    this.roofSet?.setViewer(villageLevel().rooms, x, z);
+  }
+  /** The roof set (for tests and tools). */
+  get roofs(): RoofSet | undefined {
+    return this.roofSet;
+  }
 
   private addVillage(): void {
     // (the low preset keeps the buildings' forms but not their windows, frames, plants and clutter: about a third of the triangles)
     const detailLod = this.detail.outlines ? 1 : 0;
-    const geo = buildVillage(this.world, detailLod, undefined, this.windowPanes);
+    const roofs: { roofs?: RoofSource; marks?: DoorMark[] } = {};
+    const geo = buildVillage(this.world, detailLod, undefined, this.windowPanes, roofs);
     if (!geo) return;
     const plan = villagePlan(this.world.terrain);
     // the moving parts read their positions from uniforms: the mill wheel's axle, the moored punt, the gate clock's centre and axis
@@ -462,10 +479,21 @@ export class WorldView {
     const gate = plan.buildings.find((b) => b.kind === "clock")!;
     villageUniforms.uClock.value.set(gate.x, gate.ground + GATE_CLOCK_Y, gate.z, 0);
     villageUniforms.uClockAxis.value.set(Math.cos(gate.yaw), 0, Math.sin(gate.yaw));
-    const hull = this.detail.outlines ? buildVillage(this.world, 0) : undefined;
+    const hullRoofs: { roofs?: RoofSource } = {};
+    const hull = this.detail.outlines ? buildVillage(this.world, 0, undefined, undefined, hullRoofs) : undefined;
     this.track(geo);
     if (hull) this.track(hull);
-    makeSolid(this.root, geo, this.track(toonMaterial({ wind: "village", wetDark: 0.8 })), { name: "village", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true, wind: "village" });
+    const mat = this.track(toonMaterial({ wind: "village", wetDark: 0.8 }));
+    makeSolid(this.root, geo, mat, { name: "village", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true, wind: "village" });
+    if (roofs.marks) {
+      this.doors = roofs.marks;
+      doorGroups(this.root, roofs.marks);
+    }
+    // D-038: the roofs of the village's rooms (the cottages, the stilt houses, the mill, the hall) are one mesh with its ink hull; the roof over the room the viewer is in is dropped
+    if (roofs.roofs) {
+      this.roofSet = new RoofSet(this.root, roofs.roofs, hullRoofs.roofs, mat, { name: "village-roofs", outline: this.detail.outlines, ink: "medium", wind: "village" });
+      for (const g of this.roofSet.geometries) this.track(g);
+    }
   }
 
   // ---- the flock -------------------------------------------------------------------------------------------------------------------------

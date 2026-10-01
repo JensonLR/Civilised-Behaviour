@@ -48,3 +48,6 @@ browser identity stand-in.
 ## Security posture
 Renderer untrusted. Server validates every message, rate limits (`maxMessagesPerSecond`, IP token bucket on code lookup),
 sanitises player-visible text (`sanitizeDisplayName`), validates env at boot, never logs secrets. Electron hardening rules in CLAUDE.md.
+
+## Levels
+Every region and interior is planned to `docs/LEVEL_PLAN.md` (scale grid, zoning, the door law, per-region site plans) and checked by `packages/shared/src/levelAudit.ts`, which walks the real movement step. A region is reachable only when its audit adapter reports no errors over the fixed seed list (D-038).
