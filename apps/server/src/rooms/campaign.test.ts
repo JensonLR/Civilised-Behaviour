@@ -275,7 +275,7 @@ describe("campaign: sail to Kessar Reach, settle the crossing, come home (server
     const sid = npcKey("sentry-2"); // on open ground north of the toll bar
     const sentry = room.state.players.get(sid)!;
     // stand close, on open ground, with the sentry in front
-    place(room, me.p, sentry.x, sentry.z + 4, 0);
+    place(room, me.p, sentry.x + 4, sentry.z, Math.PI / 2); // (D-038: east of him, not south: four metres south is now inside the toll booth's walls)
     await sleep(350);
     const d = me.input.data;
     d.weapon = weaponToWire(WEAPON.PISTOL);

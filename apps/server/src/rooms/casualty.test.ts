@@ -159,8 +159,12 @@ describe("casualties: down, revive, drag, rout (server authority)", () => {
       const { room, ps } = await setup(2);
       const [a, b] = ps as [P, P];
       room.damagePlayer(a.id, 1000);
-      b.p.x = a.p.x;
-      b.p.z = a.p.z + 4;
+      // 4 m off, on a side with no prop within 3 m (D-038: props come in clusters, and INTERACT beside one would pick it up, and the next press would drop it instead of reviving)
+      const props: { x: number; z: number }[] = [];
+      room.state.props.forEach((p) => props.push({ x: p.x, z: p.z }));
+      const side = [[0, 4], [0, -4], [4, 0], [-4, 0]].find(([dx, dz]) => props.every((p) => Math.hypot(p.x - (a.p.x + dx!), p.z - (a.p.z + dz!)) > 3)) ?? [0, 4];
+      b.p.x = a.p.x + side[0]!;
+      b.p.z = a.p.z + side[1]!;
       b.p.facing = 0;
       await sleep(100);
       await stream(b, BUTTON.INTERACT, 400);
