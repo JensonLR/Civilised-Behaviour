@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { NewEnding } from "../regionEndings.ts";
 import type { CampaignState, ComplicationId, ResolutionId, ScenarioFx } from "../campaignTypes.ts";
 import { NPC, RESOLVED_LINGER_S } from "../campaignTypes.ts";
 import { newCampaign } from "../factions.ts";
@@ -47,7 +48,7 @@ const BELL = init0.bell;
 // the courses of the five endings, each a script of what the server would observe
 const FORM = [near("court", 2), talk("chamberlain", "open"), talk("chamberlain", "survey"), ...ticks(SUCCESSION.formS + 1)];
 const GRAIN = [use("grange0"), use("grange1"), use("grange2")];
-const SCRIPTS: Record<Exclude<ResolutionId, never>, (() => ScenarioInput[]) | undefined> = {
+const SCRIPTS: Record<Exclude<ResolutionId, NewEnding>, (() => ScenarioInput[]) | undefined> = {
   backed_elder: () => [...FORM, talk("claimant_elder", "open"), talk("claimant_elder", "paid", P.elder), ...GRAIN, ...ticks(SUCCESSION.fedBellS + 1)],
   backed_younger: () => [...FORM, talk("claimant_younger", "open"), talk("claimant_younger", "paid", P.younger), use("grange0"), use("grange2"), ...ticks(BELL + 1)],
   regency: () => [...FORM, talk("claimant_elder", "open"), talk("claimant_elder", "survey"), talk("claimant_younger", "open"), talk("claimant_younger", "survey"), ...GRAIN, ...ticks(SUCCESSION.fedBellS + 1)],

@@ -27,15 +27,34 @@ const roadWord = (n: number): string => (n >= 2 ? "a made road" : n === 1 ? "a t
 const ageWord = (n: number): string => (n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`);
 
 /** Where each region's mark sits on the chart (a 320 x 200 sheet): home on the near shore, the colony across the water to the north-east, the highlands to the south-east (D-036). */
-export const CHART_AT: Readonly<Record<RegionId, { x: number; y: number }>> = { hollowmere: { x: 84, y: 138 }, kessar: { x: 232, y: 62 }, highmark: { x: 252, y: 156 } };
+export const CHART_AT: Readonly<Record<RegionId, { x: number; y: number }>> = {
+  hollowmere: { x: 84, y: 138 }, kessar: { x: 232, y: 62 }, highmark: { x: 252, y: 156 },
+  // D-037: the gorge on the north-west shore (inland, up its river), the delta on the south shore between home and the highlands
+  vesper: { x: 88, y: 42 }, saltmarket: { x: 160, y: 170 },
+};
 const KESSAR_AT = CHART_AT.kessar;
-const HIGHMARK_AT = CHART_AT.highmark;
+/** Where each home power sits on the chart (the class keeps the older "granges" stamp name for the CSS and tests). */
+const SEATS: readonly { power: PowerId; region: RegionId; label: string; cls: string }[] = [
+  { power: "reapers", region: "highmark", label: "Thornfield Granges", cls: "granges" },
+  { power: "choir", region: "vesper", label: "The Long Cloister", cls: "cloister" },
+  { power: "brine", region: "saltmarket", label: "Saltmarket Quay", cls: "quay" },
+];
 
 /** The sea lane between two regions as a quadratic curve: its path, and the point half way along it (where its sailing time is written). Pure; the same curve for either direction. */
 const BEND: Record<string, { x: number; y: number }> = { "hollowmere|kessar": { x: 150, y: 60 }, "hollowmere|highmark": { x: 160, y: 176 }, "kessar|highmark": { x: 286, y: 112 } };
+/** The control point of a lane: the older three are hand-set; every other pair bows a quarter of its length toward the middle of the sheet (where the sea is). Pure. */
+function bendOf(p: RegionId, q: RegionId): { x: number; y: number } {
+  const set = BEND[`${p}|${q}`];
+  if (set) return set;
+  const A = CHART_AT[p], B = CHART_AT[q];
+  const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2, dx = B.x - A.x, dz = B.y - A.y;
+  const nx = -dz * 0.25, ny = dx * 0.25;
+  const plus = Math.hypot(160 - (mx + nx), 100 - (my + ny)), minus = Math.hypot(160 - (mx - nx), 100 - (my - ny));
+  return plus <= minus ? { x: mx + nx, y: my + ny } : { x: mx - nx, y: my - ny };
+}
 function lane(a: RegionId, b: RegionId): { d: string; mid: { x: number; y: number } } {
   const [p, q] = REGION_IDS.indexOf(a) <= REGION_IDS.indexOf(b) ? [a, b] : [b, a];
-  const A = CHART_AT[p], B = CHART_AT[q], C = BEND[`${p}|${q}`]!;
+  const A = CHART_AT[p], B = CHART_AT[q], C = bendOf(p, q);
   return { d: `M${A.x} ${A.y} Q ${C.x} ${C.y} ${B.x} ${B.y}`, mid: { x: 0.25 * A.x + 0.5 * C.x + 0.25 * B.x, y: 0.25 * A.y + 0.5 * C.y + 0.25 * B.y } };
 }
 export const chartRoute = (a: RegionId, b: RegionId): string => lane(a, b).d;
@@ -74,13 +93,15 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
     s.append(t);
     g.append(s);
   }
-  // the Reapers' Granges climb Highmark's lower terraces: once the Society has heard of them, the chart says so
-  const grange = data.pins.find((p) => p.id === "reapers" && p.known);
-  if (grange && data.regions.some((r) => r.id === "highmark")) {
-    const s = svg("g", { class: "stamp granges", transform: `translate(${HIGHMARK_AT.x - 18} ${HIGHMARK_AT.y - 18})` });
+  // a home power has a SEAT in a region (the Reapers' Granges climb Highmark's lower terraces; D-037: the Guild's Cloister is cut into Vesper's cliff, the Houses keep Saltmarket Quay): once the Society has heard of the power, the chart says so
+  for (const seat of SEATS) {
+    const known = data.pins.find((p) => p.id === seat.power && p.known);
+    if (!known || !data.regions.some((r) => r.id === seat.region)) continue;
+    const at = CHART_AT[seat.region];
+    const s = svg("g", { class: `stamp ${seat.cls}`, transform: `translate(${at.x - 18} ${at.y - 18})` });
     s.append(svg("path", { d: "M-4 4 L-4 -3 M0 4 L0 -5 M4 4 L4 -3 M-6 4 L6 4" }));
     const t = svg("text", { x: -10, y: 4, "text-anchor": "end" });
-    t.textContent = "Thornfield Granges";
+    t.textContent = seat.label;
     s.append(t);
     g.append(s);
   }

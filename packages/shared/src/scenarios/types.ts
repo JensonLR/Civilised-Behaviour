@@ -33,8 +33,8 @@ export interface UseSpec {
   /** The scenario's wagon. */
   mount?: boolean;
   r: number;
-  /** "barrel": must be carrying a barrel (and the press is only taken when the machine accepts it); "none": hands empty; undefined: either. */
-  carry?: "barrel" | "none";
+  /** "barrel" / "crate" (D-037): must be carrying that kind of prop (and the press is only taken when the machine accepts it); "none": hands empty; undefined: either. */
+  carry?: "barrel" | "crate" | "none";
   /** Consume the carried prop when the machine accepted the press. */
   consume?: boolean;
   /** Opens this parley (the runner checks the press, then sends `parley_open` or `talk`). */

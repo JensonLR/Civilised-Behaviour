@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { REGION_IDS, type CampaignState, type CasualtyTally, type RegionId, type ResolutionId, type ScenarioOutcome } from "./campaignTypes.ts";
+import { liveRegions } from "./regionStatus.ts";
+import { type CampaignState, type CasualtyTally, type RegionId, type ResolutionId, type ScenarioOutcome } from "./campaignTypes.ts";
 import { POWERS, RESOLUTIONS, TEMPLATE_RESOLUTIONS, applyOutcome, consequenceLines, newCampaign, parseCampaign, serializeCampaign, wardMemory } from "./factions.ts";
 import { HIGHMARK_ANCHORS, HIGHMARK_RESOLUTIONS, HIGHMARK_STATUS } from "./highmark.ts";
 import { MEMORY_LINE } from "./negotiationText.ts";
@@ -187,47 +188,49 @@ describe("Highmark's ledger: the five endings", () => {
   });
 });
 
+// D-037: the chart, the lanes and the sailing cover the regions that can be reached (a stubbed region is not on the chart yet)
+const REACH = reachableRegions();
 const applyOutcomeDrift = (p: PowersState): PowersState => powersAfterOutcome(before, before, p, out("abandoned", { scenario: "secure_crossing", region: undefined }));
 
-describe("Highmark on the chart: three regions, a lane from each, every ordered pair sails", () => {
+describe("Highmark on the chart: every live region, a lane from each, every ordered pair sails", () => {
   it("is reachable, the stub flag is off, and the two flipped together", () => {
     expect(HIGHMARK_STATUS.stub).toBe(false);
     expect(REGIONS.highmark.reachable).toBe(true);
     expect(isReachableRegion("highmark")).toBe(true);
-    expect(reachableRegions()).toEqual(["hollowmere", "kessar", "highmark"]);
-    expect(reachableRegions()).toEqual([...REGION_IDS]);
+    expect(reachableRegions().slice(0, 3)).toEqual(["hollowmere", "kessar", "highmark"]);
+    expect(reachableRegions()).toEqual(liveRegions());   // D-037: a region is reachable exactly when its content is live
     expect(regionLanding("highmark")).toEqual(HIGHMARK_ANCHORS.landing);
     expect(stationsFor("highmark").some((s) => s.kind === "dock")).toBe(true);
   });
 
-  it("three marks and lanes from each region to the other two, with the launch halving them", () => {
+  it("a mark per live region and a lane from each to all the others, with the launch halving them", () => {
     const c = newCampaign(2), p = newPowers(2), s = newSettlements();
     const pins = mapPins(c, p, []);
-    for (const here of REGION_IDS) {
+    for (const here of REACH) {
       const m = campaignMapOf(c, s, undefined, pins, undefined, s.tech, here);
-      expect(m.regions.map((r) => r.id)).toEqual([...REGION_IDS]);
+      expect(m.regions.map((r) => r.id)).toEqual([...REACH]);
       expect(m.regions.filter((r) => r.here).map((r) => r.id)).toEqual([here]);
-      expect(m.lanes.map((l) => l.to).sort()).toEqual(REGION_IDS.filter((r) => r !== here).sort());
+      expect(m.lanes.map((l) => l.to).sort()).toEqual(REACH.filter((r) => r !== here).sort());
       for (const l of m.lanes) expect(l.seconds).toBe(REGIONS[l.to].sailSeconds);
       const fast = campaignMapOf(c, s, undefined, pins, undefined, { ...s.tech, launch: true }, here);
       for (const l of fast.lanes) expect(l.seconds).toBeLessThan(REGIONS[l.to].sailSeconds);
     }
     // the contract on offer at each region comes from its own template list
     const offers: Partial<Record<RegionId, { title: string; brief: string }>> = {};
-    for (const id of REGION_IDS) {
+    for (const id of REACH) {
       const t = pickTemplate(c, id, 5);
       if (t) offers[id] = templateNote(t);
     }
-    expect(Object.keys(offers).sort()).toEqual(["highmark", "kessar"]);
+    expect(Object.keys(offers).sort()).toEqual(["highmark", "kessar", "saltmarket", "vesper"]);
     expect(offers.highmark!.title).toBe("The Vacant Chair");
     const m = campaignMapOf(c, s, undefined, pins, offers, s.tech, "hollowmere");
-    expect(m.regions.map((r) => r.offered?.title)).toEqual([undefined, "Secure the River Crossing", "The Vacant Chair"]);
+    expect(m.regions.map((r) => r.offered?.title)).toEqual([undefined, "Secure the River Crossing", "The Vacant Chair", offers.vesper!.title, offers.saltmarket!.title]);
     expect(REGION_TEMPLATES.highmark).toEqual(["succession_dispute"]);
   });
 
   it("every ordered pair of regions sails in the travel machine: propose, vote, sail, arrive", () => {
     let pairs = 0;
-    for (const from of REGION_IDS) for (const to of REGION_IDS) {
+    for (const from of REACH) for (const to of REACH) {
       let st = travelPropose(travelIdle(from), from, to, 0, 0b11);
       if (from === to) {
         expect(st.s.phase, `${from} -> ${to}`).toBe(0);
@@ -244,7 +247,7 @@ describe("Highmark on the chart: three regions, a lane from each, every ordered 
       st = travelArrived(travelArrived(s3, 0, to, 0b11).s, 1, to, 0b11);
       expect(st).toMatchObject({ fx: "done", s: { phase: 0 } });
     }
-    expect(pairs).toBe(6);
+    expect(pairs).toBe(REACH.length * (REACH.length - 1));
     // a forged or unknown destination is still ignored
     for (const bad of ["Highmark", "HIGHMARK", "highmark ", { to: "highmark" }, null, undefined, 3, ["highmark"], "__proto__"]) expect(travelPropose(travelIdle(), "hollowmere", bad, 0, 1).s.phase).toBe(0);
   });

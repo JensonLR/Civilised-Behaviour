@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { liveTemplates } from "../regionStatus.ts";
+import type { NewEnding } from "../regionEndings.ts";
 import type { CampaignState, ResolutionId, ScenarioFx, ScenarioTemplateId } from "../campaignTypes.ts";
 import { BORDER_ESCALATE_S, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, RESOLVED_LINGER_S } from "../campaignTypes.ts";
 import { applyOutcome, newCampaign } from "../factions.ts";
@@ -45,8 +47,8 @@ const count = (group: string, alive: number, routed: number, down: number, total
 const talk = (kind: Extract<ScenarioInput, { t: "talk" }>["kind"], result: Extract<ScenarioInput, { t: "talk" }>["result"], paid = 0): ScenarioInput => ({ t: "talk", kind, result, paid });
 
 const T = TEMPLATES;
-// D-036: these scripts are KESSAR's twenty endings. Highmark's five (HIGHMARK_RESOLUTIONS) are scripted by package G in succession.test.ts.
-const SCRIPTS: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number]>, (c: CampaignState) => { id: ScenarioTemplateId; events: ScenarioInput[] } | undefined> = {
+// D-036: these scripts are KESSAR's twenty endings. Highmark's five (HIGHMARK_RESOLUTIONS) are scripted by package G in succession.test.ts; the sixteen of D-037 (NewEnding) by packages C3 and D4.
+const SCRIPTS: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number] | NewEnding>, (c: CampaignState) => { id: ScenarioTemplateId; events: ScenarioInput[] } | undefined> = {
   paid: () => ({ id: "secure_crossing", events: [{ t: "arrive", party: 2 }, { t: "parley_open" }, { t: "deal", resolution: "paid", toll: 40, paid: 40 }] }),
   bargained: () => ({ id: "secure_crossing", events: [{ t: "arrive", party: 2 }, { t: "parley_open" }, { t: "deal", resolution: "bargained", toll: 30, paid: 30 }] }),
   bribed: () => ({ id: "secure_crossing", events: [{ t: "arrive", party: 2 }, { t: "parley_open" }, { t: "deal", resolution: "bribed", toll: 20, paid: 20 }] }),
@@ -531,7 +533,7 @@ describe("determinism, views and the linger", () => {
         expect(v.template).toBe(id);
         expect(v.title).toBe(def.title);
         expect(new Set(v.objectives.map((o) => o.id)).size).toBe(v.objectives.length);
-        expect(v.objectives.length).toBeGreaterThan(id === "succession_dispute" && HIGHMARK_STATUS.stub ? 0 : 1);   // D-036: the stub has one; G's has several
+        expect(v.objectives.length).toBeGreaterThan((id === "succession_dispute" && HIGHMARK_STATUS.stub) || !liveTemplates().includes(id) ? 0 : 1);   // D-036/D-037: a stub has one; the real template has several
         expect(v.hint.length).toBeGreaterThan(30);
         const comp = (s as unknown as { complication?: string }).complication;
         if (comp && comp !== "none" && id !== "secure_crossing") expect(v.complication).toBe(comp);

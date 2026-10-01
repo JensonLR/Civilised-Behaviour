@@ -24,6 +24,11 @@ export interface SweepOptions {
   round?: "start" | "end" | "both";
   /** One dome ring instead of three (crowd levels: a tip a few pixels wide does not need a smooth cap). */
   coarseDome?: boolean;
+  /**
+   * OUTLINE HULL ONLY (the geometry gets a per-vertex `hthin` attribute that outline.ts reads): how much thinner the ink line is at `t` (0 root .. 1 end of the spine you passed),
+   * 0 = the full line, 0.45 = 55%. A nose's hull overlays the cheek and the eye in a three-quarter view; its bridge wants a hairline and its tip the full silhouette.
+   */
+  hullThin?: (t: number) => number;
 }
 
 const c = new Color();
@@ -77,6 +82,8 @@ export function sweepGeometry(spineIn: readonly V3[], section: (t: number, i: nu
   const n = spine.length;
   const pos: number[] = [];
   const col: number[] = [];
+  const thin: number[] = [];
+  const startDome = opts.round === "start" || opts.round === "both" ? DOME.length : 0;
   const index: number[] = [];
   ref.set(...(opts.side ?? ([1, 0, 0] as V3)));
 
@@ -104,6 +111,7 @@ export function sweepGeometry(spineIn: readonly V3[], section: (t: number, i: nu
       const v = sec.rz * Math.sign(co) * Math.abs(co) ** e;
       pos.push(p[0] + S.x * u + B.x * v, p[1] + S.y * u + B.y * v, p[2] + S.z * u + B.z * v);
       col.push(c.r, c.g, c.b);
+      if (opts.hullThin) thin.push(opts.hullThin(Math.max(0, Math.min(1, (i - startDome) / (baseN - 1)))));
     }
   }
   // Side quads. Winding is checked against the outward direction once, so the caps can follow it exactly.
@@ -136,10 +144,12 @@ export function sweepGeometry(spineIn: readonly V3[], section: (t: number, i: nu
       pos.push(p[0], p[1], p[2]);
       c.setHex(secs[i]!.color ?? opts.color);
       col.push(c.r, c.g, c.b);
+      if (opts.hullThin) thin.push(thin[i * seg]!);
       const base = pos.length / 3;
       for (let k = 0; k < seg; k++) {
         pos.push(pos[(i * seg + k) * 3]!, pos[(i * seg + k) * 3 + 1]!, pos[(i * seg + k) * 3 + 2]!);
         col.push(col[(i * seg + k) * 3]!, col[(i * seg + k) * 3 + 1]!, col[(i * seg + k) * 3 + 2]!);
+        if (opts.hullThin) thin.push(thin[i * seg + k]!);
       }
       // The cap must face away from the rest of the tube (along p - q).
       const away: V3 = [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
@@ -162,6 +172,7 @@ export function sweepGeometry(spineIn: readonly V3[], section: (t: number, i: nu
   geo.setAttribute("color", new BufferAttribute(new Float32Array(col), 3));
   geo.setIndex(index);
   geo.computeVertexNormals();
+  if (opts.hullThin) geo.setAttribute("hthin", new BufferAttribute(new Float32Array(thin), 1));
   geo.setAttribute("uv", new BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
   return geo;
 }

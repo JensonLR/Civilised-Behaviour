@@ -509,6 +509,7 @@ export class Game {
         view = undefined;
       }
       this.tracker.update(view);
+      this.stage.setScenario(view);   // (D-037: the region's scenery may dress it: a fall, a flood)
     }
     this.trackerClock -= 1;
     if (this.trackerClock <= 0) {

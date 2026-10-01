@@ -6,6 +6,8 @@ import { hash3 } from "./rng.ts";
 import { LIMB } from "./limbs.ts";
 import { ZONE, woundLevel } from "./wounds.ts";
 import type { RegionId } from "./campaignTypes.ts";
+import { SALTMARKET_MOUNT_SPOTS } from "./saltmarket.ts";
+import { VESPER_MOUNT_SPOTS } from "./vesper.ts";
 
 /**
  * Mounts: a SECOND pure shared step (D-034). A horse is not a second predicted entity: it is a picture of the RIDER's predicted state, and
@@ -407,6 +409,9 @@ export function regionMountSpots(id: RegionId): RegionMountSpots {
       wagon: { x: 0, z: 74, yaw: 0 },
     };
   }
+  // D-037: the later regions declare their own spots beside their plans (vesper.ts, saltmarket.ts)
+  if (id === "vesper") return VESPER_MOUNT_SPOTS;
+  if (id === "saltmarket") return SALTMARKET_MOUNT_SPOTS;
   // D-036: Highmark: a ring behind the Reed Landing (z <= 108), on the open quay-side grass. G proves each open (mount.test.ts runs every region in REGION_IDS).
   if (id === "highmark") {
     return {

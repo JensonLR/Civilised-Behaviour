@@ -3,9 +3,11 @@ import type { CampaignState, CasualtyTally, ResolutionId, ScenarioOutcome, Scena
 import { RESOLUTIONS, TEMPLATE_RESOLUTIONS, applyOutcome, newCampaign } from "./factions.ts";
 import { PAPER_LIMITS, generatePaper, type Paper } from "./newspaper.ts";
 import { HEADLINES, NOTICES, SPIN_DEAD, STANDFIRSTS } from "./newspaperText.ts";
+import { NEW_RESOLUTIONS, NEW_TEMPLATE_IDS, TEMPLATE_REGION } from "./regionEndings.ts";
+import { liveResolutions } from "./regionStatus.ts";
 
 const tally = (t: Partial<CasualtyTally> = {}): CasualtyTally => ({ wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0, ...t });
-const templateOf = (r: ResolutionId): ScenarioTemplateId => (["hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute"] as const).find((t) => TEMPLATE_RESOLUTIONS[t].includes(r) && r !== "abandoned") ?? "secure_crossing";
+const templateOf = (r: ResolutionId): ScenarioTemplateId => (["hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", ...NEW_TEMPLATE_IDS] as const).find((t) => TEMPLATE_RESOLUTIONS[t].includes(r) && r !== "abandoned") ?? "secure_crossing";
 const out = (resolution: ResolutionId, o: Partial<ScenarioOutcome> = {}): ScenarioOutcome => ({
   scenario: templateOf(resolution), resolution, toll: 50, paid: 0, bridge: "intact", tally: tally(), brokePromise: false, seconds: 100, ...o,
 });
@@ -27,7 +29,9 @@ const CHAIR_CASES: [ResolutionId, Partial<ScenarioOutcome>][] = [
   ["backed_elder", { paid: 70, region: "highmark" }], ["backed_younger", { paid: 45, region: "highmark" }], ["regency", { paid: 25, region: "highmark" }],
   ["usurped", { tally: tally({ wounded: 2, garrisonKilled: 2 }), region: "highmark" }], ["crown_sold", { loot: 100, region: "highmark" }],
 ];
-const ALL_CASES = [...CASES, ...NEW_CASES, ...CHAIR_CASES];
+/** D-037: the sixteen endings of Vesper Gorge and the Saltmarket Delta, covered from the moment their package flips its STATUS flag (regionStatus.ts); until then they are neutral stubs. */
+const LATER_CASES: [ResolutionId, Partial<ScenarioOutcome>][] = NEW_RESOLUTIONS.filter((r) => liveResolutions().includes(r)).map((r) => [r, { region: TEMPLATE_REGION[templateOf(r)] }]);
+const ALL_CASES = [...CASES, ...NEW_CASES, ...CHAIR_CASES, ...LATER_CASES];
 
 describe("generatePaper", () => {
   it("is deterministic: equal input, equal paper; a different world seed changes the wording", () => {
@@ -45,7 +49,7 @@ describe("generatePaper", () => {
     expect(eds).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it("all 25 resolutions print distinct headlines, each with at least 3 templates and real variety", () => {
+  it("every live resolution prints distinct headlines, each with at least 3 templates and real variety", () => {
     const all = new Map<ResolutionId, Set<string>>();
     for (const [r, o] of ALL_CASES) {
       const heads = new Set<string>();
@@ -55,7 +59,7 @@ describe("generatePaper", () => {
       expect(STANDFIRSTS[r].length).toBeGreaterThanOrEqual(3);
       all.set(r, heads);
     }
-    expect(all.size).toBe(RESOLUTIONS.length);   // every ending, Highmark's five included (ALL_CASES covers them all)
+    expect(all.size).toBe(liveResolutions().length);   // every ending whose region is live, Highmark's five included (ALL_CASES covers them all)
     const keys = [...all.keys()];
     for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
       for (const h of all.get(keys[i]!)!) expect(all.get(keys[j]!)!.has(h), `${keys[i]} vs ${keys[j]}: ${h}`).toBe(false);

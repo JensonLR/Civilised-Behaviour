@@ -1,4 +1,5 @@
 import type { AchievementId, PresenceState } from "./platform.ts";
+import { REGION_COPY } from "./regionCopy.ts";
 import { DEMO } from "./demo.ts";
 import { hash3 } from "./rng.ts";
 
@@ -8,7 +9,7 @@ import { hash3 } from "./rng.ts";
  * Pools are fixed and chosen by `hash3`, so a presence string is a pure function of the state (no clock, no randomness). Invented institutions only; no join code ever appears in text.
  */
 
-const REGION_NAME = { hollowmere: "Hollowmere Depot", kessar: "Kessar Reach", highmark: "Highmark" } as const;
+const REGION_NAME = { hollowmere: "Hollowmere Depot", kessar: "Kessar Reach", highmark: "Highmark", vesper: "Vesper Gorge", saltmarket: "Saltmarket Delta" } as const;
 
 const MENU_LINES = [
   "Queueing at the Society's front desk",
@@ -29,6 +30,8 @@ const REGION_LINES = {
   hollowmere: ["Day {day}: {party} improving Hollowmere, invoice to follow", "Day {day} in Hollowmere, {party}, civilising the neighbours"],
   kessar: ["Day {day}: {party} negotiating at Kessar Reach, loudly", "Day {day} at Kessar Reach, {party}, tolls disputed"],
   highmark: ["Day {day}: {party} at Highmark, waiting on a Chamberlain", "Day {day} at Highmark, {party}, in the order of precedence (last)"],
+  vesper: REGION_COPY.vesper!.presence,   // D-037: the later regions author their own lines (<region>Text.ts)
+  saltmarket: REGION_COPY.saltmarket!.presence,
 } as const;
 const PARTY = ["a lone surveyor", "a party of two", "a party of three", "a party of four"] as const;
 

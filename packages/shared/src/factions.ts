@@ -5,6 +5,11 @@ import type {
 import { isRegionId } from "./campaignTypes.ts";
 import { hash3 } from "./rng.ts";
 import { FLAG_FX } from "./powersText.ts";
+import { NEW_RESOLUTIONS, NEW_TEMPLATE_IDS, NEW_TEMPLATE_RESOLUTIONS, isNewTemplate, pluck } from "./regionEndings.ts";
+import { SALTMARKET_ENDINGS } from "./saltmarketLedger.ts";
+import { VESPER_ENDINGS } from "./vesperLedger.ts";
+import { SALTMARKET_COPY } from "./saltmarketText.ts";
+import { VESPER_COPY } from "./vesperText.ts";
 
 /**
  * Factions and the campaign ledger. Pure and deterministic: no Math.random/Date.now; every roll is hash3(seed, ...).
@@ -20,6 +25,7 @@ export const RESOLUTIONS: readonly ResolutionId[] = [
   "paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned",
   "ransomed", "rescued", "slipped_away", "hostage_lost", "seized", "tipped_off", "burned", "passed", "mediated", "sided_ward", "sided_syndicate", "provoked", "escalated",
   "backed_elder", "backed_younger", "regency", "usurped", "crown_sold",
+  ...NEW_RESOLUTIONS,   // D-037: Vesper Gorge's eight and the Saltmarket Delta's eight (regionEndings.ts)
 ];
 export const TEMPLATE_RESOLUTIONS: Readonly<Record<ScenarioTemplateId, readonly ResolutionId[]>> = {
   secure_crossing: ["paid", "bargained", "bribed", "forced", "sabotaged", "rival_secured", "abandoned"],
@@ -27,8 +33,9 @@ export const TEMPLATE_RESOLUTIONS: Readonly<Record<ScenarioTemplateId, readonly 
   convoy_ambush: ["seized", "tipped_off", "burned", "passed", "abandoned"],
   border_incident: ["mediated", "sided_ward", "sided_syndicate", "provoked", "escalated", "abandoned"],
   succession_dispute: ["backed_elder", "backed_younger", "regency", "usurped", "crown_sold", "abandoned"],
+  ...NEW_TEMPLATE_RESOLUTIONS,   // D-037
 };
-const TEMPLATES_LIST: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute"];
+const TEMPLATES_LIST: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", ...NEW_TEMPLATE_IDS];
 const COMPLICATIONS: readonly ComplicationId[] = ["none", "rival_scouts", "rain", "reinforcements", "rival_bid", "outriders", "ward_patrol", "fog", "stray_shot"];
 const BRIDGES: readonly BridgeState[] = ["intact", "rigged", "collapsed"];
 const CONTROLS: readonly CrossingControl[] = ["ward", "society", "rival", "contested"];
@@ -57,7 +64,7 @@ export const POWERS: readonly LocalPower[] = [
     temperament: { pride: 72, greed: 55, caution: 62, humour: 38 }, need: "coin", rivals: ["rival", "brine"],
   },
   {
-    id: "brine", name: "Brine Houses of Ossuary Bay", seat: "Saltmarket Quay", region: null, motto: "The tide is ours; you are renting it.",
+    id: "brine", name: "Brine Houses of Ossuary Bay", seat: "Saltmarket Quay", region: "saltmarket",   /* D-037: the Houses' quay and Exchange are the delta */ motto: "The tide is ours; you are renting it.",
     blurb: "Seven salt-trading families who own the tides by deed and charge visitors for the weather. They bury their disputes at sea, usually with the disputant.",
     temperament: { pride: 55, greed: 85, caution: 40, humour: 60 }, need: "arms", rivals: ["ward", "rival"],
   },
@@ -67,7 +74,7 @@ export const POWERS: readonly LocalPower[] = [
     temperament: { pride: 35, greed: 30, caution: 70, humour: 65 }, need: "medicine", rivals: ["choir", "brine"],
   },
   {
-    id: "choir", name: "Low Vesper Lamentation Guild", seat: "The Long Cloister, Low Vesper", region: null, motto: "Grief, professionally handled, at competitive rates.",
+    id: "choir", name: "Low Vesper Lamentation Guild", seat: "The Long Cloister, Low Vesper", region: "vesper",   /* D-037: the Cloister is cut into the gorge's west cliff */ motto: "Grief, professionally handled, at competitive rates.",
     blurb: "Hired mourners who run every funeral, cemetery and rumour in the lowlands. They bill per corpse and have a vested interest in your expedition.",
     temperament: { pride: 80, greed: 60, caution: 35, humour: 75 }, need: "deference", rivals: ["reapers", "ward"],
   },
@@ -114,7 +121,7 @@ function defaultFaction(id: FactionId): FactionState {
     : { id, trust: 10, fear: 0, grievance: 0, playerInfluence: 20, rivalInfluence: 30, militaryStrength: 45, prosperity: 60, need: "coin" };
 }
 
-export const newSites = (): SiteLedger => ({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open" });
+export const newSites = (): SiteLedger => ({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open", ends: {} });
 
 export function newCampaign(seed: number): CampaignState {
   return {
@@ -180,7 +187,19 @@ function parseSites(raw: unknown): SiteLedger {
     lastDay, hostage: oneOf(r.hostage, ["none", "freed", "lost"] as const, "none"), convoy: oneOf(r.convoy, ["none", "seized", "tipped", "burned", "passed"] as const, "none"),
     border: oneOf(r.border, ["quiet", "mediated", "ward", "syndicate", "war"] as const, "quiet"), lastComplication: oneOf(r.lastComplication, COMPLICATIONS, "none"),
     succession: oneOf(r.succession, ["open", "elder", "younger", "regency", "usurped", "sold"] as const, "open"),
+    ends: parseEnds(r.ends),
   };
+}
+
+/** D-037: the last ending of each of the four newer templates; an unknown template, or an ending that template cannot have, is dropped. Never throws. */
+function parseEnds(raw: unknown): SiteLedger["ends"] {
+  const out: SiteLedger["ends"] = {};
+  if (!isObj(raw)) return out;
+  for (const id of NEW_TEMPLATE_IDS) {
+    const v = raw[id];
+    if (typeof v === "string" && (NEW_TEMPLATE_RESOLUTIONS[id] as readonly string[]).includes(v)) out[id] = v as ResolutionId;
+  }
+  return out;
 }
 
 /** Fixed key order, so equal campaigns serialise to equal text. Well under the 4 KB wire budget (12 history entries ~ 0.7 KB). */
@@ -215,6 +234,7 @@ export function askingToll(c: CampaignState, p?: { flags: readonly string[] }): 
 
 /** What each past resolution left in the Ward's memory (before decay). */
 const MEMORY: Record<ResolutionId, { gratitude: number; resentment: number; contempt: number }> = {
+  ...pluck(VESPER_ENDINGS, "memory"), ...pluck(SALTMARKET_ENDINGS, "memory"),   // D-037 (regionEndings.ts)
   paid: { gratitude: 20, resentment: 0, contempt: 5 },
   bargained: { gratitude: 12, resentment: 0, contempt: 0 },
   bribed: { gratitude: 0, resentment: 10, contempt: 30 },
@@ -276,7 +296,7 @@ export function leverageOf(c: CampaignState, live: { armed: number; garrisonAliv
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 
 type WardDelta = { trust: number; fear: number; grievance: number; prosperity: number; playerInfluence: number; rivalInfluence: number };
-interface Rule {
+export interface Rule {
   control: CrossingControl | undefined; toll: "asked" | "paid" | "zero" | "rival" | "keep"; ward: WardDelta; /** Absent: the Ward's need is left as it was (Highmark's endings are not Kessar's business). */ need?: NeedId; lies: number; rivalProsperity: number; rivalGrievance: number;
   /** Swings in the two powers' garrisons beyond what the tally says (the Syndicate's wagon armed, deserters dead, two sides trading fire). */
   wardMil?: number; rivalMil?: number;
@@ -285,6 +305,7 @@ interface Rule {
 }
 
 const RULES: Record<ResolutionId, Rule> = {
+  ...pluck(VESPER_ENDINGS, "rule"), ...pluck(SALTMARKET_ENDINGS, "rule"),   // D-037 (regionEndings.ts)
   //                                                     trust fear grievance prosperity playerInf rivalInf
   paid:          { control: "ward",      toll: "asked", ward: { trust: 8,   fear: -3, grievance: -4, prosperity: 6,   playerInfluence: 5,  rivalInfluence: -2 }, need: "arms",      lies: 0, rivalProsperity: 0, rivalGrievance: 0 },
   bargained:     { control: "ward",      toll: "paid",  ward: { trust: 12,  fear: -3, grievance: -8, prosperity: 3,   playerInfluence: 8,  rivalInfluence: -4 }, need: "coin",      lies: 0, rivalProsperity: 0, rivalGrievance: 0 },
@@ -383,7 +404,10 @@ export function applyOutcome(c: CampaignState, o: ScenarioOutcome): CampaignStat
     day: clampI(c.day + 1, 1, 9999, 1), expeditions: clampI(c.expeditions + 1, 0, 9999, 0), purse: clampI(c.purse - paid + loot, 0, 99999, 0),
     lies: clampI(c.lies + rule.lies + (o.brokePromise ? 1 : 0), 0, 99, 0),
     factions: { ward, rival }, crossing, tally, history,
-    sites: { ...c.sites, ...rule.site, lastDay: { ...c.sites.lastDay, [o.scenario]: clampI(c.day + 1, 1, 9999, 1) }, lastComplication: o.complication ?? "none" },
+    sites: {
+      ...c.sites, ...rule.site, lastDay: { ...c.sites.lastDay, [o.scenario]: clampI(c.day + 1, 1, 9999, 1) }, lastComplication: o.complication ?? "none",
+      ends: isNewTemplate(o.scenario) ? { ...c.sites.ends, [o.scenario]: o.resolution } : c.sites.ends,   // D-037
+    },
   };
 }
 
@@ -400,6 +424,8 @@ const SUCCESSION_TEXT: Record<Exclude<SiteLedger["succession"], "open">, string>
   regency: "Highmark has a regency of three signatures and a chair nobody sits in.", usurped: "Somebody sat down in Highmark's chair, and the court is calling it an early succession.",
   sold: "Highmark's Crown has sold its concession to the Syndicate, and kept the hat.",
 };
+/** D-037: the debrief card's line for each ending of the newer regions (authored in `<region>Text.ts`). */
+const END_LINE = { ...pluck(VESPER_COPY, "debrief"), ...pluck(SALTMARKET_COPY, "debrief") };
 const CONTROL_TEXT: Record<CrossingControl, string> = {
   ward: "The Ward holds the crossing.", society: "The Society holds the crossing, which the Ward will remember.",
   rival: "The Syndicate holds the crossing and has put up a sign about it.", contested: "Nobody holds the crossing; there is nothing left to hold.",
@@ -424,6 +450,11 @@ export function consequenceLines(before: CampaignState, after: CampaignState): s
   if (a.convoy !== b.convoy && a.convoy !== "none") out.push(CONVOY_TEXT[a.convoy]);
   if (a.border !== b.border && a.border !== "quiet") out.push(BORDER_TEXT[a.border]);
   if (a.succession !== b.succession && a.succession !== "open") out.push(SUCCESSION_TEXT[a.succession]);
+  for (const id of NEW_TEMPLATE_IDS) {   // D-037: the newer contracts name what they left behind, in their own region copy (`EndingCopy.debrief`)
+    const e = a.ends?.[id];
+    const line = e !== undefined && e !== "abandoned" && e !== b.ends?.[id] ? (END_LINE as Partial<Record<ResolutionId, string>>)[e] : undefined;
+    if (line) out.push(line);
+  }
   const dr = before.factions.rival.militaryStrength - after.factions.rival.militaryStrength;
   if (dr > 0) out.push(`The Syndicate's escort is weaker by ${dr}.`);
   if (dr < 0) out.push(`The Syndicate is better armed by ${-dr}.`);

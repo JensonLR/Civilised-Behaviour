@@ -187,6 +187,7 @@ export function morphOutlineMaterial(): ShaderMaterial {
   const m = new ShaderMaterial({
     side: base.side,
     fog: base.fog,
+    defaultAttributeValues: base.defaultAttributeValues,
     uniforms: base.uniforms, // same objects: outlineSettings changes reach this material too
     vertexShader: base.vertexShader
       .replace("attribute vec3 onormal;", "attribute vec3 onormal;\n#include <morphtarget_pars_vertex>")

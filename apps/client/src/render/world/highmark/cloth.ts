@@ -4,6 +4,7 @@ import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
 import { worldTime } from "../toon.ts";
 import { HIGHMARK_SIGNS, highmarkPlan, type HighmarkBanner } from "./shared.ts";
+import { skylineBanners } from "./skyline.ts";
 
 /**
  * Banners and signboards for Highmark: ONE canvas atlas (drawn at runtime from palette colours, in the game's bundled IM Fell faces: no image assets), ONE textured mesh with a `wave`
@@ -244,7 +245,8 @@ export function buildHighmarkCloth(terrain: Terrain): BufferGeometry | undefined
   const wave: number[] = [];
   const COLS = 6;
   const ROWS = 10;
-  for (const b of plan.banners) {
+  // the plan's banners, then the skyline's (skyline.ts: bigger cloth on the gate and the palace, one on every terrace mast)
+  for (const b of [...plan.banners, ...skylineBanners({ terrainHeight: (x, z) => terrain.height(x, z) })]) {
     const [u0, v0, u1, v1] = BANNER_UV[b.kind];
     const nx = Math.cos(b.yaw);
     const nz = Math.sin(b.yaw);

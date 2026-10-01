@@ -1,4 +1,4 @@
-import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
+import { BoxGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
 import { PALETTE, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
 import { atmoUniforms, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
@@ -18,7 +18,8 @@ import { buildHighmarkGround, buildHighmarkSkirt } from "./ground.ts";
 import { Herds } from "./herds.ts";
 import { planHighmarkScatter, type HighmarkScatter } from "./scatter.ts";
 import type { HighmarkTerrain } from "./shared.ts";
-import { buildHighmarkSolid } from "./structures.ts";
+import { landmarkFog, landmarkInk } from "./landmark.ts";
+import { buildHighmarkSolid, type LanternRoom } from "./structures.ts";
 import { buildHighmarkWater } from "./water.ts";
 
 const WHITE = new Color(1, 1, 1);
@@ -186,14 +187,34 @@ export class HighmarkView implements RegionView {
   private addSolid(): void {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildHighmarkSolid(this.world, lod);
-    this.lamps = solid.lamps;
+    this.lamps = [...solid.lamps, { x: solid.lantern.x, y: solid.lantern.y, z: solid.lantern.z }]; // (the lit tower's lantern burns with the lamps)
+    this.addLantern(solid.lantern);
     if (!solid.geometry) return;
     const hull = this.detail.outlines ? buildHighmarkSolid(this.world, 0).geometry : undefined;
     this.track(solid.geometry);
     if (hull) this.track(hull);
-    makeSolid(this.root, solid.geometry, this.track(toonMaterial({ wetDark: 0.8 })), { name: "highmark", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    // the capital is a LANDMARK (landmark.ts): it keeps a share of its colour through the haze and its ink does not thin to nothing at 200 m
+    makeSolid(this.root, solid.geometry, landmarkFog(this.track(toonMaterial({ wetDark: 0.8 }))), { name: "highmark", outline: false, castShadow: true });
+    if (this.detail.outlines && hull) {
+      const ink = new Mesh(hull, landmarkInk());
+      ink.name = "highmark_outline";
+      this.root.add(ink);
+    }
   }
   private lamps: { x: number; y: number; z: number }[] = [];
+
+  /** The lit tower's glass: an unlit pane that is slate by day and the lamps' amber at the harvest bell hour (`applyDay`), the one lit thing in the capital from the plain. */
+  private addLantern(l: LanternRoom): void {
+    const mat = landmarkFog(this.track(new MeshBasicMaterial({ color: this.lanternDark, fog: true })), 0.95); // (a light: the haze takes almost none of it)
+    const mesh = new Mesh(this.track(new BoxGeometry(l.half * 2, l.height, l.half * 2)), mat);
+    mesh.name = "palace-lantern";
+    mesh.position.set(l.x, l.y, l.z);
+    this.root.add(mesh);
+    this.lantern = mat;
+  }
+  private lantern?: MeshBasicMaterial;
+  private readonly lanternDark = new Color(PALETTE.highmark.lanternGlass);
+  private readonly lanternLit = new Color(PALETTE.highmark.lampGlow);
 
   private addCloth(terrain: HighmarkTerrain): void {
     const geo = buildHighmarkCloth(terrain);
@@ -282,6 +303,7 @@ export class HighmarkView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the lamps are lit at the harvest bell hour
+    this.lantern?.color.copy(this.lanternDark).lerp(this.lanternLit, this.ambientU.uLamp.value); // ... and so is the tower's glass
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
   }

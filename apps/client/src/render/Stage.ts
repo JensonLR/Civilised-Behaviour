@@ -13,7 +13,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld, type HqHistoryPiece, type RegionDress, type RegionId } from "@cb/shared";
+import { applyWeather, createDayState, dayState, hashFloat, mistLevel, parseClock, parseWeatherKind, type CollisionWorld, type HqHistoryPiece, type RegionDress, type RegionId, type ScenarioView } from "@cb/shared";
 import { setOutlineViewport } from "@cb/procedural/three";
 import { createRegionView, type RegionView } from "./world/regionView.ts";
 import { setToonLite } from "./world/toon.ts";
@@ -220,6 +220,15 @@ export class Stage {
     // what the campaign has built (D-035) is re-applied to every new view, so a preset change or a region change never loses it
     if (this.dress) this.worldView.applyDress?.(this.dress);
     this.worldView.applyHistory?.(this.history);
+    this.worldView.applyScenario?.(this.scenario);
+  }
+
+  private scenario: ScenarioView | undefined;
+
+  /** The contract in play (D-037): handed to the region view, which may dress it (a fall, a flood); re-applied to every new view. */
+  setScenario(v: ScenarioView | undefined): void {
+    this.scenario = v;
+    this.worldView?.applyScenario?.(v);
   }
 
   private dress: RegionDress | undefined;

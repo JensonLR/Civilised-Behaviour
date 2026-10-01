@@ -6,6 +6,8 @@ import { CHARACTER } from "./constants.ts";
 import { kessarNavOptions } from "./garrison.ts";
 import { HIGHMARK_ANCHORS as H, HIGHMARK_SITES as HS, createHighmarkWorld, highmarkProps, highmarkNavOptions, highmarkSpawn } from "./highmark.ts";
 import { createKessarWorld, kessarProps, kessarSpawn } from "./kessar.ts";
+import { SALTMARKET_ANCHORS as SM, SALTMARKET_STATIONS, createSaltmarketWorld, saltmarketNavOptions, saltmarketProps, saltmarketSpawn } from "./saltmarket.ts";
+import { VESPER_ANCHORS as V, VESPER_STATIONS, createVesperWorld, vesperNavOptions, vesperProps, vesperSpawn } from "./vesper.ts";
 import type { NavOptions } from "./nav.ts";
 import { JETTY } from "./landscape.ts";
 import { angleDelta } from "./math.ts";
@@ -27,7 +29,7 @@ export interface RegionDef {
   sailSeconds: number;
   /**
    * D-036: can a party SAIL here? false = the region exists in the contract (ids, worlds, stations, a dev start `?region=<id>`) but is not on the map room's chart and the
-   * travel machine refuses it. Package G flips highmark to true as its LAST act, when its acceptance tests pass.
+   * travel machine refuses it. The package that builds a region flips it to true as its LAST act (together with its STATUS flag: `VESPER_STATUS.stub`, `SALTMARKET_STATUS.stub`), when its acceptance tests pass.
    */
   reachable: boolean;
 }
@@ -57,6 +59,23 @@ export const REGIONS: Record<RegionId, RegionDef> = {
     sailSeconds: SAIL_SECONDS,
     reachable: true,
   },
+  // D-037: regions three and four exist in the contract (ids, worlds, stations, a dev start `?region=<id>`) and flip `reachable` together with their STATUS flag, as each package's LAST act
+  vesper: {
+    id: "vesper",
+    name: "Vesper Gorge",
+    blurb: "A dry river's canyon of red-violet strata, an iron headframe and a long cloister cut into the cliff. The Low Vesper Lamentation Guild runs the funerals, the records and, as it turns out, a good deal of the mine.",
+    bounds: V.bounds,
+    sailSeconds: SAIL_SECONDS,
+    reachable: true,
+  },
+  saltmarket: {
+    id: "saltmarket",
+    name: "Saltmarket Delta",
+    blurb: "Braided channels, stilted warehouses and an exchange that floods at every spring tide and holds its sale regardless. The Brine Houses own the tides by deed; everything else is a lot.",
+    bounds: SM.bounds,
+    sailSeconds: SAIL_SECONDS,
+    reachable: true,
+  },
 };
 
 /** The regions a party may sail to (D-036): the chart, the map room's list and the travel machine all read this, never REGION_IDS. */
@@ -65,27 +84,29 @@ export const reachableRegions = (): RegionId[] => REGION_IDS.filter((id) => REGI
 
 /** Where the ship puts everybody ashore (the integrator's landfall: manifest effects, kegs, hands, horses are placed around it). Hollowmere's is the jetty's foot. */
 export function regionLanding(id: RegionId): { x: number; z: number } {
-  return id === "kessar" ? { x: A.landing.x, z: A.landing.z } : id === "highmark" ? { x: H.landing.x, z: H.landing.z } : { x: JETTY.x0, z: JETTY.z0 };
+  return id === "kessar" ? { x: A.landing.x, z: A.landing.z } : id === "highmark" ? { x: H.landing.x, z: H.landing.z } : id === "vesper" ? { x: V.landing.x, z: V.landing.z }
+    : id === "saltmarket" ? { x: SM.landing.x, z: SM.landing.z } : { x: JETTY.x0, z: JETTY.z0 };
 }
 
 /** Navigation options of a region's nav grid (Kessar closes the gorge and prunes the sealed courtyard; Highmark the river). Hollowmere: none. */
 export function regionNavOptions(id: RegionId, world: CollisionWorld): NavOptions {
-  return id === "kessar" ? kessarNavOptions(world) : id === "highmark" ? highmarkNavOptions(world) : {};
+  return id === "kessar" ? kessarNavOptions(world) : id === "highmark" ? highmarkNavOptions(world) : id === "vesper" ? vesperNavOptions(world) : id === "saltmarket" ? saltmarketNavOptions(world) : {};
 }
 
 /** The collision world of a region. `opts` (bridge, outpost stage, telegraph) only matter to Kessar: the world is a pure function of (seed, those). */
 export function createRegionWorld(id: RegionId, seed: number, opts?: RegionWorldOpts): CollisionWorld {
-  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : id === "highmark" ? createHighmarkWorld(seed) : createArena(seed);
+  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : id === "highmark" ? createHighmarkWorld(seed)
+    : id === "vesper" ? createVesperWorld(seed) : id === "saltmarket" ? createSaltmarketWorld(seed) : createArena(seed);
 }
 
 /** Where player `index` of `count` arrives. */
 export function regionSpawn(id: RegionId, index: number, count = 4): { x: number; z: number } {
-  return id === "kessar" ? kessarSpawn(index, count) : id === "highmark" ? highmarkSpawn(index, count) : spawnPoint(index, count);
+  return id === "kessar" ? kessarSpawn(index, count) : id === "highmark" ? highmarkSpawn(index, count) : id === "vesper" ? vesperSpawn(index, count) : id === "saltmarket" ? saltmarketSpawn(index, count) : spawnPoint(index, count);
 }
 
 /** The props a region starts with (the integrator spawns them in the physics world). */
 export function regionProps(id: RegionId, seed: number, world: CollisionWorld): PropSpawn[] {
-  return id === "kessar" ? kessarProps(seed, world) : id === "highmark" ? highmarkProps(seed, world) : scatterProps(seed, world.terrain, 14);
+  return id === "kessar" ? kessarProps(seed, world) : id === "highmark" ? highmarkProps(seed, world) : id === "vesper" ? vesperProps(seed, world) : id === "saltmarket" ? saltmarketProps(seed, world) : scatterProps(seed, world.terrain, 14);
 }
 
 // ---- stations: the places you can USE (map table, notice board, the dock, the pier, the Warden) ------------------------------------------------------
@@ -113,7 +134,8 @@ const HIGHMARK_STATIONS: readonly UseStation[] = [
   { id: "younger", kind: "court", x: HS.claimants.younger.x, z: HS.claimants.younger.z, r: 2.6, prompt: "Hear the younger claimant" },
 ];
 
-const stationList = (id: RegionId): readonly UseStation[] => (id === "kessar" ? KESSAR_STATIONS : id === "highmark" ? HIGHMARK_STATIONS : HOLLOWMERE_STATIONS);
+const stationList = (id: RegionId): readonly UseStation[] =>
+  id === "kessar" ? KESSAR_STATIONS : id === "highmark" ? HIGHMARK_STATIONS : id === "vesper" ? VESPER_STATIONS : id === "saltmarket" ? SALTMARKET_STATIONS : HOLLOWMERE_STATIONS;
 
 export function stationsFor(id: RegionId): UseStation[] {
   return [...stationList(id)];

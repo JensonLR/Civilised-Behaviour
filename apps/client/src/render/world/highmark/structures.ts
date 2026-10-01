@@ -4,6 +4,7 @@ import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { tent } from "../landmarks.ts";
 import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, highmarkPlan, type HighmarkBox, type HighmarkRound, type HighmarkWall } from "./shared.ts";
+import { BELL_GABLE, GATE_MAST, LANTERN_TOWER, PALACE_MAST, TERRACE_MAST, TIER2_PINNACLE, palaceHeights, terraceMasts } from "./skyline.ts";
 
 /**
  * Every solid thing in Highmark merged into ONE vertex-coloured geometry (one draw, one ink hull): the retaining walls of the five terraces and the ramps' sloping side walls (the
@@ -37,8 +38,9 @@ const masonry = (seed: number, base: number = P.chalk, shade: number = P.chalkSh
 /** Verdigris roof: dark ribs and light flanks, the weathered green of old copper. */
 const roofColour: ColourFn = (p, n, out) => {
   const rib = (Math.floor((p.x + p.z * 0.7) * 1.8) & 1) * 0.28;
-  blend(out, P.verdigrisDark, P.verdigris, Math.max(0, n.y) * 0.55 + rib);
-  if (n.y > 0.75) blend(out, out.getHex(), P.verdigrisLight, 0.25);
+  // (deeper than the old verdigris: from the plain a roof is the one dark mass in a white town, and the first value to survive the haze)
+  blend(out, P.roofDeep, P.verdigrisDark, Math.max(0, n.y) * 0.55 + rib);
+  if (n.y > 0.75) blend(out, out.getHex(), P.verdigris, 0.3);
 };
 
 const box = (k: Kit, s: V3, at: V3, colour: number | ColourFn, rot?: V3): void => {
@@ -71,6 +73,35 @@ function gable(k: Kit, hx: number, hz: number, h: number, at: V3, colour: Colour
 /** A pyramid roof (four slopes) over a square footprint of half-side `r`. */
 function pyramid(k: Kit, r: number, h: number, at: V3, colour: ColourFn | number = roofColour): void {
   k.add(new ConeGeometry(r * Math.SQRT2, h, 4, 1), { at: [at[0], at[1] + h / 2, at[2]], rot: [0, Math.PI / 4, 0], colour, flat: true, perFace: typeof colour !== "number" });
+}
+
+/**
+ * A stepped ridge: a row of small blocks along local x that rises to the middle of the run and falls again (crow steps), so a roof's line against the sky is a stair and not a ruler. `len` is the
+ * ridge's length, `at` the ridge's midpoint, `step` how much each block rises over the one outside it.
+ */
+function crest(k: Kit, len: number, at: V3, colour: number, lod: Lod, step = 0.28): void {
+  const n = Math.max(3, Math.round(len / 1.4)) | 1; // (odd: one block at the middle)
+  const w = len / n;
+  for (let i = 0; i < n; i++) {
+    const rise = Math.min(i, n - 1 - i);
+    const h = 0.3 + rise * step;
+    box(k, [w * 0.82, h, 0.34], [at[0] - len / 2 + w * (i + 0.5), at[1] + h / 2, at[2]], i % 2 ? colour : P.chalkCap);
+  }
+  if (lod) k.add(new SphereGeometry(0.2, 6, 4), { at: [at[0], at[1] + 0.3 + Math.floor(n / 2) * step + 0.2, at[2]], colour: P.sunGold });
+}
+
+/** A spire: a slim square cone on a plinth, a gilt ball at the tip. `h` is the spire's own height; the plinth stands under it. */
+function spire(k: Kit, at: V3, plinth: number, h: number, r: number, roof: number): void {
+  if (plinth > 0) box(k, [r * 2.2, plinth, r * 2.2], [at[0], at[1] + plinth / 2, at[2]], P.chalkCap);
+  pyramid(k, r, h, [at[0], at[1] + plinth, at[2]], roof);
+  k.add(new SphereGeometry(0.2, 6, 4), { at: [at[0], at[1] + plinth + h + 0.05, at[2]], colour: P.sunGold });
+}
+
+/** A banner mast: a slim pole from `base` to `base + height`, a crossbar under the tip where the cloth hangs from, and a gilt ball. */
+function mast(k: Kit, x: number, base: number, z: number, height: number, bar: number): void {
+  k.limb([x, base - 0.2, z], [x, base + height, z], 0.1, 0.07, P.timber, 6);
+  box(k, [bar, 0.09, 0.09], [x, base + height - 0.35, z], P.timber);
+  k.add(new SphereGeometry(0.17, 5, 4), { at: [x, base + height + 0.12, z], colour: P.sunGold });
 }
 
 /** The sun of the Crown: a gilt disc with sixteen rays, standing on a wall face (local +z is the face's normal). */
@@ -174,6 +205,7 @@ function hall(k: Kit, b: HighmarkBox, gy: number, lod: Lod, seed: number, big: b
   slab(k, [b.hx * 2, b.height + 0.7, b.hz * 2], [0, (b.height - 0.7) / 2, 0], masonry(seed), lod);
   box(k, [b.hx * 2 + 0.3, 0.25, b.hz * 2 + 0.3], [0, b.height - 0.05, 0], P.chalkCap);
   gable(k, b.hx + 0.5, b.hz + 0.55, big ? 3.2 : 2.5, [0, b.height + 0.05, 0]);
+  crest(k, (b.hx + 0.5) * 2 - 1.2, [0, b.height + 0.05 + (big ? 3.2 : 2.5), 0], P.verdigrisLight, lod);
   // windows (dark, lit at dusk by the lamps), a door on the face the road passes (local +z), a gilt sun over it
   const n = Math.max(2, Math.round(b.hx / 1.7));
   for (let i = 0; i < n; i++) {
@@ -207,6 +239,10 @@ function gatehouse(k: Kit, world: CollisionWorld, lod: Lod): void {
     box(k, [t.hx * 2 + 0.4, 0.3, t.hz * 2 + 0.4], [0, t.height - 0.1, 0], P.chalkCap);
     pyramid(k, t.hx + 0.5, 4.2, [0, t.height + 0.05, 0]);
     k.add(new SphereGeometry(0.26, 6, 4), { at: [0, t.height + 4.4, 0], colour: P.sunGold });
+    // a mast over the roof's tip: the Crown's cloth flies from it, higher than anything else on the gate
+    mast(k, 0, t.height + 0.05 + 4.2, 0, 0.2 + GATE_MAST.height, 2.9);
+    // merlons round the tower's parapet: a toothed rim under the pyramid, the stair a gate has against the sky
+    if (lod) for (let m = -2; m <= 2; m++) for (const sz of [-1, 1]) box(k, [0.55, 0.5, 0.4], [m * 0.95, t.height + 0.4, sz * (t.hz + 0.05)], P.chalkCap);
     if (lod) {
       for (let r = 0; r < 2; r++) box(k, [0.3, 0.9, 0.12], [-0.9 + r * 1.8, t.height * 0.6, t.hz + 0.03], P.iron);
       box(k, [t.hx * 2 + 0.2, 0.22, t.hz * 2 + 0.2], [0, t.height * 0.4, 0], P.chalkCap);
@@ -220,6 +256,7 @@ function gatehouse(k: Kit, world: CollisionWorld, lod: Lod): void {
   slab(k, [l.hx * 2, l.height - 3.6, l.hz * 2], [0, 3.6 + (l.height - 3.6) / 2, 0], masonry(51), lod);
   box(k, [l.hx * 2 + 0.5, 0.3, l.hz * 2 + 0.5], [0, l.height + 0.1, 0], P.chalkCap);
   gable(k, l.hx + 0.3, l.hz + 0.5, 1.6, [0, l.height + 0.25, 0]);
+  crest(k, l.hx * 2, [0, l.height + 0.25 + 1.6, 0], P.verdigrisLight, lod);
   k.clearBase();
   sun(k, l.x, gy + 5.0, l.z + l.hz + 0.06, 0, 0.62, lod);
   // the Chamberlain's Window: a counter in the inner face of the west tower, a brass grille, a ledge, a bell-pull and a number lamp
@@ -256,20 +293,47 @@ function palace(k: Kit, world: CollisionWorld, lod: Lod): void {
   slab(k, [t3.hx * 2, t3.h, t3.hz * 2], [0, b.height + t2.h + t3.h / 2, -0.4], masonry(72), lod);
   box(k, [t3.hx * 2 + 0.35, 0.26, t3.hz * 2 + 0.35], [0, b.height + t2.h + t3.h - 0.05, -0.4], P.chalkCap);
   gable(k, t3.hx + 0.5, t3.hz + 0.6, 2.4, [0, b.height + t2.h + t3.h + 0.05, -0.4]);
-  // pitched roofs over the lower tiers' set-backs (the cake's piped icing): a verdigris hip at each end
+  // pitched roofs over the lower tiers' set-backs (the cake's piped icing): a verdigris hip at each end. The west end of tier two carries the lit tower instead of its hip.
   for (const s of [-1, 1]) {
     pyramid(k, 1.5, 2.2, [s * (b.hx - 1.8), b.height + 0.1, b.hz - 1.5]);
-    pyramid(k, 1.2, 1.8, [s * (t2.hx - 1.4), b.height + t2.h + 0.1, -0.2]);
+    if (s === 1) pyramid(k, 1.2, 1.8, [s * (t2.hx - 1.4), b.height + t2.h + 0.1, -0.2]);
   }
-  // the bell-gable: a slim tower on the top tier with an open arch, a bronze bell and a pitched roof
-  const bell = { y: b.height + t2.h + t3.h + 2.4 };
+  crest(k, (t3.hx + 0.5) * 2 - 0.8, [0, b.height + t2.h + t3.h + 0.05 + 2.4, -0.4], P.verdigrisLight, lod);
+  // pinnacles on tier two's four corners, masts (and their gilt balls) on the base's two front corners: the vertical teeth of the skyline
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const P2 = TIER2_PINNACLE;
+    spire(k, [sx * (t2.hx - P2.inset), b.height + t2.h + 0.05, -0.2 + sz * (t2.hz - P2.inset)], P2.plinth, P2.spire, 0.5, P.verdigrisDark);
+  }
+  for (const sx of [-1, 1]) mast(k, sx * (b.hx - PALACE_MAST.inset), b.height, b.hz - PALACE_MAST.inset, PALACE_MAST.height, 3.0);
+  // the bell-gable: a slim tower on the ridge with an open arch, a bronze bell and a pitched roof (taller than it was: 4.2 m of posts, a 3 m roof)
+  const bell = { y: b.height + t2.h + t3.h + 2.4 + 0.05 };
   k.setBase(b.x, gy + bell.y, b.z - 0.4, 0);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * 0.9, 0, sz * 0.9], [sx * 0.9, 2.8, sz * 0.9], 0.2, 0.17, P.chalkCap, 6);
-  box(k, [2.4, 0.22, 2.4], [0, 2.9, 0], P.chalkCap);
-  k.add(new CylinderGeometry(0.34, 0.62, 0.9, lod ? 10 : 6), { at: [0, 1.7, 0], colour: P.bell, flat: true });
-  k.limb([0, 2.8, 0], [0, 2.15, 0], 0.06, 0.06, P.iron, 4);
-  pyramid(k, 1.45, 2.4, [0, 3.0, 0]);
-  k.add(new SphereGeometry(0.2, 6, 4), { at: [0, 5.65, 0], colour: P.sunGold });
+  const BG = BELL_GABLE;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * 0.9, 0, sz * 0.9], [sx * 0.9, BG.posts, sz * 0.9], 0.2, 0.17, P.chalkCap, 6);
+  box(k, [2.4, 0.22, 2.4], [0, BG.posts + 0.1, 0], P.chalkCap);
+  box(k, [2.0, 0.18, 2.0], [0, BG.posts * 0.5, 0], P.verdigris);
+  k.add(new CylinderGeometry(0.34, 0.62, 0.9, lod ? 10 : 6), { at: [0, BG.posts * 0.55, 0], colour: P.bell, flat: true });
+  k.limb([0, BG.posts, 0], [0, BG.posts * 0.55 + 0.45, 0], 0.06, 0.06, P.iron, 4);
+  pyramid(k, 1.45, BG.cap, [0, BG.posts + 0.2, 0], P.roofDeep);
+  k.add(new SphereGeometry(BG.finial, 6, 4), { at: [0, BG.posts + 0.2 + BG.cap + 0.05, 0], colour: P.sunGold });
+  k.clearBase();
+  // the lit tower: a slim chalk shaft on tier two's west end, a gallery, a glazed lantern room (its glass is the view's own mesh, dark by day and lit at the harvest bell hour), a deep verdigris
+  // cap and a gilt spire. The tallest thing in the capital by eight metres: the one the eye finds from the plain.
+  const T = LANTERN_TOWER;
+  const tb = b.height + t2.h + 0.28;
+  k.setBase(b.x + T.dx, gy + tb, b.z + T.dz, 0);
+  slab(k, [T.half * 2, T.shaft, T.half * 2], [0, T.shaft / 2, 0], masonry(75), lod);
+  for (const y of [3.2, 6.4]) box(k, [T.half * 2 + 0.25, 0.2, T.half * 2 + 0.25], [0, y, 0], P.verdigris);
+  for (const y of [1.8, 4.8, 8.0]) box(k, [0.22, 0.9, 0.1], [0, y, T.half + 0.02], P.iron);
+  box(k, [T.half * 2 + 0.9, 0.3, T.half * 2 + 0.9], [0, T.shaft + 0.1, 0], P.chalkCap);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    k.limb([sx * (T.half - 0.1), T.shaft + 0.25, sz * (T.half - 0.1)], [sx * (T.half - 0.1), T.shaft + 0.25 + T.room, sz * (T.half - 0.1)], 0.13, 0.11, P.chalkCap, 6);
+  }
+  box(k, [T.half * 2 + 0.5, 0.22, T.half * 2 + 0.5], [0, T.shaft + 0.25 + T.room + 0.1, 0], P.chalkCap);
+  pyramid(k, T.half + 0.55, T.cap, [0, T.shaft + 0.25 + T.room + 0.2, 0], P.roofDeep);
+  const spireBase = T.shaft + 0.25 + T.room + 0.2 + T.cap;
+  k.limb([0, spireBase - 0.2, 0], [0, spireBase + T.spire, 0], 0.09, 0.04, P.iron, 5);
+  k.add(new SphereGeometry(0.2, 6, 4), { at: [0, spireBase + T.spire + 0.1, 0], colour: P.sunGold });
   k.clearBase();
   // the front: a flight of steps, a colonnade of slim columns, the great door, and the Crown's sun over it
   k.setBase(b.x, gy, b.z + b.hz, 0);
@@ -411,6 +475,8 @@ function poles(k: Kit, world: CollisionWorld): void {
     k.limb([b.x, y - 0.2, b.z], [b.x, y + b.top + 0.4, b.z], 0.11, 0.08, P.timber, 6);
     k.add(new SphereGeometry(0.16, 5, 4), { at: [b.x, y + b.top + 0.5, b.z], colour: P.sunGold });
   }
+  // the terraces' masts (skyline.ts): a pole on every riser's coping, flying the cloth the skyline adds
+  for (const m of terraceMasts()) mast(k, m.x, m.base, m.z, TERRACE_MAST.height, 2.1);
 }
 
 /** The market's well and the guild terrace's lamps are drawn here too. */
@@ -427,8 +493,26 @@ function wellAt(k: Kit, world: CollisionWorld, lod: Lod): void {
   k.clearBase();
 }
 
+/** Where the lit tower's glazed room is (world coordinates) and how big: the view draws its glass as a mesh of its own, because that glass is what the day turns on and off. */
+export interface LanternRoom {
+  x: number;
+  y: number;
+  z: number;
+  /** Half the width (x and z) and the height of the glass. */
+  half: number;
+  height: number;
+}
+
+export function lanternRoom(world: CollisionWorld): LanternRoom {
+  const b = highmarkPlan().palace;
+  const T = LANTERN_TOWER;
+  const H = palaceHeights();
+  const gy = world.terrainHeight(b.x, b.z);
+  return { x: b.x + T.dx, y: gy + H.base + H.t2 + 0.28 + T.shaft + 0.25 + T.room / 2, z: b.z + T.dz, half: T.half - 0.26, height: T.room - 0.12 };
+}
+
 /** Everything solid in Highmark, merged. `lod` 0 is the cheap shape the ink hull and the low preset use. */
-export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; lamps: { x: number; y: number; z: number }[] } {
+export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; lamps: { x: number; y: number; z: number }[]; lantern: LanternRoom } {
   const plan = highmarkPlan();
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
   const k = new Kit();
@@ -453,5 +537,5 @@ export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry:
   poles(k, world);
   void HIGHMARK_SITES;
   k.clearBase();
-  return { geometry: k.build(), lamps };
+  return { geometry: k.build(), lamps, lantern: lanternRoom(world) };
 }

@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { OUTPOST_STAGES, TEMPLATE_RESOLUTIONS, PropKind, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
+import { OUTPOST_STAGES, isRegionId, TEMPLATE_RESOLUTIONS, PropKind, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
@@ -8,6 +8,8 @@ import { createRegionView, type RegionView } from "../render/world/regionView.ts
 import { KESSAR_OUTPOST as KO } from "@cb/shared";
 import { KESSAR_ANCHORS as KA, createRegionWorld, regionProps, regionSpawn, type RegionId } from "../render/world/kessar/shared.ts";
 import { folkHints } from "../render/world/villagers.ts";
+import { SALTMARKET_DEFAULT_VIEW, saltmarketViews } from "./saltmarket.ts";
+import { VESPER_DEFAULT_VIEW, vesperViews } from "./vesper.ts";
 
 /**
  * World review scene (`?showcase=world`): the real arena (same seed -> same layout as the game) with a few figures for scale and
@@ -25,6 +27,8 @@ import { folkHints } from "../render/world/villagers.ts";
  *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat, bridge=collapsed (the span down)
  *   region=highmark HIGHMARK (D-036; the savannah and its hill-capital): view=landing|road|grass|herds|waiting|foot|terraces|granary|market|ramp|gate|window|court|throne|palace|capital|capitalfar|plateau|top|quay|camp
  *     (time=dusk is the harvest bell hour: the lamps burn); herds are a function of seed and the world clock (wms=N sits it)
+ *   region=vesper   VESPER GORGE (D-037; the canyon and its mine): the vantage points are package C3's (showcase/vesper.ts)
+ *   region=saltmarket   THE SALTMARKET DELTA (D-037; the channels and the Exchange): the vantage points are package D4's (showcase/saltmarket.ts)
  *   outpost=none|camp|trading_post|fortified_outpost|settlement|town [&telegraph=1&road=0|1|2&launch=1&rivalpost=0|1|2]   (region=kessar, view=outpost|rivalpost|wire|landing) THE SOCIETY'S OUTPOST (D-035)
  *   history=N [&outpost=<stage>]   (view=table|game, Hollowmere) HQ keeps the first N endings of a scripted campaign on the planning table, the strongbox and the back wall
  *   seed=N     arena seed (default 7)
@@ -40,16 +44,17 @@ import { folkHints } from "../render/world/villagers.ts";
 export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): void {
   const stage = new Stage(canvas, (params.get("gfx") as import("../render/Stage.ts").PresetName | null) ?? "medium");
   const seed = Number(params.get("seed") ?? 7);
-  const region: RegionId = params.get("region") === "kessar" ? "kessar" : params.get("region") === "highmark" ? "highmark" : "hollowmere";
+  const regionParam = params.get("region");
+  const region: RegionId = isRegionId(regionParam) ? regionParam : "hollowmere";   // (D-037: every region id of the contract, dev starts included)
   // D-035: the Society's outpost and what comes of it. outpost=none|camp|trading_post|fortified_outpost|settlement|town, telegraph=1, road=0|1|2, launch=1, rivalpost=0|1|2
   const stageParam = params.get("outpost");
   const outpost: OutpostStage = (OUTPOST_STAGES as readonly string[]).includes(stageParam ?? "") ? (stageParam as OutpostStage) : "none";
   const telegraph = params.get("telegraph") === "1" && outpost !== "none";
-  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph }) : region === "highmark" ? createRegionWorld("highmark", seed) : createArena(seed);
-  if (region === "highmark") {
+  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph }) : region === "hollowmere" ? createArena(seed) : createRegionWorld(region, seed);
+  if (region === "highmark" || region === "vesper" || region === "saltmarket") {
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
     inner.builtFor = world;
-    inner.worldView = createRegionView("highmark", stage.scene, world, PRESETS[(params.get("gfx") as keyof typeof PRESETS | null) ?? "medium"], inner.lightDir, seed);
+    inner.worldView = createRegionView(region, stage.scene, world, PRESETS[(params.get("gfx") as keyof typeof PRESETS | null) ?? "medium"], inner.lightDir, seed);
   } else if (region === "kessar") {
     // (the Stage builds Hollowmere's WorldView itself; until it builds through createRegionView, the region's own view is handed to it here)
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
@@ -267,7 +272,7 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     plateau: [new Vector3(0, 40, -40), new Vector3(0, 8, -96)],
     top: [new Vector3(0, 190, 10), new Vector3(0, 0, 10)],
   };
-  const [defCam, defAt] = (region === "kessar" ? kviews[params.get("view") ?? "landing"] : region === "highmark" ? hviews[params.get("view") ?? "capital"] : undefined) ?? views[params.get("view") ?? "game"] ?? views.game!;
+  const [defCam, defAt] = (region === "kessar" ? kviews[params.get("view") ?? "landing"] : region === "highmark" ? hviews[params.get("view") ?? "capital"] : region === "vesper" ? vesperViews(ky)[params.get("view") ?? VESPER_DEFAULT_VIEW] : region === "saltmarket" ? saltmarketViews(ky)[params.get("view") ?? SALTMARKET_DEFAULT_VIEW] : undefined) ?? views[params.get("view") ?? "game"] ?? views.game!;
   const cam = vec(params.get("cam")) ?? defCam;
   const at = vec(params.get("at")) ?? defAt;
   stage.camera.fov = Number(params.get("fov") ?? 65);

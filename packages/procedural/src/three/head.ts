@@ -13,6 +13,7 @@ import { HAT_SEAT, buildHat } from "./hatsGeo.ts";
 import { buildFaceDecor } from "./faceDecor.ts";
 import { greyed } from "./look.ts";
 import { addFaceMorphs } from "./faceMorph.ts";
+import { addHairSway } from "./hairSway.ts";
 import { buildSkull, faceSurfaceZ, gridLevel, headShape, type BrushTag } from "./headShape.ts";
 import { LEATHER, PartBuilder, singe } from "./parts.ts";
 import { tone } from "./bodyKit.ts";
@@ -104,6 +105,8 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   const R = P.headRadius;
   const b = new PartBuilder();
   b.trackMorph = c.morph === true;
+  // hair sways at the full and the mid level of detail (hairSway.ts); a crowd level merges the head and never asks, and a bald head has nothing to move
+  b.trackSway = PartBuilder.sway && PartBuilder.lod <= 1 && (spec.hair !== 0 || spec.hairAcc !== 0);
   const { skin, hairC, hatC, accent, burnt } = c;
   const cy = R; // head centre above the neck joint
   const shape = headShape(P);
@@ -144,9 +147,11 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   mark("sideburns");
   if (lod < 2) buildSideburns(fc);
   mark("hair");
+  b.swayable = true;
   buildHair(fc, hatOn, coarse, seatY, hf);
   mark("hairAcc");
   if (lod < 2) buildHairAccessory(fc, hatOn);
+  b.swayable = false;
   mark("beard");
   buildBeard(fc);
   mark("moustache");
@@ -192,5 +197,5 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   // margin for hair), so the crown wraps the head instead of floating over it.
   mark("hat");
   if (hatOn) buildHat({ b, spec, hf, R, cy, hatC, accent, burnt, seatY, hairT: hairBandThickness(fc, hf, seatY) });
-  return b.build((geo, mw) => addFaceMorphs(geo, mw, P, cy));
+  return b.build((geo, mw) => addFaceMorphs(geo, mw, P, cy), (geo, sw) => addHairSway(geo, sw, hf));
 }

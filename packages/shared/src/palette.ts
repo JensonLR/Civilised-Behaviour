@@ -9,6 +9,9 @@
  *
  * Values are sRGB hex numbers (0xRRGGBB), exactly what three.js `Color.setHex` and CSS `#rrggbb` expect.
  */
+import { SALTMARKET_PALETTE } from "./paletteSaltmarket.ts";
+import { VESPER_PALETTE } from "./paletteVesper.ts";
+
 export const PALETTE = {
   /** The darkest colour that exists. Outlines, pupils, deepest shadow accents. Nothing else may be darker. */
   ink: 0x1b130d,
@@ -507,6 +510,11 @@ export const PALETTE = {
     hidePale: 0xc9a77a,
     hull: 0x7a5238,
     awning: 0xc4a460,
+    // the skyline pass (D-037, package P): what lets the capital hold its edge against the haze
+    /** The capital's roofs, deeper than `verdigris`: a dark mass against pale haze, the first value to survive distance. */
+    roofDeep: 0x2d5f52,
+    /** The lit tower's glass by day: slate, a dark pane in the white tower. At the harvest bell hour it is `lampGlow`. */
+    lanternGlass: 0x4a5560,
   },
 
   /** The Society's outpost (D-035), from foundation stakes to a town: canvas, plank, palisade, stone, telegraph, the launch, road paint. Owned by outpost.ts and its views. */
@@ -537,7 +545,20 @@ export const PALETTE = {
     sign: 0xe0cfa2,
     mud: 0x8a6d4a,
   },
+
+  /** Vesper Gorge (region three, D-037): red-violet strata in cool shade, black crepe, the Guild's plum, lamp amber. Owned by paletteVesper.ts (package C3). */
+  vesper: VESPER_PALETTE,
+
+  /** The Saltmarket Delta (region four, D-037): silt and salt, slate water, tarred plank, indigo and coral canvas. Owned by paletteSaltmarket.ts (package D4). */
+  saltmarket: SALTMARKET_PALETTE,
 } as const;
+
+/**
+ * The five colours that carry each region's identity (ground, wall, roof, accent, cloth), compared across regions by `regionPalettes.test.ts` so no two regions read alike. Kessar's and Highmark's are
+ * declared here (Highmark's keys may be re-pointed by whoever restyles it, never dropped); Vesper's and Saltmarket's live beside their groups.
+ */
+export const KESSAR_SWATCH = { ground: PALETTE.kessar.sand, wall: PALETTE.kessar.stone, roof: PALETTE.kessar.roof, accent: PALETTE.kessar.wardRed, cloth: PALETTE.kessar.wardBlue } as const;
+export const HIGHMARK_SWATCH = { ground: PALETTE.highmark.grassGold, wall: PALETTE.highmark.chalk, roof: PALETTE.highmark.verdigris, accent: PALETTE.highmark.crownRed, cloth: PALETTE.highmark.crownBlue } as const;
 
 // ---- colour maths (also used by the art-direction tests) ------------------------------------------------------------------------
 

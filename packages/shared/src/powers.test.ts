@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { liveTemplates } from "./regionStatus.ts";
 import { applyOutcome, newCampaign, RESOLUTIONS, TEMPLATE_RESOLUTIONS, stanceOf } from "./factions.ts";
 import { AUTHORED_FLAGS, HOOKS, NEWS, RIVALRIES, LEADERS } from "./powersText.ts";
 import { MINOR_IDS, POWER_DEFS, eventItem, mapPins, newPowers, parsePowers, powerEffects, powerStance, powersAfterOutcome, powersAfterSettlement, powersDispatches, regionClimate, serializePowers } from "./powers.ts";
@@ -123,6 +124,7 @@ describe("relations", () => {
     expect(Object.keys(RELATION_FX).sort()).toEqual([...RESOLUTIONS].sort());
     for (const tpl of Object.keys(TEMPLATE_RESOLUTIONS) as ScenarioTemplateId[]) {
       if (tpl === "succession_dispute" && HIGHMARK_STATUS.stub) continue;   // D-036: neutral stubs until package G authors them (it sets stub:false, and this then bites)
+      if (!liveTemplates().includes(tpl)) continue;   // D-037: likewise for the four newer templates, until their region's STATUS flag flips
       const rs = TEMPLATE_RESOLUTIONS[tpl];
       for (let i = 0; i < rs.length; i++) {
         for (let j = i + 1; j < rs.length; j++) {

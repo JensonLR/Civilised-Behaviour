@@ -1,5 +1,5 @@
 // Screenshot a client URL headlessly. Usage: node scripts/shot.mjs "<path?query>" out.png [WxH] [waitMs]
-// Requires the client dev server (pnpm dev:client). Software GL: stills only, never a perf number.
+// Requires the client dev server (pnpm dev:client; or `pnpm --filter @cb/client exec vite --port N --strictPort` with CB_PORT=N). Software GL: stills only, never a perf number.
 import { chromium } from "@playwright/test";
 import { existsSync } from "node:fs";
 
@@ -15,7 +15,8 @@ const page = await (await browser.newContext({ viewport: { width: w, height: h }
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-await page.goto(`http://127.0.0.1:5173/${path}`);
+// (CB_PORT: each parallel package runs its own Vite, D-037; default is the usual dev client)
+await page.goto(`http://127.0.0.1:${process.env.CB_PORT ?? 5173}/${path}`);
 await page.waitForTimeout(Number(wait));
 const stats = await page.evaluate(() => window.__showcase?.stats?.());
 await page.screenshot({ path: out });

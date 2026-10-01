@@ -13,8 +13,8 @@ import { sleeveFull, upperLegRings } from "./limbRings.ts";
 
 const MARGIN = 0.025;
 const MAX = 0.5;
-/** An arm beside hip gear may stand out a little further (the body alone never asks for more than MAX). */
-const MAX_GEAR = 0.62;
+/** An arm beside hip gear may stand out further (the body alone never asks for more than MAX): on an extreme stubby body the gear stands a hand's width beyond the belly, and the arm that swings past it must clear it (about 57 degrees; hipGear.test.ts). */
+const MAX_GEAR = 1.0;
 
 /** A minimal BodyCtx: enough for the ring tables that give the body's outline (colours do not matter). */
 function shapeCtx(spec: CharacterSpec, P: Proportions): BodyCtx {
@@ -27,23 +27,25 @@ export interface BodyOutline {
 }
 
 /**
- * Hip gear that hangs beside the body on one side: how far it stands out beyond the body's own outline, and over which torso-frame heights (gear.ts places each of these with the same
- * numbers). A hand that hangs beside a holster, a canteen, a scabbard, a machete, a coil of rope, a satchel or a birdcage must clear THAT, so the arm on that side rests further out.
+ * Hip gear that hangs beside the body on one side: how far it stands out beyond the body's WIDEST point over the heights it covers (gear.ts places each of these off `reach`, the widest
+ * of the torso, the coat skirt and the thighs over its span, never off the local width), and over which torso-frame heights. `extra` is the offset at the top of the span, `extraLow` at the bottom
+ * (a sabre's scabbard swings outward toward the chape). A hand that hangs beside a holster, a canteen, a scabbard, a machete, a coil of rope, a satchel or a birdcage must clear THAT, so the arm on that side rests further out.
  */
-function gearOnSide(spec: CharacterSpec, P: Proportions, side: "L" | "R"): { yLo: number; yHi: number; extra: number } | undefined {
+export function gearOnSide(spec: CharacterSpec, P: Proportions, side: "L" | "R"): { yLo: number; yHi: number; extra: number; extraLow: number } | undefined {
   const h = P.torsoHeight;
   const u = Math.max(0.8, Math.min(1.18, h / 0.6));
   const g = spec.hipGear;
   const leg = P.legUpper + P.legLower;
+  const same = (yLo: number, yHi: number, extra: number): { yLo: number; yHi: number; extra: number; extraLow: number } => ({ yLo, yHi, extra, extraLow: extra });
   if (side === "R") {
-    if (g === 1) return { yLo: h * 0.08 - 0.11 * u, yHi: h * 0.08 + 0.2 * u, extra: 0.03 + 0.068 * u };
-    if (g === 6) return { yLo: h * 0.04 - Math.min(0.44, leg * 0.5), yHi: h * 0.04 + 0.22, extra: 0.115 };
-    if (g === 7) return { yLo: h * 0.08 - 0.14 * u - 0.4, yHi: h * 0.08 + 0.14, extra: 0.118 + 0.06 * u };
+    if (g === 1) return same(h * 0.08 - 0.11 * u, h * 0.08 + 0.2 * u, 0.03 + 0.068 * u);
+    if (g === 6) return same(h * 0.04 - Math.min(0.44, leg * 0.5), h * 0.04 + 0.22, 0.115);
+    if (g === 7) return same(h * 0.08 - 0.14 * u - 0.4, h * 0.08 + 0.14, 0.118 + 0.06 * u);
   } else {
-    if (g === 2) return { yLo: h * 0.06 - 0.105 * u, yHi: h * 0.06 + 0.2 * u, extra: 0.076 * u + 0.006 };
-    if (g === 5) return { yLo: h * 0.1 - Math.min(0.78, leg * 0.8 + h * 0.1), yHi: h * 0.1 + 0.19, extra: 0.09 };
-    if (spec.pack === 3) return { yLo: h * 0.02 - 0.125 * u, yHi: h * 0.02 + 0.2 * u, extra: 0.118 * u + 0.008 };
-    if (spec.pack === 8) return { yLo: h * 0.02 - 0.13 * u, yHi: h * 0.02 + 0.25 * u, extra: 0.212 * u + 0.012 };
+    if (g === 2) return same(h * 0.06 - 0.105 * u, h * 0.06 + 0.2 * u, 0.076 * u + 0.006);
+    if (g === 5) return { yLo: h * 0.1 - Math.min(0.78, leg * 0.8 + h * 0.1), yHi: h * 0.1 + 0.19, extra: 0.06, extraLow: 0.15 };
+    if (spec.pack === 3) return same(h * 0.02 - 0.125 * u, h * 0.02 + 0.2 * u, 0.118 * u + 0.008);
+    if (spec.pack === 8) return same(h * 0.02 - 0.13 * u, h * 0.02 + 0.25 * u, 0.212 * u + 0.012);
   }
   return undefined;
 }
@@ -60,17 +62,27 @@ export function bodyOutline(spec: CharacterSpec, P: Proportions, side?: "L" | "R
   const r = legRadius(c);
   void r;
   const gear = side ? gearOnSide(spec, P, side) : undefined;
+  const body = (yT: number): number => {
+    const yP = yT + pelvisAbove; // pelvis frame
+    let w = 0;
+    if (yT >= -0.05 * P.torsoHeight) w = Math.max(w, ringAt(torso, yT).rx - 0.025); // (a sleeve may brush the trunk: the arm hangs from its edge)
+    if (yP <= 0.1 * P.scale) {
+      w = Math.max(w, P.hipWidth + ringAt(legs, Math.min(yP, 0.04)).rx);
+      if (skirt) w = Math.max(w, ringAt(skirt, yP).rx);
+    }
+    return w;
+  };
+  // gear stands off the widest the body gets over its whole span (gear.ts: `reach`), so the span's widest is found once, here
+  let spanWidest = 0;
+  if (gear) for (let i = 0; i <= 12; i++) spanWidest = Math.max(spanWidest, body(gear.yLo + ((gear.yHi - gear.yLo) * i) / 12));
   return {
     halfWidth(depth: number): number {
       const yT = shoulderY - depth; // torso frame
-      const yP = yT + pelvisAbove; // pelvis frame
-      let w = 0;
-      if (yT >= -0.05 * P.torsoHeight) w = Math.max(w, ringAt(torso, yT).rx - 0.025); // (a sleeve may brush the trunk: the arm hangs from its edge)
-      if (yP <= 0.1 * P.scale) {
-        w = Math.max(w, P.hipWidth + ringAt(legs, Math.min(yP, 0.04)).rx);
-        if (skirt) w = Math.max(w, ringAt(skirt, yP).rx);
+      let w = body(yT);
+      if (gear && yT >= gear.yLo && yT <= gear.yHi) {
+        const t = (yT - gear.yLo) / (gear.yHi - gear.yLo || 1);
+        w = Math.max(w, spanWidest + gear.extraLow + (gear.extra - gear.extraLow) * t);
       }
-      if (gear && yT >= gear.yLo && yT <= gear.yHi) w += gear.extra;
       return w;
     },
   };

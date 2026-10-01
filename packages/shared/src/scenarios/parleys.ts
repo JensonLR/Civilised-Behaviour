@@ -1,6 +1,8 @@
 import type { ParleyKind, ParleyOption, ParleyView, TalkResult } from "../campaignTypes.ts";
 import { clampI } from "../factions.ts";
 import { hash3 } from "../rng.ts";
+import { SALTMARKET_PARLEYS } from "./saltmarketParleyText.ts";
+import { VESPER_PARLEYS } from "./vesperParleyText.ts";
 
 /**
  * The site parleys (D-034): the deserters' ransom, the Ward's border patrol, the Syndicate's surveyor and the Ward's ford post. Authored here, pure,
@@ -10,19 +12,47 @@ import { hash3 } from "../rng.ts";
  */
 
 export type SiteParleyKind = Exclude<ParleyKind, "warden">;
-type Key = "pay" | "flatter" | "threaten" | "walk" | "propose" | "ask" | "tell" | "envelope" | "tip";
+/** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below. */
+export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head";
+type LegacyKind = Exclude<SiteParleyKind, ScriptKind>;
+export type Key = "pay" | "flatter" | "threaten" | "walk" | "propose" | "ask" | "tell" | "envelope" | "tip";
 const WIRE: Record<Key, ParleyOption["id"]> = {
   pay: "pay", flatter: "haggle_flatter", threaten: "haggle_threaten", walk: "walk_away", propose: "haggle_flatter", ask: "haggle_flatter", tell: "bribe", envelope: "bribe", tip: "bribe",
 };
 export interface SiteParleyCtx { price: number; purse: number; seed: number; day: number }
-interface Opt { key: Key; label: string; hint: string; cost: number }
+export interface Opt { key: Key; label: string; hint: string; cost: number }
+
+/**
+ * One scripted parley (D-037). The wire ids and the result each key reports are fixed by the engine below: pay -> `paid` (the price is taken from the purse), propose -> `survey`, tell -> `tell`,
+ * envelope -> `envelope`, tip -> `tip`, ask -> the second round plus a `learn` event, flatter -> the price moves 20% down (45%) or 10% up, threaten -> `hostile`, walk -> `walked`; `deal` holds the line
+ * for each result the script offers. The template decides what each result MEANS (its `talk` event carries kind + result). Lists hold >= 2 variants (picked by hash3).
+ */
+export interface ParleyScript {
+  speaker: string;
+  open: readonly string[];
+  /** The line after `ask` (and the second round's opening). */
+  round2: readonly string[];
+  walk: string;
+  hostile: string;
+  /** "{price}" is filled in. Required only when a round offers `flatter`; absent, a `flatter` press re-issues the round. */
+  flatter?: { ok: readonly string[]; fail: readonly string[] };
+  deal: Partial<Record<"paid" | "survey" | "tell" | "envelope" | "tip", string>>;
+  /** The line when `pay` is chosen with too little in the purse. */
+  short: string;
+  /** The options of round 1, 2 and 3 for a price `p` (>= 1 of them; always includes a `walk`). */
+  options(round: number, p: number): readonly Opt[];
+}
+const PARLEY_SCRIPTS: Readonly<Partial<Record<ParleyKind, ParleyScript>>> = { ...VESPER_PARLEYS, ...SALTMARKET_PARLEYS };
+/** The scripted kinds only (exported for the tests that prove every script is complete). */
+export const SCRIPTED_KINDS: readonly ScriptKind[] = Object.keys(PARLEY_SCRIPTS) as ScriptKind[];
+export const parleyScript = (kind: ParleyKind): ParleyScript | undefined => PARLEY_SCRIPTS[kind];
 
 /** A step of a site parley: the next round (optionally reporting what was learnt on the way), or the end. */
 export type SiteStep =
   | { view: ParleyView; line: string; emit?: TalkResult; done?: undefined }
   | { done: { result: TalkResult | "walked"; paid: number }; line: string; view?: undefined; emit?: undefined };
 
-const SPEAKER: Record<SiteParleyKind, string> = {
+const SPEAKER: Record<LegacyKind, string> = {
   ransom: "Colour-Sergeant Barnaby Cull (deserted)",
   ward_post: "Patrol-Sergeant Hettie Rook",
   surveyor: "Surveyor Ansel Quire-Dunmarrow",
@@ -32,7 +62,7 @@ const SPEAKER: Record<SiteParleyKind, string> = {
   claimant_elder: "Princess Orla, by Seniority",
   claimant_younger: "Prince Dunstan, by Acclamation",
 };
-const OPEN: Record<SiteParleyKind, readonly string[]> = {
+const OPEN: Record<LegacyKind, readonly string[]> = {
   ransom: [
     "\"Mr. Quim,\" says the colour-sergeant, patting the cage, \"is insured. That makes him worth more alive to everyone, which is a first for a surveyor. The price is £{price}.\"",
     "\"We were not kidnapping him,\" says the colour-sergeant. \"We were repatriating him, with a handling fee of £{price}. Nobody here has ever been paid on time, so we are very keen on prompt settlement.\"",
@@ -62,7 +92,7 @@ const OPEN: Record<SiteParleyKind, readonly string[]> = {
     "Prince Dunstan beams, then gestures, and a small band strikes up in the courtyard on cue. \"Acclamation,\" he says, \"is a form of consent that arrives in advance. £{price} for the arrangements, and the band is extra, and the band is also me.\"",
   ],
 };
-const ROUND2: Record<SiteParleyKind, readonly string[]> = {
+const ROUND2: Record<LegacyKind, readonly string[]> = {
   ransom: [
     "\"Fine,\" says the colour-sergeant, scratching a stubble you could strike matches on. \"£{price}, and I will throw in the cage.\"",
     "\"You drive a hard bargain for a person with no firearm,\" says the colour-sergeant. \"£{price}. Last offer. It is also the first.\"",
@@ -77,7 +107,7 @@ const ROUND2: Record<SiteParleyKind, readonly string[]> = {
   claimant_elder: ["\"I will sign for a regency,\" says Orla, \"if my brother does, which he will not, because he cannot count. Or I will be crowned. Make it official: Form 11 stamped, the Assembly sitting, the barley in. I shall be very gracious about the price.\""],
   claimant_younger: ["\"The Assembly,\" says Dunstan, lowering his voice, \"likes grain. All farmers do. A delegate who has eaten votes for whoever is standing nearest the buffet. I intend to be standing nearest the buffet. Pledge me, and I shall be.\""],
 };
-const FLATTER_HM: Partial<Record<SiteParleyKind, { ok: readonly string[]; fail: readonly string[] }>> = {
+const FLATTER_HM: Partial<Record<LegacyKind, { ok: readonly string[]; fail: readonly string[] }>> = {
   claimant_elder: {
     ok: ["\"Seniority,\" says Orla, softening by perhaps a degree, \"is at least noticed. £{price}, and do not tell my brother I cut it.\"", "\"You have read the precedents,\" says the Princess. \"£{price}, then. A reader is a rare thing in this court.\""],
     fail: ["\"Flattery is not a form,\" says the Princess. \"£{price}, to cover the speech.\"", "\"I was flattered by a better class of courtier,\" says Orla. \"£{price}.\""],
@@ -89,7 +119,7 @@ const FLATTER_HM: Partial<Record<SiteParleyKind, { ok: readonly string[]; fail: 
 };
 const FLATTER_OK = ["\"You have a kind way of robbing a man,\" says the colour-sergeant. \"£{price}, then, and I did not say it was a discount.\"", "\"Manners!\" He looks around for witnesses. \"£{price}. Do not tell the lads.\""];
 const FLATTER_FAIL = ["\"That is a very nice speech,\" says the colour-sergeant, \"and now it costs £{price}, to cover the speech.\"", "\"I was flattered by better in a better regiment. £{price}.\""];
-const WALK: Record<SiteParleyKind, string> = {
+const WALK: Record<LegacyKind, string> = {
   ransom: "You excuse yourself. The colour-sergeant waves the cage at you as you go, which is not a farewell.",
   ward_post: "You step back. The sergeant notes the time and your face, in that order.",
   surveyor: "You step back. The surveyor makes a small mark in a small book.",
@@ -105,7 +135,7 @@ const DEAL: Partial<Record<TalkResult, string>> = {
   envelope: "The envelope is thick. It is also, somehow, already in your coat. \"The stone,\" says the surveyor, \"is a quarter-ton, so lift with your knees.\"",
   tip: "\"A wagon, in the Cut, with the Syndicate's flag on a Ward crate? I did not hear that,\" says the corporal, loudly, standing up. \"Section! The Cut. Ambush stations. And bring the tea.\"",
 };
-const DEAL_HM: Partial<Record<SiteParleyKind, Partial<Record<TalkResult, string>>>> = {
+const DEAL_HM: Partial<Record<LegacyKind, Partial<Record<TalkResult, string>>>> = {
   chamberlain: {
     survey: "\"Form 11, in triplicate,\" says the Chamberlain, receiving it with both hands and a faint sigh. \"It will be stamped. Stamping takes forty-five seconds, which in Highmark is called prompt.\"",
     paid: "The envelope disappears into the Window, where envelopes go. \"Form 11,\" says the Chamberlain, stamping it twice, \"is hereby in order, retroactively.\"",
@@ -119,7 +149,7 @@ const DEAL_HM: Partial<Record<SiteParleyKind, Partial<Record<TalkResult, string>
     survey: "\"A regency,\" says the Prince. \"A throne with three bottoms. How cosy. Put me down.\"",
   },
 };
-const HOSTILE: Record<SiteParleyKind, string> = {
+const HOSTILE: Record<LegacyKind, string> = {
   ransom: "The colour-sergeant takes this in. The camp takes it in. Everyone reaches for something at the same time.",
   ward_post: "\"Is that an order?\" asks the sergeant, with great calm. The border wakes up.",
   surveyor: "The surveyor steps back, and an entourage steps forward. His chain is a lot heavier than it looks.",
@@ -135,6 +165,11 @@ const pickText = (list: readonly string[], seed: number, tag: number): string =>
 
 /** Round 1 is always the opening; later rounds are reached only through `answerSiteParley`, which carries the price in `view.toll`. */
 function options(kind: SiteParleyKind, round: number, p: number): Opt[] {
+  const script = PARLEY_SCRIPTS[kind];
+  if (script) return [...script.options(round, p)];
+  return legacyOptions(kind as LegacyKind, round, p);
+}
+function legacyOptions(kind: LegacyKind, round: number, p: number): Opt[] {
   const walk: Opt = { key: "walk", label: "Walk away", hint: "Nothing lost, nothing gained.", cost: 0 };
   switch (kind) {
     case "ransom":
@@ -181,7 +216,7 @@ function options(kind: SiteParleyKind, round: number, p: number): Opt[] {
 
 function view(kind: SiteParleyKind, round: number, p: number, line: string): ParleyView {
   return {
-    round, speaker: SPEAKER[kind], line, toll: p,
+    round, speaker: PARLEY_SCRIPTS[kind]?.speaker ?? SPEAKER[kind as LegacyKind], line, toll: p,
     options: options(kind, round, p).map((o): ParleyOption => ({ id: WIRE[o.key], label: o.label, cost: o.cost, hint: o.hint })),
     mood: "neutral",
   };
@@ -189,10 +224,38 @@ function view(kind: SiteParleyKind, round: number, p: number, line: string): Par
 
 export function openSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx): ParleyView {
   const p = price(ctx.price);
-  return view(kind, 1, p, fill(pickText(OPEN[kind], ctx.seed, hash3(ctx.day, 1, 0x7a1) ), p));
+  const open = PARLEY_SCRIPTS[kind]?.open ?? OPEN[kind as LegacyKind];
+  return view(kind, 1, p, fill(pickText(open, ctx.seed, hash3(ctx.day, 1, 0x7a1) ), p));
 }
 
 const done = (result: TalkResult | "walked", paid: number, line: string): SiteStep => ({ done: { result, paid }, line });
+
+/** The engine for a scripted kind (D-037): the key decides the result, the script supplies the words. */
+function answerScripted(kind: SiteParleyKind, sc: ParleyScript, ctx: SiteParleyCtx, round: number, p: number, o: Opt, roll: number): SiteStep {
+  const again = (line: string): SiteStep => ({ view: view(kind, round, p, line), line });
+  switch (o.key) {
+    case "walk": return done("walked", 0, sc.walk);
+    case "threaten": return done("hostile", 0, sc.hostile);
+    case "pay":
+      if (ctx.purse < p || o.cost !== p || sc.deal.paid === undefined) return again(sc.short);
+      return done("paid", p, sc.deal.paid);
+    case "flatter": {
+      if (round !== 1 || !sc.flatter) return again("Nobody moves. The offer stands as it was.");
+      const lower = roll < 45;
+      const np = price(lower ? Math.round((p * 0.8) / 5) * 5 : Math.round((p * 1.1) / 5) * 5);
+      const line = fill(pickText(lower ? sc.flatter.ok : sc.flatter.fail, ctx.seed, round * 17 + (lower ? 1 : 2)), np);
+      return { view: view(kind, 2, np, line), line };
+    }
+    case "ask": {
+      const line = fill(pickText(sc.round2, ctx.seed, 29), p);
+      return { view: view(kind, 2, p, line), line, emit: "learn" };
+    }
+    case "propose": return sc.deal.survey === undefined ? again(sc.short) : done("survey", 0, sc.deal.survey);
+    case "tell": return sc.deal.tell === undefined ? again(sc.short) : done("tell", 0, sc.deal.tell);
+    case "envelope": return sc.deal.envelope === undefined ? again(sc.short) : done("envelope", 0, sc.deal.envelope);
+    case "tip": return sc.deal.tip === undefined ? again(sc.short) : done("tip", 0, sc.deal.tip);
+  }
+}
 
 /** One answer. `option` indexes `view.options`; anything the current round does not offer re-issues the round. */
 export function answerSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx, v: ParleyView, option: number): SiteStep {
@@ -203,25 +266,28 @@ export function answerSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx, v: Pa
   const again = (): SiteStep => ({ view: view(kind, round, p, "Nobody moves. The offer stands as it was."), line: "Nobody moves. The offer stands as it was." });
   if (!o) return again();
   const roll = hash3(ctx.seed, ctx.day, round, 0x7a2) % 100;
+  const script = PARLEY_SCRIPTS[kind];
+  if (script) return answerScripted(kind, script, ctx, round, p, o, roll);
+  const lk = kind as LegacyKind;   // (every other kind is one of the older, hard-wired seven)
   switch (o.key) {
-    case "walk": return done("walked", 0, WALK[kind]);
-    case "threaten": return done("hostile", 0, HOSTILE[kind]);
+    case "walk": return done("walked", 0, WALK[lk]);
+    case "threaten": return done("hostile", 0, HOSTILE[lk]);
     case "pay": {
       const hm = kind === "chamberlain" || kind === "claimant_elder" || kind === "claimant_younger";
       if (ctx.purse < p || o.cost !== p) return { view: view(kind, round, p, hm ? "\"You are short,\" says the court, counting what is not there. The price stands." : "\"You are short,\" says the colour-sergeant, counting what is not there. The price stands."), line: "You are short of the price." };
-      return hm ? done("paid", p, DEAL_HM[kind]!.paid!) : done("ransom", p, DEAL.ransom!);
+      return hm ? done("paid", p, DEAL_HM[lk]!.paid!) : done("ransom", p, DEAL.ransom!);
     }
     case "flatter": {
       if (round !== 1) return again();
       const lower = roll < 45;
       const np = price(lower ? Math.round((p * 0.8) / 5) * 5 : Math.round((p * 1.1) / 5) * 5);
-      const hmf = FLATTER_HM[kind];
+      const hmf = FLATTER_HM[lk];
       const line = fill(pickText(hmf ? (lower ? hmf.ok : hmf.fail) : lower ? FLATTER_OK : FLATTER_FAIL, ctx.seed, round * 17 + (lower ? 1 : 2)), np);
       return { view: view(kind, 2, np, line), line };
     }
-    case "propose": return done("survey", 0, DEAL_HM[kind]?.survey ?? DEAL.survey!);
+    case "propose": return done("survey", 0, DEAL_HM[lk]?.survey ?? DEAL.survey!);
     case "ask": {
-      const line = pickText(ROUND2[kind], ctx.seed, 29);
+      const line = pickText(ROUND2[lk], ctx.seed, 29);
       return { view: view(kind, 2, p, line), line, emit: "learn" };
     }
     case "tell": return done("tell", 0, DEAL.tell!);

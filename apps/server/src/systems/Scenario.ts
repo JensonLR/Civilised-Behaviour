@@ -144,8 +144,8 @@ export class Scenario {
     for (const u of this.def.observe.use) {
       const at = this.locate(u);
       if (!at || Math.hypot(p.x - at.x, p.z - at.z) > u.r) continue;
-      if (u.carry === "barrel") {
-        if (!carrying || carriedProp === undefined || this.host.propKind(carriedProp) !== PropKind.BARREL) continue;
+      if (u.carry === "barrel" || u.carry === "crate") {
+        if (!carrying || carriedProp === undefined || this.host.propKind(carriedProp) !== (u.carry === "barrel" ? PropKind.BARREL : PropKind.CRATE)) continue;
       } else if (u.carry === "none" && carrying) continue;
       this.actor = sid;
       this.audience = sid;

@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { CAMP, HIGHMARK_RESOLUTIONS, NPC_CAP, REGIONS, ROOM_WORLD, TICK_RATE, parseCampaign, reachableRegions, regionSpawn } from "@cb/shared";
+import { CAMP, HIGHMARK_RESOLUTIONS, NPC_CAP, REGIONS, ROOM_WORLD, TICK_RATE, parseCampaign, reachableRegions, regionLanding, regionSpawn } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
 import type { WorldRoom } from "./WorldRoom.ts";
 
 /**
- * D-036 integration through a REAL room (the integrator's; the contract file holds the dev-start and gating cases): the chart lists three shores, a party sails Hollowmere -> Highmark from
+ * D-036 integration through a REAL room (the integrator's; the contract file holds the dev-start and gating cases): the chart lists five shores (D-037), a party sails Hollowmere -> Highmark from
  * the map table and is given the Vacant Chair, every Highmark ending is committed by the same pipeline a real one takes and says where it happened, and a saved campaign with a Highmark ending
  * comes back byte for byte from the file store. Port 2600 (2601: the demo's file).
  */
@@ -42,8 +42,8 @@ describe("Highmark, region two, through a real room", () => {
   });
   afterEach(async () => colyseus.cleanup());
 
-  it("the chart lists three reachable regions, and a party at the map table sails to Highmark: one landfall, the succession offered, the cast inside the cap", async () => {
-    expect(reachableRegions()).toEqual(["hollowmere", "kessar", "highmark"]);
+  it("the chart lists five reachable regions, and a party at the map table sails to Highmark: one landfall, the succession offered, the cast inside the cap", async () => {
+    expect(reachableRegions()).toEqual(["hollowmere", "kessar", "highmark", "vesper", "saltmarket"]);
     expect(REGIONS.highmark.reachable).toBe(true);
     const room = (await colyseus.createRoom(ROOM_WORLD, { seed: 5 })) as unknown as WorldRoom;
     const c = await colyseus.connectTo(room as never, { name: "Skipper" });
@@ -74,6 +74,36 @@ describe("Highmark, region two, through a real room", () => {
     c.send("travelPropose" as never, { to: "hollowmere" } as never);
     await until(() => room.state.region === "hollowmere", 8000 + 1000 * TICK_RATE, "the sailing home");
   }, 60_000);
+
+  it("D-037: one party sails the whole chart Hollowmere -> Vesper -> Saltmarket -> Highmark -> Kessar -> home; each landfall is within 0.5 m of the spawn, offers its own contract and keeps the cast inside the cap", async () => {
+    const room = (await colyseus.createRoom(ROOM_WORLD, { seed: 9 })) as unknown as WorldRoom;
+    const c = await colyseus.connectTo(room as never, { name: "Skipper" });
+    await sleep(150);
+    const p = room.state.players.get(c.sessionId)!;
+    const w = (room as unknown as Priv).world;
+    p.x = CAMP.mapTable.x;
+    p.z = CAMP.mapTable.z + 1.2;
+    p.y = w.terrainHeight(p.x, p.z);
+    const offers: Record<string, readonly string[]> = { vesper: ["mine_rescue", "claim_race"], saltmarket: ["smuggling_run", "flooded_market"], highmark: ["succession_dispute"], kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"] };
+    for (const to of ["vesper", "saltmarket", "highmark", "kessar"] as const) {
+      c.send("travelPropose" as never, { to } as never);
+      await until(() => room.state.region === to && room.state.travelPhase === 3, 8000 + 1000 * TICK_RATE, `landfall at ${to}`);
+      c.send("regionReady" as never, { region: to } as never);
+      await until(() => room.state.travelPhase === 0, 5000, `everyone ashore at ${to}`);
+      const spawn = regionSpawn(to, p.slot, 4);
+      expect(Math.hypot(p.x - spawn.x, p.z - spawn.z), to).toBeLessThan(0.5);
+      expect(offers[to], to).toContain((JSON.parse(room.state.scenario) as { template: string }).template);
+      let npcs = 0;
+      room.state.players.forEach((q) => {
+        if (q.npc) npcs++;
+      });
+      expect(npcs, to).toBeLessThanOrEqual(NPC_CAP);
+      p.x = regionLanding(to).x; // the dock is the landing: stand on it for the next proposal
+      p.z = regionLanding(to).z;
+    }
+    c.send("travelPropose" as never, { to: "hollowmere" } as never);
+    await until(() => room.state.region === "hollowmere", 8000 + 1000 * TICK_RATE, "the sailing home");
+  }, 120_000);
 
   it("each of the five Highmark endings commits once through the real pipeline: the ledger's chair, the history's region, distinct campaign JSON; a forged resolution is ignored", async () => {
     const seen = new Map<string, string>();

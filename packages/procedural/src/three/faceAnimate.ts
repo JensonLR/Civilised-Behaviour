@@ -17,6 +17,15 @@ const KEYS = Object.keys(NEUTRAL) as (keyof FaceTarget)[];
 /** Upper lid rotation (about X) at which the lash line lies a little below the middle of the eye; the lower lid rises to meet it. */
 const LID_CLOSED = -0.59;
 
+/** How a shut eye changes shape (see `FaceAnimator.update`): wider, flatter and a little shallower, as fractions of its open size. */
+const SLIT_WIDEN = 0.1;
+const SLIT_FLATTEN = 0.4;
+const SLIT_SHALLOW = 0.15;
+const smooth = (a: number, b: number, x: number): number => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
 /**
  * Drives the face from an expression: eases the live pose (`face.pose`) toward the blend of neutral and the current expression, blinks, glances about, and writes the pose
  * onto the eyes, lids, brows and morph targets. No allocation per frame. One per animator.
@@ -84,9 +93,15 @@ export class FaceAnimator {
     const low = Math.PI - 0.6 + face.lowerLidBase * 1.2 + Math.min(1.1, f.squint * 0.75 + shut * shut * 1.05);
     face.lowerLidL.rotation.x = low;
     face.lowerLidR.rotation.x = low;
+    // a SHUT eye is an almond, not a bump: the whole eye (ball, lids, the lot) flattens and widens as the lid comes to its closed angle, so the visible lid is a wide slit with its
+    // lash line, at least 2.2 times as wide as it is tall (a fully round eye sphere under a round cap read as a button). Only past a half shut, so an open or a half-lidded eye is untouched.
+    const slit = smooth(0.55, 1, shut);
     const sc = 1 + wideExtra * 0.35;
-    face.eyeL.scale.set(face.eyeScale[0] * sc, face.eyeScale[1] * sc, sc);
-    face.eyeR.scale.set(face.eyeScale[0] * sc, face.eyeScale[1] * sc, sc);
+    const ex = face.eyeScale[0] * sc * (1 + SLIT_WIDEN * slit);
+    const ey = face.eyeScale[1] * sc * (1 - SLIT_FLATTEN * slit);
+    const ez = sc * (1 - SLIT_SHALLOW * slit);
+    face.eyeL.scale.set(ex, ey, ez);
+    face.eyeR.scale.set(ex, ey, ez);
     face.coreL.scale.setScalar(f.pupil);
     face.coreR.scale.setScalar(f.pupil);
     // the eyes turn: the irises (and the pupils on them) rotate about the centre of the eyeball; a drunk's drift apart

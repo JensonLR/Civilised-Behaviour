@@ -35,6 +35,7 @@ export function outlineMaterial(): ShaderMaterial {
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
       attribute vec3 onormal;
+      attribute float hthin; // 0 = the full line, 0.45 = a line 55% as thick: a nose's bridge, where the hull would draw a bar across the face (parts.ts, sweep.ts)
       uniform float thickness;
       uniform vec2 viewport;
       void main() {
@@ -50,7 +51,7 @@ export function outlineMaterial(): ShaderMaterial {
         vec4 clip = projectionMatrix * mvPosition;
         vec3 n = normalize(normalMatrix * on);
         vec2 dir = normalize((projectionMatrix * vec4(n, 0.0)).xy + vec2(1e-6));
-        float t = thickness * clamp(10.0 / max(-mvPosition.z, 0.1), 0.4, 1.6);
+        float t = thickness * clamp(10.0 / max(-mvPosition.z, 0.1), 0.4, 1.6) * (1.0 - hthin);
         clip.xy += dir * (t * 2.0 / viewport) * clip.w;
         gl_Position = clip;
         #include <fog_vertex>
@@ -63,6 +64,8 @@ export function outlineMaterial(): ShaderMaterial {
         #include <fog_fragment>
       }`,
   });
+  // geometry without a `hthin` attribute (every instanced prop, every limb) reads 0: the whole line
+  Object.assign(material.defaultAttributeValues, { hthin: [0] });
   return material;
 }
 

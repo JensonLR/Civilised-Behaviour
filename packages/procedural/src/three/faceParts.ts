@@ -53,6 +53,9 @@ const lerpAt = (arr: readonly number[], t: number): number => {
 
 // ---- nose ----------------------------------------------------------------------------------------------------------------
 
+/** How much of the outline's weight the nose bridge loses (0.45: a line 55% as thick; the acceptance bar is <= 0.6 of the full line). */
+export const NOSE_BRIDGE_INK = 0.6;
+
 /** How big the nostril wings are, by nose style (x the tip's width): button, hooked, bulb, long, flat, lump, snub, roman. */
 const ALAR = [0.5, 0.55, 0.85, 0.5, 1.05, 0.9, 0.62, 0.55] as const;
 
@@ -77,7 +80,10 @@ export function buildNose(c: FaceCtx): void {
     pow: 2.3,
     color: painted ? mix(c.skin, PALETTE.trim.zinc, 0.55 + 0.45 * smooth(0.05, 0.45, t)) : t > 0.72 ? mix(color, tipTone, Math.min(1, (t - 0.72) * 3.2)) : color,
   });
-  b.sweep(spine, noseSection, color, { side: [1, 0, 0], segments: 8, round: "end" });
+  // The ink hull of a nose lies across the cheek and the eye in a three-quarter view: a bar down the bridge. Thin it there (60% off from the root to two thirds of the way, back to the full
+  // line over the ball), so the silhouette of the tip and of the head keeps its full weight.
+  const bridgeInk = (t: number): number => NOSE_BRIDGE_INK * (1 - smooth(0.66, 0.92, t));
+  b.sweep(spine, noseSection, color, { side: [1, 0, 0], segments: 8, round: "end", ...(PartBuilder.hullMode ? { hullThin: bridgeInk } : {}) });
 
   const last = spine.length - 1;
   const at = spine[last]!;

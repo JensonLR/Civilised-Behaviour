@@ -1,6 +1,8 @@
 import { Quaternion } from "three";
 import { FLAG, ZONE, woundLevel } from "@cb/shared";
 import { FaceAnimator } from "./faceAnimate.ts";
+import { TABLE_MOODS, sumBodyMood, type BodyMood } from "./moodBody.ts";
+import { HAIR_SWAY_MAX } from "./hairSway.ts";
 import type { ExpressionId } from "./expressions.ts";
 import type { CharacterRig } from "./rig.ts";
 import { armRestAbduction, crouchObstruction, kneeFlexLimit } from "./armClearance.ts";
@@ -74,8 +76,20 @@ export class CharacterAnimator {
   private breath = 0;
   /** Ambient life (idle blinking, weight shift, glances, idle actions). Disable for stills (photo mode) and deterministic tests. */
   autoBlink = true;
+  /**
+   * Motion scale for ambient flourishes that are not gameplay (today: the hair's sway): 1 normally, 0.3 under the game's "reduce motion" setting (the client sets it; the animator does
+   * not know the setting). 0 stills them.
+   */
+  motion = 1;
+  /** The hair's sway: a spring per axis (position, velocity) in the head frame, driven by the body's motion (see `updateHair`). */
+  private readonly hairPos = [0, 0, 0];
+  private readonly hairVel = [0, 0, 0];
+  /** The spring's targets, written each frame (preallocated: the update is allocation-free). */
+  private readonly hairTgt = [0, 0, 0];
   /** Mood weights (0..1), smoothed: the expression drives the body as well as the face. */
-  private readonly mood = { pain: 0, fear: 0, drunk: 0, triumph: 0, angry: 0 };
+  private readonly mood = { pain: 0, fear: 0, drunk: 0, triumph: 0, angry: 0, smug: 0, disgust: 0, surprise: 0, laugh: 0, sleep: 0 };
+  /** The summed body of the table moods (moodBody.ts), recomputed each frame. */
+  private readonly nb: BodyMood = { chest: 0, twist: 0, roll: 0, lift: 0, headPitch: 0, headYaw: 0, headRoll: 0, armSwing: 0, armOut: 0, armBend: 0, handSwing: 0, handBend: 0, heave: 0, heaveRate: 0 };
   /** Limp amount 0..1 and which leg it favours (-1 left, +1 right). */
   private limp = 0;
   private limpSide = 1;
@@ -223,6 +237,8 @@ export class CharacterAnimator {
     this.pegBlend = damp(this.pegBlend, peg ? 1 : 0, 8, dt);
     this.updateMood(dt);
     const m = this.mood;
+    // the table moods (smug, disgust, surprise, laugh, sleep): nothing while downed or in the air
+    const nb = sumBodyMood(m, this.time, (1 - this.air) * (1 - this.down), this.nb);
 
     // ---- take-off and landing ----------------------------------------------------------------------------------------------
     const vy = Number.isFinite(pose.vy) ? pose.vy : 0;
@@ -390,11 +406,11 @@ export class CharacterAnimator {
     const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) - this.haul * 0.3 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
     this.lean = damp(this.lean, leanTarget, 8, dt);
     const moodLean = m.pain * 0.3 + m.angry * 0.14 + m.fear * -0.1 - m.triumph * 0.16 + m.drunk * 0.06;
-    j.torso.rotation.x = -(P.lean + this.lean + moodLean * (1 - this.air)) - this.down * 0.15 + this.jolt[0]! * 0.6 + this.limp * 0.06 + m.drunk * 0.12 * Math.sin(this.time * 1.3);
+    j.torso.rotation.x = -(P.lean + this.lean + moodLean * (1 - this.air)) - this.down * 0.15 + this.jolt[0]! * 0.6 + this.limp * 0.06 + m.drunk * 0.12 * Math.sin(this.time * 1.3) + nb.chest + nb.heave;
     const torsoTwist = (0.11 + 0.1) * s * twist - clamp(this.turn, -6, 6) * 0.03 * (1 - this.air); // (the shoulders lag the turn a little, the head leads it)
-    j.torso.rotation.y = torsoTwist + m.drunk * 0.16 * Math.sin(this.time * 1.1);
+    j.torso.rotation.y = torsoTwist + m.drunk * 0.16 * Math.sin(this.time * 1.1) + nb.twist;
     const bank = clamp(this.turn * speed * 0.018, -0.3, 0.3); // banking into a turn: the body leans toward the inside
-    j.torso.rotation.z = this.jolt[1]! * 0.6 - this.limpSide * this.limp * 0.08 * onBad - roll * 0.7 - bank + m.drunk * 0.08 * Math.sin(this.time * 1.6 + 1);
+    j.torso.rotation.z = this.jolt[1]! * 0.6 - this.limpSide * this.limp * 0.08 * onBad - roll * 0.7 - bank + m.drunk * 0.08 * Math.sin(this.time * 1.6 + 1) + nb.roll;
     j.pelvis.rotation.z += bank * 0.3;
     const breathe = Math.sin(this.breath * (1.7 + m.pain * 1.4 + m.fear * 1.9)) * (0.012 + m.pain * 0.008 + m.fear * 0.01);
     // landing squash (and the take-off stretch): the trunk shortens and widens on touchdown, lengthens as it leaves the ground
@@ -402,7 +418,7 @@ export class CharacterAnimator {
     j.torso.scale.set(1 + breathe + squash * 0.5, 1 + breathe * 0.6 - squash, 1 + breathe + squash * 0.5);
     // the shoulders rise with the in-breath, and with tension
     const tense = m.pain * 0.02 + m.fear * 0.03 + m.angry * 0.02;
-    j.shoulderL.position.y = j.shoulderR.position.y = this.shoulderBaseY + breathe * 0.35 + tense;
+    j.shoulderL.position.y = j.shoulderR.position.y = this.shoulderBaseY + breathe * 0.35 + tense + nb.lift + nb.heave * 0.12;
 
     // ---- arms ------------------------------------------------------------------------------------------------------------------------
     const busy = Math.max(this.carry, this.kneel, this.haul, this.down * 0.6);
@@ -465,8 +481,15 @@ export class CharacterAnimator {
     shR += m.drunk * Math.sin(this.time * 1.9 + 2.5) * 0.35;
     szL -= m.drunk * (0.15 + 0.15 * Math.sin(this.time * 2.7));
     szR += m.drunk * (0.15 + 0.15 * Math.sin(this.time * 2.2 + 1));
+    // the table moods: both arms, and the right hand's own extra
+    shL += nb.armSwing;
+    shR += nb.armSwing + nb.handSwing;
+    szL -= nb.armOut;
+    szR += nb.armOut;
+    elL += nb.armBend;
+    elR += nb.armBend + nb.handBend;
     // idle life: breathing arms, weight shifts, glances and the occasional small action
-    const idle = (1 - Math.min(1, move * 2)) * (1 - this.air) * (1 - this.crouch) * (1 - busy) * (1 - this.down) * (1 - Math.max(m.pain, m.fear, m.triumph, m.angry));
+    const idle = (1 - Math.min(1, move * 2)) * (1 - this.air) * (1 - this.crouch) * (1 - busy) * (1 - this.down) * (1 - Math.max(m.pain, m.fear, m.triumph, m.angry, m.smug, m.disgust, m.surprise, m.laugh, m.sleep));
     let headYaw = 0;
     let headPitch = 0;
     if (idle > 0.01 && this.autoBlink) {
@@ -585,15 +608,17 @@ export class CharacterAnimator {
     if (this.rideBlend > 0.002) applyRidePose(this.rig, this.rideIn, this.rideBlend);
 
     // ---- head: stays level against the torso, glances, leads the turn, takes the mood ---------------------------------------------------------
-    j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1);
-    j.head.rotation.y = -(j.torso.rotation.y + j.pelvis.rotation.y) * 0.8 + Math.sin(this.time * 0.6) * 0.05 * (0.4 + idle) + headYaw + this.turn * 0.05 + m.fear * Math.sin(this.time * 6) * 0.05;
-    j.head.rotation.z = -(j.pelvis.rotation.z + j.torso.rotation.z) * 0.5 + m.drunk * Math.sin(this.time * 1.3) * 0.16 - bank * 0.4;
+    j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1) + nb.headPitch;
+    j.head.rotation.y = -(j.torso.rotation.y + j.pelvis.rotation.y) * 0.8 + Math.sin(this.time * 0.6) * 0.05 * (0.4 + idle) + headYaw + this.turn * 0.05 + m.fear * Math.sin(this.time * 6) * 0.05 + nb.headYaw;
+    j.head.rotation.z = -(j.pelvis.rotation.z + j.torso.rotation.z) * 0.5 + m.drunk * Math.sin(this.time * 1.3) * 0.16 - bank * 0.4 + nb.headRoll;
 
     // ---- downed: rotate the whole figure onto its back ---------------------------------------------------------------------------------
     j.root.rotation.z = 0;
     // +X tilts the head backward (leaning forward is negative X in this rig), so a downed character lies on their back.
     j.root.rotation.x = this.down * (Math.PI / 2 - 0.1);
     j.root.position.y = this.down * (P.torsoDepth * 0.5 + 0.05);
+
+    this.updateHair(dt, speed, runW, s, grounded);
 
     this.updateFace(dt);
   }
@@ -727,15 +752,54 @@ export class CharacterAnimator {
     }
   }
 
+  /**
+   * Hair sway (hairSway.ts): the head's hair is moved by ONE vec3, a spring per axis that lags the head. The pushes: streaming back with speed (a run lifts the tips 2-8 cm: the
+   * furthest is HAIR_SWAY_MAX), the head's start and stop (acceleration), a turn, the side-to-side of the stride and a lift on every step; at a standstill a breath of motion
+   * (< 1 mm). Deterministic: the phase comes from the spec's hash, never Math.random. Scaled by `motion`; allocation-free.
+   */
+  private updateHair(dt: number, speed: number, runW: number, stride: number, grounded: boolean): void {
+    const u = this.rig.hairSway.value;
+    const free = (1 - this.down) * (grounded ? 1 : 0.5);
+    const ph = h01(this.seed) * Math.PI * 2;
+    const idle = 0.0007 * (1 - Math.min(1, speed));
+    // targets (metres at weight 1), before the motion scale
+    const tz = (clamp(speed * 0.0105, 0, HAIR_SWAY_MAX.z) + clamp(this.accel * 0.0028, -0.025, 0.025) + idle * Math.sin(this.time * 1.1 + ph)) * free;
+    const tx = (clamp(this.turn, -6, 6) * -0.0045 + stride * 0.012 * runW + idle * Math.sin(this.time * 0.8 + ph * 1.7)) * free;
+    const ty = (Math.max(0, -Math.cos(this.phase * 2 + ph)) * 0.011 * runW + Math.max(0, this.landSpring) * 0.03 + (grounded ? 0 : 0.01)) * free;
+    const k = clamp(this.motion, 0, 1);
+    // a lightly damped spring (w = 13 rad/s, zeta 0.4), sub-stepped: one explicit step of a stiff spring is unstable at a slow frame
+    const steps = Math.max(1, Math.ceil(dt / 0.012));
+    const h = dt / steps;
+    const tgt = this.hairTgt;
+    tgt[0] = tx;
+    tgt[1] = ty;
+    tgt[2] = tz;
+    for (let n = 0; n < steps; n++) {
+      for (let i = 0; i < 3; i++) {
+        this.hairVel[i]! += (-(this.hairPos[i]! - tgt[i]!) * 169 - this.hairVel[i]! * 10.4) * h;
+        this.hairPos[i]! += this.hairVel[i]! * h;
+      }
+    }
+    this.hairPos[0] = clamp(this.hairPos[0]!, -HAIR_SWAY_MAX.x, HAIR_SWAY_MAX.x);
+    this.hairPos[1] = clamp(this.hairPos[1]!, 0, HAIR_SWAY_MAX.y);
+    this.hairPos[2] = clamp(this.hairPos[2]!, -HAIR_SWAY_MAX.z, HAIR_SWAY_MAX.z);
+    u.set(this.hairPos[0]! * k, this.hairPos[1]! * k, this.hairPos[2]! * k);
+  }
+
   /** The expression drives the body too: each mood's weight eases toward 1 while it is on (and only while the character is standing free). */
   private updateMood(dt: number): void {
     const e = this.expression;
+    const k = clamp(this.expressionIntensity, 0, 1); // a flinch and a scream are one expression at two strengths
     const m = this.mood;
-    m.pain = damp(m.pain, e === "pain" ? 1 : 0, 6, dt);
-    m.fear = damp(m.fear, e === "fear" ? 1 : 0, 6, dt);
-    m.drunk = damp(m.drunk, e === "drunk" ? 1 : 0, 3, dt);
-    m.triumph = damp(m.triumph, e === "triumph" ? 1 : 0, 7, dt);
-    m.angry = damp(m.angry, e === "angry" ? 1 : 0, 6, dt);
+    m.pain = damp(m.pain, e === "pain" ? k : 0, 6, dt);
+    m.fear = damp(m.fear, e === "fear" ? k : 0, 6, dt);
+    m.drunk = damp(m.drunk, e === "drunk" ? k : 0, 3, dt);
+    m.triumph = damp(m.triumph, e === "triumph" ? k : 0, 7, dt);
+    m.angry = damp(m.angry, e === "angry" ? k : 0, 6, dt);
+    for (let i = 0; i < TABLE_MOODS.length; i++) {
+      const id = TABLE_MOODS[i]!;
+      m[id] = damp(m[id], e === id ? k : 0, id === "sleep" ? 2.5 : 6, dt);
+    }
   }
 
   private updateFace(dt: number): void {

@@ -88,6 +88,7 @@ import {
   isRegionId,
   isTemplateId,
   regionNavOptions,
+  TEMPLATE_REGION,
   regionLanding,
   DEMO,
   npcThink,
@@ -1515,7 +1516,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (!(RESOLUTIONS as readonly string[]).includes(r)) return;
       const template = (Object.keys(TEMPLATE_RESOLUTIONS) as ScenarioTemplateId[]).find((t) => (TEMPLATE_RESOLUTIONS[t] as readonly string[]).includes(r)) ?? "secure_crossing";
       this.commitOutcome({
-        scenario: template, ...(template === "succession_dispute" ? { region: "highmark" as const } : {}), resolution: r as ResolutionId, toll: 40, paid: 0, bridge: this.campaign.crossing.bridge, brokePromise: false, seconds: 1,
+        scenario: template, ...(TEMPLATE_REGION[template] !== "kessar" ? { region: TEMPLATE_REGION[template] } : {}), resolution: r as ResolutionId, toll: 40, paid: 0, bridge: this.campaign.crossing.bridge, brokePromise: false, seconds: 1,
         tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 },
       });
     }

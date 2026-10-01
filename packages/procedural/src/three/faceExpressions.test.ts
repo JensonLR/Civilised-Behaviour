@@ -1,4 +1,4 @@
-import { Mesh, Vector3, type BufferAttribute } from "three";
+import { Matrix4, Mesh, Vector3, type BufferAttribute } from "three";
 import { afterAll, describe, expect, it } from "vitest";
 import { FLAG } from "@cb/shared";
 import { generateCharacter, type CharacterSpec } from "../spec.ts";
@@ -239,6 +239,61 @@ describe("expressions", () => {
     const full = run("fear", 1);
     expect(half.browArch).toBeGreaterThan(neutral.browArch);
     expect(half.browArch).toBeLessThan(full.browArch);
+    rig.dispose();
+  });
+
+  it("a shut eye is an almond, not a bump: the visible lid is >= 2.2 times as wide as it is tall, with a rim of >= 16 sides (5 heads, eyes = 0)", () => {
+    for (const [hi, over] of HEADS.entries()) {
+      const rig = buildCharacter(BASE(over), { outline: false });
+      settle(rig, "sleep", 1);
+      expect(rig.face.pose.eyes, `head ${hi} eyes`).toBeLessThan(0.05);
+      const skin = deformedSkin(rig);
+      const inv = new Matrix4().copy(rig.joints.head.matrixWorld).invert();
+      const cy = rig.proportions.headRadius;
+      for (const lid of [rig.face.lidL, rig.face.lidR]) {
+        const m = new Matrix4().multiplyMatrices(inv, lid.matrixWorld);
+        const pos = lid.geometry.attributes.position as BufferAttribute;
+        let x0 = Infinity;
+        let x1 = -Infinity;
+        let y0 = Infinity;
+        let y1 = -Infinity;
+        const v = new Vector3();
+        for (let i = 0; i < pos.count; i++) {
+          // (only what is outside the skin is seen: the rest of the lid is inside the head)
+          v.fromBufferAttribute(pos, i).applyMatrix4(m);
+          v.y -= cy;
+          const l = v.length();
+          const r = skin.radius(v.x / l, v.y / l, v.z / l);
+          if (r === undefined || l < r - 0.002) continue;
+          x0 = Math.min(x0, v.x);
+          x1 = Math.max(x1, v.x);
+          y0 = Math.min(y0, v.y);
+          y1 = Math.max(y1, v.y);
+        }
+        expect((x1 - x0) / (y1 - y0), `head ${hi}: closed lid width:height`).toBeGreaterThanOrEqual(2.2);
+        // the rim of the cap (the vertices on its lowest ring, in the lid's own frame) is a polygon of at least 16 sides at the full level of detail
+        const lp = lid.geometry.attributes.position as BufferAttribute;
+        const yRim = rig.face.eyeRadius * 1.11 * Math.cos(1.15); // (lidGeo: a cap of radius 1.11 eyeR running 1.15 rad from its axis)
+        const rim = new Set<string>();
+        for (let i = 0; i < lp.count; i++) if (Math.abs(lp.getY(i) - yRim) < 1e-5) rim.add(`${lp.getX(i).toFixed(5)},${lp.getZ(i).toFixed(5)}`);
+        expect(rim.size, `head ${hi}: lid rim sides`).toBeGreaterThanOrEqual(16);
+      }
+      // an open eye is untouched by the slit: the same head at neutral keeps the round eye's own proportions
+      rig.dispose();
+    }
+  });
+
+  it("only a SHUT eye changes shape: open, half-lidded and wide eyes keep their scale", () => {
+    const rig = buildCharacter(BASE({}), { outline: false });
+    const open = rig.face.eyeScale;
+    for (const id of ["neutral", "surprise", "fear", "angry", "triumph"] as const) {
+      settle(rig, id, 1);
+      expect(rig.face.eyeL.scale.x, id).toBeLessThan(open[0] * 1.41); // (a wide eye grows by up to 35%, not by the slit's widening on top)
+      expect(rig.face.eyeL.scale.y, id).toBeGreaterThan(open[1] * 0.99);
+    }
+    settle(rig, "neutral", 1);
+    expect(rig.face.eyeL.scale.x).toBeCloseTo(open[0], 6);
+    expect(rig.face.eyeL.scale.y).toBeCloseTo(open[1], 6);
     rig.dispose();
   });
 });

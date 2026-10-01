@@ -1,4 +1,7 @@
 import type { ResolutionId, FactionStance } from "./campaignTypes.ts";
+import { pluck } from "./regionEndings.ts";
+import { SALTMARKET_COPY, SALTMARKET_STORY_HEADS } from "./saltmarketText.ts";
+import { VESPER_COPY, VESPER_STORY_HEADS } from "./vesperText.ts";
 
 /**
  * Authored text for the Society's house paper. The paper is the Expeditionary Society talking about itself: every defeat is a "repositioning", every corpse a
@@ -21,6 +24,7 @@ export const DATELINE_TAIL: readonly string[] = [
 ];
 
 export const HEADLINES: Record<HeadKey, readonly string[]> = {
+  ...pluck(VESPER_COPY, "headlines"), ...pluck(SALTMARKET_COPY, "headlines"),   // D-037 (regionEndings.ts)
   paid: [
     "Society Settles Kessar Toll in Full; Ledger Delighted",
     "£{toll} Buys Passage and Mutual Respect at Kessar Crossing",
@@ -190,6 +194,7 @@ export const HEADLINES: Record<HeadKey, readonly string[]> = {
 };
 
 export const STANDFIRSTS: Record<HeadKey, readonly string[]> = {
+  ...pluck(VESPER_COPY, "standfirsts"), ...pluck(SALTMARKET_COPY, "standfirsts"),   // D-037 (regionEndings.ts)
   paid: [
     "The Society settled the Ward's £{toll} toll at Kessar in full and in coin. The bridge is {bridge}. {spin}",
     "Having paid £{toll} at the toll bar, the expedition crossed with dignity and receipts intact; the bridge is {bridge}. {spin}",
@@ -380,10 +385,12 @@ export const STORY_HEADS = {
   convoy: ["The Dry Cut Affair", "Syndicate Wagon: the Figures", "Notes on a Convoy"],
   marker: ["Marker Stone No. 4", "The Stone in the Ford", "On the Matter of a Border"],
   chair: ["The Vacant Chair, in Figures", "Highmark: the Court Reports", "On the Matter of a Throne"],
+  ...VESPER_STORY_HEADS, ...SALTMARKET_STORY_HEADS,   // D-037: mine_rescue, claim_race, smuggling_run, flooded_market (keyed by template id)
 } as const;
 
 /** The ledger story's euphemism per new resolution: what happened, in the Society's own words. */
 export const SITE_LINES: Partial<Record<ResolutionId, readonly string[]>> = {
+  ...pluck(VESPER_COPY, "siteLines"), ...pluck(SALTMARKET_COPY, "siteLines"),   // D-037 (regionEndings.ts)
   ransomed: ["The Society \"facilitated a mutually agreeable repatriation\" of one surveyor.", "A sum was \"redistributed\" to the deserters, at the deserters' suggestion."],
   rescued: ["One surveyor was \"extracted\", along with the camp's morale.", "The deserters were \"encouraged into other careers\", several of them posthumously."],
   slipped_away: ["One surveyor \"departed the premises\" without consulting the premises.", "The camp was \"left in a state of undisturbed slumber\"."],

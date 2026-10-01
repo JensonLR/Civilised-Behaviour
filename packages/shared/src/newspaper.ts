@@ -6,6 +6,7 @@ import {
   SITE_LINES, SPIN_LIMBS, SPIN_ROUTED, SPIN_WOUNDED, STANDFIRSTS, STORY_HEADS, WARD_SAYS,
   type HeadKey,
 } from "./newspaperText.ts";
+import { isNewTemplate } from "./regionEndings.ts";
 import { hash3 } from "./rng.ts";
 import type { PaperExtras } from "./worldTypes.ts";
 
@@ -53,7 +54,8 @@ export function generatePaper(c: CampaignState, worldSeed: number, extras?: Pape
   const lastTemplate = c.history.length ? c.history[c.history.length - 1]!.template : "secure_crossing";
   if (last && lastTemplate !== "secure_crossing") {
     // the other contracts: a ledger story named for the place ("The Cartwright's Cage", "Marker Stone No. 4") and the Society's own euphemism for what was done
-    const heads = lastTemplate === "hostage_rescue" ? STORY_HEADS.cage : lastTemplate === "convoy_ambush" ? STORY_HEADS.convoy : lastTemplate === "succession_dispute" ? STORY_HEADS.chair : STORY_HEADS.marker;
+    const heads = lastTemplate === "hostage_rescue" ? STORY_HEADS.cage : lastTemplate === "convoy_ambush" ? STORY_HEADS.convoy : lastTemplate === "succession_dispute" ? STORY_HEADS.chair
+      : isNewTemplate(lastTemplate) ? STORY_HEADS[lastTemplate] : STORY_HEADS.marker;   // D-037: the four newer contracts carry their own headings, keyed by template id
     const site = SITE_LINES[last];
     story("ledger", heads, `${site ? pick(site, 20) : ""} Fallen: ${dead}. Wounded: ${t.wounded}. Limbs: ${t.limbsLost}. Purse: £${c.purse}. ${pick(LEDGER_TAIL, 21)}`, 22);
   } else if (last) {

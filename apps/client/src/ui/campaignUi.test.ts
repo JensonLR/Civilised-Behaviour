@@ -101,7 +101,7 @@ describe("the newspaper sheet", () => {
 });
 
 describe("what the map room is told", () => {
-  it("lists both regions, marks where we are, carries the campaign's memory and the vote", () => {
+  it("lists every live region, marks where we are, carries the campaign's memory and the vote", () => {
     const players = [
       { name: "Ada", slot: 0, connected: true, npc: 0 },
       { name: "Sentry", slot: 16, connected: true, npc: 1 },
@@ -110,7 +110,7 @@ describe("what the map room is told", () => {
     ];
     const st = { region: "hollowmere", travelPhase: 1, travelTo: "kessar", travelReady: 0b10, players: { forEach: (cb: (p: (typeof players)[number]) => void) => players.forEach(cb) } };
     const v = mapRoomView(st, newCampaign(1), 0);
-    expect(v.regions.map((r) => [r.id, r.here])).toEqual([["hollowmere", true], ["kessar", false], ["highmark", false]]);
+    expect(v.regions.map((r) => [r.id, r.here])).toEqual([["hollowmere", true], ["kessar", false], ["highmark", false], ["vesper", false], ["saltmarket", false]]);
     expect(v.ready).toEqual([{ slot: 0, name: "Ada", ready: false }, { slot: 1, name: "Bo", ready: true }]); // no NPCs, no dropped connections
     expect(v.to).toBe("kessar");
     expect(v.you).toBe(0);

@@ -300,10 +300,10 @@ describe("applyOutcome: the three newer contracts (D-034)", () => {
     expect(parseCampaign(serializeCampaign(c))).toEqual(c);
     const old = JSON.parse(serializeCampaign(newCampaign(2))) as Record<string, unknown>;
     delete old.sites;
-    expect(parseCampaign(JSON.stringify(old))?.sites).toEqual({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open" });
+    expect(parseCampaign(JSON.stringify(old))?.sites).toEqual({ lastDay: {}, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open", ends: {} });
     const bad = { ...JSON.parse(serializeCampaign(c)), sites: { lastDay: { hostage_rescue: 1e9, nonsense: 4 }, hostage: "x", convoy: 7, border: null, lastComplication: "<script>" }, history: [{ seq: 1, region: "kessar", resolution: "paid", day: 2, template: "elsewhere" }] };
     const p = parseCampaign(JSON.stringify(bad))!;
-    expect(p.sites).toEqual({ lastDay: { hostage_rescue: 9999 }, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open" });
+    expect(p.sites).toEqual({ lastDay: { hostage_rescue: 9999 }, hostage: "none", convoy: "none", border: "quiet", lastComplication: "none", succession: "open", ends: {} });
     expect(p.history[0]!.template).toBe("secure_crossing");
   });
 

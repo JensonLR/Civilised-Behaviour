@@ -515,7 +515,7 @@ export function buildFace(ctx: FaceCtx, parent: Group): FaceBuild {
     // up-and-back (eye open), -PI/2 = pointing forward over the pupil (eye closed / blink).
     const lidKey = `${eK}|${hex(lidTone)}|${hex(creaseTone)}|${hex(lashC)}`;
     const lidG = (d: 0 | 1): BufferGeometry =>
-      cachedGeo(`lid|${lidKey}|${d}`, () => lidGeo(eyeR, eyeR * 1.11, 1.15, d === 0 ? 12 : 8, d === 0 ? 4 : 3, lidTone, creaseTone, lashC, true));
+      cachedGeo(`lid|${lidKey}|${d}`, () => lidGeo(eyeR, eyeR * 1.11, 1.15, d === 0 ? 16 : 8, d === 0 ? 4 : 3, lidTone, creaseTone, lashC, true));
     const lid = both(new Mesh(lidG(0), vertexToon("eye")), lidG(0), lidG(1));
     lid.rotation.x = 0.5;
     // Lower lid: a smaller cap opening downward; it rises for a squint. Pouches darken it. (Hidden at the mid level of detail.)

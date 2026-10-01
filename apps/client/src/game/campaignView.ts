@@ -1,4 +1,4 @@
-import { REGIONS, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type RegionId, type RivalPresence } from "@cb/shared";
+import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type RegionId, type RivalPresence } from "@cb/shared";
 import type { MapRoomView } from "../ui/MapRoom.ts";
 
 /** What the campaign remembers about a region, written beside it on the chart. Plain text; no markup. */
@@ -9,6 +9,8 @@ export function regionNote(id: RegionId, c: CampaignState | undefined, seed?: nu
   const offer = seed === undefined ? undefined : pickTemplate(c, id, seed, presence);
   const contract = offer ? ` On offer: ${templateNote(offer).title}. ${templateNote(offer).brief}` : "";
   if (id === "highmark") return highmarkNote(c, contract);
+  const own = REGION_COPY[id];   // D-037: Vesper and Saltmarket write their own chart note (shared/vesperText.ts, saltmarketText.ts)
+  if (own) return `${own.chartNote(c)}${contract}`;
   const cr = c.crossing;
   if (!c.history.some((h) => h.region === id)) return `Not yet visited. A bridge, a toll bar and a fort with opinions.${contract}`;
   const bridge = cr.bridge === "collapsed" ? "The bridge is down" : cr.bridge === "rigged" ? "The bridge is rigged" : "The bridge stands";

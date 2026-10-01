@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   FLAG, PropKind, hash3, answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, generatePaper, npcKey, weatherAt,
-  HIGHMARK_RESOLUTIONS, KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
-  type BridgeState, type CampaignState, type ParleyView, type PlayerStateType, type ResolutionId, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
+  HIGHMARK_RESOLUTIONS, TEMPLATES, KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
+  type BridgeState, type CampaignState, type NewEnding, type ParleyView, type PlayerStateType, type ResolutionId, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
 } from "@cb/shared";
 import type { CastApi, CastCount, CastOrder, MountApi, NpcSide, NpcSpec } from "@cb/shared";
 import { Scenario, type ScenarioHost } from "./Scenario.ts";
@@ -732,8 +732,8 @@ describe("leave: the room calls it before dispose", () => {
 
 describe("all 20 resolutions: one scripted run each through the runner; distinct outcomes, distinct papers", () => {
   /** Plays the resolution out on a fresh fake and returns what was committed. */
-  // D-036: Kessar's twenty endings. Highmark's five (HIGHMARK_RESOLUTIONS) are driven through the runner by package G (systems/Succession.test.ts).
-  const play: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number]>, (f: Fake) => { id: ScenarioTemplateId; go: (s: Scenario) => void }> = {
+  // D-036: Kessar's twenty endings. Highmark's five (HIGHMARK_RESOLUTIONS) are driven through the runner by package G (systems/Succession.test.ts); the sixteen of D-037 (NewEnding) by C3 and D4.
+  const play: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number] | NewEnding>, (f: Fake) => { id: ScenarioTemplateId; go: (s: Scenario) => void }> = {
     paid: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); } }),
     bargained: (f) => ({ id: "secure_crossing", go: (s) => { f.players.set("p2", row("p2", bar.x + 2, bar.z)); put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "haggle_threaten")); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "pay")); } }),
     bribed: (f) => ({ id: "secure_crossing", go: (s) => { put(f, "p1", bar.x - 0.7, bar.z - 0.5); run(f, s, 1.5); press(f, s); s.onPick("p1", optionIndex(lastParley(f, "p1")!.view!, "bribe")); } }),
@@ -881,5 +881,40 @@ describe("hostile input at every entry point", () => {
       for (const c of f.commits) expect(c.resolution, `${id} #${i}`).toBe("abandoned");
       expect(f.commits.length).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("the runner: a use spec that asks for a CRATE (D-037)", () => {
+  // the real templates' timber and barge presses are driven in MineRescue.test.ts and SmugglingRun.test.ts; this isolates the runner's own crate rule on the claim race's slot with a bespoke one-spec template, restored afterwards
+  const withTimber = <T>(body: () => T): T => {
+    const stub = TEMPLATES.claim_race;
+    const patched = {
+      ...stub,
+      observe: { ...stub.observe, use: [{ id: "timber", at: { x: 5, z: 5 }, r: 2, carry: "crate" as const, consume: true }] },
+      reduce: (st: { t: number }, e: { t: string }) => (e.t === "use" ? { s: { ...st, t: st.t + 0.001 }, fx: [] } : stub.reduce(st as never, e as never)),
+    };
+    (TEMPLATES as Record<string, unknown>).claim_race = patched;
+    try { return body(); } finally { (TEMPLATES as Record<string, unknown>).claim_race = stub; }
+  };
+  it("is taken only with a crate in hand and in reach, consumes it exactly once, and never for a barrel, empty hands or the wrong place", () => {
+    withTimber(() => {
+      const f = fake();
+      f.props.set("crate", { kind: PropKind.CRATE, x: 5, z: 5 });
+      f.props.set("barrel", { kind: PropKind.BARREL, x: 5, z: 5 });
+      const s = setup(f, "claim_race", row("p1", 5, 5, { flags: FLAG.GROUNDED | FLAG.CARRYING }));
+      run(f, s, 0.5);
+      expect(s.onInteract("p1", me(f), "barrel")).toBe(false);
+      expect(s.onInteract("p1", me(f), undefined)).toBe(false);
+      expect(s.onInteract("p1", me(f), "nonsense")).toBe(false);
+      put(f, "p1", 40, 40);
+      expect(s.onInteract("p1", me(f), "crate")).toBe(false);
+      expect(f.consumed).toEqual([]);
+      put(f, "p1", 5, 5);
+      expect(s.onInteract("p1", me(f), "crate")).toBe(true);
+      expect(f.consumed).toEqual(["crate"]);
+      me(f).flags &= ~FLAG.CARRYING;
+      expect(s.onInteract("p1", me(f), "crate")).toBe(false);   // empty hands: not a crate press
+      expect(f.consumed).toEqual(["crate"]);
+    });
   });
 });

@@ -26,6 +26,11 @@ export function tagRange(role: number, inSight: boolean): number {
     case NPC.WARDEN:
     case NPC.CHAMBERLAIN:
     case NPC.CLAIMANT:
+    case NPC.FOREMAN:   // D-037: the people a contract turns on show their plate from the notable range
+    case NPC.MOURNER:
+    case NPC.FACTOR:
+    case NPC.MINER:
+    case NPC.BARGEMAN:
     case NPC.HOSTAGE:
     case NPC.DRIVER:
       return TAG_RANGE.notable;

@@ -2,6 +2,7 @@ import { Mesh, MeshBasicMaterial, SphereGeometry, type Group, type Scene, type V
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig, type ExpressionId, type GoreLevel, type RideInput } from "@cb/procedural/three";
 import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
+import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
 import { ghostTree } from "./ghost.ts";
@@ -303,6 +304,7 @@ export class CharacterActor {
       crew: (pose.flags & FLAG.OPERATING) !== 0 ? Math.max(c?.crew ?? 0, 1) : 0,
       fp: this.fpBlend,
     });
+    this.anim.motion = getReduceMotion() ? 0.3 : 1;   // hair sway only (D-037): 30% under "reduce motion"
     this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride });
     this.weapons.apply(this.anim.hold);
     // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).

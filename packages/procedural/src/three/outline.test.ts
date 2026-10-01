@@ -2,6 +2,10 @@ import { BoxGeometry, InstancedMesh, Matrix4, MeshBasicMaterial } from "three";
 import { describe, expect, it } from "vitest";
 import { WORLD_INK, instancedOutline, instancedWorldOutline, isSharedInk, outlineMaterial, outlineSettings, sharedToonRamp, syncInstancedOutline, worldOutlineMaterial } from "./outline.ts";
 import { addOutlineNormals } from "./parts.ts";
+import { generateCharacter } from "../spec.ts";
+import { NOSE_BRIDGE_INK } from "./faceParts.ts";
+import { buildCharacter } from "./rig.ts";
+import type { Mesh } from "three";
 
 describe("outline on instanced meshes", () => {
   it("the shader moves the hull with the instance matrix and un-skews the normal (one draw covers every instance)", () => {
@@ -80,5 +84,58 @@ describe("outline on instanced meshes", () => {
     expect(a).not.toBe(worldOutlineMaterial({ thickness: 1.8 }));
     expect(a.vertexShader).toContain("local.x += sin(uTime);");
     expect(a.uniforms.uTime).toBe(uniforms.uTime);
+  });
+});
+
+describe("nose-bridge ink", () => {
+  /** The head's outline hull for a spec with a long nose and no hat or hair to hide it, and where the nose is. */
+  const headHull = (noseStyle: number): { thin: Float32Array; pos: Float32Array; rig: ReturnType<typeof buildCharacter> } => {
+    const rig = buildCharacter({ ...generateCharacter(5), noseStyle, hat: 0, hair: 0, beard: 0, moustache: 0, eyewear: 0, woodenLeg: 0 }, { outline: true });
+    const hull = rig.root.getObjectByName("outline_head") as Mesh;
+    const g = hull.geometry;
+    return { thin: g.getAttribute("hthin")!.array as Float32Array, pos: g.getAttribute("position")!.array as Float32Array, rig };
+  };
+
+  it("the hull's line is at most 60% as thick on the bridge and the full line on the head, the jaw and the brow", () => {
+    expect(1 - NOSE_BRIDGE_INK).toBeLessThanOrEqual(0.6);
+    for (const style of [0, 3, 7]) {
+      const { thin, pos, rig } = headHull(style);
+      const P = rig.proportions;
+      const R = P.headRadius;
+      // (the head's frame: y up from the head bone; the nose is in front, -z)
+      let bridge = 0;
+      let thinnest = 1;
+      for (let i = 0; i < thin.length; i++) {
+        const t = thin[i]!;
+        if (t > 0) {
+          bridge++;
+          thinnest = Math.min(thinnest, 1 - t);
+          // only the nose carries it: in front of the face (z < 0) and not at the brow, the jaw or the crown
+          expect(pos[i * 3 + 2]!, `style ${style}`).toBeLessThan(0);
+        }
+      }
+      expect(bridge, `style ${style} has a bridge band`).toBeGreaterThan(8);
+      expect(thinnest, `style ${style}`).toBeLessThanOrEqual(0.6);
+      // the head's own vertices (everything but the nose's) are the whole line: the skull is far more of the hull than the nose
+      expect(bridge).toBeLessThan(thin.length * 0.2);
+      expect(R).toBeGreaterThan(0);
+      rig.dispose();
+    }
+  });
+
+  it("the tip keeps the full silhouette: the vertices of the last third of the nose are not thinned", () => {
+    const { thin, pos, rig } = headHull(3);
+    const P = rig.proportions;
+    // find the nose's own geometry (the long nose projects furthest forward): the most forward vertex is its tip and must carry the full line
+    let tip = 0;
+    for (let i = 1; i < thin.length; i++) if (pos[i * 3 + 2]! < pos[tip * 3 + 2]!) tip = i;
+    expect(thin[tip]).toBe(0);
+    expect(P.noseLength).toBeGreaterThan(0);
+    rig.dispose();
+  });
+
+  it("without the attribute (a prop, a limb) the shader reads 0: the whole line", () => {
+    expect(outlineMaterial().vertexShader).toContain("(1.0 - hthin)");
+    expect((outlineMaterial().defaultAttributeValues as Record<string, number[]>).hthin).toEqual([0]);
   });
 });

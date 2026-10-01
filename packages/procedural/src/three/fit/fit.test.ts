@@ -25,16 +25,16 @@ afterAll(() => clearCharacterCaches());
  */
 const RATCHET: Record<FitGroup, Record<Metric, { worstCm: number; count: number }>> = {
   trunk: {
-    garmentPenetration: { worstCm: 2.3, count: 1 },
+    garmentPenetration: { worstCm: 2.2, count: 1 },
     accessoryPenetration: { worstCm: 2.0, count: 11 },
     accessorySink: { worstCm: 1.3, count: 6 },
     floating: { worstCm: 0, count: 0 },
-    poseClip: { worstCm: 6.0, count: 154 },
+    poseClip: { worstCm: 5.9, count: 115 }, // (hip gear's resting arm: armClearance.gearOnSide; was 6.0 / 154)
     poseExtreme: { worstCm: 6.8, count: 101 },
     headPenetration: { worstCm: 0, count: 0 },
   },
   limbs: {
-    garmentPenetration: { worstCm: 1.7, count: 2 },
+    garmentPenetration: { worstCm: 1.6, count: 2 },
     accessoryPenetration: { worstCm: 0, count: 0 },
     accessorySink: { worstCm: 1.2, count: 16 },
     floating: { worstCm: 0, count: 0 },
@@ -49,7 +49,7 @@ const RATCHET: Record<FitGroup, Record<Metric, { worstCm: number; count: number 
     floating: { worstCm: 0, count: 0 },
     poseClip: { worstCm: 0, count: 0 },
     poseExtreme: { worstCm: 0, count: 0 },
-    headPenetration: { worstCm: 1.2, count: 18 },
+    headPenetration: { worstCm: 0, count: 0 },
   },
 };
 

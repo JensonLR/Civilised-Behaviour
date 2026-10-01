@@ -16,6 +16,8 @@ export const NPC_SIDE: Readonly<Record<number, NpcSide>> = {
   [NPC.HOSTAGE]: "neutral", [NPC.DRIVER]: "neutral", [NPC.PORTER]: "party", [NPC.HIRED_RIFLE]: "party", [NPC.SURGEON]: "party",
   // D-036: Highmark. The "ward" side is the local authority of whatever region you are in: here the Crown's household. Claimants and herders keep out of it.
   [NPC.CHAMBERLAIN]: "ward", [NPC.COURT_GUARD]: "ward", [NPC.CLAIMANT]: "neutral", [NPC.HERDER]: "neutral",
+  // D-037: Vesper Gorge (a foreman is the company's, i.e. the local authority's; miners and mourners keep out of it), the Saltmarket Delta (customs men are the Constabulary's; bargemen and factors keep out of it)
+  [NPC.FOREMAN]: "ward", [NPC.MINER]: "neutral", [NPC.MOURNER]: "neutral", [NPC.CUSTOMS]: "ward", [NPC.BARGEMAN]: "neutral", [NPC.FACTOR]: "neutral",
 };
 export type BrainId = "garrison" | "follower" | "civil";   // civil = hostage, driver: never fights, flees, follows when freed
 export interface NpcSpec {

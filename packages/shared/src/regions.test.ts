@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { liveRegions } from "./regionStatus.ts";
 import { createArena } from "./arena.ts";
 import { CAMP, hqPlan } from "./camp.ts";
 import { KESSAR_ANCHORS as A, REGION_IDS } from "./campaignTypes.ts";
@@ -18,7 +19,7 @@ describe("regions", () => {
         expect(Math.hypot(s.x, s.z)).toBeLessThan(REGIONS[id].bounds);
         expect(Number.isFinite(w.terrainHeight(s.x, s.z))).toBe(true);
       }
-      expect(regionProps(id, 7, w).length).toBeGreaterThan(3);
+      if (liveRegions().includes(id)) expect(regionProps(id, 7, w).length).toBeGreaterThan(3);   // D-037: a contract stub has no props yet
     }
   });
 

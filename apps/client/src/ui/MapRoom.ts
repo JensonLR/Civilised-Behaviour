@@ -1,4 +1,4 @@
-import type { CampaignMapData, PowerId, RegionId } from "@cb/shared";
+import { REGION_IDS, type CampaignMapData, type PowerId, type RegionId } from "@cb/shared";
 import { Modal, h } from "./modal.ts";
 import { CHART_AT, CampaignMap, chartRoute, drawCampaignOverlay, regionPair } from "./CampaignMap.ts";
 import "./mapRoom.css";
@@ -39,8 +39,10 @@ export interface MapRoomCallbacks {
 }
 
 /** The names written under the marks (a region the chart does not know is written as its id). */
-const CHART_LABEL: Record<string, string> = { hollowmere: "Hollowmere", kessar: "Kessar", highmark: "Highmark" };
-const LANES: readonly [RegionId, RegionId][] = [["hollowmere", "kessar"], ["hollowmere", "highmark"], ["kessar", "highmark"]];
+const CHART_LABEL: Record<string, string> = { hollowmere: "Hollowmere", kessar: "Kessar", highmark: "Highmark", vesper: "Vesper", saltmarket: "Saltmarket" };
+/** Every pair of regions has a lane (every ordered pair sails); a lane and a mark are SHOWN only while the regions are on the chart (reachable), so a region that is not built yet is not on it. */
+const LANES: readonly [RegionId, RegionId][] = REGION_IDS.flatMap((a, i) => REGION_IDS.slice(i + 1).map((b): [RegionId, RegionId] => [a, b]));
+const NUMBER_WORD: Record<number, string> = { 2: "two", 3: "three", 4: "four", 5: "five" };
 const SVG = "http://www.w3.org/2000/svg";
 const svg = (tag: string, attrs: Record<string, string | number>): SVGElement => {
   const el = document.createElementNS(SVG, tag);
@@ -141,8 +143,14 @@ export class MapRoom {
     return v.regions.some((r) => r.id === this.selected && !r.here);
   }
 
-  private buildChart(): void {
+  /** The regions the chart is drawn for (D-037: only the ones the party can sail to are on it; a region that is not built yet has no mark, no shore and no lane). */
+  private charted = "";
+  private buildChart(ids: readonly RegionId[] = ["hollowmere", "kessar", "highmark"]): void {
     const c = this.chart;
+    c.replaceChildren();
+    this.routes.clear();
+    const on = new Set<string>(ids);
+    c.setAttribute("aria-label", `Chart of the Society's ${NUMBER_WORD[on.size] ?? on.size} shores`);
     c.append(
       svg("rect", { class: "sea", x: 0, y: 0, width: 320, height: 200 }),
       svg("path", { class: "land", d: "M0 120 C30 104 52 112 74 108 C102 103 118 128 112 152 C108 172 70 186 34 184 L0 200 Z" }),
@@ -150,12 +158,18 @@ export class MapRoom {
       svg("path", { class: "land", d: "M204 200 L320 200 L320 132 C302 126 290 138 268 134 C246 130 238 146 222 152 C208 158 198 180 204 200 Z" }),
       svg("path", { class: "wave", d: "M130 40 q8 -6 16 0 t16 0 M120 130 q8 -6 16 0 t16 0 M150 190 q8 -6 16 0 t16 0 M236 108 q8 -6 16 0 t16 0 M20 40 q8 -6 16 0 t16 0" }),
     );
+    // D-037: the gorge's shore (north-west) and the delta's (south) are drawn only once those regions can be sailed to
+    if (on.has("vesper")) c.append(svg("path", { class: "land", "data-region": "vesper", d: "M0 0 L150 0 C162 24 142 58 112 72 C86 84 52 74 30 80 C14 84 4 72 0 62 Z" }));
+    if (on.has("saltmarket")) c.append(svg("path", { class: "land", "data-region": "saltmarket", d: "M122 200 C124 172 142 150 164 150 C186 150 198 176 196 200 Z" }));
     for (const [a, b] of LANES) {
+      if (!on.has(a) || !on.has(b)) continue;
       const route = svg("path", { class: "route", d: chartRoute(a, b), "data-lane": regionPair(a, b) });
       c.appendChild(route);
       this.routes.set(regionPair(a, b), route);
     }
-    for (const [id, p] of Object.entries(CHART_AT)) {
+    for (const id of REGION_IDS) {
+      if (!on.has(id)) continue;
+      const p = CHART_AT[id];
       const g = svg("g", { class: "mark", "data-region": id, transform: `translate(${p.x} ${p.y})` });
       g.append(svg("circle", { r: 9 }), svg("path", { d: "M0 -5 L0 6 M-4 2 Q0 9 4 2 M-3 -2 L3 -2" }));
       const label = svg("text", { x: 0, y: 24, "text-anchor": "middle" });
@@ -200,7 +214,12 @@ export class MapRoom {
       this.list.appendChild(label);
     }
     if (focusedId) this.list.querySelector<HTMLInputElement>(`input[value="${focusedId}"]`)?.focus();
-    // the chart follows the selection
+    // the chart follows the selection (and is redrawn when the set of charted regions changes)
+    const key = v.regions.map((r) => r.id).join(",");
+    if (key !== this.charted) {
+      this.charted = key;
+      this.buildChart(v.regions.map((r) => r.id));
+    }
     const here = v.regions.find((r) => r.here);
     for (const g of this.chart.querySelectorAll("g.mark")) g.classList.toggle("sel", g.getAttribute("data-region") === this.selected);
     for (const g of this.chart.querySelectorAll("g.mark")) g.classList.toggle("here", v.regions.some((r) => r.here && r.id === g.getAttribute("data-region")));

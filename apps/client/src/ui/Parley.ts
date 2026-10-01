@@ -1,4 +1,4 @@
-import type { ParleyView, RegionId } from "@cb/shared";
+import { REGION_COPY, type ParleyView, type RegionId } from "@cb/shared";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
 import "./parley.css";
@@ -85,8 +85,10 @@ export class Parley {
     const mood = String(v.mood ?? "neutral");
     // (the court asks a price, not a toll, and nobody there is a "she")
     const court = this.region === "highmark";
-    this.society.textContent = court ? "An audience at court" : "An audience at the toll bar";
-    this.meta.textContent = court ? `Price asked: £${toll}   Round ${round}   The court seems ${mood}.` : `Toll asked: £${toll}   Round ${round}   She seems ${mood}.`;
+    const own = REGION_COPY[this.region]?.parley;   // D-037: the later regions author their own heading and asked line (shared/vesperText.ts, saltmarketText.ts)
+    this.society.textContent = own ? own.heading : court ? "An audience at court" : "An audience at the toll bar";
+    this.meta.textContent = own ? own.asked.replace(/\{price\}/g, String(toll)).replace(/\{round\}/g, String(round)).replace(/\{mood\}/g, mood)
+      : court ? `Price asked: £${toll}   Round ${round}   The court seems ${mood}.` : `Toll asked: £${toll}   Round ${round}   She seems ${mood}.`;
     const focused = this.options.querySelector<HTMLElement>("button:focus")?.dataset.i;
     this.options.replaceChildren();
     const list = Array.isArray(v.options) ? v.options.slice(0, 9) : [];

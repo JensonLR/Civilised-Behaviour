@@ -37,3 +37,6 @@ Reviewed against the code as of this slice. Nothing in this section adds a perso
 | **Website** | No analytics, no cookies, no scripts, no tracker, no embedded third-party content, no web fonts from other sites (the fonts are bundled), no contact form and no mailing list. The host's own access logs are whatever the host keeps (not chosen yet). There is no contact address yet. |
 
 **The device id is still the credential.** Until a verifier exists, the `cb.identity` UUID in the browser's or the shell's local storage is the whole proof of membership of a saved campaign (see "Campaign persistence" above): anyone who copies it can resume that campaign, and clearing storage loses it. A Steam verifier (a server-side ticket check) is the planned replacement and is not built.
+
+## Regions three and four (D-037): reviewed, nothing new
+Reviewed 2026-10-01: the only new stored data is `SiteLedger.ends` in the campaign record (up to four short ending ids, validated per template on load) and the sixteen new `ResolutionId` values in the capped history. No new personal data, no new identifier, no new network call, no tracker; the campaign record stays well under its 8 KB cap.

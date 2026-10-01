@@ -7,8 +7,10 @@ import {
   NearestFilter,
   RedFormat,
   Matrix4,
+  ShaderMaterial,
   Skeleton,
   SkinnedMesh,
+  Vector3,
   type Bone,
   type Material,
 } from "three";
@@ -20,6 +22,7 @@ import { buildHead } from "./head.ts";
 import { morphOutlineMaterial } from "./faceMorph.ts";
 import { buildFace, clearFaceCaches, inertFace, irisColour, type FaceBuild, type FaceParts } from "./faceRig.ts";
 import { outlineMaterial } from "./outline.ts";
+import { hairSwayHullMaterial, hairSwayMaterial, type HairSwayUniform } from "./hairSway.ts";
 import { mergeRigid, posedBounds, type RigidPart } from "./merged.ts";
 import { PartBuilder, singe, type Lod } from "./parts.ts";
 import { buildProsthesis } from "./prosthetics.ts";
@@ -56,6 +59,11 @@ export interface CharacterRig {
   root: Group;
   joints: Joints;
   face: FaceParts;
+  /**
+   * The hair's sway as ONE vec3 (head bone frame, metres at the tips: x right, y up, z behind) that the head's shader reads (hairSway.ts). The animator drives it; a rig whose head has no
+   * hair, or that is at a crowd level, ignores it. Appended to the interface: code that does not know it is unaffected.
+   */
+  hairSway: { value: Vector3 };
   proportions: Proportions;
   spec: CharacterSpec;
   /** The level of detail the meshes are currently at (0 full, 1 mid distance, 2 far silhouette). */
@@ -248,6 +256,28 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const outlines: Mesh[] = [];
   const hiddenBones = new Set<string>();
 
+  // Hair sway (hairSway.ts): a head that has hair on it draws with this rig's own copy of the cloth shader and ink hull, which read the rig's one `hairSway` vec3 (the animator drives it).
+  const hairSway: HairSwayUniform = { value: new Vector3() };
+  const swayMaterials: Material[] = [];
+  let headCloth: MeshToonMaterial | undefined;
+  const hullKinds = new Map<string, ShaderMaterial>();
+  const bodyMaterial = (a: Attachment, g: BufferGeometry): MeshToonMaterial => {
+    if (a.bone !== "head" || !g.hasAttribute("hsw")) return material;
+    if (!headCloth) swayMaterials.push((headCloth = hairSwayMaterial(material, hairSway)));
+    return headCloth;
+  };
+  const hullMaterial = (a: Attachment, g: BufferGeometry): ShaderMaterial => {
+    const morph = a.morphs && !!g.morphAttributes.position;
+    if (a.bone !== "head" || !g.hasAttribute("hsw")) return morph ? morphOutlineMaterial() : outlineMaterial();
+    const k = morph ? "morph" : "plain";
+    let m = hullKinds.get(k);
+    if (!m) {
+      m = hairSwayHullMaterial(morph, hairSway);
+      hullKinds.set(k, m);
+      swayMaterials.push(m);
+    }
+    return m;
+  };
   const meshGeometry = (a: Attachment): BufferGeometry | undefined =>
     cached(`${a.bone}|${key}|L${lod}`, () => {
       PartBuilder.auditTag = a.bone;
@@ -258,7 +288,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (a.hull || !a.mesh) return;
     const hg = hullGeometry(a);
     if (!hg) return;
-    const o = new Mesh(hg, a.morphs && hg.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial());
+    const o = new Mesh(hg, hullMaterial(a, hg));
     o.name = `outline_${a.bone}`;
     o.visible = !hiddenBones.has(a.bone) && !a.mesh.userData.lodOff;
     o.castShadow = false;
@@ -273,7 +303,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (a.mesh) return;
     const geo = meshGeometry(a);
     if (!geo) return;
-    const m = new Mesh(geo, material);
+    const m = new Mesh(geo, bodyMaterial(a, geo));
     m.name = `mesh_${a.bone}`;
     m.castShadow = true;
     m.receiveShadow = false;
@@ -510,7 +540,13 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
       const parts: RigidPart[] = [];
       for (const a of attachments) {
         PartBuilder.auditTag = a.bone;
-        const g = withMode(level, false, a.make);
+        PartBuilder.sway = false; // (a merged head never sways: it is not asked to pay for the attribute)
+        let g: BufferGeometry | undefined;
+        try {
+          g = withMode(level, false, a.make);
+        } finally {
+          PartBuilder.sway = true;
+        }
         if (g) parts.push({ geometry: g, bone: boneList.indexOf(a.parent), matrix: restOf.get(a.parent)! });
       }
       if (level === 1) {
@@ -571,6 +607,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
         a.mesh.userData.lodOff = off;
         if (g) {
           a.mesh.geometry = g;
+          a.mesh.material = bodyMaterial(a, g);
           a.mesh.updateMorphTargets();
         }
         a.mesh.visible = !off && !hiddenBones.has(a.bone);
@@ -579,7 +616,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
         const h = g ? hullGeometry(a) : undefined;
         if (h) {
           a.hull.geometry = h;
-          a.hull.material = a.morphs && h.morphAttributes.position ? morphOutlineMaterial() : outlineMaterial();
+          a.hull.material = hullMaterial(a, h);
           a.hull.updateMorphTargets();
         }
         a.hull.visible = outlineOn && !!h && !hiddenBones.has(a.bone);
@@ -601,6 +638,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     root,
     joints: { root, pelvis, torso, head, shoulderL, shoulderR, elbowL, elbowR, wristL, wristR, hipL, hipR, kneeL, kneeR },
     face: faceParts,
+    hairSway,
     proportions: P,
     spec,
     get lod() {
@@ -622,6 +660,10 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     detachLimb,
     dispose() {
       // Bone and face geometry and materials belong to the shared caches (freed by clearCharacterCaches); a rig owns only its scene-graph objects (and a merged rig's bone texture).
+      for (const m of swayMaterials) m.dispose();
+      swayMaterials.length = 0;
+      headCloth = undefined;
+      hullKinds.clear();
       for (const m of mergedMeshes) m?.removeFromParent();
       mergedMeshes.fill(undefined);
       skeleton?.dispose();

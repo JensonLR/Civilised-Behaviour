@@ -128,6 +128,8 @@ export class PartBuilder {
    * tessellated coarsely (a line does not need smooth curvature). Set by the rig around a second run of a bone's builder.
    */
   static hullMode = false;
+  /** Off while the crowd's merged levels build their bones (hairSway.ts: a merged head never sways, so it never pays for the attribute). */
+  static sway = true;
   /**
    * Crowd level of detail (0 full, 1 mid distance, 2 far silhouette). Set by the rig around a bone's builder like `hullMode`; builders
    * may also read it to skip whole features (`PartBuilder.lod >= 1`), and every primitive helper tessellates more coarsely and
@@ -150,6 +152,10 @@ export class PartBuilder {
   trackMorph = false;
   /** While true (and `trackMorph`), parts added are flagged as moving with the face's morph targets (skin, beards); false = rigid (ears, hats, neck). */
   morphable = false;
+  /** Set before the first `add` to track which parts are hair (see hairSway.ts); `build` then hands the flags to its `sway` callback. Off for crowd levels and anything that is not a character's head. */
+  trackSway = false;
+  /** While true (and `trackSway`), parts added are hair: they may sway. */
+  swayable = false;
 
   /** Adds a primitive. Geometry is consumed (transformed in place then disposed after merge). */
   add(geo: BufferGeometry, color: number, pos: V3 = [0, 0, 0], rot: V3 = [0, 0, 0], scale: V3 = [1, 1, 1]): this {
@@ -192,7 +198,10 @@ export class PartBuilder {
       colors[i * 3 + 2] = Math.min(1, c.b * shade);
     }
     geo.setAttribute("color", new BufferAttribute(colors, 3));
+    // outline hulls only: every part carries `hthin` (0 = the full ink line; a nose's bridge sets its own, see SweepOptions.hullThin) so the parts merge
+    if (PartBuilder.hullMode && !geo.attributes.hthin) geo.setAttribute("hthin", new BufferAttribute(new Float32Array(n), 1));
     if (this.trackMorph) geo.setAttribute("mw", new BufferAttribute(new Float32Array(n).fill(this.morphable ? 1 : 0), 1));
+    if (this.trackSway) geo.setAttribute("sw", new BufferAttribute(new Float32Array(n).fill(this.swayable ? 1 : 0), 1));
     // Drop UVs: nothing samples textures, and mismatched attribute sets break merging.
     geo.deleteAttribute("uv");
     this.parts.push(geo);
@@ -293,7 +302,7 @@ export class PartBuilder {
   }
 
   /** Merges everything into one geometry (or undefined if empty). */
-  build(morph?: (geo: BufferGeometry, mw: BufferAttribute) => void): BufferGeometry | undefined {
+  build(morph?: (geo: BufferGeometry, mw: BufferAttribute) => void, sway?: (geo: BufferGeometry, sw: BufferAttribute) => void): BufferGeometry | undefined {
     if (this.parts.length === 0) return undefined;
     // All Three primitives used here are indexed with position/normal/color, which mergeGeometries requires to match.
     const merged = mergeGeometries(this.parts, false);
@@ -306,6 +315,15 @@ export class PartBuilder {
     }
     merged.computeBoundingSphere();
     merged.computeBoundingBox();
+    if (this.trackSway) {
+      const sw = merged.getAttribute("sw") as BufferAttribute | undefined;
+      if (sw && sway) {
+        sway(merged, sw);
+        // (the culling sphere holds the hair at the furthest it is ever moved)
+        if (merged.boundingSphere) merged.boundingSphere.radius += 0.09;
+      }
+      merged.deleteAttribute("sw");
+    }
     if (this.trackMorph) {
       const mw = merged.getAttribute("mw") as BufferAttribute | undefined;
       if (mw && morph) {

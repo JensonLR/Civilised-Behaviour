@@ -26,12 +26,12 @@ test("a browser sails from the map room to Highmark, builds the hill and is give
     });
   expect(await state()).toMatchObject({ region: "hollowmere", phase: 0 });
 
-  // the map table opens the map room; the chart lists three shores
+  // the map table opens the map room; the chart lists every shore (five since D-037)
   await page.evaluate(() => (window as unknown as { __cb: Hook }).__cb.session.room.send("debug", { cmd: "tp:-2.4:-5.8:0" }));
   await page.waitForTimeout(400);
   await page.keyboard.press("KeyE");
   await expect(page.locator("#sheet-maproom")).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator("#sheet-maproom .dest")).toHaveCount(3);
+  await expect(page.locator("#sheet-maproom .dest")).toHaveCount(5);
   await expect(page.locator("#sheet-maproom .dest[data-region=highmark]")).toContainText("Highmark");
   await page.locator("#sheet-maproom .dest[data-region=highmark]").click();
   await page.locator("#sheet-maproom button.primary", { hasText: "Propose sailing" }).click();

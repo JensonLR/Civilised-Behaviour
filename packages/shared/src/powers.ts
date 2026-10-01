@@ -1,6 +1,9 @@
-import type { CampaignState, FactionStance, NeedId, RegionId, ScenarioOutcome } from "./campaignTypes.ts";
+import type { CampaignState, FactionStance, NeedId, RegionId, ResolutionId, ScenarioOutcome } from "./campaignTypes.ts";
 import { NEEDS, POWERS, WARD, clampI, stanceOf, type Temperament } from "./factions.ts";
 import { HIGHMARK_RESOLUTIONS } from "./highmark.ts";
+import type { MinorDelta as EndingMinorDelta } from "./regionEndings.ts";
+import { SALTMARKET_ENDINGS, SALTMARKET_FAVOUR } from "./saltmarketLedger.ts";
+import { VESPER_ENDINGS, VESPER_FAVOUR } from "./vesperLedger.ts";
 import { rivalAfterOutcome, newRival, rivalDispatch, rivalEventItem } from "./rival.ts";
 import { REL_BASE, applyRelationFx, cloneState, hasFlag, pairEnds, pairKey, pairState, withFlag, withLog, withoutFlag, type RelVec } from "./relations.ts";
 import { hash3 } from "./rng.ts";
@@ -153,6 +156,10 @@ export const militaryOf = (c: CampaignState, p: PowersState, id: PowerId): numbe
 // After an ending: relations, the minors' moods, errands, the rival's grudge
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 
+/** Resolutions of the newer regions that also satisfy a pledged favour (their ledger files declare them). */
+const FAVOUR_EXTRA: Record<MinorPowerId, readonly ResolutionId[]> = {
+  brine: [...(VESPER_FAVOUR.brine ?? []), ...(SALTMARKET_FAVOUR.brine ?? [])], reapers: [...(VESPER_FAVOUR.reapers ?? []), ...(SALTMARKET_FAVOUR.reapers ?? [])], choir: [...(VESPER_FAVOUR.choir ?? []), ...(SALTMARKET_FAVOUR.choir ?? [])],
+};
 const FAVOUR_OF: Record<MinorPowerId, { flag: string; hook: HookDef }> = {
   brine: { flag: "errand_brine", hook: HOOKS.brine[1] }, reapers: { flag: "errand_reapers", hook: HOOKS.reapers[1] }, choir: { flag: "errand_choir", hook: HOOKS.choir[1] },
 };
@@ -171,6 +178,8 @@ const CHAIR_FX: Record<ChairKey, Record<MinorPowerId, MinorDelta>> = {
   crown_sold:     { reapers: { trust: -8, grievance: 10, prosperity: -6, rivalInfluence: 8, playerInfluence: -3 }, choir: { prosperity: 3 }, brine: { trust: -6, grievance: 8, rivalInfluence: 10 } },
 };
 const isChair = (r: string): r is ChairKey => (HIGHMARK_RESOLUTIONS as readonly string[]).includes(r);
+/** D-037: the rows of the newer regions' endings (their numbers: what each meant to each minor power, and the dispatch the paper prints). */
+const ENDING_ROWS: Partial<Record<ResolutionId, { minors: Record<MinorPowerId, EndingMinorDelta>; news: { a: PowerId; b?: PowerId } }>> = { ...VESPER_ENDINGS, ...SALTMARKET_ENDINGS };
 
 /** One day of the minors' drift (fear cools by 2, grudges soften by 1, as the Ward's do) and what this ending meant to each. */
 function minorAfter(m: PowerState, o: ScenarioOutcome): PowerState {
@@ -188,10 +197,8 @@ function minorAfter(m: PowerState, o: ScenarioOutcome): PowerState {
     n.trust = pct(n.trust + (r === "paid" || r === "bargained" || r === "bribed" ? 3 : 0) - (r === "sabotaged" || r === "forced" ? 4 : 0), n.trust);
   }
   if (r === "sided_syndicate" || r === "passed" || r === "rival_secured") n.rivalInfluence = pct(n.rivalInfluence + 3, n.rivalInfluence);
-  if (isChair(r)) {
-    const d = CHAIR_FX[r][m.id];
-    for (const k of Object.keys(d) as (keyof MinorDelta)[]) n[k] = pct(n[k] + (d[k] ?? 0), n[k]);
-  }
+  const d: MinorDelta | undefined = isChair(r) ? CHAIR_FX[r][m.id] : ENDING_ROWS[r]?.minors[m.id];
+  if (d) for (const k of Object.keys(d) as (keyof MinorDelta)[]) n[k] = pct(n[k] + (d[k] ?? 0), n[k]);
   return n;
 }
 
@@ -206,7 +213,7 @@ export function powersAfterOutcome(before: CampaignState, after: CampaignState, 
   for (const id of MINOR_IDS) p.minor[id] = minorAfter(p.minor[id], o);
   for (const id of MINOR_IDS) {
     const f = FAVOUR_OF[id];
-    if (!hasFlag(p, f.flag) || !(f.hook.satisfiedBy ?? []).includes(o.resolution)) continue;
+    if (!hasFlag(p, f.flag) || !((f.hook.satisfiedBy ?? []).includes(o.resolution) || (FAVOUR_EXTRA[id] ?? []).includes(o.resolution))) continue;
     const m = p.minor[id];
     m.owes = Math.min(3, m.owes + 1);
     m.trust = pct(m.trust + 8, m.trust);
@@ -226,6 +233,9 @@ export function powersAfterOutcome(before: CampaignState, after: CampaignState, 
   }
   // the chair's own dispatch goes last, so it is the newest and the paper (and the six-line cap) keep it
   if (isChair(o.resolution)) p.log = withLog(p.log, { day: after.day, kind: `chair_${o.resolution}`, a: "reapers", b: o.resolution === "crown_sold" ? "brine" : "choir", n: Math.max(0, Math.min(999, Math.round(o.paid))) });
+  // D-037: the newer regions' endings print their own dispatch (`end_<resolution>`), also last so the six-line cap keeps it
+  const row = ENDING_ROWS[o.resolution];
+  if (row) p.log = withLog(p.log, row.news.b === undefined ? { day: after.day, kind: `end_${o.resolution}`, a: row.news.a, n: Math.max(0, Math.min(999, Math.round(o.paid))) } : { day: after.day, kind: `end_${o.resolution}`, a: row.news.a, b: row.news.b, n: Math.max(0, Math.min(999, Math.round(o.paid))) });
   return p;
 }
 const clampRelI = (v: number): number => Math.min(100, Math.max(-100, Math.round(v)));
