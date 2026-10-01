@@ -16,6 +16,12 @@ const hook = (page: Page) => page.evaluate(() => {
   return { code: h.session.code, id: h.session.sessionId, players: h.session.room.state.players.size, pos: p ? { x: p.x, y: p.y, z: p.z } : null };
 });
 
+// Pages from `browser.newContext()` are not closed when a test ends, and every one keeps rendering a world on the software rasteriser.
+// Left open they starve the later specs of the run (starts that take minutes, then a 120 s timeout), so each test closes what it opened.
+test.afterEach(async ({ browser }) => {
+  for (const c of browser.contexts()) await c.close();
+});
+
 async function start(page: Page, name: string, code?: string, extra = "") {
   await page.goto(code ? `/?join=${code}&gfx=test${extra}` : `/?gfx=test${extra}`); // test preset: no shadows, sky clouds, ground cover or people, half-size frame buffer (see PRESETS.test): ~4x the frame rate on the software rasteriser
   await page.waitForSelector("#name", { timeout: 120_000 }); // the game boots via dynamic import after `load` (2-3 s idle; software GL under load can take much longer)
