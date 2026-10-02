@@ -129,16 +129,14 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await expect(page.locator("html")).toHaveAttribute("data-device", "xbox");
   await expect(page.locator(".help .glyph-xbox-a")).not.toHaveCount(0); // the hint line too (in the page; a small window hides it)
 
-  await tap(page, "x"); // X is Use: something is in reach
-  await expect(page.locator("#sheet-paper")).toBeVisible({ timeout: 60_000 });
-  await tap(page, "b");
-  await expect(page.locator("#sheet-paper")).toBeHidden({ timeout: 30_000 });
+  // (a press whose effect shows is held until it shows: on a starved runner a 350 ms tap can fall between two frames' pad reads and be lost, as CI saw here)
+  await holdUntil(page, "x", () => page.locator("#sheet-paper").isVisible(), 60_000); // X is Use: something is in reach
+  await holdUntil(page, "b", () => page.locator("#sheet-paper").isHidden());
 
   // ---- the supply pyramid: the manifest opens, the d-pad walks the focus to a stepper, A moves it ------------------------------------------
   await tp(page, -4.85, -6.85, Math.PI / 2);
   await expect(page.locator(".prompt .glyph-xbox-x")).toBeVisible({ timeout: 60_000 });
-  await tap(page, "x");
-  await expect(page.locator("#sheet-loadout")).toBeVisible({ timeout: 60_000 });
+  await holdUntil(page, "x", () => page.locator("#sheet-loadout").isVisible(), 60_000);
   for (let i = 0; i < 40; i++) {
     if ((await page.evaluate(() => document.activeElement?.getAttribute("data-k"))) === "horses+") break;
     await tap(page, "down");
@@ -146,8 +144,7 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   expect(await page.evaluate(() => document.activeElement?.getAttribute("data-k"))).toBe("horses+");
   await tap(page, "a");
   await expect.poll(() => hook(page, (h) => (JSON.parse(h.session.room.state.party) as { loadout: { horses: number } }).loadout.horses), { timeout: 30_000 }).toBe(1); // the server took the manifest
-  await tap(page, "b");
-  await expect(page.locator("#sheet-loadout")).toBeHidden({ timeout: 30_000 });
+  await holdUntil(page, "b", () => page.locator("#sheet-loadout").isHidden());
 
   // ---- LT + RT fires: the server's `shots` rises ---------------------------------------------------------------------------------------------
   // open ground: nothing to use. The camp's loose props are scattered by the campaign's seed, a fresh one per campaign since D-039, and (0, 12) had one in Use
