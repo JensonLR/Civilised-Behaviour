@@ -42,9 +42,10 @@ export function dressNativeJacket(v: TorsoView, id: number): void {
       break;
     }
     case JACKET.LAMP_ROBE: {
-      // the Kessarine robe: a tall stand collar, a column of brass toggles, a sash at the waist and a lamp medallion on the chest
+      // the Kessarine robe: a tall stand collar, a woven panel down the front in the trim dye (D-041: it had a column of brass toggles, which read as one more frock coat from the
+      // Society's tailor), a sash at the waist and a lamp medallion on the panel
       collar(v, "high", coat);
-      buttons(v, [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map((f) => h * f), 0, gold, 0.016);
+      stripPatch(v, h * 0.16, h * 0.9, () => -0.001, (y) => 0.15 + 0.05 * (1 - (y - h * 0.16) / (h * 0.74)), tone(v.trim, 1.08), 0.008, 0, 6, 10);
       bandAround(b, v.s, h * 0.14, h * 0.24, v.trim, { lift: 0.008, steps: 1, crease: true });
       const fr = frameAt(v.s.atX(0, h * 0.62, 0));
       b.sphere(0.032, gold, fr.at(0, 0, 0.026), [1, 1, 0.45], fr.rot);

@@ -50,7 +50,8 @@ async function main(): Promise<void> {
     }
   }
   console.log(`\n=== SUMMARY\n${summaries.join("\n")}`);
-  await server.gracefullyShutdown(false).catch(() => undefined);
+  // (a room still disposing can hold the shutdown open for minutes: the report is written, so do not wait on it)
+  await Promise.race([server.gracefullyShutdown(false).catch(() => undefined), new Promise((r) => setTimeout(r, 3000))]);
   process.exit(0);
 }
 

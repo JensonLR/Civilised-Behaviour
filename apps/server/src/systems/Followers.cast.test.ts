@@ -73,6 +73,7 @@ describe("Followers on the real Cast", () => {
     s.tick(60);
     expect(s.f.onCommand("p1", { intent: "hold", at: { x: 0, z: 78 } })).toMatch(/^Obeyed/);
     s.cast.spawn([deserter(60)]);
+    s.cast.order("camp", { o: "alert" }); // (D-041: outlaws act on the party only once their camp is up)
     s.cmds.length = 0;
     s.tick(300);
     const shots = s.cmds.filter((c) => c.key === npcKey(s.id) && (c.buttons & BUTTON.FIRE) !== 0).length;
@@ -84,6 +85,7 @@ describe("Followers on the real Cast", () => {
   it("a porter never fires, whatever is in front of it", () => {
     const s = setup("porter");
     s.cast.spawn([deserter(60)]);
+    s.cast.order("camp", { o: "alert" });
     s.cmds.length = 0;
     s.tick(240);
     expect(s.cmds.filter((c) => c.key === npcKey(s.id) && (c.buttons & BUTTON.FIRE) !== 0)).toHaveLength(0);

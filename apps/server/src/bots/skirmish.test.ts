@@ -79,7 +79,9 @@ class Sim {
       brains: { garrison: npcThink },
     });
     // the room asks its scenario about hits and ticks it; here the scenario is the cast
-    this.room.scenario = { tick: () => undefined, onDamage: () => undefined, onInteract: () => false, onPick: () => undefined, onParleyClose: () => undefined, dispose: () => undefined };
+    this.room.scenario = { tick: () => undefined, onDamage: () => undefined, onShotAt: () => undefined, onInteract: () => false, onPick: () => undefined, onParleyClose: () => undefined, dispose: () => undefined };
+    // and the room's cast IS this cast: a hit or a near miss reaches the sentries the way it does in play (D-041: one shot at from out of sight goes looking)
+    this.room.cast = this.cast;
     // gunfire is heard (Combat's host `noise` hook; the integrator wires the same line)
     this.room.combat.host.noise = (x: number, z: number, r: number, src: string) => this.cast.noise(x, z, r, src);
   }

@@ -86,7 +86,16 @@ export interface CombatHost {
   blasted?(id: string, speed: number): void;
   /** A free prop was struck by a ranged round (the room blows a powder keg up). */
   propShot?(propId: string, shooter: string): void;
+  /**
+   * D-041: a PERSON's round passed close by an NPC (within `NEAR_MISS_M` of its chest, before the round met the world). Being shot at is a declaration as plain as being hit:
+   * the playtest emptied a rifle at the Ward's sentries from the bridge, every round into the parapet beside them, and they never looked up.
+   */
+  shotAt?(shooter: string, target: string): void;
 }
+
+/** How close a round must pass to an NPC's chest to count as being shot at (m). */
+export const NEAR_MISS_M = 2;
+const NEAR_Y = 1.2;
 
 /** A held button counts only while frames keep arriving (a stalled client cannot hold a rammer forever). */
 const HOLD_STALE_MS = 1000;
@@ -129,6 +138,8 @@ interface PlayerCombat {
   aimElev: number;
   held: number;
   heldAt: number;
+  /** D-041: a trigger squeezed while the gun was not yet ready (drawing, or the last of its cooldown), kept for as long as it stays held. */
+  firePending: boolean;
 }
 
 interface Pending {
@@ -317,6 +328,7 @@ export class Combat {
       aimElev: 0,
       held: 0,
       heldAt: 0,
+      firePending: false,
     };
     this.pcs.set(sessionId, pc);
     this.sync(p, pc);
@@ -445,7 +457,14 @@ export class Combat {
       // Blades and sticks swing on the press and keep swinging while it is held (each swing waits out the cooldown).
       if ((cmd.buttons & (BUTTON.FIRE | BUTTON.MELEE)) !== 0) this.beginSwing(sessionId, p, pc, def, def.melee!);
     } else {
-      if ((pressed & BUTTON.FIRE) !== 0 && def?.ranged) this.fire(sessionId, p, pc, def, def.ranged);
+      // A squeeze during the draw (or the cooldown) is not lost: it fires the moment the gun is ready, if the trigger is still held. Once per press, so a held
+      // trigger is never automatic fire. (The pad e2e drew a rifle and squeezed at once on a fast CI runner, and nothing ever came out of the barrel.)
+      if (!def?.ranged || (cmd.buttons & BUTTON.FIRE) === 0) pc.firePending = false;
+      else if ((pressed & BUTTON.FIRE) !== 0 && pc.ready > 0) pc.firePending = true;
+      if (def?.ranged && ((pressed & BUTTON.FIRE) !== 0 || (pc.firePending && pc.ready <= 0))) {
+        if (pc.ready <= 0) pc.firePending = false;
+        this.fire(sessionId, p, pc, def, def.ranged);
+      }
       if ((pressed & BUTTON.MELEE) !== 0) {
         const bash = (def ?? WEAPONS[WEAPON.FISTS]).melee;
         if (bash) this.beginSwing(sessionId, p, pc, def ?? WEAPONS[WEAPON.FISTS], bash);
@@ -457,6 +476,7 @@ export class Combat {
 
   private cancelActions(pc: PlayerCombat): void {
     pc.swing = undefined;
+    pc.firePending = false;
     pc.reloadLeft = 0;
     pc.reloadTotal = 0;
   }
@@ -493,6 +513,21 @@ export class Combat {
     out.z = p.z;
   }
 
+  /** Every NPC the aimed line passes within NEAR_MISS_M of (in front of the shooter, before the world stops the round) has been shot at. Per shot, never per frame. */
+  private nearMisses(shooter: string, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, range: number): void {
+    const cb = this.host.shotAt;
+    if (!cb) return;
+    const tmax = rayWorld(this.host.world, ox, oy, oz, dx, dy, dz, range, this.worldHit) ? this.worldHit.t : range;
+    this.host.players.forEach((q, id) => {
+      if (id === shooter || q.npc === 0 || (q.flags & FLAG.DOWNED) !== 0) return;
+      const cx = q.x - ox, cy = q.y + NEAR_Y - oy, cz = q.z - oz;
+      const t = cx * dx + cy * dy + cz * dz;
+      if (t < 0.5 || t > tmax + NEAR_MISS_M) return;
+      const px = cx - dx * t, py = cy - dy * t, pz = cz - dz * t;
+      if (px * px + py * py + pz * pz <= NEAR_MISS_M * NEAR_MISS_M) cb(shooter, id);
+    });
+  }
+
   private fire(sessionId: string, p: PlayerStateType, pc: PlayerCombat, def: WeaponDef, r: RangedStats): void {
     if (pc.ready > 0 || pc.reloadLeft > 0 || def.id === WEAPON.CANNON) return;
     if (pc.mags[def.id]! <= 0) {
@@ -516,6 +551,7 @@ export class Combat {
     metrics.shotsFired++;
     this.host.emitShot({ id: sessionId, w: def.id, x: ox, y: oy, z: oz, dx: aimDir.x, dy: aimDir.y, dz: aimDir.z, seed, spread });
     this.host.noise?.(p.x, p.z, def.noise, sessionId);
+    if (p.npc === 0) this.nearMisses(sessionId, ox, oy, oz, aimDir.x, aimDir.y, aimDir.z, r.range);
 
     // Where the shooter saw the world when they pulled the trigger.
     const view = this.viewOf(sessionId);

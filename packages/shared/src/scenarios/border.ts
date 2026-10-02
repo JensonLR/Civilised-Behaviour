@@ -21,12 +21,19 @@ import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts"
 export const BORDER = {
   escalateS: BORDER_ESCALATE_S, clashS: 45, riseRate: 0.2, noiseGain: 0.3, talkRelief: 10, surveyRelief: 25, refusalRise: 20, strayAt: 150, strayRise: 40, reinforceAt: 120, reinforceRise: 15,
   sightPatrol: 24, fogFactor: 0.5,
+  /**
+   * D-041: seconds somebody of the party must stand witness at the Stone (in the ford) while both chains go out, once both sides have agreed to a joint survey. The bot
+   * playtest settled the border with two clicks in seventeen seconds; agreeing is now the start of the hard part, and the tension does not stop rising while you stand there.
+   */
+  witnessS: 30,
 } as const;
 
 export interface BorderState extends BaseState {
   complication: ComplicationId; rain: number; tension: number;
   near: { marker: number; ward: number; rival: number };
   survey: { ward: boolean; rival: boolean }; plan: boolean; envelope: boolean; hostile: boolean; stray: boolean; reinforced: boolean; escalatedAt: number;
+  /** Seconds of witnessing still owed at the Stone once both sides agreed (-1 = not yet agreed). */
+  witness: number;
   ward: { alive: number; routed: number; down: number; total: number }; rival: { alive: number; routed: number; down: number; total: number };
   tally: CasualtyTally; brokePromise: boolean; paid: number;
 }
@@ -36,7 +43,7 @@ const NO_PLAN_LINE = "\"What plan? If you have something to tell us, tell us. If
 function init(c: CampaignState, _asking: number, seed: number, presence?: RivalPresence): BorderState {
   return {
     phase: "approach", t: 0, resolvedAt: 0, complication: dealComplication(c, "border_incident", seed, presence), rain: 0, tension: 10 + (hash3(seed >>> 0, int(c.day, 0, 1e6, 0), 0xb04d) % 11),
-    near: { marker: 0, ward: 0, rival: 0 }, survey: { ward: false, rival: false }, plan: false, envelope: false, hostile: false, stray: false, reinforced: false, escalatedAt: -1,
+    near: { marker: 0, ward: 0, rival: 0 }, survey: { ward: false, rival: false }, plan: false, envelope: false, hostile: false, stray: false, reinforced: false, escalatedAt: -1, witness: -1,
     ward: { alive: 2, routed: 0, down: 0, total: 2 }, rival: { alive: 3, routed: 0, down: 0, total: 3 }, tally: zeroTally(), brokePromise: false, paid: 0,
   };
 }
@@ -55,6 +62,11 @@ function escalate(s: BorderState): Reduction<BorderState> {
       say("Somebody on the north bank says something about a mother. Somebody on the south bank answers in a better accent. Both sides open fire on each other, which has been coming since the maps.")],
   };
 }
+
+const MEDIATED_FX: ScenarioFx[] = [
+  { k: "order", group: "ward", order: { o: "stand_down" } }, { k: "order", group: "rival", order: { o: "stand_down" } }, { k: "war", a: "ward", b: "rival", on: false },
+  say("Both chains come in. Both sides sign. The Ward's copy is the third one; the Syndicate's copy is the other third one. Nobody will ever know who got the stone, which is the best result of the year."),
+];
 
 function reduce(s: BorderState, e: ScenarioInput): Reduction<BorderState> {
   if (s.phase === "resolved") return frozen(s, e);
@@ -79,6 +91,11 @@ function reduce(s: BorderState, e: ScenarioInput): Reduction<BorderState> {
       if (n.tension >= 100 || n.t >= BORDER.escalateS) {
         const r = escalate(n);
         return { s: r.s, fx: [...fx, ...r.fx] };
+      }
+      // the joint survey: the chains go out only while somebody neutral stands at the Stone
+      if (n.witness > 0 && n.near.marker > 0) {
+        n.witness = Math.max(0, n.witness - dt);
+        if (n.witness === 0) return resolveWith(n, "mediated", {}, [...fx, ...MEDIATED_FX]);
       }
       return { s: fin(n), fx };
     }
@@ -136,10 +153,7 @@ function reduce(s: BorderState, e: ScenarioInput): Reduction<BorderState> {
           const survey = { ...s.survey, [e.kind === "ward_post" ? "ward" : "rival"]: true };
           const n = fin(relieve({ ...closed, survey }, BORDER.surveyRelief));
           if (survey.ward && survey.rival) {
-            return resolveWith(n, "mediated", {}, [
-              { k: "order", group: "ward", order: { o: "stand_down" } }, { k: "order", group: "rival", order: { o: "stand_down" } }, { k: "war", a: "ward", b: "rival", on: false },
-              say("Both sides sign. The Ward's copy is the third one; the Syndicate's copy is the other third one. Nobody will ever know who got the stone, which is the best result of the year."),
-            ]);
+            return { s: { ...n, witness: BORDER.witnessS }, fx: [say(`Both sides agree to a joint survey, which is to say both chains go out at once and somebody neutral stands at the Stone while they do. You are, God help the border, the neutral party. Stand at Marker Stone No. 4 for ${BORDER.witnessS} seconds, and keep everybody's hands where they are.`)] };
           }
           return { s: n, fx: [say(survey.ward ? "The Ward patrol has agreed to a joint survey. Now the Syndicate." : "The Syndicate has agreed to a joint survey. Now the Ward patrol.")] };
         }
@@ -186,6 +200,7 @@ function view(s: BorderState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { id: "reach", text: "Reach Marker Stone No. 4 in the ford", done: s.phase !== "approach" },
     { id: "talk", text: `Talk to both sides (${(s.survey.ward ? 1 : 0) + (s.survey.rival ? 1 : 0)} of 2 agree to a joint survey)`, done: s.survey.ward && s.survey.rival },
+    ...(s.witness >= 0 && res === undefined ? [{ id: "witness", text: `Stand witness at the Stone while the chains go out (${Math.ceil(s.witness)} s)`, done: s.witness === 0 } satisfies ObjectiveView] : []),
     { id: "settle", text: res === "provoked" ? "Lost: somebody fired first" : res === "escalated" ? "Lost: the border went to war" : "Settle the border, by whatever means", done: won },
   ];
   if (s.envelope && res === undefined) objectives.push({ id: "stone", text: "Pull Marker Stone No. 4 (INTERACT at the Stone)", done: false, optional: true });

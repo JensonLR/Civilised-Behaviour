@@ -1,5 +1,5 @@
 import {
-  BUTTON, COMBAT, FLAG, NavQuery, buildNavGrid, isRegionId, newNavPath, regionNavOptions,
+  BUTTON, COMBAT, FLAG, NavQuery, buildNavGrid, isRegionId, newNavPath, newWorldHit, rayWorld, regionNavOptions,
   type JoinOptions, type NavPath, type ParleyView, type PlayerStateType, type RegionId,
 } from "@cb/shared";
 import { Bot, aimAt, type BotFrame } from "../Bot.ts";
@@ -70,7 +70,16 @@ export class Pilot {
         this.note(`PARLEY closed${m.line ? `: "${m.line}"` : ""}`);
       }
     });
-    for (const t of ["hit", "sever", "shot", "impact", "boom", "hitmark", "station", "saved", "travel", "pong", "wish"]) room.onMessage(t, () => undefined);
+    // who shoots, and who is hit: the first lines of every exchange of fire go in the log (a player sees the smoke and feels the blow)
+    let shotsLogged = 0;
+    room.onMessage("shot", (m: { id: string; x: number; z: number }) => {
+      if (shotsLogged++ < 12) this.note(`SHOT by ${m.id === room.sessionId ? "ME" : m.id} from ${m.x.toFixed(0)},${m.z.toFixed(0)}`);
+    });
+    room.onMessage("hit", (m: { id: string; zone: number; down: boolean; power: number }) => {
+      if (m.id === room.sessionId) this.note(`HIT ME zone ${m.zone} power ${m.power.toFixed(2)}${m.down ? " DOWN" : ""} (health ${this.me?.health})`);
+      else this.note(`HIT ${m.id}${m.down ? " DOWN" : ""}`);
+    });
+    for (const t of ["sever", "impact", "boom", "hitmark", "station", "saved", "travel", "pong", "wish"]) room.onMessage(t, () => undefined);
     room.onMessage("*", () => undefined);
     this.bot.start();
     await this.until(() => this.me !== undefined, 5000, "spawn");
@@ -294,6 +303,7 @@ export class Pilot {
     await this.press(BUTTON.FIRE | BUTTON.AIM);
     await this.sleep(150);
     const fired = this.me!.shots !== shots0;
+    if (!fired) this.note(`NO SHOT at ${key}: weapon ${this.me!.weapon} ammo ${this.me!.ammo} reserve ${this.me!.reserve} flags ${this.me!.flags}`);
     if (this.me!.ammo === 0) {
       this.hold = 0;
       await this.press(BUTTON.RELOAD);
@@ -301,6 +311,17 @@ export class Pilot {
     }
     return fired;
   }
+
+  /** Line of sight from the eye to a point, through the region's solid world (what a player's eyes would allow). */
+  canSee(x: number, y: number, z: number): boolean {
+    const e = this.pos;
+    const ey = e.y + COMBAT.eyeHeight;
+    const dx = x - e.x, dy = y - ey, dz = z - e.z;
+    const l = Math.hypot(dx, dy, dz);
+    if (l < 0.5) return true;
+    return !rayWorld(this.bot.world, e.x, ey, e.z, dx / l, dy / l, dz / l, l - 0.4, this.hit);
+  }
+  private readonly hit = newWorldHit();
 
   holster(): void {
     this.hold = 0;

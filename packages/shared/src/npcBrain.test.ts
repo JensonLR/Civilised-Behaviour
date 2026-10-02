@@ -7,7 +7,7 @@ import { BUTTON, FLAG, MOVEMENT } from "./constants.ts";
 import { NPC_SIDE, type NavApi, type NpcBody, type NpcSenses, type NpcSpec } from "./expeditionTypes.ts";
 import { moraleBand } from "./morale.ts";
 import { NavQuery, buildNavGrid } from "./nav.ts";
-import { NPC_TUNING, npcBrainNew, npcThink, type NpcBrainState } from "./npcBrain.ts";
+import { NPC_TUNING, npcBrainNew, npcHeardShot, npcThink, type NpcBrainState } from "./npcBrain.ts";
 import { stepCharacter, yawFromWire, yawToWire, type CharState, type MoveCommand } from "./movement.ts";
 import { Rng, hashFloat } from "./rng.ts";
 import { WEAPON, elevFromWire, weaponToWire, type WeaponId } from "./weapons.ts";
@@ -543,5 +543,58 @@ describe("npcThink performance", () => {
     const c = cmd();
     run(b, body({ facing: 100 }), senses({ alert: true, enemy: foe(3, -9) }), 3, (cc) => { expect(cc.yaw).toBe(yawToWire(yawFromWire(cc.yaw))); });
     void c;
+  });
+});
+
+describe("npcHeardShot (D-041): shot at by somebody it cannot see", () => {
+  // the bot playtest sniped the Ward's ford patrol from 45 m (beyond 28 m of sight) and from behind the bridge parapet: nobody ever came
+  const fwd = (c: MoveCommand): number => (c.moveF > 0 ? walk(c).z : 0);
+  it("an alert soldier goes toward where the shot came from, for the search time, then goes home", () => {
+    const b = npcBrainNew(spec());
+    const me = body();
+    npcHeardShot(b, 0, -45, 0);
+    let toward = 0, late = 0;
+    run(b, me, senses({ alert: true }), NPC_TUNING.search + 2, (c, t) => {
+      if (t > 0.5 && t < NPC_TUNING.search - 0.1 && fwd(c) < -0.9) toward++;
+      if (t > NPC_TUNING.search + 0.1 && c.moveF !== 0) late++;
+    });
+    expect(toward).toBeGreaterThan((NPC_TUNING.search - 0.6) / DT - 3);
+    expect(late).toBe(0); // (still at its post: home is where it stands)
+  });
+  it("never fires at a place: it walks, it does not shoot", () => {
+    const b = npcBrainNew(spec());
+    npcHeardShot(b, 0, -20, 0);
+    let fired = 0;
+    run(b, body(), senses({ alert: true }), 4, (c) => { if (isFire(c)) fired++; });
+    expect(fired).toBe(0);
+  });
+  it("within its range it stops, unless the spot is behind something, when it keeps closing to where it can see it", () => {
+    const at = (los: boolean): number => {
+      const b = npcBrainNew(spec());
+      npcHeardShot(b, 0, -40, 0);
+      let walked = 0;
+      run(b, body({ z: -25 }), senses({ alert: true, nav: fakeNav({ los }) }), 3, (c) => { if (fwd(c) < -0.9) walked++; });
+      return walked;
+    };
+    expect(at(true)).toBe(0);
+    expect(at(false)).toBeGreaterThan(2 / DT);
+  });
+  it("a soldier who is not alert does not go looking (the site decides what a shot means)", () => {
+    const b = npcBrainNew(spec());
+    npcHeardShot(b, 0, -45, 0);
+    let moved = 0;
+    run(b, body(), senses({ alert: false }), 3, (c) => { if (c.moveF !== 0) moved++; });
+    expect(moved).toBe(0);
+  });
+  it("a soldier fighting somebody it can see keeps fighting him; garbage is ignored", () => {
+    const b = npcBrainNew(spec());
+    const sn = senses({ alert: true, enemy: foe(0, -10) });
+    run(b, body(), sn, 1);
+    npcHeardShot(b, 50, 50, sn.now);
+    expect([b.lastTx, b.lastTz]).toEqual([0, -10]);
+    const c = npcBrainNew(spec());
+    npcHeardShot(c, NaN, 3, 0);
+    npcHeardShot(c, 3, Infinity, 0);
+    expect(c.lastSeen).toBe(-1e9);
   });
 });

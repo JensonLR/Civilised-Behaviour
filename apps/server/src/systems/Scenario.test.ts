@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  FLAG, PropKind, hash3, answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, generatePaper, npcKey, weatherAt,
+  BORDER, FLAG, HOSTAGE, PropKind, hash3, answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, generatePaper, npcKey, weatherAt,
   HIGHMARK_RESOLUTIONS, TEMPLATES, KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
   type BridgeState, type CampaignState, type NewEnding, type ParleyView, type PlayerStateType, type ResolutionId, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
 } from "@cb/shared";
 import type { CastApi, CastCount, CastOrder, MountApi, NpcSide, NpcSpec } from "@cb/shared";
-import { Scenario, type ScenarioHost } from "./Scenario.ts";
+import { BOARD_R, Scenario, type ScenarioHost } from "./Scenario.ts";
 
 /**
  * The runner against a FAKE host with a fake Cast and fake Mounts (the real Cast has its own tests; here the runner is judged on what it observes and what it
@@ -388,6 +388,31 @@ describe("hostage rescue through the runner", () => {
     expect(f.commits[0]).toMatchObject({ scenario: "hostage_rescue", resolution: "slipped_away", paid: 0 });
   });
 
+  it("D-041: sailing with Mr. Quim at your heels takes him home; sailing with him left behind loses him", () => {
+    const freed = (): { f: Fake; s: Scenario } => {
+      const f = fake();
+      const s = setup(f, "hostage_rescue", row("p1", H.cage.x, H.cage.z + 1.5));
+      run(f, s, 1.5);
+      expect(press(f, s)).toBe(true);
+      // the rescuer is at the boat; Mr. Quim is still on the way up, out of the dock's radius
+      const p = f.players.get("p1")!; p.x = landing.x; p.z = landing.z;
+      const h = f.players.get("npc:hostage")!; h.x = landing.x; h.z = landing.z - 4 - HOSTAGE.dockRadius - 3;
+      run(f, s, 1);
+      expect(f.commits).toEqual([]);
+      return { f, s };
+    };
+    const a = freed();
+    a.s.leave();
+    expect(a.f.commits).toHaveLength(1);
+    expect(a.f.commits[0]).toMatchObject({ scenario: "hostage_rescue", resolution: "slipped_away" });
+    // ... but not one who was left at the Orchard
+    const b = freed();
+    const h = b.f.players.get("npc:hostage")!; h.x = H.cage.x; h.z = H.cage.z;
+    b.s.leave();
+    expect(b.f.commits[0]).toMatchObject({ resolution: "hostage_lost" });
+    expect(BOARD_R).toBeLessThan(Math.hypot(H.cage.x - landing.x, H.cage.z - landing.z));
+  });
+
   it("the ransom: talk to the colour-sergeant, pay from the purse, no shots", () => {
     const f = fake();
     const s = setup(f, "hostage_rescue", row("p1", H.posts[0]!.x + 0.8, H.posts[0]!.z));
@@ -455,14 +480,22 @@ describe("hostage rescue through the runner", () => {
     expect(f.cast.groupOrders("deserters")).toContain("alert");
   });
 
-  it("the lookout sees you from 14 m and the alarm goes up, and a deserter does not see you from 8 m", () => {
+  it("the lookout sees you from 12 m and hails you (D-041), and the alarm goes up when his patience is out; crouched he does not see you at 10 m; a deserter does not see you from 8 m", () => {
     const f = fake();
-    const s = setup(f, "hostage_rescue", row("p1", H.lookout.x + 20, H.lookout.z));
+    // (west of the rise, the way up from the ford: well away from the carousers' posts)
+    const s = setup(f, "hostage_rescue", row("p1", H.lookout.x - 20, H.lookout.z));
     run(f, s, 1);
+    expect(lastView(f).objectives.some((o) => o.id === "explain")).toBe(false);
+    put(f, "p1", H.lookout.x - 10, H.lookout.z);
+    run(f, s, 1);
+    expect(lastView(f).objectives.some((o) => o.id === "explain")).toBe(true);
     expect(f.cast.groupOrders("lookout")).not.toContain("alert");
-    put(f, "p1", H.lookout.x + 10, H.lookout.z);
-    run(f, s, 1);
+    run(f, s, HOSTAGE.lookoutChallengeS + 1);
     expect(f.cast.groupOrders("lookout")).toContain("alert");
+    const c = fake();
+    const u = setup(c, "hostage_rescue", row("p1", H.lookout.x - 10, H.lookout.z, { flags: FLAG.GROUNDED | FLAG.CROUCHING }));
+    run(c, u, 3);
+    expect(lastView(c).objectives.some((o) => o.id === "explain")).toBe(false);
     const g = fake();
     const t = setup(g, "hostage_rescue", row("p1", H.cage.x, H.cage.z + 1.5));
     run(g, t, 2);
@@ -590,6 +623,9 @@ describe("border incident through the runner", () => {
     expect(f.commits).toEqual([]);
     const r = talkTo(f, s, "rival-0");
     s.onPick("p1", labelIndex(r, /joint survey/));
+    expect(f.commits).toEqual([]); // (D-041: agreeing is not the end: somebody stands witness at the Stone while the chains go out)
+    put(f, "p1", B.marker.x + 1.2, B.marker.z);
+    run(f, s, BORDER.witnessS + 2);
     expect(f.commits).toHaveLength(1);
     expect(f.commits[0]).toMatchObject({ scenario: "border_incident", resolution: "mediated" });
     expect(f.cast.groupOrders("ward")).toContain("stand_down");
@@ -749,7 +785,7 @@ describe("all 20 resolutions: one scripted run each through the runner; distinct
     tipped_off: (f) => ({ id: "convoy_ambush", go: (s) => { run(f, s, 1); beside(f, "p1", "post-0"); press(f, s); s.onPick("p1", 0); down(f, "npc:guard-0"); down(f, "npc:guard-1"); run(f, s, 1); } }),
     burned: (f) => ({ id: "convoy_ambush", go: (s) => { const c = KESSAR_SITES.convoy.cut; run(f, s, 1); f.mounts.at = { x: c.x + 3, z: c.z }; const keg = [...f.props.entries()].find(([, p]) => p.kind === PropKind.BARREL)![0]; s.onProp("destroyed", keg); } }),
     passed: (f) => ({ id: "convoy_ambush", go: (s) => { const r = KESSAR_SITES.convoy.route; run(f, s, CONVOY_DEPART_S + 1); f.mounts.at = { x: r[r.length - 1]!.x, z: r[r.length - 1]!.z }; run(f, s, 1); } }),
-    mediated: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "ward-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /joint survey/)); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /joint survey/)); } }),
+    mediated: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "ward-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /joint survey/)); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /joint survey/)); put(f, "p1", KESSAR_SITES.border.marker.x + 1.2, KESSAR_SITES.border.marker.z); run(f, s, BORDER.witnessS + 2); } }),
     sided_ward: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /really measuring/)); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /Walk away/)); beside(f, "p1", "ward-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /Syndicate's plan/)); } }),
     sided_syndicate: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); beside(f, "p1", "rival-0"); press(f, s); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /really measuring/)); s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /envelope/i)); put(f, "p1", KESSAR_SITES.border.marker.x + 1.5, KESSAR_SITES.border.marker.z); run(f, s, 1); press(f, s); } }),
     provoked: (f) => ({ id: "border_incident", go: (s) => { run(f, s, 1); s.onDamage("npc:rival-1", "p1", 1, false); } }),

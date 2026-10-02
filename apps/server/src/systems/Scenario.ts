@@ -52,7 +52,11 @@ export interface ScenarioHost {
 
 const TICK_WATCH = 0.25, TICK_WEATHER = 1;
 const PARLEY_LEASH = 6;
-const WET_SIGHT = 0.6, FOG_SIGHT = 0.5;
+export const WET_SIGHT = 0.6, FOG_SIGHT = 0.5;
+/** D-041: a crouching person is seen from this fraction of a watcher's range (the playtest crept up to the Orchard's cage bent double and was spotted at 5 m, as if strolling). */
+export const CROUCH_SIGHT = 0.55;
+/** D-041: metres from a standing member of the party inside which an escort boards with them (a follower that is not sprinting lags up to 14 m). */
+export const BOARD_R = 20;
 const LINE_HOSTILE = "You have made your point, with a bullet.";
 const LINE_FUSE = "The Lamp-Warden hears a fuse, closes her ledger, and ends the audience.";
 const LINE_RIVAL = "A gentleman from the Syndicate is waiting behind you with a cheque and a pen.";
@@ -239,6 +243,13 @@ export class Scenario {
     this.publish(false);
   }
 
+  /** D-041: a person's round passed close by `victim` (Combat.nearMisses). For anyone who is somebody's side, being shot at is the same declaration as first blood. */
+  onShotAt(attacker: string, victim: string): void {
+    if (!this.started || this.s.phase === "resolved" || isNpcKey(attacker) || attacker === "") return;
+    const sp = this.bySpecKey.get(victim);
+    if (sp && sp.id !== "hostage" && this.def.observe.hostileGroups.includes(sp.group)) this.apply({ t: "hostile", at: sp.group });
+  }
+
   /** A report carried `radius` metres from (x, z) (a shot, a blast). The site hears it as `noise`, loudest at its centre. */
   onNoise(x: number, z: number, radius: number, _src: string): void {
     const n = this.def.observe.noise;
@@ -270,8 +281,22 @@ export class Scenario {
   leave(): void {
     if (!this.started || this.s.phase === "resolved") return;
     this.refresh();
-    this.apply({ t: "leave" });
+    this.board();
+    this.apply({ t: "leave" }); // (a run the boarding just resolved is frozen: no second commit)
     this.publish(true);
+  }
+
+  /** An escort (`boards`) standing near a standing member of the party when it sails gets into the boat with them: it has arrived. */
+  private board(): void {
+    for (const a of this.def.observe.actors) {
+      if (!a.boards || this.actorDone.has(`${a.id}:arrived`) || this.actorDone.has(`${a.id}:down`)) continue;
+      const row = this.host.cast.row(a.id);
+      if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
+      const near = this.real.some((p) => p.connected && (p.flags & FLAG.DOWNED) === 0 && Math.hypot(p.x - row.x, p.z - row.z) <= BOARD_R);
+      if (!near) continue;
+      this.actorDone.add(`${a.id}:arrived`);
+      this.apply({ t: "actor", id: a.id, state: "arrived" });
+    }
   }
 
   tick(dt: number): void {
@@ -448,7 +473,7 @@ export class Scenario {
     }
   }
 
-  /** Who has seen the party: a standing member of the group within `sight` metres of a standing human (shorter in rain and fog). Edge-triggered. */
+  /** Who has seen the party: a standing member of the group within `sight` metres of a standing human (shorter in rain and fog, and for someone crouching). Edge-triggered. */
   private observeSeen(): void {
     if (this.def.observe.seen.length === 0) return;
     const k = (this.wasWet ? WET_SIGHT : 1) * (this.complication === "fog" ? FOG_SIGHT : 1) * (this.complication === "rain" ? WET_SIGHT : 1);
@@ -461,7 +486,7 @@ export class Scenario {
         if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
         for (const p of this.real) {
           if (!p.connected || (p.flags & FLAG.DOWNED) !== 0) continue;
-          if (Math.hypot(p.x - row.x, p.z - row.z) <= range) { sees = true; break; }
+          if (Math.hypot(p.x - row.x, p.z - row.z) <= ((p.flags & FLAG.CROUCHING) !== 0 ? range * CROUCH_SIGHT : range)) { sees = true; break; }
         }
         if (sees) break;
       }

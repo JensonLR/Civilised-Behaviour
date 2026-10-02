@@ -133,7 +133,7 @@ const HOUSE_HEAD: ParleyScript = {
     return round === 1
       ? [
           { key: "pay", label: `Make a contribution to the tide (£${p})`, hint: "The House-Head withdraws his paddle: one rival fewer. The money is gone.", cost: p },
-          { key: "propose", label: "Propose a consortium: the family's paddle and your purse", hint: "Free. Two signatures (any mix of Houses and the Syndicate's factor) make a pooled lot, and the pool is yours to share.", cost: 0 },
+          { key: "propose", label: "Propose a consortium: the family's paddle and your purse", hint: "Free, once you are in the bidding: the family pools with bidders, not spectators. Two signatures (any mix of Houses and the Syndicate's factor) make a pooled lot.", cost: 0 },
           { key: "tell", label: "Whisper that the Syndicate's factor means to sell short", hint: "Every House's ceiling comes down a little: nobody likes to be shorted at their own auction.", cost: 0 },
           { key: "ask", label: "Ask what the family's figure is", hint: "He will not say. He will, however, hint at where the loudest paddle stops.", cost: 0 },
           { key: "flatter", label: "Admire the heron", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
@@ -142,7 +142,7 @@ const HOUSE_HEAD: ParleyScript = {
         ]
       : [
           { key: "pay", label: `Make a contribution to the tide (£${p})`, hint: "The House-Head withdraws his paddle.", cost: p },
-          { key: "propose", label: "Propose a consortium: the family's paddle and your purse", hint: "Free. Two signatures make a pool.", cost: 0 },
+          { key: "propose", label: "Propose a consortium: the family's paddle and your purse", hint: "Free, once you have a bid standing. Two signatures make a pool.", cost: 0 },
           { key: "tell", label: "Whisper that the Syndicate's factor means to sell short", hint: "Every House's ceiling comes down a little.", cost: 0 },
           walk,
         ];

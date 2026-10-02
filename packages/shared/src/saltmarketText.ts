@@ -284,5 +284,5 @@ export const SALTMARKET_REGION: RegionCopy = {
     return `Last time: ${parts.length ? parts.join("; ") : "an expedition that left no mark"}. The Houses keep the receipts.`;
   },
   presence: ["Day {day}: {party} at Saltmarket, bidding on weather", "Day {day} at Saltmarket, {party}, in the Houses' ledger"],
-  parley: { heading: "A word on the quay", asked: "Price asked: £{price}   Round {round}   The Houses seem {mood}." },
+  parley: { heading: "A word on the quay", asked: "Price asked: £{price} · Round {round} · The Houses seem {mood}." },
 };

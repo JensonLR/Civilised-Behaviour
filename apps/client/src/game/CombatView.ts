@@ -111,6 +111,9 @@ export class CombatView {
   private pendingBlows = 0;
   private localReadyAt = 0;
   private lastCooldown = 0.5;
+  /** D-041, as the server does: a squeeze made while the gun was not ready, kept while the trigger stays held, and the weapon the server last showed in hand (its change starts a draw). */
+  private triggerPending = false;
+  private drawnWire = 0;
   private bloom = 0;
   private lastReload = 0;
   private aimYaw = 0;
@@ -261,12 +264,25 @@ export class CombatView {
     const mine = this.me;
     if (!me || !mine) return;
     const w = this.wish;
-    if (w < 0 || (me.flags & BUSY) !== 0) return;
-    const def = WEAPONS[w as WeaponId];
     const now = performance.now();
+    // the server has put another weapon in hand: it is being drawn, and a squeeze now waits for it (Combat.handleSwitch)
+    if (mine.weapon !== this.drawnWire) {
+      this.drawnWire = mine.weapon;
+      const drawn = mine.weapon > 0 ? WEAPONS[(mine.weapon - 1) as WeaponId] : undefined;
+      if (drawn) this.localReadyAt = Math.max(this.localReadyAt, now + Math.max(drawn.drawSeconds, COMBAT.switchSeconds) * 1000 * 0.94);
+      this.triggerPending = false;
+    }
+    if (w < 0 || (me.flags & BUSY) !== 0) {
+      this.triggerPending = false;
+      return;
+    }
+    const def = WEAPONS[w as WeaponId];
     const melee = def.fire === "melee";
-    const trigger = melee ? (it.buttons & (BUTTON.FIRE | BUTTON.MELEE)) !== 0 : (pressed & BUTTON.FIRE) !== 0;
+    if (melee || (it.buttons & BUTTON.FIRE) === 0) this.triggerPending = false;
+    else if ((pressed & BUTTON.FIRE) !== 0 && now < this.localReadyAt) this.triggerPending = true;
+    const trigger = melee ? (it.buttons & (BUTTON.FIRE | BUTTON.MELEE)) !== 0 : (pressed & BUTTON.FIRE) !== 0 || (this.triggerPending && now >= this.localReadyAt);
     if (trigger && mine.weapon === w + 1 && now >= this.localReadyAt) {
+      this.triggerPending = false;
       if (melee) this.predictBlow(w, def.melee!.windup, def.melee!.cooldown, false);
       else if (def.ranged && (mine.ammo ?? 0) - this.pendingShots > 0 && (mine.reload ?? 0) === 0) this.predictShot(w, me);
     }

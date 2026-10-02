@@ -49,6 +49,8 @@ const buyOffAll = (s: MarketState): ScenarioInput[] => {   // (the prices are th
   return out;
 };
 
+/** A bid at the reserve, at the start of the sale: what puts the party "in the bidding". */
+const BID = (): ScenarioInput[] => [talk("auctioneer", "open"), talk("auctioneer", "paid", askAt(S0))];
 const SCRIPTS = {
   // a standing bid at the right moment (above the loudest paddle), then the hammer
   lot_won: (): ScenarioInput[] => {
@@ -56,7 +58,8 @@ const SCRIPTS = {
     const t = Math.ceil((rivalMax(S0) - S0.reserve) / MARKET.riseStep) * MARKET.riseEvery;
     return [near(), ...ticks(t), talk("auctioneer", "open"), talk("auctioneer", "paid", askAt({ reserve: S0.reserve, t })), ...TICKS_TO_HAMMER];
   },
-  consortium: (): ScenarioInput[] => [near(), talk("house_head", "open"), talk("house_head", "survey"), talk("house_head", "open"), talk("house_head", "survey")],
+  // (D-041: a consortium needs the party in the bidding: a bid at the reserve first, then two signatures)
+  consortium: (): ScenarioInput[] => [near(), ...BID(), talk("house_head", "open"), talk("house_head", "survey"), talk("house_head", "open"), talk("house_head", "survey")],
   shorted: (): ScenarioInput[] => {
     // the same wait, and an offer on credit at the price that clears the loudest paddle: no cash behind it
     const t = Math.ceil((rivalMax(S0) - S0.reserve) / MARKET.riseStep) * MARKET.riseEvery;
@@ -141,12 +144,16 @@ describe("The Auction at High Water: the rules", () => {
     const f1 = drive([use("factor")]);
     expect(f1.s.factorOffered).toBe(true);
     expect(f1.s.signed).toBe(0);
-    const f2 = drive([use("factor"), use("factor")]);
+    // (D-041: nobody pools with a spectator: no bid, no partnership)
+    const idle = drive([use("factor"), use("factor")]);
+    expect(idle.s.signed).toBe(0);
+    expect(drive([talk("house_head", "open"), talk("house_head", "survey")]).s.signed).toBe(0);
+    const f2 = drive([...BID(), use("factor"), use("factor")]);
     expect(f2.s.factorPooled).toBe(true);
     expect(f2.s.signed).toBe(1);
-    expect(drive([use("factor"), use("factor"), use("factor")]).s.signed, "pooled once").toBe(1);
+    expect(drive([...BID(), use("factor"), use("factor"), use("factor")]).s.signed, "pooled once").toBe(1);
     // a House and the factor are two signatures: a consortium with the Syndicate
-    const mixed = drive([use("factor"), use("factor"), talk("house_head", "open"), talk("house_head", "survey")]);
+    const mixed = drive([...BID(), use("factor"), use("factor"), talk("house_head", "open"), talk("house_head", "survey")]);
     expect(mixed.s.resolution).toBe("consortium");
     const room = drive(buyOffAll(R0), undefined, RICH).s;
     expect(rivalMax(room), "with the bench gone only the factor is left").toBe(R0.factor);

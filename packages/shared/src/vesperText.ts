@@ -281,5 +281,5 @@ export const VESPER_REGION: RegionCopy = {
     return `Last time: ${parts.join("; ")}.`;
   },
   presence: ["Day {day}: {party} in Vesper Gorge, billed per outcome", "Day {day} in Vesper Gorge, {party}, in the Guild's books"],
-  parley: { heading: "A word in the gorge", asked: "Price asked: £{price}   Round {round}   They seem {mood}." },
+  parley: { heading: "A word in the gorge", asked: "Price asked: £{price} · Round {round} · They seem {mood}." },
 };

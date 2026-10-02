@@ -37,12 +37,19 @@ const w = (...pairs: (readonly [string, number])[]): Weighted => pairs;
  * Colonial-coded options natives never wear (the Society's uniforms and affectations) PLUS options that echo a real people's dress (the catalogue has a fez, a poncho and a top knot
  * from before D-038: they stay for the creator, never for a native). `applyPeople` replaces any of them the generator drew.
  */
-export const COLONIAL_CODED: Partial<Record<TagField | "epaulettes" | "decoration" | "eyewear", readonly string[]>> = {
-  hat: ["Top Hat", "Bowler", "Pith Helmet", "Shako", "Bicorne", "Plumed Helmet", "Boater", "Fez", "Veiled Pith", "Tricorn", "Kepi", "Deerstalker", "Topee", "Busby", "Peaked Cap"],
-  jacket: ["Frock Coat", "Tunic", "Greatcoat", "Hunting Jacket", "Poncho", "Smoking Jacket", "Naval Reefer", "Norfolk Jacket"],
+export const COLONIAL_CODED: Partial<Record<TagField | "epaulettes" | "decoration" | "eyewear" | "sideburns", readonly string[]>> = {
+  // (D-041: the owner's "the people we colonise should not look like us" was still unmet: natives wore the Society's caps, waistcoats, collars, breeches, riding boots, gloves and
+  // whiskers under their own hats. Everything a Victorian gentleman's outfitter sold is now the Society's alone.)
+  hat: ["Top Hat", "Bowler", "Pith Helmet", "Shako", "Bicorne", "Plumed Helmet", "Boater", "Fez", "Veiled Pith", "Tricorn", "Kepi", "Deerstalker", "Topee", "Busby", "Peaked Cap", "Flat Cap", "Slouch Hat", "Wide-Awake", "Sou'wester", "Nightcap"],
+  jacket: ["Frock Coat", "Tunic", "Greatcoat", "Hunting Jacket", "Poncho", "Smoking Jacket", "Naval Reefer", "Norfolk Jacket", "Waistcoat"],
+  shirt: ["Striped", "Checked", "Wing Collar", "Ruffled Jabot"],
+  trousers: ["Striped", "Breeches", "Plus-Fours", "Jodhpurs"],
+  boots: ["Tall Riding", "Spats", "Spurred", "Puttees", "Wellingtons", "Hobnailed"],
+  gloves: ["White Cotton", "Leather", "Gauntlets"],
+  sideburns: ["Mutton Chops", "Flourishing", "Bushy Wings", "Piccadilly Weepers", "Sculpted Points"],
   neckwear: ["Cravat", "Bow Tie", "Ascot", "Ruff"],
   hair: ["Top Knot", "Pompadour"],
-  moustache: ["Handlebar", "Walrus", "Imperial", "Waxed Tips", "Soup Strainer", "Cavalry", "Magnificent Fringe", "Lampshade"],
+  moustache: ["Handlebar", "Walrus", "Imperial", "Waxed Tips", "Soup Strainer", "Cavalry", "Magnificent Fringe", "Lampshade", "Toothbrush", "Pencil"],
   epaulettes: ["Plain", "Fringed", "Bullion", "Shoulder Cords"],
   decoration: ["Ribbon Bars", "Order Star", "Regimental Badge", "Rosette"],
   eyewear: ["Monocle", "Pince-nez", "Left Monocle", "Corded Pince-nez", "Green Visor"],
@@ -81,9 +88,10 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     id: "mereborn",
     body: { height: [90, 190], torsoWidth: [110, 220], belly: [60, 190], headScale: [90, 190], shoulderWidth: [90, 180], handScale: [120, 220], footScale: [100, 190] },
     pick: {
-      hat: w(["Reed Brim", 5], ["Wide-Awake", 3], ["Flat Cap", 2], ["Sou'wester", 2], ["None", 1]),
-      jacket: w(["Stone Smock", 5], ["Waistcoat", 2], ["Shirt Sleeves", 2], ["Cape", 1]),
-      boots: w(["Clogs", 4], ["Reed Sandals", 2], ["Wellingtons", 2], ["Slippers", 1]),
+      hat: w(["Reed Brim", 7], ["None", 2]),
+      jacket: w(["Stone Smock", 7], ["Shirt Sleeves", 1], ["Cape", 1]),
+      boots: w(["Clogs", 4], ["Reed Sandals", 3], ["Slippers", 1]),
+      shirt: w(["Collarless", 3], ["Work Shirt", 2]),
       neckwear: w(["None", 4], ["Neckerchief", 3], ["Scarf", 2]),
       facePaint: w(["None", 7], ["Lime Dabs", 3]),
       hair: w(["Plait", 2], ["Curls", 2], ["Bowl Cut", 1], ["Side Part", 2], ["Mop Top", 1], ["Draped Fall", 1], ["Receding", 1]),
@@ -97,9 +105,10 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     id: "kessarine",
     body: { height: [175, 255], torsoWidth: [40, 120], torsoDepth: [60, 130], belly: [0, 90], headScale: [50, 130], shoulderWidth: [60, 140], legLength: [150, 255], armLength: [140, 230], handScale: [110, 200], posture: [150, 255] },
     pick: {
-      hat: w(["Lamp Hood", 6], ["Slouch Hat", 1], ["None", 1]),
-      jacket: w(["Lamp Robe", 6], ["Cape", 1]),
-      boots: w(["Ankle", 3], ["Slippers", 2], ["Hobnailed", 1]),
+      hat: w(["Lamp Hood", 7], ["None", 1]),
+      jacket: w(["Lamp Robe", 7], ["Cape", 1]),
+      boots: w(["Slippers", 3], ["Reed Sandals", 2], ["Ankle", 1]),
+      shirt: w(["Collarless", 3], ["Plain", 1]),
       neckwear: w(["Lamp Chain", 3], ["Scarf", 2], ["None", 2]),
       facePaint: w(["None", 5], ["Lamp Soot Line", 4]),
       hipGear: w(["Small Lamp", 6], ["Canteen", 1]),
@@ -113,9 +122,10 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     id: "marchers",
     body: { height: [110, 220], torsoWidth: [150, 255], torsoDepth: [120, 220], belly: [60, 200], shoulderWidth: [170, 255], armLength: [110, 200], handScale: [170, 255], footScale: [140, 230], headScale: [80, 170], posture: [120, 230] },
     pick: {
-      hat: w(["Sheaf Hat", 5], ["Wide-Awake", 2], ["Flat Cap", 2], ["None", 1]),
-      jacket: w(["Herd Cloak", 6], ["Waistcoat", 2], ["Cape", 1]),
-      boots: w(["Hobnailed", 3], ["Puttees", 2], ["Tall Riding", 2], ["Clogs", 1]),
+      hat: w(["Sheaf Hat", 7], ["None", 1]),
+      jacket: w(["Herd Cloak", 7], ["Cape", 1]),
+      boots: w(["Reed Sandals", 3], ["Clogs", 2], ["Mud Pattens", 1], ["Ankle", 1]),
+      shirt: w(["Work Shirt", 3], ["Collarless", 2]),
       neckwear: w(["Bell Collar", 3], ["Bead Strings", 2], ["Scarf", 2], ["None", 1]),
       hair: w(["Braid Crown", 3], ["Plait", 2], ["Shaggy Mane", 2], ["Curls", 1], ["Shoulder Curtain", 1]),
       hairAcc: w(["Herd Tags", 3], ["Glass Beads", 2], ["None", 3]),
@@ -130,14 +140,15 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     id: "vesperine",
     body: { height: [80, 190], torsoWidth: [30, 110], torsoDepth: [60, 130], belly: [0, 70], headScale: [100, 200], shoulderWidth: [40, 120], armLength: [140, 230], posture: [20, 110], age: [90, 230], jaw: [90, 200] },
     pick: {
-      hat: w(["Dust Wrap", 5], ["Slouch Hat", 2], ["Nightcap", 1], ["None", 1]),
-      jacket: w(["Crepe Shawl", 6], ["Cape", 1], ["Waistcoat", 1]),
-      boots: w(["Hobnailed", 3], ["Ankle", 2], ["Puttees", 2]),
+      hat: w(["Dust Wrap", 7], ["None", 1]),
+      jacket: w(["Crepe Shawl", 7], ["Cape", 1]),
+      boots: w(["Ankle", 3], ["Mud Pattens", 2], ["Reed Sandals", 1]),
+      shirt: w(["Collarless", 3], ["Plain", 1]),
       neckwear: w(["Memorial Beads", 4], ["Muffler", 2], ["None", 2]),
       facePaint: w(["Ash Brow", 4], ["None", 4], ["Soot Smudges", 2]),
       hair: w(["Wrapped Plait", 3], ["Draped Fall", 2], ["Long Lank", 2], ["Thin Wisps", 1], ["Monk Fringe", 1]),
       hairAcc: w(["Copper Rings", 3], ["Bone Pins", 2], ["None", 3]),
-      gloves: w(["None", 4], ["Leather", 2], ["Fingerless", 2]),
+      gloves: w(["None", 5], ["Fingerless", 2]),
     },
     grandOdds: 0.14,
     grandPick: { neckwear: w(["Memorial Beads", 1]), jacket: w(["Crepe Shawl", 1]), hat: w(["Tiered Hat", 1]) },
@@ -146,9 +157,10 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     id: "brinefolk",
     body: { height: [20, 120], torsoWidth: [150, 255], torsoDepth: [140, 230], belly: [140, 255], headScale: [100, 200], shoulderWidth: [90, 170], legLength: [10, 100], armLength: [60, 140], footScale: [150, 255], handScale: [110, 210] },
     pick: {
-      hat: w(["Tide Hat", 5], ["Net Cap", 2], ["Sou'wester", 2], ["None", 1]),
-      jacket: w(["Wading Smock", 6], ["Waistcoat", 1], ["Shirt Sleeves", 1]),
-      boots: w(["Mud Pattens", 3], ["Wellingtons", 3], ["Reed Sandals", 1]),
+      hat: w(["Tide Hat", 6], ["Net Cap", 3], ["None", 1]),
+      jacket: w(["Wading Smock", 7], ["Shirt Sleeves", 1]),
+      boots: w(["Mud Pattens", 4], ["Reed Sandals", 2]),
+      shirt: w(["Work Shirt", 3], ["Collarless", 2]),
       neckwear: w(["Float Cord", 4], ["Bead Strings", 2], ["None", 2]),
       facePaint: w(["Tide Lines", 4], ["None", 5]),
       hair: w(["Salt Locks", 4], ["Tied Tail", 2], ["Curls", 1], ["Shaggy Mane", 1]),
@@ -161,6 +173,12 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
 };
 
 const rangeAt = (r: Range, u: number): number => Math.round(r[0] + (r[1] - r[0]) * u);
+
+/** The catalogue list behind a COLONIAL_CODED field. */
+export const codedList = (f: string): readonly string[] =>
+  f === "epaulettes" ? C.EPAULETTES : f === "decoration" ? C.DECORATIONS : f === "eyewear" ? C.EYEWEAR : f === "sideburns" ? C.SIDEBURNS : FIELD_LIST[f as TagField];
+/** What replaces a colonial pick where the field's first option is not "nothing" (boots[0] is the riding boot). */
+const REPLACE: Readonly<Record<string, string>> = { hair: "Curls", boots: "Reed Sandals", gloves: "None", sideburns: "None" };
 
 /** A name from a weighted table that exists in the catalogue (additions not yet landed are skipped); undefined if none does. */
 function drawName(table: Weighted, list: readonly string[], rng: Rng): string | undefined {
@@ -200,11 +218,11 @@ export function applyPeople(spec: CharacterSpec, people: PeopleId, seed: number)
     const sig = o.pick.jacket?.find(([n]) => own.has(n) && C.JACKETS.includes(n as never));
     if (sig) out.jacket = (C.JACKETS as readonly string[]).indexOf(sig[0]);
   }
-  // the colonial uniform and the borrowed dress never survive
+  // the colonial uniform and the borrowed dress never survive (a field whose first option is itself colonial is replaced by a native one)
   for (const [f, names] of Object.entries(COLONIAL_CODED) as [string, readonly string[]][]) {
-    const list = f === "epaulettes" ? C.EPAULETTES : f === "decoration" ? C.DECORATIONS : f === "eyewear" ? C.EYEWEAR : FIELD_LIST[f as TagField];
+    const list = codedList(f);
     const cur = list[out[f] ?? 0];
-    if (cur !== undefined && names.includes(cur)) out[f] = f === "hair" ? list.indexOf("Curls") : 0;
+    if (cur !== undefined && names.includes(cur)) out[f] = Math.max(0, list.indexOf(REPLACE[f] ?? list[0]!));
   }
   out.medals = 0;
   out.medalStyle = 0;

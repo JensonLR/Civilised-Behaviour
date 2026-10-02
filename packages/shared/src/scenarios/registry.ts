@@ -16,6 +16,9 @@ import type { AnyTemplate } from "./types.ts";
 
 export * from "./types.ts";
 export { crossingSettled, settledDaysLeft } from "./crossing.ts";
+export { BORDER } from "./border.ts";
+export { HOSTAGE } from "./hostage.ts";
+export { SMUGGLE } from "./smugglingRun.ts";
 
 /** Every template, by id. The runner (server `Scenario`) is generic over this table. */
 export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {

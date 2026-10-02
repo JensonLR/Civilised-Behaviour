@@ -610,7 +610,8 @@ function buildVeil(h: HatCtx, cr: Crown, bw: number): void {
   const lodLow = PartBuilder.lod >= 1 || PartBuilder.hullMode;
   const nu = lodLow ? 16 : 26;
   const nv = lodLow ? 4 : 6;
-  const phi0 = 1.25;
+  // (from just behind the ear round the back, a havelock: from 1.25 rad it began at the cheekbone and, opaque, read as a card over the face in any three-quarter view)
+  const phi0 = 1.6;
   const ys = Array.from({ length: nv + 1 }, (_, j) => yTop + ((yBot - yTop) * j) / nv);
   const cols: number[][] = [];
   const lands: number[] = [];

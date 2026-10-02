@@ -39,6 +39,8 @@ export const SUCCESSION = {
   formS: 45,
   /** Delegates, votes to ratify, and the haste of a fed Assembly. */
   delegates: 3, votesToRatify: 2, fedBellS: 20,
+  /** D-041: seconds from a ready court (form, two votes, one heir or a regency) to the bell. */
+  readyBellS: 25,
   /** Court guards broken: share of the four who must be down or routed before the chair is unguarded. */
   brokenFraction: 0.6,
   /** Reach of INTERACT with the chair, the envoy, a delegate (metres). */
@@ -93,6 +95,11 @@ function init(c: CampaignState, _asking: number, seed: number, presence?: RivalP
 const formOk = (s: SuccessionState): boolean => s.form === "filed" || s.form === "bribed";
 const votes = (s: SuccessionState): number => popcount(s.fed & ~s.downD);
 const present = (s: SuccessionState): number => SUCCESSION.delegates - popcount(s.downD);
+/** Exactly one heir pledged, or both in for a regency: what the Assembly would ratify if it sat now. */
+const courtReady = (s: SuccessionState): boolean => {
+  const { elder: e, younger: y } = s.heir;
+  return (e === "pledged") !== (y === "pledged") || (e === "regency" && y === "regency");
+};
 const broken = (s: SuccessionState): number => s.guards.routed + s.guards.down;
 const guardBroken = (s: SuccessionState): boolean => s.guards.total === 0 || broken(s) >= Math.ceil(s.guards.total * SUCCESSION.brokenFraction);
 const affordable = (s: SuccessionState, n: number): boolean => n >= 0 && n <= s.purse - s.spent;
@@ -112,6 +119,12 @@ function settle(s: SuccessionState, said: ScenarioFx[] = []): Reduction<Successi
       ...said, { k: "order", group: "guards", order: { o: "stand_down" } },
       say(`The Chamberlain's seal comes down on the cheque with a thump that echoes in several offices. £${s.price.cheque} is yours; the Crown's concession is the Syndicate's; the chair is, by a majority of one cheque, sold. \"Subject to contract,\" says the envoy, who has already printed the contract.`),
     ]);
+  }
+  // D-041: a court that is READY (the form in, two votes in the barley, one heir pledged or a regency signed) sends for the Assembly: the bell comes forward. The bot playtest
+  // set the whole court up by minute three and then stood about for three more with nothing left to do but wait for a bell on a schedule.
+  if (!s.bellRung && formOk(s) && votes(s) >= SUCCESSION.votesToRatify && courtReady(s) && s.bell > s.t + SUCCESSION.readyBellS) {
+    s = fin({ ...s, bell: Math.round(s.t + SUCCESSION.readyBellS) });
+    said = [...said, say("The Chamberlain looks at the form, the barley and the pledge, and finds nothing left to object to, which visibly pains her. A boy is sent up the bell tower. The Assembly is asked to find its hats.")];
   }
   // the Assembly votes at the bell (or at once if it is already ringing and the court is ready)
   if (s.bellRung && formOk(s) && votes(s) >= SUCCESSION.votesToRatify) {

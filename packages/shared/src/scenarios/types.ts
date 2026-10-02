@@ -56,8 +56,11 @@ export interface ObserveSpec {
   seen: SeenSpec[];
   /** Where reports of fire reach the site: a shot within `radius` of `at` becomes a `noise` event (100 at the point, 0 at the edge). */
   noise?: { x: number; z: number };
-  /** People to watch: `down` once, and `arrived` inside `goal`. "wagon" is the scenario's wagon. */
-  actors: { id: string; goal?: { x: number; z: number; r: number } }[];
+  /**
+   * People to watch: `down` once, and `arrived` inside `goal`. "wagon" is the scenario's wagon. `boards`: an escort whose goal is the party's boat; when the party sails
+   * with it standing near one of them, it has arrived (D-041: a rescuer who ran to the boat with the hostage ten metres behind had brought him home).
+   */
+  actors: { id: string; goal?: { x: number; z: number; r: number }; boards?: boolean }[];
   /** Groups whose members the runner may name in `hostile`/tally (everything else is the party's side). */
   hostileGroups: string[];
 }

@@ -122,7 +122,7 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
   },
   hostage_rescue: {
     find: at("Hangman's Orchard", KESSAR_SITES.hostage.lookout), free: at("The cage", KESSAR_SITES.hostage.cage), break: at("The cage", KESSAR_SITES.hostage.cage),
-    dock: "home", home: "home",
+    explain: at("The colour-sergeant", KESSAR_SITES.hostage.posts[0]), dock: "home", home: "home",
   },
   convoy_ambush: {
     pick: at("Dry Cut", KESSAR_SITES.convoy.cut), stop: at("Dry Cut", KESSAR_SITES.convoy.cut), guards: at("Dry Cut", KESSAR_SITES.convoy.cut),
@@ -130,7 +130,7 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
   },
   border_incident: {
     reach: at("Marker Stone", KESSAR_SITES.border.marker), talk: at("Marker Stone", KESSAR_SITES.border.marker), settle: at("Marker Stone", KESSAR_SITES.border.marker),
-    stone: at("Marker Stone", KESSAR_SITES.border.marker), home: "home",
+    stone: at("Marker Stone", KESSAR_SITES.border.marker), witness: at("Marker Stone", KESSAR_SITES.border.marker), home: "home",
   },
   succession_dispute: {
     court: at("Court", HIGHMARK_ANCHORS.capital.court), form: at("Chamberlain", HIGHMARK_SITES.chamberlain), heir: at("Claimants", HIGHMARK_ANCHORS.capital.court),

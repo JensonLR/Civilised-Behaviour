@@ -61,7 +61,16 @@ async function fight(p: Pilot, prefix: string, ms: number): Promise<void> {
     if (!live.length) break;
     const me = p.pos;
     live.sort((a, b) => Math.hypot(a[1].x - me.x, a[1].z - me.z) - Math.hypot(b[1].x - me.x, b[1].z - me.z));
-    await p.shootAt(live[0]![0]);
+    // a person shoots at what they can see: with nothing in sight they close in (walking, rifle ready) until somebody is
+    const seen = live.find(([, n]) => p.canSee(n.x, n.y + 1.2, n.z));
+    if (!seen) {
+      const [, t] = live[0]!;
+      // (a few metres nearer each time, not "within 14": standing 13.7 m from a man behind a parapet, that arrived at once, forever)
+      const d = Math.hypot(t.x - me.x, t.z - me.z);
+      await p.goTo(t.x, t.z, { within: Math.max(2.5, d - 6), sprint: false, ms: 6000, label: `close in on ${live[0]![0]}` });
+      continue;
+    }
+    await p.shootAt(seen[0]);
     await p.sleep(300);
   }
   p.holster();
@@ -102,9 +111,7 @@ export const PLANS: Plan[] = [
     expect: ["paid", "bargained"],
     async run(p) {
       await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
-      await p.goTo(A.wardenPost.x, A.wardenPost.z + 2, { within: 1, label: "the Warden" });
-      await p.face(A.wardenPost.x, A.wardenPost.z);
-      await p.use("parley");
+      if (!(await talkTo(p, "warden", 1.4))) return;
       (await p.pick(/^Pay|Agree|Pay the toll/i)) >= 0 || (await p.pick(/Haggle|bargain/i));
       await p.until(() => p.view?.resolution !== undefined, 8000, "settled");
       await sailHome(p, A.landing);
@@ -167,17 +174,28 @@ export const PLANS: Plan[] = [
     join: { region: "kessar", scenario: "hostage_rescue", seed: SEED },
     expect: ["slipped_away", "rescued"],
     async run(p) {
-      // crouched from the ford, round the east side of the orchard, away from the lookout
+      // from the ford, wide round the east side of the orchard (away from the lookout), then crouched in from the north, between the two northern carousers
+      const C = KS.hostage.cage;
       await p.goTo(A.ford.x, A.ford.z - 6, { label: "the ford" });
-      await p.goTo(86, -6, { label: "east of the orchard" });
+      await p.goTo(88, 0, { label: "east of the orchard" });
+      await p.goTo(C.x, C.z + 14, { label: "north of the orchard", sprint: false });
       p.holdButtons(BUTTON.CROUCH);
-      await p.goTo(KS.hostage.cage.x + 2, KS.hostage.cage.z, { within: 1.6, sprint: false, label: "the cage", ms: 120_000 });
-      await p.face(KS.hostage.cage.x, KS.hostage.cage.z);
+      await p.goTo(C.x, C.z + 1.6, { within: 0.6, sprint: false, label: "the cage", ms: 120_000 });
+      await p.face(C.x, C.z);
       await p.use("open the cage");
-      p.holdButtons(0);
       await p.sleep(1000);
-      await p.goTo(A.landing.x, A.landing.z - 4, { within: 3, label: "the landing with Quim", ms: 150_000 });
+      // and out the way it came, still crouched until clear, Quim behind
+      const q = (): string => { const n = p.npc("hostage"); return n ? `${n.x.toFixed(1)},${n.z.toFixed(1)}` : "gone"; };
+      await p.goTo(C.x, C.z + 14, { sprint: false, label: "north of the orchard with Quim", ms: 60_000 });
+      p.note(`Quim at ${q()}`);
+      p.holdButtons(0);
+      await p.goTo(88, 0, { sprint: false, label: "east of the orchard with Quim" });
+      p.note(`Quim at ${q()}`);
+      await p.goTo(A.landing.x, A.landing.z - 4, { within: 3, sprint: false, label: "the landing with Quim", ms: 150_000 });
+      const quim = (): string => { const q = p.npc("hostage"); return q ? `${q.x.toFixed(1)},${q.z.toFixed(1)} hp ${q.health}` : "gone"; };
+      p.note(`Quim at ${quim()}`);
       await p.until(() => p.view?.resolution !== undefined, 60_000, "resolution");
+      p.note(`Quim at ${quim()}`);
     },
   },
   {
@@ -206,7 +224,9 @@ export const PLANS: Plan[] = [
       if (p.parley) await p.pick(/Walk away/);
       await p.goTo(A.ford.x, A.ford.z - 12, { label: "the Ward bank" });
       if (await talkTo(p, "ward-0")) await p.pick(/joint survey/i);
-      await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+      // the neutral party stands at the Stone while both chains go out
+      await p.goTo(KS.border.marker.x, KS.border.marker.z, { within: 2, sprint: false, label: "Marker Stone No. 4" });
+      await p.until(() => p.view?.resolution !== undefined, 45_000, "resolution");
     },
   },
   {
@@ -256,7 +276,7 @@ export const PLANS: Plan[] = [
     expect: ["landed"],
     async run(p) {
       if (await talkTo(p, "reeve")) await p.pick(/courtesy/i);
-      for (let i = 0; i < 3 && p.view?.resolution === undefined; i++) await carry(p, PropKind.CRATE, SA.cove.x, SA.cove.z, SP.dropDoor.x + 1.2, SP.dropDoor.z, `crate ${i + 1}`, 1.4);
+      for (let i = 0; i < 3 && p.view?.resolution === undefined; i++) await carry(p, PropKind.CRATE, SA.cove.x, SA.cove.z, SP.dropDoor.x + 0.9, SP.dropDoor.z, `crate ${i + 1}`, 0.7);
       await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
     },
   },
@@ -265,6 +285,10 @@ export const PLANS: Plan[] = [
     join: { region: "saltmarket", scenario: "flooded_market", seed: SEED },
     expect: ["consortium", "lot_won"],
     async run(p) {
+      // in the bidding first (the Houses pool with bidders, not spectators): a bid at the Auctioneer's price
+      if (await talkTo(p, "auctioneer")) await p.pick(/^Bid £/);
+      await p.sleep(500);
+      if (p.parley) await p.pick(/Walk away/);
       for (const i of [0, 1]) {
         if (await talkTo(p, `head-${i}`)) await p.pick(/consortium/i);
         await p.sleep(500);

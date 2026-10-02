@@ -1,4 +1,4 @@
-import { REGION_COPY, type ParleyView, type RegionId } from "@cb/shared";
+import { REGION_COPY, type ParleyView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import { typeset } from "./typeset.ts";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
@@ -6,7 +6,19 @@ import { sheetHints } from "./sheetHints.ts";
 import "./parley.css";
 
 /**
- * The parley sheet: the Lamp-Warden's line, the toll she is asking, and the options the server offered this round. The server owns the talks
+ * D-041: Kessar's talks are four different conversations, and every one of them used to be headed "An audience at the toll bar" with "She seems ..." (the colour-sergeant at
+ * the Orchard and the Syndicate's surveyor are not the Lamp-Warden). Each contract frames its own; `{price}` is left out where nothing is asked.
+ */
+const KESSAR_PARLEY: Partial<Record<ScenarioTemplateId, { heading: string; asked: string }>> = {
+  secure_crossing: { heading: "An audience at the toll bar", asked: "Toll asked: £{price} · Round {round} · She seems {mood}." },
+  hostage_rescue: { heading: "Terms at Hangman's Orchard", asked: "Price asked: £{price} · Round {round} · The camp seems {mood}." },
+  border_incident: { heading: "A word at Marker Stone No. 4", asked: "Round {round} · The bank seems {mood}." },
+  convoy_ambush: { heading: "A word with the ford picket", asked: "Round {round} · The picket seems {mood}." },
+};
+const COURT = { heading: "An audience at court", asked: "Price asked: £{price} · Round {round} · The court seems {mood}." };
+
+/**
+ * The parley sheet: the speaker's line, what is asked, and the options the server offered this round. The server owns the talks
  * (Scenario + negotiation.ts); this shows a view and sends `pick(i)` or `close()`. Every string is set as text, never markup. Keys 1-9 pick
  * an option; Escape / pad B walks away (the sheet's own close). Focus is trapped like every other sheet.
  */
@@ -19,6 +31,8 @@ export class Parley {
   private readonly options = h("div", { class: "options", role: "group", "aria-label": "Your reply" });
   /** Where the talks are held: the heading and the asked line follow the place (Kessar's toll bar, Highmark's court). */
   private region: RegionId = "kessar";
+  /** The contract the talks belong to (Kessar holds four kinds of conversation). */
+  private template: ScenarioTemplateId | undefined;
   private pick: ((i: number) => void) | undefined;
   private close: (() => void) | undefined;
   private quiet = false;
@@ -52,8 +66,9 @@ export class Parley {
     return this.modal.isOpen;
   }
 
-  open(v: ParleyView, pick: (i: number) => void, close: () => void, region: RegionId = "kessar"): void {
+  open(v: ParleyView, pick: (i: number) => void, close: () => void, region: RegionId = "kessar", template?: ScenarioTemplateId): void {
     this.region = region;
+    this.template = template;
     this.pick = pick;
     this.close = close;
     this.render(v);
@@ -85,12 +100,10 @@ export class Parley {
     const toll = Number.isFinite(v.toll) ? Math.max(0, Math.round(v.toll)) : 0;
     const round = Math.max(1, v.round | 0);
     const mood = String(v.mood ?? "neutral");
-    // (the court asks a price, not a toll, and nobody there is a "she")
-    const court = this.region === "highmark";
-    const own = REGION_COPY[this.region]?.parley;   // D-037: the later regions author their own heading and asked line (shared/vesperText.ts, saltmarketText.ts)
-    this.society.textContent = own ? own.heading : court ? "An audience at court" : "An audience at the toll bar";
-    this.meta.textContent = own ? own.asked.replace(/\{price\}/g, String(toll)).replace(/\{round\}/g, String(round)).replace(/\{mood\}/g, mood)
-      : court ? `Price asked: £${toll}   Round ${round}   The court seems ${mood}.` : `Toll asked: £${toll}   Round ${round}   She seems ${mood}.`;
+    // D-037: the later regions author their own heading and asked line (shared/vesperText.ts, saltmarketText.ts); the court asks a price, not a toll; Kessar's follow the contract
+    const own = REGION_COPY[this.region]?.parley ?? (this.region === "highmark" ? COURT : KESSAR_PARLEY[this.template ?? "secure_crossing"] ?? KESSAR_PARLEY.secure_crossing!);
+    this.society.textContent = own.heading;
+    this.meta.textContent = own.asked.replace(/\{price\}/g, String(toll)).replace(/\{round\}/g, String(round)).replace(/\{mood\}/g, mood);
     const focused = this.options.querySelector<HTMLElement>("button:focus")?.dataset.i;
     this.options.replaceChildren();
     const list = Array.isArray(v.options) ? v.options.slice(0, 9) : [];

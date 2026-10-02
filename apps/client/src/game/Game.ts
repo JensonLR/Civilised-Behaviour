@@ -512,7 +512,7 @@ export class Game {
     }
     if (!m?.view) return;
     if (this.parley.isOpen) this.parley.update(m.view);
-    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion);
+    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion, this.scenarioView?.template);
   }
 
   /** Follows the room's campaign fields: the sailing card, a new region or a fallen bridge (rebuild the world), the orders of the day, the map room. */

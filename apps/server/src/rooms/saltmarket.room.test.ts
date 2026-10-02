@@ -118,6 +118,18 @@ describe("The Saltmarket Delta through a real room (D-037)", () => {
 
   it("driven for real: two House-Heads agree to a consortium, one after the other, and the market commits `consortium`", async () => {
     const { room, c, me, input, parleys, world } = await founded("flooded_market");
+    // in the bidding first (D-041: the Houses pool with bidders, not spectators): a bid at the Auctioneer's price, or a short one if the purse is thin
+    {
+      const before = parleys.filter((m) => m.view).length;
+      stand(room, me, world, "auctioneer");
+      await sleep(150);
+      await press(input, BUTTON.INTERACT);
+      await until(() => parleys.filter((m) => m.view).length > before, 3000, "the Auctioneer's parley to open");
+      const view = [...parleys].reverse().find((m) => m.view)!.view!;
+      const bid = view.options.findIndex((o) => /^Bid £/.test(o.label));
+      c.send("parleyPick" as never, { option: bid >= 0 ? bid : view.options.findIndex((o) => /^Sell short/.test(o.label)) } as never);
+      await sleep(300);
+    }
     for (const head of ["head-0", "head-1"]) {
       const before = parleys.filter((m) => m.view).length;
       stand(room, me, world, head);

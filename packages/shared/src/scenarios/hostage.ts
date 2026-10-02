@@ -25,8 +25,17 @@ export const HOSTAGE = {
   sightCarousers: 5, sightLookout: 12,
   /** A carouser who sees you hails you rather than shooting: you have this long to open a parley (or be gone) before it is an alarm. */
   challengeS: 6,
+  /**
+   * D-041: the lookout hails too, from further off, and gives you longer: the colour-sergeant is across the camp from him. (He used to shoot on sight, which made the
+   * ransom unreachable for anyone who walked up the road to pay it: the bot playtest's paying party was under fire before it had said a word.)
+   */
+  lookoutChallengeS: 15,
   ransomBase: 35, ransomMax: 90,
-  dockRadius: 5,
+  /**
+   * Metres round the dock goal (4 m inland of the landing) inside which Mr. Quim has ARRIVED. D-041: he follows 4-5 m behind his rescuer, so at 5 m a party standing
+   * at the dock's edge left him short and nothing happened, and taking the boat then lost him; wide enough that anyone at the boat has brought him in.
+   */
+  dockRadius: 9,
 } as const;
 
 export interface HostageState extends BaseState {
@@ -79,6 +88,11 @@ function reduce(s: HostageState, e: ScenarioInput): Reduction<HostageState> {
       const dt = dtOf(e);
       let n: HostageState = { ...s, t: s.t + dt, noise: Math.max(0, s.noise - HOSTAGE.noiseDecay * dt) };
       const fx: ScenarioFx[] = [];
+      // a hailed party that walks away has answered the question (but the Orchard will be watching the cage now: `seen` stays)
+      if (n.challenge > 0 && !n.parley && !n.alarm && n.near.camp === 0 && n.near.cage === 0 && n.near.lookout === 0) {
+        n.challenge = 0;
+        fx.push(say("\"And stay gone.\" The Orchard settles back to its bottles, but it will be watching the cage now."));
+      }
       if (n.challenge > 0 && !n.parley && !n.alarm) {
         n.challenge = Math.max(0, n.challenge - dt);
         if (n.challenge === 0) {
@@ -114,12 +128,13 @@ function reduce(s: HostageState, e: ScenarioInput): Reduction<HostageState> {
     case "seen": {
       if (e.group !== "deserters" && e.group !== "lookout" && e.group !== "late:reinf") return stay(s);
       if (s.alarm) return stay(s);
-      // a carouser hails you (talk, or leave); a man paid to look, or a fresh arrival, shoots first
-      if (e.group === "deserters") {
-        if (s.seen) return stay(s);
-        return { s: { ...s, seen: true, challenge: HOSTAGE.challengeS }, fx: [say("\"Oi! You! State your business, or he will state it for you.\" A deserter has noticed you. There is a bottle in one hand and a rifle in the other, and he has not yet decided which.")] };
+      // a fresh arrival shoots first; a carouser or the lookout hails you (talk to the colour-sergeant, or leave)
+      if (e.group === "late:reinf") return raise({ ...s, seen: true }, "\"Intruder!\" The new arrivals have seen you, and the whole Orchard has heard them.");
+      if (s.challenge > 0 || s.parley) return stay(s);
+      if (e.group === "lookout") {
+        return { s: fin({ ...s, seen: true, challenge: HOSTAGE.lookoutChallengeS }), fx: [say("\"Halt! Who goes there?\" The lookout has his rifle on you. \"Sergeant! Visitors!\" Speak to the colour-sergeant, or go back the way you came.")] };
       }
-      return raise({ ...s, seen: true }, "\"Intruder!\" The lookout has seen you, and the whole Orchard has heard him.");
+      return { s: fin({ ...s, seen: true, challenge: HOSTAGE.challengeS }), fx: [say("\"Oi! You! State your business, or he will state it for you.\" A deserter has noticed you. There is a bottle in one hand and a rifle in the other, and he has not yet decided which.")] };
     }
     case "hostile": {
       if (e.at !== undefined && e.at !== "deserters" && e.at !== "lookout" && e.at !== "late:reinf") return stay(s);
@@ -204,8 +219,11 @@ function view(s: HostageState, now: number): ScenarioView {
   const res = s.resolution;
   const won = res === "ransomed" || res === "rescued" || res === "slipped_away";
   const need = HOSTAGE.brokenNeeded;
+  const hailed = s.challenge > 0 && !s.parley && !s.alarm && res === undefined;
   const objectives: ObjectiveView[] = [
-    { id: "find", text: "Find the deserters' camp at Hangman's Orchard", done: s.near.camp > 0 || s.near.cage > 0 || s.phase !== "planning" },
+    { id: "find", text: "Find the deserters' camp at Hangman's Orchard", done: s.seen || s.near.camp > 0 || s.near.cage > 0 || s.phase !== "planning" },
+    // (before the cage, so the compass points at the man you must answer)
+    ...(hailed ? [{ id: "explain", text: "You have been hailed: speak to the colour-sergeant, or walk away", done: false }] : []),
     { id: "free", text: res === "hostage_lost" ? "Lost: Mr. Quim did not come home" : "Get Mr. Quim out of the cage, by whatever means", done: s.cage || won },
   ];
   if (s.alarm && !won && res === undefined) objectives.push({ id: "break", text: `Break the captors (${Math.min(need, broken(s))} of ${need})`, done: broken(s) >= need, optional: true });
@@ -213,7 +231,7 @@ function view(s: HostageState, now: number): ScenarioView {
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
 
   const HINT: Record<string, string> = {
-    planning: "Mr. Percival Quim, junior surveyor and insured, is in a cage at Hangman's Orchard in the north-east scrub. The deserters are carousing. Approach by the ford and mind the lookout on the south-west rise.",
+    planning: "Mr. Percival Quim, junior surveyor and insured, is in a cage at Hangman's Orchard in the north-east scrub. The deserters are carousing. Approach by the ford: the lookout on the south-west rise will hail anyone who walks up, and crouching keeps you out of sight.",
     standoff: "You are at the Orchard. The colour-sergeant takes cash. The cage takes patience. The rifles take neither. Anyone who sees you will give you a few seconds to explain.",
     parley: "The colour-sergeant is listening. He has named a price.",
     fighting: "The camp is up. Break three of the four, open the cage, and walk the surveyor to the dock.",
@@ -226,11 +244,12 @@ function view(s: HostageState, now: number): ScenarioView {
     hostage_lost: "Mr. Quim is gone. The insurance people are not amused. Sail home from the dock.",
     abandoned: "The expedition is down. The Orchard is unmoved. Sail home and explain.",
   };
-  let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
+  let hint = res !== undefined ? DONE[res] ?? "" : hailed ? "They have seen you and want an answer. Walk up to the colour-sergeant (he has the pistol) and Use to talk, or walk well away before they lose patience." : HINT[s.phase] ?? "";
   const ch = COMPLICATION_HINT[s.complication];
   if (res === undefined && ch) hint += ` ${ch}`;
   const remain = s.phase === "resolved" || s.hostage === "arrived" ? 0 : s.deadline - s.t;
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer("The Syndicate buys him", remain, now), template: "hostage_rescue", title: "The Cartwright's Cage" };
+  const clock = hailed ? timer("Their patience", s.challenge, now) : timer("The Syndicate buys him", remain, now);
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...clock, template: "hostage_rescue", title: "The Cartwright's Cage" };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -273,7 +292,7 @@ const observe: ObserveSpec = {
   count: [{ group: "deserters" }],
   seen: [{ group: "deserters", sight: HOSTAGE.sightCarousers }, { group: "lookout", sight: HOSTAGE.sightLookout }, { group: "late:reinf", sight: HOSTAGE.sightLookout }],
   noise: { x: KESSAR_SITES.hostage.cage.x, z: KESSAR_SITES.hostage.cage.z },
-  actors: [{ id: "hostage", goal: { x: KESSAR_ANCHORS.landing.x, z: KESSAR_ANCHORS.landing.z - 4, r: HOSTAGE.dockRadius } }],
+  actors: [{ id: "hostage", goal: { x: KESSAR_ANCHORS.landing.x, z: KESSAR_ANCHORS.landing.z - 4, r: HOSTAGE.dockRadius }, boards: true }],
   hostileGroups: ["deserters", "lookout", "late:reinf"],
 };
 

@@ -165,7 +165,8 @@ function usePeg(s: ClaimState, i: number): Reduction<ClaimState> {
   const set = (v: Owner): Owner[] => s.pegs.map((p, k) => (k === i ? v : p));
   if (who === 0) {
     const n = fin({ ...s, pegs: set(1) });
-    return { s: n, fx: [say(`The ${NAME(i)} peg is yours (${count(n, 1)} of ${CLAIM.need}). It is a stick with a rag on it, which is what the law calls a boundary.`)] };
+    const k = count(n, 1);
+    return { s: n, fx: [say(`The ${NAME(i)} peg is yours (${k <= CLAIM.need ? `${k} of ${CLAIM.need}` : `${k} pegs; ${CLAIM.need} were needed, and the law admires thoroughness`}). It is a stick with a rag on it, which is what the law calls a boundary.`)] };
   }
   if (who === 1) return { s, fx: [say(`The ${NAME(i)} peg is already yours. Staking it twice does not make it twicer.`)] };
   // the Syndicate's peg: it comes out only once their people are broken or the clerk has marked their survey provisional

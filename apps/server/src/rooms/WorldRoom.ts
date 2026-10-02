@@ -399,6 +399,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.scenario?.onNoise(x, z, radius, src);
       },
       hostile: (shooter, target) => this.cast.hostileTo(shooter, target),
+      // being shot at: the site hears a declaration, and a soldier who saw nobody goes and looks where it came from (D-041)
+      shotAt: (shooter, target) => {
+        this.scenario?.onShotAt(shooter, target);
+        this.cast.shotFrom(target, shooter);
+      },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
       propShot: (id, shooter) => this.propShot(id, shooter),
     });
@@ -1540,6 +1545,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
+      if (hit?.by) this.cast.shotFrom(sessionId, hit.by);
       if (down) this.mounts.onDown(sessionId); // he slides from the saddle
       else this.mounts.onHurt(sessionId, amount, hit); // a hard enough blow unseats him
     }
