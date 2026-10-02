@@ -17,7 +17,7 @@ and a contract for the Crown's grain that pays it either way.
   parley then offers the honest measure.
 - THE STEWARD (parley `steward`): before the proof, offers the party a fee to "persuade" the Compact back (a `tip`: the strike-breakers come sooner, the
   Syndicate is pleased); after it, decrees an honest measure (`propose`).
-- THE STRIKE-BREAKERS (cast group `late:scabs`, four rows, arriving by barge at `scabsAt`, marching from the quay to the barley): if two reach the field
+- THE STRIKE-BREAKERS (cast group `late:breakers`, four rows, arriving by barge at `barge`, marching from the quay to the barley): if two reach the field
   before the Compact is back at work, the strike is broken. The party can turn them (fight: `hostile` at the group; or the Compact's own pickets fight them
   if the strike has turned ugly), or let them through.
 - THE CLOCK: the rain (`rainAt`, seeded; the `rain` complication brings it forward). Barley standing in the rain is lost.

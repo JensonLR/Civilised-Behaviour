@@ -1,5 +1,6 @@
 import type { CampaignState, RegionId, ScenarioTemplateId } from "../campaignTypes.ts";
 import { hash3 } from "../rng.ts";
+import { pickHighmarkContract } from "../reapersLedger.ts";
 import { pickSaltmarketContract } from "../saltmarketLedger.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 import { pickVesperContract } from "../vesperLedger.ts";
@@ -10,6 +11,7 @@ import { crossingTemplate, crossingSettled } from "./crossing.ts";
 import { floodedMarketTemplate } from "./floodedMarket.ts";
 import { hostageTemplate } from "./hostage.ts";
 import { mineRescueTemplate } from "./mineRescue.ts";
+import { reapersStrikeTemplate } from "./reapersStrike.ts";
 import { smugglingRunTemplate } from "./smugglingRun.ts";
 import { successionTemplate } from "./succession.ts";
 import type { AnyTemplate } from "./types.ts";
@@ -19,6 +21,7 @@ export { crossingSettled, settledDaysLeft } from "./crossing.ts";
 export { BORDER } from "./border.ts";
 export { HOSTAGE } from "./hostage.ts";
 export { SMUGGLE } from "./smugglingRun.ts";
+export { STRIKE } from "./reapersStrike.ts";
 
 /** Every template, by id. The runner (server `Scenario`) is generic over this table. */
 export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
@@ -31,13 +34,14 @@ export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
   claim_race: claimRaceTemplate as unknown as AnyTemplate,
   smuggling_run: smugglingRunTemplate as unknown as AnyTemplate,   // D-037: the Saltmarket Delta's
   flooded_market: floodedMarketTemplate as unknown as AnyTemplate,
+  reapers_strike: reapersStrikeTemplate as unknown as AnyTemplate,   // D-042: Highmark's second
 };
-export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market"];
-/** D-036: the contracts each region offers (the ledger weights WITHIN a region's list; Kessar's four are unchanged, Highmark's family is one template for now). */
+export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike"];
+/** D-036: the contracts each region offers (the ledger weights WITHIN a region's list; Kessar's four are unchanged). D-042: Highmark has two. */
 export const REGION_TEMPLATES: Readonly<Record<RegionId, readonly ScenarioTemplateId[]>> = {
   hollowmere: [],
   kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"],
-  highmark: ["succession_dispute"],
+  highmark: ["succession_dispute", "reapers_strike"],
   vesper: ["mine_rescue", "claim_race"],   // D-037
   saltmarket: ["smuggling_run", "flooded_market"],
 };
@@ -57,7 +61,7 @@ const RECENT = 4;
  * another is eligible; weighted ties are broken by hash3(seed, day), so the same ledger always offers the same thing.
  */
 export function pickTemplate(c: CampaignState, region: RegionId, seed: number, presence?: RivalPresence): ScenarioTemplateId | undefined {
-  if (region === "highmark") return "succession_dispute";   // D-036: one family so far; G may weight more templates here WITHOUT touching Kessar's weights (backcompat.test.ts hashes them)
+  if (region === "highmark") return pickHighmarkContract(c);   // D-042: the chair first, then the two alternate (Kessar's weights untouched: backcompat.test.ts hashes them)
   if (region === "vesper") return pickVesperContract(c, seed, presence);   // D-037: C3 weights its two contracts from the ledger (never the same twice running when both are eligible)
   if (region === "saltmarket") return pickSaltmarketContract(c, seed, presence);   // D-037: D4 likewise
   if (region !== "kessar") return undefined;
@@ -72,7 +76,7 @@ export function pickTemplate(c: CampaignState, region: RegionId, seed: number, p
     convoy_ambush: 1 + (w.rivalInfluence >= 50 ? 4 : 0) + (had("rival_secured") ? 3 : 0) + (presence?.wagon ? 6 : 0),   // the Syndicate runs a wagon while it has goods to move
     border_incident: 1 + (w.militaryStrength >= 55 && w.rivalInfluence >= 35 ? 4 : 0) + (presence !== undefined && presence.postStage > 0 ? 3 : 0),
     succession_dispute: 0,   // never offered at Kessar
-    mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0,   // (D-037: nor are the later regions' contracts)
+    mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0, reapers_strike: 0,   // (D-037, D-042: nor are the later regions' contracts)
   };
   const last = c.history[c.history.length - 1]!.template;
   const ids = TEMPLATE_IDS.filter((id) => weights[id] > 0);

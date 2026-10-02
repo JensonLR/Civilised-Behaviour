@@ -49,7 +49,7 @@ describe("Highmark contract (D-036)", () => {
   it("the succession dispute is registered, offered only at Highmark, and its five endings are in every exhaustive table", () => {
     expect(TEMPLATE_IDS).toContain("succession_dispute");
     expect(TEMPLATES.succession_dispute.id).toBe("succession_dispute");
-    expect(REGION_TEMPLATES.highmark).toEqual(["succession_dispute"]);
+    expect(REGION_TEMPLATES.highmark).toEqual(["succession_dispute", "reapers_strike"]);   // D-042: the strike is the second
     expect(REGION_TEMPLATES.kessar).not.toContain("succession_dispute");
     expect(REGION_TEMPLATES.hollowmere).toEqual([]);
     const c = newCampaign(3);

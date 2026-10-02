@@ -138,6 +138,17 @@ describe("what the map room is told", () => {
     const c = newCampaign(1);
     c.history.push({ seq: 1, region: "highmark", resolution: "regency", day: 3, template: "succession_dispute" });
     expect(regionNote("kessar", c)).toMatch(/Not yet visited. A bridge/);
+    // D-042: after the chair, the strike is on offer; and the chart remembers how the last harvest went, beside the chair
+    expect(regionNote("highmark", c, 2)).toContain("On offer: The Reapers' Strike.");
+    const harvest: Record<string, RegExp> = { honest_measure: /honest bushel/, bought_back: /Society's bonus/, strike_broken: /Syndicate's men cut/, barley_lost: /lay down in the rain/ };
+    for (const [r, re] of Object.entries(harvest)) {
+      const h = newCampaign(1);
+      h.history.push({ seq: 1, region: "highmark", resolution: r as never, day: 4, template: "reapers_strike" });
+      h.sites.ends = { reapers_strike: r as never };
+      expect(regionNote("highmark", h), r).toMatch(re);
+      expect(regionNote("highmark", h), r).toMatch(/vacant in a procedural sense/);
+      expect(regionNote("highmark", h, 2), r).toContain("On offer: The Vacant Chair.");
+    }
   });
 
   it("the map note names the contract the ledger offers next (the same pure rule the server runs at landfall), and nothing without a seed", () => {

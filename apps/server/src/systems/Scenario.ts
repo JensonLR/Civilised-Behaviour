@@ -150,6 +150,7 @@ export class Scenario {
       if (!at || Math.hypot(p.x - at.x, p.z - at.z) > u.r) continue;
       if (u.carry === "barrel" || u.carry === "crate") {
         if (!carrying || carriedProp === undefined || this.host.propKind(carriedProp) !== (u.carry === "barrel" ? PropKind.BARREL : PropKind.CRATE)) continue;
+        if (u.prop !== undefined && this.props.get(u.prop)?.id !== carriedProp) continue;
       } else if (u.carry === "none" && carrying) continue;
       this.actor = sid;
       this.audience = sid;

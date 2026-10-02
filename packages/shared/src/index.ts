@@ -46,6 +46,9 @@ export * from "./saltmarket.ts";
 export * from "./saltmarketLedger.ts";
 export * from "./saltmarketText.ts";
 export * from "./paletteSaltmarket.ts";
+// ---- D-042: Highmark's second contract, the Reapers' Strike ----
+export * from "./reapersLedger.ts";
+export * from "./reapersText.ts";
 export * from "./regions.ts";
 export * from "./travel.ts";
 export * from "./scenario.ts";

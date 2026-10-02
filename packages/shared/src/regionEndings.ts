@@ -20,9 +20,12 @@ export const VESPER_RESOLUTIONS = ["dug_out", "blasted_through", "sealed", "cons
 /** The Saltmarket Delta (the wetland trading region). Two templates. */
 export const SALTMARKET_RESOLUTIONS = ["landed", "impounded", "scuttled", "informed", "lot_won", "consortium", "shorted", "washed_out"] as const satisfies readonly ResolutionId[];
 export type VesperEnding = (typeof VESPER_RESOLUTIONS)[number];
+/** D-042: Highmark's second contract, the Reapers' Strike (its endings follow this file's shape; the succession's five keep their older literal rows). */
+export const REAPERS_RESOLUTIONS = ["honest_measure", "bought_back", "strike_broken", "barley_lost"] as const satisfies readonly ResolutionId[];
+export type ReapersEnding = (typeof REAPERS_RESOLUTIONS)[number];
 export type SaltmarketEnding = (typeof SALTMARKET_RESOLUTIONS)[number];
-/** Every ending the D-037 regions add (16). Tests that script Kessar's twenty or Highmark's five exclude these. */
-export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS] as const;
+/** Every ending in the D-037 shape (20: Vesper's and the Saltmarket's sixteen, the strike's four). Tests that script Kessar's twenty or Highmark's chair exclude these. */
+export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS, ...REAPERS_RESOLUTIONS] as const;
 export type NewEnding = (typeof NEW_RESOLUTIONS)[number];
 
 /** What each new template can end as (each has >= 3 materially different endings besides the shared `abandoned`). */
@@ -31,6 +34,7 @@ export const NEW_TEMPLATE_RESOLUTIONS = {
   claim_race: ["staked", "jumped", "partnered", "outpaced", "abandoned"],
   smuggling_run: ["landed", "impounded", "scuttled", "informed", "abandoned"],
   flooded_market: ["lot_won", "consortium", "shorted", "washed_out", "abandoned"],
+  reapers_strike: ["honest_measure", "bought_back", "strike_broken", "barley_lost", "abandoned"],   // D-042 (Highmark)
 } as const satisfies Partial<Record<ScenarioTemplateId, readonly ResolutionId[]>>;
 export type NewTemplateId = keyof typeof NEW_TEMPLATE_RESOLUTIONS;
 export type VesperTemplate = "mine_rescue" | "claim_race";
@@ -41,7 +45,7 @@ export const isNewTemplate = (t: unknown): t is NewTemplateId => typeof t === "s
 /** Where each template is played (its outcome carries this as `ScenarioOutcome.region`; the debug command `outcome:<resolution>` reads it). Exhaustive. */
 export const TEMPLATE_REGION: Readonly<Record<ScenarioTemplateId, RegionId>> = {
   secure_crossing: "kessar", hostage_rescue: "kessar", convoy_ambush: "kessar", border_incident: "kessar", succession_dispute: "highmark",
-  mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket",
+  mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket", reapers_strike: "highmark",
 };
 
 /** What one ending does to a minor power's mood (integer deltas, applied after the day's drift, clamped 0..100). */

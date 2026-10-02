@@ -29,6 +29,8 @@ export const PRESS_GRADE: Readonly<Record<ResolutionId, PressGrade>> = {
   // the Saltmarket Delta
   landed: "story", impounded: "embarrassment", scuttled: "embarrassment", informed: "story",
   lot_won: "triumph", consortium: "story", shorted: "story", washed_out: "embarrassment",
+  // Highmark's strike (D-042)
+  honest_measure: "triumph", bought_back: "story", strike_broken: "embarrassment", barley_lost: "embarrassment",
 };
 
 const LINE: Readonly<Record<PressGrade, string>> = {

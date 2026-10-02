@@ -14,7 +14,9 @@ export type BridgeState = "intact" | "rigged" | "collapsed";
 export type CrossingControl = "ward" | "society" | "rival" | "contested";
 export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_ambush" | "border_incident" | "succession_dispute"
   // D-037: Vesper Gorge (mine_rescue, claim_race) and the Saltmarket Delta (smuggling_run, flooded_market)
-  | "mine_rescue" | "claim_race" | "smuggling_run" | "flooded_market";
+  | "mine_rescue" | "claim_race" | "smuggling_run" | "flooded_market"
+  // D-042: Highmark's second contract, the Reapers' Strike
+  | "reapers_strike";
 export type ResolutionId =
   | "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned"
   | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated"
@@ -23,7 +25,9 @@ export type ResolutionId =
   // D-037, Vesper Gorge: the Lower Gallery (mine_rescue) and the Claim Race (claim_race)
   | "dug_out" | "blasted_through" | "sealed" | "consecrated" | "staked" | "jumped" | "partnered" | "outpaced"
   // D-037, Saltmarket Delta: the Quiet Barge (smuggling_run) and the Auction at High Water (flooded_market)
-  | "landed" | "impounded" | "scuttled" | "informed" | "lot_won" | "consortium" | "shorted" | "washed_out";
+  | "landed" | "impounded" | "scuttled" | "informed" | "lot_won" | "consortium" | "shorted" | "washed_out"
+  // D-042, Highmark: the Reapers' Strike (reapers_strike)
+  | "honest_measure" | "bought_back" | "strike_broken" | "barley_lost";
 export type ComplicationId = "none" | "rival_scouts" | "rain" | "reinforcements" | "rival_bid" | "outriders" | "ward_patrol" | "fog" | "stray_shot";
 export interface CrossingState { bridge: BridgeState; control: CrossingControl; toll: number; tollPaidTotal: number; bribed: boolean; exposed: boolean }  // toll in pounds per crossing (0 = free)
 export interface CasualtyTally { wounded: number; downed: number; limbsLost: number; garrisonKilled: number; garrisonRouted: number; civiliansHarmed: number; rivalKilled: number }
@@ -76,7 +80,8 @@ export type ScenarioEvent =
   | { t: "talk"; kind: ParleyKind; result: TalkResult; paid: number };
 /** Who a site parley is with. "warden" is the crossing's (negotiation.ts); the rest are authored in scenarios/parleys.ts. */
 export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_post" | "chamberlain" | "claimant_elder" | "claimant_younger"   // D-036: Highmark's
-  | "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head";   // D-037: Vesper's three, then the Saltmarket's three
+  | "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head"   // D-037: Vesper's three, then the Saltmarket's three
+  | "reaper" | "steward";   // D-042: the Reapers' Strike (the Compact's Foreperson, the Steward of the Granary)
 export type TalkResult = "open" | "close" | "hostile" | "paid" | "bargained" | "bribed" | "ransom" | "survey" | "learn" | "tell" | "envelope" | "tip";
 export type ScenarioEffect = "garrison_alert" | "garrison_stand_down" | "gate_open" | "arm_charge" | "rival_advance" | "commit";
 /** What a template asks the server to DO (the runner turns each into Cast / Mounts / host calls). Sites are named in KESSAR_SITES / KESSAR_ANCHORS. */

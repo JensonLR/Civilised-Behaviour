@@ -2,6 +2,7 @@ import type { CampaignState, FactionStance, NeedId, RegionId, ResolutionId, Scen
 import { NEEDS, POWERS, WARD, clampI, stanceOf, type Temperament } from "./factions.ts";
 import { HIGHMARK_RESOLUTIONS } from "./highmark.ts";
 import type { MinorDelta as EndingMinorDelta } from "./regionEndings.ts";
+import { REAPERS_ENDINGS, REAPERS_FAVOUR } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS, SALTMARKET_FAVOUR } from "./saltmarketLedger.ts";
 import { VESPER_ENDINGS, VESPER_FAVOUR } from "./vesperLedger.ts";
 import { rivalAfterOutcome, newRival, rivalDispatch, rivalEventItem } from "./rival.ts";
@@ -158,7 +159,7 @@ export const militaryOf = (c: CampaignState, p: PowersState, id: PowerId): numbe
 
 /** Resolutions of the newer regions that also satisfy a pledged favour (their ledger files declare them). */
 const FAVOUR_EXTRA: Record<MinorPowerId, readonly ResolutionId[]> = {
-  brine: [...(VESPER_FAVOUR.brine ?? []), ...(SALTMARKET_FAVOUR.brine ?? [])], reapers: [...(VESPER_FAVOUR.reapers ?? []), ...(SALTMARKET_FAVOUR.reapers ?? [])], choir: [...(VESPER_FAVOUR.choir ?? []), ...(SALTMARKET_FAVOUR.choir ?? [])],
+  brine: [...(VESPER_FAVOUR.brine ?? []), ...(SALTMARKET_FAVOUR.brine ?? [])], reapers: [...(VESPER_FAVOUR.reapers ?? []), ...(SALTMARKET_FAVOUR.reapers ?? []), ...(REAPERS_FAVOUR.reapers ?? [])], choir: [...(VESPER_FAVOUR.choir ?? []), ...(SALTMARKET_FAVOUR.choir ?? [])],
 };
 const FAVOUR_OF: Record<MinorPowerId, { flag: string; hook: HookDef }> = {
   brine: { flag: "errand_brine", hook: HOOKS.brine[1] }, reapers: { flag: "errand_reapers", hook: HOOKS.reapers[1] }, choir: { flag: "errand_choir", hook: HOOKS.choir[1] },
@@ -179,7 +180,7 @@ const CHAIR_FX: Record<ChairKey, Record<MinorPowerId, MinorDelta>> = {
 };
 const isChair = (r: string): r is ChairKey => (HIGHMARK_RESOLUTIONS as readonly string[]).includes(r);
 /** D-037: the rows of the newer regions' endings (their numbers: what each meant to each minor power, and the dispatch the paper prints). */
-const ENDING_ROWS: Partial<Record<ResolutionId, { minors: Record<MinorPowerId, EndingMinorDelta>; news: { a: PowerId; b?: PowerId } }>> = { ...VESPER_ENDINGS, ...SALTMARKET_ENDINGS };
+const ENDING_ROWS: Partial<Record<ResolutionId, { minors: Record<MinorPowerId, EndingMinorDelta>; news: { a: PowerId; b?: PowerId } }>> = { ...VESPER_ENDINGS, ...SALTMARKET_ENDINGS, ...REAPERS_ENDINGS };
 
 /** One day of the minors' drift (fear cools by 2, grudges soften by 1, as the Ward's do) and what this ending meant to each. */
 function minorAfter(m: PowerState, o: ScenarioOutcome): PowerState {

@@ -247,6 +247,33 @@ export const PLANS: Plan[] = [
     },
   },
   {
+    name: "strike-honest-measure",
+    join: { region: "highmark", scenario: "reapers_strike", seed: SEED },
+    expect: ["honest_measure"],
+    async run(p) {
+      // D-042: hear the Compact out, fetch the royal bushel from the granary scale up the hill, weigh it in front of the Steward, then both signatures
+      if (await talkTo(p, "foreperson")) {
+        await p.pick(/Ask why/);
+        await p.pick(/Walk away/);
+      }
+      const st = p.npc("steward");
+      if (!st || !(await carry(p, PropKind.BARREL, HS.strike.scale.x, HS.strike.scale.z, st.x, st.z, "the royal bushel to the Steward", 1.8))) return;
+      if (await talkTo(p, "steward")) await p.pick(/honest measure/);
+      if (await talkTo(p, "foreperson")) await p.pick(/honest measure/);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
+      await sailHome(p, H.landing);
+    },
+  },
+  {
+    name: "strike-bonus",
+    join: { region: "highmark", scenario: "reapers_strike", seed: SEED },
+    expect: ["bought_back"],
+    async run(p) {
+      if (await talkTo(p, "foreperson")) await p.pick(/harvest bonus/);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
+    },
+  },
+  {
     name: "mine-dig-out",
     join: { region: "vesper", scenario: "mine_rescue", seed: SEED },
     expect: ["dug_out"],

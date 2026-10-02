@@ -37,6 +37,8 @@ export interface UseSpec {
   carry?: "barrel" | "crate" | "none";
   /** Consume the carried prop when the machine accepted the press. */
   consume?: boolean;
+  /** D-042: with `carry`, only THIS template prop (an id of `props`) will do: the royal bushel is a barrel, but not any barrel. */
+  prop?: string;
   /** Opens this parley (the runner checks the press, then sends `parley_open` or `talk`). */
   talk?: ParleyKind;
 }

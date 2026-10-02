@@ -2,6 +2,7 @@ import type { ResolutionId, FactionStance } from "./campaignTypes.ts";
 import type { NeedId } from "./campaignTypes.ts";
 import { hash3 } from "./rng.ts";
 import { pluck } from "./regionEndings.ts";
+import { REAPERS_COPY } from "./reapersText.ts";
 import { SALTMARKET_COPY } from "./saltmarketText.ts";
 import { VESPER_COPY } from "./vesperText.ts";
 
@@ -59,7 +60,7 @@ export const NEED_LINE: Record<NeedId, readonly string[]> = {
 
 /** What she remembers of your last visit. */
 export const MEMORY_LINE: Record<ResolutionId, readonly string[]> = {
-  ...pluck(VESPER_COPY, "memoryLine"), ...pluck(SALTMARKET_COPY, "memoryLine"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_COPY, "memoryLine"), ...pluck(SALTMARKET_COPY, "memoryLine"), ...pluck(REAPERS_COPY, "memoryLine"),   // D-037 (regionEndings.ts)
   paid: ["You paid promptly last time. I noticed.", "You paid without a murmur last time. It was unsettling."],
   bargained: ["You haggled well last time. I have been practising.", "Last time you talked me down. I have since had words with my arithmetic."],
   bribed: ["Last time you bought my quartermaster. He has been unbearable since.", "I have seen my quartermaster's new boots. I have questions."],

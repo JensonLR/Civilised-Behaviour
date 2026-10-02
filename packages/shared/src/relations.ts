@@ -1,5 +1,6 @@
 import type { ResolutionId } from "./campaignTypes.ts";
 import { pluck } from "./regionEndings.ts";
+import { REAPERS_ENDINGS } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS } from "./saltmarketLedger.ts";
 import { VESPER_ENDINGS } from "./vesperLedger.ts";
 import { PAIR_KEYS, POWER_IDS, type PairKey, type PairState, type PowerEvent, type PowerId, type PowersState } from "./worldTypes.ts";
@@ -28,7 +29,7 @@ export const pairEnds = (k: PairKey): [PowerId, PowerId] => {
 
 /** What each ending does to the powers' opinion of one another (before the day's drift). Every entry nudges a different shape of the map, so no two endings read alike. */
 export const RELATION_FX: Record<ResolutionId, Partial<Record<PairKey, number>>> = {
-  ...pluck(VESPER_ENDINGS, "relations"), ...pluck(SALTMARKET_ENDINGS, "relations"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "relations"), ...pluck(SALTMARKET_ENDINGS, "relations"), ...pluck(REAPERS_ENDINGS, "relations"),   // D-037 (regionEndings.ts)
   // the crossing
   paid:            { "ward|rival": -2, "ward|brine": 2, "ward|choir": 2 },
   bargained:       { "ward|rival": -3, "ward|reapers": 3, "ward|brine": -2, "reapers|choir": 2 },

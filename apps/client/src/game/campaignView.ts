@@ -1,4 +1,4 @@
-import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type RegionId, type RivalPresence } from "@cb/shared";
+import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type ReapersEnding, type RegionId, type RivalPresence } from "@cb/shared";
 import type { MapRoomView } from "../ui/MapRoom.ts";
 
 /** What the campaign remembers about a region, written beside it on the chart. Plain text; no markup. */
@@ -28,11 +28,20 @@ const CHAIR_NOTE: Record<CampaignState["sites"]["succession"], string> = {
   usurped: "The chair has an occupant the court is calling an early succession.",
   sold: "The Crown's concession is the Syndicate's, and the Crown has kept the hat.",
 };
+/** And what the last harvest came to (D-042): the ledger's `ends.reapers_strike`. */
+const STRIKE_NOTE: Record<ReapersEnding, string> = {
+  honest_measure: "The Compact reaps by an honest bushel now.",
+  bought_back: "The Compact went back on the Society's bonus; the royal bushel is as large as ever.",
+  strike_broken: "The Syndicate's men cut the last harvest, and the Compact remembers.",
+  barley_lost: "The last harvest lay down in the rain.",
+};
 function highmarkNote(c: CampaignState, contract: string): string {
   const visited = c.history.some((h) => h.region === "highmark");
   if (!visited) return `Not yet visited. Five terraces, one switchback road and a court that has been waiting six years for a signature.${contract}`;
   const last = [...c.history].reverse().find((h) => h.region === "highmark");
-  return `${CHAIR_NOTE[c.sites.succession]}${last ? ` Last visit: day ${last.day}.` : ""}${contract}`;
+  const strike = c.sites.ends.reapers_strike;
+  const harvest = strike !== undefined && strike !== "abandoned" ? ` ${STRIKE_NOTE[strike as ReapersEnding]}` : "";
+  return `${CHAIR_NOTE[c.sites.succession]}${harvest}${last ? ` Last visit: day ${last.day}.` : ""}${contract}`;
 }
 
 /** The slice of the room state the map room needs (structural, so tests need no Colyseus). */

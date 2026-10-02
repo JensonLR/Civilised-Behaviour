@@ -137,6 +137,10 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
     grange: at("The Grange", HIGHMARK_SITES.grange[0]!), chair: at("Vacant Chair", throne()), cheque: at("Syndicate envoy", HIGHMARK_SITES.envoy),
     break: at("Court", HIGHMARK_ANCHORS.capital.court), sit: at("Vacant Chair", throne()), home: "home",
   },
+  reapers_strike: {
+    line: at("Picket line", HIGHMARK_SITES.strike.foreperson), bushel: at("Granary scale", HIGHMARK_SITES.strike.scale), steward: at("The Steward", HIGHMARK_SITES.strike.steward),
+    compact: at("The Foreperson", HIGHMARK_SITES.strike.foreperson), settle: at("The Foreperson", HIGHMARK_SITES.strike.foreperson), breakers: at("The barley", HIGHMARK_SITES.strike.barley), home: "home",
+  },
   mine_rescue: {
     approach: at("Lower Gallery", VESPER_ANCHORS.adit), timber: at("The fall", VESPER_STOCK.dig), dig: at("The fall", VESPER_STOCK.dig),
     foreman: at("Foreman", VESPER_SITES.foreman), guild: at("Dirge-Master", VESPER_SITES.dirgeMaster), miners: at("The fall", VESPER_STOCK.dig),

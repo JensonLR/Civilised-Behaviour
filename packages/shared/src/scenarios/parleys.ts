@@ -1,6 +1,7 @@
 import type { ParleyKind, ParleyOption, ParleyView, TalkResult } from "../campaignTypes.ts";
 import { clampI } from "../factions.ts";
 import { hash3 } from "../rng.ts";
+import { REAPERS_PARLEYS } from "./highmarkParleyText.ts";
 import { SALTMARKET_PARLEYS } from "./saltmarketParleyText.ts";
 import { VESPER_PARLEYS } from "./vesperParleyText.ts";
 
@@ -12,8 +13,8 @@ import { VESPER_PARLEYS } from "./vesperParleyText.ts";
  */
 
 export type SiteParleyKind = Exclude<ParleyKind, "warden">;
-/** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below. */
-export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head";
+/** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below; D-042: so are the strike's two. */
+export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head" | "reaper" | "steward";
 type LegacyKind = Exclude<SiteParleyKind, ScriptKind>;
 export type Key = "pay" | "flatter" | "threaten" | "walk" | "propose" | "ask" | "tell" | "envelope" | "tip";
 const WIRE: Record<Key, ParleyOption["id"]> = {
@@ -42,7 +43,7 @@ export interface ParleyScript {
   /** The options of round 1, 2 and 3 for a price `p` (>= 1 of them; always includes a `walk`). */
   options(round: number, p: number): readonly Opt[];
 }
-const PARLEY_SCRIPTS: Readonly<Partial<Record<ParleyKind, ParleyScript>>> = { ...VESPER_PARLEYS, ...SALTMARKET_PARLEYS };
+const PARLEY_SCRIPTS: Readonly<Partial<Record<ParleyKind, ParleyScript>>> = { ...VESPER_PARLEYS, ...SALTMARKET_PARLEYS, ...REAPERS_PARLEYS };
 /** The scripted kinds only (exported for the tests that prove every script is complete). */
 export const SCRIPTED_KINDS: readonly ScriptKind[] = Object.keys(PARLEY_SCRIPTS) as ScriptKind[];
 export const parleyScript = (kind: ParleyKind): ParleyScript | undefined => PARLEY_SCRIPTS[kind];

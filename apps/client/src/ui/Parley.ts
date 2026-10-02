@@ -16,6 +16,8 @@ const KESSAR_PARLEY: Partial<Record<ScenarioTemplateId, { heading: string; asked
   convoy_ambush: { heading: "A word with the ford picket", asked: "Round {round} · The picket seems {mood}." },
 };
 const COURT = { heading: "An audience at court", asked: "Price asked: £{price} · Round {round} · The court seems {mood}." };
+/** D-042: the strike is argued at the foot of the hill, not at court (the Foreperson names a bonus, the Steward a fee). */
+const PICKET = { heading: "A word at the picket line", asked: "Sum named: £{price} · Round {round} · The line seems {mood}." };
 
 /**
  * The parley sheet: the speaker's line, what is asked, and the options the server offered this round. The server owns the talks
@@ -101,7 +103,7 @@ export class Parley {
     const round = Math.max(1, v.round | 0);
     const mood = String(v.mood ?? "neutral");
     // D-037: the later regions author their own heading and asked line (shared/vesperText.ts, saltmarketText.ts); the court asks a price, not a toll; Kessar's follow the contract
-    const own = REGION_COPY[this.region]?.parley ?? (this.region === "highmark" ? COURT : KESSAR_PARLEY[this.template ?? "secure_crossing"] ?? KESSAR_PARLEY.secure_crossing!);
+    const own = REGION_COPY[this.region]?.parley ?? (this.region === "highmark" ? (this.template === "reapers_strike" ? PICKET : COURT) : KESSAR_PARLEY[this.template ?? "secure_crossing"] ?? KESSAR_PARLEY.secure_crossing!);
     this.society.textContent = own.heading;
     this.meta.textContent = own.asked.replace(/\{price\}/g, String(toll)).replace(/\{round\}/g, String(round)).replace(/\{mood\}/g, mood);
     const focused = this.options.querySelector<HTMLElement>("button:focus")?.dataset.i;
