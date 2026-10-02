@@ -258,7 +258,7 @@ describe("Vesper view: scatter", () => {
     }
     const thin = planVesperScatter(world, PRESETS.test);
     expect(thin.grass.length).toBeLessThan(a.grass.length);
-  });
+  }, 30_000); // (D-041: seconds of real work; the 5 s default timed out on a busy CI runner, not the checks)
 });
 
 describe("Vesper view: the dress follows the contract", () => {

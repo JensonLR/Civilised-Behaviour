@@ -156,7 +156,7 @@ describe("Highmark view: geometry", () => {
     // the lamps are the plan's lamps, standing above the ground they are on
     expect(full.lamps.length).toBe(highmarkPlan().lamps.length + highmarkLevel().rooms.length);   // (D-038: and one lantern hung inside the Assembly Hall)
     for (const l of full.lamps) expect(l.y).toBeGreaterThan(world.terrainHeight(l.x, l.z) + 2.5);
-  });
+  }, 30_000); // (D-041: seconds of real work; the 5 s default timed out on a busy CI runner, not the checks)
 
   it("every wall the collision world has is drawn: the solid covers the plan's walls, and the capital's buildings stand inside the geometry's bounds", () => {
     const geo = buildHighmarkSolid(world, 0).geometry!;

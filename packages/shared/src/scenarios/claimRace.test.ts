@@ -10,6 +10,7 @@ import { VESPER_ANCHORS, VESPER_SITES } from "../vesper.ts";
 import { VESPER_COMPLICATIONS } from "../vesperLedger.ts";
 import { CLAIM, claimRaceTemplate, type ClaimState } from "./claimRace.ts";
 import { lingerDone } from "./common.ts";
+import { peopleForNpc } from "../peoples.ts";
 import { answerSiteParley, openSiteParley } from "./parleys.ts";
 import { TEMPLATES } from "./registry.ts";
 import type { Fx } from "./types.ts";
@@ -371,5 +372,16 @@ describe("The Claim Race: leave, views, roster, observation, determinism", () =>
       expect(t).not.toMatch(banned);
     }
     expect(texts.length).toBeGreaterThan(14);
+  });
+});
+
+describe("the Claim Race's people (D-041)", () => {
+  it("the Assay House clerk is one of Vesper's own people, not a Highmark courtier (he borrows the Chamberlain's role)", () => {
+    const c = newCampaign(5);
+    const def = TEMPLATES.claim_race;
+    const clerk = def.roster(c, 7, def.init(c, 0, 7)).find((r) => r.id === "assayer")!;
+    expect(clerk.role).toBe(NPC.CHAMBERLAIN);
+    expect(clerk.people).toBe("vesperine");
+    expect(peopleForNpc(NPC.CHAMBERLAIN, "vesper")).toBe("marchers"); // (which is why the spec must say so)
   });
 });
