@@ -265,6 +265,28 @@ export const PLANS: Plan[] = [
     },
   },
   {
+    name: "strike-let-through",
+    join: { region: "highmark", scenario: "reapers_strike", seed: SEED },
+    expect: ["strike_broken"],
+    async run(p) {
+      // D-042: stand at the picket line and do nothing; the barge lands, its men march up the road into the barley
+      await p.goTo(HS.strike.foreperson.x + 3, HS.strike.foreperson.z + 2, { label: "the picket line" });
+      await p.until(() => p.view?.resolution !== undefined, 300_000, "the strike-breakers");
+    },
+  },
+  {
+    name: "strike-turn-breakers",
+    join: { region: "highmark", scenario: "reapers_strike", seed: SEED },
+    expect: ["barley_lost", "abandoned"],
+    async run(p) {
+      // D-042: meet the barge's men on the road and fight them; a turned crew breaks nothing, so the rain settles it
+      await p.goTo(-4, 84, { label: "the road below the barley" });
+      await p.until(() => p.npcs("breaker-").length > 0, 240_000, "the barge");
+      await fight(p, "breaker-", 120_000);
+      await p.until(() => p.view?.resolution !== undefined, 480_000, "the rain");
+    },
+  },
+  {
     name: "strike-bonus",
     join: { region: "highmark", scenario: "reapers_strike", seed: SEED },
     expect: ["bought_back"],

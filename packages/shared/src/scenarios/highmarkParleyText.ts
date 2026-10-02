@@ -39,8 +39,8 @@ const reaper: ParleyScript = {
 const steward: ParleyScript = {
   speaker: "Steward Ambrose Tithe-Wexley, of the Granary",
   open: [
-    "\"The Crown,\" says the Steward of the Granary, dabbing at a ledger with a handkerchief as if it had sneezed on him, \"pays by the royal bushel, which is the bushel the Crown pays by. That is what royal means. If the Society could see its way to persuading the Compact back into the field before the rain, there would be a fee of £{price}. Payable on results. No reforms.\"",
-    "The Steward does not look up from his figures. \"A strike,\" he says, \"is a failure of arithmetic on the part of the strikers. The Syndicate has a barge of bonded labour on the river that has never once been out on strike. I would prefer the Compact. I would prefer them by this afternoon. £{price}, to whoever arranges it, and the bushel is not a topic.\"",
+    "\"The Crown,\" says the Steward of the Granary, dabbing at a ledger with a handkerchief as if it had sneezed on him, \"pays by the royal bushel. Whatever anybody has weighed this afternoon, that is what royal means. If the Society could see its way to persuading the Compact back into the field before the rain, there would be a fee of £{price}. Payable on results. No reforms.\"",
+    "The Steward does not look up from his figures. \"A strike,\" he says, \"is a failure of arithmetic on the part of the strikers. The Syndicate has a barge of bonded labour on the river that has never once been out on strike. I would prefer the Compact, by this afternoon, on the measure we have. £{price}, to whoever arranges it.\"",
   ],
   round2: [
     "\"The royal bushel,\" says the Steward, a little too quickly, \"is kept on the granary scale, sealed, by the first granary up the hill, where it is perfectly safe from anybody who might weigh it. It has been the royal bushel since the King was not pending. I have never measured it. One does not measure a measure.\"",
