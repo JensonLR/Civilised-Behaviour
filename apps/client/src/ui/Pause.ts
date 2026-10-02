@@ -1,4 +1,5 @@
 import { playSfx } from "../audio/index.ts";
+import { deviceTracker } from "../input/devices.ts";
 import { h, Modal, anyModalOpen } from "./modal.ts";
 import { openHowTo } from "./HowTo.ts";
 import { openSettings } from "./Settings.ts";
@@ -78,8 +79,9 @@ export class Pause {
       this.quitBtn.disabled = false;
       this.quitBtn.textContent = "Save and quit";
       delete this.quitBtn.dataset.retry;
-      // Handing the mouse back to the game: needs a user gesture, which the Resume click or the Escape key is.
-      if (this.enabled) this.deps.canvas.requestPointerLock?.();
+      // Handing the mouse back to the game: needs a user gesture, which the Resume click or the Escape key is. Only for a mouse player (D-041): a pad player's A
+      // is no use to the mouse, and a lock taken for them let the browser's mouse movement under it mark the KEYBOARD as the device in use (keyboard glyphs after a pause).
+      if (this.enabled && deviceTracker.device === "keyboard") this.deps.canvas.requestPointerLock?.();
     };
 
     window.addEventListener("keydown", (e) => {

@@ -246,6 +246,31 @@ describe("the activation rules", () => {
     });
   });
 
+  it("D-041: a held direction steps once, waits, then repeats; a press a little slower than a flick is still one step", () => {
+    document.body.innerHTML = `<div id="r"><button id="b0">0</button><button id="b1">1</button><button id="b2">2</button><button id="b3">3</button><button id="b4">4</button><button id="b5">5</button></div>`;
+    const root = document.getElementById("r")!;
+    return import("./PadNav.ts").then(({ startPadNav, NAV_FIRST_REPEAT_MS, NAV_REPEAT_MS }) => {
+      startPadNav(root, () => true);
+      document.getElementById("b0")!.focus();
+      // (each poll here is 300 ms apart: longer than the old 190 ms repeat, shorter than the first repeat)
+      expect(NAV_FIRST_REPEAT_MS).toBeGreaterThan(300);
+      expect(NAV_REPEAT_MS).toBeLessThan(300);
+      press(DOWN, true);
+      tick();
+      expect(active().id).toBe("b1"); // at once
+      tick();
+      expect(active().id).toBe("b1"); // 300 ms held: still one step
+      tick();
+      expect(active().id).toBe("b2"); // 600 ms: the repeat has begun
+      tick();
+      expect(active().id).toBe("b3"); // and runs
+      press(DOWN, false);
+      tick();
+      tap(DOWN);
+      expect(active().id).toBe("b4"); // a fresh press steps at once
+    });
+  });
+
   it("the command wheel's stamps are reachable and B cancels without sending", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
