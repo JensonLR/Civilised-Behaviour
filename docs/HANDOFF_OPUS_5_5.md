@@ -1,0 +1,68 @@
+# Handoff to Claude Opus 5.5 (max effort): upgrade, improve and finish Civilised Behaviour
+
+You are taking over a large, working, unfinished game. This brief gives you the outcome, the current truth, what the owner said after playing it, the constraints that never bend, and the judgement calls that are yours. It deliberately does not script your steps: plan them yourself, in the order the evidence tells you to.
+
+## 0. How to run this session (Opus 5.5 guidance applied)
+- Run at **max effort** for planning, design and review. Thinking is always on; effort is your only depth control. Drop to high/xhigh for routine edits, mechanical fixes and test runs rather than spending max everywhere.
+- Give yourself the whole picture before acting: read `CLAUDE.md`, `docs/BUILD_STATE.md` (the honest state and every open finding), `docs/GDD.md` (what), `docs/ARCHITECTURE.md` (how), `docs/DECISIONS.md` (why, D-001..D-039), `docs/LEVEL_PLAN.md` (binding layout standard) and the newest `docs/_notes/*.md`. `docs/BUILD_STATE.md` wins over this file on any fact that has moved.
+- Work in long, uninterrupted runs. State your plan once, then keep going; send a short progress note at natural milestones (what shipped, what you looked at, what is next), not per step.
+- Verify with evidence, never with confidence. For anything visual, **look at renders** (`node scripts/shot.mjs ... out.png`, view the image) and say what you saw. For gameplay, drive the real game (Playwright with `gfx=test`, scripted Colyseus bots, the soak harness). A test that passes is not the same as a thing that is good.
+- Prefer one clear root-cause fix to three symptom patches. Never weaken, skip or loosen a test to get green; fit-test thresholds may only be ratcheted down.
+- Use sub-agents or the Workflow tool only when work is genuinely parallel and file ownership is disjoint; give each a self-contained brief, a list of files it may touch, and the rule that only one integrator edits shared registries. Earlier fan-outs cost 1.6-3M tokens each; the owner watches a usage meter, so spend where it moves quality and say so when a batch is large.
+- Your own commit trailers: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and the session URL line your harness gives you. Never put a model identifier in code, commit titles, PRs or docs content.
+
+## 1. The product and the bar
+**Civilised Behaviour** (working title): a 1-4 player co-op satirical colonial-expedition sandbox. Premium PC game (Steam first, but **Steamworks is ON HOLD until the owner says**), web-native TypeScript + Three.js client, authoritative Colyseus server, Rapier physics, pnpm monorepo. Tone: jolly, absurd surface (caricature characters, brass-band music) over real grit: heavy violence, consequences, institutional satire. Funny AND bloody AND fun to play. The satire targets the colonisers' institutions and behaviour. **Every culture is fictional**; no real flags, nations, ethnicities or religions; locals have agency, humour, factions and manipulate the players back.
+
+The bar the owner set: the game must be in a **VERY good state** before any Steam playtest or demo, "utterly beautiful and complete". Treat that as a release-quality bar, not a feature checklist: coherent, readable, fair, polished, no broken doors, no ugly overlaps, no unreadable UI, no placeholder pretending to be content.
+
+## 2. Where things stand (verify against BUILD_STATE)
+Built, pushed and live: five regions (Hollowmere hub + Kessar Reach coast fort, Highmark savannah capital, Vesper Gorge canyon mines, Saltmarket Delta), travel via the HQ map room, factions/powers + persistent rival, scenario templates with distinct endings, NPC AI + nav + garrison, mounts + wagon, hired followers + command wheel + loadout, outposts/settlement/tech + campaign map, satirical newspaper, authoritative combat with lag compensation, rebuilt guns, persistent gore decals, six fictional native peoples, long-hair rebuild + fit audit, third-person aim solve + pad profile + device-aware glyph prompts, adaptive music + synthesized sound, level plan + automated level audit, persistence (memory / file / Postgres) with resume, Continue / expeditions list / Save and quit / per-campaign tutorial, hardened Electron shell, Steam stub, demo flag, website, soak harness.
+Last verified on the final tree: shared 1063, procedural ~709, client 1048 unit tests; server 636/636 serial; Playwright 35/35 (~13 min).
+
+**Live deployment** (Render free tier + Neon): client https://civilised-behaviour.onrender.com (service `civilised-behaviour`), server https://civilised-behaviour-server.onrender.com (`civilised-behaviour-server`, Frankfurt, auto-deploys from the branch), Neon project "Civilised Behaviour" (Frankfurt) with `CAMPAIGN_STORE=postgres`. The old `cb-client` / `cb-server` services still run with memory-only saves; ask the owner before deleting them. Free tier sleeps after ~15 min and is too slow for a real four-player session (tick overruns): moving to a paid instance is a recommendation for the owner, not something to do silently.
+
+## 3. What the owner said after playing it (verbatim intent; judge whether each is truly fixed)
+- Feels good, characters are funny; the music is jolly and everything looks jolly. Good contrast, but **we must also have the grit and gore**.
+- The people we colonise should not look like us: native peoples of some sort (fictional, dignified, not stereotyped).
+- Guns looked broken and ugly. Some cosmetics still do not fit or overlap badly on different shapes and sizes. Long hair looked especially bad.
+- Third person is hard to aim and shoot; first person is very cool. Xbox controller is fiddly and the UI did not change to the controller.
+- Maps look cool and beautiful but had broken, ugly overlaps, broken doors and poor layout. Build areas from a plan that lines up with the full final build.
+- No save; "new world" spawned the same one with no tutorial.
+Each was addressed in the last two passes, but **nobody (including the previous builders) has played the result as a human**. Your first job is to find out what is still wrong by playing it yourself with scripted bots, real-browser runs and renders, not to trust the checklists.
+
+## 4. Priorities (re-rank them if the evidence says so)
+1. **Make it fun to play, then prove it.** Run the real loop end to end in a browser and with bots: hub -> loadout -> sail -> region -> scenario -> outcome -> newspaper -> next day. Find the dull minutes, the unclear objectives, the unfair deaths, the dead ends. Tune combat feel (aim in third person on KB+M and on pad, recoil, hit feedback, damage and gore readability), garrison and rival difficulty, economy and pacing. Add the physical-comedy chaos the pillars promise where it is thin.
+2. **Grit with the jolly.** Gore and consequence must be visible and audible but optional (Full/Reduced/Off, dismemberment On/Off; never required for readability). Check that dying, wounds, aftermath dressing, ragdolls and the adaptive music's tension/combat/aftermath layers actually deliver the contrast.
+3. **Visual quality pass over everything the player sees** (characters, the six peoples at a glance, guns in all three views, every region by day, dusk, night, weather; interiors; UI sheets). Fix ugliness at the root in the generators and fit engine, not per instance. Real-GPU performance is unmeasured: software-GL numbers are floors.
+4. **Level quality is a standing gate.** `packages/shared/src/levelAudit*.ts` plus `docs/LEVEL_PLAN.md` define overlap, door, reachability and route rules for all five areas; keep it green over many seeds and extend it (sightlines, pacing, set-piece readability) rather than relying on spot checks. A new region or building must pass it before it ships.
+5. **Input and UI parity.** Pad-only and keyboard-only play must both be complete (menus, sheets, parley, wheel, loadout, map room, pause), with glyphs that follow the last-used device. Test with scripted gamepads. Accessibility options must keep working.
+6. **Persistence you can trust.** Prove a campaign survives a server restart against the real Neon store (a restart-persistence run against production-like config), and that resume, Continue, Save and quit and the tutorial-per-campaign flow work from the live URL. Look at idle-day evolution, save migration and hostile saves.
+7. **Remaining content depth toward the GDD** (v1 scope: 4 regions with home powers, >=12 scenario templates, tech emerging from campaign state, rival expedition present, replay via seed and decisions). Count what exists, find the gaps, add content by reusing systems, not bespoke one-offs.
+8. **Release hygiene without Steam.** Keep the Steamworks adapter a stub. You may prepare everything that does not need the owner's accounts (store-page copy accuracy, disclosures, press kit, installers' build config, soak and bad-network runs, security review of the server and Electron shell), but do not provision accounts, sign anything or publish anything.
+
+## 5. Non-negotiables (from CLAUDE.md, restated because they are expensive to violate)
+- Do not switch engine. Server-authoritative: never trust the client with damage, rewards, inventory, faction state or progression; aim assist is a client-side nudge inside the server's existing aim slack.
+- One shared pure deterministic movement step (`packages/shared/src/movement.ts`): allocation-free, no `Math.random` / `Date.now` / `performance.now` in shared sim code (use `Rng` / `hash3`). Hot loops stay allocation-free.
+- No runtime LLMs: newspapers and dialogue are authored templates plus deterministic generation; utility-scored AI.
+- Colours live only in `packages/shared/src/palette.ts` (a test rejects literals in rendering code). Every asset and every piece of AI-written text is registered in `docs/ASSET_REGISTER.md` / `docs/AI_CONTENT_REGISTER.md`. Privacy per `docs/PRIVACY_DATA_MAP.md`.
+- **Fictional peoples rule:** distinguish peoples by invented silhouette, dress, ornament, architecture and customs, never by real-world ethnic, national or religious coding and never by skin-colour stereotype (every people spans the full skin-tone range). Dignified and funny, never caricatured.
+- Never claim something is done if it is placeholder-only; keep `docs/BUILD_STATE.md` honest on every pass.
+- No ads, energy, pay-to-win, gambling, loot boxes. Electron: `nodeIntegration:false`, `contextIsolation:true`, narrow preload, no secrets in the renderer.
+
+## 6. Operating notes learned the hard way
+- Develop and push only on `claude/civilised-behaviour-architecture-jtce2l`; never force-push. No PR exists yet (the repo had only this branch); if the harness asks you to open one, open a draft against the repo's default branch. Commit coherent milestones and push: the container can be restarted and unpushed work is lost. A WIP checkpoint commit is fine when typecheck is clean and the message says so. Every push redeploys the live Render services (the free server restarts and drops anyone playing).
+- Commands: `pnpm install`, `pnpm dev` (server :2567, client :5173), `pnpm typecheck && pnpm test`, `pnpm e2e` (Playwright, starts servers). `node scripts/shot.mjs "<url>" out.png WxH [waitMs]` (honours `CB_PORT`; wait 8-9 s for heavy scenes; a black frame means too early); showcase routes are listed in `apps/client/src/showcase/World.ts` and `docs/_notes/*.md`.
+- Server integration tests use real timers: run the server suite **serially** (`fileParallelism: false` is set) and never alongside screenshots or e2e. Software-rendered Chromium is slow (~10 fps): poll state, never assert on timing. Playwright specs must close the contexts they open (leaked pages starve later specs). Use `gfx=test` in e2e.
+- Never `pkill -f` (it kills your own shell); free ports with `fuser -k 2567/tcp 5173/tcp`. A stale hand-started server decodes new schemas as garbage: kill leftovers before e2e.
+- Verify fast-moving APIs against the installed package types, not memory (Colyseus 0.18: `@colyseus/sdk`, `schema({...})`, `defineInput`, `Predict`).
+- Dev hooks (`?region=`, `?scenario=`, `debug` messages, showcase routes) are gated behind `debugCommands`; keep production closed.
+- Secrets: never print, log, commit or paste connection strings, peppers or tokens. **The Neon database password and the identity pepper were visible in the previous session's transcript** when they were set on Render; recommend rotating both to the owner (a Neon role-password reset plus updating the Render env vars) and do it only with their go-ahead.
+- Tools available here include the Render and Neon connectors (the owner approved Neon and the Render services already created; ask before creating, deleting or paying for anything else) and GitHub through the MCP tools, not `gh`.
+
+## 7. Autonomy boundaries
+Act without asking on: code, tests, art, audio, content, docs, refactors that serve a priority, pushes to the branch, redeploys via push.
+Ask first on: deleting the old Render services, anything that spends money or provisions accounts, rotating secrets, anything Steam/signing/domain/trademark related, publishing anywhere, changing the game's tone or scope in a way the GDD does not already allow.
+
+## 8. How to report
+The owner reads for the conclusion first. Lead with what changed in the game and whether it is verified; separate "looked at in renders / ran against bots" from "unit-tested only" from "unverified"; list the open problems plainly; keep it short, plain prose, no filler, cite the file or test that proves a claim. Update `docs/BUILD_STATE.md` before every handoff-worthy milestone so the next session starts from the truth.
