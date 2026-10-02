@@ -41,15 +41,20 @@ blows do nothing; with it on, `ffScale` softens the hit and a shooter's own blas
 ## Lag compensation (what it does, what it costs)
 Colyseus `allowRewindState` records `facing` and `flags` (held between snapshots) and positions (linearly interpolated) at the 50 ms patch cadence.
 For each hitscan shot and for each projectile's first instants the server asks `lastSeenBy(shooter)`, i.e. *the frame this shooter's client last rendered*, and tests
-people against that; the world and the shooter stay live. Clamp: `COMBAT.rewindMaxMs` = 250 ms. Projectiles keep the shooter's full lag for `projectileRewindHold`
+people against that; the world and the shooter stay live. Clamp: `COMBAT.rewindMaxMs` = 400 ms, derived (D-042): a 250 ms round trip honoured in full + the 100 ms
+display delay (`INTERP_DELAY_MS`) + one 50 ms patch of slack for the sim tick a frame waits to be read and for timer jitter. Projectiles keep the shooter's full lag for `projectileRewindHold`
 (0.3 s) and then fade to live positions over 0.1 s (`projectileLag`), so a ball that needs 0.1 s to arrive still meets the man the shooter saw, and nothing is hit around
 a corner for more than the clamp.
 Trade-offs, stated plainly:
-1. The *target* pays: a man who ducks behind cover can still be hit for up to ~250 ms after he thought he was safe. That is the price of letting a 200 ms player hit
-   what he saw; the clamp bounds what a hostile client can gain by claiming a large lag. The view time is the render timestamp the SDK's `Predict` stamps on the client's inputs, which the server cannot verify, so a cheater can always pick the worst 250 ms for the victim; he cannot reach further back.
+1. The *target* pays: a man who ducks behind cover can still be hit by an honest shooter for up to his round trip plus 100 ms after he thought he was safe (~300 ms
+   at 200 ms RTT). That is the price of letting a 200 ms player hit what he saw; the clamp bounds what a hostile client can gain by claiming a large lag. The view time is the render timestamp the SDK's `Predict` stamps on the client's inputs, which the server cannot verify, so a cheater can always pick the worst 400 ms for the victim; he cannot reach further back (in this co-op game the rewound targets are mostly NPCs; friendly fire is the only player-on-player exposure).
 2. Rewind covers people only. Walls, props and the shooter are live; a door closed in the last 250 ms is closed.
 3. Melee is compensated with the lag stored at the press, resolved after the wind-up.
-4. Above ~200 ms total lag (half RTT plus the 100 ms display delay) the client's own estimate of the display time gets noisy and hits start to be missed (below).
+4. A shot's lag is the WHOLE round trip plus the 100 ms display delay: the picture took half a round trip to come down, the trigger takes the other half to go up,
+   then up to a 33 ms tick to be read, less up to a 50 ms patch since the last recorded pose. At 200 ms RTT that is 250..350 ms. It is honoured in full up to a 250 ms
+   round trip; beyond that the rewind stops at the clamp and the shooter has to lead by the difference. (Until D-042 the clamp was 250 ms on the belief that the lag
+   was HALF the round trip plus the delay, and the misses were blamed on the client's noisy RTT estimate; that noise cancels, because the display and the stamp are the
+   same `serverNow - delay - smoothedRtt/2` taken at the same instant. Every 200 ms shot was cut ~50 ms short and 6..12 of 14 landed.)
 5. A cannon ball and blasts are not compensated (slow, big, telegraphed by a 0.7 s fuse).
 Switch: `Combat.lagCompensation` (tests use it as the control).
 
@@ -59,10 +64,10 @@ A rifleman aims at where he *sees* a target strafing 4 m/s at 22 m (14 shots); t
 |---|---|---|
 | 0 ms | 14/14 | 7/14 |
 | 100 ms | 14/14 | - |
-| 200 ms | 10/14 (71%) | 0/14 |
+| 200 ms | 14/14 in each of 20 runs (D-042; was 6..12 of 14 under the old 250 ms clamp) | 0/14 |
 Control: aiming 1.2 m to the side hits 0/8 at 0 and 150 ms (the test is honest). Pistol balls (12 m, strafing man, first instants compensated): 11/12 at 0 ms, 6/12 at 150 ms
 (a ball in flight can also be dodged). During development the `diag` hook measured how far the aim ray passed from the target's chest in the rewound view versus the live
-one: about 0 to 0.08 m rewound (a strafing man moving 4 m/s would be ~0.8 m off in the live view at 200 ms; that is arithmetic, and I did not commit the per-shot distances, the hit rates above are the committed numbers).
+one: about 0 to 0.08 m rewound (D-042 re-measured it per shot: 0.05 m mean, under 0.1 m at worst, at 0, 200 and 250 ms RTT once the rewind is not clamped) (a strafing man moving 4 m/s would be ~0.8 m off in the live view at 200 ms; that is arithmetic, and I did not commit the per-shot distances, the hit rates above are the committed numbers).
 Prediction under fire (bot walking a circle while aiming and firing, 11 shots): worst reconciler correction 3.7e-7 m at 0 ms and 3.5e-7 m at 100 ms RTT, i.e. shooting does not
 touch the predicted step. A *knock* (server velocity added on a hit) is different: 0.42 m worst correction at 100 ms RTT while it is applied (bounded; the server owns it).
 
@@ -86,6 +91,7 @@ friendly-fire rule, and event traffic (one `shot` event per pull however many pe
 7. cannon `soloFactor` .5 -> 1 -> "a lone gunner loads it at half speed" fails.
 8. umbrella `severBias` 0 -> 3 -> "every blow and ball carries its weapon's sever bias" fails (the first version SURVIVED: the old test injected the bias itself; the new one spies on `Casualties.damage`).
 9. lag compensation disabled in the hitscan view -> "hitscan at 200 ms RTT" fails (and the OFF control shows 0/14).
+10. `rewindMaxMs` put back to 250 ms (D-042) -> "hitscan at 200 ms RTT" fails: 14 of 14 rounds clamped, 7/14 hits.
 
 ## Client
 Weapon meshes are built like the character parts (`PartBuilder`, toon ramp, inked hull) in `render/weapons/WeaponModels.ts`; `WEAPON_ANCHORS` (grip at the origin, -Z down the barrel) is the contract
@@ -97,7 +103,7 @@ capped, scaled by the graphics level; gore goes through `HitFx`. Sound goes only
 seconds before judging puffs.
 
 ## Weak spots (be honest)
-- Lag comp is measured in a headless bot at 22 m on one strafing pattern; 200 ms RTT lands 71%. Real networks have jitter and loss the simulator does not; nothing here was run over a real link.
+- Lag comp is measured in a headless bot at 22 m on one strafing pattern; 200 ms RTT lands 14/14 (20 runs) since D-042. Real networks have jitter and loss the simulator does not; nothing here was run over a real link.
 - Reviewed in a real browser by stills only (software GL ~3 fps): held weapons in third person, aiming, muzzle flash and smoke for the pistol, rifle and blunderbuss, sabre swing, cannon loading and blast,
   first-person ready/reload, a rifle hit with blood and the bearing chevron. NOT reviewed: gamepad (bindings exist, untested on a device), audio (names exist in the module; nothing was heard),
   gore Reduced/Off on a wound, four players at once, the umbrella swing frames, dismemberment by cannon.
