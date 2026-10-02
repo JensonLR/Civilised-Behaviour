@@ -68,6 +68,9 @@ describe("lag compensation and prediction under fire (headless bots against a re
     const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED })) as unknown as WorldRoom;
     const combat = (room as unknown as { combat: Combat }).combat;
     combat.lagCompensation = opts.lagComp;
+    // The rewind each of the shooter's rounds was judged with (only rounds that are rewound report here).
+    const lags: number[] = [];
+    combat.diag = (d) => lags.push(d.lagMs);
     colyseus.server.simulateLatency(rttMs);
     const world = createArena(SEED);
     const range = opts.range ?? 22;
@@ -134,7 +137,13 @@ describe("lag compensation and prediction under fire (headless bots against a re
       }
       await sleep(750);
     }
-    const stats = { shots: shots.length, hits: marks.length, rate: shots.length ? marks.length / shots.length : 0 };
+    const stats = {
+      shots: shots.length,
+      hits: marks.length,
+      rate: shots.length ? marks.length / shots.length : 0,
+      lagMs: lags.length ? [Math.round(Math.min(...lags)), Math.round(Math.max(...lags))] : [],
+      clamped: lags.filter((l) => l >= COMBAT.rewindMaxMs).length,
+    };
     await S.stop();
     await T.stop();
     return stats;
@@ -145,9 +154,9 @@ describe("lag compensation and prediction under fire (headless bots against a re
       const r = await duel(rtt, { lagComp: true });
       results[`hitscan_rtt${rtt}_on`] = r;
       expect(r.shots).toBeGreaterThanOrEqual(10);
-      // (D-041: at 200 ms every shot asks the rewind for 320-360 ms - half the trip, the display delay, the frame's wait - and the old 250 ms cap clamped
-      //  them all, so 6-12 of 14 landed and this bar was 0.6. With COMBAT.rewindMaxMs at 400 all 14 land at 0, 100 and 200 ms; the control below
-      //  still shows 0/14 without rewinding.)
+      // A shot's lag is the WHOLE round trip (the picture came down, the trigger went up) plus the display delay: 250..350 ms at 200 ms.
+      // The rewind must reach it, not stop at the clamp (D-043: a 250 ms clamp cut all 14 short and landed 6..12 of them).
+      expect(r.clamped).toBe(0);
       expect(r.rate).toBeGreaterThanOrEqual(0.85);
     }, 60000);
   }

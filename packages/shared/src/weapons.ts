@@ -1,5 +1,5 @@
 import type { Obstacle } from "./collision.ts";
-import { MOVEMENT } from "./constants.ts";
+import { INTERP_DELAY_MS, MOVEMENT, PATCH_RATE_MS } from "./constants.ts";
 import { clamp } from "./math.ts";
 import type { Vec3 } from "./daycycle.ts";
 import { hash3, hashFloat } from "./rng.ts";
@@ -218,16 +218,20 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 export const weaponDef = (id: number): WeaponDef | undefined => (isWeapon(id) ? WEAPONS[id] : undefined);
 
+/** The longest round trip whose shots are judged exactly where the shooter saw the target (D-043); a longer link starts to have to lead. */
+const REWIND_RTT_MS = 250;
+
 /** Combat-wide tuning that is not per weapon. */
 export const COMBAT = {
   /**
    * Lag compensation (see docs/_notes/combat.md): a shot is judged against where the shooter SAW everyone, never further back than this,
-   * however large a lag the client claims. Bounds what a hostile client can gain. D-041: 250 ms was set for "about 200 ms of total lag" at a 200 ms
-   * round trip, but measured there every shot asks for 320-360 ms (half the trip, the display delay, the frame's wait) and was clamped, so the server
-   * judged a strafing target 40-70 ms later than the shooter saw it and about a third of on-target shots missed. The people on the far end of a
-   * shot are almost always NPCs in this co-op game; the window costs a friend under friendly fire a little, and buys a player 200 ms away his hits.
+   * however large a lag the client claims. Bounds what a hostile client can gain.
+   * The lag a shot really carries is the WHOLE round trip (the picture came down, the trigger went up) plus the display delay, and then
+   * up to a sim tick waiting to be read, less up to a patch since the last recorded pose: 250..350 ms at a 200 ms round trip (D-043: a
+   * 250 ms clamp cut every one of those shots short). The patch interval on top is the slack for the tick and for timer jitter.
+   * The people on the far end of a shot are almost always NPCs in this co-op game; the window costs a friend under friendly fire a little.
    */
-  rewindMaxMs: 400,
+  rewindMaxMs: REWIND_RTT_MS + INTERP_DELAY_MS + PATCH_RATE_MS,
   /**
    * A projectile keeps its shooter's view of the world (the same rewind as the shot that made it) for this long after leaving the muzzle, so a
    * ball that takes a tenth of a second to arrive still meets the man the shooter saw; it then blends to live positions over `projectileRewindFade`

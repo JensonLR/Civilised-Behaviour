@@ -3,6 +3,7 @@ import { Predict } from "@colyseus/sdk/predict";
 import { SaveTracker } from "./saveStatus.ts";
 import {
   CollisionWorld,
+  INTERP_DELAY_MS,
   MoveInput,
   PREDICTED_FIELDS,
   ROOM_WORLD,
@@ -90,7 +91,7 @@ export class Session {
   ) {
     this.saves = saves ?? new SaveTracker();
     this.world = Session.worldFor(room.state.region, room.state.seed, Session.worldOptsOf(room.state));
-    this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
+    this.predict = Predict.get(room, { mode: "lerp", delay: INTERP_DELAY_MS }) as Predict<WorldStateType>;
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.predict.attachAll("props", { x: "lerp", y: "lerp", z: "lerp", qx: "lerp", qy: "lerp", qz: "lerp", qw: "lerp" } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;

@@ -2,6 +2,11 @@
 export const TICK_RATE = 30;
 export const STEP_DT = 1 / TICK_RATE;
 export const PATCH_RATE_MS = 50;
+/**
+ * Clients draw other bodies this far behind the newest snapshot (the `Predict` lerp delay: two patches, so a late one does not stall
+ * the picture). The server's rewind must reach back past it (COMBAT.rewindMaxMs), so the client, the test bots and the clamp share this one number.
+ */
+export const INTERP_DELAY_MS = 100;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGES_PER_SECOND = 120;
 

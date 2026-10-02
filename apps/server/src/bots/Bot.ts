@@ -2,6 +2,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import { Predict } from "@colyseus/sdk/predict";
 import {
   COMBAT,
+  INTERP_DELAY_MS,
   MoveInput,
   PREDICTED_FIELDS,
   ROOM_WORLD,
@@ -82,8 +83,8 @@ export class Bot {
     private readonly behaviour: Behaviour,
   ) {
     this.world = this.freshWorld();
-    this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
-    // Remote players are drawn interpolated 100 ms behind, exactly as in the browser (net/Session.ts): what a bot "sees" is what a player sees.
+    this.predict = Predict.get(room, { mode: "lerp", delay: INTERP_DELAY_MS }) as Predict<WorldStateType>;
+    // Remote players are drawn interpolated INTERP_DELAY_MS behind, exactly as in the browser (net/Session.ts): what a bot "sees" is what a player sees.
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;
   }
@@ -124,7 +125,7 @@ export class Bot {
   }
 
   /**
-   * Where THIS client draws another player right now: the SDK's interpolated (lerp, 100 ms behind) value, i.e. exactly what a human
+   * Where THIS client draws another player right now: the SDK's interpolated (lerp, INTERP_DELAY_MS behind) value, i.e. exactly what a human
    * would aim at. This is the reference for "hits land where the shooter saw them".
    */
   rendered(p: PlayerStateType): { x: number; y: number; z: number; facing: number } {
