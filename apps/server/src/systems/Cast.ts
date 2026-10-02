@@ -367,6 +367,15 @@ export class Cast implements CastApi {
     }
   }
 
+  despawnOne(id: string): void {
+    const key = npcKey(id);
+    const r = this.byKey.get(key);
+    if (!r) return;
+    if (!r.gone) this.host.removeNpc(key);
+    this.byKey.delete(key);
+    this.recs = this.recs.filter((x) => x !== r);
+  }
+
   setWorld(w: CollisionWorld): void {
     this.worldRef = w;
     this.navQ = new NavQuery(buildNavGrid(w, this.host.navOptions?.(w) ?? {}));

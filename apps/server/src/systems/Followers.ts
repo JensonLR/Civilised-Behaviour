@@ -188,7 +188,21 @@ export class Followers {
     if (spent > 0) this.host.spend(spent);
     this.p = r.party;
     this.publish();
+    // D-047: the crew is on the ground at home too. A new hand comes up from the jetty (`landfall` spawns only who is missing; those standing keep their bodies);
+    // a dismissed one leaves the ground at once
+    if (this.atHome) {
+      if (m.on) this.landfall(this.landing, true);
+      else this.dismissBody(m.id);
+    }
     return true;
+  }
+
+  private dismissBody(id: string): void {
+    const h = this.hands.get(id);
+    if (!h) return;
+    if (h.mind.carrying) this.host.dropProp(h.key);
+    this.hands.delete(id);
+    this.host.cast.despawnOne?.(id);
   }
 
   /**
@@ -289,7 +303,14 @@ export class Followers {
   }
 
   /** Landfall: the roster stands around `near`. Hands the Cast refuses (cap) simply do not come. */
-  landfall(near: { x: number; z: number }): number {
+  /** D-047: the party is home (Hollowmere): the crew comes ashore at the jetty, and from now on a hire at the table comes up from it and a dismissal leaves at once. */
+  home(near: { x: number; z: number }): number {
+    return this.landfall(near, true);
+  }
+  private atHome = false;
+
+  landfall(near: { x: number; z: number }, home = false): number {
+    this.atHome = home;
     this.hands.clear();
     this.landing = { x: near.x, z: near.z };
     const specs = followerSpecs(this.p, this.host.seed, near);
@@ -505,6 +526,7 @@ export class Followers {
 
   /** Region change or room reset: the hands leave the ground (the Cast despawns the group), the plates go with them. */
   endExpedition(): void {
+    this.atHome = false;
     for (const h of this.hands.values()) if (h.mind.carrying) this.host.dropProp(h.key);
     this.hands.clear();
     this.host.cast.despawn("party");

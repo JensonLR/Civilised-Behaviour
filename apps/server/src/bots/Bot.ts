@@ -10,7 +10,6 @@ import {
   createRegionWorld,
   elevToWire,
   isRegionId,
-  parseCampaign,
   type JoinOptions,
   stepCharacter,
   weaponToWire,
@@ -20,6 +19,7 @@ import {
   type MoveInputType,
   type PlayerStateType,
   type WorldStateType,
+  regionWorldOpts, type RegionWorldOpts, type RegionId,
 } from "@cb/shared";
 
 export interface BotFrame {
@@ -104,20 +104,23 @@ export class Bot {
     return new Bot(room, behaviour);
   }
 
-  private freshWorld(): CollisionWorld {
+  /** The world as the room builds it (`regionWorldOpts`: the crossing's bridge AND the outpost's stage and wire), keyed so a change rebuilds it. */
+  private worldSpec(): { region: RegionId; opts: RegionWorldOpts; key: string } {
     const st = this.room.state;
-    const bridge = (st.campaign ? parseCampaign(st.campaign)?.crossing.bridge : undefined) ?? "intact";
     const region = isRegionId(st.region) ? st.region : "hollowmere";
-    this.worldKey = `${region}|${bridge}`;
-    return createRegionWorld(region, st.seed, { bridge });
+    const opts = regionWorldOpts(st.campaign ?? "", st.settlements ?? "");
+    return { region, opts, key: `${region}|${opts.bridge ?? "intact"}|${opts.outpost ?? "none"}|${opts.telegraph ? 1 : 0}` };
   }
 
-  /** Rebuilds the world when the region or the crossing changed (the reconciler's step reads `this.world` each time). */
+  private freshWorld(): CollisionWorld {
+    const w = this.worldSpec();
+    this.worldKey = w.key;
+    return createRegionWorld(w.region, this.room.state.seed, w.opts);
+  }
+
+  /** Rebuilds the world when the region, the crossing or the outpost changed (the reconciler's step reads `this.world` each time). */
   private syncWorld(): void {
-    const st = this.room.state;
-    const bridge = (st.campaign ? parseCampaign(st.campaign)?.crossing.bridge : undefined) ?? "intact";
-    const region = isRegionId(st.region) ? st.region : "hollowmere";
-    if (`${region}|${bridge}` !== this.worldKey) this.world = this.freshWorld();
+    if (this.worldSpec().key !== this.worldKey) this.world = this.freshWorld();
   }
 
   get self(): PlayerStateType | undefined {

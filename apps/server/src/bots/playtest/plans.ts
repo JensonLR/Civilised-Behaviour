@@ -52,7 +52,8 @@ async function sailHome(p: Pilot, landing: { x: number; z: number }): Promise<vo
 }
 
 /** Fights the group until the contract resolves, the pilot is down, or time runs out. Takes cover by standing still behind nothing: a deliberately plain shooter. */
-async function fight(p: Pilot, prefix: string, ms: number): Promise<void> {
+/** `hold`: a defender behind a wall shoots what comes into sight and never walks out to look for it (the fortified post's gate). */
+async function fight(p: Pilot, prefix: string, ms: number, hold = false): Promise<void> {
   p.draw(WEAPON.RIFLE);
   await p.sleep(1200);
   const end = Date.now() + ms;
@@ -64,6 +65,10 @@ async function fight(p: Pilot, prefix: string, ms: number): Promise<void> {
     // a person shoots at what they can see: with nothing in sight they close in (walking, rifle ready) until somebody is
     const seen = live.find(([, n]) => p.canSee(n.x, n.y + 1.2, n.z));
     if (!seen) {
+      if (hold) {
+        await p.sleep(300);
+        continue;
+      }
       const [, t] = live[0]!;
       // (a few metres nearer each time, not "within 14": standing 13.7 m from a man behind a parapet, that arrived at once, forever)
       const d = Math.hypot(t.x - me.x, t.z - me.z);
@@ -366,6 +371,42 @@ export const PLANS: Plan[] = [
       // stand well off by the toll bar and watch the smoke
       await p.goTo(2, 10, { within: 3, label: "the toll bar" });
       await p.until(() => p.view?.resolution !== undefined, 400_000, "the smoke");
+    },
+  },
+  // D-045 at a real post (the dev-forced contract founds none; `outpost:<stage>` does, and rebuilds the collision world): the raiders walk in through the stockade's north gate
+  {
+    name: "raid-burn-fortified",
+    join: { region: "kessar", scenario: "outpost_raid", seed: 4243 },
+    expect: ["post_burned"],
+    async run(p) {
+      p.debug("outpost:fortified_outpost");
+      await p.goTo(2, 10, { within: 3, label: "the toll bar" });
+      await p.until(() => p.view?.resolution !== undefined, 400_000, "the smoke");
+    },
+  },
+  {
+    name: "raid-burn-town",
+    join: { region: "kessar", scenario: "outpost_raid", seed: 4243 },
+    expect: ["post_burned"],
+    async run(p) {
+      p.debug("outpost:town");
+      await p.goTo(2, 10, { within: 3, label: "the toll bar" });
+      await p.until(() => p.view?.resolution !== undefined, 400_000, "the smoke");
+    },
+  },
+  {
+    name: "raid-hold-fortified",
+    join: { region: "kessar", scenario: "outpost_raid", seed: 4243 },
+    expect: ["post_held", "post_burned", "abandoned"],
+    async run(p) {
+      p.debug("outpost:fortified_outpost");
+      await p.sleep(1500);
+      // the back of the yard, the gate in front: the raiders must come through it and across the yard (a man at the gate itself met five at sabre range: tried, D-047)
+      await p.goTo(KO.site.x, KO.site.z + 5, { within: 1.5, label: "the back of the yard" });
+      await p.until(() => p.npcs("raider-").length > 0, 160_000, "the landing");
+      await p.until(() => p.view?.phase === "fighting", 80_000, "the captain's watch");
+      await fight(p, "raider-", 240_000, true);
+      await p.until(() => p.view?.resolution !== undefined, 60_000, "resolution");
     },
   },
   {

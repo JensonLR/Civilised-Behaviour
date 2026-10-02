@@ -94,6 +94,7 @@ import {
   regionNavOptions,
   TEMPLATE_REGION,
   regionLanding,
+  HUB_CREW_SPOT,
   DEMO,
   npcThink,
   followerThink,
@@ -1266,7 +1267,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         openParley: (c, lv, seed) => openParley(c, lv, seed, this.powers),
         answerParley: (c, lv, seed, view, option) => answerParley(c, lv, seed, view, option, this.powers),
       },
-      rivalPresence: () => rivalPresence(this.campaign, this.powers),
+      // D-047: and the party's own post where the contract is played, so a raid meets the walls that stand
+      rivalPresence: () => {
+        const r = rivalPresence(this.campaign, this.powers);
+        const post = isRegionId(this.state.region) ? this.settlements.posts[this.state.region as RegionId]?.stage : undefined;
+        return post && post !== "none" ? { ...r, partyPost: post } : r;
+      },
       seed: this.state.seed,
       groundY: (x, z) => this.world.terrainHeight(x, z),
     };
@@ -1396,6 +1402,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (to === "hollowmere") {
       for (const h of spots.horses) this.mounts.spawnHorse(h, { coat: hash3(this.state.seed, Math.round(h.x), 0x4c01) });
       this.mounts.spawnWagon(spots.wagon, { coat: hash3(this.state.seed, 7, 0x4c02), crates: 0, horse: false });
+      // D-047: the hired hands come home with the party (they used to exist only on a foreign shore: hired at the table, never seen at home)
+      this.followers.home(HUB_CREW_SPOT);
       return;
     }
     const prep = this.pendingPrep;
@@ -1601,6 +1609,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const events: SettlementEvent[] = [{ kind: "founded", day: this.campaign.day, region: "kessar", stage, name: base.name }];
       this.commitSettlements({ ...this.settlements, posts: { ...this.settlements.posts, kessar: { ...base, stage, supply: 60, security: 50, trade: 50 } } }, events);
       this.rebuildWorld();
+      // (QA: a contract nothing has happened in yet starts again, so it sees the post as it would have in play, where the post is founded long before)
+      if (this.state.region === "kessar" && this.scenario && this.scenario.phase === "planning" && this.scenario.resolution === undefined) {
+        this.scenario.dispose();
+        this.scenario = undefined;
+        this.startScenario("kessar");
+      }
     }
     else if (cmd === "nearCannon") {
       // Stand at the breech of the first cannon, looking down the barrel.

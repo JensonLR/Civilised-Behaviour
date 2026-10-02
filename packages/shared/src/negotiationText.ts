@@ -141,6 +141,17 @@ export const REPLY = {
     "Going? Mind the road. It has not been improved.",
     "Of course. Do come back when you have found some manners.",
   ],
+  // D-047: a party short of the toll turns out its pockets
+  pleadOk: [
+    "£{cost}, a button and a promise. The ledger has seen worse. Go on, before I come to my senses.",
+    "I shall enter it as £{cost} and a hard-luck story. The bridge is yours. Do not make a habit of it.",
+    "£{cost}. The Ward is not a charity, but it was once a garrison of people with empty pockets. Cross.",
+  ],
+  pleadFail: [
+    "I have heard that story before, from a better liar. The toll is still £{toll}.",
+    "Pockets are not a currency. £{toll}, or the road.",
+    "Touching. The bridge remains £{toll}. The lamps remain unmoved.",
+  ],
   lastCall: [
     "I have a queue, you know. Well, I have a dog. Decide.",
     "The lamps are getting restless. Decide.",
@@ -152,6 +163,7 @@ export const LABEL = {
   haggle_flatter: "Flatter the Lamp-Warden",
   haggle_threaten: "Show them the guns",
   bribe: "Slip the quartermaster £{cost}",
+  plead: "Turn out your pockets (£{cost})",
   walk_away: "Walk away",
 } as const;
 
@@ -160,5 +172,6 @@ export const HINT = {
   haggle_flatter: "She likes being asked nicely.",
   haggle_threaten: "Needs a steady hand and a steady crowd. A bluff called ends the talking.",
   bribe: "Cheap and quiet, until it is neither.",
+  plead: "Everything you have, and the truth about it. She may take it.",
   walk_away: "Nothing lost, nothing crossed.",
 } as const;

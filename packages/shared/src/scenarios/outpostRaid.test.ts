@@ -129,6 +129,32 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect(wet.s.phase, "rain: the torches take longer").not.toBe("resolved");
   });
 
+  it("D-047: a post's stout sheds take longer to fire, by its stage (a fort is worth defending from); no post, or an old presence, is the plain 15 s", () => {
+    const presence = (partyPost?: string): RivalPresence => ({ goal: "sabotage_party", arrivesInS: 200, escort: 1, wagon: false, surveyors: 1, postStage: 0, raidDue: true, ...(partyPost ? { partyPost } : {}) } as RivalPresence);
+    const burnAt = (st?: string): number => {
+      const s0 = def.init(C, 0, SEED, presence(st));
+      const at = drive([...ticks(s0.raidAt + 1), { t: "hostile", at: "late:raiders" }, arrive(0), arrive(1)], s0).s;
+      let t = 0;
+      let s = at;
+      while (s.phase !== "resolved" && t < 60) { s = def.reduce(s, { t: "tick", dt: 1 }).s; t++; }
+      return t;
+    };
+    const base = burnAt();
+    const wet = def.init(C, 0, SEED, presence()).complication === "rain" ? RAID.rainTorch : 0;   // (the same deal for every stage: the complication does not read the post)
+    expect(base - wet).toBeGreaterThanOrEqual(RAID.torchS);
+    expect(base - wet).toBeLessThanOrEqual(RAID.torchS + 1);
+    expect(burnAt("camp")).toBe(base);
+    expect(burnAt("trading_post") - base).toBe(RAID.stout.trading_post);
+    expect(burnAt("fortified_outpost") - base).toBe(RAID.stout.fortified_outpost);
+    expect(burnAt("town") - base).toBe(RAID.stout.town);
+    // and the tracker says the real number
+    const s0 = def.init(C, 0, SEED, presence("fortified_outpost"));
+    const yard = drive([...ticks(s0.raidAt + 1), { t: "hostile", at: "late:raiders" }, arrive(0), arrive(1)], s0);
+    expect(said(yard.fx)).toContain(`${RAID.torchS + RAID.stout.fortified_outpost + wet} seconds and the stores go up`);
+    // an old presence (no partyPost) keeps the state byte-identical to before D-047
+    expect("stout" in def.init(C, 0, SEED, presence())).toBe(false);
+  });
+
   it("the people and the observe spec agree; under the cap", () => {
     const r = def.roster(C, SEED, S0);
     const ids = r.map((p) => p.id);

@@ -130,7 +130,7 @@ export function peopleForNpc(role: number, region: RegionId): PeopleId | undefin
     case NPC.HOSTAGE:
       return PEOPLE_OF_REGION[region];
     default:
-      return undefined; // NONE, RIVAL_GUARD, RIVAL_SURVEYOR, DESERTER, HIRED_RIFLE, SURGEON, FOREMAN: the Society, the Syndicate, the Company
+      return undefined; // NONE, RIVAL_GUARD, RIVAL_SURVEYOR, RAIDER, DESERTER, HIRED_RIFLE, SURGEON, FOREMAN: the Society, the Syndicate, the Company
   }
 }
 

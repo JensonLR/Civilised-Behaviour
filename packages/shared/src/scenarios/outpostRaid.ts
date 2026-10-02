@@ -6,7 +6,7 @@ import { KESSAR_OUTPOST } from "../outpost.ts";
 import { hash3 } from "../rng.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import { WEAPON, type WeaponId } from "../weapons.ts";
-import type { RivalPresence } from "../worldTypes.ts";
+import type { OutpostStage, RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
 
@@ -27,6 +27,8 @@ export const RAID = {
   demandS: 45,
   /** Raiders standing in the yard together for this long burn the stores (rain: longer). */
   torchS: 15, rainTorch: 10, torchersNeeded: 2,
+  /** D-047: a post's stout sheds take longer to fire (seconds added by stage): the fort is worth defending from, not a blind wall the raiders swarm through. */
+  stout: { none: 0, camp: 0, trading_post: 3, fortified_outpost: 10, settlement: 12, town: 15 } as Readonly<Record<OutpostStage, number>>,
   /** Share of the raiders down or routed that breaks the raid. */
   brokenFraction: 0.7,
   /** How widely the raiders spread at their ranks while the captain talks (metres across). */
@@ -65,6 +67,8 @@ export interface RaidState extends BaseState {
   crew: { alive: number; routed: number; down: number; total: number };
   /** Raiders who reached the yard and are not down (ids), and since when two or more have been there together. */
   inYard: string[]; torchSince: number;
+  /** D-047: seconds the post's own sheds add to the torch time (by its stage when the contract began). */
+  stout?: number;
   captainGone: boolean;
   price: number;
   purse: number; spent: number; paid: number;
@@ -82,6 +86,7 @@ function init(c: CampaignState, _asking: number, seed: number, presence?: RivalP
     phase: "planning", t: 0, resolvedAt: 0, complication, near: { post: 0 }, landed: false,
     raidAt: Math.round(RAID.raidMin + (h(1) % (RAID.raidMax - RAID.raidMin + 1)) + (complication === "fog" ? RAID.fogRaid : 0)),
     demandUntil: 0, attacking: false, crew: { alive: n, routed: 0, down: 0, total: n }, inYard: [], torchSince: 0, captainGone: false,
+    ...(presence?.partyPost && RAID.stout[presence.partyPost] > 0 ? { stout: RAID.stout[presence.partyPost] } : {}),
     price: rnd5(...RAID.priceProtection, h(2)), purse: int(c.purse, 0, 99999, 0), spent: 0, paid: 0, tally: zeroTally(), brokePromise: false,
   };
 }
@@ -91,7 +96,7 @@ function init(c: CampaignState, _asking: number, seed: number, presence?: RivalP
 const brokenCount = (s: RaidState): number => s.crew.routed + s.crew.down;
 const needed = (s: RaidState): number => Math.ceil(s.crew.total * RAID.brokenFraction);
 const isBroken = (s: RaidState): boolean => s.crew.total > 0 && brokenCount(s) >= needed(s);
-const torchS = (s: RaidState): number => RAID.torchS + (s.complication === "rain" ? RAID.rainTorch : 0);
+const torchS = (s: RaidState): number => RAID.torchS + (s.stout ?? 0) + (s.complication === "rain" ? RAID.rainTorch : 0);
 const affordable = (s: RaidState, n: number): boolean => n >= 0 && n <= s.purse - s.spent;
 const phaseOf = (s: RaidState): RaidState["phase"] =>
   s.parley ? "parley" : s.attacking ? "fighting" : s.demandUntil > 0 ? "standoff" : s.landed ? "tension" : "planning";
@@ -279,7 +284,8 @@ function roster(_c: CampaignState, seed: number, s: RaidState): NpcSpec[] {
   for (let i = 0; i < s.crew.total; i++) {
     const a = (i / s.crew.total) * Math.PI * 2;
     out.push({
-      id: `raider-${i}`, role: NPC.RIVAL_GUARD, faction: "rival", side: "rival", group: "late:raiders", post: { x: L.x + Math.cos(a) * 2.2, z: L.z + Math.sin(a) * 2.2 }, weapon: ARMS[i]!,
+      id: `raider-${i}`, role: NPC.RAIDER,   // (their own role so the client can give them torches; a Syndicate soldier in every other respect)
+       faction: "rival", side: "rival", group: "late:raiders", post: { x: L.x + Math.cos(a) * 2.2, z: L.z + Math.sin(a) * 2.2 }, weapon: ARMS[i]!,
       lookSeed: hash3(seed >>> 0, i, 0x2a1d), name: RAIDERS[i]!, skill: 38 + (hash3(seed >>> 0, i, 0x2a2) % 16), bravery: 40 + (hash3(seed >>> 0, i, 0x2a3) % 25), brain: "garrison",
     });
   }

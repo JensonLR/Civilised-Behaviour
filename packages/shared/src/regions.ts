@@ -88,6 +88,9 @@ export function regionLanding(id: RegionId): { x: number; z: number } {
     : id === "saltmarket" ? { x: SM.landing.x, z: SM.landing.z } : { x: JETTY.x0, z: JETTY.z0 };
 }
 
+/** D-047: where the hired hands stand at home, a step inland of the jetty's foot (the jetty's own end puts part of their ring over the pond); proven open by Followers.test.ts. */
+export const HUB_CREW_SPOT = { x: JETTY.x0 - 1.5, z: JETTY.z0 + 1 } as const;
+
 /** Navigation options of a region's nav grid (Kessar closes the gorge and prunes the sealed courtyard; Highmark the river). Hollowmere: none. */
 export function regionNavOptions(id: RegionId, world: CollisionWorld): NavOptions {
   return id === "kessar" ? kessarNavOptions(world) : id === "highmark" ? highmarkNavOptions(world) : id === "vesper" ? vesperNavOptions(world) : id === "saltmarket" ? saltmarketNavOptions(world) : {};

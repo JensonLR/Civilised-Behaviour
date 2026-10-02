@@ -164,8 +164,20 @@ export function buildHat(h: HatCtx): void {
       { color, top: "none" },
     );
   };
+  // D-047 (release gate 5): spectacles under a brim. The audit found the front of brims and peaks dipping into the lenses of 15 hats and 9 kinds of eyewear (worst 3.8 cm), so the
+  // fix is here, for every brim: with eyewear worn on the face, the front of a brim does not droop (it is worn turned up a little, as a person in spectacles wears it); the sides
+  // and the back keep their shape. Pushed-up goggles sit on the hat and a visor gives way to it, so neither lifts anything.
+  const onFace = spec.eyewear !== 0 && spec.eyewear !== 10 && spec.eyewear !== 13;
+  const clearGlasses = (rise: ((phi: number, s: number) => number) | undefined): ((phi: number, s: number) => number) | undefined => {
+    if (!onFace) return rise;
+    return (p, s) => {
+      const r = rise ? rise(p, s) : 0;
+      const f = 1 - sstep(0.5, 1.3, Math.abs(wrap(p)));
+      return r < 0 ? r * (1 - f) + f * R * 0.03 * s : r;
+    };
+  };
   const brim = (cr: Crown, y: number, width: (phi: number) => number, rise: ((phi: number, s: number) => number) | undefined, color: number, thick = R * 0.03, lining = tone(color, 0.78), nv = 2): ((phi: number, s: number, lift?: number) => V3) =>
-    addBrim(b, { y, inner: cr.radiusAt(y), width, rise, thick, color, lining, nv });
+    addBrim(b, { y, inner: cr.radiusAt(y), width, rise: clearGlasses(rise), thick, color, lining, nv });
   const sphereAt = (r: number, color: number, p: V3, sc?: V3): void => void b.sphere(r, color, p, sc);
 
   let trimCrown: Crown | undefined;

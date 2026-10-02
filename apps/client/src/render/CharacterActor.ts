@@ -7,6 +7,7 @@ import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
 import { ghostTree } from "./ghost.ts";
 import { WeaponRig } from "./weapons/WeaponRig.ts";
+import { TorchHold } from "./torch.ts";
 
 /**
  * First-person arm pose, added on top of the animator for the local body only (nobody else sees it). A relaxed arm hangs far below the
@@ -60,6 +61,8 @@ export interface ActorPose {
   ride?: RideInput;
   /** What the world is doing to this body now (mud underfoot, a blast or fire near, rain, water): it gathers mud and soot (D-038, `stepExposure`). Absent = nothing accrues. A shared scratch object is fine: it is read at once. */
   ground?: Omit<ExposureInput, "moving">;
+  /** D-047: a lit torch in the off hand (the raid's raiders whose weapon leaves it free). Absent = none. */
+  torch?: boolean;
 }
 
 /** The replicated combat state of one figure, as the actor needs it. */
@@ -93,6 +96,9 @@ export class CharacterActor {
   private ragdoll: Ragdoll | undefined;
   /** The weapon in the hands: model, recoil, blows (weapons/WeaponRig.ts). Rebuilt with the rig. */
   private weapons!: WeaponRig;
+  /** D-047: built on the first frame that wants one. */
+  private torch?: TorchHold;
+  private torchT = 0;
   private lastVy = 0;
   private lastVx = 0;
   private lastVz = 0;
@@ -153,8 +159,10 @@ export class CharacterActor {
     this.ragdoll?.dispose();
     this.ragdoll = undefined;
     this.marks?.dispose();
+    this.torch?.dispose();   // (off the old hand before the rig goes: its geometry is shared by every torch)
     this.rig?.dispose();
     this.rig = buildCharacter(spec, { outline: this.outline });
+    this.torch?.attach(this.rig.joints.wristL);
     this.marks = new BodyMarks(this.rig);
     this.marksKey = -1;
     this.anim = new CharacterAnimator(this.rig);
@@ -359,6 +367,15 @@ export class CharacterActor {
     const staff = (pose.flags & FLAG.OPERATING) !== 0 ? 0.85 : undefined; // (a cannon's crew has both fists round the rammer's staff)
     this.heldGrip.R = h.visible && h.right.w > 0.3 ? 0.92 : staff;
     this.heldGrip.L = h.visible && h.left.w > 0.3 ? 0.88 : staff;
+    // D-047: a torch in a free off hand (never while the hands are busy or the weapon wants the left hand too)
+    const torchOn = pose.torch === true && !busy && !(h.visible && h.left.w > 0.3);
+    if (torchOn && !this.torch) {
+      this.torch = new TorchHold(this.fallbackSeed);
+      this.torch.attach(this.rig.joints.wristL);
+    }
+    if (torchOn) this.heldGrip.L = 0.85;
+    this.torchT += dt;
+    this.torch?.update(torchOn, this.torchT);
     this.hands.update(dt, pose.flags, Math.hypot(pose.vx, pose.vz), this.anim.currentExpression, this.heldGrip.L, this.heldGrip.R);
     // The animator overwrites root.position.y each update with its own offset (e.g. lift when lying down);
     // the ground height is added afterwards.
@@ -446,6 +463,7 @@ export class CharacterActor {
   }
 
   dispose(): void {
+    this.torch?.dispose();
     this.marks.dispose();
     this.ragdoll?.dispose();
     this.ragdoll = undefined;

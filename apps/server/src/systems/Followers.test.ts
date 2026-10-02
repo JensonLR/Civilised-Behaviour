@@ -5,6 +5,7 @@ import type { CastApi, NpcSpec } from "@cb/shared";
 import { mindOf } from "@cb/shared";
 import { hirePool, newParty } from "@cb/shared";
 import { emptyLoadout } from "@cb/shared";
+import { HUB_CREW_SPOT, NavQuery, buildNavGrid, createRegionWorld, followerSpecs, regionNavOptions } from "@cb/shared";
 import { npcBrainNew, type NpcBrainState } from "@cb/shared";
 import { NO_COMMAND, parseParty, serializeParty } from "@cb/shared";
 import { Followers, FOLLOWERS_RATE, type FollowersHost } from "./Followers.ts";
@@ -606,5 +607,47 @@ describe("plates", () => {
     expect(writes).toBe(0);
     r.f.onCommand("p1", { intent: "retreat", who: 1 });
     expect(row.cmd).toBe(4);
+  });
+});
+
+describe("D-047: the crew is on the ground at home", () => {
+  const JETTY = HUB_CREW_SPOT;
+  it("home() lands the roster at the jetty; a hire at the table then comes up from it; a dismissal leaves the ground at once; a foreign landfall ends being home", () => {
+    const r = rig();
+    const removed: string[] = [];
+    r.host.cast.despawnOne = (id) => { removed.push(id); r.rows.delete(`npc:${id}`); };
+    r.human("p1");
+    const pool = hirePool(SEED, DAY);
+    expect(r.f.onHire("p1", { id: pool[0]!.id, on: true })).toBe(true);
+    expect(r.rows.has(`npc:${pool[0]!.id}`), "not yet home: no body").toBe(false);
+    expect(r.f.home(JETTY)).toBe(1);
+    const first = r.rows.get(`npc:${pool[0]!.id}`)!;
+    expect(Math.hypot(first.x - JETTY.x, first.z - JETTY.z)).toBeLessThan(3);
+    r.s.now += 1;
+    expect(r.f.onHire("p1", { id: pool[1]!.id, on: true })).toBe(true);
+    expect(r.rows.has(`npc:${pool[1]!.id}`), "the new hand comes up from the jetty").toBe(true);
+    expect(r.rows.get(`npc:${pool[0]!.id}`), "the first keeps its body").toBe(first);
+    r.s.now += 1;
+    expect(r.f.onHire("p1", { id: pool[0]!.id, on: false })).toBe(true);
+    expect(removed).toEqual([pool[0]!.id]);
+    expect(r.rows.has(`npc:${pool[0]!.id}`)).toBe(false);
+    // sailing: the hands leave the ground, and a hire is no longer possible anywhere but home (the table is shut), so being home ends with the expedition
+    r.f.endExpedition();
+    r.f.landfall({ x: 0, z: 82 });
+    r.s.now += 1;
+    expect(r.f.onHire("p1", { id: pool[2]!.id, on: true })).toBe(true);
+    expect(r.rows.has(`npc:${pool[2]!.id}`), "abroad, a hire would not appear at the landing").toBe(false);
+  });
+
+  it("the jetty ring where the crew stands at home is open ground on Hollowmere at every seed tried", () => {
+    for (const seed of [1, 3, 7, 11, 42, 777, 4242, 31337, 99991, 123457]) {
+      const w = createRegionWorld("hollowmere", seed);
+      const q = new NavQuery(buildNavGrid(w, regionNavOptions("hollowmere", w)));
+      let party = newParty();
+      for (const c of hirePool(seed, 1).slice(0, FOLLOWER_CAP)) party = { ...party, roster: [...party.roster, { ...c, owed: 0, wounded: 0, loyalty: 50, hiredDay: 1 } as never] };
+      const specs = followerSpecs(party, seed, JETTY);
+      expect(specs.length).toBeGreaterThan(0);
+      for (const sp of specs) expect(q.open(sp.post.x, sp.post.z), `${sp.post.x.toFixed(1)},${sp.post.z.toFixed(1)} @${seed}`).toBe(true);
+    }
   });
 });

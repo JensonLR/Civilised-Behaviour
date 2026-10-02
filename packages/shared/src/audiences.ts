@@ -134,6 +134,8 @@ export function answerAudience(c: CampaignState, p: PowersState, lv: Leverage, a
       if (r < pr + 0.25) return next(a.hook === "purchase" ? Math.ceil(toll * 1.2) : 0, moodShift(mood, -1), say(a, "refused", seed, round));
       return { done: { kind: "hostile", paid: 0 }, line: say(a, "hostile", seed, round) };
     }
+    // (the toll bar's plea, D-047: an audience never offers it, so it is answered like any option the round did not offer)
+    case "plead": return { view: viewOf(p, lv, a, round, toll, mood, typeof view?.line === "string" ? view.line.slice(0, 400) : "") };
   }
 }
 

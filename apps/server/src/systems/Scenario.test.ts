@@ -244,6 +244,39 @@ describe("the crossing through the runner", () => {
     expect(f.commits[0]!.paid).toBeLessThan(v.toll);
   });
 
+  it("D-047: a party short of the toll turns out its pockets through the real runner: offered, picked until it is taken or the talk ends, committed as bargained at what was in the purse", () => {
+    let bargained = 0, ended = 0;
+    for (const seed of [424242, 1, 2, 3, 77]) for (const purse of [12, 18, 25, 31]) {
+      const f = fake({ ...newCampaign(11), purse });
+      (f.host as { seed: number }).seed = seed;
+      const s = setup(f, "secure_crossing", row("p1", bar.x - 0.7, bar.z - 0.5));
+      run(f, s, 1.5);
+      press(f, s);
+      let v = lastParley(f, "p1")!.view!;
+      expect(v.toll).toBeGreaterThan(purse);
+      expect(v.options.map((o) => o.id)).not.toContain("pay");
+      for (let n = 0; n < 4 && v && f.commits.length === 0; n++) {
+        const i = optionIndex(v, "plead");
+        expect(i, `round ${v.round}: the plea is still on the table`).toBeGreaterThanOrEqual(0);
+        s.onPick("p1", i);
+        const last = lastParley(f, "p1")!;
+        if (last.closed) break;
+        v = last.view!;
+      }
+      if (f.commits.length) {
+        bargained++;
+        expect(f.commits[0]).toMatchObject({ scenario: "secure_crossing", resolution: "bargained", paid: purse, toll: purse, brokePromise: false });
+      } else {
+        ended++;
+        expect(lastParley(f, "p1")!.closed).toBe(true);
+        expect(lastView(f).phase).toBe("standoff");   // the door: the bar is still there to be crossed some other way
+      }
+    }
+    expect(bargained, "the Warden takes the pockets, often").toBeGreaterThan(5);
+    expect(ended, "and sometimes does not").toBeGreaterThan(0);
+    expect(bargained + ended).toBe(20);
+  });
+
   it("first blood alerts the ward group; breaking 60% of it is forced, with the dead and the routed counted", () => {
     const f = fake();
     const s = setup(f, "secure_crossing", row("p1", 0, 22));

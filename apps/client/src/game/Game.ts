@@ -1096,7 +1096,7 @@ export class Game {
       }
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER },
         getGore(),
         getShowLimbs(),
       );

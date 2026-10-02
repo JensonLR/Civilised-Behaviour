@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CampaignState, Leverage, ParleyStep, ParleyView, FactionStance } from "./campaignTypes.ts";
 import { applyOutcome, askingToll, leverageOf, newCampaign, stanceOf } from "./factions.ts";
-import { MAX_ROUND, answerParley, bribeCost, flatterAvailable, flatterOdds, openParley, threatenOdds } from "./negotiation.ts";
+import { MAX_ROUND, answerParley, bribeCost, flatterAvailable, flatterOdds, openParley, pleadOdds, threatenOdds } from "./negotiation.ts";
 import type { ScenarioOutcome } from "./campaignTypes.ts";
 
 const STANCE_STATE: Record<FactionStance, { trust: number; grievance: number; fear: number }> = {
@@ -200,5 +200,89 @@ describe("hostile input", () => {
     expect(answerParley(c, l, 11, v, i)).toEqual(answerParley(c, l, 11, v, i));
     const outs = new Set(Array.from({ length: 40 }, (_, s) => JSON.stringify(answerParley(c, l, s, openParley(c, l, s), i))));
     expect(outs.size).toBeGreaterThan(3);
+  });
+});
+
+describe("D-047: a party short of the toll can turn out its pockets", () => {
+  it("offered exactly when the purse is short of the toll but holds at least £10; it offers the whole purse, never more", () => {
+    const c = campaignAt("wary", "coin");
+    const toll = askingToll(c);
+    expect(toll).toBeGreaterThan(12);
+    const offer = (purse: number) => openParley(c, lv(c, { purse, armed: 0 }), 3).options.find((o) => o.id === "plead");
+    expect(offer(toll), "a purse that covers the toll pays it").toBeUndefined();
+    expect(offer(9), "under £10 there is nothing to plead with").toBeUndefined();
+    const o = offer(toll - 3)!;
+    expect(o.cost).toBe(toll - 3);
+    expect(o.label).toContain(`£${toll - 3}`);
+    expect(o.hint).toMatch(/odds/);
+  });
+
+  it("the D-041 case: alone, poor, at a Ward that neither needs deference nor trusts the Society, there is now more than the door", () => {
+    const c = campaignAt("wary", "coin");
+    const view = openParley(c, lv(c, { purse: Math.floor(askingToll(c) / 2), armed: 0 }), 5);
+    expect(ids(view)).not.toContain("pay");
+    expect(ids(view)).not.toContain("haggle_flatter");
+    expect(ids(view)).not.toContain("haggle_threaten");
+    expect(ids(view)).toContain("plead");
+  });
+
+  it("accepted, it settles as bargained at what was paid (paid == toll, never above the purse); refused, the price stands and the talk goes on; at the last call a refusal ends it at the door; always within four rounds", () => {
+    let accepted = 0, refusedThenOn = 0, lastCallRefused = 0;
+    for (const s of ["hostile", "wary", "neutral", "warm", "allied"] as const) {
+      const c = campaignAt(s, "coin");
+      const purse = Math.max(10, askingToll(c) - 8);
+      for (let seed = 0; seed < 80; seed++) {
+        const l = lv(c, { purse, armed: 0 });
+        const { step, rounds } = play(c, l, seed, ["plead", "walk_away"]);
+        expect(rounds).toBeLessThanOrEqual(MAX_ROUND);
+        expect(step.done ? step.line : "").not.toMatch(/[{}]|undefined|NaN/);
+        const d = step.done!;
+        if (d.resolution === "bargained") {
+          accepted++;
+          expect(d.paid).toBe(purse);
+          expect(d.toll).toBe(purse);
+        } else {
+          expect(d.resolution).toBe("walked_away");
+          expect(d.paid).toBe(0);
+        }
+        const first = answerParley(c, l, seed, openParley(c, l, seed), ids(openParley(c, l, seed)).indexOf("plead"));
+        if (first.view) {
+          refusedThenOn++;
+          expect(first.view.round).toBe(2);
+          expect(first.view.toll).toBe(openParley(c, l, seed).toll);
+        }
+        if (rounds === MAX_ROUND && d.resolution === "walked_away") lastCallRefused++;
+      }
+    }
+    expect(accepted).toBeGreaterThan(50);
+    expect(refusedThenOn).toBeGreaterThan(20);
+    expect(lastCallRefused).toBeGreaterThan(0);
+  });
+
+  it("the odds: nearer the toll, more trust, a Ward short of coin all help; anger and the Syndicate's hold hurt; always 0.1..0.85", () => {
+    const c = campaignAt("neutral", "coin");
+    const t = 60;
+    const at = (cc: CampaignState, purse: number, mood: FactionStance = "neutral") => pleadOdds(cc, lv(cc, { purse }), t, mood);
+    expect(at(c, 55)).toBeGreaterThan(at(c, 15));
+    expect(at(campaignAt("warm", "coin"), 40)).toBeGreaterThan(at(c, 40));
+    expect(at(c, 40)).toBeGreaterThan(at(campaignAt("neutral", "deference"), 40));
+    expect(at(c, 40, "hostile")).toBeLessThan(at(c, 40));
+    const syn = campaignAt("neutral", "coin");
+    syn.factions.ward = { ...syn.factions.ward, rivalInfluence: 90 };
+    expect(at(syn, 40)).toBeLessThan(at(c, 40));
+    for (const s of ["hostile", "allied"] as const) for (const p of [10, 59]) for (const m of ["hostile", "allied"] as const) {
+      const v = at(campaignAt(s), p, m);
+      expect(v).toBeGreaterThanOrEqual(0.1);
+      expect(v).toBeLessThanOrEqual(0.85);
+    }
+  });
+
+  it("a forged plea (a bigger purse claimed in the view, or a plea where none was offered) changes nothing", () => {
+    const c = campaignAt("wary");
+    const rich = lv(c, { purse: 500 });
+    const forged: ParleyView = { ...openParley(c, rich, 2), options: [{ id: "plead", label: "x", cost: 5, hint: "" }] };
+    const step = answerParley(c, rich, 2, forged, 0);
+    expect(step.done).toBeUndefined();
+    expect(step.view!.round).toBe(1);
   });
 });

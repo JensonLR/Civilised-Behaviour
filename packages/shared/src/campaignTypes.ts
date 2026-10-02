@@ -64,7 +64,7 @@ export interface ScenarioOutcome {                                       // what
 }
 // ---- negotiation (types here so C never imports A's code) ----
 export interface Leverage { purse: number; armed: number; garrisonAlive: number; garrisonTotal: number; partyWounded: number; rivalInfluence: number; lies: number }
-export interface ParleyOption { id: "pay" | "haggle_flatter" | "haggle_threaten" | "bribe" | "walk_away"; label: string; cost: number; hint: string }
+export interface ParleyOption { id: "pay" | "haggle_flatter" | "haggle_threaten" | "bribe" | "plead" | "walk_away"; label: string; cost: number; hint: string }
 export interface ParleyView { round: number; speaker: string; line: string; toll: number; options: ParleyOption[]; mood: FactionStance }
 export type ParleyStep = { view: ParleyView; done?: undefined } | { done: { resolution: ResolutionId | "walked_away" | "hostile"; toll: number; paid: number }; view?: undefined; line: string };
 // ---- scenario public view (HUD) and machine I/O ----
@@ -100,7 +100,7 @@ export type ScenarioFx =
 export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation" | "court" | "post";   // D-036: "court" = a person of Highmark's court (the chamberlain, a claimant), acted on through the scenario; D-037: "post" = the same for any later region (a foreman, a clerk, a customs shed)
 export interface UseStation { id: string; kind: StationKind; x: number; z: number; r: number; prompt: string }
 export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10, CHAMBERLAIN: 11, CLAIMANT: 12, COURT_GUARD: 13, HERDER: 14,
-  FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three)
+  FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20, RAIDER: 21 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three; D-047: the Syndicate's torch-bearing raiders)
 export const NPC_CAP = 24, FOLLOWER_CAP = 4, SETTLED_DAYS = 3, HOSTAGE_DEADLINE_S = 480, CONVOY_DEPART_S = 60, BORDER_ESCALATE_S = 240, NAME_TAG_RANGE = 30, SAIL_SECONDS = 6, ARRIVE_TIMEOUT_S = 30, PROPOSE_TIMEOUT_S = 20, RIVAL_ARRIVES_S = 420, RIVAL_PARLEY_S = 60, RESOLVED_LINGER_S = 45;
 /** Story coordinates of Kessar Reach (metres, x east, z south, y from terrain). B builds the geometry around them; C puts people on them. Frozen. */
 export const KESSAR_ANCHORS = {
