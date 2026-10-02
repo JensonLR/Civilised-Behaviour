@@ -107,7 +107,9 @@ export class LimbDebris {
         g.position.y += s.vy * dt;
         g.position.z += s.vz * dt;
       }
-      if (g.position.y <= ground) {
+      // Contact uses the same 1 mm the step above treats as resting: a bounce whose last step ended inside it, above `ground`, was neither
+      // moved nor caught and hovered there, spinning, for the limb's whole life.
+      if (g.position.y <= ground + 1e-3) {
         g.position.y = ground;
         if (s.vy < -1.2) s.vy = -s.vy * DEBRIS.restitution;
         else s.vy = 0;
