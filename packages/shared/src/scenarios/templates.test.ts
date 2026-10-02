@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { liveTemplates } from "../regionStatus.ts";
-import type { NewEnding } from "../regionEndings.ts";
+import { isNewTemplate, type NewEnding } from "../regionEndings.ts";
 import type { CampaignState, ResolutionId, ScenarioFx, ScenarioTemplateId } from "../campaignTypes.ts";
 import { BORDER_ESCALATE_S, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, RESOLVED_LINGER_S } from "../campaignTypes.ts";
 import { BORDER } from "./border.ts";
@@ -109,7 +109,8 @@ describe("templates: one scripted run per resolution on the pure reducers", () =
       campaigns.add(JSON.stringify(after));
       heads.add(generatePaper(after, 5).headline);
     }
-    for (const id of REGION_TEMPLATES.kessar) expect(states.get(id)!.size, id).toBeGreaterThanOrEqual(3);
+    // (Kessar's four original contracts; D-045's raid is a newer template, scripted in scenarios/outpostRaid.test.ts and covered by regionsContract.test.ts like every other)
+    for (const id of REGION_TEMPLATES.kessar.filter((t) => !isNewTemplate(t))) expect(states.get(id)!.size, id).toBeGreaterThanOrEqual(3);
     expect(campaigns.size).toBe(20);
     expect(heads.size).toBe(20);
   });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ParleyView, RegionId, ScenarioTemplateId } from "@cb/shared";
+import { REGION_TEMPLATES, type ParleyView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 
 vi.mock("../audio/index.ts", () => ({ playSfx: () => undefined, attachUiSounds: () => undefined }));
 const { Parley } = await import("./Parley.ts");
@@ -34,6 +34,13 @@ describe("the parley sheet says where the talks are and what is asked (D-041)", 
     expect(border.meta).not.toMatch(/£|She /);
     expect(framed("kessar", "convoy_ambush", 0).heading).toMatch(/picket/);
     expect(framed("kessar", undefined, 53).heading).toBe("An audience at the toll bar"); // (no contract known yet: the toll bar)
+  });
+  it("every Kessar contract, the later ones included, frames its own talks (D-045: the raid's captain is not the Lamp-Warden at the toll bar)", () => {
+    const heads = REGION_TEMPLATES.kessar.map((t) => framed("kessar", t, 60).heading);
+    expect(new Set(heads).size).toBe(heads.length);
+    const raid = framed("kessar", "outpost_raid", 60);
+    expect(raid.heading).toMatch(/yard/);
+    expect(raid.meta).toBe("Retainer asked: £60 · Round 1 · The raiders seem neutral.");
   });
   it("every region's asked line separates its parts with a visible mark, never with runs of spaces", () => {
     for (const [r, t] of [["kessar", "secure_crossing"], ["kessar", "hostage_rescue"], ["highmark", "succession_dispute"], ["vesper", undefined], ["saltmarket", undefined]] as const) {

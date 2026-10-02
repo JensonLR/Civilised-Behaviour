@@ -374,6 +374,22 @@ describe("Cast: orders", () => {
     expect(Math.hypot(p.x - 10, p.z + 12)).toBeLessThan(2);
   });
 
+  it("march with join picks the route up at the nearest waypoint; without it the walk starts from the first (D-045: a raid ordered in mid-march)", () => {
+    const walk = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: -12 }, { x: 0, z: -12 }];
+    const at = (join: boolean): { x: number; z: number } => {
+      const r = rig();
+      r.cast.defineRoute("walk", walk);
+      r.cast.spawn([spec("r1", { group: "rival", side: "rival", faction: "rival", role: NPC.RIVAL_GUARD, post: { x: 10, z: -11 } })]);
+      r.cast.order("rival", join ? { o: "march", route: "walk", join } : { o: "march", route: "walk" });
+      r.tick(150);
+      return r.rows.get("npc:r1")!;
+    };
+    const joined = at(true);
+    expect(Math.hypot(joined.x - 0, joined.z + 12), "joined at 10,-12 and walked the last leg").toBeLessThan(2);
+    const fromStart = at(false);
+    expect(Math.hypot(fromStart.x - 0, fromStart.z + 12), "went back to the first waypoint").toBeGreaterThan(5);
+  });
+
   it("guard moves a group to a spot and spreads it inside the radius", () => {
     const r = rig();
     r.cast.spawn([0, 1, 2].map((i) => spec(`g${i}`, { post: { x: 20, z: 20 }, lookSeed: 40 + i })));

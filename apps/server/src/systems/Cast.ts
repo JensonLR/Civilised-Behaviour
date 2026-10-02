@@ -204,6 +204,16 @@ export class Cast implements CastApi {
           b.path.n = n;
           b.path.complete = n === pts.length;
           b.route = 0;
+          if (o.join === true) {
+            const row = this.host.players.get(r.key);
+            if (row) {
+              let best = Infinity;
+              for (let i = 0; i < n; i++) {
+                const d = Math.hypot(pts[i]!.x - row.x, pts[i]!.z - row.z);
+                if (d < best) { best = d; b.route = i; }
+              }
+            }
+          }
           b.fled = false;
           b.mode = "march";
           b.since = now;

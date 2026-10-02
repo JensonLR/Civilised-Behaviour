@@ -1,4 +1,4 @@
-import { BUTTON, FLAG, HIGHMARK_ANCHORS as H, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
+import { BUTTON, FLAG, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
 import type { Pilot } from "./pilot.ts";
 
 export interface Plan {
@@ -317,6 +317,86 @@ export const PLANS: Plan[] = [
       for (const [i, pg] of VS.claimPegs.entries()) await useAt(p, pg.x, pg.z, `peg ${i}`, 1.2);
       if (await talkTo(p, "assayer")) await p.pick(/^File the claim/);
       await p.until(() => p.view?.resolution !== undefined, 30_000, "resolution");
+    },
+  },
+  {
+    name: "engine-foul",
+    join: { region: "vesper", scenario: "winding_engine", seed: SEED },
+    expect: ["engine_fouled"],
+    async run(p) {
+      // D-044: a crate of tailings from the heap on the ore road, up the terrace's east ramp (a laden walker cannot jump the side bank the nav grid would cut up), to the boiler's feed
+      if (!(await pickUp(p, PropKind.CRATE, VS.engine.grit[0]!.x, VS.engine.grit[0]!.z))) return;
+      await p.goTo(24, -38, { within: 2, label: "the foot of the terrace ramp" });
+      await useAt(p, VS.engine.boiler.x, VS.engine.boiler.z, "grit into the feed", 1.8);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
+    },
+  },
+  {
+    name: "raid-pay",
+    join: { region: "kessar", scenario: "outpost_raid", seed: SEED },
+    expect: ["protection_paid"],
+    async run(p) {
+      // wait in the yard for the landing, then walk out to the captain at the muster and buy the season
+      await p.goTo(KO.site.x, KO.site.z, { within: 3, label: "the post's yard" });
+      await p.until(() => p.npc("captain") !== undefined, 140_000, "the landing");
+      await p.until(() => { const c = p.npc("captain"); return c !== undefined && Math.hypot(c.x - RS.muster.x, c.z - RS.muster.z) < 2; }, 40_000, "the captain halted at the muster");
+      if (await talkTo(p, "captain", 2)) await p.pick(/protection/);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
+    },
+  },
+  {
+    name: "raid-hold",
+    // (seed 4243: no complication, five raiders; SEED's campaign deals the reinforcements, seven, which a lone rifle is not meant to hold)
+    join: { region: "kessar", scenario: "outpost_raid", seed: 4243 },
+    expect: ["post_held", "post_burned", "abandoned"],
+    async run(p) {
+      // hold the yard: let them land and muster, and fire when they come across the open ground (not at the landing, 30 m off, which only starts it sooner)
+      await p.goTo(KO.site.x, KO.site.z - 3, { within: 2, label: "the post's yard" });
+      await p.until(() => p.npcs("raider-").length > 0, 160_000, "the landing");
+      await p.until(() => p.view?.phase === "fighting", 80_000, "the captain's watch");
+      await fight(p, "raider-", 240_000);
+      await p.until(() => p.view?.resolution !== undefined, 60_000, "resolution");
+    },
+  },
+  {
+    name: "raid-let-burn",
+    join: { region: "kessar", scenario: "outpost_raid", seed: SEED },
+    expect: ["post_burned"],
+    async run(p) {
+      // stand well off by the toll bar and watch the smoke
+      await p.goTo(2, 10, { within: 3, label: "the toll bar" });
+      await p.until(() => p.view?.resolution !== undefined, 400_000, "the smoke");
+    },
+  },
+  {
+    name: "engine-buy",
+    join: { region: "vesper", scenario: "winding_engine", seed: SEED },
+    expect: ["engine_bought"],
+    async run(p) {
+      if (await talkTo(p, "engineer")) await p.pick(/inspection/);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
+    },
+  },
+  {
+    name: "engine-blow",
+    join: { region: "vesper", scenario: "winding_engine", seed: SEED },
+    expect: ["engine_blown", "abandoned"],
+    async run(p) {
+      // the Company's keg from its magazine by the fall, up to the boiler, lit, and then away
+      if (!(await pickUp(p, PropKind.BARREL, VK.keg.x, VK.keg.z))) return;
+      await p.goTo(24, -38, { within: 2, label: "the foot of the terrace ramp" });
+      await useAt(p, VS.engine.boiler.x, VS.engine.boiler.z, "the keg under the boiler", 1.8);
+      await p.goTo(VS.engine.yard.x - 22, VS.engine.yard.z + 20, { label: "away from the fuse", sprint: true });
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "the blast");
+    },
+  },
+  {
+    name: "engine-let-run",
+    join: { region: "vesper", scenario: "winding_engine", seed: SEED },
+    expect: ["vein_struck"],
+    async run(p) {
+      await p.goTo(V.headframe.x - 14, V.headframe.z + 30, { label: "below the terrace" });
+      await p.until(() => p.view?.resolution !== undefined, 480_000, "the cross-cut");
     },
   },
   {

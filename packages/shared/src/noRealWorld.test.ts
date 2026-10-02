@@ -106,7 +106,9 @@ describe("no real-world terms in authored text", () => {
       // D-035: the powers, the rival agent, the audiences and the relation map
       "powers.ts", "powersText.ts", "rival.ts", "rivalText.ts", "audiences.ts", "relations.ts", "worldTypes.ts",
       // D-036: Highmark (region two): the plan and its signs, the succession dispute, the chart
-      "highmark.ts", "scenarios/succession.ts", "mapData.ts", "outpostText.ts"]) {
+      "highmark.ts", "scenarios/succession.ts", "mapData.ts", "outpostText.ts",
+      // D-037..D-045: every later template's notices and objectives live in its reducer
+      "scenarios/mineRescue.ts", "scenarios/claimRace.ts", "scenarios/windingEngine.ts", "scenarios/smugglingRun.ts", "scenarios/floodedMarket.ts", "scenarios/reapersStrike.ts", "scenarios/outpostRaid.ts"]) {
       const url = new URL(f, dir);
       expect(existsSync(url), f).toBe(true);
       const hit = readFileSync(url, "utf8").split("\n").findIndex((l) => RE.test(l));

@@ -12,6 +12,8 @@ import { floodedMarketTemplate } from "./floodedMarket.ts";
 import { hostageTemplate } from "./hostage.ts";
 import { mineRescueTemplate } from "./mineRescue.ts";
 import { reapersStrikeTemplate } from "./reapersStrike.ts";
+import { windingEngineTemplate } from "./windingEngine.ts";
+import { outpostRaidTemplate } from "./outpostRaid.ts";
 import { smugglingRunTemplate } from "./smugglingRun.ts";
 import { successionTemplate } from "./succession.ts";
 import type { AnyTemplate } from "./types.ts";
@@ -22,6 +24,8 @@ export { BORDER } from "./border.ts";
 export { HOSTAGE } from "./hostage.ts";
 export { SMUGGLE } from "./smugglingRun.ts";
 export { STRIKE } from "./reapersStrike.ts";
+export { ENGINE } from "./windingEngine.ts";
+export { RAID, RAID_SITES } from "./outpostRaid.ts";
 
 /** Every template, by id. The runner (server `Scenario`) is generic over this table. */
 export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
@@ -35,14 +39,16 @@ export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
   smuggling_run: smugglingRunTemplate as unknown as AnyTemplate,   // D-037: the Saltmarket Delta's
   flooded_market: floodedMarketTemplate as unknown as AnyTemplate,
   reapers_strike: reapersStrikeTemplate as unknown as AnyTemplate,   // D-042: Highmark's second
+  winding_engine: windingEngineTemplate as unknown as AnyTemplate,   // D-044: Vesper's third
+  outpost_raid: outpostRaidTemplate as unknown as AnyTemplate,   // D-045: Kessar's fifth
 };
-export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike"];
+export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike", "winding_engine", "outpost_raid"];
 /** D-036: the contracts each region offers (the ledger weights WITHIN a region's list; Kessar's four are unchanged). D-042: Highmark has two. */
 export const REGION_TEMPLATES: Readonly<Record<RegionId, readonly ScenarioTemplateId[]>> = {
   hollowmere: [],
-  kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"],
+  kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "outpost_raid"],   // D-045: the raid only while one is due
   highmark: ["succession_dispute", "reapers_strike"],
-  vesper: ["mine_rescue", "claim_race"],   // D-037
+  vesper: ["mine_rescue", "claim_race", "winding_engine"],   // D-037; D-044 the engine
   saltmarket: ["smuggling_run", "flooded_market"],
 };
 export const isTemplateId = (v: unknown): v is ScenarioTemplateId => typeof v === "string" && (TEMPLATE_IDS as readonly string[]).includes(v);
@@ -75,8 +81,10 @@ export function pickTemplate(c: CampaignState, region: RegionId, seed: number, p
     hostage_rescue: 1 + (had("forced") ? 4 : 0) + (had("abandoned") ? 3 : 0) + (w.militaryStrength <= 40 ? 2 : 0),
     convoy_ambush: 1 + (w.rivalInfluence >= 50 ? 4 : 0) + (had("rival_secured") ? 3 : 0) + (presence?.wagon ? 6 : 0),   // the Syndicate runs a wagon while it has goods to move
     border_incident: 1 + (w.militaryStrength >= 55 && w.rivalInfluence >= 35 ? 4 : 0) + (presence !== undefined && presence.postStage > 0 ? 3 : 0),
+    // D-045: the raid is offered only while the Syndicate means to raid the party's post, and then above everything else (a weight of 0 otherwise keeps the hashed old weights byte-identical)
+    outpost_raid: presence?.raidDue ? 12 : 0,
     succession_dispute: 0,   // never offered at Kessar
-    mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0, reapers_strike: 0,   // (D-037, D-042: nor are the later regions' contracts)
+    mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0, reapers_strike: 0, winding_engine: 0,   // (D-037, D-042: nor are the later regions' contracts)
   };
   const last = c.history[c.history.length - 1]!.template;
   const ids = TEMPLATE_IDS.filter((id) => weights[id] > 0);

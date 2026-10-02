@@ -32,7 +32,7 @@ import type { ScenarioOutcome } from "./campaignTypes.ts";
  * and `REGIONS.<id>.reachable` true (together, as its last act) the region must be invisible to players yet fully addressable by a dev start.
  */
 const REGION_OF: Record<"vesper" | "saltmarket", { status: { stub: boolean }; endings: readonly ResolutionId[]; templates: readonly ScenarioTemplateId[] }> = {
-  vesper: { status: VESPER_STATUS, endings: VESPER_RESOLUTIONS, templates: ["mine_rescue", "claim_race"] },
+  vesper: { status: VESPER_STATUS, endings: VESPER_RESOLUTIONS, templates: ["mine_rescue", "claim_race", "winding_engine"] },
   saltmarket: { status: SALTMARKET_STATUS, endings: SALTMARKET_RESOLUTIONS, templates: ["smuggling_run", "flooded_market"] },
 };
 const tally = { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 };
@@ -94,8 +94,8 @@ describe("Vesper Gorge and the Saltmarket Delta: the contract (D-037)", () => {
   });
 
   it("the newer templates are registered, each offered only in its own region, each with >= 3 endings besides abandoned", () => {
-    expect(NEW_TEMPLATE_IDS.sort()).toEqual(["claim_race", "flooded_market", "mine_rescue", "reapers_strike", "smuggling_run"]);   // D-037's four, D-042's strike
-    expect(REGION_TEMPLATES.vesper).toEqual(["mine_rescue", "claim_race"]);
+    expect(NEW_TEMPLATE_IDS.sort()).toEqual(["claim_race", "flooded_market", "mine_rescue", "outpost_raid", "reapers_strike", "smuggling_run", "winding_engine"]);   // D-037's four, D-042's strike, D-044's engine, D-045's raid
+    expect(REGION_TEMPLATES.vesper).toEqual(["mine_rescue", "claim_race", "winding_engine"]);
     expect(REGION_TEMPLATES.saltmarket).toEqual(["smuggling_run", "flooded_market"]);
     for (const id of NEW_TEMPLATE_IDS) {
       expect(TEMPLATE_IDS).toContain(id);
@@ -120,16 +120,16 @@ describe("Vesper Gorge and the Saltmarket Delta: the contract (D-037)", () => {
         seen.add(t);
         h = applyOutcome(h, outcome(TEMPLATE_RESOLUTIONS[t][0]!, t));
       }
-      expect(seen.size, `${region} offers both of its contracts over a campaign`).toBe(2);
+      expect(seen.size, `${region} offers every one of its contracts over a campaign`).toBe(REGION_TEMPLATES[region].length);
     }
     for (const day of [1, 4, 9, 30]) for (const tpl of ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident"] as const) {
       expect(NEW_TEMPLATE_IDS as string[], "never at Kessar").not.toContain(pickTemplate({ ...c, day, history: [{ seq: 1, region: "kessar", resolution: "paid", day: 1, template: tpl }] }, "kessar", day));
     }
   });
 
-  it("all twenty endings in the D-037 shape are in every exhaustive table, apply without throwing, and are remembered in the ledger and the paper", () => {
-    expect(NEW_RESOLUTIONS.length).toBe(20);   // Vesper's eight, the Saltmarket's eight, the strike's four (D-042)
-    expect(new Set(NEW_RESOLUTIONS).size).toBe(20);
+  it("all twenty-seven endings in the D-037 shape are in every exhaustive table, apply without throwing, and are remembered in the ledger and the paper", () => {
+    expect(NEW_RESOLUTIONS.length).toBe(27);   // Vesper's eight, the Saltmarket's eight, the strike's four (D-042), the engine's four (D-044), the raid's three (D-045)
+    expect(new Set(NEW_RESOLUTIONS).size).toBe(27);
     for (const r of NEW_RESOLUTIONS) expect(RESOLUTIONS).toContain(r);
     for (const tpl of NEW_TEMPLATE_IDS) {
       for (const r of NEW_TEMPLATE_RESOLUTIONS[tpl]) {
@@ -174,7 +174,7 @@ describe("Vesper Gorge and the Saltmarket Delta: the contract (D-037)", () => {
   });
 
   it("the scripted parley kinds: each opens, walks away, never throws on hostile input, and only ever reports a result its script offers", () => {
-    expect([...SCRIPTED_KINDS].sort()).toEqual(["assayer", "auctioneer", "dirge_master", "foreman", "house_head", "reaper", "steward", "tide_reeve"]);   // D-037's six, D-042's two
+    expect([...SCRIPTED_KINDS].sort()).toEqual(["assayer", "auctioneer", "dirge_master", "engineer", "foreman", "house_head", "raid_captain", "reaper", "steward", "tide_reeve"]);   // D-037's six, D-042's two, D-044's engineer, D-045's captain
     for (const kind of SCRIPTED_KINDS) {
       const sc = parleyScript(kind)!;
       expect(sc.speaker.length).toBeGreaterThan(5);

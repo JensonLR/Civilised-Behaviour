@@ -17,6 +17,7 @@ export const COMPLICATION_POOL: Record<ScenarioTemplateId, readonly Complication
   hostage_rescue: ["reinforcements", "rival_bid", "rain"],
   convoy_ambush: ["outriders", "ward_patrol", "rain"],
   border_incident: ["fog", "stray_shot", "reinforcements"],
+  outpost_raid: ["reinforcements", "fog", "rain"],   // D-045: more raiders; a late launch; slow torches (scenarios/outpostRaid.ts)
   succession_dispute: ["rain", "fog", "outriders"],   // D-036: rain hurries the harvest bell, fog delays it, outriders shorten the Syndicate's patience (scenarios/succession.ts)
   ...VESPER_COMPLICATIONS, ...SALTMARKET_COMPLICATIONS, ...REAPERS_COMPLICATIONS,   // D-037: each region package declares the pools of its own two templates (existing ComplicationIds only)
 };
@@ -29,7 +30,7 @@ const NONE_WEIGHT = 3, ENTRY_WEIGHT = 3;
 /** The crossing's own rule, unchanged since slice 1: the Syndicate turns up early when it smells a precedent. */
 const crossingScouts = (c: CampaignState): boolean => c.factions.ward.rivalInfluence >= 45 || hash3(c.seed, Math.max(0, Math.round(c.day)), 0x5c07) % 100 < 35;
 
-const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10 };
+const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10, winding_engine: 11, outpost_raid: 12 };
 
 export function dealComplication(c: CampaignState, id: ScenarioTemplateId, seed: number, presence?: RivalPresence): ComplicationId {
   if (id === "secure_crossing") return crossingScouts(c) ? "rival_scouts" : "none";

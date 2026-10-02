@@ -14,6 +14,8 @@ const KESSAR_PARLEY: Partial<Record<ScenarioTemplateId, { heading: string; asked
   hostage_rescue: { heading: "Terms at Hangman's Orchard", asked: "Price asked: £{price} · Round {round} · The camp seems {mood}." },
   border_incident: { heading: "A word at Marker Stone No. 4", asked: "Round {round} · The bank seems {mood}." },
   convoy_ambush: { heading: "A word with the ford picket", asked: "Round {round} · The picket seems {mood}." },
+  // D-045: the raiders' captain names a retainer at the edge of the post's yard
+  outpost_raid: { heading: "Terms at the edge of the yard", asked: "Retainer asked: £{price} · Round {round} · The raiders seem {mood}." },
 };
 const COURT = { heading: "An audience at court", asked: "Price asked: £{price} · Round {round} · The court seems {mood}." };
 /** D-042: the strike is argued at the foot of the hill, not at court (the Foreperson names a bonus, the Steward a fee). */

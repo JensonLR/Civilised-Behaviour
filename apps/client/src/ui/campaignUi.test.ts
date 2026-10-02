@@ -121,6 +121,15 @@ describe("what the map room is told", () => {
     expect(regionNote("kessar", c)).toContain("£55");
   });
 
+  it("D-045: while the Syndicate's raid on the post is due, the chart offers the Raid on the Post at Kessar on most visits; never once it is spent", () => {
+    const c = newCampaign(1);
+    c.history.push({ seq: 1, region: "kessar", resolution: "paid", day: 1, template: "secure_crossing" });
+    const presence = { goal: "sabotage_party" as const, arrivesInS: 200, escort: 1, wagon: false, surveyors: 1, postStage: 2 as const };
+    const due = Array.from({ length: 20 }, (_, i) => regionNote("kessar", c, i + 1, { ...presence, raidDue: true }));
+    expect(due.filter((n) => n.includes("On offer: The Raid on the Post.")).length).toBeGreaterThan(10);
+    for (let i = 1; i <= 20; i++) expect(regionNote("kessar", c, i, presence)).not.toContain("Raid on the Post");
+  });
+
   it("Highmark has its own voice on the chart: unvisited, then the chair as the ledger left it, and the contract on offer", () => {
     const fresh = newCampaign(1);
     expect(regionNote("highmark", fresh)).toMatch(/Not yet visited.*switchback road.*six years/);

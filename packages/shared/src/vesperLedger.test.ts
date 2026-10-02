@@ -224,9 +224,9 @@ describe("Vesper's ledger: the eight endings", () => {
       expect(t, "never twice running").not.toBe(last);
       seen.add(t);
       last = t;
-      c = applyOutcome(c, OUTCOMES[t === "mine_rescue" ? "sealed" : "staked"]);
+      c = applyOutcome(c, t === "winding_engine" ? { ...OUTCOMES.staked, scenario: "winding_engine", resolution: "engine_fouled", paid: 0 } : OUTCOMES[t === "mine_rescue" ? "sealed" : "staked"]);
     }
-    expect(seen.size).toBe(2);
+    expect(seen.size, "all three of Vesper's contracts come up (D-044: the engine is the third)").toBe(3);
     // the same ledger always offers the same thing
     expect(pickVesperContract(c, 5)).toBe(pickVesperContract(c, 5));
     // Kessar's weights and Highmark's single contract are untouched

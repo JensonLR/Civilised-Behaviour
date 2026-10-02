@@ -172,6 +172,13 @@ export function foundationStatus(s: SettlementsState, region: RegionId): { crate
   return { crates: p && p.stage === "none" ? p.crates : 0, standing: !!p && p.stage !== "none", ruined: !!p && p.ruined };
 }
 
+/** D-045: a raid beaten off in the post's own yard (the Raid on the Post's `post_held`): the watch is steadier for it and the stores are as they were. */
+export function defendOutpost(s: SettlementsState, region: RegionId): SettlementsState {
+  const p = s.posts[region];
+  if (!p || p.stage === "none") return s;
+  return { ...s, posts: { ...s.posts, [region]: { ...p, security: pct(p.security + 15) } } };
+}
+
 /** A raid lands (the rival's `raided_outpost` event): the stores are carried off and the watch is shaken; a second raid on a weak outpost is the end of its stage. */
 export function raidOutpost(s: SettlementsState, region: RegionId, day: number): { s: SettlementsState; events: SettlementEvent[] } {
   const p = s.posts[region];

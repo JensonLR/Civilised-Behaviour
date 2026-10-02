@@ -121,4 +121,30 @@ const assayer: ParleyScript = {
   },
 };
 
-export const VESPER_PARLEYS = { foreman, dirge_master, assayer } as const satisfies Partial<Record<"foreman" | "dirge_master" | "assayer", ParleyScript>>;
+/** D-044, the Winding Engine: the Syndicate's engineer at the headframe, who knows exactly what his engine cannot stand and is paid by the hour to keep that to himself. */
+const engineer: ParleyScript = {
+  speaker: "Engineer Lucius Brack-Dunmarrow, of the Syndicate",
+  open: [
+    "\"Leased,\" says the engineer, patting the winding house as if it were a horse that owed him money, \"from the Company, by the hour, to dig under the Company, by the yard. The cross-cut reaches the vein this afternoon. I am paid to see that nothing happens to her before then. I am also, I should say, paid rather badly. A fault could be found, for £{price}. Faults are expensive to find.\"",
+    "The engineer wipes his hands on a rag that makes them dirtier. \"She is a lovely engine. She will strike the vein by the end of the shift and the Syndicate will own the gorge by tea. Unless,\" he adds, examining the rag, \"an inspection were to find her unsafe. An inspection costs £{price}. I am the inspector.\"",
+  ],
+  round2: [
+    "\"Her weakness?\" The engineer lowers his voice to the level of a man selling a horse. \"She drinks whatever is poured into her feed, at the west wall, and she has no stomach for grit. A crate of the gorge's own tailings would finish her, and the tailings heap is just down the road. Not that I said so. The beat-man comes round every forty seconds and he has eyes like a customs officer.\"",
+    "\"Between us,\" says the engineer, \"the Company's powder is in the Company's magazine, down by the fall, and the Company's magazine has a lock the Company has never once fitted. And the feed at the west wall takes anything. I am telling you this as a matter of professional regret.\"",
+  ],
+  walk: "You step back. The engineer goes back to his gauge, which he taps, and which taps back.",
+  hostile: "The engineer drops his rag and his manners at once. \"Guards!\" he calls, with real feeling. \"The Society is here to discuss my engine!\"",
+  deal: {
+    paid: "The engineer counts it twice, pockets it once and climbs up into the winding house with a spanner and an expression of sincere technical concern. A moment later something in the engine says \"clunk\" in a way that will take a week to put right. \"Cracked flywheel,\" he calls down. \"Tragic. Nobody's fault.\"",
+  },
+  short: "\"You are short,\" says the engineer. \"Faults do not come cheaper because the customer is poorer. That is the whole of engineering.\"",
+  options: (round, p): readonly Opt[] => {
+    const pay: Opt = { key: "pay", label: `Pay for an inspection (£${p})`, hint: "He finds a fault in his own engine. Quiet, certain, and the Syndicate's money stays in the Syndicate's pocket too.", cost: p };
+    return round === 1
+      ? [pay, { key: "ask", label: "Ask what the engine cannot stand", hint: "He may tell you. He is not paid enough not to.", cost: 0 },
+        { key: "threaten", label: "Tell him what you will do to his engine", hint: "He will call the guards. Loudly.", cost: 0 }, walk]
+      : [pay, walk];
+  },
+};
+
+export const VESPER_PARLEYS = { foreman, dirge_master, assayer, engineer } as const satisfies Partial<Record<"foreman" | "dirge_master" | "assayer" | "engineer", ParleyScript>>;

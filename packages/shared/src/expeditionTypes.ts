@@ -26,7 +26,9 @@ export interface NpcSpec {
   look?: Record<string, number> /* authored CharacterSpec patch, run through specFromUntrusted */; people?: PeopleId /* D-038: which native people they are (peoples.ts `peopleForNpc`); the server lays the people's overlay under `look`; absent = colonial */; name: string; skill: number; bravery: number; brain: BrainId;
 }
 export type CastOrder =
-  | { o: "post" } | { o: "alert" } | { o: "stand_down" } | { o: "hold_fire" } | { o: "flee" } | { o: "march"; route: string }
+  | { o: "post" } | { o: "alert" } | { o: "stand_down" } | { o: "hold_fire" } | { o: "flee" }
+  /** `join`: start at the route's nearest waypoint instead of its first (a group re-ordered onto a route it is already partway along; D-045). */
+  | { o: "march"; route: string; join?: boolean }
   | { o: "guard"; x: number; z: number; r: number } | { o: "follow"; target: string } | { o: "attack"; side?: NpcSide };
 export interface CastCount { alive: number; routed: number; down: number; total: number }
 export type PlayersView = { forEach(cb: (p: PlayerStateType, id: string) => void): void; get(id: string): PlayerStateType | undefined };

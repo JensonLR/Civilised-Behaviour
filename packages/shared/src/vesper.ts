@@ -76,6 +76,15 @@ export const VESPER_SITES = {
   claimPegs: [{ x: -44, z: -36 }, { x: -32, z: -36 }, { x: -32, z: -24 }, { x: -44, z: -24 }],
   /** The Syndicate's claim guards at the headframe (they come down the road when the whistle goes). */
   guards: [{ x: 22, z: -62 }, { x: 30, z: -62 }, { x: 22, z: -70 }, { x: 30, z: -70 }],
+  /**
+   * D-044, the Winding Engine: the Syndicate has leased the Company's winding house (31, -77) and is driving a cross-cut with it. The boiler's feed is at the house's west wall,
+   * its engineer stands by the gauge, a guard walks a beat along the terrace; the grit is the tailings heap below the trestle on the ore road.
+   */
+  engine: {
+    boiler: { x: 26.6, z: -77 }, engineer: { x: 25.4, z: -73 }, yard: { x: 25, z: -70 },
+    beat: [{ x: 24, z: -60 }, { x: 23, z: -80 }],
+    grit: [{ x: 10.5, z: -44 }, { x: 12, z: -45.4 }],
+  },
 } as const;
 
 /** What the Lower Gallery's template places: the shoring timber, the powder keg, and where the fall is dug and blown. */
@@ -626,6 +635,8 @@ export function vesperSitePoints(): { id: string; x: number; z: number }[] {
     ...S.miners.map((p, i) => ({ id: `miners${i}`, ...p })), ...S.mourners.map((p, i) => ({ id: `mourners${i}`, ...p })),
     ...S.rivalSurveyors.map((p, i) => ({ id: `surveyor${i}`, ...p })), ...S.claimPegs.map((p, i) => ({ id: `peg${i}`, ...p })), ...S.guards.map((p, i) => ({ id: `guard${i}`, ...p })),
     ...K.timber.map((p, i) => ({ id: `timber${i}`, ...p })), { id: "keg", ...K.keg }, { id: "dig", ...K.dig },
+    { id: "engine.boiler", ...S.engine.boiler }, { id: "engine.engineer", ...S.engine.engineer }, { id: "engine.yard", ...S.engine.yard },
+    ...S.engine.beat.map((p, i) => ({ id: `engine.beat${i}`, ...p })), ...S.engine.grit.map((p, i) => ({ id: `engine.grit${i}`, ...p })),
   ];
 }
 

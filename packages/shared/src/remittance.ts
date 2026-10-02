@@ -31,6 +31,10 @@ export const PRESS_GRADE: Readonly<Record<ResolutionId, PressGrade>> = {
   lot_won: "triumph", consortium: "story", shorted: "story", washed_out: "embarrassment",
   // Highmark's strike (D-042)
   honest_measure: "triumph", bought_back: "story", strike_broken: "embarrassment", barley_lost: "embarrassment",
+  // Vesper's engine (D-044)
+  engine_fouled: "story", engine_blown: "triumph", engine_bought: "story", vein_struck: "embarrassment",
+  // Kessar's post (D-045)
+  post_held: "triumph", post_burned: "embarrassment", protection_paid: "embarrassment",
 };
 
 const LINE: Readonly<Record<PressGrade, string>> = {

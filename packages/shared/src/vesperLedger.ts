@@ -94,18 +94,22 @@ export const VESPER_ENDINGS: Record<VesperEnding, EndingNumbers> = {
 export const VESPER_FAVOUR: FavourExtra = { choir: ["sealed", "blasted_through", "consecrated"] };
 
 /**
- * Which of Vesper's two contracts the campaign offers next (called by `pickTemplate(c, "vesper", seed, presence)`; pure and deterministic; never the same template twice running while both are eligible).
+ * Which of Vesper's contracts (three since D-044) the campaign offers next (called by `pickTemplate(c, "vesper", seed, presence)`; pure and deterministic; never the same template twice running while another is eligible).
  * The first visit is the Lower Gallery (the Guild's home contract: the contract test founds a dev start on it) unless the Syndicate both has influence enough to be pegging the gorge (>= 50) AND has
  * surveyors in it (`presence.surveyors`): then the Claim Race. After that the other one is offered, because the campaign has only the two, weighted anyway by the ledger so the rule survives a third contract: a seal or a consecration last time makes the
  * Guild's own business likelier, a Syndicate that filed first (`outpaced`) makes the grudge match likelier. Ties break by hash3(seed, day).
+ * D-044: the Winding Engine is the third. It is likelier while the Syndicate is strong in the gorge (influence >= 40), after it took the ground (`jumped`, `outpaced`) and after the last
+ * engine struck the vein; once the engine was blown or fouled it rests a while (the Syndicate is shopping for a new one).
  */
 export function pickVesperContract(c: CampaignState, seed: number, presence?: RivalPresence): ScenarioTemplateId {
-  type Id = "mine_rescue" | "claim_race";
-  const ids: readonly Id[] = ["mine_rescue", "claim_race"];
+  type Id = "mine_rescue" | "claim_race" | "winding_engine";
+  const ids: readonly Id[] = ["mine_rescue", "claim_race", "winding_engine"];
   const mine = c.history.filter((h) => h.region === "vesper");
   const last = mine.length > 0 ? mine[mine.length - 1]!.template : undefined;
   const w: Record<Id, number> = {
     mine_rescue: 3 + (c.sites.ends.claim_race === "outpaced" ? 0 : 1),
+    winding_engine: 2 + (c.factions.ward.rivalInfluence >= 40 ? 3 : 0) + (c.sites.ends.claim_race === "jumped" || c.sites.ends.claim_race === "outpaced" ? 3 : 0)
+      + (c.sites.ends.winding_engine === "vein_struck" ? 2 : 0) - (c.sites.ends.winding_engine === "engine_blown" || c.sites.ends.winding_engine === "engine_fouled" ? 1 : 0),
     claim_race: 3 + (c.factions.ward.rivalInfluence >= 50 ? 3 : 0) + (presence !== undefined && presence.surveyors > 0 ? 4 : 0) + (c.sites.ends.claim_race === "outpaced" ? 2 : 0) + (c.sites.ends.mine_rescue === "sealed" || c.sites.ends.mine_rescue === "consecrated" ? 0 : 1),
   };
   if (last === undefined) return c.factions.ward.rivalInfluence >= 50 && presence !== undefined && presence.surveyors > 0 ? "claim_race" : "mine_rescue";
@@ -124,4 +128,5 @@ export function pickVesperContract(c: CampaignState, seed: number, presence?: Ri
 export const VESPER_COMPLICATIONS: Record<VesperTemplate, readonly ComplicationId[]> = {
   mine_rescue: ["rain", "fog"],
   claim_race: ["rival_scouts", "outriders"],
+  winding_engine: ["fog", "rain", "reinforcements"],   // D-044: fog and rain narrow the guards' eyes; reinforcements add a man to the yard
 };

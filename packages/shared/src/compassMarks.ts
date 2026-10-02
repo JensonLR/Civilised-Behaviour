@@ -4,6 +4,8 @@ import { KESSAR_ANCHORS, KESSAR_SITES } from "./campaignTypes.ts";
 import { HIGHMARK_ANCHORS, HIGHMARK_SITES, highmarkPlan } from "./highmark.ts";
 import { hqPins } from "./hqRoute.ts";
 import { HILL, JETTY } from "./landscape.ts";
+import { KESSAR_OUTPOST } from "./outpost.ts";
+import { RAID_SITES } from "./scenarios/outpostRaid.ts";
 import { SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS } from "./saltmarket.ts";
 import { SITES } from "./village.ts";
 import { VESPER_ANCHORS, VESPER_SITES, VESPER_STOCK } from "./vesper.ts";
@@ -149,6 +151,15 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
   claim_race: {
     ground: at("Pegging ground", VESPER_ANCHORS.pegging), file: at("Assay House", VESPER_ANCHORS.assay), claim: at("Assay House", VESPER_ANCHORS.assay), home: "home",
     ...Object.fromEntries(VESPER_SITES.claimPegs.map((p, i) => [`peg-${i}`, at(`Peg ${i + 1}`, p)])),
+  },
+  winding_engine: {
+    yard: at("Headframe terrace", VESPER_SITES.engine.yard), stop: at("Winding engine", VESPER_SITES.engine.boiler), feed: at("Tailings heap", VESPER_SITES.engine.grit[0]!),
+    keg: at("Company magazine", VESPER_STOCK.keg), fuse: at("Winding engine", VESPER_SITES.engine.boiler), challenge: at("Headframe terrace", VESPER_SITES.engine.yard),
+    guards: at("Headframe terrace", VESPER_SITES.engine.yard), home: "home",
+  },
+  outpost_raid: {
+    post: at("The Society's post", KESSAR_OUTPOST.site), defend: at("The post's yard", KESSAR_OUTPOST.site), captain: at("The raiders' muster", RAID_SITES.muster),
+    break: at("The post's yard", KESSAR_OUTPOST.site), yard: at("The post's yard", KESSAR_OUTPOST.site), home: "home",
   },
   smuggling_run: {
     cove: at("Reed cove", SALTMARKET_ANCHORS.cove), carry: at("Drop-house", SALTMARKET_SPOTS.dropDoor), reeve: at("Tide-Reeve", SALTMARKET_SITES.tideReeve),

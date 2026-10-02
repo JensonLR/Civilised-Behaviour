@@ -67,6 +67,8 @@ import {
   isValidJoinCode,
   newPowers,
   newSettlements,
+  raidAftermath,
+  defendOutpost,
   parseParty,
   serializePowers,
   serializeSettlements,
@@ -1134,6 +1136,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // D-040: the Society pays for the story (by the column-inch), so an honest campaign is never stranded at HQ with an empty purse
     const pay = remit(c, o);
     c = pay.c;
+    // D-045: a Raid on the Post was the Syndicate's raid, played: it is spent before the rival's days run (so it never lands twice), and the post takes what the ending says
+    const raided = raidAftermath(p, o);
+    p = raided.p;
     const idle = this.pendingIdle;
     this.pendingIdle = 0;
     const adv = rivalAdvance(c, p, c.day + idle);
@@ -1142,6 +1147,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const events: SettlementEvent[] = [];
     this.campaign = c;
     this.powers = p;
+    if (raided.raid) events.push(...this.outposts.raid("kessar", c.day));
+    if (raided.defended) this.commitSettlements(defendOutpost(this.settlements, "kessar"), []);
     for (const e of adv.events) if (e.kind === "raided_outpost") events.push(...this.outposts.raid(e.region, e.day));
     events.push(...this.outposts.evolve(c.day, regionClimate(c, p, "kessar")));   // (the outposts publish themselves and tell the powers: commitSettlements)
     this.publishCampaign();
