@@ -155,7 +155,7 @@ describe("lag compensation and prediction under fire (headless bots against a re
       results[`hitscan_rtt${rtt}_on`] = r;
       expect(r.shots).toBeGreaterThanOrEqual(10);
       // A shot's lag is the WHOLE round trip (the picture came down, the trigger went up) plus the display delay: 250..350 ms at 200 ms.
-      // The rewind must reach it, not stop at the clamp (D-042: a 250 ms clamp cut all 14 short and landed 6..12 of them).
+      // The rewind must reach it, not stop at the clamp (D-043: a 250 ms clamp cut all 14 short and landed 6..12 of them).
       expect(r.clamped).toBe(0);
       expect(r.rate).toBeGreaterThanOrEqual(0.85);
     }, 60000);

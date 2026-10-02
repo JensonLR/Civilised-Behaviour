@@ -218,7 +218,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 export const weaponDef = (id: number): WeaponDef | undefined => (isWeapon(id) ? WEAPONS[id] : undefined);
 
-/** The longest round trip whose shots are judged exactly where the shooter saw the target (D-042); a longer link starts to have to lead. */
+/** The longest round trip whose shots are judged exactly where the shooter saw the target (D-043); a longer link starts to have to lead. */
 const REWIND_RTT_MS = 250;
 
 /** Combat-wide tuning that is not per weapon. */
@@ -227,7 +227,7 @@ export const COMBAT = {
    * Lag compensation (see docs/_notes/combat.md): a shot is judged against where the shooter SAW everyone, never further back than this,
    * however large a lag the client claims. Bounds what a hostile client can gain.
    * The lag a shot really carries is the WHOLE round trip (the picture came down, the trigger went up) plus the display delay, and then
-   * up to a sim tick waiting to be read, less up to a patch since the last recorded pose: 250..350 ms at a 200 ms round trip (D-042: a
+   * up to a sim tick waiting to be read, less up to a patch since the last recorded pose: 250..350 ms at a 200 ms round trip (D-043: a
    * 250 ms clamp cut every one of those shots short). The patch interval on top is the slack for the tick and for timer jitter.
    */
   rewindMaxMs: REWIND_RTT_MS + INTERP_DELAY_MS + PATCH_RATE_MS,
