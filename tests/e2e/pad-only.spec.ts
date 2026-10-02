@@ -141,7 +141,19 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await expect.poll(async () => Math.abs((await hook(page, (h) => h.game.rig.yaw)) - yaw0), { timeout: 30_000 }).toBeGreaterThan(0.3);
   await stick(page, "r", 0, 0);
 
-  await holdUntil(page, "a", () => hook(page, (h) => h.session.predicted!.vy > 1 || (h.session.predicted!.flags & 1) === 0));
+  // A jumps. The jump is a transient (half a second in the air) and expect.poll samples at growing gaps, so on a fast runner the whole jump fell between two samples and,
+  // A being held (a jump is on the press), the poll waited out its 30 s (CI, D-047). A watcher in the page LATCHES "left the ground" on whichever frame it happens.
+  await page.evaluate(() => {
+    const w = window as unknown as { __cb: Hook; __jumped?: boolean };
+    w.__jumped = false;
+    const watch = (): void => {
+      const p = w.__cb.session.predicted;
+      if (p && (p.vy > 1 || (p.flags & 1) === 0)) w.__jumped = true;
+      if (!w.__jumped) requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
+  await holdUntil(page, "a", () => page.evaluate(() => (window as unknown as { __jumped?: boolean }).__jumped === true));
 
   // ---- the prompts follow the device: Xbox glyphs at the notice board ----------------------------------------------------------------------
   // the notice board stands at (3.65, -11.05): a step east of it, facing it (west)
