@@ -138,7 +138,7 @@ describe("rendered offline: levels", () => {
         expect(db(rms(s)), `${id}/${region} is silent`).toBeGreaterThan(-60);
       }
     }
-  });
+  }, 30_000); // (CPU-bound: renders every music stem offline, the colour layer once per region; 6.3 s alone, 5.5 s in the full run on a 4-core container. A time limit, not a budget.)
 
   const BAND: Record<MusicMood, [number, number]> = { calm: [-26, -18], tension: [-28, -18], combat: [-27, -17], aftermath: [-33, -22] };
   it("every mood's mix (all seven stems at that mood's gains, in every region) is under -1 dBFS and inside its loudness band", () => {

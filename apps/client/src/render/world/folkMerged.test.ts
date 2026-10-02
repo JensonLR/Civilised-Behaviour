@@ -165,7 +165,7 @@ describe("the merged village crowd (D-036): draws, equivalence, memory", () => {
     expect(per).toBeLessThanOrEqual(31);
     expect(characterCacheSize()).toBeLessThan(1536 * 0.5);
     bodies.forEach((x) => x.dispose());
-  });
+  }, 30_000); // (CPU-bound: builds the whole roster at two levels of detail; 3.8 s alone, 4.2 s in the full run, over 5 s on a busy CI runner. A time limit, not a budget.)
 
   it("the 600-frame crowd retains nothing: heap after a forced GC does not grow", () => {
     v8.setFlagsFromString("--expose-gc");
