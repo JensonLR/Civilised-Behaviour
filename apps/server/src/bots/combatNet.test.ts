@@ -145,9 +145,10 @@ describe("lag compensation and prediction under fire (headless bots against a re
       const r = await duel(rtt, { lagComp: true });
       results[`hitscan_rtt${rtt}_on`] = r;
       expect(r.shots).toBeGreaterThanOrEqual(10);
-      // (at 200 ms the total lag - half the round trip plus the display delay - sits at 200 of the 250 ms the rewind may reach, and the round-trip
-      //  estimate the client renders with is noisiest; measured 10/14 there, all 14 at 0 and 100 ms. The control below shows 0/14 without rewinding.)
-      expect(r.rate).toBeGreaterThanOrEqual(rtt >= 200 ? 0.6 : 0.85);
+      // (D-041: at 200 ms every shot asks the rewind for 320-360 ms - half the trip, the display delay, the frame's wait - and the old 250 ms cap clamped
+      //  them all, so 6-12 of 14 landed and this bar was 0.6. With COMBAT.rewindMaxMs at 400 all 14 land at 0, 100 and 200 ms; the control below
+      //  still shows 0/14 without rewinding.)
+      expect(r.rate).toBeGreaterThanOrEqual(0.85);
     }, 60000);
   }
 

@@ -78,7 +78,9 @@ const L = PALETTE.light;
 const S = PALETTE.sky;
 const W = PALETTE.world;
 
-const NIGHT: Omit<Stop, "h"> = { sun: W.nightSun, top: W.nightTop, mid: W.nightMid, horizon: W.nightHorizon, glow: W.nightGlow, hemiSky: W.nightSky, hemiGround: W.nightBounce, sunI: 0.95, hemiI: 0.62, fog: 0.0105, exposure: 0.4, fire: 1, ambient: 0.5 };
+// D-041: night was so dark that people, crates and jetties went black against the ground (looked at in all five regions under a new moon); the moon and the
+// sky's fill are brighter, so a night reads blue and dim and still shows who is standing where. The colours (the palette's night stops) are unchanged.
+const NIGHT: Omit<Stop, "h"> = { sun: W.nightSun, top: W.nightTop, mid: W.nightMid, horizon: W.nightHorizon, glow: W.nightGlow, hemiSky: W.nightSky, hemiGround: W.nightBounce, sunI: 1.4, hemiI: 1.4, fog: 0.0105, exposure: 0.4, fire: 1, ambient: 0.5 };
 
 /** A convex mix of two palette hexes as a hex (used at load only, for the golden hour between noon and dusk, so the stop stays a mix of palette entries). */
 function mixHex(a: number, b: number, t: number): number {

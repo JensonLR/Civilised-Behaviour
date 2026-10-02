@@ -64,6 +64,16 @@ describe("the day cycle", () => {
     expect(d.sunDir.y).toBeLessThan(0); // the sun is below the horizon
   });
 
+  it("D-041: a night stays readable: at midnight the moon and the sky's fill keep a floor (people went black against the ground under a new moon at 0.95 and 0.62)", () => {
+    const d = createDayState();
+    dayState(0, d);
+    expect(d.hemiIntensity).toBeGreaterThanOrEqual(1.2);
+    expect(d.sunIntensity).toBeGreaterThanOrEqual(1.2);
+    const noon = createDayState();
+    dayState(13, noon);
+    expect(d.hemiIntensity).toBeLessThan(noon.hemiIntensity * 1.5); // (still night: the colour and the dark sky say so)
+  });
+
   it("dusk glows: the horizon warms and the fire strengthens toward sunset, then fades toward morning", () => {
     const a = createDayState();
     const b = createDayState();

@@ -222,9 +222,12 @@ export const weaponDef = (id: number): WeaponDef | undefined => (isWeapon(id) ? 
 export const COMBAT = {
   /**
    * Lag compensation (see docs/_notes/combat.md): a shot is judged against where the shooter SAW everyone, never further back than this,
-   * however large a lag the client claims. Bounds what a hostile client can gain.
+   * however large a lag the client claims. Bounds what a hostile client can gain. D-041: 250 ms was set for "about 200 ms of total lag" at a 200 ms
+   * round trip, but measured there every shot asks for 320-360 ms (half the trip, the display delay, the frame's wait) and was clamped, so the server
+   * judged a strafing target 40-70 ms later than the shooter saw it and about a third of on-target shots missed. The people on the far end of a
+   * shot are almost always NPCs in this co-op game; the window costs a friend under friendly fire a little, and buys a player 200 ms away his hits.
    */
-  rewindMaxMs: 250,
+  rewindMaxMs: 400,
   /**
    * A projectile keeps its shooter's view of the world (the same rewind as the shot that made it) for this long after leaving the muzzle, so a
    * ball that takes a tenth of a second to arrive still meets the man the shooter saw; it then blends to live positions over `projectileRewindFade`

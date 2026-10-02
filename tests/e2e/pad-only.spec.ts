@@ -188,9 +188,11 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await tp(page, 5.2, -11.05, Math.PI / 2);
   await expect(page.locator(".prompt .glyph-xbox-x")).toBeVisible({ timeout: 60_000 });
   await setId(page, DUALSENSE_ID);
-  await set(page, "y", true); // any pad input names the device
+  // any pad input names the device: a nudge of the right stick (it turns the camera only; Y, the old choice, is melee, which swings and turns the body
+  // toward the camera, so the player could turn away from the board and lose the prompt being checked)
+  await stick(page, "r", 0.4, 0);
   await expect(page.locator(".prompt .glyph-ps-square")).toBeVisible({ timeout: 30_000 });
-  await set(page, "y", false);
+  await stick(page, "r", 0, 0);
   await expect(page.locator(".prompt .glyph-xbox-x")).toHaveCount(0);
   await expect(page.locator("html")).toHaveAttribute("data-device", "playstation");
 

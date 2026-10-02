@@ -371,9 +371,9 @@ export class Stage {
     const w = this.sky_.weather;
     applyWeather(d, w, this.sky_.lightning.flash);
     setRgb(this.sun.color, d.sun);
-    // moonlight follows the moon's phase: a full moon lights the night well, a new moon hardly at all
+    // moonlight follows the moon's phase: a full moon lights the night well, a new moon less (D-041: not so little that people go black; starlight and the sky still fill)
     const illum = 0.5 - 0.5 * Math.cos(this.sky_.moon * Math.PI * 2);
-    this.sun.intensity = d.sunIntensity * (1 - d.night * 0.6 * (1 - illum));
+    this.sun.intensity = d.sunIntensity * (1 - d.night * 0.4 * (1 - illum));
     // cloud takes the sun's shadows with it
     this.sun.shadow.intensity = 0.72 * (1 - 0.85 * Math.max(0, (d.cover - 0.06) / 0.94));
     setRgb(this.hemi.color, d.hemiSky);

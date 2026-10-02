@@ -41,15 +41,15 @@ blows do nothing; with it on, `ffScale` softens the hit and a shooter's own blas
 ## Lag compensation (what it does, what it costs)
 Colyseus `allowRewindState` records `facing` and `flags` (held between snapshots) and positions (linearly interpolated) at the 50 ms patch cadence.
 For each hitscan shot and for each projectile's first instants the server asks `lastSeenBy(shooter)`, i.e. *the frame this shooter's client last rendered*, and tests
-people against that; the world and the shooter stay live. Clamp: `COMBAT.rewindMaxMs` = 250 ms. Projectiles keep the shooter's full lag for `projectileRewindHold`
+people against that; the world and the shooter stay live. Clamp: `COMBAT.rewindMaxMs` = 400 ms (250 until D-041). Projectiles keep the shooter's full lag for `projectileRewindHold`
 (0.3 s) and then fade to live positions over 0.1 s (`projectileLag`), so a ball that needs 0.1 s to arrive still meets the man the shooter saw, and nothing is hit around
 a corner for more than the clamp.
 Trade-offs, stated plainly:
-1. The *target* pays: a man who ducks behind cover can still be hit for up to ~250 ms after he thought he was safe. That is the price of letting a 200 ms player hit
-   what he saw; the clamp bounds what a hostile client can gain by claiming a large lag. The view time is the render timestamp the SDK's `Predict` stamps on the client's inputs, which the server cannot verify, so a cheater can always pick the worst 250 ms for the victim; he cannot reach further back.
-2. Rewind covers people only. Walls, props and the shooter are live; a door closed in the last 250 ms is closed.
+1. The *target* pays: a man who ducks behind cover can still be hit for up to ~400 ms after he thought he was safe. That is the price of letting a 200 ms player hit
+   what he saw; the clamp bounds what a hostile client can gain by claiming a large lag. The view time is the render timestamp the SDK's `Predict` stamps on the client's inputs, which the server cannot verify, so a cheater can always pick the worst 400 ms for the victim; he cannot reach further back. (In this co-op game the far end of a shot is almost always an NPC; players meet each other's rounds only under friendly fire.)
+2. Rewind covers people only. Walls, props and the shooter are live; a door closed in the last 400 ms is closed.
 3. Melee is compensated with the lag stored at the press, resolved after the wind-up.
-4. Above ~200 ms total lag (half RTT plus the 100 ms display delay) the client's own estimate of the display time gets noisy and hits start to be missed (below).
+4. D-041, measured: at a 200 ms round trip every shot asks the rewind for 320-360 ms (half the trip, the display delay and the frame's wait), not the ~200 ms first assumed, so the old 250 ms cap clamped every shot and the server judged a strafing target 40-70 ms after the shooter saw it (6-12 of 14 landed). At 400 ms all 14 land at 0, 100 and 200 ms. Above a ~300 ms round trip the cap bites again.
 5. A cannon ball and blasts are not compensated (slow, big, telegraphed by a 0.7 s fuse).
 Switch: `Combat.lagCompensation` (tests use it as the control).
 

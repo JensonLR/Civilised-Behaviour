@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Menu } from "./Menu.ts";
 import { Pause } from "./Pause.ts";
+import { deviceTracker } from "../input/devices.ts";
 import { openSettings } from "./Settings.ts";
 
 /**
@@ -137,5 +138,26 @@ describe("gamepad only, title to field", () => {
     expect(document.activeElement?.textContent).toMatch(/resume/i);
     tap(1); // B
     expect(pause.isOpen).toBe(false);
+  });
+
+  it("D-041: resuming takes the mouse only for a mouse player; a pad player's resume leaves it alone (a lock let mouse movement flip their glyphs to the keyboard's)", () => {
+    const canvas = document.createElement("canvas");
+    document.body.appendChild(canvas);
+    const lock = vi.fn();
+    (canvas as unknown as { requestPointerLock: () => void }).requestPointerLock = lock;
+    const pause = new Pause({ canvas, invite: () => undefined, leave: () => undefined });
+    pause.active = true;
+    deviceTracker.note("xbox");
+    tick();
+    tap(9); // Start
+    tap(1); // B
+    expect(pause.isOpen).toBe(false);
+    expect(lock).not.toHaveBeenCalled();
+    deviceTracker.note("keyboard");
+    pause.open();
+    expect(pause.isOpen).toBe(true);
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape", key: "Escape", bubbles: true }));
+    expect(pause.isOpen).toBe(false);
+    expect(lock).toHaveBeenCalledTimes(1);
   });
 });
