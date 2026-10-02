@@ -28,7 +28,14 @@ export const garrisonSize = (militaryStrength: number): number => {
 
 // Authored, invented names. The Ward is prim and clerical; the Syndicate is brisk and corporate.
 const SENTRY_NAMES = ["Pell Quillon", "Hobb Tallowby", "Marrow Dunce", "Tamsin Cray", "Orrin Bellwether", "Sedge Ashby", "Cobb Lanternside", "Wren Pickett"] as const;
-const RIVAL_NAMES = ["Enforcer Garth Vesk-Lowe", "Enforcer Dilly Marrowgate", "Surveyor Ansel Quire-Dunmarrow"] as const;
+// (D-040: by role and by count, so a larger escort never repeats a name or gives an enforcer the surveyor's: the playtest met two Garth Vesk-Lowes)
+const ENFORCER_NAMES = ["Garth Vesk-Lowe", "Dilly Marrowgate", "Bram Ossery-Vane", "Cutler Plimsoll", "Fenn Harrowgate", "Odo Ledgerwick"] as const;
+const SURVEYOR_NAMES = ["Ansel Quire-Dunmarrow", "Perpetua Chainley", "Lemuel Brisk-Theodolite"] as const;
+const rivalName = (guard: boolean, k: number): string => {
+  const list = guard ? ENFORCER_NAMES : SURVEYOR_NAMES;
+  const base = list[k % list.length]!;
+  return `${guard ? "Enforcer" : "Surveyor"} ${base}${k >= list.length ? ` the ${k >= list.length * 2 ? "Third" : "Younger"}` : ""}`;
+};
 /** First four sentries cover the bar; the rest by strength (the Ward prefers rifles on the wall and sabres where the ladies are watching). */
 const SENTRY_ARMS: readonly WeaponId[] = [WEAPON.RIFLE, WEAPON.PISTOL, WEAPON.SABRE, WEAPON.RIFLE, WEAPON.RIFLE, WEAPON.SABRE, WEAPON.PISTOL, WEAPON.PISTOL];
 const RIVAL_POSTS = [{ x: -2, z: 0 }, { x: 2, z: 1.5 }, { x: 0, z: -2.5 }] as const;
@@ -60,7 +67,7 @@ export function garrisonRoster(c: CampaignState, seed: number, presence?: RivalP
     const arm = guard ? (i === 0 ? WEAPON.BLUNDERBUSS : WEAPON.PISTOL) : WEAPON.UMBRELLA;
     out.push({
       id: `rival-${i}`, role, faction: "rival", side: NPC_SIDE[role]!, group: "rival", post: { x: camp.x + p.x + (i >= RIVAL_POSTS.length ? 2.5 * (i - RIVAL_POSTS.length + 1) : 0), z: camp.z + p.z },
-      weapon: arm, lookSeed: hash3(seed, i, NPC.RIVAL_GUARD), name: RIVAL_NAMES[i % RIVAL_NAMES.length]!,
+      weapon: arm, lookSeed: hash3(seed, i, NPC.RIVAL_GUARD), name: rivalName(guard, guard ? i : i - guards),
       skill: guard ? 60 : 30, bravery: guard ? 58 : 24, brain: "garrison",
     });
   }

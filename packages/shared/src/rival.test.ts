@@ -242,3 +242,12 @@ describe("rival agent", () => {
     for (const r of [a, b, d]) expect(r.announced).toBe(true);
   });
 });
+
+describe("the paper counts days in words (D-040)", () => {
+  it("never prints '1 days'", async () => {
+    const { daysPhrase } = await import("./rival.ts");
+    expect(daysPhrase(1)).toBe("a day");
+    expect(daysPhrase(2)).toBe("two days");
+    expect(daysPhrase(14)).toBe("14 days");
+  });
+});

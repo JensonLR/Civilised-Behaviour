@@ -4,7 +4,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
@@ -147,6 +147,8 @@ export class Game {
   private readonly paper: NewspaperView;
   private readonly tracker: ObjectiveTracker;
   private builtRegion: RegionId;
+  /** The running contract's view (the tracker's), for the heading strip's objective flag. */
+  private scenarioView: ScenarioView | undefined;
   private building = false;
   /** `regionReady` has been sent for the landfall in progress (reset when the sailing machine leaves the arriving phase). */
   private arrivalSent = false;
@@ -188,12 +190,16 @@ export class Game {
     this.builtKey = NetSession.worldKeyOf(session.room.state);
     this.applySettings();
     this.offSettings = onSettingChange(() => this.applySettings());
-    this.tagLayer = hud;
+    // name plates and speech slips live in their own layer at the BOTTOM of the HUD, so every card (tracker, telegrams, orientation) covers them, never the reverse (D-040)
+    this.tagLayer = document.createElement("div");
+    this.tagLayer.className = "taglayer";
+    hud.prepend(this.tagLayer);
     this.props = new PropViews(stage.scene, stage.outlines);
-    this.tags = new NameTags(hud);
+    this.tags = new NameTags(this.tagLayer);
     this.mountView = new MountView(stage.scene, { outline: stage.outlines });
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
+    this.hud.setCompass(regionMarks(this.builtRegion));
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
@@ -552,6 +558,8 @@ export class Game {
         view = undefined;
       }
       this.tracker.update(view);
+      this.scenarioView = view;
+      this.refreshCompass();
       this.scenarioPhase = view?.phase ?? "";
       this.stage.setScenario(view);   // (D-037: the region's scenery may dress it: a fall, a flood)
     }
@@ -624,6 +632,7 @@ export class Game {
         this.aftermathSite = undefined;
       }
       this.builtRegion = region;
+      this.refreshCompass();
       this.builtKey = NetSession.worldKeyOf(st);
       this.applyCampaignVisuals();
       this.loadRagdolls();
@@ -680,6 +689,7 @@ export class Game {
     this.loadout.dispose();
     this.wheel.dispose();
     this.tags.dispose();
+    this.tagLayer.remove();
     this.mountView.dispose();
     this.demoBanner?.dispose();
     this.wishlist?.dispose();
@@ -746,6 +756,7 @@ export class Game {
       this.rig.mounted = pf !== undefined && (pf.flags & FLAG.MOUNTED) !== 0;
       this.rig.mountSpeed01 = pf ? Math.hypot(this.session.value(pf, "vx"), this.session.value(pf, "vz")) / MOUNT.gallop : 0;
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
+      this.rig.ready = this.combat.firearmReady;
       this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample), ((this.session.predicted?.flags ?? 0) & FLAG.DOWNED) !== 0);
       this.stage.followShadow(tmp);
     }
@@ -1001,6 +1012,11 @@ export class Game {
 
   private mountPromptNow(me: NonNullable<Game["session"]["predicted"]>, mine: PlayerStateType, flags: number): string | undefined {
     return this.mountPrompter.now(this.session.value(me, "x"), this.session.value(me, "z"), me.facing, flags, mine.missing);
+  }
+
+  /** The heading strip follows the shore you stand on and the contract's next goal (D-040: it showed the hub's places everywhere). */
+  private refreshCompass(): void {
+    this.hud.setCompass(regionMarks(this.builtRegion), this.builtRegion === "hollowmere" ? undefined : objectiveMark(this.builtRegion, this.scenarioView));
   }
 
   /** The words at the outpost's foundation (D-035): how many crates are down, what the carried thing will do. */

@@ -51,6 +51,8 @@ export class CameraRig {
   yaw = 0;
   pitch = 0.32;
   distance = 5.6;
+  /** Set by the game each frame: a firearm is in hand (the "ready" view: the follow camera looks down the line with the body to the left of the crosshair, D-040). */
+  ready = false;
   /** Set by the game each frame: the local body sits a horse, and how fast it goes as a fraction of a gallop. The follow camera pulls back and up, and widens a little at speed. */
   mounted = false;
   mountSpeed01 = 0;
@@ -64,6 +66,8 @@ export class CameraRig {
   private readonly thirdLook = new Vector3();
   /** 0..1: how far the follow camera has gone from the hip view to the over-the-shoulder aim view (closer, tighter lens, shoulder out, looking down the aim). `blendAim`: exponential, never snaps. */
   private aimK = 0;
+  /** 0..1: how far the follow camera has gone into the ready view (a firearm in hand), blended like the aim. */
+  private readyK = 0;
   private readonly dirTmp = new Vector3();
   private readonly look3 = new Vector3();
   /** Metres the follow camera was pulled in by a wall this frame (0 = free); for tests and the HUD. */
@@ -250,14 +254,16 @@ export class CameraRig {
     // with a slow unsteady drift (the player can still look around; this only moves the framing).
     const dk = this.downedK;
     this.aimK = blendAim(this.aimK, aiming && dk < 0.5, dt);
+    this.readyK = blendAim(this.readyK, this.ready && dk < 0.5, dt);
     const ak = this.aimK * this.aimK * (3 - 2 * this.aimK); // smoothstep of the exponential approach: it starts from rest as well as ending at rest
-    const dist = (this.distance * (1 - (1 - AIM.camera.distanceScale) * ak) + this.mountCam.pull) * (1 - 0.32 * dk);
+    const rk = this.readyK * this.readyK * (3 - 2 * this.readyK) * (1 - ak); // (the aim view takes over from the ready view, never adds to it)
+    const dist = (this.distance * (1 - (1 - AIM.camera.distanceScale) * ak - (1 - AIM.camera.readyDistanceScale) * rk) + this.mountCam.pull) * (1 - 0.32 * dk);
     const pitch = clamp(this.pitch - 0.3 * dk, -0.35, 1.25); // first person may look further than the follow camera can
     const cp = Math.cos(pitch);
     const sinY = Math.sin(this.yaw);
     const cosY = Math.cos(this.yaw);
     // Camera sits behind the look direction (look = -Z at yaw 0), offset to the right shoulder.
-    const shoulder = HIP_SHOULDER + (AIM.camera.shoulder - HIP_SHOULDER) * ak;
+    const shoulder = HIP_SHOULDER + (AIM.camera.shoulder - HIP_SHOULDER) * ak + (AIM.camera.readyShoulder - HIP_SHOULDER) * rk;
     const hy = this.focus.y + HEAD_Y + this.mountCam.rise - 0.95 * dk;
     this.desired.set(
       this.focus.x + sinY * cp * dist + cosY * shoulder,
@@ -294,10 +300,11 @@ export class CameraRig {
       this.focus.y + 1.35 - 0.7 * dk + Math.sin(this.clock * 0.53 + 1) * 0.07 * dk,
       this.focus.z,
     );
-    if (ak > 0) {
+    const line = ak + rk; // how far the view looks down the line (aimed or ready) rather than at the wearer's chest
+    if (line > 0) {
       const far = 30;
       this.thirdLook.set(this.thirdPos.x - sinY * cp * far, this.thirdPos.y - Math.sin(pitch) * far, this.thirdPos.z - cosY * cp * far);
-      this.thirdLook.lerpVectors(this.look3, this.thirdLook, ak);
+      this.thirdLook.lerpVectors(this.look3, this.thirdLook, line);
     } else this.thirdLook.copy(this.look3);
   }
 

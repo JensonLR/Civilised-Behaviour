@@ -1,4 +1,5 @@
 import { REGION_COPY, type ParleyView, type RegionId } from "@cb/shared";
+import { typeset } from "./typeset.ts";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
 import { sheetHints } from "./sheetHints.ts";
@@ -80,7 +81,7 @@ export class Parley {
 
   private render(v: ParleyView): void {
     this.speaker.textContent = String(v.speaker ?? "");
-    this.line.textContent = String(v.line ?? "");
+    this.line.textContent = typeset(String(v.line ?? ""));
     const toll = Number.isFinite(v.toll) ? Math.max(0, Math.round(v.toll)) : 0;
     const round = Math.max(1, v.round | 0);
     const mood = String(v.mood ?? "neutral");
@@ -101,7 +102,7 @@ export class Parley {
         h("span", { class: "key kb-only", "aria-hidden": "true" }, String(i + 1)), // (the number keys are a keyboard thing: a pad moves focus and presses the confirm control)
         h("span", { class: "label" }, String(o.label ?? "")),
         Number(o.cost) > 0 ? h("span", { class: "cost" }, `£${Math.round(Number(o.cost))}`) : null,
-        h("span", { class: "hint" }, String(o.hint ?? "")),
+        h("span", { class: "hint" }, typeset(String(o.hint ?? ""))),
       );
       b.addEventListener("click", () => this.choose(i));
       this.options.appendChild(b);

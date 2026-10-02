@@ -1,0 +1,277 @@
+import { BUTTON, FLAG, HIGHMARK_ANCHORS as H, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
+import type { Pilot } from "./pilot.ts";
+
+export interface Plan {
+  name: string;
+  join: Partial<JoinOptions>;
+  player?: string;
+  /** The endings a person playing this route would reasonably expect. */
+  expect?: ResolutionId[];
+  run(p: Pilot): Promise<void>;
+}
+
+const SEED = 4242;
+
+/** The nearest prop of a kind to a point (and not carried). */
+function nearestProp(p: Pilot, kind: number, x: number, z: number, within = 12): { id: string; x: number; z: number } | undefined {
+  let best: { id: string; x: number; z: number } | undefined;
+  let bd = within;
+  p.bot.room.state.props.forEach((pr, id) => {
+    if (pr.kind !== kind || pr.holder) return;
+    const d = Math.hypot(pr.x - x, pr.z - z);
+    if (d < bd) {
+      bd = d;
+      best = { id, x: pr.x, z: pr.z };
+    }
+  });
+  return best;
+}
+
+/** Walks to a prop and picks it up (Use with empty hands at arm's length, facing it). */
+async function pickUp(p: Pilot, kind: number, x: number, z: number): Promise<boolean> {
+  const pr = nearestProp(p, kind, x, z);
+  if (!pr) {
+    p.note(`NO PROP of kind ${kind} near ${x},${z}`);
+    return false;
+  }
+  await p.goTo(pr.x, pr.z, { within: 1.3, label: "prop" });
+  await p.face(pr.x, pr.z);
+  await p.use("pick up");
+  const held = await p.until(() => {
+    let h = false;
+    p.bot.room.state.props.forEach((q) => (h ||= q.holder === p.bot.room.sessionId));
+    return h;
+  }, 2000, "holding the prop");
+  p.note(held ? "HOLDING prop" : "FAILED to pick up");
+  return held;
+}
+
+async function sailHome(p: Pilot, landing: { x: number; z: number }): Promise<void> {
+  await p.goTo(landing.x, landing.z, { within: 2.5, label: "landing" });
+  await p.until(() => p.view?.resolution !== undefined, 15_000, "resolution to commit");
+}
+
+/** Fights the group until the contract resolves, the pilot is down, or time runs out. Takes cover by standing still behind nothing: a deliberately plain shooter. */
+async function fight(p: Pilot, prefix: string, ms: number): Promise<void> {
+  p.draw(WEAPON.RIFLE);
+  await p.sleep(1200);
+  const end = Date.now() + ms;
+  while (Date.now() < end && p.view?.resolution === undefined && p.me && (p.me.flags & FLAG.DOWNED) === 0 && p.me.health > 0) {
+    const live = p.npcs(prefix).filter(([, n]) => n.health > 0 && (n.flags & FLAG.DOWNED) === 0);
+    if (!live.length) break;
+    const me = p.pos;
+    live.sort((a, b) => Math.hypot(a[1].x - me.x, a[1].z - me.z) - Math.hypot(b[1].x - me.x, b[1].z - me.z));
+    await p.shootAt(live[0]![0]);
+    await p.sleep(300);
+  }
+  p.holster();
+}
+
+/** Walks up to an NPC (where it stands now) and presses Use facing it. */
+async function talkTo(p: Pilot, id: string, within = 1.6): Promise<boolean> {
+  const n = p.npc(id);
+  if (!n) {
+    p.note(`NO NPC ${id}`);
+    return false;
+  }
+  await p.goTo(n.x, n.z, { within, label: id });
+  const m = p.npc(id)!;
+  await p.face(m.x, m.z);
+  await p.use(`talk to ${id}`);
+  return p.until(() => p.parley !== undefined, 3000, `${id}'s parley`);
+}
+
+async function useAt(p: Pilot, x: number, z: number, label: string, within = 1.4): Promise<void> {
+  await p.goTo(x, z, { within, sprint: false, label });
+  await p.face(x, z);
+  await p.use(label);
+}
+
+/** Carries a prop of `kind` from near (fx, fz) to (tx, tz) and presses Use there. */
+async function carry(p: Pilot, kind: number, fx: number, fz: number, tx: number, tz: number, label: string, within = 1.6): Promise<boolean> {
+  if (!(await pickUp(p, kind, fx, fz))) return false;
+  await useAt(p, tx, tz, label, within);
+  await p.sleep(400);
+  return true;
+}
+
+export const PLANS: Plan[] = [
+  {
+    name: "crossing-pay",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["paid", "bargained"],
+    async run(p) {
+      await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
+      await p.goTo(A.wardenPost.x, A.wardenPost.z + 2, { within: 1, label: "the Warden" });
+      await p.face(A.wardenPost.x, A.wardenPost.z);
+      await p.use("parley");
+      (await p.pick(/^Pay|Agree|Pay the toll/i)) >= 0 || (await p.pick(/Haggle|bargain/i));
+      await p.until(() => p.view?.resolution !== undefined, 8000, "settled");
+      await sailHome(p, A.landing);
+    },
+  },
+  {
+    name: "crossing-run-the-bar",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["forced", "abandoned"],
+    async run(p) {
+      await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
+      // a person who ignores the bar and walks up the fort road
+      await p.goTo(0, -14, { label: "fort road", ms: 30_000 });
+      await p.sleep(7000);
+      p.note(`hostile? phase=${p.view?.phase}`);
+      await fight(p, "sentry", 60_000);
+    },
+  },
+  {
+    name: "crossing-force",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["forced", "abandoned"],
+    async run(p) {
+      p.debug("give:all");
+      await p.goTo(0, 34, { label: "south end of the bridge" });
+      await fight(p, "sentry", 120_000);
+    },
+  },
+  {
+    name: "crossing-sabotage",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["sabotaged"],
+    async run(p) {
+      if (!(await pickUp(p, PropKind.BARREL, A.powder.x, A.powder.z))) return;
+      await p.goTo(A.pier.x + 0.8, A.pier.z, { within: 1.2, sprint: false, label: "the pier" });
+      await p.face(A.pier.x, A.pier.z);
+      await p.use("set the charge");
+      await p.sleep(300);
+      // clear the deck
+      await p.goTo(0, 40, { label: "clear of the bridge" });
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "the bridge to go");
+    },
+  },
+  {
+    name: "hostage-ransom",
+    join: { region: "kessar", scenario: "hostage_rescue", seed: SEED },
+    expect: ["ransomed"],
+    async run(p) {
+      if (!(await talkTo(p, "deserter-0", 1.8))) return;
+      await p.pick(/^Pay/);
+      await p.until(() => p.view?.resolution !== undefined || p.parley === undefined, 6000, "ransom answer");
+      if (p.parley) await p.pick(/^Pay/);
+      await p.until(() => p.view?.resolution !== undefined, 120_000, "Mr. Quim walked home");
+      if (p.view?.resolution === undefined) await p.goTo(A.landing.x, A.landing.z, { within: 4, label: "landing with Quim" });
+      await p.until(() => p.view?.resolution !== undefined, 120_000, "resolution");
+    },
+  },
+  {
+    name: "hostage-slip",
+    join: { region: "kessar", scenario: "hostage_rescue", seed: SEED },
+    expect: ["slipped_away", "rescued"],
+    async run(p) {
+      // crouched from the ford, round the east side of the orchard, away from the lookout
+      await p.goTo(A.ford.x, A.ford.z - 6, { label: "the ford" });
+      await p.goTo(86, -6, { label: "east of the orchard" });
+      p.holdButtons(BUTTON.CROUCH);
+      await p.goTo(KS.hostage.cage.x + 2, KS.hostage.cage.z, { within: 1.6, sprint: false, label: "the cage", ms: 120_000 });
+      await p.face(KS.hostage.cage.x, KS.hostage.cage.z);
+      await p.use("open the cage");
+      p.holdButtons(0);
+      await p.sleep(1000);
+      await p.goTo(A.landing.x, A.landing.z - 4, { within: 3, label: "the landing with Quim", ms: 150_000 });
+      await p.until(() => p.view?.resolution !== undefined, 60_000, "resolution");
+    },
+  },
+  {
+    name: "convoy-ambush",
+    join: { region: "kessar", scenario: "convoy_ambush", seed: SEED },
+    expect: ["seized", "burned"],
+    async run(p) {
+      p.debug("give:all");
+      await p.goTo(KS.convoy.cut.x, KS.convoy.cut.z + 6, { label: "the Dry Cut" });
+      await p.until(() => p.npcs("guard").some(([, n]) => Math.hypot(n.x - KS.convoy.cut.x, n.z - KS.convoy.cut.z) < 30), 120_000, "the wagon at the Cut");
+      await fight(p, "guard", 90_000);
+      // take the wagon: Use beside it
+      const w = [...p.bot.room.state.mounts.values()].find((m) => (m as { kind?: number }).kind !== undefined) as { x: number; z: number } | undefined;
+      if (w) await useAt(p, w.x, w.z, "take the wagon", 2.6);
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+    },
+  },
+  {
+    name: "border-mediate",
+    join: { region: "kessar", scenario: "border_incident", seed: SEED },
+    expect: ["mediated"],
+    async run(p) {
+      await p.goTo(KS.border.rival[1]!.x, KS.border.rival[1]!.z + 3, { label: "the Syndicate bank" });
+      if (await talkTo(p, "rival-0")) await p.pick(/joint survey/i);
+      await p.sleep(800);
+      if (p.parley) await p.pick(/Walk away/);
+      await p.goTo(A.ford.x, A.ford.z - 12, { label: "the Ward bank" });
+      if (await talkTo(p, "ward-0")) await p.pick(/joint survey/i);
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+    },
+  },
+  {
+    name: "succession-back-elder",
+    join: { region: "highmark", seed: SEED },
+    expect: ["backed_elder"],
+    async run(p) {
+      // two barrels of grain from the quay to the Grange's delegates on the granary terrace, then the court
+      for (const i of [0, 1]) {
+        const g = p.npc(`grange-${i}`);
+        if (!g) break;
+        await carry(p, PropKind.BARREL, H.landing.x - 6, H.landing.z - 6, g.x, g.z, `grain to delegate ${i}`, 1.8);
+      }
+      await p.goTo(H.capital.court.x, H.capital.court.z + 6, { label: "the court" });
+      if (await talkTo(p, "chamberlain")) await p.pick(/File Form 11/);
+      if (await talkTo(p, "claimant-elder")) await p.pick(/^Pledge/);
+      await p.until(() => p.view?.resolution !== undefined, 240_000, "the harvest bell");
+    },
+  },
+  {
+    name: "mine-dig-out",
+    join: { region: "vesper", scenario: "mine_rescue", seed: SEED },
+    expect: ["dug_out"],
+    async run(p) {
+      for (let i = 0; i < 3; i++) await carry(p, PropKind.CRATE, VK.timber[0]!.x, VK.timber[0]!.z, VK.dig.x, VK.dig.z + 1.2, `timber ${i + 1}`, 1.6);
+      // dig: Use with empty hands at the fall, over and over
+      const end = Date.now() + 180_000;
+      while (Date.now() < end && p.view?.resolution === undefined) {
+        await p.use();
+        await p.sleep(150);
+      }
+    },
+  },
+  {
+    name: "claim-stake",
+    join: { region: "vesper", scenario: "claim_race", seed: SEED },
+    expect: ["staked"],
+    async run(p) {
+      for (const [i, pg] of VS.claimPegs.entries()) await useAt(p, pg.x, pg.z, `peg ${i}`, 1.2);
+      if (await talkTo(p, "assayer")) await p.pick(/^File the claim/);
+      await p.until(() => p.view?.resolution !== undefined, 30_000, "resolution");
+    },
+  },
+  {
+    name: "smuggle-courtesy-land",
+    join: { region: "saltmarket", scenario: "smuggling_run", seed: SEED },
+    expect: ["landed"],
+    async run(p) {
+      if (await talkTo(p, "reeve")) await p.pick(/courtesy/i);
+      for (let i = 0; i < 3 && p.view?.resolution === undefined; i++) await carry(p, PropKind.CRATE, SA.cove.x, SA.cove.z, SP.dropDoor.x + 1.2, SP.dropDoor.z, `crate ${i + 1}`, 1.4);
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+    },
+  },
+  {
+    name: "market-consortium",
+    join: { region: "saltmarket", scenario: "flooded_market", seed: SEED },
+    expect: ["consortium", "lot_won"],
+    async run(p) {
+      for (const i of [0, 1]) {
+        if (await talkTo(p, `head-${i}`)) await p.pick(/consortium/i);
+        await p.sleep(500);
+        if (p.parley) await p.pick(/Walk away/);
+        if (p.view?.resolution) break;
+      }
+      await p.until(() => p.view?.resolution !== undefined, 30_000, "resolution");
+    },
+  },
+];

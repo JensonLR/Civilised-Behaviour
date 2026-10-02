@@ -37,7 +37,10 @@ describe("the orientation machine", () => {
         expect(isDone(run(newOrientation(), { ...short, device }), id), `${id} just short`).toBe(false);
         const done = run(newOrientation(), { ...enough, device });
         expect(isDone(done, id), `${id} enough`).toBe(true);
-        expect(doneCount(done), `${id} ticks off only itself`).toBe(1);
+        // (D-040: opening the map room also finds it: the playtest's card kept "Find the map room" open after the room had been used)
+        const implied: OrientStep[] = id === "map" ? ["pin"] : [];
+        for (const i of implied) expect(isDone(done, i), `${id} implies ${i}`).toBe(true);
+        expect(doneCount(done), `${id} ticks off only itself`).toBe(1 + implied.length);
         // the others are untouched and the current step is the first not done
         expect(currentStep(done)).toBe(id === "move" ? "look" : "move");
       }
@@ -49,7 +52,7 @@ describe("the orientation machine", () => {
     const order = [...TABLE].reverse();
     for (const [id, enough] of order) {
       const next = orientationStep(s, sample(enough));
-      expect(next).not.toBe(s);
+      if (!isDone(s, id)) expect(next).not.toBe(s); // (the map room, done first here, has already found itself)
       expect(isDone(next, id)).toBe(true);
       expect(orientationStep(next, sample(enough))).toBe(next); // nothing new: the same state, no allocation
       expect(orientationStep(next, sample())).toBe(next); // the sample dropping back undoes nothing

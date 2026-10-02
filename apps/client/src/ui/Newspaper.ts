@@ -1,7 +1,8 @@
-import type { Paper } from "@cb/shared";
+import { paperSection, type Paper } from "@cb/shared";
 import { playSfx } from "../audio/index.ts";
 import { Modal, h } from "./modal.ts";
 import { sheetHints } from "./sheetHints.ts";
+import { typeset } from "./typeset.ts";
 import "./newspaper.css";
 
 /**
@@ -36,10 +37,10 @@ export class NewspaperView {
     this.body.replaceChildren(
       h("h2", { id: "paper-masthead", class: "masthead" }, String(p.masthead ?? "")),
       h("p", { class: "dateline" }, `Edition ${Math.max(1, Number(p.edition) | 0)}  —  ${String(p.dateline ?? "")}`),
-      h("h3", { class: "headline" }, String(p.headline ?? "")),
-      h("p", { class: "standfirst" }, String(p.standfirst ?? "")),
-      h("div", { class: "columns" }, ...stories.map((s) => h("article", {}, h("h4", {}, String(s.head ?? "")), h("p", { class: "slug" }, String(s.slug ?? "")), h("p", {}, String(s.body ?? ""))))),
-      ...(notices.length ? [h("ul", { class: "notices", "aria-label": "Notices" }, ...notices.map((n) => h("li", {}, String(n))))] : []),
+      h("h3", { class: "headline" }, typeset(String(p.headline ?? ""))),
+      h("p", { class: "standfirst" }, typeset(String(p.standfirst ?? ""))),
+      h("div", { class: "columns" }, ...stories.map((s) => h("article", {}, h("h4", {}, typeset(String(s.head ?? ""))), h("p", { class: "slug" }, paperSection(String(s.slug ?? ""))), h("p", {}, typeset(String(s.body ?? "")))))),
+      ...(notices.length ? [h("ul", { class: "notices", "aria-label": "Notices" }, ...notices.map((n) => h("li", {}, typeset(String(n)))))] : []),
     );
     playSfx("paper_rustle"); // the broadsheet is unfolded
     this.modal.open();

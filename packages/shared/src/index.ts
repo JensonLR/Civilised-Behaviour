@@ -68,6 +68,8 @@ export * from "./scenarios/parleys.ts";
 export * from "./worldTypes.ts";
 export * from "./hqRoute.ts";
 export * from "./hqRouteText.ts";
+export * from "./compassMarks.ts";
+export * from "./remittance.ts";
 export * from "./powersText.ts";
 export * from "./relations.ts";
 export * from "./powers.ts";

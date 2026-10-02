@@ -453,8 +453,8 @@ export const SCANDAL = {
 } as const;
 
 export const PROMISES: readonly string[] = [
-  "The Society has given {lies} assurances it did not keep. Officials prefer \"rolling commitments\".",
-  "{lies} undertakings are \"in progress\", where \"progress\" means a direction away from them.",
+  "The Society has given assurances it did not keep ({lies} at the last count). Officials prefer \"rolling commitments\".",
+  "Undertakings \"in progress\": {lies}, where \"progress\" means a direction away from them.",
 ];
 
 export const FILLER: readonly string[] = [

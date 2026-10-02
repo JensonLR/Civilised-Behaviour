@@ -242,8 +242,12 @@ export function rivalDispatch(p: PowersState, seed: number): PaperItem {
   const r = p.rival;
   const t = GOAL_NEWS[r.goal];
   const pick = (list: readonly string[], tag: number): string => list[hash3(seed >>> 0, r.day, r.since, tag) % list.length]!;
-  return { slug: "rival-goal", head: pick(t.head, 1), body: pick(t.body, 2).replace("{days}", String(Math.max(1, r.lead))) };
+  return { slug: "rival-goal", head: pick(t.head, 1), body: pick(t.body, 2).replace("{days} days", daysPhrase(Math.max(1, r.lead))).replace("{days}", String(Math.max(1, r.lead))) };
 }
+
+const SMALL = ["no", "a", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"] as const;
+/** "a day", "two days", "14 days": the paper never prints "1 days" (D-040). */
+export const daysPhrase = (n: number): string => (n === 1 ? "a day" : `${n >= 0 && n <= 10 ? SMALL[n] : n} days`);
 
 /** A paper item for one rival event (the log holds `rival_<kind>`). */
 export function rivalEventItem(ev: PowerEvent, seed: number): PaperItem | undefined {

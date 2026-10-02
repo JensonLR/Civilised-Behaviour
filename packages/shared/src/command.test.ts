@@ -333,6 +333,21 @@ describe("followerThink: fighting (the garrison brain, with tokens)", () => {
     expect(fed).toBeGreaterThan(paid);
   });
 
+  it("D-040: a calm, paid hand beside the employer reads steady at any ordinary bravery; fire still shakes them", () => {
+    const w = flat();
+    for (const bravery of [35, 40, 50, 65]) {
+      const r = rig(w, 0, 0, { kind: "surgeon" });
+      const m = mindOf(r.b);
+      m.paid = true; m.provisions = false; m.bravery = bravery;
+      r.b.morale.v = 70;
+      runFor(r, w, 30, () => { r.leader.x = r.s.x; r.leader.z = r.s.z - 3; });
+      expect(moraleBand(r.b.morale.v), `bravery ${bravery} calm`).toBe("steady");
+      r.sn.alert = true; r.sn.enemy = foe(0, -20); r.sn.underFire = 1;
+      runFor(r, w, 10, () => { r.leader.x = r.s.x; r.leader.z = r.s.z - 3; });
+      if (bravery <= 50) expect(moraleBand(r.b.morale.v), `bravery ${bravery} under fire`).not.toBe("steady"); // (a truly brave hand may keep steady under fire)
+    }
+  });
+
   it("the garrison brain's own morale step does not double count (its inputs are discarded)", () => {
     const w = flat();
     const a = rig(w, 0, 0);

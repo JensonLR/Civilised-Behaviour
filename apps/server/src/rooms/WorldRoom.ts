@@ -53,6 +53,7 @@ import {
   NPC_SIDE,
   WEAPONS,
   applyOutcome,
+  remit,
   askingToll,
   answerParley,
   DAYS_IDLE_CAP,
@@ -1125,6 +1126,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // powers -> publish everything -> save. Each step is a pure function in shared/; this method only orders them and publishes.
     let c = applyOutcome(before, o);
     let p = powersAfterOutcome(before, c, this.powers, o);
+    // D-040: the Society pays for the story (by the column-inch), so an honest campaign is never stranded at HQ with an empty purse
+    const pay = remit(c, o);
+    c = pay.c;
     const idle = this.pendingIdle;
     this.pendingIdle = 0;
     const adv = rivalAdvance(c, p, c.day + idle);
@@ -1137,10 +1141,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     events.push(...this.outposts.evolve(c.day, regionClimate(c, p, "kessar")));   // (the outposts publish themselves and tell the powers: commitSettlements)
     this.publishCampaign();
     this.publishPowers();
-    for (const line of consequenceLines(before, this.campaign).slice(0, 3)) this.broadcast("notice", { text: line });
-    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") this.broadcast("notice", { text: this.settlementLine(e) });
+    // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
+    const debrief = [pay.line, ...consequenceLines(before, this.campaign).slice(0, 3)];
+    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") debrief.push(this.settlementLine(e));
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
-    for (const line of this.followers.settle(o).slice(0, 4)) this.broadcast("notice", { text: line });
+    debrief.push(...this.followers.settle(o).slice(0, 4));
+    this.broadcast("notice", { text: debrief.join("\n") });
     log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
   }
 

@@ -10,8 +10,8 @@ export interface Slip {
   life: number;
 }
 
-/** Reading time for a slip: 3.2 s and 45 ms a character, between 4 and 11 seconds unless the caller says. */
-export const readingTime = (text: string): number => Math.max(4, Math.min(11, 3.2 + text.length * 0.045));
+/** Reading time for a slip: 3.2 s and 45 ms a character, between 4 and 11 seconds unless the caller says; a debrief (several lines, D-040) may stay up to 16. */
+export const readingTime = (text: string): number => Math.max(4, Math.min(text.includes("\n") ? 16 : 11, 3.2 + text.length * 0.045));
 
 export class TelegramQueue {
   readonly shown: Slip[] = [];

@@ -101,3 +101,19 @@ describe("kessarNavOptions", () => {
     }
   });
 });
+
+describe("the Syndicate's people are named by role, never twice (D-040)", () => {
+  it("any escort the rival agent sends: every name in the roster is unique, enforcers are Enforcers and surveyors Surveyors; the default three keep their old names", () => {
+    const c = newCampaign(4);
+    const base = garrisonRoster(c, 4).filter((s) => s.faction === "rival").map((s) => s.name);
+    expect(base).toEqual(["Enforcer Garth Vesk-Lowe", "Enforcer Dilly Marrowgate", "Surveyor Ansel Quire-Dunmarrow"]);
+    for (let escort = 0; escort <= 8; escort++) {
+      for (let surveyors = 0; surveyors <= 3; surveyors++) {
+        const r = garrisonRoster(c, 4, { goal: "survey_route", arrivesInS: 300, escort, wagon: false, surveyors, postStage: 0 });
+        const names = r.map((s) => s.name);
+        expect(new Set(names).size, `${escort}/${surveyors}`).toBe(names.length);
+        for (const s of r.filter((x) => x.faction === "rival")) expect(s.name.startsWith(s.role === NPC.RIVAL_GUARD ? "Enforcer " : "Surveyor ")).toBe(true);
+      }
+    }
+  });
+});

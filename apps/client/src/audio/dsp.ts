@@ -235,9 +235,12 @@ export function renderLayers(ctx: BaseAudioContext, out: AudioNode, t0: number, 
       }
       case "r": {
         for (let i = 0; i < l.ratios.length; i++) {
+          // a partial above the Nyquist limit is silent aliasing and a console warning on every bell (D-040): it is not made at all
+          const hz = l.hz * pitch * l.ratios[i]!;
+          if (hz >= ctx.sampleRate * 0.45) continue;
           const osc = ctx.createOscillator();
           osc.type = "sine";
-          osc.frequency.value = l.hz * pitch * l.ratios[i]!;
+          osc.frequency.value = hz;
           const g = ctx.createGain();
           const dec = l.decs[i]!;
           env(g.gain, t, l.peak * l.amps[i]!, 0.0008, dec);

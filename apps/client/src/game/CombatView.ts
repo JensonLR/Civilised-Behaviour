@@ -525,6 +525,15 @@ export class CombatView {
     this.hud.updateCannon(c ? { phase: c.phase, progress: c.progress, crew: c.crew, shells: c.shells, mine: (me.flags & FLAG.OPERATING) !== 0 } : undefined);
   }
 
+  /** A firearm (not a blade, not bare hands) is wanted in hand and the body can use it: the follow camera takes its "ready" view (D-040). */
+  get firearmReady(): boolean {
+    const w = this.wish;
+    const me = this.predicted;
+    if (w < 0 || !me || (me.flags & (FLAG.DOWNED | FLAG.OPERATING)) !== 0) return false;
+    const def = WEAPONS[w as WeaponId];
+    return !!def && def.fire !== "melee";
+  }
+
   /** True when the sight, not the first-person dot, is drawing the crosshair (the plain dot then stays hidden). */
   get sightShown(): boolean {
     const w = this.wish;

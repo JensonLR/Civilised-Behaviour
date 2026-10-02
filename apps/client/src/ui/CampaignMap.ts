@@ -111,10 +111,17 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
     if (!here) continue;
     const m = chartRouteMid(here, l.to);
     const t = svg("text", { x: m.x, y: m.y - 5, "text-anchor": "middle", class: "lane" });
-    t.textContent = `${l.seconds} s by sail`;
+    t.textContent = sailShort(l.seconds);
     g.append(t);
   }
 }
+
+/**
+ * A sailing in the fiction's terms (D-040: the playtest's chart said "6 s by sail"). The voyage is a card of a few seconds, and an expedition is a day; the steam
+ * launch halves the crossing. Chart lanes carry the short form, the text panel the long one.
+ */
+export const sailShort = (seconds: number): string => (seconds >= 5 ? "a day" : "half a day");
+export const sailLong = (seconds: number): string => (seconds >= 5 ? "a day's sail" : "half a day by steam launch");
 
 /** The text panel under the chart. `render` replaces its contents; call it whenever the map data changes. */
 export class CampaignMap {
@@ -142,7 +149,7 @@ export class CampaignMap {
     // what has been latched: words, not colour
     const t = data.tech;
     this.root.append(h("p", { class: "tech" }, `Infrastructure: ${roadWord(t.road)}; ${t.telegraph ? "a telegraph line (news travels, wrongly, faster)" : "no telegraph"}; ${t.launch ? "a steam launch at the landing" : "no steam launch"}.`));
-    for (const l of data.lanes) this.root.append(h("p", { class: "lane-note" }, `Sailing to ${data.regions.find((r) => r.id === l.to)?.name ?? l.to}: ${l.seconds} seconds.`));
+    for (const l of data.lanes) this.root.append(h("p", { class: "lane-note" }, `${data.regions.find((r) => r.id === l.to)?.name ?? l.to}: ${sailLong(l.seconds)}.`));
 
     // the Syndicate
     this.root.append(

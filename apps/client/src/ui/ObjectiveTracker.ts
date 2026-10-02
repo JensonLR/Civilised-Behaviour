@@ -1,4 +1,5 @@
 import type { ScenarioView } from "@cb/shared";
+import { typeset } from "./typeset.ts";
 import "./objectiveTracker.css";
 
 /** "m:ss", rounded up (a fuse with 0.2 s left still reads 0:01). Negative or non-finite reads 0:00. */
@@ -104,7 +105,7 @@ export class ObjectiveTracker {
         this.rows.delete(id);
       }
     }
-    const hint = String(view.hint ?? "");
+    const hint = typeset(String(view.hint ?? ""));
     if (this.hint.textContent !== hint) this.hint.textContent = hint;
     this.hint.hidden = hint === "";
     const label = String(view.timerLabel ?? "");

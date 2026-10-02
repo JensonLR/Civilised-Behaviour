@@ -17,6 +17,22 @@ import type { PaperExtras } from "./worldTypes.ts";
 
 export interface Paper { masthead: string; edition: number; dateline: string; headline: string; standfirst: string; stories: { slug: string; head: string; body: string }[]; notices: string[] }
 
+/**
+ * The section a story is printed under (D-040: the playtest's paper printed its internal story ids, "RIVAL-GOAL", "FILLER", as section heads). Fixed slugs by name,
+ * families by prefix; anything else is a dispatch.
+ */
+const SECTIONS: Readonly<Record<string, string>> = {
+  casualty: "Casualty List", filler: "Parish Notes", ledger: "The Ledger", promise: "Undertakings", prospectus: "Prospectus", scandal: "Scandal",
+  ward: "Ward Affairs", colonies: "The Colonies", rival: "Competitors", "rival-goal": "Intelligence",
+};
+const SECTION_PREFIX: readonly (readonly [string, string])[] = [["rival-", "Competitors"], ["post-", "From the Outposts"], ["chair-", "Court Circular"], ["end-", "Despatches"]];
+export function paperSection(slug: string): string {
+  const s = String(slug ?? "");
+  if (s in SECTIONS) return SECTIONS[s]!;
+  for (const [p, name] of SECTION_PREFIX) if (s.startsWith(p)) return name;
+  return "Despatches";
+}
+
 export const PAPER_LIMITS = { headline: 90, standfirst: 280, head: 60, body: 420, notice: 120, stories: 5, notices: 4 } as const;
 
 const cap = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);

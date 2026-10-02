@@ -44,6 +44,7 @@ export function goldenDigest(): string {
 describe("D-035 back-compat", () => {
   it("absent extras / presence leave every old output byte-identical", () => {
     expect(RESOLUTIONS.length).toBe(41);   // 20 at Kessar + 5 at Highmark (D-036) + 16 at Vesper and Saltmarket (D-037); the digest covers Kessar's only
-    expect(goldenDigest()).toBe("e36d8edd");
+    // re-recorded ONCE at D-040 for a deliberate copy fix in the paper's PROMISES lines ("1 undertakings are"); verified first that the old text still gave e36d8edd on the new code
+    expect(goldenDigest()).toBe("82698a61");
   });
 });

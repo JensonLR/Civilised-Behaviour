@@ -1,4 +1,5 @@
 import { TelegramQueue } from "./telegramQueue.ts";
+import { typeset } from "./typeset.ts";
 
 /**
  * The telegram stack: paper slips down the top of the picture, newest at the bottom, at most three at once, the rest waiting in a queue
@@ -60,7 +61,7 @@ export class Telegrams {
       el.className = "telegram";
       const body = document.createElement("div");
       body.className = "body";
-      body.textContent = s.text;
+      body.textContent = typeset(s.text);
       el.appendChild(body);
       this.root.appendChild(el);
       this.els.set(s.id, el);
