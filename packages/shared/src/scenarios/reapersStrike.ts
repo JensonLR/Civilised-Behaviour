@@ -20,8 +20,8 @@ import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts"
  *  - the FOREPERSON (parley `reaper`): a harvest bonus out of the party's purse ends it today (`bought_back`); an honest measure she signs only once the fraud is proven; a threat ends her dealing.
  *  - the ROYAL BUSHEL (a barrel on the granary scale, up the hill): carried to the Steward and weighed in front of him, it is the proof. Any other barrel is just a barrel.
  *  - the STEWARD (parley `steward`): decrees an honest measure once the bushel is weighed; before that, he offers the party a fee to talk the Compact back (`tip`), and sends the barge word to hurry.
- *  - the STRIKE-BREAKERS (`late:breakers`, four, landed at the quay at `barge`, marching to the barley): two in the field with the Compact still out break the strike. Fight them and they stop
- *    marching to fight you; whatever else happens, they are not cutting barley this afternoon.
+ *  - the STRIKE-BREAKERS (`late:breakers`, four, landed at the quay at `barge`, mustered there `musterS`, then marching to the barley): two in the field with the Compact still out break the
+ *    strike. Fight them and they stop marching to fight you; whatever else happens, they are not cutting barley this afternoon.
  * Endings (first wins, then the state is frozen):
  *  `honest_measure`: the bushel weighed AND both the Steward and the Foreperson signed (either order).  `bought_back`: the bonus was paid.
  *  `strike_broken`: two strike-breakers reached the barley unopposed.  `barley_lost`: the rain arrived with the Compact still out.  `abandoned`: the party is down.
@@ -32,6 +32,8 @@ import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts"
 export const STRIKE = {
   /** The barge lands this many seconds in (seeded in range); outriders bring it forward, fog delays it; once the Steward has sent word it lands no later than `hurriedS` after. */
   bargeMin: 150, bargeMax: 190, outridersBarge: -60, fogBarge: 30, hurriedS: 20,
+  /** D-042, from the bot playtest: landed, the crew musters on the quay this long before it marches (marching, it reached the barley in 15 s, too soon for a warning to mean anything). */
+  musterS: 30,
   /** The rain reaches the barley (seeded in range); the rain complication brings it forward, fog holds it off. */
   rainMin: 380, rainMax: 440, rainRain: -90, fogRain: 40,
   /** Strike-breakers on the barge, and how many in the field break the strike. */
@@ -56,6 +58,8 @@ export interface StrikeState extends BaseState {
   /** The party took the Steward's fee. */
   tipped: boolean;
   barge: number; landed: boolean;
+  /** When the landed crew sets off for the barley (0 until it lands), and whether it has. */
+  marchAt: number; marched: boolean;
   /** Strike-breakers who reached the barley unopposed; `fight`: the party has fought them (they stopped marching). */
   inField: number; fight: boolean;
   crew: { alive: number; routed: number; down: number; total: number };
@@ -75,7 +79,7 @@ function init(c: CampaignState, _asking: number, seed: number, presence?: RivalP
   const rainAt = STRIKE.rainMin + (h(2) % (STRIKE.rainMax - STRIKE.rainMin + 1)) + (complication === "rain" ? STRIKE.rainRain : complication === "fog" ? STRIKE.fogRain : 0);
   return {
     phase: "approach", t: 0, resolvedAt: 0, complication, near: { line: 0 }, asked: { reaper: false, steward: false }, proof: false, agreed: { steward: false, compact: false },
-    refused: false, stewardGone: false, tipped: false, barge: Math.round(barge), landed: false, inField: 0, fight: false,
+    refused: false, stewardGone: false, tipped: false, barge: Math.round(barge), landed: false, marchAt: 0, marched: false, inField: 0, fight: false,
     crew: { alive: 0, routed: 0, down: 0, total: STRIKE.breakers }, rainAt: Math.round(rainAt),
     price: { bonus: rnd5(...STRIKE.priceBonus, h(3)), fee: rnd5(...STRIKE.priceFee, h(4)) },
     purse: int(c.purse, 0, 99999, 0), spent: 0, paid: 0, loot: 0, tally: zeroTally(), brokePromise: false,
@@ -117,9 +121,13 @@ function reduce(s: StrikeState, e: ScenarioInput): Reduction<StrikeState> {
       let n: StrikeState = { ...s, t: s.t + dtOf(e) };
       const fx: ScenarioFx[] = [];
       if (!n.landed && n.t >= n.barge) {
-        n = { ...n, landed: true, crew: { ...n.crew, alive: STRIKE.breakers } };
-        fx.push({ k: "spawn", group: "late:breakers" }, { k: "order", group: "late:breakers", order: { o: "march", route: "breakers" } },
-          say("A barge noses into the quay below the hill and lets down a plank. Four men in Syndicate armbands come down it with sickles, a contract and a supervisor: \"seasonal operatives, bonded\". They form up and set off up the road for the barley. If two of them get there before the Compact is back at work, the strike is broken."));
+        n = { ...n, landed: true, marchAt: Math.round(n.t + STRIKE.musterS), crew: { ...n.crew, alive: STRIKE.breakers } };
+        fx.push({ k: "spawn", group: "late:breakers" },
+          say("A barge noses into the quay below the hill and lets down a plank. Four men in Syndicate armbands come down it with sickles, a contract and a supervisor: \"seasonal operatives, bonded\". They form up on the quay while the supervisor reads the contract aloud, all of it. When he has finished they will march for the barley, and if two of them get there before the Compact is back at work, the strike is broken."));
+      }
+      if (n.landed && !n.marched && !n.fight && n.t >= n.marchAt) {
+        n = { ...n, marched: true };
+        fx.push({ k: "order", group: "late:breakers", order: { o: "march", route: "breakers" } }, say("The supervisor reaches the end of the contract, signs it on his knee and points up the road. The strike-breakers set off for the barley."));
       }
       if (n.t >= n.rainAt) {
         return resolveWith(n, "barley_lost", {}, [...fx, CALM,
@@ -268,7 +276,7 @@ const HINT: Record<string, string> = {
   approach: "Harvest week at Highmark, and the Reapers' Compact has laid down its scythes at the foot of the hill. The barley stands; the rain is coming. Walk up to the picket line, west of the road.",
   waiting: "The Compact says the royal bushel it is paid by is a third larger than the one the Crown sells by. Pay the harvest bonus, or prove it: the royal bushel sits on the granary scale up the hill. Carry it down to the Steward. An honest measure needs both signatures.",
   parley: "They are listening. The Compact remembers who paid it and who threatened it; the Steward remembers everything, in a ledger.",
-  tension: "The Syndicate's strike-breakers are on the road from the quay. If two reach the barley before the Compact is back at work, the strike is broken. Settle it first, stop them, or let them through.",
+  tension: "The Syndicate's strike-breakers have landed at the quay. If two reach the barley before the Compact is back at work, the strike is broken. Settle it first, stop them, or let them through.",
   fighting: "The strike-breakers have turned on you instead of the barley. Whatever is agreed today will be agreed over this, before the rain.",
 };
 const DONE: Record<string, string> = {
@@ -298,7 +306,7 @@ function view(s: StrikeState, now: number): ScenarioView {
   }
   objectives.push({ id: "settle", text: res === "abandoned" ? "Lost: the expedition went down" : res === "strike_broken" ? "Broken: the Syndicate's men are in the barley" : res === "barley_lost" ? "Lost: the rain reached the barley first" : "Get the Compact back in the barley before the rain", done: back });
   if (s.landed && res === undefined) {
-    objectives.push({ id: "breakers", text: s.fight ? "The strike-breakers are fighting you instead of reaping" : `Strike-breakers on the road (${Math.min(s.inField, STRIKE.breakersNeeded)} of ${STRIKE.breakersNeeded} in the barley)`, done: s.fight, optional: true });
+    objectives.push({ id: "breakers", text: s.fight ? "The strike-breakers are fighting you instead of reaping" : !s.marched ? "Strike-breakers mustering on the quay" : `Strike-breakers on the road (${Math.min(s.inField, STRIKE.breakersNeeded)} of ${STRIKE.breakersNeeded} in the barley)`, done: s.fight, optional: true });
   }
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the Reed Landing", done: false });
 
@@ -307,8 +315,9 @@ function view(s: StrikeState, now: number): ScenarioView {
   if (res === undefined && s.tipped) hint += ` (You took the Steward's £${s.price.fee}, on results: the Compact back with nothing reformed.)`;
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
-  const remain = res !== undefined ? 0 : !s.landed && s.barge < s.rainAt ? s.barge - s.t : s.rainAt - s.t;
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(!s.landed && s.barge < s.rainAt ? "The Syndicate's barge lands" : "The rain", remain, now), template: "reapers_strike", title: "The Reapers' Strike" };
+  const clock: [string, number] = !s.landed && s.barge < s.rainAt ? ["The Syndicate's barge lands", s.barge - s.t]
+    : s.landed && !s.marched && !s.fight && s.marchAt < s.rainAt ? ["The strike-breakers march", s.marchAt - s.t] : ["The rain", s.rainAt - s.t];
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(clock[0], res !== undefined ? 0 : clock[1], now), template: "reapers_strike", title: "The Reapers' Strike" };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;

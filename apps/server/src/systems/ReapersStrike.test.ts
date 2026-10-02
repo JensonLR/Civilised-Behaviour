@@ -78,10 +78,13 @@ describe("the endings through the real runner, one commit each", () => {
     expect(f.commits[0]!.paid).toBeGreaterThanOrEqual(40);
   });
 
-  it("strike_broken: the barge lands on the clock, its men march, and two of them in the barley break the strike", () => {
+  it("strike_broken: the barge lands on the clock, its men muster and march, and two of them in the barley break the strike", () => {
     const { f, s } = newRun();
     run(f, s, bargeIn(f) + 1);
     expect(npcKeys(f).filter((k) => k.startsWith("npc:breaker-")).length).toBe(4);
+    expect(f.cast.groupOrders("late:breakers")).not.toContain("march");
+    expect(lastView(f).timerLabel).toBe("The strike-breakers march");
+    run(f, s, bargeIn(f) + 1);
     expect(f.cast.orders).toContainEqual({ group: "late:breakers", order: { o: "march", route: "breakers" } });
     expect(npcKeys(f).length).toBeLessThanOrEqual(NPC_CAP);
     put(f, npcKey("breaker-0"), S.barley.x, S.barley.z);
@@ -97,6 +100,7 @@ describe("the endings through the real runner, one commit each", () => {
     const { f, s } = newRun();
     run(f, s, bargeIn(f) + 1);
     s.onDamage(npcKey("breaker-3"), "p1", 1, false);
+    expect(lastView(f).timerLabel, "a fought crew never marches: the clock is the rain's").toBe("The rain");
     expect(f.cast.groupOrders("late:breakers")).toContain("alert");
     expect(lastView(f).phase).toBe("fighting");
     for (const i of [0, 1, 2]) put(f, npcKey(`breaker-${i}`), S.barley.x, S.barley.z);

@@ -75,12 +75,21 @@ describe("the Reapers' Strike (D-042): the reducer", () => {
     expect(drive([talk("reaper", "paid", S0.price.bonus)]).s.phase).not.toBe("resolved");
   });
 
-  it("the barge lands at its hour and marches; two strike-breakers in the barley break the strike, one does not", () => {
-    const land = drive(ticks(S0.barge + 1));
-    expect(land.s.landed).toBe(true);
-    expect(land.fx).toContainEqual({ k: "spawn", group: "late:breakers" });
-    expect(land.fx).toContainEqual({ k: "order", group: "late:breakers", order: { o: "march", route: "breakers" } });
+  it("the barge lands at its hour, its crew musters on the quay, then marches; two strike-breakers in the barley break the strike, one does not", () => {
+    const MARCH = { k: "order", group: "late:breakers", order: { o: "march", route: "breakers" } };
+    const landed = drive(ticks(S0.barge + 1));
+    expect(landed.s.landed).toBe(true);
+    expect(landed.fx).toContainEqual({ k: "spawn", group: "late:breakers" });
+    expect(landed.fx, "they muster before they march").not.toContainEqual(MARCH);
+    expect(def.view(landed.s, 0).timerLabel).toBe("The strike-breakers march");
+    expect(drive(ticks(STRIKE.musterS - 3), landed.s).fx).not.toContainEqual(MARCH);
+    const land = drive(ticks(STRIKE.musterS + 1), landed.s);
+    expect(land.fx).toContainEqual(MARCH);
+    expect(land.s.marched).toBe(true);
     expect(land.s.phase).toBe("tension");
+    // a crew the party has fought on the quay never sets off
+    const fought = drive([{ t: "hostile", at: "late:breakers" }, ...ticks(STRIKE.musterS + 1)], landed.s);
+    expect(fought.fx).not.toContainEqual(MARCH);
     const one = drive([arrive(0)], land.s);
     expect(one.s.phase).not.toBe("resolved");
     const two = drive([arrive(0), arrive(1)], land.s);
@@ -190,7 +199,8 @@ describe("the Reapers' Strike (D-042): the reducer", () => {
     expect(v1.hint).toMatch(/granary terrace/);
     const landed = def.view(drive(ticks(S0.barge + 1)).s, 0);
     expect(landed.objectives.map((o) => o.id)).toContain("breakers");
-    expect(landed.timerLabel).toBe("The rain");
+    expect(landed.timerLabel).toBe("The strike-breakers march");
+    expect(def.view(drive(ticks(S0.barge + STRIKE.musterS + 2)).s, 0).timerLabel).toBe("The rain");
     const done = def.view(drive([talk("reaper", "open"), talk("reaper", "paid", S0.price.bonus)]).s, 0);
     expect(done.resolution).toBe("bought_back");
     expect(done.objectives.find((o) => o.id === "home")).toBeDefined();
