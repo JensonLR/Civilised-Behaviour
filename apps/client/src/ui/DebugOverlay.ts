@@ -41,7 +41,7 @@ export class DebugOverlay {
       `${fps.toFixed(0)} fps  ${((this.acc / this.frames) * 1000).toFixed(1)} ms avg  ${(this.worst * 1000).toFixed(1)} ms worst`,
       `draw calls ${info.render.calls}  tris ${(info.render.triangles / 1000).toFixed(1)}k`,
       `geometries ${info.memory.geometries}  textures ${info.memory.textures}`,
-      `players ${this.src.players()}  rtt ${this.src.rttMs().toFixed(0)} ms`,
+      `players ${this.src.players()}  rtt ${this.src.rttMs() > 0 ? `${this.src.rttMs().toFixed(0)} ms` : "—"}`,
       mem ? `js heap ${(mem.usedJSHeapSize / 1048576).toFixed(0)} MB` : "",
       this.src.extra?.() ?? "",
     ]

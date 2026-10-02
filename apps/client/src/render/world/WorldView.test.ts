@@ -131,7 +131,7 @@ describe("three.js warnings", () => {
       warn.mockRestore();
       error.mockRestore();
     }
-  });
+  }, 30_000); // (CPU-bound: the world built at every preset; 2.3 s alone, over 5 s under load. A time limit, not a budget.)
 
   it("HQ history (D-035) is one merged solid and its ink hull: at most two more draws, and none when the campaign has nothing to show", () => {
     const view = new WorldView(new Scene(), createArena(7), PRESETS.medium, sun);

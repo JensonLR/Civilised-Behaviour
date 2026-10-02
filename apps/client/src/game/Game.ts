@@ -46,6 +46,8 @@ import { Parley } from "../ui/Parley.ts";
 import { Sailing } from "../ui/Sailing.ts";
 import { holdInput } from "../ui/modal.ts";
 import { Session as NetSession } from "../net/Session.ts";
+import { smoothRtt } from "../net/rtt.ts";
+import { frameDelta } from "./frameClock.ts";
 import { mapRoomView } from "./campaignView.ts";
 import { CombatView } from "./CombatView.ts";
 
@@ -261,8 +263,7 @@ export class Game {
       playSfx("notice");
     });
     session.room.onMessage("pong", (m: { t: number }) => {
-      const rtt = performance.now() - m.t;
-      session.rttMs = session.rttMs === 0 ? rtt : session.rttMs * 0.8 + rtt * 0.2;
+      session.rttMs = smoothRtt(session.rttMs, performance.now() - m.t);
     });
   }
 
@@ -698,7 +699,9 @@ export class Game {
   }
 
   private frame(now: number): void {
-    const dt = Math.min((now - this.last) / 1000, 0.1);
+    // the simulation's step is clamped (a stalled tab does not leap); what was MEASURED is not (D-047: the overlay and the perf capture read the clamp and could never show a
+    // frame slower than 100 ms, so a software-GL capture always said "10 fps"; the ping clock also ran on the clamp, pinging every 20 frames however long they took)
+    const { raw: rawDt, step: dt } = frameDelta(now, this.last);
     this.last = now;
 
     const [lx, ly] = this.controls.drainLook(dt);
@@ -722,7 +725,7 @@ export class Game {
       }
     }
 
-    this.pingTimer -= dt;
+    this.pingTimer -= rawDt;
     if (this.pingTimer <= 0) {
       this.pingTimer = 2;
       this.session.room.send("ping", { t: performance.now() });
@@ -764,7 +767,7 @@ export class Game {
     this.stage.renderer.info.reset(); // (two passes a frame: the overlay's counters cover both)
     this.stage.render();
     this.viewmodel.render();
-    this.overlay.frame(dt);
+    this.overlay.frame(rawDt);
   }
 
   /** Which full-screen sheet is open, for the orientation card (it ticks the notice board, the supply manifest and the map room off from this). */

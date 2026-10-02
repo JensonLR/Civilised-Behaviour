@@ -53,7 +53,7 @@ node scripts/shot.mjs "?showcase=lineup&n=6" out.png   # look at the art; ALWAYS
   not `colyseus.js`; schemas use `schema({...})`/`t.*`; inputs via `defineInput`/`room.input`; prediction via `Predict`.)
 - A stale dev server is a classic false failure: `tsx watch` restarts on edits, but a server started by hand is NOT restarted, and a schema change
   then decodes as garbage on the client. Kill leftovers with `fuser -k 2567/tcp` before e2e. (`ss` is not installed; `pkill -f` can kill your own shell.)
-- Headless Chromium here is software-rendered (~10 fps). Do not write timing-based e2e assertions; poll state instead.
+- Headless Chromium here is software-rendered (measured ~1 fps at low, ~0.3 fps at medium; the old "~10 fps" was the overlay reading the step clamp, D-047). Do not write timing-based e2e assertions; poll state instead, and latch transients in the page.
   Software-GL numbers are a floor, never a perf claim.
 - Keep hot loops allocation-free; pool particles/decals/projectiles; cap ragdolls and physics bodies.
 - Do not refactor working code for aesthetics mid-feature. No speculative abstractions, no premature ECS.

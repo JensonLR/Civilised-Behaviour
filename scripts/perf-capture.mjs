@@ -18,7 +18,7 @@ const page = await (await browser.newContext({ viewport: { width: w, height: h }
 await page.goto(`http://127.0.0.1:5173/?gfx=${gfx}`);
 await page.fill("#name", "Perf");
 await page.click("#create");
-await page.waitForFunction(() => window.__cb?.session.predicted);
+await page.waitForFunction(() => window.__cb?.session.predicted, undefined, { timeout: 120_000 }); // (a software-GL join at medium can take over the 30 s default)
 await page.keyboard.press("F3");
 await page.waitForTimeout(seconds * 1000);
 console.log(`${w}x${h} ${gfx}\n${await page.evaluate(() => window.__cb.game.overlay.snapshot())}\n`);

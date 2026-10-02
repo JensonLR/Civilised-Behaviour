@@ -175,7 +175,7 @@ describe("Ragdoll", () => {
       }
     }
     expect(checked).toBe(84);
-  });
+  }, 30_000); // (CPU-bound: every mood, act and pose through the ragdoll; 2.1 s alone, over 5 s with servers and a browser beside it. A time limit, not a budget.)
 
   it("blends back into exactly the animator's pose, in the animator's place", () => {
     const a = standing(7, 4, -2);
