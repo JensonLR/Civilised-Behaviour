@@ -45,7 +45,7 @@ const LANDED = drive(ticks(S0.raidAt + 1)).s;
 const said = (fx: Fx[]): string => fx.map((f) => (typeof f === "object" && f.k === "say" ? f.text : "")).join(" | ");
 
 describe("the Raid on the Post (D-045): the reducer", () => {
-  it("the raiders land on their clock, march to the muster and halt for the captain's demand; when it runs out they go for the yard", () => {
+  it("the raiders land on their clock, take their ranks behind the captain at the muster and halt for the captain's demand; when it runs out they go for the yard", () => {
     expect(def.view(S0, 0).timerLabel).toBe("The raiders land");
     // the runner reports the empty group every tick before the landing: the raid still lands with its full crew (the bot playtest saw "0 men with torches")
     const early = drive([{ t: "count", group: "late:raiders", alive: 0, routed: 0, down: 0, total: 0 }, ...ticks(S0.raidAt + 1)]);
@@ -56,11 +56,13 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect(LANDED.phase).toBe("standoff");
     const land = drive(ticks(S0.raidAt + 1));
     expect(land.fx).toContainEqual({ k: "spawn", group: "late:raiders" });
-    expect(land.fx).toContainEqual({ k: "order", group: "late:raiders", order: { o: "march", route: "muster" } });
+    expect(land.fx).toContainEqual({ k: "order", group: "late:raiders", order: { o: "guard", x: RAID_SITES.ranks.x, z: RAID_SITES.ranks.z, r: RAID.ranksR } });
+    expect(land.fx).toContainEqual({ k: "order", group: "late:captain", order: { o: "guard", x: RAID_SITES.muster.x, z: RAID_SITES.muster.z, r: 0 } });
     expect(def.view(LANDED, 0).timerLabel).toBe("The captain's watch");
     const out = drive(ticks(RAID.demandS + 1), LANDED);
     expect(out.s.attacking).toBe(true);
     expect(out.fx).toContainEqual({ k: "order", group: "late:raiders", order: { o: "march", route: "assault", join: true } });
+    expect(out.fx, "the captain sends them; he does not fight").toContainEqual({ k: "order", group: "late:captain", order: { o: "hold_fire" } });
   });
 
   it("post_burned: two raiders in the yard together for the torch time burn the stores; one alone, or one shot down, does not", () => {
@@ -77,7 +79,7 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect(said(burned.fx)).toMatch(/stores go up/);
   });
 
-  it("post_held: the raiders broken (60% down or routed) ends it, whatever the yard", () => {
+  it("post_held: the raiders broken (70% down or routed) ends it, whatever the yard", () => {
     const at = drive([{ t: "hostile", at: "late:raiders" }], LANDED).s;
     const total = at.crew.total;
     const most = drive([{ t: "count", group: "late:raiders", alive: total - (Math.ceil(total * RAID.brokenFraction) - 1), routed: 1, down: Math.ceil(total * RAID.brokenFraction) - 2, total }], at);
@@ -118,6 +120,9 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect([...by.keys()].sort()).toEqual(["fog", "none", "rain", "reinforcements"]);
     const R = by.get("reinforcements")!;
     expect(R.s.crew.total).toBe(RAID.raiders + RAID.extraRaiders);
+    // the tracker names how many it takes AND how many came (the browser look read "Break the raiders (0 of 5)" with seven ashore)
+    const fighting = drive([...ticks(R.s.raidAt + 1), { t: "hostile", at: "late:raiders" }], R.s).s;
+    expect(def.view(fighting, 0).objectives.find((o) => o.id === "break")?.text).toBe("Drop or rout 5 of the 7 raiders (0 so far)");
     expect(def.roster(R.c, R.seed, R.s).filter((p) => p.group === "late:raiders").length).toBe(RAID.raiders + RAID.extraRaiders);
     expect(by.get("fog")!.s.raidAt).toBeGreaterThanOrEqual(RAID.raidMin + RAID.fogRaid);
     const wet = drive([...ticks(by.get("rain")!.s.raidAt + 1), { t: "hostile", at: "late:raiders" }, arrive(0), arrive(1), ...ticks(RAID.torchS + 2)], by.get("rain")!.s);
@@ -184,7 +189,7 @@ describe("the raid in the campaign (D-045)", () => {
 
 describe("the raid's ground (D-045): every stage, both bridges, five seeds", () => {
   it("the landing, the muster, every assault waypoint and the yard are open on the nav grid, and every leg the Cast walks straight is clear", () => {
-    const pts = [RAID_SITES.landing, RAID_SITES.muster, ...RAID_SITES.route, ...RAID_SITES.assault];
+    const pts = [RAID_SITES.landing, RAID_SITES.muster, RAID_SITES.ranks, ...RAID_SITES.route, ...RAID_SITES.assault];
     expect(RAID_SITES.assault.slice(0, RAID_SITES.route.length), "the assault is the muster walk, continued").toEqual(RAID_SITES.route);
     for (const seed of [1, 7, 19, 42, 91, 4242, 4243]) for (const st of OUTPOST_STAGES) for (const bridge of ["intact", "collapsed"] as const) {
       const w = createKessarWorld(seed, bridge, { outpost: st, telegraph: st === "town" });

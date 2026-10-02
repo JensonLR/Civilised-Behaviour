@@ -1,8 +1,8 @@
 import { BoxGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
+import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type ScenarioView } from "@cb/shared";
 import { atmoUniforms, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
-import { acaciaGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, type Lod } from "../flora.ts";
+import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, type Lod } from "../flora.ts";
 import { buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
 import { disposeTree } from "../kit.ts";
 import { buildRain } from "../rain.ts";
@@ -22,6 +22,7 @@ import type { HighmarkTerrain } from "./shared.ts";
 import { landmarkFog, landmarkInk } from "./landmark.ts";
 import { buildHighmarkSolid, type LanternRoom } from "./structures.ts";
 import { buildHighmarkWater } from "./water.ts";
+import { buildGranaryScale, buildScythes } from "./strikeProps.ts";
 
 const WHITE = new Color(1, 1, 1);
 /** The hill rings start 112 m out (HILL_RINGS[0]: 150 - 38); this scale puts that foot just past the ground mesh's half-side (bounds + 30). */
@@ -73,7 +74,25 @@ export class HighmarkView implements RegionView {
     this.addHerds(seed);
     this.addWater(terrain);
     this.addAmbient();
+    this.addStrikeProps();
     this.count();
+  }
+
+  // ---- D-046: the Reapers' Strike's scale (always: it is the granary's) and the Compact's laid-down scythes (only while the strike is on) --------------------------------------
+  private scythes: Mesh[] = [];
+  private addStrikeProps(): void {
+    const mat = this.track(toonMaterial({}));
+    const scale = buildGranaryScale(this.world);
+    if (scale) makeSolid(this.root, this.track(scale), mat, { name: "granary_scale", outline: this.detail.outlines, ink: "small", castShadow: true });
+    const scythes = buildScythes(this.world);
+    if (scythes) {
+      this.scythes = makeSolid(this.root, this.track(scythes), mat, { name: "scythes", outline: this.detail.outlines, ink: "small", castShadow: false });
+      for (const m of this.scythes) m.visible = false;
+    }
+  }
+  applyScenario(v: ScenarioView | undefined): void {
+    const on = v?.template === "reapers_strike" && v.phase !== "resolved";
+    for (const m of this.scythes) m.visible = on;
   }
 
   private track<T extends { dispose(): void }>(x: T): T {
@@ -180,6 +199,8 @@ export class HighmarkView implements RegionView {
     this.instanced("mounds", boulderGeometry, rockMat, p.mounds, p.mounds.map((i) => this.varied(i.v, 0.12).multiply(mound)), { shadow: true, ink: "medium" });
     this.instanced("pebbles", () => pebbleGeometry(), rockMat, p.pebbles, p.pebbles.map((i) => this.varied(i.v, 0.3)));
     this.instanced("grass", () => grassTuftGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.grass, p.grass.map((i) => this.varied(i.v, 0.22).multiply(i.cls === 1 ? new Color(1.1, 1.0, 0.8) : dry)), { noCull: true });
+    // D-046: the barley field (its own straw-and-pale-gold clumps; the instance colour only varies them a little)
+    this.instanced("barley", () => barleyGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.barley, p.barley.map((i) => this.varied(i.v, 0.1)), { noCull: true });
     this.instanced("reeds", () => reedGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.reeds, p.reeds.map((i) => this.varied(i.v, 0.2)), { noCull: true });
   }
 

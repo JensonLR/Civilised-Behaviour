@@ -148,3 +148,25 @@ describe("atmosphere: what the audio engine reads", () => {
     expect(windGain(0.22, 1)).toBeCloseTo(1, 0); // a light breeze is about the old fixed sway
   });
 });
+
+describe("the sky shows the contract's weather (D-046)", () => {
+  it("a rain complication makes it rain over a clear world; clearing it gives the world back; a forced ?weather= still wins", () => {
+    let seed = 1;
+    while (weatherAt(seed, 2_000_000).rain > 0 || weatherAt(seed, 2_000_000).fog > 0.2) seed++;
+    const c = new SkyClock();
+    c.sync(seed, 2_000_000, 9, 30, 0);
+    c.update(0, 0);
+    expect(c.weather.rain).toBe(0);
+    c.setContractWeather("drizzle");
+    c.update(0, 0);
+    expect(c.weather.rain).toBeGreaterThanOrEqual(0.45);
+    expect(c.weather.kind).toBe("drizzle");
+    c.setContractWeather(undefined);
+    c.update(0, 0);
+    expect(c.weather.rain).toBe(0);
+    const forced = new SkyClock({ forcedWeather: "clear" });
+    forced.setContractWeather("fog");
+    forced.update(0, 0);
+    expect(forced.weather.fog).toBe(0);
+  });
+});

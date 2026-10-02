@@ -445,6 +445,39 @@ export function grassTuftGeometry(): BufferGeometry {
   return s.build();
 }
 
+/**
+ * A clump of ripe barley (D-046, the Reapers' Strike's field): eight upright stalks, each with an ear nodding at the top (two half-diamonds in crossed planes, so it has body from
+ * every side at three triangles a stalk: Highmark's triangle budget holds), straw at the root and pale
+ * gold at the ear. Planted in rows by the scatter, it reads as a crop where the savannah's tufts read as wild grass. Height ~0.95. Normals mostly up, like the grass.
+ */
+export function barleyGeometry(): BufferGeometry {
+  const s = new Soup();
+  const H = PALETTE.highmark;
+  const root = new Color(H.grassGoldDeep);
+  const stalk = new Color(H.grassGold);
+  const ear = new Color(H.grassGoldPale);
+  for (let i = 0; i < 8; i++) {
+    const a = i * 2.399963;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const r0 = 0.02 + (0.1 * ((i * 5) % 8)) / 7;
+    const h = 0.8 + 0.18 * (((i * 37) % 11) / 10);
+    const lean = 0.04 + 0.06 * (((i * 53) % 7) / 6);
+    const bx = ca * r0, bz = sa * r0;
+    const tx = bx + ca * lean, tz = bz + sa * lean;
+    const w = 0.012;
+    const n: V3 = [ca * 0.3, 1, sa * 0.3];
+    s.tri([bx - sa * w, 0, bz + ca * w], [bx + sa * w, 0, bz - ca * w], [tx, h, tz], root, n, 0, root, stalk);
+    // the ear: from just below the top of the stalk to a tip nodding outward
+    const droop = 0.06, ew = 0.032;
+    const lo: V3 = [tx, h - 0.04, tz];
+    const hi: V3 = [tx + ca * droop, h + 0.16, tz + sa * droop];
+    const cx = (lo[0] + hi[0]) / 2, cz = (lo[2] + hi[2]) / 2, cy = h + 0.06;
+    s.tri(lo, [cx - sa * ew, cy, cz + ca * ew], hi, stalk, n, 0, ear, ear);   // across the lean
+    s.tri(lo, hi, [cx - ca * ew, cy, cz - sa * ew], stalk, n, 0, ear, ear);   // along it
+  }
+  return s.build();
+}
+
 const cStem = new Color(W.fern);
 const cStemTop = new Color(W.crownLight);
 const cLeaf = new Color(W.fern);

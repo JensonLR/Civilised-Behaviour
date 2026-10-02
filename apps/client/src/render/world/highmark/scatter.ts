@@ -1,6 +1,6 @@
-import { HIGHMARK, HIGHMARK_ANCHORS, Rng, hash3, highmarkRoadDistance, type CollisionWorld, type Obstacle } from "./shared.ts";
+import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, Rng, hash3, highmarkRoadDistance, type CollisionWorld, type Obstacle } from "./shared.ts";
 import type { Item, ScatterDetail } from "../scatter.ts";
-import { highmarkCover } from "./ground.ts";
+import { highmarkCover, highmarkFieldMask } from "./ground.ts";
 
 /**
  * Where Highmark's plants and stones go, as plain data (no three.js: placement is unit-tested in Node): the acacia flats and the termite mounds are the world's own `tree` and `rock`
@@ -16,13 +16,15 @@ export interface HighmarkScatter {
   grass: Item[];
   pebbles: Item[];
   reeds: Item[];
+  /** D-046: the barley field's planted clumps, in rows (HIGHMARK_SITES.strike.field). */
+  barley: Item[];
 }
 
 const h01 = (seed: number, a: number, b = 0): number => hash3(seed, Math.round(a * 100), Math.round(b * 100)) / 4294967296;
 const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: number, sz: number, cls = 0, v = 0, tiltX = 0, tiltZ = 0): Item => ({ x, y, z, yaw, sx, sy, sz, cls, v, tiltX, tiltZ });
 
 export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail): HighmarkScatter {
-  const out: HighmarkScatter = { acacia: [], mounds: [], bushes: [], grass: [], pebbles: [], reeds: [] };
+  const out: HighmarkScatter = { acacia: [], mounds: [], bushes: [], grass: [], pebbles: [], reeds: [], barley: [] };
   const h = (x: number, z: number): number => world.terrainHeight(x, z);
   const water = (x: number, z: number): number => (world.terrain as { waterDepth?: (x: number, z: number) => number }).waterDepth?.(x, z) ?? 0;
   const blocked = (x: number, z: number, margin: number): boolean => {
@@ -72,7 +74,7 @@ export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail
   for (let i = 0, placed = 0; placed < detail.bushes && i < detail.bushes * 8; i++) {
     const x = rng.range(-145, 145);
     const z = rng.range(-120, 112);
-    if (!free(x, z, 0.8)) continue;
+    if (!free(x, z, 0.8) || highmarkFieldMask(x, z) > 0) continue;   // (no thorn scrub in the barley)
     const s = 0.8 + rng.next() * 0.9;
     out.bushes.push(item(x, h(x, z) - 0.05, z, rng.next() * 6.28, s * (0.9 + rng.next() * 0.3), s * (0.7 + rng.next() * 0.5), s, 0, rng.next()));
     placed++;
@@ -101,6 +103,20 @@ export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail
     if (blocked(x, z, 0.4)) continue;
     const s = 0.7 + gr.next() * 0.9;
     out.grass.push(item(x, hh - 0.03, z, gr.next() * 6.28, s * (0.9 + gr.next() * 0.3), s * (1.0 + gr.next() * 0.9), s * (0.9 + gr.next() * 0.3), gr.chance(0.35) ? 1 : 0, gr.next()));
+  }
+  // D-046: the barley field, planted in north-south rows a clump every ~0.55 m (thinned with the grass budget; none at all where the preset draws no grass), round any obstacle
+  if (detail.grassTufts > 0) {
+    const f = HIGHMARK_SITES.strike.field;
+    const step = 0.55 / Math.min(1, Math.max(0.45, detail.grassTufts / 5000));
+    const br = new Rng(0xba41);
+    for (let x = f.x0 + f.row / 2; x < f.x1; x += f.row) {
+      for (let z = f.z0 + step / 2; z < f.z1; z += step) {
+        const px = x + br.range(-0.1, 0.1), pz = z + br.range(-0.15, 0.15);
+        if (blocked(px, pz, 0.35) || water(px, pz) > 0 || highmarkRoadDistance(px, pz) < HIGHMARK.roadHalf + 1) continue;
+        const sc = 0.92 + br.next() * 0.22;
+        out.barley.push(item(px, h(px, pz) - 0.02, pz, br.next() * 6.28, sc, sc * (0.95 + br.next() * 0.15), sc, 0, br.next()));
+      }
+    }
   }
   // reeds on the river's banks (and the water's edge beside the quay)
   const rr = new Rng(0x5e3d);

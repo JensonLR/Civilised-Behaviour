@@ -165,7 +165,7 @@ describe("generatePaper", () => {
     }
     expect(n).toBeGreaterThan(1000);
     expect(pools.size).toBeGreaterThan(1);   // the masthead is per world seed
-  });
+  }, 30_000); // (CPU-bound: every ending of all twelve templates through every paper; 4.5 s alone, 5.7 s in the full parallel run. A time limit, not a budget.)
 
   it("authored pools are big enough to read fresh", () => {
     expect(NOTICES.length).toBe(16);   // the notice stride walk relies on a power-of-two pool

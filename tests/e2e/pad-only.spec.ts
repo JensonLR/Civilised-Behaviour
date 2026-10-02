@@ -18,7 +18,7 @@ const DUALSENSE_ID = "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 05
 const BTN = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, back: 8, start: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 } as const;
 type Name = keyof typeof BTN;
 
-type PadObj = { id: string; axes: number[]; buttons: { pressed: boolean; touched: boolean; value: number }[] };
+type PadObj = { id: string; axes: number[]; buttons: { pressed: boolean; touched: boolean; value: number }[]; seen: number[]; reads: number };
 type Hook = {
   session: {
     sessionId: string;
@@ -38,9 +38,18 @@ function installPad(id: string): void {
     timestamp: 0,
     axes: [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })),
+    // how many times the page has READ each button down, and read the pad at all (so a tap can be released the moment it has been seen)
+    seen: Array.from({ length: 17 }, () => 0),
+    reads: 0,
   };
   (window as unknown as { __pad: PadObj }).__pad = pad as unknown as PadObj;
-  Object.defineProperty(navigator, "getGamepads", { value: () => [pad], configurable: true });
+  const read = (): unknown[] => {
+    const p = pad as unknown as PadObj;
+    p.reads++;
+    for (let i = 0; i < p.buttons.length; i++) if (p.buttons[i]!.pressed) p.seen[i]!++;
+    return [pad];
+  };
+  Object.defineProperty(navigator, "getGamepads", { value: read, configurable: true });
 }
 
 const set = (page: Page, name: Name, down: boolean) =>
@@ -69,11 +78,23 @@ async function holdUntil(page: Page, name: Name, seen: () => Promise<boolean>, m
     await page.waitForTimeout(600); // (a release the page has plainly seen: a press that follows a release inside one frame is one long press)
   }
 }
-/** A press the interface plainly sees: down for a moment (a few frames at 10 fps), then up. */
+/**
+ * A TAP: down until the page has read it down, released at once (before its next frame), then up until the page has read it up. The page sees one press and no hold time: a timed
+ * 350 ms press used to be longer than the 0.3 s a HOLD needs (R3's view switch), so on a page whose frames landed inside it the "tap" switched the view (seen on CI and here).
+ */
 async function tap(page: Page, name: Name): Promise<void> {
-  await set(page, name, true);
-  await page.waitForTimeout(350);
-  await set(page, name, false);
+  await page.evaluate(async (i) => {
+    const p = (window as unknown as { __pad: PadObj }).__pad;
+    const b = p.buttons[i]!;
+    p.seen[i] = 0;
+    b.pressed = b.touched = true;
+    b.value = 1;
+    await new Promise<void>((r) => { const t = (): void => void (p.seen[i]! > 0 ? r() : setTimeout(t, 2)); t(); });
+    b.pressed = b.touched = false;
+    b.value = 0;
+    const at = p.reads;
+    await new Promise<void>((r) => { const t = (): void => void (p.reads > at ? r() : setTimeout(t, 2)); t(); });
+  }, BTN[name]);
   await page.waitForTimeout(150);
 }
 

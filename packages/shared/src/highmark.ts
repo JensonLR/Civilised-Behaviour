@@ -79,6 +79,8 @@ export const HIGHMARK_SITES = {
    */
   strike: {
     barley: { x: -30, z: 40, r: 14 },
+    /** D-046: the barley as a FIELD you can see (presentation: the ground's furrows, the planted rows): inside `barley`, so what reads as the barley is where the rules count it; rows run north-south. */
+    field: { x0: -40, x1: -21, z0: 35, z1: 50, row: 0.9 },
     foreperson: { x: -20, z: 30 }, pickets: [{ x: -24, z: 33 }, { x: -17, z: 34 }],
     steward: { x: -12, z: 26 },
     scale: { x: -42, z: -43 },

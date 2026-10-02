@@ -48,7 +48,7 @@ describe("Highmark skyline: budgets (numbers unchanged)", () => {
       expect(view.stats.triangles, `${name} triangles`).toBeLessThan(HIGHMARK_VIEW_BUDGET.triangles[name]);
       view.dispose();
     }
-  });
+  }, 30_000); // (CPU-bound: builds Highmark's view at all four presets, the barley field included; 5.2 s in the full parallel run. A time limit, not a budget.)
 });
 
 describe("Highmark skyline: height and vertical features", () => {

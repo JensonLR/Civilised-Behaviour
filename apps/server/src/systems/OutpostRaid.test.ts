@@ -25,7 +25,7 @@ function land(f: Fake, s: Scenario): void {
 const walkIn = (f: Fake, keys: readonly string[]): void => { for (const k of keys) { const r = f.players.get(k)!; r.x = S.x + 1; r.z = S.z; } };
 
 describe("the runner: The Raid on the Post", () => {
-  it("nobody is on the bank until the landing; then the raiders and their captain, marching to the muster", () => {
+  it("nobody is on the bank until the landing; then the raiders and their captain, taking their ground at the muster", () => {
     const { f, s } = newRun();
     expect(s.template).toBe("outpost_raid");
     expect(npcKeys(f)).toEqual([]);
@@ -34,7 +34,8 @@ describe("the runner: The Raid on the Post", () => {
     expect(f.players.get(npcKey("captain"))).toBeDefined();
     const r0 = f.players.get(raiders(f)[0]!)!;
     expect(Math.hypot(r0.x - RAID_SITES.landing.x, r0.z - RAID_SITES.landing.z)).toBeLessThan(6);
-    expect(f.cast.groupOrders("late:raiders")).toContain("march");
+    expect(f.cast.groupOrders("late:raiders")).toEqual(["guard"]);
+    expect(f.cast.groupOrders("late:captain")).toEqual(["guard"]);
     expect(lastView(f).timerLabel).toBe("The captain's watch");
   });
 
@@ -51,7 +52,7 @@ describe("the runner: The Raid on the Post", () => {
     const { f, s } = newRun();
     land(f, s);
     run(f, s, RAID.demandS + 1);
-    expect(f.cast.groupOrders("late:raiders").filter((o) => o === "march").length).toBe(2);
+    expect(f.cast.groupOrders("late:raiders").filter((o) => o === "march").length).toBe(1);
     walkIn(f, raiders(f).slice(0, 2));
     run(f, s, RAID.torchS + 2);
     expect(f.commits).toHaveLength(1);

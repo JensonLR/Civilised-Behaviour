@@ -14,7 +14,7 @@ import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts"
  * THE RAID ON THE POST (D-045, Kessar's fifth contract: the GDD's outpost defence). Offered at Kessar only while the Syndicate's agent means to raid the party's outpost (`presence.raidDue`):
  * instead of the raid landing abstractly between expeditions, the party is there when it comes. A raiding party lands upstream at `raidAt`, marches to a muster point at the edge of the post
  * and halts while its captain offers a "security consultation"; when his demand runs out (or the party opens fire, or tells him to come and try) the raiders march on the yard with torches.
- *  - `post_held`: the raiders broken (down or routed, 60% of them) before they fire the stores.
+ *  - `post_held`: the raiders broken (down or routed, 70% of them) before they fire the stores.
  *  - `post_burned`: two raiders standing in the yard for TORCH_S together: the stores burn and the raid lands (WorldRoom.commitOutcome hands it to the outposts).
  *  - `protection_paid`: the captain's price, paid: the raiders go home, the post stands, the Syndicate has a client.  `abandoned`: the party is down.
  * Complications (existing ids only): reinforcements add two raiders; fog delays the raid; rain makes the torches slow (a longer burn).
@@ -28,7 +28,9 @@ export const RAID = {
   /** Raiders standing in the yard together for this long burn the stores (rain: longer). */
   torchS: 15, rainTorch: 10, torchersNeeded: 2,
   /** Share of the raiders down or routed that breaks the raid. */
-  brokenFraction: 0.6,
+  brokenFraction: 0.7,
+  /** How widely the raiders spread at their ranks while the captain talks (metres across). */
+  ranksR: 8,
   raiders: 5, extraRaiders: 2,
   /** Radius of the yard the raiders must stand in, and of the post (the party "at the post"). */
   yardR: 7, postR: 22,
@@ -47,6 +49,8 @@ const MUSTER_WALK = [{ x: 60, z: 60 }, { x: 56, z: 60 }, { x: 56, z: 48 }, { x: 
 export const RAID_SITES = {
   landing: MUSTER_WALK[0],
   muster: MUSTER_WALK[3],
+  /** Where the raiders stand while their captain talks: spread behind him (a `guard` order, planned on the nav grid), so the party meets the captain first and sees a party, not a clump. */
+  ranks: { x: 54, z: 50 },
   route: MUSTER_WALK,
   assault: [...MUSTER_WALK, { x: 38, z: 52 }, { x: SITE.x, z: SITE.z - 18 }, { x: SITE.x, z: SITE.z - 8 }, { x: SITE.x, z: SITE.z }],
 } as const;
@@ -94,11 +98,12 @@ const phaseOf = (s: RaidState): RaidState["phase"] =>
 const fin = (s: RaidState): RaidState => (s.phase === "resolved" ? s : { ...s, phase: phaseOf(s) });
 
 /** The raiders go for the yard: first cause wins. */
+// (the captain sends his men and stays at the muster with his list: he holds fire, a consultant, not a sixth gun; the bot playtest's lone defender lost to him when he joined in)
 function assault(s: RaidState, why: string): Reduction<RaidState> {
   if (s.attacking || !s.landed) return stay(fin(s));
   return {
     s: fin({ ...s, attacking: true, demandUntil: 0, parley: s.parley === "raid_captain" ? undefined : s.parley }),
-    fx: [{ k: "order", group: "late:raiders", order: { o: "alert" } }, { k: "order", group: "late:raiders", order: { o: "march", route: "assault", join: true } }, { k: "order", group: "late:captain", order: { o: "alert" } }, say(why)],
+    fx: [{ k: "order", group: "late:raiders", order: { o: "alert" } }, { k: "order", group: "late:raiders", order: { o: "march", route: "assault", join: true } }, { k: "order", group: "late:captain", order: { o: "hold_fire" } }, say(why)],
   };
 }
 
@@ -113,7 +118,8 @@ function reduce(s: RaidState, e: ScenarioInput): Reduction<RaidState> {
       if (!n.landed && n.t >= n.raidAt) {
         n = { ...n, landed: true, demandUntil: n.t + RAID.demandS };
         fx.push({ k: "spawn", group: "late:raiders" }, { k: "spawn", group: "late:captain" },
-          { k: "order", group: "late:raiders", order: { o: "march", route: "muster" } }, { k: "order", group: "late:captain", order: { o: "march", route: "muster" } },
+          { k: "order", group: "late:raiders", order: { o: "guard", x: RAID_SITES.ranks.x, z: RAID_SITES.ranks.z, r: RAID.ranksR } },
+          { k: "order", group: "late:captain", order: { o: "guard", x: RAID_SITES.muster.x, z: RAID_SITES.muster.z, r: 0 } },
           say(`A Syndicate launch noses into the south bank upstream and puts a raiding party ashore: ${n.crew.total} men with torches, and a captain with a list. They are coming down the bank toward the post.`));
       }
       if (n.landed && !n.attacking && n.demandUntil > 0 && n.t >= n.demandUntil) {
@@ -237,7 +243,7 @@ function view(s: RaidState, now: number): ScenarioView {
     { id: "defend", text: res === "post_burned" ? "Lost: the stores were burned" : res === "abandoned" ? "Lost: the expedition went down" : "Keep the raiders' torches out of the post's yard", done: won },
   ];
   if (res === undefined && s.landed && !s.attacking && !s.captainGone) objectives.push({ id: "captain", text: `Hear the captain's offer (£${s.price} for a season's protection), or refuse it`, done: false, optional: true });
-  if (res === undefined && s.attacking) objectives.push({ id: "break", text: `Break the raiders (${Math.min(brokenCount(s), needed(s))} of ${needed(s)})`, done: isBroken(s), optional: true });
+  if (res === undefined && s.attacking) objectives.push({ id: "break", text: `Drop or rout ${needed(s)} of the ${s.crew.total} raiders (${Math.min(brokenCount(s), needed(s))} so far)`, done: isBroken(s), optional: true });
   if (res === undefined && s.attacking && s.inYard.length > 0) objectives.push({ id: "yard", text: `Raiders in the yard: ${s.inYard.length} (two together for ${torchS(s)} seconds burn the stores)`, done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
@@ -301,6 +307,6 @@ export const outpostRaidTemplate: TemplateDef<RaidState> = {
   id: "outpost_raid", title: "The Raid on the Post",
   brief: "The Syndicate means to raid the Society's post on Kessar's south bank, and this time the party is there. Hold the yard, pay the raiders' captain for a season's \"protection\", or watch the stores burn.",
   init, reduce, view, outcome, roster, leave, observe,
-  routes: { muster: RAID_SITES.route, assault: RAID_SITES.assault },
+  routes: { assault: RAID_SITES.assault },
   sites: { yard: SITE, muster: RAID_SITES.muster },
 };
