@@ -65,7 +65,20 @@ describe("netcode with casualties", () => {
     // pulling starts: the server suddenly steers a body the client predicted as stationary). Bounds leave headroom over
     // that; a broken dragged-step (e.g. not integrating server velocity) produces means above 0.5 m.
     expect(stats.correctionMean).toBeLessThan(rtt === 0 ? 0.05 : 0.12);
-    expect(stats.correctionMax).toBeLessThan(rtt === 0 ? 0.7 : 1.6);
+    if (rtt === 0) expect(stats.correctionMax).toBeLessThan(0.7);
+    else {
+      // D-047: the worst correction is ONE snap, the moment pulling starts (the server moves a body the client predicted still, and the client hears of it a round trip later),
+      // so its size is the drag speed times that delay: whole server ticks (0.27 m each), 4..5 of them here, 7 on a loaded CI runner (1.87 m against the old 1.6 m bar: the bar sat
+      // on the expected value and timing decided it). What the test is for, a dragged body that does not track, shows AFTER the onset: so the snap is bounded by the body's
+      // own reach and confined to the first second, and the tracking after it is held far tighter than the old bar ever held it (measured: nothing over 0.2 m after the onset).
+      const big = stats.corrections.filter((c) => c.mag > 0.7);
+      const onset = big[0]?.tick ?? stats.corrections.find((c) => c.mag > 0.2)?.tick ?? 0;
+      expect(stats.correctionMax, "the onset snap is within the body's reach").toBeLessThan(2.5);
+      for (const c of big) expect(c.tick - onset, `a ${c.mag.toFixed(2)} m correction at tick ${c.tick}, ${c.tick - onset} after the onset`).toBeLessThan(30);
+      const steady = stats.corrections.filter((c) => c.tick > onset + 30);
+      expect(steady.length, "the drag ran long enough to judge").toBeGreaterThan(20);
+      expect(Math.max(0, ...steady.map((c) => c.mag)), "steady tracking after the first second").toBeLessThan(0.35);
+    }
   });
 
   it("MEASURE: input-frame flooding vs movement speed", async () => {

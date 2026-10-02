@@ -55,6 +55,8 @@ export interface BotStats {
   correctionMax: number;
   /** Mean positional correction per reconcile after warm-up, metres. */
   correctionMean: number;
+  /** D-047: every counted correction with the bot's tick (capped), so a test can tell the one-off snap at a server-forced change of motion from steady tracking. */
+  corrections: { tick: number; mag: number }[];
 }
 
 /**
@@ -74,6 +76,7 @@ export class Bot {
   private correctionMax = 0;
   private correctionSum = 0;
   private correctionCount = 0;
+  private readonly correctionLog: { tick: number; mag: number }[] = [];
   private lastReconcileSeq = -1;
   private lastRender: { x: number; z: number; t: number } | undefined;
   private reconciler: ReturnType<Predict<WorldStateType>["reconciler"]> | undefined;
@@ -176,6 +179,7 @@ export class Bot {
       driftPeak: this.reconciler?.drift.peak ?? 0,
       correctionMax: this.correctionMax,
       correctionMean: this.correctionCount ? this.correctionSum / this.correctionCount : 0,
+      corrections: this.correctionLog.slice(),
     };
   }
 
@@ -218,6 +222,7 @@ export class Bot {
       this.correctionMax = Math.max(this.correctionMax, mag);
       this.correctionSum += mag;
       this.correctionCount++;
+      if (this.correctionLog.length < 4096) this.correctionLog.push({ tick: this.tickNo, mag });
     }
     this.lastReconcileSeq = rc.reconcileSeq;
     // Measure what a player would see: rendered position vs. what the bot's velocity explains.
