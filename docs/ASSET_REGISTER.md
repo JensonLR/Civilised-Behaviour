@@ -20,6 +20,8 @@ Polish pass 2 (D-038, 2026-10-01): no new image, texture, model, audio or font F
 
 Contracts eleven and twelve and the strike's scene (D-044 to D-046, 2026-10-02): no new image, texture, model, audio or font FILES; everything is code. The barley field's clumps (`barleyGeometry` in `apps/client/src/render/world/flora.ts`, planted by `highmark/scatter.ts`, its furrows painted by `highmark/ground.ts`), the granary scale and the laid-down scythes (`apps/client/src/render/world/highmark/strikeProps.ts`) are primitives merged at runtime; the contracts' weather is the existing rain and fog (`packages/shared/src/weather.ts`); the raiders' torch (D-047, `apps/client/src/render/torch.ts`) is primitives with the camp's flame colours. All colours are in `packages/shared/src/palette.ts`. Nothing to license.
 
+Tab icon (2026-10-02): no file. The seal (a stamp-red disc, brass rim, paper-and-brass compass needle) is an SVG string built from `PALETTE.ui` by `faviconSvg()` in `packages/shared/src/palette.ts` and set as a data URL at start-up by `apps/client/src/main.ts`. Original, code-drawn.
+
 Fonts: system serif stack only so far (Georgia / Iowan Old Style / Palatino). No web fonts are loaded.
 
 ## Software dependencies

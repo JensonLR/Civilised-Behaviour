@@ -2,10 +2,11 @@ import "@fontsource/im-fell-english/latin-400.css";
 import "@fontsource/im-fell-english/latin-400-italic.css";
 import "@fontsource/im-fell-english-sc/latin-400.css";
 import "@fontsource/special-elite/latin-400.css";
-import { paletteCssVars } from "@cb/shared";
+import { faviconSvg, paletteCssVars } from "@cb/shared";
 
 /** Publishes the shared palette as CSS custom properties so the interface and the 3D world can never drift apart. */
 for (const [name, value] of Object.entries(paletteCssVars())) document.documentElement.style.setProperty(name, value);
+document.querySelector<HTMLLinkElement>("link[rel=icon]")?.setAttribute("href", `data:image/svg+xml,${encodeURIComponent(faviconSvg())}`);
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const params = new URLSearchParams(location.search);
