@@ -23,7 +23,7 @@ type Hook = {
   session: {
     sessionId: string;
     predicted?: { x: number; y: number; z: number; vy: number; flags: number };
-    room: { state: { players: Map<string, { shots: number; reload: number; weapons: number; ammo: number }>; party: string }; send(t: string, m: unknown): void };
+    room: { state: { players: Map<string, { shots: number; reload: number; weapons: number; ammo: number }>; props: Map<string, { x: number; z: number }>; party: string }; send(t: string, m: unknown): void };
   };
   game: { rig: { yaw: number; mode: string } };
 };
@@ -150,7 +150,18 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await expect(page.locator("#sheet-loadout")).toBeHidden({ timeout: 30_000 });
 
   // ---- LT + RT fires: the server's `shots` rises ---------------------------------------------------------------------------------------------
-  await tp(page, 0, 12, 0); // open ground: nothing to use
+  // open ground: nothing to use. The camp's loose props are scattered by the campaign's seed, a fresh one per campaign since D-039, and (0, 12) had one in Use
+  // reach for about 1 seed in 5 (379 of seeds 1..2000); so the spot is the first near it with no prop within 4 m (none in reach for any of those seeds).
+  const open = await hook(page, (h) => {
+    const props: { x: number; z: number }[] = [];
+    h.session.room.state.props.forEach((p) => props.push({ x: p.x, z: p.z }));
+    for (let r = 0; r <= 8; r += 2) for (let k = 0; k < 8; k++) {
+      const x = r * Math.cos((k * Math.PI) / 4), z = 12 + r * Math.sin((k * Math.PI) / 4);
+      if (props.every((p) => Math.hypot(p.x - x, p.z - z) > 4)) return { x, z };
+    }
+    return { x: 0, z: 12 };
+  });
+  await tp(page, open.x, open.z, 0);
   await hook(page, (h) => h.session.room.send("debug", { cmd: "give:all" }));
   await expect.poll(() => hook(page, (h) => h.session.room.state.players.get(h.session.sessionId)!.weapons), { timeout: 30_000 }).toBeGreaterThan(0);
   await tap(page, "right"); // the d-pad takes the next piece from the rack
