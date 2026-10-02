@@ -62,17 +62,21 @@ test("two players share a campaign, move with prediction, see each other", async
     }, { timeout: 20_000 })
     .toBeGreaterThan(3);
   await a.keyboard.up("KeyW");
-  await a.waitForTimeout(800); // let deceleration + server patches settle
-  const after = (await hook(a)).pos!;
 
-  // B's view of A converges on A's authoritative position.
-  const seenByB = await b.evaluate((id) => {
-    const h = (window as unknown as { __cb: Hook & { session: { room: { state: { players: Map<string, { x: number; z: number }> } } } } }).__cb;
-    const p = h.session.room.state.players.get(id);
-    return p ? { x: p.x, z: p.z } : null;
-  }, (await hook(a)).id);
-  expect(seenByB).not.toBeNull();
-  expect(Math.hypot(seenByB!.x - after.x, seenByB!.z - after.z)).toBeLessThan(0.75);
+  // B's view of A converges on A's own (predicted, reconciled) position once A has stopped. Polled, not read after a fixed wait: on a
+  // starved CI runner B's software-rendered frames can hold already-sent patches for over a second (one run read B's copy 4.5 m behind
+  // after the old 800 ms sleep while its twin job passed), and a real divergence never converges, so the poll still catches one.
+  const idA = (await hook(a)).id;
+  const gap = async (): Promise<number> => {
+    const after = (await hook(a)).pos!;
+    const seenByB = await b.evaluate((id) => {
+      const h = (window as unknown as { __cb: Hook & { session: { room: { state: { players: Map<string, { x: number; z: number }> } } } } }).__cb;
+      const p = h.session.room.state.players.get(id);
+      return p ? { x: p.x, z: p.z } : null;
+    }, idA);
+    return seenByB ? Math.hypot(seenByB.x - after.x, seenByB.z - after.z) : Infinity;
+  };
+  await expect.poll(gap, { timeout: 20_000 }).toBeLessThan(0.75);
 
   await a.screenshot({ path: "test-results/coop-a.png" });
   await b.screenshot({ path: "test-results/coop-b.png" });
