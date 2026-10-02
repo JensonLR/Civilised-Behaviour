@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Group, SphereGeometry, type Material, type Mesh, type MeshToonMaterial, type Object3D } from "three";
+import { BoxGeometry, BufferAttribute, BufferGeometry, Group, HemisphereLight, SphereGeometry, type Material, type Mesh, type MeshToonMaterial, type Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { roomAt, saltmarketLevel, type RoomRect } from "@cb/shared";
 import type { Lod } from "./flora.ts";
@@ -357,5 +357,46 @@ export class RoofKits {
       if (g) geos.push({ id: p.id, geometry: g });
     }
     return mergeRoofs(geos);
+  }
+}
+
+// ---- the room's own light -----------------------------------------------------------------------------------------------------------------------
+
+/**
+ * The warm light of a room the viewer stands in. With the roof lifted, a narrow room's inner faces are in the walls' own shadow and lit by the sky's hemisphere alone, which at a toon ramp's floor reads
+ * as near-black (a records room and a customs house were unreadable in the stills: D-038 follow-up). Every region that has walkable interiors adds ONE of these: a hemisphere light in the region's own
+ * lamp and lime-wash colours, at intensity 0 outside a room and eased up to `peak` inside one (the light is always in the scene, so the shaders never recompile when the viewer walks in). Eased, never
+ * snapped; `update` takes the world clock the views already get. Presentation only: it moves no collision and no server state.
+ */
+export class InteriorFill {
+  readonly light: HemisphereLight;
+  private k = 0;
+  private target = 0;
+  private last = Number.NaN;
+
+  /** `sky` is the colour of the light from above (the lime-wash the lamp throws on a wall), `ground` the bounce from the floor; both PALETTE colours of the region. */
+  constructor(parent: Object3D, sky: number, ground: number, private readonly peak: number) {
+    this.light = new HemisphereLight(sky, ground, 0);
+    this.light.name = "interior-fill";
+    parent.add(this.light);
+  }
+
+  /** Once a frame (from `setViewer`): whether the viewer is inside a room now. */
+  setInside(inside: boolean): void {
+    this.target = inside ? 1 : 0;
+  }
+
+  /** 0..1: how far the fill has come up. */
+  get amount(): number {
+    return this.k;
+  }
+
+  /** Eases toward the target (about a third of a second) and sets the light. `t` is a clock in seconds. */
+  update(t: number): void {
+    const dt = Number.isNaN(this.last) ? 1 : Math.min(0.25, Math.max(0, t - this.last));
+    this.last = t;
+    this.k += (this.target - this.k) * (1 - Math.exp(-8 * dt));
+    if (Math.abs(this.target - this.k) < 0.002) this.k = this.target;
+    this.light.intensity = this.peak * this.k;
   }
 }

@@ -10,7 +10,7 @@ import { setRgb } from "../sky.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
-import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import type { WaterUniforms } from "../water.ts";
 import { buildSaltmarketCloth, createSaltmarketAtlas, saltmarketClothMaterial } from "./cloth.ts";
 import { FLOOD, buildFloodMesh, floodTarget } from "./flood.ts";
@@ -21,6 +21,8 @@ import { buildSaltmarketPlanks, buildSaltmarketSolid } from "./structures.ts";
 import { buildSaltmarketWater } from "./water.ts";
 
 const WHITE = new Color(1, 1, 1);
+/** Peak intensity of the room's fill light (see `InteriorFill`): enough that a warehouse's planks and the customs desk read in a still at noon. */
+const INTERIOR_FILL = 1.2;
 
 /** Tamarisk scrub: three feathery lobes in the delta's own greys and olives (palette colours only), lit from above. */
 function tamariskGeometry(lod: Lod): BufferGeometry {
@@ -69,6 +71,8 @@ export class SaltmarketView implements RegionView {
   /** D-038: the roofs of the interiors (the cutaway), and the doors the view drew. */
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
+  /** D-038 follow-up: the lamp-and-lime-wash light of the room the viewer stands in. */
+  private readonly fill: InteriorFill;
 
   constructor(
     private readonly scene: Scene,
@@ -79,6 +83,7 @@ export class SaltmarketView implements RegionView {
   ) {
     this.world = world;
     this.root.name = "world";
+    this.fill = new InteriorFill(this.root, PALETTE.saltmarket.salt, PALETTE.saltmarket.tarPlankLight, INTERIOR_FILL);
     setToonLite(detail.liteShading);
     scene.add(this.root);
     const terrain = world.terrain as SaltmarketTerrain;
@@ -301,7 +306,7 @@ export class SaltmarketView implements RegionView {
 
   /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
   setViewer(x: number, z: number): void {
-    this.roofSet?.setViewer(saltmarketLevel().rooms, x, z);
+    this.fill.setInside(this.roofSet?.setViewer(saltmarketLevel().rooms, x, z) !== undefined);
   }
 
   /** The doors the view drew (for tests and tools). */
@@ -359,6 +364,7 @@ export class SaltmarketView implements RegionView {
 
   update(t: number, camera?: { x: number; y?: number; z: number }, worldSec?: number): void {
     worldTime.value = t;
+    this.fill.update(t);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
     this.ambientU.uMotion.value = motion.value;
     if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;

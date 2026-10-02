@@ -140,7 +140,7 @@ describe("every sheet by pad alone", () => {
   it("the pause sheet", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    const pause = new Pause({ canvas: document.createElement("canvas"), invite: () => ({ code: "K7M2Q", link: "x", present: 2 }), leave: () => undefined });
+    const pause = new Pause({ canvas: document.createElement("canvas"), invite: () => ({ code: "K7M2Q", link: "x", present: 2, seed: 7 }), leave: () => undefined });
     pause.active = true;
     pause.open();
     checkSheet({ name: "pause", root: () => document.getElementById("sheet-pause")!, isOpen: () => pause.isOpen, primary: ".primary" });

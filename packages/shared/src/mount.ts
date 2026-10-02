@@ -338,7 +338,8 @@ export function trailStep(w: Trailer, hx: number, hz: number, _dt: number, world
   const pz = w.z;
   let dx = px - hx;
   let dz = pz - hz;
-  let d = Math.hypot(dx, dz);
+  // (not `Math.hypot`: the engine calls it as a builtin and boxes both arguments and the result, 38 B on every step of every wagon, measured; a square root of the sum is exact and allocation-free)
+  let d = Math.sqrt(dx * dx + dz * dz);
   if (d < 1e-6) {
     // hitched onto the very point: fall straight behind the way the wagon faces
     dx = Math.sin(w.facing);

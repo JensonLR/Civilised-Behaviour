@@ -418,6 +418,7 @@ export class SettingsSheet {
     });
     this.toggle(p, { label: "High contrast", get: S.getHighContrast, set: S.setHighContrast, note: "Stark ink on plain paper, heavier borders, no textured grain." });
     this.toggle(p, { label: "Larger text", get: S.getLargeText, set: S.setLargeText, note: "Bumps every size in the interface by a fifth, on top of the interface scale.", on: "Larger", off: "Normal" });
+    this.toggle(p, { label: "Never show tutorials", get: S.getSkipTutorials, set: S.setSkipTutorials, note: "Keeps the orientation card away from every campaign. Otherwise it greets each new campaign once, and the Pause sheet can replay it.", on: "Never", off: "As needed" });
     this.toggle(p, {
       label: "Captions",
       get: S.getCaptions,

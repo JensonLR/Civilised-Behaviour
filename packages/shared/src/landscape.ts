@@ -484,6 +484,48 @@ export interface LandscapeTerrain extends Terrain {
   channelLevel(s: number): number;
 }
 
+/** How steeply the ground may run between two pads' flat cores (rise over run), and the extra run the cores' own blends are credited with. */
+const PAD_SEAM_SLOPE = 0.2;
+const PAD_SEAM_RUN = 0.8;
+/** Softens the inverse-square taper at a core's edge (metres squared). */
+const PAD_CORE_EPS = 0.25;
+
+/**
+ * Pad levels, relaxed so two pads that stand close together do not differ by more than the ground between their flat cores can climb.
+ * Each pad is levelled to the average of the ground it covers, which on a slope or beside a pond can be a metre apart from its neighbour's
+ * while the cores stand two metres apart: the street between them became a step (D-038 follow-up: Hollowmere seeds 1247, 1580 and nine more
+ * of 200 had a 1.0+ gradient at the plaza/stilt-house seam, so a walker stuck on the first prop corner). The excess is taken from the pair in
+ * proportion to the inverse of each pad's area (the big plaza moves least), a few sweeps, deterministic, pure.
+ */
+function relaxPadLevels(pads: readonly GroundPad[], natural: readonly number[]): number[] {
+  const level = natural.slice();
+  const n = pads.length;
+  for (let sweep = 0; sweep < 24; sweep++) {
+    let moved = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = pads[i]!;
+        const b = pads[j]!;
+        const dist = Math.hypot(a.x - b.x, a.z - b.z);
+        const gap = dist - a.r - b.r;
+        if (gap >= a.blend + b.blend) continue; // (their blends do not meet)
+        const allow = PAD_SEAM_SLOPE * ((gap > 0 ? gap : 0) + PAD_SEAM_RUN);
+        const diff = level[j]! - level[i]!;
+        const excess = Math.abs(diff) - allow;
+        if (excess <= 1e-4) continue;
+        const wi = 1 / (a.r * a.r);
+        const wj = 1 / (b.r * b.r);
+        const sgn = diff > 0 ? 1 : -1;
+        level[i] = level[i]! + sgn * excess * (wi / (wi + wj));
+        level[j] = level[j]! - sgn * excess * (wj / (wi + wj));
+        moved += excess;
+      }
+    }
+    if (moved < 1e-4) break;
+  }
+  return level;
+}
+
 /**
  * Lays the hill, the stream and its pond over a base terrain. The hill is a flat-topped rise (the base noise is blended toward the
  * plateau level); the stream is carved so that its cross-section is level (a channel with a rounded bed that blends into the banks over
@@ -502,7 +544,7 @@ export function withLandscape(base: Terrain, padList: readonly GroundPad[] = [])
   // Pads: round patches of ground levelled to the height their centre had (the village's floors, yards and market stalls). Where pads
   // overlap the levels are blended by weight, and the strongest weight decides how far the ground moves off its natural shape.
   // A pad sits at the average height of the ground it covers (centre, mid-radius and rim), so it cuts and fills evenly instead of standing on a stilt or in a pit.
-  const padLevel = padList.map((p) => {
+  const naturalLevel = padList.map((p) => {
     let sum = hill(p.x, p.z) * 2;
     let n = 2;
     for (let k = 0; k < 8; k++) {
@@ -512,6 +554,7 @@ export function withLandscape(base: Terrain, padList: readonly GroundPad[] = [])
     }
     return sum / n;
   });
+  const padLevel = relaxPadLevels(padList, naturalLevel);
   // a pad on a slope must not become a cliff: its blend is stretched until the ground it levels off climbs back at a walkable rate
   const padBlend = padList.map((p, i) => {
     let diff = 0;
@@ -542,9 +585,13 @@ export function withLandscape(base: Terrain, padList: readonly GroundPad[] = [])
       const d = Math.hypot(x - p.x, z - p.z);
       if (d >= p.r + padBlend[i]!) continue;
       const w = 1 - smoothstep(p.r, p.r + padBlend[i]!, d);
-      const w6 = (w * w * w * w * w * w * 100) / (p.r * p.r); // (a pad's own level dominates wherever it is strong, and a small pad beats a big one: interiors stay level)
-      wsum += w6;
-      lsum += w6 * padLevel[i]!;
+      // Where pads overlap their levels are blended by weight. A pad's weight falls off with the distance `e` outside its own flat core (an
+      // inverse-square taper), so between two cores the ground runs from one level to the other across the whole gap (the old sixth power
+      // of `w` flipped between them within a metre: a wall in the village street). Inside a core a small pad beats a big one (interiors stay level).
+      const e = d > p.r ? d - p.r : 0;
+      const wt = (w * w * 100) / (p.r * p.r * (e * e + PAD_CORE_EPS));
+      wsum += wt;
+      lsum += wt * padLevel[i]!;
       if (w > wmax) wmax = w;
     }
     if (wmax === 0) return h0;

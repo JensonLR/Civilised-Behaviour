@@ -217,7 +217,7 @@ describe("every prompt module draws all three and follows a device change", () =
   });
 
   it("the orientation card", () => {
-    const o = new Orientation(document.body);
+    const o = new Orientation(document.body, "K7M2Q");
     const tick = (d: "keyboard" | "pad"): void => o.tick(1 / 60, 0, 0, 0, "hollowmere", "none", false, d);
     tick("keyboard");
     const card = document.querySelector<HTMLElement>(".orientation")!;

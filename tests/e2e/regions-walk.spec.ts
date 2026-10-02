@@ -80,7 +80,7 @@ for (const region of REGIONS) {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => m.type() === "error" && !/favicon|Failed to load resource/.test(m.text()) && errors.push(m.text()));
-    await page.addInitScript(() => localStorage.setItem("cb.seenOrientation", "1"));
+    await page.addInitScript(() => localStorage.setItem("cb.skipTutorials", "1"));
     await page.goto(region === "hollowmere" ? "/?gfx=test" : `/?gfx=test&region=${region}`);
     await page.waitForSelector("#name", { timeout: 120_000 });
     await page.fill("#name", "Marcher");

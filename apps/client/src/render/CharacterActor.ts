@@ -102,6 +102,9 @@ export class CharacterActor {
   /** 0..1 easing of the first-person arm pose and body-follows-view; decays after leaving first person. */
   private fpBlend = 0;
   private fpFree = 1;
+  /** Third person, local body: the yaw of the aim ray while the sight is up (undefined = none), and 0..1 how far the body has been turned to it. */
+  private aimYaw: number | undefined;
+  private aimBlend = 0;
   private visFacing = 0;
   private lastFlags = 0;
   private lastSpeed = 0;
@@ -177,7 +180,7 @@ export class CharacterActor {
     this.weapons.setOutline(on);
   }
 
-  /** Body heading as drawn (the server's facing for everyone else; the view direction for the local body in first person). */
+  /** Body heading as drawn (the server's facing for everyone else; the view direction for the local body in first person, the aim ray's while aiming in third). */
   get facing(): number {
     return this.visFacing;
   }
@@ -192,6 +195,15 @@ export class CharacterActor {
     if (on === this.firstPerson) return;
     this.firstPerson = on;
     this.applyHeadVisibility();
+  }
+
+  /**
+   * Third person, LOCAL body: the yaw of the aim ray (the direction the shot leaves the eye; `CombatView.aimHeading`), or undefined when there is none. While AIM is held the body is
+   * drawn turned to it, smoothed, and eased back to the server's heading after. Presentation only: the shared step's `facing` (which already follows the camera's yaw while aiming) and
+   * the server's authority are untouched, and every other body is drawn from its replicated facing as before. Cheap to call every frame.
+   */
+  setAimYaw(yaw: number | undefined): void {
+    this.aimYaw = yaw;
   }
 
   /**
@@ -311,10 +323,13 @@ export class CharacterActor {
     this.fpBlend = damp(this.fpBlend, this.firstPerson ? 1 : 0, 10, dt);
     this.lastFlags = pose.flags;
     this.lastSpeed = Math.hypot(pose.vx, pose.vz);
-    if (this.fpBlend > 0.002) {
+    const aimTurn = !this.firstPerson && this.aimYaw !== undefined && (pose.flags & FLAG.AIMING) !== 0 && !downed;
+    this.aimBlend = damp(this.aimBlend, aimTurn ? 1 : 0, 10, dt);
+    if (this.fpBlend > 0.002 || this.aimBlend > 0.002) {
       // The local body turns with the camera in first person (fast, but not instant: a little trailing reads as weight), and eases back
-      // to the server's heading on the way out.
-      this.visFacing = dampAngle(this.visFacing, this.firstPerson ? this.viewYaw : pose.facing, this.firstPerson ? 25 : 12, dt);
+      // to the server's heading on the way out. In third person, while the sight is up, it turns to the aim ray the same way.
+      const follow = this.firstPerson ? this.viewYaw : aimTurn ? this.aimYaw! : pose.facing;
+      this.visFacing = dampAngle(this.visFacing, follow, this.firstPerson ? 25 : aimTurn ? 20 : 12, dt);
     } else this.visFacing = pose.facing;
     this.rig.root.rotation.y = this.visFacing;
     this.painTimer = Math.max(0, this.painTimer - dt);

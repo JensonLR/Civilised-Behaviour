@@ -41,6 +41,26 @@ for (const id of REGION_IDS) {
   });
 }
 
+// ---- the hub seeds that were found broken ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Every Hollowmere seed the audit has ever failed on, kept for good (the game's seed is random per room). Found by `AUDIT_SEEDS_EXTRA=200` and wider sweeps:
+ *  - 1247, 1580, 3652, 3726, 5206, 5280, 6242, 6686, 7204, 7315: `trail.village` blocked at the plaza / stilt-house seam (pad levels a metre apart across two metres of street, the ground a wall
+ *    to a body that also grazes the cart's corner): `relaxPadLevels` in landscape.ts;
+ *  - 4910, 22579, 26760, 28092, 28314, 28869, 29905, 30201, 30608, 30830: a crag's end ran into an aqueduct pier (the placement tested the crag's centre, not its box): arena.ts;
+ *  - 22320: a boulder in the cannon's carriage, 29646: a tree in a finger-post and in the gate passage's apron (dressing drawn before the authored things it must avoid): arena.ts.
+ */
+const HUB_REGRESSION_SEEDS = [1247, 1580, 3652, 3726, 4910, 5206, 5280, 6242, 6686, 7204, 7315, 22320, 22579, 26760, 28092, 28314, 28869, 29646, 29905, 30201, 30608, 30830];
+
+describe("Hollowmere: every seed that ever failed the audit stays clean", () => {
+  for (const seed of HUB_REGRESSION_SEEDS) {
+    it(`seed ${seed}`, () => {
+      const report = auditRegion(LEVEL_ADAPTERS.hollowmere(seed));
+      expect(errorsOf(report).map((f) => `${f.kind} ${f.subject} ${f.other ?? ""} @ ${f.at.x.toFixed(1)},${f.at.z.toFixed(1)}: ${f.detail}`)).toEqual([]);
+    }, 60_000);
+  }
+});
+
 // ---- buildings stand on a pad -------------------------------------------------------------------------------------------------------------------
 
 const LEVELS: Record<string, RegionLevel> = { hollowmere: villageLevel(), kessar: kessarLevel(), highmark: highmarkLevel(), vesper: vesperLevel(), saltmarket: saltmarketLevel() };

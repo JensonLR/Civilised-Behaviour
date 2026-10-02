@@ -1,27 +1,36 @@
 import { fillPrompt, onPromptChange } from "../input/glyphDom.ts";
 import { deviceTracker, type InputDevice } from "../input/devices.ts";
-import { emitSetting, onSettingChange, readStored, writeStored } from "../settings.ts";
-import { ORIENT_STEPS, OrientationSampler, currentStep, doneCount, isActive, isDone, newOrientation, orientationStep, parseOrientation, serializeOrientation, skipOrientation, type Device, type OrientStep, type OrientationState, type SheetKind } from "./orientationLogic.ts";
+import { emitSetting, getSkipTutorials, onSettingChange, readStored, writeStored } from "../settings.ts";
+import { clearOrientProgress, getOrientProgress, setOrientProgress } from "./expeditions.ts";
+import { ALL_DONE, ORIENT_STEPS, OrientationSampler, currentStep, doneCount, isActive, isDone, newOrientation, orientationStep, skipOrientation, type Device, type OrientStep, type OrientationState, type SheetKind } from "./orientationLogic.ts";
 import { ORIENT_DONE, ORIENT_HINT, ORIENT_SKIP, ORIENT_STEP_NAME, ORIENT_TAG, ORIENT_TEXT, ORIENT_TITLE } from "./orientationCopy.ts";
 import "./orientation.css";
 
 /**
- * The first-run orientation card (D-035, R): a non-modal field document in the corner. It takes no input of its own (the page's controls keep working, nothing traps focus: its one
- * button is the Skip stamp), Esc or the Skip stamp (or the pad's Back button) dismisses it for good, `cb.seenOrientation` remembers that in storage guarded by try/catch, and the
- * progress is kept (`cb.orientation`) so a reload resumes where you were. The Field Manual replays it (`replayOrientation()`). Every string is set as text. The steps are completed by
- * `orientationLogic.ts` from what `Game` already knows (position, yaw, which sheet is open): this file only draws.
+ * The orientation card (D-035, R; per campaign since D-039): a non-modal field document in the corner. It takes no input of its own (the page's controls keep working, nothing traps
+ * focus: its one button is the Skip stamp), Esc or the Skip stamp (or the pad's Back button) dismisses it for good IN THIS CAMPAIGN, and its progress is kept with the campaign's entry
+ * in the expeditions record (`expeditions.ts`, keyed by the join code), so every new campaign starts with the card and a reload or a resume carries on where you were. The global
+ * "Never show tutorials" setting keeps it away everywhere. The pause sheet and the Field Manual replay it (`replayOrientation()`). Every string is set as text. The steps are
+ * completed by `orientationLogic.ts` from what `Game` already knows (position, yaw, which sheet is open): this file only draws.
  */
 
-const SEEN = "cb.seenOrientation";
-const PROGRESS = "cb.orientation";
+/** Set by a replay asked for with no card running (the Field Manual opened at the front door): the next card to be built starts again from nothing. */
+const REPLAY_NEXT = "cb.replayOrientation";
 const DONE_LINGER_S = 7;
 const PAD_BACK = 8;
+let live = 0;
 
-export const hasSeenOrientation = (): boolean => readStored(SEEN) === "1";
-/** Asks a running card (in the game) to start again, and forgets that it was ever dismissed. The Field Manual's "Replay" button calls this. */
+/** Has this campaign's orientation been skipped or finished? (The front door and the tests read it; the card itself reads the same record.) */
+export function hasSeenOrientation(code: string): boolean {
+  const p = getOrientProgress(code);
+  return p !== undefined && (p.skipped || p.done === ALL_DONE);
+}
+/**
+ * Asks the card to start again. A running card (in a campaign) does so now and forgets its stored progress; with none running (the front door) the NEXT card built does. The
+ * pause sheet and the Field Manual's "Replay" button call this.
+ */
 export function replayOrientation(): void {
-  writeStored(SEEN, null);
-  writeStored(PROGRESS, null);
+  if (live === 0) writeStored(REPLAY_NEXT, "1");
   emitSetting("replayOrientation");
 }
 
@@ -43,12 +52,25 @@ export class Orientation {
   private padHeld = false;
   private off: (() => void) | undefined;
   private offGlyphs: (() => void) | undefined;
+  /** Nothing is written, and the card stays down, while the global "Never show tutorials" is on (a replay on purpose lifts it for this card). */
+  private suppressed: boolean;
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.key === "Escape" && this.visible && !e.repeat) this.skip(); // (no preventDefault: the pause screen still opens)
   };
 
-  constructor(parent: HTMLElement) {
-    this.state = hasSeenOrientation() ? { ...newOrientation(), skipped: true } : parseOrientation(readStored(PROGRESS));
+  constructor(
+    parent: HTMLElement,
+    private readonly code: string,
+  ) {
+    writeStored("cb.seenOrientation", null); // (D-039: the old per-browser flags are retired; a profile that skipped once must meet the card in its next new campaign)
+    writeStored("cb.orientation", null);
+    const replay = readStored(REPLAY_NEXT) === "1";
+    if (replay) writeStored(REPLAY_NEXT, null);
+    this.suppressed = getSkipTutorials() && !replay;
+    const saved = replay ? undefined : getOrientProgress(code);
+    if (replay) clearOrientProgress(code);
+    // (a finished card does not linger again on a resume: it comes back as skipped)
+    this.state = this.suppressed ? { ...newOrientation(), skipped: true } : saved ? { done: saved.done, skipped: saved.skipped || saved.done === ALL_DONE, finished: saved.done === ALL_DONE } : newOrientation();
     this.root = document.createElement("section");
     this.root.className = "orientation";
     this.root.setAttribute("role", "status");
@@ -94,8 +116,13 @@ export class Orientation {
     this.root.append(society, title, tag, this.list, this.doneLine, foot);
     parent.appendChild(this.root);
     window.addEventListener("keydown", this.onKey);
+    live++;
     this.off = onSettingChange((k) => {
       if (k === "replayOrientation") this.restart();
+      else if (k === "skipTutorials" && getSkipTutorials()) {
+        this.suppressed = true;
+        this.skip(false);
+      }
     });
     this.offGlyphs = onPromptChange(() => this.render()); // a change of device or binding: every line is written again with the new glyphs
     this.render();
@@ -125,8 +152,7 @@ export class Orientation {
     const before = this.state;
     this.state = orientationStep(this.state, this.sampler.feed(dt, x, z, yaw, region, sheet, down, device));
     if (this.state !== before) {
-      writeStored(PROGRESS, serializeOrientation(this.state));
-      if (this.state.finished) writeStored(SEEN, "1");
+      this.save();
       this.render();
     } else if (device !== this.device) {
       this.device = device;
@@ -136,16 +162,22 @@ export class Orientation {
     if (device === "pad") this.pollBack();
   }
 
-  /** Dismiss for good. */
-  skip(): void {
+  /** Dismiss for good (in this campaign; `remember` false when the global setting did it, which is not this campaign's choice). */
+  skip(remember = true): void {
     if (!isActive(this.state)) return;
     this.state = skipOrientation(this.state);
-    writeStored(SEEN, "1");
+    if (remember) this.save();
     this.setVisible(false);
   }
 
-  /** The Field Manual's replay: forget, start again. */
+  private save(): void {
+    if (!this.suppressed) setOrientProgress(this.code, { done: this.state.done, skipped: this.state.skipped });
+  }
+
+  /** The replay (pause sheet, Field Manual): forget this campaign's progress, start again. */
   restart(): void {
+    this.suppressed = false;
+    clearOrientProgress(this.code);
     this.state = newOrientation();
     this.sampler.reset();
     this.doneFor = 0;
@@ -187,6 +219,7 @@ export class Orientation {
 
   dispose(): void {
     window.removeEventListener("keydown", this.onKey);
+    live = Math.max(0, live - 1);
     this.off?.();
     this.offGlyphs?.();
     this.root.remove();

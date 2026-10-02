@@ -17,10 +17,12 @@ import { vesperBoulderGeometry, vesperSlabGeometry } from "./rocks.ts";
 import { planVesperScatter, type VesperScatter } from "./scatter.ts";
 import type { VesperTerrain } from "./shared.ts";
 import { buildVesperSolid } from "./solid.ts";
-import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import { sheaveAt, sheaveGeometry } from "./works.ts";
 
 const WHITE = new Color(1, 1, 1);
+/** Peak intensity of the room's fill light (see `InteriorFill`): enough that a records room's shelves and floor read in a still at noon. */
+const INTERIOR_FILL = 1.2;
 const fract = (x: number): number => x - Math.floor(x);
 
 interface SetOptions {
@@ -52,10 +54,12 @@ export class VesperView implements RegionView {
   private glows: { x: number; y: number; z: number }[] = [];
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
+  /** D-038 follow-up: the lamp-and-lime-wash light of the room (or gallery) the viewer stands in. */
+  private readonly fill: InteriorFill;
 
   /** Once a frame for the local player: the roof of the room (or the gallery) the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
   setViewer(x: number, z: number): void {
-    this.roofSet?.setViewer(vesperLevel().rooms, x, z);
+    this.fill.setInside(this.roofSet?.setViewer(vesperLevel().rooms, x, z) !== undefined);
   }
   /** The doors the view drew, and the roof set (for tests and tools). */
   get doorMarks(): readonly DoorMark[] {
@@ -73,6 +77,7 @@ export class VesperView implements RegionView {
     _seed = 7,
   ) {
     this.root.name = "world";
+    this.fill = new InteriorFill(this.root, PALETTE.vesper.companyCream, PALETTE.vesper.timberLight, INTERIOR_FILL);
     setToonLite(detail.liteShading);
     scene.add(this.root);
     const terrain = world.terrain as VesperTerrain;
@@ -280,6 +285,7 @@ export class VesperView implements RegionView {
 
   update(t: number, camera?: { x: number; y?: number; z: number }, _worldSec?: number): void {
     worldTime.value = t;
+    this.fill.update(t);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
     this.ambientU.uMotion.value = motion.value;
     if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;

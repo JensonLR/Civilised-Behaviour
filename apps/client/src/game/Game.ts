@@ -228,7 +228,7 @@ export class Game {
     this.parley = new Parley(document.body);
     this.paper = new NewspaperView(document.body);
     this.tracker = new ObjectiveTracker(hud);
-    this.orientation = new Orientation(hud);
+    this.orientation = new Orientation(hud, session.code); // (per campaign: the card is remembered under the join code, D-039)
     this.loadout = new LoadoutSheet(document.body);
     this.wheel = new CommandWheel(document.body, (c) => this.sendCommand(c));
     controls.onCommand = (phase) => this.onCommandKey(phase);
@@ -1072,6 +1072,7 @@ export class Game {
       this.audio.actor(id, isMe, dt, x, y, z, this.session.value(p, "vx"), this.session.value(p, "vy"), this.session.value(p, "vz"), flags);
       a.body.setLook(p.look);
       if (isMe) a.body.setFirstPerson(this.rig.headHidden, this.rig.yaw); // own head, never the others'
+      if (isMe) a.body.setAimYaw(this.combat.aimHeading); // third person: the body turns to the aim ray while the sight is up
       a.groundIn -= dt;
       if (a.groundIn <= 0) {
         a.groundIn = 0.25 + (a.key & 7) * 0.02; // (spread over frames: bodies do not all look at the ground in the same one)

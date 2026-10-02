@@ -639,3 +639,10 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 @keyframes rose { to { transform: rotate(360deg); } }
 @media (max-height: 34rem) { .panel.main .rule svg { width: 1.5rem; height: 1.5rem; } }
 .consult .actions[hidden] { display: none; }
+
+/* ---- the save line in the HUD's expedition bar (D-039) ---- */
+.codebar .saveline { font-family: var(--serif); font-size: 0.85rem; letter-spacing: 0.02em; opacity: 0.85; white-space: nowrap; }
+.codebar .saveline[data-state="failed"], .codebar .saveline[data-state="unkept"] { color: var(--stamp); opacity: 1; font-weight: 700; }
+.codebar .saveline[hidden] { display: none; }
+.pause .menu .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.pause .saveline[data-state="failed"], .pause .saveline[data-state="unkept"] { color: var(--stamp); opacity: 1; }

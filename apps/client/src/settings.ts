@@ -387,6 +387,10 @@ const captions = flagSetting("captions", "cb.captions", "captions", () => false)
 /** On-screen captions for the sounds that matter ("[musket shot, left]"). */
 export const getCaptions = (): boolean => captions.get();
 export const setCaptions = (on: boolean): void => captions.set(on);
+const skipTutorials = flagSetting("skipTutorials", "cb.skipTutorials", "notutorial", () => false);
+/** "Never show tutorials": the first-run orientation card stays away in every campaign (it is otherwise remembered per campaign, see ui/expeditions.ts). `?notutorial=1` does it for a session (tests, stills). */
+export const getSkipTutorials = (): boolean => skipTutorials.get();
+export const setSkipTutorials = (on: boolean): void => skipTutorials.set(on);
 const shake = numSetting("shake", "cb.shake", "shake", 1, 0, 1, 0.05);
 export const getShake = (): number => shake.get();
 export const setShake = (v: number): void => shake.set(v);

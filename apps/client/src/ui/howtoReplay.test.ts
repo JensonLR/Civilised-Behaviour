@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { onSettingChange } from "../settings.ts";
 import { openHowTo } from "./HowTo.ts";
-import { hasSeenOrientation } from "./Orientation.ts";
+import { Orientation, hasSeenOrientation } from "./Orientation.ts";
+import { noteExpedition } from "./expeditions.ts";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -10,23 +11,27 @@ afterEach(() => {
 });
 
 describe("the Field Manual can replay the orientation", () => {
-  it("has a Replay button; pressing it forgets that the orientation was dismissed, tells a running card, and closes the manual", () => {
-    localStorage.setItem("cb.seenOrientation", "1");
-    localStorage.setItem("cb.orientation", '{"done":5,"skipped":true}');
+  it("has a Replay tutorial button; pressing it forgets this campaign's progress, tells a running card, and closes the manual", () => {
+    noteExpedition("K7M2Q", { name: "Ada" });
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const card = new Orientation(host, "K7M2Q");
+    card.skip();
+    expect(hasSeenOrientation("K7M2Q")).toBe(true);
     const heard: string[] = [];
     const off = onSettingChange((k) => heard.push(k));
     openHowTo();
     const sheet = document.getElementById("sheet-howto")!;
     expect(sheet.hidden).toBe(false);
     const replay = sheet.querySelector<HTMLButtonElement>('button[data-act="replay-orientation"]')!;
-    expect(replay.textContent).toMatch(/orientation/i);
-    expect(hasSeenOrientation()).toBe(true);
+    expect(replay.textContent).toBe("Replay tutorial");
     replay.click();
-    expect(hasSeenOrientation()).toBe(false);
-    expect(localStorage.getItem("cb.orientation")).toBeNull();
+    expect(hasSeenOrientation("K7M2Q")).toBe(false);
+    expect(card.active).toBe(true);
     expect(heard).toContain("replayOrientation");
     expect(sheet.hidden).toBe(true);
     off();
+    card.dispose();
     vi.restoreAllMocks();
   });
 });

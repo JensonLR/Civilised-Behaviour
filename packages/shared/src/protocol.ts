@@ -53,6 +53,8 @@ export interface ClientMessages {
   command: CommandMsg;
   /** Ask for an audience with a power at HQ (D-035): only the map table or dock, only for a power that is pending today; the answers reuse `parleyPick`/`parleyClose` and the `parley` message. */
   audienceOpen: { power: PowerId };
+  /** Save the campaign's ledger now and say how it went (the pause sheet's "Save now" / "Save and quit"). Rate limited; answered with `saved` (`asked: true`) to the sender only. */
+  saveNow: Record<string, never>;
 }
 
 /** Minimum gap between accepted setLook messages per client. */
@@ -78,6 +80,19 @@ export interface ServerMessages {
   station: { kind: "map" | "paper" | "loadout" };
   /** The parley's state for its owner: a new view, or it closed (with the closing line). */
   parley: { view?: ParleyView; line?: string; closed?: boolean };
+  /** Where the campaign's save stands: sent to a joiner, after every save the room makes, and in answer to `saveNow` (`asked`). */
+  saved: SavedMsg;
+}
+
+export interface SavedMsg {
+  /** False when this room keeps nothing (the web demo, or a campaign made without a usable identity): "Saved" must never be shown then. */
+  kept: boolean;
+  /** The last save attempt went through. */
+  ok: boolean;
+  /** Epoch ms of the last good save (0: none yet). */
+  at: number;
+  /** This answers a `saveNow`. */
+  asked?: boolean;
 }
 
 export interface ShotEvent {

@@ -18,7 +18,7 @@ test("the demo shows its licence tag, refuses a sailing to Highmark, saves nothi
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-  await page.addInitScript(() => localStorage.setItem("cb.seenOrientation", "1"));
+  await page.addInitScript(() => localStorage.setItem("cb.skipTutorials", "1"));
   await page.goto("/?gfx=test");
   await page.waitForSelector("#name", { timeout: 120_000 });
   await page.fill("#name", "Ada");

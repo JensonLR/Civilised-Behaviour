@@ -4,14 +4,19 @@ export interface MenuHandlers {
   /** Found an expedition. `progress` names the stage reached ("Surveying the territory...") for the working card. */
   onCreate(name: string, rules: { dismemberment: boolean }, progress: (step: string) => void): Promise<void>;
   onJoin(code: string, name: string, progress: (step: string) => void): Promise<void>;
-  /** D-035: bring a saved expedition back by its code (the server answers a stranger and an unknown code alike). */
+  /**
+   * D-035: bring a saved expedition back by its code (the server answers a stranger and an unknown code alike). Absent where nothing is saved (the demo): the door then offers no
+   * Continue and no list (D-039).
+   */
   onResume?(code: string, name: string, progress: (step: string) => void): Promise<void>;
 }
 
 /** The join lookup found no live room for the code: a dormant campaign may be waiting, so the failure card offers to resume it. */
 export const isNoLiveCampaign = (message: string): boolean => /^No campaign with that code/i.test(message);
 
-import { describeError, stepAt } from "./menuLogic.ts";
+import { dormantCopy, describeError, isDormantSave, stepAt } from "./menuLogic.ts";
+import { expeditionMeta, forgetExpedition, listExpeditions, type Expedition } from "./expeditions.ts";
+import "./expeditions.css";
 import { bindPrompt } from "../input/glyphDom.ts";
 import { startPadNav } from "./PadNav.ts";
 import { REACH_RETRY } from "../platform/reachCopy.ts";
@@ -48,6 +53,8 @@ export class Menu {
   private lastAction: (() => Promise<void>) | undefined;
   /** True while the action in hand is a join (only a join that found nothing offers to resume). */
   private lastWasJoin = false;
+  /** The code of the expedition the action in hand is resuming, if it is one (a failure then gets the friendly "file not found" card, D-039). */
+  private lastResumeCode: string | undefined;
 
   constructor(
     private readonly root: HTMLElement,
@@ -69,10 +76,19 @@ export class Menu {
         <label>Name upon the manifest
           <input id="name" maxlength="20" autocomplete="off" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
         </label>
+        <div class="row" id="continue-row" hidden>
+          <button id="continue" type="button" class="primary"><span class="cont-title">Continue</span><span class="cont-meta"></span></button>
+        </div>
         <div class="row">
           <button id="create" class="primary">New campaign</button>
         </div>
+        <p id="create-note" class="fine">Founds a fresh world: a new seed and a clean ledger, with the orientation to meet you.</p>
         <label class="check"><input type="checkbox" id="limb-rule"${getCampaignLimbLoss() ? " checked" : ""} /> Limbs may be lost in this campaign</label>
+        <section class="expeditions" id="expeditions" aria-labelledby="exp-h" hidden>
+          <h2 id="exp-h">Your expeditions</h2>
+          <ul></ul>
+          <p class="fine">Kept on this device. The Society's files hold the ledger; where you stood does not come back.</p>
+        </section>
         <div class="or">or present a code to join a party</div>
         <div class="row">
           <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
@@ -98,7 +114,7 @@ export class Menu {
           <h2 id="consult-head">Consulting the Society...</h2>
           <p id="consult-step" role="status" aria-live="polite"></p>
           <div class="bar" aria-hidden="true"><div class="fill"></div></div>
-          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="back">Return to the door</button></div>
+          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="forget" hidden>Forget this expedition</button><button type="button" class="back">Return to the door</button></div>
         </div>
       </div>`;
     // a pad's hint under the door (shown only while a pad is the device in use): the front door is the first thing a pad player sees
@@ -120,7 +136,17 @@ export class Menu {
     root.querySelector(".consult .back")!.addEventListener("click", () => this.closeConsult());
     root.querySelector(".consult .resume")!.addEventListener("click", () => {
       const code = this.codeInput.value.trim().toUpperCase();
-      if (isValidJoinCode(code) && handlers.onResume) void this.run(() => handlers.onResume!(code, this.name(), (t) => this.progress(t)), false);
+      if (isValidJoinCode(code) && handlers.onResume) this.resume(code);
+    });
+    root.querySelector(".consult .forget")!.addEventListener("click", () => {
+      if (this.lastResumeCode) forgetExpedition(this.lastResumeCode);
+      this.closeConsult();
+      this.renderExpeditions();
+      this.setStatus("That expedition has been struck from the list.", false);
+    });
+    root.querySelector("#continue")!.addEventListener("click", () => {
+      const e = listExpeditions()[0];
+      if (e) this.resume(e.code);
     });
     this.consult.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !this.consultActions.hidden) this.closeConsult();
@@ -128,6 +154,7 @@ export class Menu {
     root.addEventListener("padback", () => !this.consultActions.hidden && this.closeConsult());
     root.querySelector("#create")!.addEventListener("click", () => void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t)), false));
     root.querySelector("#join")!.addEventListener("click", () => void this.join());
+    this.renderExpeditions();
     root.querySelector<HTMLSelectElement>("#gore")!.addEventListener("change", (e) => setGore((e.target as HTMLSelectElement).value as (typeof GORE_LEVELS)[number]));
     const options = root.querySelector<HTMLButtonElement>("#options")!;
     const howto = root.querySelector<HTMLButtonElement>("#howto")!;
@@ -142,6 +169,67 @@ export class Menu {
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
     this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t)), false));
     startPadNav(root, () => !this.root.hidden && !anyModalOpen());
+  }
+
+  /** Bring a saved expedition back: one click, through the same path as the code box (the server checks that this browser was a member). */
+  private resume(code: string): void {
+    if (!this.handlers.onResume) return;
+    void this.run(() => this.handlers.onResume!(code, this.name(), (t) => this.progress(t)), false, code);
+  }
+
+  /** The door's own record of expeditions (this device only): the Continue button for the latest and the list to resume or forget from. Drawn again after every change. */
+  private renderExpeditions(): void {
+    const list: Expedition[] = this.handlers.onResume ? listExpeditions() : [];
+    const row = this.root.querySelector<HTMLElement>("#continue-row")!;
+    const section = this.root.querySelector<HTMLElement>("#expeditions")!;
+    const create = this.root.querySelector<HTMLElement>("#create")!;
+    const now = Date.now();
+    row.hidden = list.length === 0;
+    section.hidden = list.length === 0;
+    create.classList.toggle("primary", list.length === 0);
+    const first = list[0];
+    if (first) row.querySelector<HTMLElement>(".cont-meta")!.textContent = expeditionMeta(first, now);
+    const ul = section.querySelector("ul")!;
+    ul.replaceChildren(
+      ...list.map((e) => {
+        const li = document.createElement("li");
+        const go = document.createElement("button");
+        go.type = "button";
+        go.className = "go";
+        go.dataset.code = e.code;
+        const title = document.createElement("span");
+        title.className = "exp-title";
+        title.textContent = e.name ? `${e.name}'s expedition` : `Expedition No. ${e.code}`;
+        const meta = document.createElement("span");
+        meta.className = "exp-meta";
+        meta.textContent = expeditionMeta(e, now);
+        go.append(title, meta);
+        go.addEventListener("click", () => this.resume(e.code));
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "drop quiet";
+        drop.textContent = "Forget";
+        drop.setAttribute("aria-label", `Forget expedition ${e.code}`);
+        // two presses: the record is only this device's list (the Society keeps its file), but a stray click should not strike it off
+        const disarm = (): void => {
+          delete drop.dataset.armed;
+          drop.textContent = "Forget";
+        };
+        drop.addEventListener("click", () => {
+          if (drop.dataset.armed === "1") {
+            forgetExpedition(e.code);
+            this.renderExpeditions();
+            this.root.querySelector<HTMLElement>("#create")?.focus();
+            return;
+          }
+          drop.dataset.armed = "1";
+          drop.textContent = "Sure?";
+        });
+        drop.addEventListener("blur", disarm);
+        li.append(go, drop);
+        return li;
+      }),
+    );
   }
 
   private rules(): { dismemberment: boolean } {
@@ -197,8 +285,9 @@ export class Menu {
     this.consultStep.textContent = step;
   }
 
-  private async run(action: () => Promise<void>, isJoin?: boolean): Promise<void> {
+  private async run(action: () => Promise<void>, isJoin?: boolean, resumeCode?: string): Promise<void> {
     if (isJoin !== undefined) this.lastWasJoin = isJoin;
+    this.lastResumeCode = resumeCode;
     this.lastAction = action;
     this.setBusy(true);
     this.setStatus("", false);
@@ -209,7 +298,7 @@ export class Menu {
       this.hide();
     } catch (e) {
       const message = describeError(e);
-      this.showFailure(message, this.lastWasJoin && isNoLiveCampaign(message) && !!this.handlers.onResume);
+      this.showFailure(message, this.lastWasJoin && isNoLiveCampaign(message) && !!this.handlers.onResume, resumeCode);
       this.setBusy(false);
     }
   }
@@ -219,6 +308,7 @@ export class Menu {
     this.workingSince = performance.now();
     this.consult.hidden = false;
     this.consult.dataset.state = "working";
+    this.consult.dataset.kind = "";
     this.consultHead.textContent = "Consulting the Society...";
     this.consultStep.textContent = stepAt(0);
     this.consultActions.hidden = true;
@@ -230,12 +320,16 @@ export class Menu {
     }, 1000);
   }
 
-  private showFailure(message: string, resumable = false): void {
+  private showFailure(message: string, resumable = false, resumeCode?: string): void {
+    // a saved expedition that cannot be found (lapsed, wiped, or still marching elsewhere): say what it may be, and offer to strike it off the list
+    const dormant = resumeCode !== undefined && isDormantSave(message);
     this.consultActions.querySelector<HTMLElement>(".resume")!.hidden = !resumable;
+    this.consultActions.querySelector<HTMLElement>(".forget")!.hidden = !(dormant && listExpeditions().some((e) => e.code === resumeCode));
     window.clearInterval(this.workingTimer);
     this.consult.dataset.state = "error";
-    this.consultHead.textContent = "The Society regrets...";
-    this.consultStep.textContent = message;
+    this.consult.dataset.kind = dormant ? "dormant" : "";
+    this.consultHead.textContent = dormant ? "The file cannot be found" : "The Society regrets...";
+    this.consultStep.textContent = dormant ? dormantCopy(resumeCode) : message;
     this.consultActions.hidden = false;
     this.consultActions.querySelector<HTMLElement>(".retry")!.focus();
   }
@@ -262,6 +356,7 @@ export class Menu {
   show(): void {
     this.root.hidden = false;
     this.setBusy(false);
+    this.renderExpeditions();
   }
 
   hide(): void {

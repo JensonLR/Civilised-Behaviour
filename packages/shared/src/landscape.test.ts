@@ -14,6 +14,7 @@ import {
   trailSample,
   waterEdgeDistance,
   waterField,
+  withLandscape,
   type LandscapeTerrain,
   type WaterField,
 } from "./landscape.ts";
@@ -363,5 +364,61 @@ describe("ground dressing fields", () => {
     expect(stone.r).toBeGreaterThan(stone.g * 0.95); // warm pale stone, not grass
     expect(earth.r).toBeGreaterThan(earth.g);
     expect(green.g).toBeGreaterThan(green.r);
+  });
+});
+
+describe("ground pads (the village's levelled floors)", () => {
+  // The ground between two pads' flat cores must be walkable. Each pad is levelled to the average of the ground it covers, so two pads that stand a few metres apart on a slope (or either side
+  // of a pond bank) used to sit up to a metre apart and the street between them was a step (Hollowmere seeds 1247, 1580 and nine more of 200: gradient 1.0 to 1.6, a body stuck on the first prop corner).
+  const stepped = { height: (_x: number, z: number): number => 0.3 * Math.max(0, Math.min(5, -z)) }; // (a ramp of 0.3 that gains 1.5 m between the pads' centres)
+  const pads = [
+    { x: 0, z: 0, r: 2, blend: 3 },
+    { x: 0, z: -5, r: 2, blend: 3 },
+  ];
+
+  it("two pads a metre apart on a slope that gains 1.5 m between them are relaxed toward each other and the ground between them climbs at a walkable rate", () => {
+    const t = withLandscape(stepped, pads);
+    const a = t.height(0, 0);
+    const b = t.height(0, -5);
+    const gap = Math.hypot(0, 5) - 4;
+    expect(Math.abs(b - a)).toBeLessThanOrEqual(0.2 * (gap + 0.8) + 0.05); // (the relaxed seam allowance, the pads' own ground then moves by the blend)
+    let worst = 0;
+    for (let z = 0.5; z > -5.5; z -= 0.05) worst = Math.max(worst, Math.abs(t.height(0, z - 0.05) - t.height(0, z)) / 0.05);
+    expect(worst).toBeLessThan(0.7);
+  });
+
+  it("pads already as close as the ground allows are left where they were (a pair on level ground keeps its level)", () => {
+    const flat = { height: () => 3 };
+    const t = withLandscape(flat, pads);
+    expect(t.height(0, 0)).toBeCloseTo(3, 9);
+    expect(t.height(0, -5)).toBeCloseTo(3, 9);
+  });
+
+  it("the village street, the ferry lane and the hall steps never climb steeper than 0.7 on the seeds that had a step there", () => {
+    const names = new Set(["village", "ferry-lane", "hall-steps", "mill-lane"]);
+    for (const seed of [1062, 1839, 1580, 285, 1247, 1025, 3652, 3726, 5206, 5280, 6242, 6686, 7204, 7315]) {
+      const t = landscape(seed);
+      let worst = 0;
+      let at = "";
+      for (const tr of TRAILS.filter((x) => names.has(x.name))) {
+        for (let k = 0; k + 3 < tr.line.length; k += 2) {
+          const x0 = tr.line[k]!;
+          const z0 = tr.line[k + 1]!;
+          const x1 = tr.line[k + 2]!;
+          const z1 = tr.line[k + 3]!;
+          const len = Math.hypot(x1 - x0, z1 - z0) || 1;
+          for (const o of [-0.9, 0, 0.9]) {
+            const nx = (-(z1 - z0) / len) * o;
+            const nz = ((x1 - x0) / len) * o;
+            const g = Math.abs(t.height(x1 + nx, z1 + nz) - t.height(x0 + nx, z0 + nz)) / len;
+            if (g > worst) {
+              worst = g;
+              at = `${tr.name} ${x0.toFixed(1)},${z0.toFixed(1)}`;
+            }
+          }
+        }
+      }
+      expect(worst, `seed ${seed}: ${at}`).toBeLessThan(0.7);
+    }
   });
 });

@@ -27,7 +27,7 @@ async function start(page: Page, errors: string[]): Promise<void> {
 }
 const noise = (errors: string[]) => errors.filter((e) => !/favicon|Failed to load resource/.test(e));
 
-test("a fresh profile gets the orientation card; Esc skips it for good", async ({ page }) => {
+test("a fresh profile gets the orientation card; Esc skips it for this campaign", async ({ page }) => {
   test.setTimeout(240_000);
   const errors: string[] = [];
   await start(page, errors);
@@ -35,14 +35,16 @@ test("a fresh profile gets the orientation card; Esc skips it for good", async (
   await expect(page.locator(".orientation")).toContainText("The Imperial Cartographic");
   await page.keyboard.press("Escape");
   await expect(page.locator(".orientation")).toBeHidden({ timeout: 10_000 });
-  expect(await page.evaluate(() => localStorage.getItem("cb.seenOrientation"))).toBe("1");
+  // (D-039: remembered per campaign, in the expeditions record, under this campaign's code)
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("cb.expeditions") ?? "null") as { list: { code: string; orient?: { skipped: boolean } }[] } | null);
+  expect(stored?.list[0]?.orient?.skipped).toBe(true);
   expect(noise(errors)).toEqual([]);
 });
 
 test("after three endings the map room shows the campaign (an outpost, the Syndicate's marker, the powers, an audience), the audience plays out, and HQ keeps what was done", async ({ page }) => {
   test.setTimeout(420_000);
   const errors: string[] = [];
-  await page.addInitScript(() => localStorage.setItem("cb.seenOrientation", "1")); // (the card has its own test above)
+  await page.addInitScript(() => localStorage.setItem("cb.skipTutorials", "1")); // (the card has its own test above)
   await start(page, errors);
   for (const r of ["forced", "sabotaged", "seized"]) await send(page, "debug", { cmd: `outcome:${r}` });
   await send(page, "debug", { cmd: "outpost:trading_post" });
@@ -80,7 +82,7 @@ test("after three endings the map room shows the campaign (an outpost, the Syndi
 test("a dormant campaign comes back by its code: the door offers to resume it, and the ledger is as it was", async ({ page }) => {
   test.setTimeout(420_000);
   const errors: string[] = [];
-  await page.addInitScript(() => localStorage.setItem("cb.seenOrientation", "1"));
+  await page.addInitScript(() => localStorage.setItem("cb.skipTutorials", "1"));
   await start(page, errors);
   await send(page, "debug", { cmd: "outcome:paid" });
   await send(page, "debug", { cmd: "outcome:forced" });

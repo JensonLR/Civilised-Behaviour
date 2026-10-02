@@ -89,7 +89,7 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await page.addInitScript(installPad, XBOX_ID);
   await page.addInitScript(() => {
     localStorage.setItem("cb.name", "Padwise");
-    localStorage.setItem("cb.seenOrientation", "1");
+    localStorage.setItem("cb.skipTutorials", "1");
   });
   await page.goto("/?gfx=test&view=third");
   await page.waitForSelector("#name", { timeout: 120_000 });

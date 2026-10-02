@@ -10,7 +10,7 @@ import { probeServer, reachText } from "../platform/serverReach.ts";
 import { REACH_CHECKING } from "../platform/reachCopy.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
 import { Stage } from "../render/Stage.ts";
-import { DEMO, createArena, isRegionId, isTemplateId, type RegionId, type ScenarioTemplateId } from "@cb/shared";
+import { DEMO, createArena, isRegionId, isTemplateId, parseCampaign, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import { decodeSpec, encodeSpec, generateCharacter } from "@cb/procedural";
 import { CreatorPreview } from "../render/CreatorPreview.ts";
 import { Captions } from "../ui/Captions.ts";
@@ -20,6 +20,9 @@ import { anyModalOpen, onInputBlocked } from "../ui/modal.ts";
 import { Pause } from "../ui/Pause.ts";
 import { buildHudChrome } from "../ui/hudChrome.ts";
 import { Menu } from "../ui/Menu.ts";
+import { listExpeditions, noteExpedition } from "../ui/expeditions.ts";
+import { isDormantSave } from "../ui/menuLogic.ts";
+import type { SaveStatus } from "../net/saveStatus.ts";
 import { SoundPlaque } from "../ui/SoundPlaque.ts";
 import { Game } from "./Game.ts";
 
@@ -113,7 +116,24 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   function showHud(s: Session): void {
     hud.hidden = false;
     removeChrome?.();
-    removeChrome = buildHudChrome(hud, s.code, `${location.origin}${location.pathname}?join=${s.code}`);
+    // (the demo saves nothing, so its bar carries no "Saved" line)
+    removeChrome = buildHudChrome(hud, s.code, `${location.origin}${location.pathname}?join=${s.code}`, isDemo() ? undefined : { status: () => s.saves.current, subscribe: (fn) => s.saves.subscribe(fn) });
+  }
+
+  /**
+   * D-039: this browser remembers the expedition (the front door's Continue and list, and the orientation card's per-campaign state). Refreshed when the server says it saved (every
+   * ledger change), every half minute and when the page goes, so the region and the day on the list are close to what they were. A demo saves nothing, so it is not recorded.
+   */
+  function rememberExpedition(s: Session, name: string): void {
+    if (isDemo()) return;
+    const sync = (): void => {
+      const day = parseCampaign(s.room.state.campaign)?.day;
+      noteExpedition(s.code, { name: s.local?.name || name, region: s.room.state.region, ...(day === undefined ? {} : { day }) });
+    };
+    sync();
+    s.saves.subscribe(() => sync());
+    window.setInterval(sync, 30_000);
+    window.addEventListener("pagehide", sync);
   }
 
   // Step 2 (after the door has painted): everything that needs the GPU.
@@ -129,7 +149,17 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     stage.setTime(17.2); // the front door sits at golden hour in the camp; a joined room's clock takes over (Game feeds it to the stage)
     pause = new Pause({
       canvas,
-      invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: realPlayers(session) } : undefined),
+      invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: realPlayers(session), seed: session.room.state.seed } : undefined),
+      // where the save stands and "Save now" / "Save and quit" (the demo saves nothing: its sheet has no save controls)
+      ...(isDemo()
+        ? {}
+        : {
+            save: {
+              status: (): SaveStatus => session?.saves.current ?? { kind: "unknown" },
+              now: (): Promise<SaveStatus> => (session ? session.saveNow() : Promise.resolve<SaveStatus>({ kind: "unknown" })),
+              subscribe: (fn: (s: SaveStatus) => void): (() => void) => session?.saves.subscribe(fn) ?? (() => undefined),
+            },
+          }),
       // the demo's pause sheet carries a way to the wish-list card
       ...(isDemo() ? { wishlist: () => new Wishlist({ url: wishlistLink() }).show() } : {}),
       leave: () => {
@@ -164,7 +194,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     })
     .catch((e) => console.error("backdrop failed", e));
 
-  async function enter(s: Session): Promise<void> {
+  async function enter(s: Session, name = ""): Promise<void> {
     backdropWanted = false;
     // (a demo that ran out while the world was still being built: the close has already happened, so the card is shown the moment the game exists)
     let demoClosed = false;
@@ -177,6 +207,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));
     preview.stop();
     session = s;
+    rememberExpedition(s, name); // (before the Game: its orientation card reads this campaign's entry)
     game = new Game(stage, s, controls, hud, debugEl, link);
     if (demoClosed) game.endDemo();
     showHud(s);
@@ -199,14 +230,14 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       progress("Posting the telegram...");
       const s = await Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}), ...(startScenario ? { scenario: startScenario } : {}) });
       progress("Reply received. Packing the trunks...");
-      await enter(s);
+      await enter(s, name);
     },
     onJoin: async (code, name, progress) => {
       backdropWanted = false;
       progress("Presenting your code...");
       const s = await Session.join(code, name, look);
       progress("Reply received. Packing the trunks...");
-      await enter(s);
+      await enter(s, name);
     },
     // a dormant campaign comes back by its code, for a former member only (D-035): the expedition resumes at HQ with its ledger
     // (a demo saves nothing, so there is nothing to resume: the handler is absent and the door never offers it)
@@ -216,9 +247,20 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
           onResume: async (code: string, name: string, progress: (step: string) => void) => {
             backdropWanted = false;
             progress("Consulting the Society's files...");
-            const s = await Session.create(name, look, { resume: code });
+            // (a campaign left a moment ago may still be putting its last save away: for an expedition played in the last half minute, ask again a few times before giving up)
+            const recent = (listExpeditions().find((e) => e.code === code)?.lastPlayed ?? 0) > Date.now() - 30_000;
+            let s: Session | undefined;
+            for (let attempt = 0; !s; attempt++) {
+              try {
+                s = await Session.create(name, look, { resume: code });
+              } catch (e) {
+                if (!recent || attempt >= 4 || !isDormantSave(e instanceof Error ? e.message : "")) throw e;
+                progress("The file is being put away. Asking again...");
+                await idleFor(700);
+              }
+            }
             progress("The file is found. Packing the trunks...");
-            await enter(s);
+            await enter(s, name);
           },
         }),
   });

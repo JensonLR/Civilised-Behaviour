@@ -122,3 +122,42 @@ describe("CharacterActor first person", () => {
     expect(eye.grounded).toBe(true);
   });
 });
+
+describe("CharacterActor third-person aim", () => {
+  const AIMING = FLAG.GROUNDED | FLAG.AIMING;
+  it("turns the local body to the aim ray while AIM is held, smoothed, and eases back to the server heading on release", () => {
+    const a = new CharacterActor(new Scene(), look(11), 1, false);
+    settle(a, pose(FLAG.GROUNDED, { facing: 0.4 }), 5);
+    a.setAimYaw(-1.2); // a ray is known, but AIM is not held: the body keeps the server's heading
+    settle(a, pose(FLAG.GROUNDED, { facing: 0.4 }), 30);
+    expect(a.facing).toBe(0.4);
+    a.update(1 / 60, pose(AIMING, { facing: 0.4 }));
+    expect(a.facing).toBeGreaterThan(-1.2); // smoothed: one frame does not snap
+    expect(a.facing).toBeLessThan(0.4);
+    settle(a, pose(AIMING, { facing: 0.4 }), 90);
+    expect(a.facing).toBeCloseTo(-1.2, 2);
+    a.setAimYaw(2.9); // the long way round is across the +-PI seam, not through zero
+    a.update(1 / 60, pose(AIMING, { facing: 0.4 }));
+    expect(a.facing).toBeLessThan(-1.2);
+    settle(a, pose(AIMING, { facing: 0.4 }), 120);
+    expect(Math.abs(Math.atan2(Math.sin(a.facing - 2.9), Math.cos(a.facing - 2.9)))).toBeLessThan(0.01);
+    settle(a, pose(FLAG.GROUNDED, { facing: 0.4 }), 400); // AIM released
+    expect(a.facing).toBeCloseTo(0.4, 3);
+  });
+
+  it("does nothing without a ray, when downed, in first person, or for a body that was never given one", () => {
+    const a = new CharacterActor(new Scene(), look(12), 1, false);
+    a.setAimYaw(undefined);
+    settle(a, pose(AIMING, { facing: 0.4 }), 60);
+    expect(a.facing).toBe(0.4);
+    a.setAimYaw(1.5);
+    settle(a, pose(AIMING | FLAG.DOWNED, { facing: 0.4 }), 60);
+    expect(a.facing).toBeCloseTo(0.4, 2);
+    a.setFirstPerson(true, -2);
+    settle(a, pose(AIMING, { facing: 0.4 }), 80);
+    expect(a.facing).toBeCloseTo(-2, 2); // the camera's yaw wins in first person
+    const remote = new CharacterActor(new Scene(), look(13), 1, false);
+    settle(remote, pose(AIMING, { facing: 1.1 }), 60);
+    expect(remote.facing).toBe(1.1);
+  });
+});

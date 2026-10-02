@@ -1,6 +1,6 @@
 # Privacy data map
 
-Status: reflects the code as of 2026-10-01 (campaign persistence, D-035, now wired into the room: `WorldRoom` saves on every ledger/powers/settlements/party change, when the last player leaves and (awaited, 5 s cap) on dispose; `JoinOptions.resume` loads a record for a former member). Draft for a future privacy policy; final legal review is advisable before release.
+Status: reflects the code as of 2026-10-02 (D-039 added the local expeditions record; the old per-browser flags `cb.seenOrientation` and `cb.orientation` are retired and deleted when the game starts; `cb.skipTutorials` and `cb.replayOrientation` are plain UI flags), earlier 2026-10-01 (campaign persistence, D-035, now wired into the room: `WorldRoom` saves on every ledger/powers/settlements/party change, when the last player leaves and (awaited, 5 s cap) on dispose; `JoinOptions.resume` loads a record for a former member). Draft for a future privacy policy; final legal review is advisable before release.
 
 | Data | Where | Purpose | Retention |
 |------|-------|---------|-----------|
@@ -9,6 +9,7 @@ Status: reflects the code as of 2026-10-01 (campaign persistence, D-035, now wir
 | IP address | Transient in-memory rate-limiter key for `/campaign/:code`; HTTP/proxy logs of the hosting provider | Abuse prevention | Limiter: minutes; host logs per provider policy |
 | Gameplay state (positions, props, NPCs, mounts, scenario progress) | Server memory only | Play the game | Room lifetime. Only the ledger sections below are saved |
 | Campaign record (`CampaignRecord`): campaign id (server uuid), join code, world seed, revision, last-save time, `owner` and `members` as identity KEYS, opaque JSON sections (`campaign` ledger, `party`, `powers`, `settlements`) | Save file `<SAVE_DIR>/<id>.json` or Postgres tables `campaigns` and `campaign_members` (`CAMPAIGN_STORE=file|postgres`; memory = nothing persisted) | Let a former member resume the expedition at HQ | Until the campaign is dormant for `SAVE_RETENTION_DAYS` (default 180, set 1-3650), then purged at boot and daily; or until deleted (below) |
+| Expeditions record (D-039): for each of up to 12 campaigns this browser has been in: join code, the display name used there, last region, day, last-played time, first-run orientation progress | Browser localStorage `cb.expeditions` only (never sent to the server, never read by it) | The front door's Continue and "Your expeditions" list; remembering the orientation per campaign. The code is what resume needs; the credential that proves membership is still `cb.identity` above, which is NOT copied here. No seed, no identity key, no member list | Until the player forgets the entry (door button), the 12-entry cap pushes it out, or storage is cleared. The server's own copy follows `SAVE_RETENTION_DAYS` regardless |
 | Identity key | Inside the record (`owner`, `members`), nothing else | Membership check on resume | Same as the record |
 | Server logs | stdout JSON (room ids, session ids, names) | Operations | Per hosting provider |
 

@@ -24,3 +24,10 @@ export function stepAt(seconds: number, override?: string): string {
   for (const s of WORKING_STEPS) if (seconds >= s.after) text = s.text;
   return text;
 }
+
+/** The server's one answer to a resume it will not do (an unknown code, a stranger, a campaign still live elsewhere, a demo): `WorldRoom.resumeFrom`. */
+export const isDormantSave = (message: string): boolean => /^No expedition by that code/i.test(message.trim());
+
+/** The friendly card for an expedition that is not waiting: what it may be, and what can be done. */
+export const dormantCopy = (code: string): string =>
+  `No file under Expedition No. ${code} is waiting for you. The Society keeps files for a limited time, and a server that has been reset keeps none; or the party may still be on the march elsewhere. You can try again in a moment, or strike it off your list and found a new campaign.`;

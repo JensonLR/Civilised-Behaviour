@@ -210,6 +210,12 @@ export class CombatView {
 
   // ---- aim ----------------------------------------------------------------------------------------------------------------------------------
 
+  /** The yaw of the aim ray (where the shot leaves the eye: `aimSolve` against the crosshair), or undefined before the first frame has solved one. The local body is drawn turned to it while aiming (`CharacterActor.setAimYaw`). */
+  get aimHeading(): number | undefined {
+    return this.aimSeen ? this.aimYaw : undefined;
+  }
+
+
   /**
    * Finds what the crosshair is on (the first solid or body along the ray through the middle of the picture) and solves the shot from the player's own eye through that point
    * (`aimSolve`, input/aim.ts): what is under the crosshair is what the round meets at any range, in third person (the camera sits beside the head) and in first. Call once a frame, before

@@ -26,6 +26,7 @@ export function createArena(seed: number): CollisionWorld {
   // The authored expedition camp (ruined wall, step-up crates, tents, fire, flag, signpost, luggage, cart, map table, washing...): camp.ts.
   // The Observatory ruin and its aqueduct: ruins.ts. The camp's field cannon: weapons.ts.
   const obstacles: Obstacle[] = [...campObstacles(terrain), ...ruinObstacles(terrain), ...cannonObstacles(terrain)];
+  const fixed: readonly Obstacle[] = obstacles.slice(); // (the camp, the Observatory and the cannon, before any dressing)
 
   const MAX_D = ARENA_RADIUS - 4;
   const tooClose = (x: number, z: number, gap: number): boolean => {
@@ -176,6 +177,18 @@ export function createArena(seed: number): CollisionWorld {
     const hz = crag.range(0.85, 1.35);
     const yaw = Math.atan2(sl.gx, -sl.gz);
     const h = crag.range(2.5, 4.6);
+    // (a crag's footprint is a box, not the point the test above used: on the Observatory hill's flank its end could run into an aqueduct pier, 0.08 m on seed 4910; it simply is not there, and nothing else has moved)
+    const cy = Math.cos(yaw);
+    const sy = Math.sin(yaw);
+    if (
+      obstacles.some((o) => {
+        if (o.tag !== "ruin" || o.kind !== "circle") return false;
+        const lx = Math.abs((o.x - x) * cy + (o.z - z) * sy);
+        const lz = Math.abs(-(o.x - x) * sy + (o.z - z) * cy);
+        return Math.hypot(Math.max(0, lx - hx), Math.max(0, lz - hz)) < o.r + 0.5;
+      })
+    )
+      continue;
     // the face stands on the lowest ground under it and rises to a level crest
     const ends = [terrain.height(x + Math.cos(yaw) * hx, z + Math.sin(yaw) * hx), terrain.height(x - Math.cos(yaw) * hx, z - Math.sin(yaw) * hx)];
     const base = Math.min(y, ...ends);
@@ -199,8 +212,23 @@ export function createArena(seed: number): CollisionWorld {
   obstacles.push(...cliffs);
 
   const clashes = (o: Obstacle): boolean => clashesFurniture(o.x, o.z, o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz));
-  const kept = obstacles.filter((o) => !(["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && clashes(o)));
-  return new CollisionWorld(terrain, [...kept, ...furniture, ...hqRouteObstacles(terrain)], ARENA_RADIUS); // the way-round-HQ finger-posts go in last (hqRoute.ts)
+  const posts = hqRouteObstacles(terrain); // the way-round-HQ finger-posts go in last (hqRoute.ts)
+  // A tree or a boulder is drawn BEFORE the authored things it must not stand in: the camp's props and the cannon (the dressing tests their centres, not a boulder's radius) and the finger-posts
+  // (placed after everything). Whatever actually overlaps one is simply not there (found by the level audit on hub seeds 22320 and 29646: a rock in the cannon's carriage, a tree in a finger-post).
+  const solids = [...fixed, ...furniture, ...posts];
+  const kept = obstacles.filter((o) => !(["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && (clashes(o) || (o.kind === "circle" && solids.some((f) => circleTouches(o, f))))));
+  return new CollisionWorld(terrain, [...kept, ...furniture, ...posts], ARENA_RADIUS);
+}
+
+/** True if the round obstacle `c` intersects the solid `f` (a standing thing of the camp, the village or the route) by any amount. */
+function circleTouches(c: Extract<Obstacle, { kind: "circle" }>, f: Obstacle): boolean {
+  if (f.tag === "tree" || f.tag === "rock" || f.tag === "snag" || f.tag === "stump" || f.tag === "log") return false;
+  if (f.kind === "circle") return (c.x - f.x) ** 2 + (c.z - f.z) ** 2 < (c.r + f.r) ** 2;
+  const cy = Math.cos(f.yaw);
+  const sy = Math.sin(f.yaw);
+  const lx = Math.abs((c.x - f.x) * cy + (c.z - f.z) * sy);
+  const lz = Math.abs(-(c.x - f.x) * sy + (c.z - f.z) * cy);
+  return Math.hypot(Math.max(0, lx - f.hx), Math.max(0, lz - f.hz)) < c.r;
 }
 
 /** Deterministic spawn ring around the origin for up to `count` players. */

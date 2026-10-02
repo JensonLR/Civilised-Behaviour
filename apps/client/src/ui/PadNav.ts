@@ -16,9 +16,14 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
   let lbWas = false;
   let rbWas = false;
 
+  /** A control in a `hidden` section of the root (the door's Continue row before there is anything to continue) is not a stop, whatever the layout engine says. */
+  const insideHidden = (el: HTMLElement): boolean => {
+    const h = el.closest("[hidden]");
+    return h !== null && h !== root && root.contains(h);
+  };
   const focusables = (): HTMLElement[] =>
     [...root.querySelectorAll<HTMLElement>("input, select, button, a[href], [role='menuitem'], [role='button']")].filter(
-      (el) => !(el as HTMLInputElement).disabled && el.getAttribute("aria-disabled") !== "true" && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1" && !el.closest("[inert]"),
+      (el) => !(el as HTMLInputElement).disabled && el.getAttribute("aria-disabled") !== "true" && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1" && !el.closest("[inert]") && !insideHidden(el),
     );
   const trapped = (): boolean => root.classList.contains("overlay") || root.querySelector("[aria-modal='true']") !== null;
   /** The sheet's primary action: what it marks for autofocus, else its primary button, else the first control. */

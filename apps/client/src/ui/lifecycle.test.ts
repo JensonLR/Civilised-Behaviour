@@ -193,7 +193,7 @@ describe("pause sheet", () => {
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
     let left = 0;
-    const pause = new Pause({ canvas, invite: () => ({ code: "K7M2Q", link: "x", present: 2 }), leave: () => void left++ });
+    const pause = new Pause({ canvas, invite: () => ({ code: "K7M2Q", link: "x", present: 2, seed: 7 }), leave: () => void left++ });
     window.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape" }));
     expect(pause.isOpen).toBe(false); // nothing to pause at the front door
     pause.active = true;

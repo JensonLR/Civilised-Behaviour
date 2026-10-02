@@ -1,10 +1,9 @@
-import v8 from "node:v8";
-import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { BUTTON, FLAG, STEP_DT } from "./constants.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { createRegionWorld, regionSpawn } from "./regions.ts";
 import { Rng } from "./rng.ts";
+import { bytesPerCall } from "./bytesPerCall.testutil.ts";
 import { LIMB } from "./limbs.ts";
 import { ZONE, setWound } from "./wounds.ts";
 import { axisToWire, createCharState, stepCharacter, yawToWire, type CharState, type MoveCommand } from "./movement.ts";
@@ -40,25 +39,6 @@ const run = (s: CharState, c: MoveCommand, seconds: number, w: CollisionWorld): 
   for (let i = 0; i < Math.round(seconds / STEP_DT); i++) stepMounted(s, c, STEP_DT, w);
 };
 const speedOf = (s: CharState): number => Math.hypot(s.vx, s.vz);
-
-/**
- * Bytes allocated per call, as a median over windows, measured from a forced GC. (This engine boxes a double each time one is stored into an object field, so a step that
- * writes state allocates a few hundred bytes whatever it does: the walker's step measures the same. "Allocation-free" here means no objects, arrays or closures per
- * step, which shows as being no worse than the walker.)
- */
-function bytesPerCall(call: (i: number) => void): number {
-  v8.setFlagsFromString("--expose-gc");
-  const gc = vm.runInNewContext("gc") as () => void;
-  for (let i = 0; i < 20000; i++) call(i);
-  const deltas: number[] = [];
-  for (let k = 0; k < 5; k++) {
-    gc();
-    const before = process.memoryUsage().heapUsed;
-    for (let i = 0; i < 20000; i++) call(i);
-    deltas.push((process.memoryUsage().heapUsed - before) / 20000);
-  }
-  return deltas.sort((a, b) => a - b)[2]!;
-}
 
 describe("mount flags", () => {
   it("do not collide with the existing FLAG bits (phase 0 mirrors these values into FLAG)", () => {
@@ -407,21 +387,7 @@ describe("trailStep", () => {
     }
   });
 
-  it("is allocation-free (no worse than the walker's step)", () => {
-    const w = createRegionWorld("hollowmere", 4);
-    const t: Trailer = { x: 0, z: 3, facing: 0 };
-    const k = createCharState(2, 3, w);
-    const c = cmd({ buttons: BUTTON.SPRINT });
-    const walker = bytesPerCall((i) => {
-      c.yaw = (i * 37) & 0xffff;
-      stepCharacter(k, c, STEP_DT, w);
-    });
-    // (integer arguments: a double passed to a function that is not inlined is boxed by the engine, which would be the test allocating, not the step)
-    const trail = bytesPerCall((i) => {
-      trailStep(t, (i >> 2) & 7, (i >> 5) & 7, STEP_DT, w);
-    });
-    expect(trail).toBeLessThanOrEqual(walker + 16);
-  });
+  // (the allocation test for trailStep is in mountAlloc.test.ts: a step measured against the walker on a real world reads 0 to 215 B by what ran before it)
 
   it("the wagon frame maps bays to the world with the wagon's facing", () => {
     const out = { x: 0, z: 0 };

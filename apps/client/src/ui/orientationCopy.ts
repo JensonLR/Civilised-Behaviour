@@ -9,11 +9,11 @@ export const ORIENT_TITLE = "Form 1: Arrival";
 export const ORIENT_TAG = "Field orientation, to be completed on the premises";
 export const ORIENT_SKIP = "Skip orientation";
 export const ORIENT_DONE = "Orientation complete. The Society notes your attendance and regrets nothing.";
-export const ORIENT_REPLAY = "Replay the orientation";
+export const ORIENT_REPLAY = "Replay tutorial";
 
 export const ORIENT_HINT: Readonly<Record<Device, string>> = {
-  keyboard: "{skip} skips it for good. The Field Manual (F1) has it again.",
-  pad: "{skip} skips it for good. The Field Manual has it again.",
+  keyboard: "{skip} skips it for this campaign. The pause sheet and the Field Manual (F1) have it again.",
+  pad: "{skip} skips it for this campaign. The pause sheet and the Field Manual have it again.",
 };
 
 export const ORIENT_TEXT: Readonly<Record<OrientStep, Readonly<Record<Device, string>>>> = {

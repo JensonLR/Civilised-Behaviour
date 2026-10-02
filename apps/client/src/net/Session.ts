@@ -1,5 +1,6 @@
 import { Client, type Room } from "@colyseus/sdk";
 import { Predict } from "@colyseus/sdk/predict";
+import { SaveTracker } from "./saveStatus.ts";
 import {
   CollisionWorld,
   MoveInput,
@@ -80,10 +81,14 @@ export class Session {
   private reconciler: ReturnType<Predict<WorldStateType>["reconciler"]> | undefined;
   /** Smoothed round-trip time in ms (SDK clock). */
   rttMs = 0;
+  /** Where the campaign's save stands (the server says after every save; the pause sheet can ask for one). Listening starts the moment the room object exists, so the welcome is not missed. */
+  readonly saves: SaveTracker;
 
   private constructor(
     readonly room: Room<WorldStateType>,
+    saves?: SaveTracker,
   ) {
+    this.saves = saves ?? new SaveTracker();
     this.world = Session.worldFor(room.state.region, room.state.seed, Session.worldOptsOf(room.state));
     this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
@@ -120,6 +125,17 @@ export class Session {
     return this.world;
   }
 
+  private static listenForSaves(room: Room<WorldStateType>): SaveTracker {
+    const saves = new SaveTracker();
+    room.onMessage("saved", (m: unknown) => saves.onSaved(m));
+    return saves;
+  }
+
+  /** Saves the campaign's ledger now (the server rate-limits and answers); settles with where the save stands. */
+  saveNow(): ReturnType<SaveTracker["request"]> {
+    return this.saves.request(() => this.room.send("saveNow", {}));
+  }
+
   /** Resolves once the first full state (seed, code, existing players) has been decoded. */
   private static stateReady(room: Room<WorldStateType>): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -148,8 +164,9 @@ export class Session {
       ...(rules.resume ? { resume: rules.resume.toUpperCase() } : {}),
     };
     const room = await client.create<WorldStateType>(ROOM_WORLD, options, WorldState as never);
+    const saves = Session.listenForSaves(room);
     await Session.stateReady(room);
-    return new Session(room);
+    return new Session(room, saves);
   }
 
   static async join(code: string, name: string, look?: string): Promise<Session> {
@@ -158,8 +175,9 @@ export class Session {
     const options: JoinOptions = { name, token: identityToken(), ...(look ? { look } : {}) };
     try {
       const room = await client.joinById<WorldStateType>(roomId, options, WorldState as never);
+      const saves = Session.listenForSaves(room);
       await Session.stateReady(room);
-      return new Session(room);
+      return new Session(room, saves);
     } catch (e) {
       throw new JoinError(e instanceof Error ? e.message : "Could not join campaign.");
     }

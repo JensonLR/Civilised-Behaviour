@@ -35,6 +35,7 @@ import {
   spawnPoint,
   stepCharacter,
   type JoinOptions,
+  type SavedMsg,
   type MoveInputType,
   type PlayerStateType,
   type PropKindId,
@@ -140,7 +141,7 @@ import { CampaignSaver } from "../persistence/saver.ts";
 import { canResume, identityKey, parseIdentity } from "../persistence/identity.ts";
 import { createRecord } from "../persistence/record.ts";
 import { idleDays, restore, snapshot } from "../persistence/sections.ts";
-import type { CampaignRecord } from "../persistence/types.ts";
+import type { CampaignRecord, SaveResult } from "../persistence/types.ts";
 import { Travel } from "../systems/Travel.ts";
 
 /** Ticks of client silence/hitch the server tolerates (12 ticks = 400 ms). Used for BOTH the frame-budget burst and the idle threshold. */
@@ -180,6 +181,8 @@ const NPC_SLOT_BASE = 16;
 const MAP_REACH_SLACK = 4;
 /** Minimum gap between accepted sailing proposals (any player): each one is announced to the whole room. */
 const PROPOSE_COOLDOWN_MS = 1500;
+/** Minimum gap between `saveNow` writes from the pause sheet (room-wide): a button is not a loop. */
+const SAVE_ASK_COOLDOWN_MS = 1500;
 
 function generateJoinCode(): string {
   const rng = new Rng((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
@@ -235,6 +238,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** The saver of this campaign (undefined: nobody with a valid identity created it, so nothing is persisted) and the days of absence still to give the rival at the next commit. */
   private saver: CampaignSaver | undefined;
   private saveQueued = false;
+  /** What the clients are told about the save (`saved` message): refreshed after every save the room makes. `at` is the last good save (epoch ms, 0 = none yet). */
+  private saveView = { ok: true, at: 0 };
+  private lastSaveAsk = -Infinity;
   private created = false;
   private pendingIdle = 0;
   /** Sections a NEWER build wrote (a downgrade): played on fresh values here, never saved over (the record keeps the newer data). */
@@ -649,6 +655,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.onMessage("hire", (client, msg: unknown) => void this.followers.onHire(client.sessionId, msg));
     this.onMessage("command", (client, msg: unknown) => void this.followers.onCommand(client.sessionId, msg));
 
+    this.onMessage("saveNow", (client) => void this.onSaveNow(client));
+
     this.onMessage("ping", (client, msg: { t?: number }) => {
       client.send("pong", { t: typeof msg?.t === "number" ? msg.t : 0, serverTime: Date.now() });
     });
@@ -692,6 +700,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.persist();
       }
     }
+    client.send("saved", this.savedMsg()); // (a joiner learns at once whether this campaign is kept; the next save refreshes it)
     this.syncClock(true); // a joiner's first state must carry a fresh world age
     metrics.players++;
     metrics.physicsBodies++;
@@ -750,7 +759,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const deny = (why: string): never => {
       this.releaseClaim();
       log.info("room.resume_denied", { roomId: this.roomId, why });
-      throw new ServerError(4004, "No expedition by that code is waiting for you.");
+      // (Colyseus uses the code as the HTTP status of the matchmaking answer: 4004 made the router throw a RangeError and the client never saw this text; 404 is what the lookup endpoint says too)
+      throw new ServerError(404, "No expedition by that code is waiting for you.");
     };
     const rt = getRoomConfig().persistence;
     if (getRoomConfig().demo?.enabled) return deny("demo"); // a demo saves nothing, so there is nothing to resume
@@ -811,11 +821,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     try {
       const store = await rt.store();
       const saver = new CampaignSaver(store, { now: () => Date.now(), log, pepper: rt.cfg.pepper });
-      if (resume) saver.bind(resume.rec);
+      if (resume) {
+        saver.bind(resume.rec);
+        this.saveView = { ok: true, at: resume.rec.savedAt };
+      }
       else saver.bind(createRecord({ code: this.state.code, seed: this.state.seed, owner: identityKey(id, rt.cfg.pepper) }));
       this.saver = saver;
       if (!resume) this.takeClaim(this.state.code); // (a resume took its claim before it loaded the record)
-      if (!resume) this.persistNow(); // the record exists from the first moment (a campaign nobody played is still resumable by its creator)
+      if (!resume) void this.persistNow(); // the record exists from the first moment (a campaign nobody played is still resumable by its creator)
     } catch (e) {
       log.error("room.saver_unavailable", { roomId: this.roomId, err: e instanceof Error ? e.name : "error" });
     }
@@ -827,21 +840,56 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.saveQueued = true;
     queueMicrotask(() => {
       this.saveQueued = false;
-      this.persistNow();
+      void this.persistNow();
     });
   }
 
-  private persistNow(): void {
-    if (!this.saver) return;
+  private persistNow(): Promise<SaveResult | undefined> {
+    if (!this.saver) return Promise.resolve(undefined);
     try {
       const live: Record<string, unknown> = { campaign: this.campaign, party: parseParty(this.state.party) ?? newParty(), powers: this.powers, settlements: this.settlements };
       for (const k of this.heldSections) delete live[k]; // (a section a newer build wrote is not ours to overwrite)
       const snap = snapshot(CAMPAIGN_CODECS, live);
-      void this.saver.saveNow(snap);
+      return this.saver.saveNow(snap).then((r) => {
+        this.noteSave(r);
+        return r;
+      });
     } catch (e) {
       metrics.saveFailures++;
       log.error("room.save_failed", { roomId: this.roomId, err: e instanceof Error ? e.name : "error" });
+      return Promise.resolve(undefined);
     }
+  }
+
+  /** What the party is told about the save: whether this room keeps anything at all, whether the last attempt went through, and when the last good one landed. */
+  private savedMsg(asked = false): SavedMsg {
+    return { kept: this.saver !== undefined, ok: this.saveView.ok, at: this.saveView.at, ...(asked ? { asked: true } : {}) };
+  }
+
+  private noteSave(r: SaveResult): void {
+    this.saveView = { ok: r.ok, at: r.ok ? Date.now() : this.saveView.at };
+    try {
+      if (this.clients.length > 0) this.broadcast("saved", this.savedMsg());
+    } catch {
+      /* a room that is going away has nobody left to tell */
+    }
+  }
+
+  /** `saveNow` from a player (the pause sheet): write the ledger now and answer THAT client with how it went. Rate limited; a refusal answers with the standing view and writes nothing. */
+  private async onSaveNow(client: Client): Promise<void> {
+    const reply = (): void => {
+      try {
+        client.send("saved", this.savedMsg(true));
+      } catch {
+        /* the sender left while the save was in flight */
+      }
+    };
+    const p = this.state.players.get(client.sessionId);
+    const now = performance.now();
+    if (!this.saver || !p || p.npc || now - this.lastSaveAsk < SAVE_ASK_COOLDOWN_MS) return reply();
+    this.lastSaveAsk = now;
+    await this.persistNow();
+    reply();
   }
 
   /** Refreshes `state.worldMs` (the world's age) at most every CLOCK_SYNC_MS unless forced. */
@@ -855,7 +903,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   override async onDispose(): Promise<void> {
     if (this.claim) this.claim.mine.closing = true; // (a resume of this campaign now waits for the last save below)
     try {
-      this.persistNow();
+      void this.persistNow();
       this.scenario?.dispose();
       this.scenario = undefined;
       this.mounts?.dispose();
