@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { typeset } from "./typeset.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ScenarioView } from "@cb/shared";
 import { existsSync, readFileSync } from "node:fs";
@@ -162,7 +163,7 @@ describe("stylesheet", () => {
         const rows = [...host.querySelectorAll("li")];
         expect(rows.length, id).toBe(v.objectives.length);
         expect(rows.map((r) => r.querySelector(".text")!.textContent)).toEqual(v.objectives.map((o) => o.text));
-        expect(host.querySelector(".hint")!.textContent, id).toBe(v.hint);
+        expect(host.querySelector(".hint")!.textContent, id).toBe(typeset(v.hint)); // (printer's quotes, D-040)
         expect(t.visibleOrders).toBe(v.phase);
         t.tick(6_000);
       }

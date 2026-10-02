@@ -1,4 +1,4 @@
-import { CLOCK, WORLD_CLOCK, advanceClock, createLightning, createWeather, lightningAt, moonPhase, sanitizeDayMinutes, weatherAt, weatherPreset, worldDay, worldHours, type Lightning, type Weather, type WeatherKind } from "@cb/shared";
+import { CLOCK, WORLD_CLOCK, advanceClock, createLightning, createWeather, lightningAt, moonPhase, sanitizeDayMinutes, weatherAt, weatherFloor, weatherPreset, worldDay, worldHours, type Lightning, type Weather, type WeatherKind } from "@cb/shared";
 
 /**
  * Which hour it is and what the weather is doing, resolved from the many places that can say. Precedence for the HOUR:
@@ -44,6 +44,11 @@ export class SkyClock {
   private pinned: number | undefined;
   private room?: { seed: number; worldMs: number; at: number; startHour: number; dayMinutes: number };
   private readonly forced: WeatherKind | undefined;
+  /** The running contract's complication as weather (D-046: `complicationWeather`): at least this, while it runs. */
+  private contract: WeatherKind | undefined;
+  setContractWeather(k: WeatherKind | undefined): void {
+    this.contract = k;
+  }
   private localMs: number;
 
   constructor(o: SkyClockOptions = {}) {
@@ -112,6 +117,7 @@ export class SkyClock {
       this.forceStorm = this.weather.storm;
     } else {
       weatherAt(this.seed, this.worldMs, this.weather);
+      if (this.contract) weatherFloor(this.contract, this.weather);
       this.forceStorm = -1;
     }
     if (this.weather.storm > 0.5 || this.forceStorm >= 0) {

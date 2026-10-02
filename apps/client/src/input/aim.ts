@@ -35,6 +35,13 @@ export const AIM = {
     blendOut: 0.22,
     /** Aim camera never goes closer to a wall than this (m); it slides along the wall instead of cutting through. */
     wallClearance: 0.35,
+    /**
+     * D-040, the "ready" view: a firearm in hand but the aim button not held. The playtest found the hip camera looking at the wearer's chest, so the crosshair (the middle of
+     * the picture, where a hip shot goes) sat ON the player's own head and hid the target. Ready, the camera looks down the line like the aim view, from further out on the
+     * shoulder and at most of the hip distance: the body stands left of the crosshair and the field ahead is clear.
+     */
+    readyShoulder: 1.0,
+    readyDistanceScale: 0.8,
   },
   /** Look speed while aiming: mouse and pad multipliers (the pad's comes from the `padAimSensitivity` setting; this is the mouse's). */
   look: { mouseScale: 0.72 },

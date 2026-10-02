@@ -2,6 +2,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import { Predict } from "@colyseus/sdk/predict";
 import {
   COMBAT,
+  INTERP_DELAY_MS,
   MoveInput,
   PREDICTED_FIELDS,
   ROOM_WORLD,
@@ -9,7 +10,6 @@ import {
   createRegionWorld,
   elevToWire,
   isRegionId,
-  parseCampaign,
   type JoinOptions,
   stepCharacter,
   weaponToWire,
@@ -19,6 +19,7 @@ import {
   type MoveInputType,
   type PlayerStateType,
   type WorldStateType,
+  regionWorldOpts, type RegionWorldOpts, type RegionId,
 } from "@cb/shared";
 
 export interface BotFrame {
@@ -54,6 +55,8 @@ export interface BotStats {
   correctionMax: number;
   /** Mean positional correction per reconcile after warm-up, metres. */
   correctionMean: number;
+  /** D-047: every counted correction with the bot's tick (capped), so a test can tell the one-off snap at a server-forced change of motion from steady tracking. */
+  corrections: { tick: number; mag: number }[];
 }
 
 /**
@@ -73,6 +76,7 @@ export class Bot {
   private correctionMax = 0;
   private correctionSum = 0;
   private correctionCount = 0;
+  private readonly correctionLog: { tick: number; mag: number }[] = [];
   private lastReconcileSeq = -1;
   private lastRender: { x: number; z: number; t: number } | undefined;
   private reconciler: ReturnType<Predict<WorldStateType>["reconciler"]> | undefined;
@@ -82,8 +86,8 @@ export class Bot {
     private readonly behaviour: Behaviour,
   ) {
     this.world = this.freshWorld();
-    this.predict = Predict.get(room, { mode: "lerp", delay: 100 }) as Predict<WorldStateType>;
-    // Remote players are drawn interpolated 100 ms behind, exactly as in the browser (net/Session.ts): what a bot "sees" is what a player sees.
+    this.predict = Predict.get(room, { mode: "lerp", delay: INTERP_DELAY_MS }) as Predict<WorldStateType>;
+    // Remote players are drawn interpolated INTERP_DELAY_MS behind, exactly as in the browser (net/Session.ts): what a bot "sees" is what a player sees.
     this.predict.attachAll("players", { x: "lerp", y: "lerp", z: "lerp", vx: "lerp", vz: "lerp", facing: { mode: "lerp", angle: true } } as never);
     this.input = room.input({ type: MoveInput, mode: "reliable" }) as unknown as MoveHandle;
   }
@@ -103,20 +107,23 @@ export class Bot {
     return new Bot(room, behaviour);
   }
 
-  private freshWorld(): CollisionWorld {
+  /** The world as the room builds it (`regionWorldOpts`: the crossing's bridge AND the outpost's stage and wire), keyed so a change rebuilds it. */
+  private worldSpec(): { region: RegionId; opts: RegionWorldOpts; key: string } {
     const st = this.room.state;
-    const bridge = (st.campaign ? parseCampaign(st.campaign)?.crossing.bridge : undefined) ?? "intact";
     const region = isRegionId(st.region) ? st.region : "hollowmere";
-    this.worldKey = `${region}|${bridge}`;
-    return createRegionWorld(region, st.seed, { bridge });
+    const opts = regionWorldOpts(st.campaign ?? "", st.settlements ?? "");
+    return { region, opts, key: `${region}|${opts.bridge ?? "intact"}|${opts.outpost ?? "none"}|${opts.telegraph ? 1 : 0}` };
   }
 
-  /** Rebuilds the world when the region or the crossing changed (the reconciler's step reads `this.world` each time). */
+  private freshWorld(): CollisionWorld {
+    const w = this.worldSpec();
+    this.worldKey = w.key;
+    return createRegionWorld(w.region, this.room.state.seed, w.opts);
+  }
+
+  /** Rebuilds the world when the region, the crossing or the outpost changed (the reconciler's step reads `this.world` each time). */
   private syncWorld(): void {
-    const st = this.room.state;
-    const bridge = (st.campaign ? parseCampaign(st.campaign)?.crossing.bridge : undefined) ?? "intact";
-    const region = isRegionId(st.region) ? st.region : "hollowmere";
-    if (`${region}|${bridge}` !== this.worldKey) this.world = this.freshWorld();
+    if (this.worldSpec().key !== this.worldKey) this.world = this.freshWorld();
   }
 
   get self(): PlayerStateType | undefined {
@@ -124,7 +131,7 @@ export class Bot {
   }
 
   /**
-   * Where THIS client draws another player right now: the SDK's interpolated (lerp, 100 ms behind) value, i.e. exactly what a human
+   * Where THIS client draws another player right now: the SDK's interpolated (lerp, INTERP_DELAY_MS behind) value, i.e. exactly what a human
    * would aim at. This is the reference for "hits land where the shooter saw them".
    */
   rendered(p: PlayerStateType): { x: number; y: number; z: number; facing: number } {
@@ -172,6 +179,7 @@ export class Bot {
       driftPeak: this.reconciler?.drift.peak ?? 0,
       correctionMax: this.correctionMax,
       correctionMean: this.correctionCount ? this.correctionSum / this.correctionCount : 0,
+      corrections: this.correctionLog.slice(),
     };
   }
 
@@ -214,6 +222,7 @@ export class Bot {
       this.correctionMax = Math.max(this.correctionMax, mag);
       this.correctionSum += mag;
       this.correctionCount++;
+      if (this.correctionLog.length < 4096) this.correctionLog.push({ tick: this.tickNo, mag });
     }
     this.lastReconcileSeq = rc.reconcileSeq;
     // Measure what a player would see: rendered position vs. what the bot's velocity explains.

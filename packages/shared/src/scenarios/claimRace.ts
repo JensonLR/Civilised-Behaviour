@@ -165,7 +165,8 @@ function usePeg(s: ClaimState, i: number): Reduction<ClaimState> {
   const set = (v: Owner): Owner[] => s.pegs.map((p, k) => (k === i ? v : p));
   if (who === 0) {
     const n = fin({ ...s, pegs: set(1) });
-    return { s: n, fx: [say(`The ${NAME(i)} peg is yours (${count(n, 1)} of ${CLAIM.need}). It is a stick with a rag on it, which is what the law calls a boundary.`)] };
+    const k = count(n, 1);
+    return { s: n, fx: [say(`The ${NAME(i)} peg is yours (${k <= CLAIM.need ? `${k} of ${CLAIM.need}` : `${k} pegs; ${CLAIM.need} were needed, and the law admires thoroughness`}). It is a stick with a rag on it, which is what the law calls a boundary.`)] };
   }
   if (who === 1) return { s, fx: [say(`The ${NAME(i)} peg is already yours. Staking it twice does not make it twicer.`)] };
   // the Syndicate's peg: it comes out only once their people are broken or the clerk has marked their survey provisional
@@ -293,7 +294,8 @@ function roster(_c: CampaignState, seed: number, _s: ClaimState): NpcSpec[] {
   const mk = (id: string, role: number, faction: NpcSpec["faction"], side: NpcSpec["side"], group: string, post: { x: number; z: number }, weapon: WeaponId, name: string, skill: number, bravery: number, brain: NpcSpec["brain"], i: number): NpcSpec => ({
     id, role, faction, side, group, post: { x: post.x, z: post.z }, weapon, lookSeed: hash3(seed >>> 0, i, role), name, skill, bravery, brain,
   });
-  out.push(mk("assayer", NPC.CHAMBERLAIN, "ward", "ward", "assay", S.assayer, WEAPON.FISTS, "Clerk Lemuel Tarn-Ledger (Assay House)", 10, 90, "civil", 0));
+  // (the clerk borrows the court official's role for his manner, not his people: D-041, he was drawn as one of Highmark's Marchers inside Vesper Gorge)
+  out.push({ ...mk("assayer", NPC.CHAMBERLAIN, "ward", "ward", "assay", S.assayer, WEAPON.FISTS, "Clerk Lemuel Tarn-Ledger (Assay House)", 10, 90, "civil", 0), people: "vesperine" });
   S.rivalSurveyors.forEach((p, i) => out.push(mk(`surveyor-${i}`, NPC.RIVAL_SURVEYOR, "rival", "rival", "surveyors", p, WEAPON.FISTS, SURVEYORS[i]!, 10, 25, "civil", 1 + i)));
   S.guards.forEach((p, i) => out.push(mk(`guard-${i}`, NPC.RIVAL_GUARD, "rival", "rival", "guards", p, GUARD_ARMS[i]!, GUARD_NAMES[i]!, 50 + 5 * i, 55, "garrison", 3 + i)));
   return out;

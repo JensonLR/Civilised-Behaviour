@@ -23,7 +23,7 @@ export const GOAL_NEWS: Record<RivalGoal, { head: readonly string[]; body: reado
   },
   survey_route: {
     head: ["Syndicate Surveyors Take to the Road", "Chains and Theodolites at the Ford", "New Road Planned, Nobody Consulted"],
-    body: ["Syndicate surveyors are walking the route between the camp and the ford, expected to finish in about {days} days. They are measuring the land the Syndicate describes as 'currently unoccupied'.", "A new road is being surveyed. It runs through three farms, one orchard and the Ward's opinion of itself. {days} days are expected.", "A survey party with a very long chain is working the road. They appear to be drawing the border before the border knows."],
+    body: ["Syndicate surveyors are walking the route between the camp and the ford, expected to finish in about {days} days. They are measuring the land the Syndicate describes as 'currently unoccupied'.", "A new road is being surveyed. It runs through three farms, one orchard and the Ward's opinion of itself. The survey is expected to take {days} days.", "A survey party with a very long chain is working the road. They appear to be drawing the border before the border knows."],
   },
   arm_brine: {
     head: ["Syndicate Wagon Rumoured to Carry Arms for the Houses", "Rifles for the Tide: A Rumour", "The Syndicate Is Being Generous"],

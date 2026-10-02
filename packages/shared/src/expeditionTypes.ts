@@ -18,7 +18,7 @@ export const NPC_SIDE: Readonly<Record<number, NpcSide>> = {
   // D-036: Highmark. The "ward" side is the local authority of whatever region you are in: here the Crown's household. Claimants and herders keep out of it.
   [NPC.CHAMBERLAIN]: "ward", [NPC.COURT_GUARD]: "ward", [NPC.CLAIMANT]: "neutral", [NPC.HERDER]: "neutral",
   // D-037: Vesper Gorge (a foreman is the company's, i.e. the local authority's; miners and mourners keep out of it), the Saltmarket Delta (customs men are the Constabulary's; bargemen and factors keep out of it)
-  [NPC.FOREMAN]: "ward", [NPC.MINER]: "neutral", [NPC.MOURNER]: "neutral", [NPC.CUSTOMS]: "ward", [NPC.BARGEMAN]: "neutral", [NPC.FACTOR]: "neutral",
+  [NPC.FOREMAN]: "ward", [NPC.MINER]: "neutral", [NPC.MOURNER]: "neutral", [NPC.CUSTOMS]: "ward", [NPC.BARGEMAN]: "neutral", [NPC.FACTOR]: "neutral", [NPC.RAIDER]: "rival",
 };
 export type BrainId = "garrison" | "follower" | "civil";   // civil = hostage, driver: never fights, flees, follows when freed
 export interface NpcSpec {
@@ -26,13 +26,15 @@ export interface NpcSpec {
   look?: Record<string, number> /* authored CharacterSpec patch, run through specFromUntrusted */; people?: PeopleId /* D-038: which native people they are (peoples.ts `peopleForNpc`); the server lays the people's overlay under `look`; absent = colonial */; name: string; skill: number; bravery: number; brain: BrainId;
 }
 export type CastOrder =
-  | { o: "post" } | { o: "alert" } | { o: "stand_down" } | { o: "hold_fire" } | { o: "flee" } | { o: "march"; route: string }
+  | { o: "post" } | { o: "alert" } | { o: "stand_down" } | { o: "hold_fire" } | { o: "flee" }
+  /** `join`: start at the route's nearest waypoint instead of its first (a group re-ordered onto a route it is already partway along; D-045). */
+  | { o: "march"; route: string; join?: boolean }
   | { o: "guard"; x: number; z: number; r: number } | { o: "follow"; target: string } | { o: "attack"; side?: NpcSide };
 export interface CastCount { alive: number; routed: number; down: number; total: number }
 export type PlayersView = { forEach(cb: (p: PlayerStateType, id: string) => void): void; get(id: string): PlayerStateType | undefined };
 export interface CastApi {
   spawn(specs: readonly NpcSpec[]): number; order(group: string, o: CastOrder): void; setWar(a: NpcSide, b: NpcSide, on: boolean): void; count(group: string): CastCount; row(id: string): PlayerStateType | undefined;
-  defineRoute(name: string, pts: readonly { x: number; z: number }[]): void; noise(x: number, z: number, radius: number, src: string): void; despawn(group?: string): void; tick(dt: number): void; setWorld(w: CollisionWorld): void; atWar(roleA: number, roleB: number): boolean;
+  defineRoute(name: string, pts: readonly { x: number; z: number }[]): void; noise(x: number, z: number, radius: number, src: string): void; despawn(group?: string): void; /** One NPC off the ground by id (D-047: a hand dismissed at the hub; optional so test fakes need not grow it). */ despawnOne?(id: string): void; tick(dt: number): void; setWorld(w: CollisionWorld): void; atWar(roleA: number, roleB: number): boolean;
 }
 export interface NavPath { n: number; x: Float32Array; z: Float32Array; complete: boolean }   // NAV.pathMax = 48 waypoints, preallocated by the caller
 export interface NavApi {

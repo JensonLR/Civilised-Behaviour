@@ -53,6 +53,7 @@ import {
   NPC_SIDE,
   WEAPONS,
   applyOutcome,
+  remit,
   askingToll,
   answerParley,
   DAYS_IDLE_CAP,
@@ -66,6 +67,8 @@ import {
   isValidJoinCode,
   newPowers,
   newSettlements,
+  raidAftermath,
+  defendOutpost,
   parseParty,
   serializePowers,
   serializeSettlements,
@@ -91,6 +94,7 @@ import {
   regionNavOptions,
   TEMPLATE_REGION,
   regionLanding,
+  HUB_CREW_SPOT,
   DEMO,
   npcThink,
   followerThink,
@@ -398,6 +402,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.scenario?.onNoise(x, z, radius, src);
       },
       hostile: (shooter, target) => this.cast.hostileTo(shooter, target),
+      // being shot at: the site hears a declaration, and a soldier who saw nobody goes and looks where it came from (D-041)
+      shotAt: (shooter, target) => {
+        this.scenario?.onShotAt(shooter, target);
+        this.cast.shotFrom(target, shooter);
+      },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
       propShot: (id, shooter) => this.propShot(id, shooter),
     });
@@ -1125,6 +1134,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // powers -> publish everything -> save. Each step is a pure function in shared/; this method only orders them and publishes.
     let c = applyOutcome(before, o);
     let p = powersAfterOutcome(before, c, this.powers, o);
+    // D-040: the Society pays for the story (by the column-inch), so an honest campaign is never stranded at HQ with an empty purse
+    const pay = remit(c, o);
+    c = pay.c;
+    // D-045: a Raid on the Post was the Syndicate's raid, played: it is spent before the rival's days run (so it never lands twice), and the post takes what the ending says
+    const raided = raidAftermath(p, o);
+    p = raided.p;
     const idle = this.pendingIdle;
     this.pendingIdle = 0;
     const adv = rivalAdvance(c, p, c.day + idle);
@@ -1133,14 +1148,18 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const events: SettlementEvent[] = [];
     this.campaign = c;
     this.powers = p;
+    if (raided.raid) events.push(...this.outposts.raid("kessar", c.day));
+    if (raided.defended) this.commitSettlements(defendOutpost(this.settlements, "kessar"), []);
     for (const e of adv.events) if (e.kind === "raided_outpost") events.push(...this.outposts.raid(e.region, e.day));
     events.push(...this.outposts.evolve(c.day, regionClimate(c, p, "kessar")));   // (the outposts publish themselves and tell the powers: commitSettlements)
     this.publishCampaign();
     this.publishPowers();
-    for (const line of consequenceLines(before, this.campaign).slice(0, 3)) this.broadcast("notice", { text: line });
-    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") this.broadcast("notice", { text: this.settlementLine(e) });
+    // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
+    const debrief = [pay.line, ...consequenceLines(before, this.campaign).slice(0, 3)];
+    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") debrief.push(this.settlementLine(e));
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
-    for (const line of this.followers.settle(o).slice(0, 4)) this.broadcast("notice", { text: line });
+    debrief.push(...this.followers.settle(o).slice(0, 4));
+    this.broadcast("notice", { text: debrief.join("\n") });
     log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
   }
 
@@ -1248,7 +1267,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         openParley: (c, lv, seed) => openParley(c, lv, seed, this.powers),
         answerParley: (c, lv, seed, view, option) => answerParley(c, lv, seed, view, option, this.powers),
       },
-      rivalPresence: () => rivalPresence(this.campaign, this.powers),
+      // D-047: and the party's own post where the contract is played, so a raid meets the walls that stand
+      rivalPresence: () => {
+        const r = rivalPresence(this.campaign, this.powers);
+        const post = isRegionId(this.state.region) ? this.settlements.posts[this.state.region as RegionId]?.stage : undefined;
+        return post && post !== "none" ? { ...r, partyPost: post } : r;
+      },
       seed: this.state.seed,
       groundY: (x, z) => this.world.terrainHeight(x, z),
     };
@@ -1378,6 +1402,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (to === "hollowmere") {
       for (const h of spots.horses) this.mounts.spawnHorse(h, { coat: hash3(this.state.seed, Math.round(h.x), 0x4c01) });
       this.mounts.spawnWagon(spots.wagon, { coat: hash3(this.state.seed, 7, 0x4c02), crates: 0, horse: false });
+      // D-047: the hired hands come home with the party (they used to exist only on a foreign shore: hired at the table, never seen at home)
+      this.followers.home(HUB_CREW_SPOT);
       return;
     }
     const prep = this.pendingPrep;
@@ -1534,6 +1560,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
+      if (hit?.by) this.cast.shotFrom(sessionId, hit.by);
       if (down) this.mounts.onDown(sessionId); // he slides from the saddle
       else this.mounts.onHurt(sessionId, amount, hit); // a hard enough blow unseats him
     }
@@ -1582,6 +1609,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const events: SettlementEvent[] = [{ kind: "founded", day: this.campaign.day, region: "kessar", stage, name: base.name }];
       this.commitSettlements({ ...this.settlements, posts: { ...this.settlements.posts, kessar: { ...base, stage, supply: 60, security: 50, trade: 50 } } }, events);
       this.rebuildWorld();
+      // (QA: a contract nothing has happened in yet starts again, so it sees the post as it would have in play, where the post is founded long before)
+      if (this.state.region === "kessar" && this.scenario && this.scenario.phase === "planning" && this.scenario.resolution === undefined) {
+        this.scenario.dispose();
+        this.scenario = undefined;
+        this.startScenario("kessar");
+      }
     }
     else if (cmd === "nearCannon") {
       // Stand at the breech of the first cannon, looking down the barrel.

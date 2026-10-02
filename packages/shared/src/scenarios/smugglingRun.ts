@@ -309,7 +309,7 @@ function leave(s: SmugglingState): ReturnType<TemplateDef<SmugglingState>["leave
 
 const HINT: Record<string, string> = {
   approach: "A barge lies at the reed cove with four unmarked crates under a tarpaulin. The drop-house is in the west reeds: the boardwalk crosses the Customs Bridge, the Long Cut's bridge and the Reed Bridge, and the Constabulary patrols between them. Start at the cove.",
-  extract: "The cargo is yours to move. Carry the crates one at a time to the drop-house door (INTERACT with a crate in hand). The patrol walks the boardwalk; the reed flats north of the cuts are slower and quieter. The Tide-Reeve at the Customs House can square a patrol; the lantern at the cove can draw it off.",
+  extract: "The cargo is yours to move. Carry the crates one at a time to the drop-house door (INTERACT with a crate in hand). The patrol walks the boardwalk: crouch, and it has to come a good deal closer to see you; the reed flats north of the cuts are slower and quieter. The Tide-Reeve at the Customs House can square a patrol; the lantern at the cove can draw it off.",
   standoff: "A patrolman has seen you. Answer him before the cargo is impounded: a declaration or a courtesy at the Customs House, a shot, or the barge's plug.",
   parley: "The Tide-Reeve is listening. Mind what you declare; he keeps carbon copies.",
   fighting: "The Customs House is awake. Break the patrol, and then there is only the cargo and the explanation.",

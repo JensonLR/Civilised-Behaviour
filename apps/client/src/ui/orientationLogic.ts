@@ -80,7 +80,8 @@ export function orientationStep(s: OrientationState, a: OrientationSample): Orie
   if (a.pinned) d |= BIT.pin;
   if (a.sheet === "paper") d |= BIT.board;
   if (a.sheet === "loadout") d |= BIT.supply;
-  if (a.sheet === "map") d |= BIT.map;
+  // (whoever has the map room open has found it, however they got there: the step that asks you to find it must never outlive the one that asks you to open it, D-040)
+  if (a.sheet === "map") d |= BIT.map | BIT.pin;
   if (d === s.done) return s;
   return { done: d, skipped: false, finished: d === ALL_DONE };
 }

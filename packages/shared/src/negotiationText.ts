@@ -2,6 +2,9 @@ import type { ResolutionId, FactionStance } from "./campaignTypes.ts";
 import type { NeedId } from "./campaignTypes.ts";
 import { hash3 } from "./rng.ts";
 import { pluck } from "./regionEndings.ts";
+import { ENGINE_COPY } from "./engineText.ts";
+import { RAID_COPY } from "./raidText.ts";
+import { REAPERS_COPY } from "./reapersText.ts";
 import { SALTMARKET_COPY } from "./saltmarketText.ts";
 import { VESPER_COPY } from "./vesperText.ts";
 
@@ -59,7 +62,7 @@ export const NEED_LINE: Record<NeedId, readonly string[]> = {
 
 /** What she remembers of your last visit. */
 export const MEMORY_LINE: Record<ResolutionId, readonly string[]> = {
-  ...pluck(VESPER_COPY, "memoryLine"), ...pluck(SALTMARKET_COPY, "memoryLine"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_COPY, "memoryLine"), ...pluck(SALTMARKET_COPY, "memoryLine"), ...pluck(REAPERS_COPY, "memoryLine"), ...pluck(ENGINE_COPY, "memoryLine"), ...pluck(RAID_COPY, "memoryLine"),   // D-037 (regionEndings.ts)
   paid: ["You paid promptly last time. I noticed.", "You paid without a murmur last time. It was unsettling."],
   bargained: ["You haggled well last time. I have been practising.", "Last time you talked me down. I have since had words with my arithmetic."],
   bribed: ["Last time you bought my quartermaster. He has been unbearable since.", "I have seen my quartermaster's new boots. I have questions."],
@@ -138,6 +141,17 @@ export const REPLY = {
     "Going? Mind the road. It has not been improved.",
     "Of course. Do come back when you have found some manners.",
   ],
+  // D-047: a party short of the toll turns out its pockets
+  pleadOk: [
+    "£{cost}, a button and a promise. The ledger has seen worse. Go on, before I come to my senses.",
+    "I shall enter it as £{cost} and a hard-luck story. The bridge is yours. Do not make a habit of it.",
+    "£{cost}. The Ward is not a charity, but it was once a garrison of people with empty pockets. Cross.",
+  ],
+  pleadFail: [
+    "I have heard that story before, from a better liar. The toll is still £{toll}.",
+    "Pockets are not a currency. £{toll}, or the road.",
+    "Touching. The bridge remains £{toll}. The lamps remain unmoved.",
+  ],
   lastCall: [
     "I have a queue, you know. Well, I have a dog. Decide.",
     "The lamps are getting restless. Decide.",
@@ -149,6 +163,7 @@ export const LABEL = {
   haggle_flatter: "Flatter the Lamp-Warden",
   haggle_threaten: "Show them the guns",
   bribe: "Slip the quartermaster £{cost}",
+  plead: "Turn out your pockets (£{cost})",
   walk_away: "Walk away",
 } as const;
 
@@ -157,5 +172,6 @@ export const HINT = {
   haggle_flatter: "She likes being asked nicely.",
   haggle_threaten: "Needs a steady hand and a steady crowd. A bluff called ends the talking.",
   bribe: "Cheap and quiet, until it is neither.",
+  plead: "Everything you have, and the truth about it. She may take it.",
   walk_away: "Nothing lost, nothing crossed.",
 } as const;

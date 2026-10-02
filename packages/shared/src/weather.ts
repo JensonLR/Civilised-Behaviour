@@ -309,3 +309,26 @@ export function applyWeather(d: DayState, w: Weather, flash = 0): DayState {
   }
   return d;
 }
+
+/**
+ * The weather a contract's complication MEANS (D-046). A contract dealt "rain" or "fog" already plays by it (its own rules and the runner's sight factors), and its brief says so;
+ * the sky has to agree, or a player is told the guards cannot see in the rain under a clear sun. Presentation only: the world's weather (`weatherAt`) stays what the server reads.
+ */
+export function complicationWeather(c: string | undefined): WeatherKind | undefined {
+  return c === "rain" ? "drizzle" : c === "fog" ? "fog" : undefined;
+}
+
+/** Raises `out` to at least the settled state of `kind` (each field the stronger of the two; the ground as wet as that rain leaves it); the stronger state names it. */
+export function weatherFloor(kind: WeatherKind, out: Weather): Weather {
+  const p = TABLE[kind];
+  const before = out.rain + out.fog + out.storm + out.dust;
+  out.rain = Math.max(out.rain, p.rain);
+  out.overcast = Math.max(out.overcast, p.overcast);
+  out.fog = Math.max(out.fog, p.fog);
+  out.wind = Math.max(out.wind, p.wind);
+  out.dust = Math.max(out.dust, p.dust);
+  out.storm = Math.max(out.storm, p.storm);
+  out.wet = Math.max(out.wet, p.rain);
+  if (p.rain + p.fog + p.storm + p.dust > before) out.kind = kind;
+  return out;
+}

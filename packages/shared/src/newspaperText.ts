@@ -1,5 +1,8 @@
 import type { ResolutionId, FactionStance } from "./campaignTypes.ts";
 import { pluck } from "./regionEndings.ts";
+import { ENGINE_COPY, ENGINE_STORY_HEADS } from "./engineText.ts";
+import { RAID_COPY, RAID_STORY_HEADS } from "./raidText.ts";
+import { REAPERS_COPY, REAPERS_STORY_HEADS } from "./reapersText.ts";
 import { SALTMARKET_COPY, SALTMARKET_STORY_HEADS } from "./saltmarketText.ts";
 import { VESPER_COPY, VESPER_STORY_HEADS } from "./vesperText.ts";
 
@@ -24,7 +27,7 @@ export const DATELINE_TAIL: readonly string[] = [
 ];
 
 export const HEADLINES: Record<HeadKey, readonly string[]> = {
-  ...pluck(VESPER_COPY, "headlines"), ...pluck(SALTMARKET_COPY, "headlines"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_COPY, "headlines"), ...pluck(SALTMARKET_COPY, "headlines"), ...pluck(REAPERS_COPY, "headlines"), ...pluck(ENGINE_COPY, "headlines"), ...pluck(RAID_COPY, "headlines"),   // D-037 (regionEndings.ts)
   paid: [
     "Society Settles Kessar Toll in Full; Ledger Delighted",
     "£{toll} Buys Passage and Mutual Respect at Kessar Crossing",
@@ -194,7 +197,7 @@ export const HEADLINES: Record<HeadKey, readonly string[]> = {
 };
 
 export const STANDFIRSTS: Record<HeadKey, readonly string[]> = {
-  ...pluck(VESPER_COPY, "standfirsts"), ...pluck(SALTMARKET_COPY, "standfirsts"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_COPY, "standfirsts"), ...pluck(SALTMARKET_COPY, "standfirsts"), ...pluck(REAPERS_COPY, "standfirsts"), ...pluck(ENGINE_COPY, "standfirsts"), ...pluck(RAID_COPY, "standfirsts"),   // D-037 (regionEndings.ts)
   paid: [
     "The Society settled the Ward's £{toll} toll at Kessar in full and in coin. The bridge is {bridge}. {spin}",
     "Having paid £{toll} at the toll bar, the expedition crossed with dignity and receipts intact; the bridge is {bridge}. {spin}",
@@ -385,12 +388,12 @@ export const STORY_HEADS = {
   convoy: ["The Dry Cut Affair", "Syndicate Wagon: the Figures", "Notes on a Convoy"],
   marker: ["Marker Stone No. 4", "The Stone in the Ford", "On the Matter of a Border"],
   chair: ["The Vacant Chair, in Figures", "Highmark: the Court Reports", "On the Matter of a Throne"],
-  ...VESPER_STORY_HEADS, ...SALTMARKET_STORY_HEADS,   // D-037: mine_rescue, claim_race, smuggling_run, flooded_market (keyed by template id)
+  ...VESPER_STORY_HEADS, ...SALTMARKET_STORY_HEADS, ...REAPERS_STORY_HEADS, ...ENGINE_STORY_HEADS, ...RAID_STORY_HEADS,   // D-037: mine_rescue, claim_race, smuggling_run, flooded_market; D-042: reapers_strike; D-044: winding_engine; D-045: outpost_raid (keyed by template id)
 } as const;
 
 /** The ledger story's euphemism per new resolution: what happened, in the Society's own words. */
 export const SITE_LINES: Partial<Record<ResolutionId, readonly string[]>> = {
-  ...pluck(VESPER_COPY, "siteLines"), ...pluck(SALTMARKET_COPY, "siteLines"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_COPY, "siteLines"), ...pluck(SALTMARKET_COPY, "siteLines"), ...pluck(REAPERS_COPY, "siteLines"), ...pluck(ENGINE_COPY, "siteLines"), ...pluck(RAID_COPY, "siteLines"),   // D-037 (regionEndings.ts)
   ransomed: ["The Society \"facilitated a mutually agreeable repatriation\" of one surveyor.", "A sum was \"redistributed\" to the deserters, at the deserters' suggestion."],
   rescued: ["One surveyor was \"extracted\", along with the camp's morale.", "The deserters were \"encouraged into other careers\", several of them posthumously."],
   slipped_away: ["One surveyor \"departed the premises\" without consulting the premises.", "The camp was \"left in a state of undisturbed slumber\"."],
@@ -453,8 +456,8 @@ export const SCANDAL = {
 } as const;
 
 export const PROMISES: readonly string[] = [
-  "The Society has given {lies} assurances it did not keep. Officials prefer \"rolling commitments\".",
-  "{lies} undertakings are \"in progress\", where \"progress\" means a direction away from them.",
+  "The Society has given assurances it did not keep ({lies} at the last count). Officials prefer \"rolling commitments\".",
+  "Undertakings \"in progress\": {lies}, where \"progress\" means a direction away from them.",
 ];
 
 export const FILLER: readonly string[] = [

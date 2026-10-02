@@ -10,6 +10,8 @@ import { HINT, LABEL, LIES_LINE, MEMORY_LINE, NEED_LINE, OPEN, REPLY, fillTempla
  * Rules (one table, no hidden state):
  *  - Rounds 1..3 allow haggling; round 4 is the last call: pay, bribe or walk away. So every path ends in at most 4 rounds.
  *  - Flatter is offered only when the Ward needs deference or trust >= 40. Threaten only with >= 2 armed in the party.
+ *  - Plead (D-047) is offered whenever the purse is short of the toll but holds at least TOLL_FLOOR: everything in it, accepted or not on the same no-hidden-dice roll;
+ *    accepted it settles as `bargained` at what was paid, refused it is a counter-round (the last call stands). So a poor lone party is never left with only the door.
  *  - Every roll is hash3(seed, round, slot) compared to an odds function of trust/fear/need/armed/rivalInfluence/memory. No hidden dice.
  *  - A called bluff ends the talking ("hostile"); every other branch continues with a counter-offer or finishes. Walking away is always possible.
  */
@@ -19,7 +21,7 @@ const TOLL_FLOOR = 10;
 const TOLL_CEIL = TOLL_MAX + 30;
 
 type OptionId = ParleyOption["id"];
-const SLOT_FLATTER = 1, SLOT_THREATEN = 2;
+const SLOT_FLATTER = 1, SLOT_THREATEN = 2, SLOT_PLEAD = 12;
 function hashUnit(seed: number, round: number, slot: number): number { return hash3(seed, round, slot) / 4294967296; }
 
 const moodShift = (s: FactionStance, d: number): FactionStance => STANCES[Math.min(STANCES.length - 1, Math.max(0, STANCES.indexOf(s) + d))]!;
@@ -27,6 +29,16 @@ const clamp01 = (v: number, lo: number, hi: number): number => Math.min(hi, Math
 
 export const flatterAvailable = (c: CampaignState): boolean => c.factions.ward.need === "deference" || c.factions.ward.trust >= 40;
 export const threatenAvailable = (lv: Leverage): boolean => lv.armed >= 2;
+
+/** D-047: a purse short of the toll can be offered whole. */
+export const pleadAvailable = (lv: Leverage, toll: number): boolean => lv.purse < toll && lv.purse >= TOLL_FLOOR;
+/** Chance the Warden takes it, 0.1..0.85: more the nearer it comes to the toll, more with trust, more when coin is what she lacks, less when the Syndicate has her ear or she is angry. */
+export function pleadOdds(c: CampaignState, lv: Leverage, toll: number, mood: FactionStance): number {
+  const f = c.factions.ward;
+  const near = Math.max(0, Math.min(1, lv.purse / Math.max(1, toll)));
+  const p = 0.1 + near * 0.45 + f.trust / 250 + (f.need === "coin" ? 0.1 : 0) - f.rivalInfluence / 400 + (mood === "hostile" ? -0.2 : mood === "warm" || mood === "allied" ? 0.1 : 0);
+  return clamp01(p, 0.1, 0.85);
+}
 
 /** Chance flattery lands, 0.1..0.9. Trust and a deference-starved Ward help; memory of bribes and broken promises hurts; the Syndicate's hold hurts. */
 export function flatterOdds(c: CampaignState, mood: FactionStance): number {
@@ -64,6 +76,7 @@ function optionsFor(c: CampaignState, lv: Leverage, round: number, toll: number,
   }
   const cost = bribeCost(c, toll, mood);
   if (lv.purse >= cost) out.push({ id: "bribe", label: fillTemplate(LABEL.bribe, { cost }), cost, hint: HINT.bribe });
+  if (pleadAvailable(lv, toll)) out.push({ id: "plead", label: fillTemplate(LABEL.plead, { cost: lv.purse }), cost: lv.purse, hint: `${HINT.plead} ${word(pleadOdds(c, lv, toll, mood))}` });
   out.push({ id: "walk_away", label: LABEL.walk_away, cost: 0, hint: HINT.walk_away });
   return out;
 }
@@ -117,6 +130,12 @@ export function answerParley(c: CampaignState, lv: Leverage, seed: number, view:
       return done("bribed", toll, chosen.cost, say(REPLY.bribed, 4));
     case "walk_away":
       return done("walked_away", toll, 0, say(REPLY.walk, 5));
+    case "plead": {
+      if (hashUnit(seed, round, SLOT_PLEAD) < pleadOdds(c, lv, toll, mood)) return done("bargained", chosen.cost, chosen.cost, say(REPLY.pleadOk, 13, { cost: chosen.cost, toll }));
+      // refused: she holds the price; at the last call that is the end of the talking, the door stays open
+      if (round >= MAX_ROUND) return done("walked_away", toll, 0, say(REPLY.pleadFail, 14));
+      return next(toll, mood, say(REPLY.pleadFail, 14));
+    }
     case "haggle_flatter": {
       if (hashUnit(seed, round, SLOT_FLATTER) < flatterOdds(c, mood)) {
         const t = Math.max(TOLL_FLOOR, Math.round(toll * 0.75));

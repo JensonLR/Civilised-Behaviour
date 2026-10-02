@@ -18,12 +18,12 @@ const DUALSENSE_ID = "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 05
 const BTN = { a: 0, b: 1, x: 2, y: 3, lb: 4, rb: 5, lt: 6, rt: 7, back: 8, start: 9, l3: 10, r3: 11, up: 12, down: 13, left: 14, right: 15 } as const;
 type Name = keyof typeof BTN;
 
-type PadObj = { id: string; axes: number[]; buttons: { pressed: boolean; touched: boolean; value: number }[] };
+type PadObj = { id: string; axes: number[]; buttons: { pressed: boolean; touched: boolean; value: number }[]; seen: number[]; reads: number };
 type Hook = {
   session: {
     sessionId: string;
     predicted?: { x: number; y: number; z: number; vy: number; flags: number };
-    room: { state: { players: Map<string, { shots: number; reload: number; weapons: number; ammo: number }>; party: string }; send(t: string, m: unknown): void };
+    room: { state: { players: Map<string, { shots: number; reload: number; weapons: number; ammo: number }>; props: Map<string, { x: number; z: number }>; party: string }; send(t: string, m: unknown): void };
   };
   game: { rig: { yaw: number; mode: string } };
 };
@@ -38,9 +38,18 @@ function installPad(id: string): void {
     timestamp: 0,
     axes: [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })),
+    // how many times the page has READ each button down, and read the pad at all (so a tap can be released the moment it has been seen)
+    seen: Array.from({ length: 17 }, () => 0),
+    reads: 0,
   };
   (window as unknown as { __pad: PadObj }).__pad = pad as unknown as PadObj;
-  Object.defineProperty(navigator, "getGamepads", { value: () => [pad], configurable: true });
+  const read = (): unknown[] => {
+    const p = pad as unknown as PadObj;
+    p.reads++;
+    for (let i = 0; i < p.buttons.length; i++) if (p.buttons[i]!.pressed) p.seen[i]!++;
+    return [pad];
+  };
+  Object.defineProperty(navigator, "getGamepads", { value: read, configurable: true });
 }
 
 const set = (page: Page, name: Name, down: boolean) =>
@@ -69,11 +78,23 @@ async function holdUntil(page: Page, name: Name, seen: () => Promise<boolean>, m
     await page.waitForTimeout(600); // (a release the page has plainly seen: a press that follows a release inside one frame is one long press)
   }
 }
-/** A press the interface plainly sees: down for a moment (a few frames at 10 fps), then up. */
+/**
+ * A TAP: down until the page has read it down, released at once (before its next frame), then up until the page has read it up. The page sees one press and no hold time: a timed
+ * 350 ms press used to be longer than the 0.3 s a HOLD needs (R3's view switch), so on a page whose frames landed inside it the "tap" switched the view (seen on CI and here).
+ */
 async function tap(page: Page, name: Name): Promise<void> {
-  await set(page, name, true);
-  await page.waitForTimeout(350);
-  await set(page, name, false);
+  await page.evaluate(async (i) => {
+    const p = (window as unknown as { __pad: PadObj }).__pad;
+    const b = p.buttons[i]!;
+    p.seen[i] = 0;
+    b.pressed = b.touched = true;
+    b.value = 1;
+    await new Promise<void>((r) => { const t = (): void => void (p.seen[i]! > 0 ? r() : setTimeout(t, 2)); t(); });
+    b.pressed = b.touched = false;
+    b.value = 0;
+    const at = p.reads;
+    await new Promise<void>((r) => { const t = (): void => void (p.reads > at ? r() : setTimeout(t, 2)); t(); });
+  }, BTN[name]);
   await page.waitForTimeout(150);
 }
 
@@ -120,7 +141,19 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await expect.poll(async () => Math.abs((await hook(page, (h) => h.game.rig.yaw)) - yaw0), { timeout: 30_000 }).toBeGreaterThan(0.3);
   await stick(page, "r", 0, 0);
 
-  await holdUntil(page, "a", () => hook(page, (h) => h.session.predicted!.vy > 1 || (h.session.predicted!.flags & 1) === 0));
+  // A jumps. The jump is a transient (half a second in the air) and expect.poll samples at growing gaps, so on a fast runner the whole jump fell between two samples and,
+  // A being held (a jump is on the press), the poll waited out its 30 s (CI, D-047). A watcher in the page LATCHES "left the ground" on whichever frame it happens.
+  await page.evaluate(() => {
+    const w = window as unknown as { __cb: Hook; __jumped?: boolean };
+    w.__jumped = false;
+    const watch = (): void => {
+      const p = w.__cb.session.predicted;
+      if (p && (p.vy > 1 || (p.flags & 1) === 0)) w.__jumped = true;
+      if (!w.__jumped) requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
+  await holdUntil(page, "a", () => page.evaluate(() => (window as unknown as { __jumped?: boolean }).__jumped === true));
 
   // ---- the prompts follow the device: Xbox glyphs at the notice board ----------------------------------------------------------------------
   // the notice board stands at (3.65, -11.05): a step east of it, facing it (west)
@@ -129,16 +162,14 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await expect(page.locator("html")).toHaveAttribute("data-device", "xbox");
   await expect(page.locator(".help .glyph-xbox-a")).not.toHaveCount(0); // the hint line too (in the page; a small window hides it)
 
-  await tap(page, "x"); // X is Use: something is in reach
-  await expect(page.locator("#sheet-paper")).toBeVisible({ timeout: 60_000 });
-  await tap(page, "b");
-  await expect(page.locator("#sheet-paper")).toBeHidden({ timeout: 30_000 });
+  // (a press whose effect shows is held until it shows: on a starved runner a 350 ms tap can fall between two frames' pad reads and be lost, as CI saw here)
+  await holdUntil(page, "x", () => page.locator("#sheet-paper").isVisible(), 60_000); // X is Use: something is in reach
+  await holdUntil(page, "b", () => page.locator("#sheet-paper").isHidden());
 
   // ---- the supply pyramid: the manifest opens, the d-pad walks the focus to a stepper, A moves it ------------------------------------------
   await tp(page, -4.85, -6.85, Math.PI / 2);
   await expect(page.locator(".prompt .glyph-xbox-x")).toBeVisible({ timeout: 60_000 });
-  await tap(page, "x");
-  await expect(page.locator("#sheet-loadout")).toBeVisible({ timeout: 60_000 });
+  await holdUntil(page, "x", () => page.locator("#sheet-loadout").isVisible(), 60_000);
   for (let i = 0; i < 40; i++) {
     if ((await page.evaluate(() => document.activeElement?.getAttribute("data-k"))) === "horses+") break;
     await tap(page, "down");
@@ -146,11 +177,21 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   expect(await page.evaluate(() => document.activeElement?.getAttribute("data-k"))).toBe("horses+");
   await tap(page, "a");
   await expect.poll(() => hook(page, (h) => (JSON.parse(h.session.room.state.party) as { loadout: { horses: number } }).loadout.horses), { timeout: 30_000 }).toBe(1); // the server took the manifest
-  await tap(page, "b");
-  await expect(page.locator("#sheet-loadout")).toBeHidden({ timeout: 30_000 });
+  await holdUntil(page, "b", () => page.locator("#sheet-loadout").isHidden());
 
   // ---- LT + RT fires: the server's `shots` rises ---------------------------------------------------------------------------------------------
-  await tp(page, 0, 12, 0); // open ground: nothing to use
+  // open ground: nothing to use. The camp's loose props are scattered by the campaign's seed, a fresh one per campaign since D-039, and (0, 12) had one in Use
+  // reach for about 1 seed in 5 (379 of seeds 1..2000); so the spot is the first near it with no prop within 4 m (none in reach for any of those seeds).
+  const open = await hook(page, (h) => {
+    const props: { x: number; z: number }[] = [];
+    h.session.room.state.props.forEach((p) => props.push({ x: p.x, z: p.z }));
+    for (let r = 0; r <= 8; r += 2) for (let k = 0; k < 8; k++) {
+      const x = r * Math.cos((k * Math.PI) / 4), z = 12 + r * Math.sin((k * Math.PI) / 4);
+      if (props.every((p) => Math.hypot(p.x - x, p.z - z) > 4)) return { x, z };
+    }
+    return { x: 0, z: 12 };
+  });
+  await tp(page, open.x, open.z, 0);
   await hook(page, (h) => h.session.room.send("debug", { cmd: "give:all" }));
   await expect.poll(() => hook(page, (h) => h.session.room.state.players.get(h.session.sessionId)!.weapons), { timeout: 30_000 }).toBeGreaterThan(0);
   await tap(page, "right"); // the d-pad takes the next piece from the rack
@@ -188,9 +229,11 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
   await tp(page, 5.2, -11.05, Math.PI / 2);
   await expect(page.locator(".prompt .glyph-xbox-x")).toBeVisible({ timeout: 60_000 });
   await setId(page, DUALSENSE_ID);
-  await set(page, "y", true); // any pad input names the device
+  // any pad input names the device: a nudge of the right stick (it turns the camera only; Y, the old choice, is melee, which swings and turns the body
+  // toward the camera, so the player could turn away from the board and lose the prompt being checked)
+  await stick(page, "r", 0.4, 0);
   await expect(page.locator(".prompt .glyph-ps-square")).toBeVisible({ timeout: 30_000 });
-  await set(page, "y", false);
+  await stick(page, "r", 0, 0);
   await expect(page.locator(".prompt .glyph-xbox-x")).toHaveCount(0);
   await expect(page.locator("html")).toHaveAttribute("data-device", "playstation");
 

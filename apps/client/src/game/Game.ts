@@ -4,7 +4,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
@@ -46,6 +46,8 @@ import { Parley } from "../ui/Parley.ts";
 import { Sailing } from "../ui/Sailing.ts";
 import { holdInput } from "../ui/modal.ts";
 import { Session as NetSession } from "../net/Session.ts";
+import { smoothRtt } from "../net/rtt.ts";
+import { frameDelta } from "./frameClock.ts";
 import { mapRoomView } from "./campaignView.ts";
 import { CombatView } from "./CombatView.ts";
 
@@ -147,6 +149,8 @@ export class Game {
   private readonly paper: NewspaperView;
   private readonly tracker: ObjectiveTracker;
   private builtRegion: RegionId;
+  /** The running contract's view (the tracker's), for the heading strip's objective flag. */
+  private scenarioView: ScenarioView | undefined;
   private building = false;
   /** `regionReady` has been sent for the landfall in progress (reset when the sailing machine leaves the arriving phase). */
   private arrivalSent = false;
@@ -188,12 +192,16 @@ export class Game {
     this.builtKey = NetSession.worldKeyOf(session.room.state);
     this.applySettings();
     this.offSettings = onSettingChange(() => this.applySettings());
-    this.tagLayer = hud;
+    // name plates and speech slips live in their own layer at the BOTTOM of the HUD, so every card (tracker, telegrams, orientation) covers them, never the reverse (D-040)
+    this.tagLayer = document.createElement("div");
+    this.tagLayer.className = "taglayer";
+    hud.prepend(this.tagLayer);
     this.props = new PropViews(stage.scene, stage.outlines);
-    this.tags = new NameTags(hud);
+    this.tags = new NameTags(this.tagLayer);
     this.mountView = new MountView(stage.scene, { outline: stage.outlines });
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
+    this.hud.setCompass(regionMarks(this.builtRegion));
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
@@ -255,8 +263,7 @@ export class Game {
       playSfx("notice");
     });
     session.room.onMessage("pong", (m: { t: number }) => {
-      const rtt = performance.now() - m.t;
-      session.rttMs = session.rttMs === 0 ? rtt : session.rttMs * 0.8 + rtt * 0.2;
+      session.rttMs = smoothRtt(session.rttMs, performance.now() - m.t);
     });
   }
 
@@ -506,7 +513,7 @@ export class Game {
     }
     if (!m?.view) return;
     if (this.parley.isOpen) this.parley.update(m.view);
-    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion);
+    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion, this.scenarioView?.template);
   }
 
   /** Follows the room's campaign fields: the sailing card, a new region or a fallen bridge (rebuild the world), the orders of the day, the map room. */
@@ -552,6 +559,8 @@ export class Game {
         view = undefined;
       }
       this.tracker.update(view);
+      this.scenarioView = view;
+      this.refreshCompass();
       this.scenarioPhase = view?.phase ?? "";
       this.stage.setScenario(view);   // (D-037: the region's scenery may dress it: a fall, a flood)
     }
@@ -624,6 +633,7 @@ export class Game {
         this.aftermathSite = undefined;
       }
       this.builtRegion = region;
+      this.refreshCompass();
       this.builtKey = NetSession.worldKeyOf(st);
       this.applyCampaignVisuals();
       this.loadRagdolls();
@@ -680,6 +690,7 @@ export class Game {
     this.loadout.dispose();
     this.wheel.dispose();
     this.tags.dispose();
+    this.tagLayer.remove();
     this.mountView.dispose();
     this.demoBanner?.dispose();
     this.wishlist?.dispose();
@@ -688,7 +699,9 @@ export class Game {
   }
 
   private frame(now: number): void {
-    const dt = Math.min((now - this.last) / 1000, 0.1);
+    // the simulation's step is clamped (a stalled tab does not leap); what was MEASURED is not (D-047: the overlay and the perf capture read the clamp and could never show a
+    // frame slower than 100 ms, so a software-GL capture always said "10 fps"; the ping clock also ran on the clamp, pinging every 20 frames however long they took)
+    const { raw: rawDt, step: dt } = frameDelta(now, this.last);
     this.last = now;
 
     const [lx, ly] = this.controls.drainLook(dt);
@@ -712,7 +725,7 @@ export class Game {
       }
     }
 
-    this.pingTimer -= dt;
+    this.pingTimer -= rawDt;
     if (this.pingTimer <= 0) {
       this.pingTimer = 2;
       this.session.room.send("ping", { t: performance.now() });
@@ -746,6 +759,7 @@ export class Game {
       this.rig.mounted = pf !== undefined && (pf.flags & FLAG.MOUNTED) !== 0;
       this.rig.mountSpeed01 = pf ? Math.hypot(this.session.value(pf, "vx"), this.session.value(pf, "vz")) / MOUNT.gallop : 0;
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
+      this.rig.ready = this.combat.firearmReady;
       this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample), ((this.session.predicted?.flags ?? 0) & FLAG.DOWNED) !== 0);
       this.stage.followShadow(tmp);
     }
@@ -753,7 +767,7 @@ export class Game {
     this.stage.renderer.info.reset(); // (two passes a frame: the overlay's counters cover both)
     this.stage.render();
     this.viewmodel.render();
-    this.overlay.frame(dt);
+    this.overlay.frame(rawDt);
   }
 
   /** Which full-screen sheet is open, for the orientation card (it ticks the notice board, the supply manifest and the map room off from this). */
@@ -1003,6 +1017,11 @@ export class Game {
     return this.mountPrompter.now(this.session.value(me, "x"), this.session.value(me, "z"), me.facing, flags, mine.missing);
   }
 
+  /** The heading strip follows the shore you stand on and the contract's next goal (D-040: it showed the hub's places everywhere). */
+  private refreshCompass(): void {
+    this.hud.setCompass(regionMarks(this.builtRegion), this.builtRegion === "hollowmere" ? undefined : objectiveMark(this.builtRegion, this.scenarioView));
+  }
+
   /** The words at the outpost's foundation (D-035): how many crates are down, what the carried thing will do. */
   private foundationText(held: PropKindId | undefined): string {
     const f = foundationStatus(this.settlements ?? newSettlements(), "kessar");
@@ -1080,7 +1099,7 @@ export class Game {
       }
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER },
         getGore(),
         getShowLimbs(),
       );

@@ -1,5 +1,5 @@
 import { Group, Scene } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEBRIS, LimbDebris } from "./LimbDebris.ts";
 
 const flat = (): number => 0;
@@ -25,6 +25,31 @@ describe("LimbDebris", () => {
     // lying: the limb's length axis (-Y) has been laid horizontal
     const axisY = -1 * (1 - 2 * (g.quaternion.x ** 2 + g.quaternion.z ** 2));
     expect(Math.abs(axisY)).toBeLessThan(0.1);
+  });
+
+  it("every throw comes to rest: on the ground, flat and still (a sweep of throws, not one random one)", () => {
+    // A throw is a function of Math.random; pinning it to c in 0..1 sweeps the throws deterministically. A bounce whose last step landed
+    // within the 1 mm the step treats as resting, but above the contact line, used to hover there for the limb's whole life, spinning
+    // (c = 0.800..0.808 here, ~0.7% of random throws).
+    const stuck: string[] = [];
+    for (let k = 0; k < 1000; k++) {
+      const c = k / 1000;
+      const d = new LimbDebris(new Scene(), flat);
+      const g = limb();
+      g.position.set(0, 1.1, 0);
+      const random = vi.spyOn(Math, "random").mockReturnValue(c);
+      d.spawn(g, 1, 0, 1, "full");
+      random.mockRestore();
+      run(d, 8);
+      const q = g.quaternion.clone();
+      run(d, 1);
+      const axisY = 1 - 2 * (g.quaternion.x ** 2 + g.quaternion.z ** 2);
+      const turned = 2 * Math.acos(Math.min(1, Math.abs(q.dot(g.quaternion))));
+      if (Math.abs(g.position.y - DEBRIS.restHeight) > 1e-4 || Math.abs(axisY) >= 0.1 || turned > 1e-3) {
+        stuck.push(`c=${c}: y ${g.position.y.toFixed(4)}, axis ${axisY.toFixed(2)}, turned ${turned.toFixed(3)} rad in the last second`);
+      }
+    }
+    expect(stuck).toEqual([]);
   });
 
   it("follows uneven ground", () => {

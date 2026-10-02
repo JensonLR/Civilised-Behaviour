@@ -73,6 +73,19 @@ export const HIGHMARK_SITES = {
   guards: [{ x: -2.5, z: -61 }, { x: 2.5, z: -61 }, { x: -8, z: -82 }, { x: 8, z: -82 }],
   /** Herders' camp (a fire, two shelters) at the edge of the grass: a quiet place for the opening. */
   drovers: { x: -52, z: 50 },
+  /**
+   * D-042, the Reapers' Strike (docs/_notes/reapers.md): the barley is the grass west of the road; the Compact's picket line and the Steward (come down to shout at it) stand at
+   * its east edge; the royal bushel sits on the granary scale up the hill, by the first granary; the Syndicate's strike-breakers land at the quay and march to the barley.
+   */
+  strike: {
+    barley: { x: -30, z: 40, r: 14 },
+    /** D-046: the barley as a FIELD you can see (presentation: the ground's furrows, the planted rows): inside `barley`, so what reads as the barley is where the rules count it; rows run north-south. */
+    field: { x0: -40, x1: -21, z0: 35, z1: 50, row: 0.9 },
+    foreperson: { x: -20, z: 30 }, pickets: [{ x: -24, z: 33 }, { x: -17, z: 34 }],
+    steward: { x: -12, z: 26 },
+    scale: { x: -42, z: -43 },
+    breakers: [{ x: -3, z: 112 }, { x: 3, z: 112 }, { x: -5, z: 108 }, { x: 5, z: 108 }],
+  },
 } as const;
 
 // ---- the plan ---------------------------------------------------------------------------------------------------------------------------
@@ -634,6 +647,9 @@ export function highmarkSitePoints(): { id: string; x: number; z: number }[] {
     { id: "landing", ...A.landing }, { id: "waitingStones", ...A.waitingStones }, { id: "gate", ...A.capital.gate }, { id: "court", ...A.capital.court },
     { id: "chamberlain", ...S.chamberlain }, { id: "claimant.elder", ...S.claimants.elder }, { id: "claimant.younger", ...S.claimants.younger },
     ...S.grange.map((p, i) => ({ id: `grange${i}`, ...p })), { id: "envoy", ...S.envoy }, ...S.guards.map((p, i) => ({ id: `guard${i}`, ...p })), { id: "drovers", ...S.drovers },
+    // D-042: the Reapers' Strike
+    { id: "strike.barley", x: S.strike.barley.x, z: S.strike.barley.z }, { id: "strike.foreperson", ...S.strike.foreperson }, ...S.strike.pickets.map((p, i) => ({ id: `strike.picket${i}`, ...p })),
+    { id: "strike.steward", ...S.strike.steward }, { id: "strike.scale", ...S.strike.scale }, ...S.strike.breakers.map((p, i) => ({ id: `strike.breaker${i}`, ...p })),
   ];
 }
 

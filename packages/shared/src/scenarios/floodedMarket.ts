@@ -133,6 +133,14 @@ function hammer(s: MarketState, said: ScenarioFx[], atHighWater: boolean): Reduc
   return resolveWith(s, "washed_out", { paid: s.spent }, [...said, ...hush(), say("The water reaches the rostrum. \"The Exchange,\" announces the Auctioneer, to a hall that is now a pond, \"holds its sale regardless.\" It does: the hammer falls, on a House, on a famous sum, with a splash. The lot is gone and so is the afternoon.")]);
 }
 
+/**
+ * D-041: a consortium pools a BIDDER's purse with a paddle, so the party must be in the bidding (a standing bid, or a short one) before anybody signs. The bot playtest pooled the
+ * Tide Concession with two free signatures in thirty seconds of a sale meant to run until the water was over the rostrum.
+ */
+const inBidding = (s: MarketState): boolean => s.bid > 0 || s.short > 0;
+const NO_POOL_HEAD = "\"The family pools with bidders,\" says the House-Head, without lowering the paddle, \"not with spectators. Put a bid in with the Auctioneer, and then we may talk about whose purse is whose.\"";
+const NO_POOL_FACTOR = "The factor withdraws his hand an inch. \"A partner, madam, is somebody already in the sale. Bid, and then come back and we shall be partners at once.\"";
+
 /** After every change: does the sale add up to an ending? (The first that does wins.) */
 function settle(s: MarketState, said: ScenarioFx[] = []): Reduction<MarketState> {
   if (s.phase === "resolved") return { s, fx: said };
@@ -190,6 +198,7 @@ function reduce(s: MarketState, e: ScenarioInput): Reduction<MarketState> {
     case "use": {
       if (e.target !== "factor" || s.factorDown || s.factorPooled) return stay(s);
       if (!s.factorOffered) return { s: fin({ ...s, factorOffered: true }), fx: [say("The Syndicate's factor produces a cheque, and a pen, and an expression of enormous reasonableness. \"A consortium, madam,\" he says. \"The Syndicate supplies the cheque; you supply the signature; the Houses supply the rage. Press my hand again and we are partners.\"")] };
+      if (!inBidding(s)) return { s: fin(s), fx: [say(NO_POOL_FACTOR)] };
       return settle(fin({ ...s, factorPooled: true, signed: s.signed + 1 }), [say("You shake the factor's hand. It is dry, which is remarkable in this hall, and it is already holding a pen. One signature of two: a Syndicate paddle, on the Society's side, for a moment.")]);
     }
     case "talk": return talk(s, e.kind, e.result, e.paid);
@@ -255,6 +264,7 @@ function talkHead(s: MarketState, result: string, paid: number): Reduction<Marke
     }
     case "survey": {
       if (headsLeft(s) === 0) return stay(fin({ ...s, parley: undefined }));
+      if (!inBidding(s)) return { s: fin({ ...s, parley: undefined }), fx: [say(NO_POOL_HEAD)] };
       return settle(fin({ ...s, parley: undefined, gone: s.gone + 1, signed: s.signed + 1 }), [say(s.signed + 1 >= MARKET.signatures ? "The second signature goes down. The ink, you notice, is salt." : "A House-Head signs for a consortium: the family's paddle and the Society's purse. One signature of two. The heron on his badge looks, for the first time, optimistic.")]);
     }
     case "tell": {

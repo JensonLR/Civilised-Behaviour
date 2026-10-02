@@ -2,16 +2,17 @@ import vm from "node:vm";
 import v8 from "node:v8";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
-import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
+import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildHighmarkCloth } from "./cloth.ts";
-import { buildHighmarkGround, buildHighmarkSkirt, highmarkCover, highmarkGroundColour, tierOf } from "./ground.ts";
+import { buildHighmarkGround, buildHighmarkSkirt, highmarkCover, highmarkFieldMask, highmarkGroundColour, tierOf } from "./ground.ts";
 import { Herds, herdBeastGeometry } from "./herds.ts";
 import { planHighmarkScatter } from "./scatter.ts";
 import { HighmarkView, HILL_SCALE } from "./HighmarkView.ts";
 import { buildHighmarkSolid } from "./structures.ts";
 import { buildHighmarkWater, riverShore } from "./water.ts";
+import { buildGranaryScale, buildScythes, scytheSpots } from "./strikeProps.ts";
 
 // The banner and sign atlas is drawn on a canvas; the unit-test environment has no DOM, so give it a recording stub (as kessar.test does).
 const g = globalThis as unknown as Record<string, unknown>;
@@ -156,7 +157,7 @@ describe("Highmark view: geometry", () => {
     // the lamps are the plan's lamps, standing above the ground they are on
     expect(full.lamps.length).toBe(highmarkPlan().lamps.length + highmarkLevel().rooms.length);   // (D-038: and one lantern hung inside the Assembly Hall)
     for (const l of full.lamps) expect(l.y).toBeGreaterThan(world.terrainHeight(l.x, l.z) + 2.5);
-  });
+  }, 30_000); // (CPU-bound: builds the region's solid twice, full and hull; 3.8 s alone and in the full run, over 5 s on a busy CI runner. A time limit, not a budget.)
 
   it("every wall the collision world has is drawn: the solid covers the plan's walls, and the capital's buildings stand inside the geometry's bounds", () => {
     const geo = buildHighmarkSolid(world, 0).geometry!;
@@ -285,6 +286,24 @@ describe("Highmark view: scatter", () => {
     expect(thin.grass).toHaveLength(0);
   });
 
+  it("D-046: the barley is a field: hundreds of clumps in north-south rows inside the strike's field, where the rules count the barley; no wild grass or scrub in it; none on the test preset", () => {
+    const a = planHighmarkScatter(world, PRESETS.medium);
+    const f = HIGHMARK_SITES.strike.field, B = HIGHMARK_SITES.strike.barley;
+    expect(a.barley.length).toBeGreaterThan(400);
+    const rows = new Set(a.barley.map((b) => Math.round((b.x - f.x0 - f.row / 2) / f.row)));
+    expect(rows.size).toBeGreaterThanOrEqual(Math.floor((f.x1 - f.x0) / f.row) - 1);
+    for (const b of a.barley) {
+      expect(b.x >= f.x0 - 0.2 && b.x <= f.x1 + 0.2 && b.z >= f.z0 - 0.2 && b.z <= f.z1 + 0.2, `${b.x},${b.z} in the field`).toBe(true);
+      expect(Math.hypot(b.x - B.x, b.z - B.z), "inside the rules' barley").toBeLessThan(B.r + 0.5);
+      expect(Number.isFinite(b.y + b.sy)).toBe(true);
+    }
+    // (the field's edge thins the wild grass over a metre and a half; none grows in the field itself, and no scrub at all where it shows)
+    for (const it of a.grass) expect(highmarkFieldMask(it.x, it.z), `${it.x},${it.z}`).toBeLessThan(1);
+    for (const it of a.bushes) expect(highmarkFieldMask(it.x, it.z), `${it.x},${it.z}`).toBe(0);
+    expect(planHighmarkScatter(world, PRESETS.test).barley).toHaveLength(0);
+    expect(planHighmarkScatter(world, PRESETS.low).barley.length).toBeLessThan(a.barley.length);
+  });
+
   it("the herds' ground and the scatter agree: no tuft or bush is planted in a herd's centre", () => {
     const a = planHighmarkScatter(world, PRESETS.medium);
     const plan = herdPlan(7);
@@ -310,5 +329,39 @@ describe("Highmark view: the herds class", () => {
     gc();
     expect(process.memoryUsage().heapUsed - before).toBeLessThan(1_000_000);
     expect(scene.children.length).toBeGreaterThan(0);
+  });
+});
+
+describe("Highmark view: the strike's props (D-046)", () => {
+  it("the granary scale and the scythes build finite geometry; the scythes lie in the open, clear of every obstacle and off the road", () => {
+    for (const g of [buildGranaryScale(world), buildScythes(world)]) {
+      expect(g).toBeDefined();
+      const p = g!.getAttribute("position").array as Float32Array;
+      expect(p.length).toBeGreaterThan(0);
+      expect(p.every(Number.isFinite)).toBe(true);
+      g!.dispose();
+    }
+    for (const s of scytheSpots()) {
+      let hit = false;
+      world.forEachNear(s.x, s.z, (o) => { if (Math.hypot(o.x - s.x, o.z - s.z) < (o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz)) + 0.3) hit = true; });
+      expect(hit, `${s.x},${s.z}`).toBe(false);
+      expect(highmarkRoadDistance(s.x, s.z)).toBeGreaterThan(2);
+    }
+  });
+
+  it("the scythes show only while the strike is on; the scale is always there", () => {
+    const view = createRegionView("highmark", new Scene(), world, PRESETS.medium, sun) as HighmarkView;
+    const scythes = () => view.root.children.filter((c) => c.name.startsWith("scythes"));
+    expect(view.root.children.some((c) => c.name === "granary_scale")).toBe(true);
+    expect(scythes().length).toBeGreaterThan(0);
+    const v = (template: string, phase: string) => ({ template, phase }) as unknown as Parameters<HighmarkView["applyScenario"]>[0];
+    expect(scythes().every((m) => !m.visible)).toBe(true);
+    view.applyScenario(v("reapers_strike", "standoff"));
+    expect(scythes().every((m) => m.visible)).toBe(true);
+    view.applyScenario(v("reapers_strike", "resolved"));
+    expect(scythes().every((m) => !m.visible)).toBe(true);
+    view.applyScenario(v("succession_dispute", "standoff"));
+    expect(scythes().every((m) => !m.visible)).toBe(true);
+    view.dispose();
   });
 });

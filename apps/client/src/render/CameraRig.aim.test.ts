@@ -200,3 +200,47 @@ describe("first person is untouched", () => {
     expect(camera.fov).toBeCloseTo(FIRST_PERSON.fov * FIRST_PERSON.aimFovScale, 1);
   });
 });
+
+describe("the ready view (D-040: a firearm in hand, aim not held)", () => {
+  it("the crosshair is clear of the wearer: the head and the right shoulder stand left of the middle of the picture, at most a little closer than the hip", () => {
+    for (const yaw of [0, 0.7, -2.1, 3]) {
+      const { r, camera } = rig();
+      r.yaw = yaw;
+      run(r, 1.5, false);
+      const hipDist = camera.position.distanceTo(feet);
+      // the playtest's complaint: at the hip with a gun drawn, the crosshair sat on the player's own head
+      const hipHead = new Vector3(feet.x, 1.55, feet.z).project(camera);
+      expect(Math.abs(hipHead.x)).toBeLessThan(0.12);
+      r.ready = true;
+      run(r, 1.5, false);
+      // the right shoulder is 0.3 m to the wearer's right of the head (right of the look direction: (cos yaw, -sin yaw))
+      const right = new Vector3(feet.x + Math.cos(yaw) * 0.3, 1.45, feet.z - Math.sin(yaw) * 0.3).project(camera);
+      const head = new Vector3(feet.x, 1.55, feet.z).project(camera);
+      expect(head.x).toBeLessThan(-0.08);
+      expect(right.x).toBeLessThan(-0.02);
+      expect(Math.abs(head.y)).toBeLessThan(0.1); // on the crosshair's horizon: the line the shot travels
+      expect(camera.position.distanceTo(feet)).toBeGreaterThan(hipDist * 0.75);
+      expect(r.aimAmount).toBe(0); // (not the aim view: the lens and the walk are unchanged)
+      // aiming from ready goes further in, as before; releasing everything returns to the hip
+      run(r, 1.5, true);
+      expect(new Vector3(feet.x, 1.55, feet.z).project(camera).x).toBeLessThan(-0.05);
+      r.ready = false;
+      run(r, 2, false);
+      expect(Math.abs(new Vector3(feet.x, 1.55, feet.z).project(camera).x)).toBeLessThan(0.12);
+    }
+  });
+
+  it("drawing and holstering never jumps the lens", () => {
+    const { r, camera } = rig();
+    run(r, 1, false);
+    let last = camera.position.clone();
+    let worst = 0;
+    for (let i = 0; i < 120; i++) {
+      r.ready = i < 60;
+      r.update(feet, 1 / 60, false, undefined);
+      worst = Math.max(worst, camera.position.distanceTo(last));
+      last = camera.position.clone();
+    }
+    expect(worst).toBeLessThan(0.3);
+  });
+});

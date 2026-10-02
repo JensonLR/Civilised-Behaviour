@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { liveTemplates } from "../regionStatus.ts";
-import type { NewEnding } from "../regionEndings.ts";
+import { isNewTemplate, type NewEnding } from "../regionEndings.ts";
 import type { CampaignState, ResolutionId, ScenarioFx, ScenarioTemplateId } from "../campaignTypes.ts";
 import { BORDER_ESCALATE_S, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, RESOLVED_LINGER_S } from "../campaignTypes.ts";
+import { BORDER } from "./border.ts";
 import { applyOutcome, newCampaign } from "../factions.ts";
 import { generatePaper } from "../newspaper.ts";
 import { Rng } from "../rng.ts";
@@ -12,6 +13,10 @@ import { REGION_TEMPLATES, TEMPLATES, TEMPLATE_IDS } from "./registry.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import type { AnyTemplate, BaseState, Fx } from "./types.ts";
 import { lingerDone } from "./common.ts";
+import { HOSTAGE, hostageTemplate } from "./hostage.ts";
+import { stationsFor } from "../regions.ts";
+import { objectiveMark } from "../compassMarks.ts";
+import { KESSAR_SITES } from "../campaignTypes.ts";
 
 const cm = (seed = 7, patch?: (c: CampaignState) => void): CampaignState => {
   const c = newCampaign(seed);
@@ -64,7 +69,7 @@ const SCRIPTS: Record<Exclude<ResolutionId, (typeof HIGHMARK_RESOLUTIONS)[number
   tipped_off: () => ({ id: "convoy_ambush", events: [talk("ford_post", "open"), talk("ford_post", "tip"), ...ticks(CONVOY_DEPART_S + 1), count("guards", 0, 0, 2, 2)] }),
   burned: () => ({ id: "convoy_ambush", events: [...ticks(CONVOY_DEPART_S + 1), { t: "prop", what: "destroyed", at: "barrel", n: 3 }] }),
   passed: () => ({ id: "convoy_ambush", events: [...ticks(CONVOY_DEPART_S + 1), { t: "actor", id: "wagon", state: "arrived" }] }),
-  mediated: () => ({ id: "border_incident", events: [near("marker"), talk("ward_post", "open"), talk("ward_post", "survey"), talk("surveyor", "open"), talk("surveyor", "survey")] }),
+  mediated: () => ({ id: "border_incident", events: [near("marker"), talk("ward_post", "open"), talk("ward_post", "survey"), talk("surveyor", "open"), talk("surveyor", "survey"), ...ticks(BORDER.witnessS + 1)] }),
   sided_ward: () => ({ id: "border_incident", events: [near("ward"), talk("surveyor", "open"), talk("surveyor", "learn"), talk("surveyor", "close"), talk("ward_post", "open"), talk("ward_post", "tell")] }),
   sided_syndicate: () => ({ id: "border_incident", events: [near("rival"), talk("surveyor", "open"), talk("surveyor", "learn"), talk("surveyor", "envelope"), near("marker"), { t: "use", target: "marker", slot: 1 }] }),
   provoked: () => ({ id: "border_incident", events: [near("ward"), { t: "tally", add: { wounded: 1 } }, { t: "hostile", at: "ward" }] }),
@@ -104,7 +109,8 @@ describe("templates: one scripted run per resolution on the pure reducers", () =
       campaigns.add(JSON.stringify(after));
       heads.add(generatePaper(after, 5).headline);
     }
-    for (const id of REGION_TEMPLATES.kessar) expect(states.get(id)!.size, id).toBeGreaterThanOrEqual(3);
+    // (Kessar's four original contracts; D-045's raid is a newer template, scripted in scenarios/outpostRaid.test.ts and covered by regionsContract.test.ts like every other)
+    for (const id of REGION_TEMPLATES.kessar.filter((t) => !isNewTemplate(t))) expect(states.get(id)!.size, id).toBeGreaterThanOrEqual(3);
     expect(campaigns.size).toBe(20);
     expect(heads.size).toBe(20);
   });
@@ -141,6 +147,49 @@ describe("hostage rescue rules", () => {
     expect(faded.fx.some((f) => typeof f === "object" && f.k === "order" && f.order.o === "alert")).toBe(false);
     // a shot is an alarm at once
     expect(run({ t: "noise", level: 80 }).fx.some((f) => typeof f === "object" && f.k === "order" && f.order.o === "alert")).toBe(true);
+  });
+
+  it("D-041: the lookout hails a party walking up the road instead of shooting it; the ransom is reachable; walking away answers the question", () => {
+    const alerts = (r: Run): boolean => r.fx.some((f) => typeof f === "object" && f.k === "order" && f.order.o === "alert");
+    const hailed = run(near("lookout"), { t: "seen", group: "lookout" });
+    expect(alerts(hailed)).toBe(false);
+    // the tracker names the man to answer, before the cage, and the compass points at him; the clock is their patience, not the Syndicate's
+    const v = def.view(hailed.s, 0);
+    expect(v.objectives.map((o) => o.id)).toEqual(["find", "explain", "free", "dock"]);
+    expect(v.objectives[0]!.done).toBe(true);
+    expect(objectiveMark("kessar", v)).toMatchObject({ label: "The colour-sergeant", x: KESSAR_SITES.hostage.posts[0]!.x, z: KESSAR_SITES.hostage.posts[0]!.z });
+    expect(v.timerLabel).toBe("Their patience");
+    expect(v.endsAtWorldMs).toBe(HOSTAGE.lookoutChallengeS * 1000);
+    // longer than a carouser gives: the colour-sergeant is across the camp
+    expect(HOSTAGE.lookoutChallengeS).toBeGreaterThan(HOSTAGE.challengeS);
+    expect(alerts(drive(def, c, ticks(HOSTAGE.lookoutChallengeS - 1), hailed.s))).toBe(false);
+    expect(alerts(drive(def, c, ticks(HOSTAGE.lookoutChallengeS + 1), hailed.s))).toBe(true);
+    // walk up to the colour-sergeant in time and the ransom is on the table
+    const talking = drive(def, c, [...ticks(8), near("camp"), talk("ransom", "open"), ...ticks(30)], hailed.s);
+    expect(alerts(talking)).toBe(false);
+    expect(talking.fx).toContainEqual({ k: "parley", kind: "ransom", price: ransom });
+    expect(drive(def, c, [talk("ransom", "ransom", ransom)], talking.s).s.resolution).toBe("ransomed");
+    // or walk well away: the hail lapses, no alarm, but the stealth is spoilt (the cage will shriek)
+    const gone = drive(def, c, [near("lookout", 0), ...ticks(HOSTAGE.lookoutChallengeS + 5)], hailed.s);
+    expect(alerts(gone)).toBe(false);
+    expect(def.view(gone.s, 0).objectives.some((o) => o.id === "explain")).toBe(false);
+    const back = drive(def, c, [near("cage"), { t: "use", target: "cage", slot: 0 }], gone.s);
+    expect(alerts(back)).toBe(true);
+    // a fresh arrival still shoots first
+    expect(alerts(run({ t: "seen", group: "late:reinf" }))).toBe(true);
+  });
+
+  it("D-041: a rescuer who has come within twice the boat's reach of the landing has brought Mr. Quim in, though he trails five metres behind", () => {
+    const dock = stationsFor("kessar").find((st) => st.id === "dock")!;
+    const goal = hostageTemplate.observe.actors.find((a) => a.id === "hostage")!.goal!;
+    // the inland half-circle (the way up from the Orchard), at twice the boat's reach: a person who stops at the dock's edge to wait for him
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI + (i / 12) * Math.PI;
+      const lx = dock.x + Math.cos(a) * dock.r * 2, lz = dock.z + Math.sin(a) * dock.r * 2;
+      const qx = lx, qz = lz - 5; // five metres back along the way up
+      expect(Math.hypot(qx - goal.x, qz - goal.z), `leader at ${lx.toFixed(1)},${lz.toFixed(1)}`).toBeLessThanOrEqual(goal.r + 1e-9);
+    }
+    expect(hostageTemplate.observe.actors.find((a) => a.id === "hostage")!.boards).toBe(true);
   });
 
   it("the cage opens only in reach, and only once", () => {
@@ -290,11 +339,21 @@ describe("border incident rules", () => {
     expect(tension(drive(def, c, [talk("ward_post", "survey")], talked.s).s)).toBeLessThan(tension(talked.s));
   });
 
-  it("mediation needs BOTH sides; one is not enough", () => {
+  it("mediation needs BOTH sides, and then a witness at the Stone while the chains go out (D-041)", () => {
     const one = run(talk("ward_post", "open"), talk("ward_post", "survey"));
     expect(one.s.resolution).toBeUndefined();
-    expect(drive(def, c, [talk("surveyor", "open"), talk("surveyor", "survey")], one.s).s.resolution).toBe("mediated");
-    const done = drive(def, c, [talk("surveyor", "open"), talk("surveyor", "survey")], one.s);
+    const agreed = drive(def, c, [talk("surveyor", "open"), talk("surveyor", "survey")], one.s);
+    expect(agreed.s.resolution).toBeUndefined(); // agreeing is the start of the hard part
+    // nobody at the Stone: the chains wait (and the tension keeps rising)
+    const away = drive(def, c, ticks(BORDER.witnessS + 5), agreed.s);
+    expect(away.s.resolution).toBeUndefined();
+    expect(tension(away.s)).toBeGreaterThan(tension(agreed.s));
+    // somebody stands witness: mediated, once the time is served (stepping off pauses it)
+    const half = drive(def, c, [near("marker"), ...ticks(BORDER.witnessS / 2), near("marker", 0), ...ticks(10)], agreed.s);
+    expect(half.s.resolution).toBeUndefined();
+    expect(drive(def, c, [near("marker"), ...ticks(BORDER.witnessS / 2 + 1)], half.s).s.resolution).toBe("mediated");
+    const done = drive(def, c, [near("marker"), ...ticks(BORDER.witnessS + 1)], agreed.s);
+    expect(done.s.resolution).toBe("mediated");
     expect(done.fx).toContainEqual({ k: "order", group: "ward", order: { o: "stand_down" } });
     expect(done.fx).toContainEqual({ k: "order", group: "rival", order: { o: "stand_down" } });
   });
@@ -364,7 +423,9 @@ describe("leave: sailing away commits per the table", () => {
       ["hostage_rescue", [], undefined],
       ["hostage_rescue", [near("camp")], undefined],
       ["hostage_rescue", [{ t: "tally", add: { downed: 1 } }], "hostage_lost"],
-      ["hostage_rescue", [{ t: "seen", group: "lookout" }], "hostage_lost"],
+      ["hostage_rescue", [{ t: "seen", group: "lookout" }], undefined], // (D-041: hailed and gone, nothing happened)
+      ["hostage_rescue", [near("lookout"), { t: "seen", group: "lookout" }, ...ticks(16)], "hostage_lost"],
+      ["hostage_rescue", [{ t: "seen", group: "late:reinf" }], "hostage_lost"],
       ["hostage_rescue", [near("cage"), { t: "use", target: "cage", slot: 0 }], "hostage_lost"],
       ["hostage_rescue", [near("cage"), { t: "use", target: "cage", slot: 0 }, { t: "actor", id: "hostage", state: "arrived" }], "slipped_away"],
       ["convoy_ambush", [], undefined],

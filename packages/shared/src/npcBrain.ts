@@ -55,6 +55,22 @@ export function npcBrainNew(spec: NpcSpec): NpcBrainState {
   };
 }
 
+/**
+ * D-041: a round from (x, z) hit this row, or passed close by it. With nobody in sight, it goes and looks there, exactly as after losing sight of a man it was fighting
+ * (the bot playtest sniped the Ward's ford patrol from 45 m, beyond their 28 m of sight, and from behind the bridge parapet, and nobody ever came). A row that can see
+ * somebody is busy and keeps fighting him. The search lasts `NPC_TUNING.search` seconds from the latest report and only runs while the row is alert.
+ */
+export function npcHeardShot(nb: NpcBrain, x: number, z: number, now: number): void {
+  const b = nb as NpcBrainState;
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(now)) return;
+  if (b.target !== "" && now - b.lastSeen < HEARD_BUSY_S) return;
+  b.lastSeen = now;
+  b.lastTx = x;
+  b.lastTz = z;
+}
+/** A row that saw its target this recently is fighting it (sense() refreshes `lastSeen` every tick while it can see). */
+const HEARD_BUSY_S = 0.5;
+
 const fin = (v: number, d: number): number => (Number.isFinite(v) ? v : d);
 /** Heading (0 = -Z, as everywhere) from (x, z) toward (tx, tz). */
 const headingTo = (x: number, z: number, tx: number, tz: number): number => Math.atan2(-(tx - x), -(tz - z));
@@ -223,9 +239,11 @@ export function npcThink(nb: NpcBrain, me: NpcBody, sn: NpcSenses, dt: number, o
       }
       return;
     }
-    // lost sight of someone it was fighting: go and look where it last saw them (a man behind a rock is not a man who has gone away)
+    // lost sight of someone it was fighting (or heard a shot it could not place): go and look where it last saw them (a man behind a rock is not a man who has gone away)
     if (e === undefined && sn.alert && now - b.lastSeen < NPC_TUNING.search) {
-      if (Math.hypot(b.lastTx - me.x, b.lastTz - me.z) > Math.max(eff * 0.75, 3)) { // (to the distance it fights from, not to the man's boots)
+      const d = Math.hypot(b.lastTx - me.x, b.lastTz - me.z);
+      // (to the distance it fights from, not to the man's boots; but from where it could SEE that spot, or it stands at its range behind the wall he is behind)
+      if (d > 3 && (d > Math.max(eff * 0.75, 3) || !sn.nav.los(me.x, me.z, b.lastTx, b.lastTz))) {
         plan(b, me, sn, b.lastTx, b.lastTz, false);
         if (!followPath(b, me, out, false)) walkTo(me, b.lastTx, b.lastTz, out, false);
       }

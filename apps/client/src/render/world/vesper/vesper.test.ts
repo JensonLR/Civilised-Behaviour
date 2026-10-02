@@ -258,7 +258,7 @@ describe("Vesper view: scatter", () => {
     }
     const thin = planVesperScatter(world, PRESETS.test);
     expect(thin.grass.length).toBeLessThan(a.grass.length);
-  });
+  }, 30_000); // (CPU-bound: plans the gorge's scatter three times; 5.7 s alone, 6.6 s in the full run on a 4-core container. A time limit, not a budget.)
 });
 
 describe("Vesper view: the dress follows the contract", () => {

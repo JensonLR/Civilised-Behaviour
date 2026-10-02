@@ -45,12 +45,22 @@ function lapsed(c: CampaignState): boolean {
 
 export interface CrossingRun extends BaseState {
   core: ScenarioState; settledStart: boolean; detonated: boolean; daysLeft: number; actor?: undefined;
+  /** D-040, running the bar: how many of the party stand on the road north of it, and when the sentries shouted (-1 = never). */
+  past: number; warnedAt: number;
 }
 
-const mirror = (core: ScenarioState, x: { settledStart: boolean; detonated: boolean; daysLeft: number }): CrossingRun => ({
+type RunExtra = Pick<CrossingRun, "settledStart" | "detonated" | "daysLeft" | "past" | "warnedAt">;
+const mirror = (core: ScenarioState, x: RunExtra): CrossingRun => ({
   phase: core.phase, t: core.t, resolution: core.resolution, resolvedAt: core.resolvedAt, parley: core.parley ? "warden" : undefined, core,
-  settledStart: x.settledStart, detonated: x.detonated, daysLeft: x.daysLeft,
+  settledStart: x.settledStart, detonated: x.detonated, daysLeft: x.daysLeft, past: x.past, warnedAt: x.warnedAt,
 });
+
+/**
+ * D-040: the playtest walked straight past the bar and up the fort road, and nothing happened. The bar is the Ward's whole point: anyone on the road north of it
+ * (`RUN_BAR`) before the crossing is settled is shouted at once, and given `graceS` to step back behind the bar; still there after that, or back again once
+ * warned, and the horn sounds (the same `hostile` a shot at a sentry gives: the garrison fights, and breaking it is `forced`).
+ */
+export const RUN_BAR = { x: KESSAR_ANCHORS.tollBar.x, z: -16, r: 12, graceS: 5 } as const;
 
 function init(c: CampaignState, asking: number, _seed?: number, presence?: RivalPresence): CrossingRun {
   const settled = crossingSettled(c);
@@ -58,7 +68,7 @@ function init(c: CampaignState, asking: number, _seed?: number, presence?: Rival
   const base = lapsed(c) ? { ...c, crossing: { ...c.crossing, toll: 0 } } : c;
   let core = newScenario(base, asking, presence);
   if (settled && core.phase !== "resolved") core = { ...core, phase: "resolved", parley: false };
-  return mirror(core, { settledStart: settled, detonated: false, daysLeft: settledDaysLeft(c) });
+  return mirror(core, { settledStart: settled, detonated: false, daysLeft: settledDaysLeft(c), past: 0, warnedAt: -1 });
 }
 
 const LINE_FUSE_ON = "There is already a fuse burning. Two would be showing off.";
@@ -66,6 +76,10 @@ const SAY_ALERT = "The horn on the gatehouse sounds. The Ward would like a word,
 const SAY_GATE = "The toll bar swings up. A sentry salutes, unsure whom.";
 const SAY_RIVAL = "A Dunmarrow-Vesk surveyor has left the Syndicate camp with a measuring chain and an entourage. They intend to buy the crossing.";
 const SAY_FUSE = "The fuse is lit. Ten seconds, give or take the weather. Clear the deck.";
+const SAY_RUN_WARN = "A sentry levels a pike down the fort road: \"The toll, if you please. Back behind the bar, or we shall have to be official about it.\"";
+
+/** The road north of the bar may be walked only once the crossing is settled (or while it is already a fight or a fuse). */
+const barOpen = (s: CrossingRun): boolean => s.core.phase === "resolved" || s.core.hostile || s.core.chargeArmed || s.settledStart;
 
 function mapFx(list: readonly ScenarioEffect[]): Fx[] {
   const out: ScenarioFx[] = [];
@@ -92,6 +106,11 @@ function reduce(s: CrossingRun, e: ScenarioInput): Reduction<CrossingRun> {
   switch (e.t) {
     case "tick": {
       const r = feed(s, e);
+      // the grace after the shout has run out with somebody still on the fort road: the horn
+      if (r.s.past > 0 && r.s.warnedAt >= 0 && !barOpen(r.s) && r.s.core.t - r.s.warnedAt >= RUN_BAR.graceS) {
+        const h = feed(r.s, { t: "hostile" }, r.fx);
+        return h;
+      }
       const core = r.s.core;
       // the fuse has burned out: the bridge goes (the runner explodes the pier and rebuilds the world)
       if (core.chargeArmed && core.fuse <= 0 && !r.s.detonated && core.phase !== "resolved") {
@@ -100,7 +119,17 @@ function reduce(s: CrossingRun, e: ScenarioInput): Reduction<CrossingRun> {
       }
       return r;
     }
-    case "near": return e.at === "bar" ? feed(s, { t: "arrive", party: e.party }) : { s, fx: [] };
+    case "near": {
+      if (e.at === "bar") return feed(s, { t: "arrive", party: e.party });
+      if (e.at !== "past") return { s, fx: [] };
+      const party = Math.max(0, Math.floor(Number.isFinite(e.party) ? e.party : 0));
+      const n: CrossingRun = { ...s, past: party };
+      if (party === 0 || barOpen(n) || s.core.phase === "parley") return { s: n, fx: [] };
+      // first time on the road: the shout and the grace; back on it after being told: the horn at once
+      if (n.warnedAt < 0) return { s: { ...n, warnedAt: n.core.t }, fx: [{ k: "say", text: SAY_RUN_WARN }] };
+      if (s.past === 0) return feed(n, { t: "hostile" });
+      return { s: n, fx: [] };
+    }
     case "count": return e.group === "ward" ? feed(s, { t: "garrison", alive: e.alive, routed: e.routed, total: e.total }) : { s, fx: [] };
     case "hostile": {
       if (e.at === "rival") return { s, fx: [{ k: "order", group: "rival", order: { o: "alert" } }] };
@@ -159,7 +188,7 @@ function outcome(s: CrossingRun): ScenarioOutcome | undefined {
 const settled = (c: CampaignState): boolean => crossingSettled(c);
 
 const observe: ObserveSpec = {
-  near: [{ id: "bar", x: KESSAR_ANCHORS.tollBar.x, z: KESSAR_ANCHORS.tollBar.z, r: SCENARIO.arriveRange }],
+  near: [{ id: "bar", x: KESSAR_ANCHORS.tollBar.x, z: KESSAR_ANCHORS.tollBar.z, r: SCENARIO.arriveRange }, { id: "past", x: RUN_BAR.x, z: RUN_BAR.z, r: RUN_BAR.r }],
   use: [
     { id: "warden", npc: "warden", r: SCENARIO.talkRange, talk: "warden", carry: "none" },
     { id: "pier", at: KESSAR_ANCHORS.pier, r: SCENARIO.pierRange, carry: "barrel", consume: true },

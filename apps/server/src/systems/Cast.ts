@@ -8,7 +8,7 @@ import type {
   BrainFn, BrainId, CastApi, CastCount, CastOrder, NavApi, NavPath, NpcBody, NpcBrain, NpcSenses, NpcSide, NpcSpec, PlayersView,
 } from "@cb/shared";
 import { NavQuery, buildNavGrid, type NavOptions } from "@cb/shared";
-import { npcBrainNew, npcThink, type NpcBrainState } from "@cb/shared";
+import { npcBrainNew, npcHeardShot, npcThink, type NpcBrainState } from "@cb/shared";
 
 /**
  * The Cast (D-034): ONE server system that runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step and combat
@@ -204,6 +204,16 @@ export class Cast implements CastApi {
           b.path.n = n;
           b.path.complete = n === pts.length;
           b.route = 0;
+          if (o.join === true) {
+            const row = this.host.players.get(r.key);
+            if (row) {
+              let best = Infinity;
+              for (let i = 0; i < n; i++) {
+                const d = Math.hypot(pts[i]!.x - row.x, pts[i]!.z - row.z);
+                if (d < best) { best = d; b.route = i; }
+              }
+            }
+          }
           b.fled = false;
           b.mode = "march";
           b.since = now;
@@ -305,6 +315,20 @@ export class Cast implements CastApi {
     return this.routes.get(name);
   }
 
+  /**
+   * D-041: `shooter`'s round hit the row `target`, or passed close by it. A soldier with nobody in sight goes and looks where the shot came from (npcHeardShot) and is
+   * under fire meanwhile. Rows on the shooter's own side, civilians and hired hands do not: a hand's orders are its sight.
+   */
+  shotFrom(target: string, shooter: string): void {
+    const r = this.byKey.get(target);
+    if (!r || r.gone || r.civil || r.spec.brain !== "garrison") return;
+    const from = this.host.players.get(shooter);
+    if (!from || this.byKey.get(shooter)?.side === r.side) return;
+    const now = this.host.worldMs() / 1000;
+    r.brain.hurtAt = Math.max(r.brain.hurtAt, now);
+    npcHeardShot(r.brain, from.x, from.z, now);
+  }
+
   /** A report carried `radius` metres from (x, z), fired by `src` (a session id or an NPC key): nearby people start; civilians bolt. */
   noise(x: number, z: number, radius: number, src: string): void {
     if (!Number.isFinite(x + z + radius) || radius <= 0) return;
@@ -341,6 +365,15 @@ export class Cast implements CastApi {
       this.groups.clear();
       this.war.clear();
     }
+  }
+
+  despawnOne(id: string): void {
+    const key = npcKey(id);
+    const r = this.byKey.get(key);
+    if (!r) return;
+    if (!r.gone) this.host.removeNpc(key);
+    this.byKey.delete(key);
+    this.recs = this.recs.filter((x) => x !== r);
   }
 
   setWorld(w: CollisionWorld): void {
@@ -421,8 +454,12 @@ export class Cast implements CastApi {
   private hostile(r: Rec, g: Group, ts: NpcSide, tAlert: boolean): boolean {
     const rs = r.side;
     if (rs === ts || rs === "neutral" || ts === "neutral") return false;
-    if (rs === "outlaw" || ts === "outlaw") return true;
     if (g.attack !== undefined && (g.attack === "any" || g.attack === ts)) return true;
+    // D-041: outlaws fight every other NPC side on sight, but the PARTY only once their camp is up. The playtest found the Orchard's lookout shooting a walker at 29 m before
+    // the contract's own rules (a carouser's challenge at 5 m, the lookout's eyes at 12 m) had said a word, which made the quiet and the ransom endings unreachable.
+    if (ts === "outlaw" && rs === "party") return tAlert; // (the party's hired hands answer fire, they do not start it)
+    if (rs === "outlaw" && ts === "party") return g.alert;
+    if (rs === "outlaw" || ts === "outlaw") return true;
     if (this.war.has(sideKey(rs, ts))) return true;
     if (ts === "party" && (rs === "ward" || rs === "rival")) return g.alert; // soldiers act on the party only once provoked
     if (rs === "party" && (ts === "ward" || ts === "rival")) return tAlert; // the party's hired hands answer fire, they do not start it

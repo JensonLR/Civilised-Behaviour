@@ -157,6 +157,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 @media (max-width: 62rem) { .help { display: none; } }
 
 /* Luggage tags over heads. */
+.taglayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .nametag { position: absolute; left: 0; top: 0; padding: 0.05rem 0.55rem 0.05rem 1.05rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; white-space: nowrap; will-change: transform; border-radius: 2px 5px 5px 2px; border: 1px solid var(--brass-dark); clip-path: polygon(0 50%, 0.5rem 0, 100% 0, 100% 100%, 0.5rem 100%); }
 .nametag::after { content: ""; position: absolute; left: 0.42rem; top: 50%; width: 0.28rem; height: 0.28rem; margin-top: -0.14rem; border-radius: 50%; background: var(--scrim); box-shadow: 0 0 0 1.5px var(--brass); }
 
@@ -516,6 +517,8 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 :root { --pad: max(0.9rem, 2.4vmin); }
 #hud { --edge-t: max(var(--pad), env(safe-area-inset-top, 0px)); --edge-r: max(var(--pad), env(safe-area-inset-right, 0px)); --edge-b: max(var(--pad), env(safe-area-inset-bottom, 0px)); --edge-l: max(var(--pad), env(safe-area-inset-left, 0px)); }
 .codebar { top: var(--edge-t); right: var(--edge-r); }
+/* (D-040: never under the heading strip: the bar keeps to the room right of it and wraps its save line under the number when that room is short) */
+#hud .codebar { max-width: calc(50vw - clamp(4.5rem, 11vw, 13.5rem) - var(--edge-r) - 0.75rem); flex-wrap: wrap; justify-content: flex-end; row-gap: 0.15rem; }
 .health { left: var(--edge-l); bottom: var(--edge-b); }
 .wounds { left: calc(var(--edge-l) + 7.7rem); bottom: var(--edge-b); }
 .help { right: var(--edge-r); bottom: var(--edge-b); }
@@ -549,20 +552,36 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 .compass .mark[data-row="2"] { top: 3.35rem; }
 .compass .mark[data-row="1"]::before { height: 1.86rem; top: -1.86rem; }
 .compass .mark[data-row="2"]::before { height: 3.36rem; top: -3.36rem; }
+.compass .mark[data-row="3"] { top: 4.85rem; }
+.compass .mark[data-row="3"]::before { height: 4.86rem; top: -4.86rem; }
 .compass .mark[data-edge] { opacity: 0.75; }
 .compass .mark[data-edge="l"] { transform: translateX(0); }
 .compass .mark[data-edge="r"] { transform: translateX(-100%); }
-.compass .mark[data-edge="l"] .name::before { content: "\2039  "; }
-.compass .mark[data-edge="r"] .dist::after { content: "  \203A"; }
+/* D-040: a place says its name only while it sits near the notch (the objective always); off the strip it is an icon and an arrow */
+.compass .mark .name { display: none; }
+.compass .mark[data-named="1"] .name { display: inline; }
+.compass .mark[data-edge="l"] .dist, .compass .mark[data-edge="r"] .dist { display: none; }
+.compass .mark[data-edge="l"]::after { content: "\2039"; order: -1; font-family: var(--type); }
+.compass .mark[data-edge="r"]::after { content: "\203A"; font-family: var(--type); }
+.compass .mark[data-goal="1"] { background: var(--ink); color: var(--paper); border-color: var(--stamp); z-index: 1; }
+.compass .mark[data-goal="1"] svg { fill: var(--paper); }
+.compass .mark[data-goal="1"]::before { border-left-color: var(--stamp); }
 @media (max-width: 40rem) { .compass .mark .name { display: none; } }
 :root[data-contrast="high"] .compass .strip, :root[data-contrast="high"] .compass .mark { border-color: var(--ink); border-width: 3px; }
 
 /* ---- the telegram stack ---- */
-.telegrams { position: absolute; top: calc(var(--edge-t) + 4.6rem); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 0.5rem; width: min(90vw, 34rem); pointer-events: none; }
+.telegrams { position: absolute; top: calc(var(--edge-t) + 6.8rem); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 0.5rem; width: min(90vw, 34rem); pointer-events: none; }
+/* D-040: the slips sit below the heading strip's rows and never on the contract card (left) or the orientation card (right): where the screen is too
+   narrow for the three side by side, they take the room between */
+@media (max-width: 75rem) {
+  #hud:has(.objectives:not([hidden])) .telegrams { left: calc(var(--edge-l) + min(19rem, 40vw) + 1rem); transform: none; width: min(34rem, calc(100vw - var(--edge-l) - var(--edge-r) - min(19rem, 40vw) - 1rem)); }
+}
+#hud:has(.orientation:not([hidden])) .telegrams { left: var(--edge-l); transform: none; width: min(34rem, calc(100vw - var(--edge-l) - var(--edge-r) - min(21rem, 46vw) - 1rem)); }
 .telegrams[hidden] { display: none; }
 .telegram { position: relative; padding: 1.35rem 1.3rem 0.6rem; font-family: var(--type); font-size: 0.95rem; line-height: 1.33; color: var(--ink); background: linear-gradient(var(--paper), var(--paper-2)); border-top: 3px double var(--ink); border-bottom: 3px double var(--ink); box-shadow: var(--shadow); animation: telegramIn 0.3s ease-out; transition: opacity 0.5s; }
 .telegram::before { content: "TELEGRAM"; position: absolute; left: 0; right: 0; top: 0.3rem; text-align: center; font-family: var(--display); font-size: 0.68rem; letter-spacing: 0.4em; color: var(--stamp); }
 .telegram.leaving { opacity: 0; }
+.telegram .body { white-space: pre-line; }
 .telegram[data-more]:not([data-more=""])::after { content: "+" attr(data-more) " waiting"; position: absolute; right: 0.6rem; top: 0.25rem; padding: 0 0.5rem; font: 0.62rem var(--display); letter-spacing: 0.14em; color: var(--text); background: var(--ink); border-radius: 2px; }
 @keyframes telegramIn { from { opacity: 0; transform: translateY(-0.9rem) rotate(-0.6deg); } }
 :root[data-contrast="high"] .telegram { background: var(--field); border-color: var(--ink); }
@@ -585,7 +604,7 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 :root[data-cvd] .bearing .wedge { fill: var(--ink); }
 :root[data-contrast="high"] .bearing .wedge { fill: var(--ink); stroke-width: 2.4; }
 @media (max-height: 34rem) {
-  .telegrams { top: calc(var(--edge-t) + 4.1rem); }
+  .telegrams { top: calc(var(--edge-t) + 5.6rem); }
   .telegram { padding: 1.05rem 1rem 0.4rem; font-size: 0.84rem; line-height: 1.25; }
   .telegram::before { top: 0.2rem; font-size: 0.6rem; }
 }

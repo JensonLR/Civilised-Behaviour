@@ -46,6 +46,16 @@ export * from "./saltmarket.ts";
 export * from "./saltmarketLedger.ts";
 export * from "./saltmarketText.ts";
 export * from "./paletteSaltmarket.ts";
+// ---- D-042: Highmark's second contract, the Reapers' Strike ----
+export * from "./reapersLedger.ts";
+export * from "./reapersText.ts";
+// ---- D-044: Vesper's third contract, the Winding Engine ----
+export * from "./engineLedger.ts";
+export * from "./engineText.ts";
+// ---- D-045: Kessar's fifth contract, the Raid on the Post ----
+export * from "./raidLedger.ts";
+export * from "./raidText.ts";
+export * from "./raidAftermath.ts";
 export * from "./regions.ts";
 export * from "./travel.ts";
 export * from "./scenario.ts";
@@ -68,6 +78,8 @@ export * from "./scenarios/parleys.ts";
 export * from "./worldTypes.ts";
 export * from "./hqRoute.ts";
 export * from "./hqRouteText.ts";
+export * from "./compassMarks.ts";
+export * from "./remittance.ts";
 export * from "./powersText.ts";
 export * from "./relations.ts";
 export * from "./powers.ts";

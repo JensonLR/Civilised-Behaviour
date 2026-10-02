@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DYE, PALETTE, PEOPLE, PEOPLE_IDS, WAYFARER_MIX, type PeopleId } from "@cb/shared";
 import * as C from "./catalog.ts";
-import { COLONIAL_CODED, PEOPLE_ADDITIONS_LANDED, PEOPLE_CATALOG_ADDITIONS, PEOPLE_OVERLAYS, applyPeople, type AdditionKey } from "./peoples.ts";
+import { COLONIAL_CODED, PEOPLE_ADDITIONS_LANDED, PEOPLE_CATALOG_ADDITIONS, PEOPLE_OVERLAYS, applyPeople, codedList, type AdditionKey } from "./peoples.ts";
 import { readFileSync } from "node:fs";
 import { FIELDS, generateCharacter, HISTORY_KEYS, NATIVE_FROM, sanitizeSpec } from "./spec.ts";
 
@@ -47,7 +47,7 @@ describe("applyPeople", () => {
       for (const s of seeds) {
         const a = applyPeople(generateCharacter(s), p, s);
         for (const [field, names] of Object.entries(COLONIAL_CODED)) {
-          const list = field === "epaulettes" ? C.EPAULETTES : field === "decoration" ? C.DECORATIONS : field === "eyewear" ? C.EYEWEAR : ((C as unknown as Record<string, readonly string[]>)[{ hat: "HATS", jacket: "JACKETS", neckwear: "NECKWEAR", hair: "HAIR_STYLES", moustache: "MOUSTACHES", hipGear: "HIP_GEAR", belt: "BELTS", sash: "SASHES" }[field]!]!);
+          const list = codedList(field);
           const worn = list[(a as unknown as Record<string, number>)[field]!];
           expect(names, `${p} ${field}=${worn}`).not.toContain(worn);
         }

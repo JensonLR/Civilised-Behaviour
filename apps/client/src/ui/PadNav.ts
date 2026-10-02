@@ -7,9 +7,14 @@ import { playSfx } from "../audio/index.ts";
  * or disabled (a list rebuilt, a stepper that has reached its limit) the pad's next input lands on the sheet's primary action instead of nowhere.
  * One implementation for every menu screen so controller support is never an afterthought (brief: "controller focus from the start").
  */
+/** A held direction steps once, waits this long, then repeats this often (ms). */
+export const NAV_FIRST_REPEAT_MS = 420, NAV_REPEAT_MS = 150;
+
 export function startPadNav(root: HTMLElement, isActive: () => boolean): () => void {
   let raf = 0;
   let moveCooldown = 0;
+  /** The direction held at the last poll (-1 up, 1 down, 0 none): a new press steps at once, a held one waits for the repeat. */
+  let navHeld = 0;
   let adjustCooldown = 0;
   let aWas = false;
   let bWas = false;
@@ -89,16 +94,21 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
       if (up || down || left || right || (pad.buttons[0]?.pressed ?? false)) {
         focusEl(primary(items));
         current = document.activeElement as HTMLElement | null;
-        moveCooldown = now + 190;
+        navHeld = up ? -1 : down ? 1 : 0; // (this press is spent on the landing)
+        moveCooldown = now + NAV_FIRST_REPEAT_MS;
         aWas = true;
       }
     }
-    if ((up || down) && now > moveCooldown && items.length) {
-      moveCooldown = now + 190;
+    // One step per press, then (still held) a pause before the repeat starts: a press a little slower than a flick is still ONE step (D-041: a held
+    // direction stepped again after 190 ms, so a casual press, or a slow frame, skipped the control the player wanted).
+    const dir = down ? 1 : up ? -1 : 0;
+    if (dir !== 0 && items.length && (dir !== navHeld || now >= moveCooldown)) {
+      moveCooldown = now + (dir !== navHeld ? NAV_FIRST_REPEAT_MS : NAV_REPEAT_MS);
       const i = current ? items.indexOf(current) : -1;
       focusEl(items[i < 0 ? (down ? 0 : items.length - 1) : (i + (down ? 1 : -1) + items.length) % items.length]);
       playSfx("ui_hover");
     }
+    navHeld = dir;
     if ((left || right) && now > adjustCooldown && current) {
       adjustCooldown = now + 70;
       adjust(current, right ? 1 : -1, Math.abs(ax) > 0.95);

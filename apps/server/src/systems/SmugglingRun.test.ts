@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FLAG, PropKind, SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS, TEMPLATES, askingToll, newCampaign, npcKey, type CampaignState } from "@cb/shared";
-import { Scenario } from "./Scenario.ts";
+import { FLAG, PropKind, SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS, SMUGGLE, TEMPLATES, askingToll, newCampaign, npcKey, type CampaignState } from "@cb/shared";
+import { CROUCH_SIGHT, FOG_SIGHT, Scenario, WET_SIGHT } from "./Scenario.ts";
 import { beside, down, fake, labelIndex, lastParley, lastView, me, npcKeys, pick, press, put, row, run, setup, type Fake } from "./vesperFake.testkit.ts";
 
 /**
@@ -67,6 +67,22 @@ describe("The Quiet Barge through the runner", () => {
     run(f, s, 10);
     expect(f.commits).toHaveLength(1);
     expect(f.commits[0]).toMatchObject({ scenario: "smuggling_run", resolution: "impounded", region: "saltmarket" });
+  });
+
+  it("D-041: crouching shortens every watcher's sight (CROUCH_SIGHT): bent double at 80% of the patrol's sight nobody sees you; standing up there, they do", () => {
+    const { f, s } = start();
+    // (the dealt complication may be fog or rain, which shorten everybody's sight first)
+    const cx = lastView(f).complication;
+    const k = cx === "fog" ? FOG_SIGHT : cx === "rain" ? WET_SIGHT : 1;
+    put(f, "p1", S.customs[2]!.x + 0.8 * SMUGGLE.sightPatrol * k, S.customs[2]!.z);
+    me(f).flags = FLAG.GROUNDED | FLAG.CROUCHING;
+    run(f, s, 10);
+    expect(lastView(f).phase).not.toBe("standoff");
+    expect(f.commits).toEqual([]);
+    me(f).flags = FLAG.GROUNDED;
+    run(f, s, 1);
+    expect(lastView(f).phase).toBe("standoff");
+    expect(CROUCH_SIGHT).toBeLessThan(1);
   });
 
   it("being seen before the barge is loaded is nothing at all", () => {

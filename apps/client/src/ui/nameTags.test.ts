@@ -102,3 +102,41 @@ describe("NameTags", () => {
     expect(el().length).toBe(0);
   });
 });
+
+describe("NameTags never pile up (D-040)", () => {
+  const box = (e: HTMLElement): { x: number; y: number } => {
+    const m = /translate\((-?\d+)px, (-?\d+)px\)/.exec(e.style.transform)!;
+    return { x: Number(m[1]), y: Number(m[2]) };
+  };
+  it("a farther plate that would cover a nearer one climbs above it; the nearest keeps its spot", () => {
+    const ndc = { x: 0, y: 0, z: 0.5 };
+    tags.update("near", "Jem Cobbold · follow · steady", 0, false, 4, ndc, 300);
+    tags.update("far", "Dr. Philippa Crake · follow · shaken", 0, false, 6, { ...ndc, x: 0.02 }, 304);
+    tags.sweep(new Set(["near", "far"]));
+    const [near, far] = el();
+    expect(box(near!).y).toBe(300);
+    expect(box(far!).y).toBeLessThanOrEqual(304 - 22); // lifted a whole plate
+    expect(far!.style.visibility).toBe("");
+    expect(tags.shown).toBe(2);
+  });
+
+  it("a crowd keeps its nearest names: beyond two lifts a plate is hidden for the frame, and comes back when there is room", () => {
+    const ids = ["a", "b", "c", "d", "e"];
+    ids.forEach((id, i) => tags.update(id, `Sentry Number ${id}`, 0, false, 3 + i, { x: 0, y: 0, z: 0.5 }, 400));
+    tags.sweep(new Set(ids));
+    expect(tags.shown).toBe(3);
+    expect(el().filter((e) => e.style.visibility === "hidden").length).toBe(2);
+    // the crowd spreads out: everyone fits again
+    ids.forEach((id, i) => tags.update(id, `Sentry Number ${id}`, 0, false, 3 + i, { x: -0.8 + i * 0.4, y: 0, z: 0.5 }, 400));
+    tags.sweep(new Set(ids));
+    expect(tags.shown).toBe(5);
+    expect(el().every((e) => e.style.visibility === "")).toBe(true);
+  });
+
+  it("a plate the frame's edge would cut is hidden, not shoved back on screen", () => {
+    tags.update("edge", "Lamp-Warden Ysolde Hask", 2, false, 5, { x: 0.95, y: 0, z: 0.5 }, 300);
+    tags.sweep(new Set(["edge"]));
+    expect(tags.shown).toBe(0);
+    expect(box(el()[0]!).x).toBe(Math.round(1.95 / 2 * 1280)); // where it points, never clamped
+  });
+});

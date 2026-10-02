@@ -22,7 +22,11 @@ export interface RivalEvent { kind: RivalEventKind; day: number; region: RegionI
 export interface PowerEvent { day: number; kind: string /* key into powersText NEWS */; a: PowerId; b?: PowerId; n: number }
 export interface PowersState { v: 1; minor: Record<MinorPowerId, PowerState>; rel: Record<PairKey, number> /* -100..100 */; rival: RivalAgent; flags: string[] /* <=12, authored list */; log: PowerEvent[] /* <=6 newest */ }
 /** What the Syndicate physically has in the active region NOW. */
-export interface RivalPresence { goal: RivalGoal; arrivesInS: number; escort: number; wagon: boolean; surveyors: number; postStage: 0 | 1 | 2 }
+export interface RivalPresence { goal: RivalGoal; arrivesInS: number; escort: number; wagon: boolean; surveyors: number; postStage: 0 | 1 | 2;
+  /** D-045: the Syndicate means to raid the party's outpost and has not yet (present only when true, so older presences are byte-identical). */
+  raidDue?: true;
+  /** D-047: the stage of the PARTY's own post where the contract is played (the room adds it from its settlements; absent = no post), so a raid meets the walls that stand. */
+  partyPost?: OutpostStage }
 /** 0..100; F computes, O consumes. */
 export interface RegionClimate { security: number; trade: number; hostility: number; rivalPressure: number; labour: number }
 /** What standing deals and flags change elsewhere (the integrator applies; F computes). */

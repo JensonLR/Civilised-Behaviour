@@ -1,4 +1,4 @@
-import { CASUALTY, FLAG, LIMB_LIST, ZONE_COUNT, ZONE_NAMES, limbZone, woundLevel } from "@cb/shared";
+import { CASUALTY, FLAG, LIMB_LIST, ZONE_COUNT, ZONE_NAMES, limbZone, woundLevel, type PlaceMark } from "@cb/shared";
 import { fillPrompt, onPromptChange } from "../input/glyphDom.ts";
 import { Compass } from "./Compass.ts";
 import { Telegrams } from "./Telegrams.ts";
@@ -138,6 +138,11 @@ export class Hud {
     this.compass = new Compass(root);
     this.telegrams = new Telegrams(root);
     this.offPrompt = onPromptChange(() => fillPrompt(this.prompt, this.lastPrompt));
+  }
+
+  /** The heading strip's places (the region's) and the objective flag (the contract's next goal). */
+  setCompass(places: readonly PlaceMark[], goal?: PlaceMark): void {
+    this.compass.setMarks(places, goal);
   }
 
   /** A telegram (the rout announcement, a comrade's news): queued, at most three on show, each for as long as it takes to read. */

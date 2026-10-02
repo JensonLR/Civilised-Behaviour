@@ -32,7 +32,7 @@ describe("CampaignMap on five shores (D-036, D-037)", () => {
     const panel = new CampaignMap();
     panel.render(m);
     expect(panel.root.textContent).toContain("Highmark: on offer: The Vacant Chair");
-    expect(panel.root.textContent).toContain("Sailing to Highmark: 6 seconds");
+    expect(panel.root.textContent).toContain("Highmark: a day's sail");
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     drawCampaignOverlay(g, m);
     expect([...g.querySelectorAll("text")].map((t) => t.textContent)).toContain("Thornfield Granges");
@@ -105,7 +105,8 @@ describe("CampaignMap", () => {
     const text = g.textContent ?? "";
     expect(text).toContain("camp");
     expect(text).toContain("Syndicate, 2 days ago");
-    expect(text).toContain("s by sail");
+    expect(text).toMatch(/a day|half a day/); // (D-040: in the fiction's terms, never "6 s by sail")
+    expect(text).not.toMatch(/\d s by sail/);
     drawCampaignOverlay(g, undefined);
     expect(g.childNodes.length).toBe(0);
   });

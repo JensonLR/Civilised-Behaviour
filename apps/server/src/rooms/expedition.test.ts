@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
 import {
+  HUB_CREW_SPOT,
   BUTTON,
   CAMP,
   COMMAND_IDS,
@@ -136,6 +137,10 @@ describe("the expedition through a real room: manifest, hired hands, orders, hor
     me.send("hire", { id: cand.id, on: true });
     await until(() => partyOf(room).roster.length === 1, 2000, "the hire");
     expect(purse(room)).toBe(purse0 - cand.wage);
+    // D-047: the hand is on the ground at home at once, come up from the jetty
+    await until(() => rows(room).some(([k]) => k === `npc:${cand.id}`), 2000, "the new hand at home");
+    const atHome = rows(room).find(([k]) => k === `npc:${cand.id}`)![1];
+    expect(Math.hypot(atHome.x - HUB_CREW_SPOT.x, atHome.z - HUB_CREW_SPOT.z)).toBeLessThan(25);
     me.send("hire", { id: cand.id, on: true }); // twice: refused, nothing changes
     await sleep(300);
     expect(partyOf(room).roster.length).toBe(1);
@@ -193,7 +198,14 @@ describe("the expedition through a real room: manifest, hired hands, orders, hor
     await sleep(500);
     expect(me.notices.length).toBe(before);
     expect(hand![1].cmd).toBe(cmdBefore);
-  }, 60000);
+
+    // D-047: and the hand comes home with the party, standing a step inland of the jetty
+    place(room, me.p, A.landing.x, A.landing.z - 1, 0);
+    await sail(room, me, "hollowmere");
+    await until(() => rows(room).some(([k]) => k === `npc:${cand.id}`), 3000, "the hand home");
+    const home = rows(room).find(([k]) => k === `npc:${cand.id}`)![1];
+    expect(Math.hypot(home.x - HUB_CREW_SPOT.x, home.z - HUB_CREW_SPOT.z)).toBeLessThan(6);
+  }, 90000);
 
   it("an unaffordable, overloaded manifest is trimmed at the ship's leaving in the fixed order, with a notice, and charged once", async () => {
     const { room, me } = await setup();

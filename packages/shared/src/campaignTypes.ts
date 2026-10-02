@@ -14,7 +14,11 @@ export type BridgeState = "intact" | "rigged" | "collapsed";
 export type CrossingControl = "ward" | "society" | "rival" | "contested";
 export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_ambush" | "border_incident" | "succession_dispute"
   // D-037: Vesper Gorge (mine_rescue, claim_race) and the Saltmarket Delta (smuggling_run, flooded_market)
-  | "mine_rescue" | "claim_race" | "smuggling_run" | "flooded_market";
+  | "mine_rescue" | "claim_race" | "smuggling_run" | "flooded_market"
+  // D-042: Highmark's second contract, the Reapers' Strike
+  | "reapers_strike"
+  | "winding_engine"   // D-044: Vesper's third
+  | "outpost_raid";   // D-045: Kessar's fifth (only while the Syndicate means to raid the party's outpost)
 export type ResolutionId =
   | "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned"
   | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated"
@@ -23,7 +27,13 @@ export type ResolutionId =
   // D-037, Vesper Gorge: the Lower Gallery (mine_rescue) and the Claim Race (claim_race)
   | "dug_out" | "blasted_through" | "sealed" | "consecrated" | "staked" | "jumped" | "partnered" | "outpaced"
   // D-037, Saltmarket Delta: the Quiet Barge (smuggling_run) and the Auction at High Water (flooded_market)
-  | "landed" | "impounded" | "scuttled" | "informed" | "lot_won" | "consortium" | "shorted" | "washed_out";
+  | "landed" | "impounded" | "scuttled" | "informed" | "lot_won" | "consortium" | "shorted" | "washed_out"
+  // D-042, Highmark: the Reapers' Strike (reapers_strike)
+  | "honest_measure" | "bought_back" | "strike_broken" | "barley_lost"
+  // D-044, Vesper Gorge: the Winding Engine (winding_engine)
+  | "engine_fouled" | "engine_blown" | "engine_bought" | "vein_struck"
+  // D-045, Kessar: the Raid on the Post (outpost_raid)
+  | "post_held" | "post_burned" | "protection_paid";
 export type ComplicationId = "none" | "rival_scouts" | "rain" | "reinforcements" | "rival_bid" | "outriders" | "ward_patrol" | "fog" | "stray_shot";
 export interface CrossingState { bridge: BridgeState; control: CrossingControl; toll: number; tollPaidTotal: number; bribed: boolean; exposed: boolean }  // toll in pounds per crossing (0 = free)
 export interface CasualtyTally { wounded: number; downed: number; limbsLost: number; garrisonKilled: number; garrisonRouted: number; civiliansHarmed: number; rivalKilled: number }
@@ -54,7 +64,7 @@ export interface ScenarioOutcome {                                       // what
 }
 // ---- negotiation (types here so C never imports A's code) ----
 export interface Leverage { purse: number; armed: number; garrisonAlive: number; garrisonTotal: number; partyWounded: number; rivalInfluence: number; lies: number }
-export interface ParleyOption { id: "pay" | "haggle_flatter" | "haggle_threaten" | "bribe" | "walk_away"; label: string; cost: number; hint: string }
+export interface ParleyOption { id: "pay" | "haggle_flatter" | "haggle_threaten" | "bribe" | "plead" | "walk_away"; label: string; cost: number; hint: string }
 export interface ParleyView { round: number; speaker: string; line: string; toll: number; options: ParleyOption[]; mood: FactionStance }
 export type ParleyStep = { view: ParleyView; done?: undefined } | { done: { resolution: ResolutionId | "walked_away" | "hostile"; toll: number; paid: number }; view?: undefined; line: string };
 // ---- scenario public view (HUD) and machine I/O ----
@@ -76,7 +86,10 @@ export type ScenarioEvent =
   | { t: "talk"; kind: ParleyKind; result: TalkResult; paid: number };
 /** Who a site parley is with. "warden" is the crossing's (negotiation.ts); the rest are authored in scenarios/parleys.ts. */
 export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_post" | "chamberlain" | "claimant_elder" | "claimant_younger"   // D-036: Highmark's
-  | "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head";   // D-037: Vesper's three, then the Saltmarket's three
+  | "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head"   // D-037: Vesper's three, then the Saltmarket's three
+  | "reaper" | "steward"   // D-042: the Reapers' Strike (the Compact's Foreperson, the Steward of the Granary)
+  | "engineer"   // D-044: the Winding Engine (the Syndicate's engineer at the headframe)
+  | "raid_captain";   // D-045: the Raid on the Post (the Syndicate's raiding captain)
 export type TalkResult = "open" | "close" | "hostile" | "paid" | "bargained" | "bribed" | "ransom" | "survey" | "learn" | "tell" | "envelope" | "tip";
 export type ScenarioEffect = "garrison_alert" | "garrison_stand_down" | "gate_open" | "arm_charge" | "rival_advance" | "commit";
 /** What a template asks the server to DO (the runner turns each into Cast / Mounts / host calls). Sites are named in KESSAR_SITES / KESSAR_ANCHORS. */
@@ -87,7 +100,7 @@ export type ScenarioFx =
 export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation" | "court" | "post";   // D-036: "court" = a person of Highmark's court (the chamberlain, a claimant), acted on through the scenario; D-037: "post" = the same for any later region (a foreman, a clerk, a customs shed)
 export interface UseStation { id: string; kind: StationKind; x: number; z: number; r: number; prompt: string }
 export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10, CHAMBERLAIN: 11, CLAIMANT: 12, COURT_GUARD: 13, HERDER: 14,
-  FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three)
+  FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20, RAIDER: 21 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three; D-047: the Syndicate's torch-bearing raiders)
 export const NPC_CAP = 24, FOLLOWER_CAP = 4, SETTLED_DAYS = 3, HOSTAGE_DEADLINE_S = 480, CONVOY_DEPART_S = 60, BORDER_ESCALATE_S = 240, NAME_TAG_RANGE = 30, SAIL_SECONDS = 6, ARRIVE_TIMEOUT_S = 30, PROPOSE_TIMEOUT_S = 20, RIVAL_ARRIVES_S = 420, RIVAL_PARLEY_S = 60, RESOLVED_LINGER_S = 45;
 /** Story coordinates of Kessar Reach (metres, x east, z south, y from terrain). B builds the geometry around them; C puts people on them. Frozen. */
 export const KESSAR_ANCHORS = {

@@ -1,6 +1,8 @@
 import type { ParleyKind, ParleyOption, ParleyView, TalkResult } from "../campaignTypes.ts";
 import { clampI } from "../factions.ts";
 import { hash3 } from "../rng.ts";
+import { REAPERS_PARLEYS } from "./highmarkParleyText.ts";
+import { KESSAR_PARLEYS } from "./kessarParleyText.ts";
 import { SALTMARKET_PARLEYS } from "./saltmarketParleyText.ts";
 import { VESPER_PARLEYS } from "./vesperParleyText.ts";
 
@@ -12,8 +14,8 @@ import { VESPER_PARLEYS } from "./vesperParleyText.ts";
  */
 
 export type SiteParleyKind = Exclude<ParleyKind, "warden">;
-/** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below. */
-export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head";
+/** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below; D-042: so are the strike's two. */
+export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head" | "reaper" | "steward" | "engineer" | "raid_captain";
 type LegacyKind = Exclude<SiteParleyKind, ScriptKind>;
 export type Key = "pay" | "flatter" | "threaten" | "walk" | "propose" | "ask" | "tell" | "envelope" | "tip";
 const WIRE: Record<Key, ParleyOption["id"]> = {
@@ -42,7 +44,7 @@ export interface ParleyScript {
   /** The options of round 1, 2 and 3 for a price `p` (>= 1 of them; always includes a `walk`). */
   options(round: number, p: number): readonly Opt[];
 }
-const PARLEY_SCRIPTS: Readonly<Partial<Record<ParleyKind, ParleyScript>>> = { ...VESPER_PARLEYS, ...SALTMARKET_PARLEYS };
+const PARLEY_SCRIPTS: Readonly<Partial<Record<ParleyKind, ParleyScript>>> = { ...VESPER_PARLEYS, ...SALTMARKET_PARLEYS, ...REAPERS_PARLEYS, ...KESSAR_PARLEYS };
 /** The scripted kinds only (exported for the tests that prove every script is complete). */
 export const SCRIPTED_KINDS: readonly ScriptKind[] = Object.keys(PARLEY_SCRIPTS) as ScriptKind[];
 export const parleyScript = (kind: ParleyKind): ParleyScript | undefined => PARLEY_SCRIPTS[kind];
@@ -130,12 +132,15 @@ const WALK: Record<LegacyKind, string> = {
 };
 const DEAL: Partial<Record<TalkResult, string>> = {
   ransom: "\"Done,\" says the colour-sergeant, pocketing the money with the care of a man who has never owned any. \"Mr. Quim! You are redeemed.\" The cage door opens. \"Do mind the step.\"",
-  survey: "\"A joint survey,\" the speaker repeats, as if tasting a pie. \"In triplicate. I shall sign the third copy. Do not let the other side see which one that is.\"",
+  survey: "\"A joint survey,\" the surveyor repeats, as if tasting a pie. \"In triplicate. I shall sign the third copy. Do not let the other side see which one that is.\"",
   tell: "\"The Syndicate means to move the stone?\" The sergeant is very still. \"Thank you. You have just saved me a night of looking at it. Gentlemen: detain these people, kindly, as witnesses.\"",
   envelope: "The envelope is thick. It is also, somehow, already in your coat. \"The stone,\" says the surveyor, \"is a quarter-ton, so lift with your knees.\"",
   tip: "\"A wagon, in the Cut, with the Syndicate's flag on a Ward crate? I did not hear that,\" says the corporal, loudly, standing up. \"Section! The Cut. Ambush stations. And bring the tea.\"",
 };
-const DEAL_HM: Partial<Record<LegacyKind, Partial<Record<TalkResult, string>>>> = {
+const DEAL_BY_SPEAKER: Partial<Record<LegacyKind, Partial<Record<TalkResult, string>>>> = {
+  ward_post: {
+    survey: "\"A joint survey,\" the sergeant repeats, without lowering the rifle. \"Both chains on the ground at once, in daylight, witnessed. I can put that in a report without having to lie in it.\"",
+  },
   chamberlain: {
     survey: "\"Form 11, in triplicate,\" says the Chamberlain, receiving it with both hands and a faint sigh. \"It will be stamped. Stamping takes forty-five seconds, which in Highmark is called prompt.\"",
     paid: "The envelope disappears into the Window, where envelopes go. \"Form 11,\" says the Chamberlain, stamping it twice, \"is hereby in order, retroactively.\"",
@@ -275,7 +280,7 @@ export function answerSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx, v: Pa
     case "pay": {
       const hm = kind === "chamberlain" || kind === "claimant_elder" || kind === "claimant_younger";
       if (ctx.purse < p || o.cost !== p) return { view: view(kind, round, p, hm ? "\"You are short,\" says the court, counting what is not there. The price stands." : "\"You are short,\" says the colour-sergeant, counting what is not there. The price stands."), line: "You are short of the price." };
-      return hm ? done("paid", p, DEAL_HM[lk]!.paid!) : done("ransom", p, DEAL.ransom!);
+      return hm ? done("paid", p, DEAL_BY_SPEAKER[lk]!.paid!) : done("ransom", p, DEAL.ransom!);
     }
     case "flatter": {
       if (round !== 1) return again();
@@ -285,7 +290,7 @@ export function answerSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx, v: Pa
       const line = fill(pickText(hmf ? (lower ? hmf.ok : hmf.fail) : lower ? FLATTER_OK : FLATTER_FAIL, ctx.seed, round * 17 + (lower ? 1 : 2)), np);
       return { view: view(kind, 2, np, line), line };
     }
-    case "propose": return done("survey", 0, DEAL_HM[lk]?.survey ?? DEAL.survey!);
+    case "propose": return done("survey", 0, DEAL_BY_SPEAKER[lk]?.survey ?? DEAL.survey!);
     case "ask": {
       const line = pickText(ROUND2[lk], ctx.seed, 29);
       return { view: view(kind, 2, p, line), line, emit: "learn" };

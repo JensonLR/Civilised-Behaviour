@@ -4,6 +4,9 @@ import { clampI } from "./factions.ts";
 import { cloneState, hasFlag, pairKey, withFlag, withLog } from "./relations.ts";
 import { hash3 } from "./rng.ts";
 import { pluck } from "./regionEndings.ts";
+import { ENGINE_ENDINGS } from "./engineLedger.ts";
+import { RAID_ENDINGS } from "./raidLedger.ts";
+import { REAPERS_ENDINGS } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS } from "./saltmarketLedger.ts";
 import { VESPER_ENDINGS } from "./vesperLedger.ts";
 import { crossingSettled } from "./scenarios/crossing.ts";
@@ -42,7 +45,7 @@ export const COUNTER: Record<RivalGoal, Partial<Record<ResolutionId, number>>> =
 };
 /** How an ending sits with the Syndicate: grudge in points (exhaustive, so a new resolution must choose). */
 export const GRUDGE_FX: Record<ResolutionId, number> = {
-  ...pluck(VESPER_ENDINGS, "grudge"), ...pluck(SALTMARKET_ENDINGS, "grudge"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "grudge"), ...pluck(SALTMARKET_ENDINGS, "grudge"), ...pluck(REAPERS_ENDINGS, "grudge"), ...pluck(ENGINE_ENDINGS, "grudge"), ...pluck(RAID_ENDINGS, "grudge"),   // D-037 (regionEndings.ts)
   paid: 0, bargained: 0, bribed: 0, forced: 2, sabotaged: 4, rival_secured: -10, abandoned: 0,
   ransomed: -3, rescued: 6, slipped_away: 0, hostage_lost: -2, seized: 12, tipped_off: 8, burned: 12, passed: -8, mediated: -2, sided_ward: 8, sided_syndicate: -8, provoked: 4, escalated: 3,
   // D-036: a chair the Society filled is a concession the Syndicate did not get (a regency stalls it longest, a usurpation shuts it); a sold crown is the Syndicate's own good day
@@ -225,6 +228,7 @@ export function rivalPresence(_c: CampaignState, p: PowersState): RivalPresence 
   return {
     goal: r.goal, arrivesInS: Math.min(480, Math.max(150, RIVAL_ARRIVES_S - sooner)), escort: Math.min(3, Math.max(1, 1 + Math.floor(r.escort / 35))),
     wagon: r.goal === "arm_brine" || r.goal === "found_post", surveyors: r.goal === "survey_route" ? 2 : r.goal === "lie_low" ? 0 : 1, postStage: r.posts,
+    ...(r.goal === "sabotage_party" && hasFlag(p, "party_post") && !hasFlag(p, "party_post_raided") ? { raidDue: true as const } : {}),
   };
 }
 
@@ -242,8 +246,12 @@ export function rivalDispatch(p: PowersState, seed: number): PaperItem {
   const r = p.rival;
   const t = GOAL_NEWS[r.goal];
   const pick = (list: readonly string[], tag: number): string => list[hash3(seed >>> 0, r.day, r.since, tag) % list.length]!;
-  return { slug: "rival-goal", head: pick(t.head, 1), body: pick(t.body, 2).replace("{days}", String(Math.max(1, r.lead))) };
+  return { slug: "rival-goal", head: pick(t.head, 1), body: pick(t.body, 2).replace("{days} days", daysPhrase(Math.max(1, r.lead))).replace("{days}", String(Math.max(1, r.lead))) };
 }
+
+const SMALL = ["no", "a", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"] as const;
+/** "a day", "two days", "14 days": the paper never prints "1 days" (D-040). */
+export const daysPhrase = (n: number): string => (n === 1 ? "a day" : `${n >= 0 && n <= 10 ? SMALL[n] : n} days`);
 
 /** A paper item for one rival event (the log holds `rival_<kind>`). */
 export function rivalEventItem(ev: PowerEvent, seed: number): PaperItem | undefined {

@@ -517,6 +517,28 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       expect(a.p.shots).toBe(first + 2);
     }, 30000);
 
+    it("D-041: a trigger squeezed while the gun is still being drawn fires the moment it is ready if still held; once per squeeze, never automatic", async () => {
+      const { room, ps } = await setup(1);
+      const [a] = ps as [Player];
+      place(a.p, 0, 0);
+      combatOf(room).give(a.id);
+      const dir = openBearing(room, 20);
+      const yaw = yawTo({ x: 0, z: 0 }, { x: Math.cos(dir), z: Math.sin(dir) });
+      await equip(a, WEAPON.RIFLE);
+      const shots = a.p.shots;
+      // the pad's habit: change to the pistol and squeeze at once, holding on (frames stream as a client's do)
+      const hold = (WEAPONS[WEAPON.PISTOL].drawSeconds + COMBAT.switchSeconds) * 1000 + 1500;
+      const end = Date.now() + hold;
+      while (Date.now() < end) {
+        frame(a, { buttons: BUTTON.AIM | BUTTON.FIRE, yaw, aimYaw: yaw, aimElev: 0, weapon: WEAPON.PISTOL });
+        await sleep(33);
+      }
+      expect(a.p.weapon).toBe(WEAPON.PISTOL + 1);
+      expect(a.p.shots).toBe((shots + 1) & 255); // one ball, after the draw; 1.5 s more of holding (four cooldowns) fired nothing more
+      frame(a, { buttons: BUTTON.AIM, yaw, aimYaw: yaw, aimElev: 0, weapon: WEAPON.PISTOL });
+      await sleep(100);
+    }, 30000);
+
     it("every blow and ball carries its weapon's sever bias into the wound rule (umbrella none, sabre more than the plain rule)", async () => {
       const { room, ps } = await setup(2);
       const [a, b] = ps as [Player, Player];

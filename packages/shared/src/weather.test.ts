@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE, chroma as hexChroma } from "./palette.ts";
 import { createDayState, dayState, type DayState } from "./daycycle.ts";
-import { WEATHER, WEATHER_KINDS, applyWeather, createLightning, createWeather, lightningAt, parseWeatherKind, slotKind, weatherAt, weatherPreset, type Weather } from "./weather.ts";
+import { WEATHER, WEATHER_KINDS, applyWeather, complicationWeather, createLightning, createWeather, lightningAt, parseWeatherKind, slotKind, weatherAt, weatherFloor, weatherPreset, type Weather } from "./weather.ts";
+import { SCENARIO } from "./scenario.ts";
 
 const NUM: (keyof Weather)[] = ["rain", "overcast", "fog", "wind", "dust", "storm", "wet"];
 const MIN = 60_000;
@@ -225,5 +226,31 @@ describe("applyWeather bends the day", () => {
     // night storms stay dark
     const night = applyWeather(dayState(0, createDayState()), weatherPreset("storm"));
     expect(night.horizon.g).toBeLessThan(0.35);
+  });
+});
+
+describe("a contract's complication as weather (D-046)", () => {
+  it("rain is a drizzle wet enough to count as rain, fog is fog, the rest are no weather", () => {
+    expect(complicationWeather("rain")).toBe("drizzle");
+    expect(complicationWeather("fog")).toBe("fog");
+    for (const c of ["none", "reinforcements", "outriders", "rival_scouts", undefined]) expect(complicationWeather(c)).toBeUndefined();
+    expect(weatherPreset("drizzle").rain).toBeGreaterThanOrEqual(SCENARIO.wetRain);
+  });
+  it("the floor only ever raises: a clear sky gets the rain, a storm keeps its storm, and the stronger state names the sky", () => {
+    const clear = weatherFloor("drizzle", weatherPreset("clear"));
+    expect(clear).toMatchObject({ kind: "drizzle", rain: 0.5 });
+    expect(clear.wet).toBeGreaterThanOrEqual(0.5);
+    const storm = weatherFloor("drizzle", weatherPreset("storm"));
+    expect(storm).toMatchObject({ kind: "storm", rain: 1, storm: 1 });
+    const foggy = weatherFloor("fog", weatherPreset("dust"));
+    expect(foggy.fog).toBe(1);
+    expect(foggy.dust).toBe(1);
+    // over a whole day of the world's own weather, every field is at least the world's and at least the floor's
+    const w = createWeather();
+    for (let t = 0; t < 86_400_000; t += 600_000) {
+      const world = { ...weatherAt(5, t, w) };
+      const f = weatherFloor("fog", { ...world });
+      for (const k of ["rain", "overcast", "fog", "wind", "dust", "storm", "wet"] as const) expect(f[k]).toBeGreaterThanOrEqual(Math.max(world[k], k === "wet" ? 0 : weatherPreset("fog")[k]));
+    }
   });
 });

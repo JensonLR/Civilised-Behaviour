@@ -118,6 +118,11 @@ export const FOLLOW = {
   engage: NPC_TUNING.react.forget,
   /** At the leader's side within this many metres a retreating hand fights again. */
   rally: 5,
+  /**
+   * D-040: bravery points a hand on the books counts beyond its own (a signed wage steadies a person). The playtest's surgeon (bravery 40) read "shaken" at a calm
+   * landing with her employer beside her: the shared goal put a calm, led, paid hand of middling bravery just under the steady line. Fear, fire and wounds still shake them.
+   */
+  hiredNerve: 12,
 } as const;
 
 /** What the host and the brain tell each other. Plain numbers and booleans; reached through `mindOf(brain)`. */
@@ -277,7 +282,7 @@ export function followerThink(b: NpcBrain, me: NpcBody, sn: NpcSenses, dt: numbe
   moraleStep(b.morale, {
     dt: step, leader: dLeader <= 20 ? 1 : 0, allies: fin(sn.allies, 0), alliesDown: fin(sn.alliesDown, 0), hpLack: 100 - clamp(fin(me.health, 100), 0, 100),
     underFire: clamp(fin(sn.underFire, 0), 0, 1), fear: clamp(fin(sn.fear, 0), 0, 100), paid: mind.paid, provisions: mind.provisions,
-  }, mind.bravery);
+  }, mind.bravery + FOLLOW.hiredNerve);
   const band = moraleBand(b.morale.v);
 
   const enemy = sn.enemy !== undefined && !sn.enemy.down && sn.alert ? sn.enemy : undefined;

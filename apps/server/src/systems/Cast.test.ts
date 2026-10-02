@@ -134,10 +134,13 @@ describe("Cast: who fights whom", () => {
     expect(fired(r, "npc:s1")).toBeGreaterThan(0);
   });
 
-  it("outlaws fight everyone at once; neutrals are nobody's target", () => {
+  it("outlaws fight the party once their camp is up (D-041: not on sight); neutrals are nobody's target", () => {
     const r = rig();
     r.human("p1", 0, -18);
     r.cast.spawn([spec("d1", { role: NPC.DESERTER, side: "outlaw", group: "camp", faction: "rival", post: { x: 0, z: 0 } }), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: 3, z: 0 } })]);
+    r.tick(240);
+    expect(fired(r, "npc:d1")).toBe(0); // carousing: the contract's own rules (a challenge, a lookout, a noise) decide when the camp is up
+    r.cast.order("camp", { o: "alert" });
     r.tick(240);
     expect(fired(r, "npc:d1")).toBeGreaterThan(0);
     expect(fired(r, "npc:h1")).toBe(0);
@@ -147,6 +150,7 @@ describe("Cast: who fights whom", () => {
     const r2 = rig({ brains: { garrison: spy } });
     r2.human("p1", 0, -18);
     r2.cast.spawn([spec("d1", { role: NPC.DESERTER, side: "outlaw", group: "camp", post: { x: 0, z: 0 } }), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "garrison", post: { x: 3, z: 0 } })]);
+    r2.cast.order("camp", { o: "alert" });
     r2.tick(60);
     expect([...seen]).toEqual(["p1"]);
   });
@@ -240,10 +244,12 @@ describe("Cast: whose bullets hurt whom (hostileTo) and the hands' attack orders
     expect(r.cast.brainOf("ghost")).toBeUndefined();
   });
 
-  it("outlaws are hostile to everything that is not neutral, in or out of sight", () => {
+  it("outlaws are hostile to every NPC side that is not neutral, and to the party once their camp is up", () => {
     const r = rig();
     r.human("p1", 0, -15);
     r.cast.spawn([spec("d1", { role: NPC.DESERTER, side: "outlaw", group: "camp" }), sentry("s1"), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", post: { x: 3, z: 0 } })]);
+    expect(r.cast.hostileTo("npc:d1", "p1")).toBe(false);
+    r.cast.order("camp", { o: "alert" });
     expect(r.cast.hostileTo("npc:d1", "p1")).toBe(true);
     expect(r.cast.hostileTo("npc:d1", "npc:s1")).toBe(true);
     expect(r.cast.hostileTo("npc:d1", "npc:h1")).toBe(false);
@@ -368,6 +374,22 @@ describe("Cast: orders", () => {
     expect(Math.hypot(p.x - 10, p.z + 12)).toBeLessThan(2);
   });
 
+  it("march with join picks the route up at the nearest waypoint; without it the walk starts from the first (D-045: a raid ordered in mid-march)", () => {
+    const walk = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: -12 }, { x: 0, z: -12 }];
+    const at = (join: boolean): { x: number; z: number } => {
+      const r = rig();
+      r.cast.defineRoute("walk", walk);
+      r.cast.spawn([spec("r1", { group: "rival", side: "rival", faction: "rival", role: NPC.RIVAL_GUARD, post: { x: 10, z: -11 } })]);
+      r.cast.order("rival", join ? { o: "march", route: "walk", join } : { o: "march", route: "walk" });
+      r.tick(150);
+      return r.rows.get("npc:r1")!;
+    };
+    const joined = at(true);
+    expect(Math.hypot(joined.x - 0, joined.z + 12), "joined at 10,-12 and walked the last leg").toBeLessThan(2);
+    const fromStart = at(false);
+    expect(Math.hypot(fromStart.x - 0, fromStart.z + 12), "went back to the first waypoint").toBeGreaterThan(5);
+  });
+
   it("guard moves a group to a spot and spreads it inside the radius", () => {
     const r = rig();
     r.cast.spawn([0, 1, 2].map((i) => spec(`g${i}`, { post: { x: 20, z: 20 }, lookSeed: 40 + i })));
@@ -434,6 +456,32 @@ describe("Cast: the people who are not soldiers", () => {
     const brain = (id: string): NpcBrainState => (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get(id)!.brain;
     expect(brain("npc:s2").morale.shock).toBeGreaterThan(10);
     expect(brain("npc:far").morale.shock).toBe(0);
+  });
+
+  it("D-041: a soldier shot at from beyond his sight goes toward the shot, finds the shooter and fights; a hand or a hostage does not, and nor does a shot from his own side", () => {
+    const r = rig();
+    const p1 = r.human("p1", 0, -45); // 45 m: beyond CAST.sightClear
+    expect(45).toBeGreaterThan(CAST.sightClear);
+    r.cast.spawn([spec("s1"), spec("h1", { role: NPC.HOSTAGE, side: NPC_SIDE[NPC.HOSTAGE]!, group: "hostage", brain: "civil", post: { x: 6, z: 0 } }), spec("s2", { post: { x: -6, z: 0 } })]);
+    r.cast.order("ward", { o: "alert" });
+    r.tick(60);
+    const s1 = r.rows.get("npc:s1")!;
+    expect(s1.z).toBeCloseTo(0, 0); // alert, but nobody in sight: he keeps his post
+    r.cast.shotFrom("npc:s1", "p1");
+    r.cast.shotFrom("npc:h1", "p1");
+    r.cast.shotFrom("npc:s2", "npc:s1"); // (his own side's round)
+    r.tick(150);
+    expect(s1.z).toBeLessThan(-8); // walked a good way toward the report (it lies at -Z)
+    expect(Math.abs(r.rows.get("npc:s2")!.z)).toBeLessThan(1.5);
+    // keep reporting (the shooter keeps shooting) until he is in sight, and then he fights
+    for (let i = 0; i < 12 && fired(r, "npc:s1") === 0; i++) {
+      r.cast.shotFrom("npc:s1", "p1");
+      r.tick(60);
+    }
+    expect(Math.hypot(s1.x - p1.x, s1.z - p1.z)).toBeLessThan(CAST.sightClear);
+    expect(fired(r, "npc:s1")).toBeGreaterThan(0);
+    // unknown targets and shooters are ignored
+    expect(() => { r.cast.shotFrom("npc:nobody", "p1"); r.cast.shotFrom("npc:s1", "nobody"); }).not.toThrow();
   });
 
   it("a wounded row remembers being hit (underFire) and is shaken by it", () => {

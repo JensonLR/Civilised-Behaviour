@@ -20,9 +20,18 @@ export const VESPER_RESOLUTIONS = ["dug_out", "blasted_through", "sealed", "cons
 /** The Saltmarket Delta (the wetland trading region). Two templates. */
 export const SALTMARKET_RESOLUTIONS = ["landed", "impounded", "scuttled", "informed", "lot_won", "consortium", "shorted", "washed_out"] as const satisfies readonly ResolutionId[];
 export type VesperEnding = (typeof VESPER_RESOLUTIONS)[number];
+/** D-042: Highmark's second contract, the Reapers' Strike (its endings follow this file's shape; the succession's five keep their older literal rows). */
+export const REAPERS_RESOLUTIONS = ["honest_measure", "bought_back", "strike_broken", "barley_lost"] as const satisfies readonly ResolutionId[];
+export type ReapersEnding = (typeof REAPERS_RESOLUTIONS)[number];
+/** D-044: Vesper's third contract, the Winding Engine (the sabotage the D-037 note left for later). */
+export const ENGINE_RESOLUTIONS = ["engine_fouled", "engine_blown", "engine_bought", "vein_struck"] as const satisfies readonly ResolutionId[];
+export type EngineEnding = (typeof ENGINE_RESOLUTIONS)[number];
+/** D-045: Kessar's fifth contract, the Raid on the Post (the GDD's outpost defence): offered only while the Syndicate means to raid the party's outpost. */
+export const RAID_RESOLUTIONS = ["post_held", "post_burned", "protection_paid"] as const satisfies readonly ResolutionId[];
+export type RaidEnding = (typeof RAID_RESOLUTIONS)[number];
 export type SaltmarketEnding = (typeof SALTMARKET_RESOLUTIONS)[number];
-/** Every ending the D-037 regions add (16). Tests that script Kessar's twenty or Highmark's five exclude these. */
-export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS] as const;
+/** Every ending in the D-037 shape (27: Vesper's and the Saltmarket's sixteen, the strike's four, the engine's four, the raid's three). Tests that script Kessar's twenty or Highmark's chair exclude these. */
+export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS, ...REAPERS_RESOLUTIONS, ...ENGINE_RESOLUTIONS, ...RAID_RESOLUTIONS] as const;
 export type NewEnding = (typeof NEW_RESOLUTIONS)[number];
 
 /** What each new template can end as (each has >= 3 materially different endings besides the shared `abandoned`). */
@@ -31,9 +40,12 @@ export const NEW_TEMPLATE_RESOLUTIONS = {
   claim_race: ["staked", "jumped", "partnered", "outpaced", "abandoned"],
   smuggling_run: ["landed", "impounded", "scuttled", "informed", "abandoned"],
   flooded_market: ["lot_won", "consortium", "shorted", "washed_out", "abandoned"],
+  reapers_strike: ["honest_measure", "bought_back", "strike_broken", "barley_lost", "abandoned"],   // D-042 (Highmark)
+  winding_engine: ["engine_fouled", "engine_blown", "engine_bought", "vein_struck", "abandoned"],   // D-044 (Vesper)
+  outpost_raid: ["post_held", "post_burned", "protection_paid", "abandoned"],   // D-045 (Kessar)
 } as const satisfies Partial<Record<ScenarioTemplateId, readonly ResolutionId[]>>;
 export type NewTemplateId = keyof typeof NEW_TEMPLATE_RESOLUTIONS;
-export type VesperTemplate = "mine_rescue" | "claim_race";
+export type VesperTemplate = "mine_rescue" | "claim_race" | "winding_engine";
 export type SaltmarketTemplate = "smuggling_run" | "flooded_market";
 export const NEW_TEMPLATE_IDS = Object.keys(NEW_TEMPLATE_RESOLUTIONS) as NewTemplateId[];
 export const isNewTemplate = (t: unknown): t is NewTemplateId => typeof t === "string" && (NEW_TEMPLATE_IDS as readonly string[]).includes(t);
@@ -41,7 +53,7 @@ export const isNewTemplate = (t: unknown): t is NewTemplateId => typeof t === "s
 /** Where each template is played (its outcome carries this as `ScenarioOutcome.region`; the debug command `outcome:<resolution>` reads it). Exhaustive. */
 export const TEMPLATE_REGION: Readonly<Record<ScenarioTemplateId, RegionId>> = {
   secure_crossing: "kessar", hostage_rescue: "kessar", convoy_ambush: "kessar", border_incident: "kessar", succession_dispute: "highmark",
-  mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket",
+  mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket", reapers_strike: "highmark", winding_engine: "vesper", outpost_raid: "kessar",
 };
 
 /** What one ending does to a minor power's mood (integer deltas, applied after the day's drift, clamped 0..100). */

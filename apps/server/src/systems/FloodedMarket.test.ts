@@ -34,6 +34,12 @@ function waitForPrice(f: Fake, s: Scenario, need: number): number {
   }
   throw new Error("the price never cleared the paddles");
 }
+/** A bid at the opening price (D-041: a consortium pools a BIDDER's purse, so the party must be in the bidding before anybody signs). */
+function bidIn(f: Fake, s: Scenario): void {
+  beside(f, "p1", "auctioneer");
+  expect(press(f, s)).toBe(true);
+  s.onPick("p1", labelIndex(lastParley(f, "p1")!.view!, /^Bid £/));
+}
 const toHammer = (f: Fake, s: Scenario): void => {
   for (let t = 0; t < 700 && f.commits.length === 0; t += 5) run(f, s, 5);
 };
@@ -96,12 +102,18 @@ describe("The Auction at High Water through the runner", () => {
 
   it("consortium: two House-Heads agree to a pool (two signatures); one commit; the Syndicate's factor counts as a signature too", () => {
     const { f, s } = start();
+    // a spectator is refused: no bid, no signature
     pick(f, s, "head-0", /Propose a consortium/);
-    expect(f.commits).toEqual([]);
     pick(f, s, "head-1", /Propose a consortium/);
+    expect(f.commits).toEqual([]);
+    bidIn(f, s);
+    pick(f, s, "head-2", /Propose a consortium/);
+    expect(f.commits).toEqual([]);
+    pick(f, s, "head-3", /Propose a consortium/);
     expect(f.commits).toHaveLength(1);
     expect(f.commits[0]).toMatchObject({ scenario: "flooded_market", resolution: "consortium", region: "saltmarket" });
     const g = start();
+    bidIn(g.f, g.s);
     beside(g.f, "p1", "factor");
     expect(press(g.f, g.s)).toBe(true);   // hears the offer
     expect(press(g.f, g.s)).toBe(true);   // pools with him
@@ -190,6 +202,7 @@ describe("The Auction at High Water through the runner", () => {
     }
     {
       const { f, s } = start(c);
+      bidIn(f, s);
       pick(f, s, "head-0", /Propose a consortium/);
       pick(f, s, "head-1", /Propose a consortium/);
       outs.set(f.commits[0]!.resolution, JSON.stringify([f.commits[0]!.paid, f.commits[0]!.loot ?? 0, f.commits[0]!.brokePromise]));

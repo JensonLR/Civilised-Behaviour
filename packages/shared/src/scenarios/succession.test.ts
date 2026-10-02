@@ -461,3 +461,26 @@ describe("The Vacant Chair: leave, views, roster, observation, determinism", () 
     }
   });
 });
+
+describe("a ready court sends for the Assembly (D-041)", () => {
+  it("form in, two votes and one heir pledged: the bell comes forward to readyBellS, and the chair is settled then, not minutes later", () => {
+    const setup = [...FORM, talk("claimant_elder", "open"), talk("claimant_elder", "paid", P.elder), use("grange0"), use("grange1")];
+    const r = drive(setup);
+    expect(r.s.bell).toBeLessThanOrEqual(Math.ceil(r.s.t) + SUCCESSION.readyBellS);
+    expect(r.s.bell).toBeLessThan(BELL);
+    const done = drive(ticks(SUCCESSION.readyBellS + 1), r.s);
+    expect(done.s.resolution).toBe("backed_elder");
+    // the line is said once
+    expect(drive(ticks(3), r.s).fx.filter((f) => typeof f === "object" && f.k === "say" && /bell tower/.test(f.text))).toHaveLength(0);
+  });
+
+  it("a court that is not ready (no heir, half a regency, or no form) keeps the bell's own hour", () => {
+    for (const setup of [
+      [...FORM, use("grange0"), use("grange1")],
+      [...FORM, talk("claimant_elder", "open"), talk("claimant_elder", "survey"), use("grange0"), use("grange1")],
+      [near("court", 2), talk("claimant_elder", "open"), talk("claimant_elder", "paid", P.elder), use("grange0"), use("grange1")],
+    ]) {
+      expect(drive(setup).s.bell).toBe(BELL);
+    }
+  });
+});
