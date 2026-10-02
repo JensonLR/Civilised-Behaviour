@@ -105,7 +105,7 @@ export interface VesperOut {
  * (a pavement that follows the ground, a lantern at every pier, crepe swagged across the openings), and at its north end the Records Room (a door 1.5 m wide, ledger shelves, a desk). The flat roof over the
  * corridor and the Records Room's own roof are separate (the cutaway lifts the one over the viewer); the bell-gable stands over the cliff's mass. Drawn from the same constants as the collision.
  */
-function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y: number; z: number }[], out: VesperOut): void {
+function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y: number; z: number; lit?: number }[], out: VesperOut): void {
   const c = vesperPlan().cloister;
   const C = CLOISTER;
   const gy = world.terrainHeight(c.x, c.z);
@@ -150,7 +150,7 @@ function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y
       const ly = g(px, zc) + 2.7;
       k.limb([px, gy + H, zc], [px, ly + 0.2, zc], 0.012, 0.012, P.iron, 3);
       k.add(new SphereGeometry(0.13, 6, 4), { at: [px, ly, zc], colour: P.glowLamp });
-      glows.push({ x: px, y: ly, z: zc });
+      glows.push({ x: px, y: ly, z: zc, lit: 0.45 });   // (a lamp under a roof burns bright even at noon, so the gallery is seen to be lit from the forecourt)
     }
   }
   // the roof over the corridor (flat stone, a parapet each side): its own piece, lifted while the viewer is in the gallery
@@ -172,14 +172,15 @@ function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y
   for (const sz of [-1, 1]) for (let i = 0; i < 4; i++) {
     const x = -lb.hx + 1.4 + i * 1.6;
     box(k, [1.4, 3.2, 0.34], [x, fl + 1.6, sz * (lb.hz - 0.5)], P.timber);
-    for (let j = 0; j < 4; j++) box(k, [1.3, 0.34, 0.26], [x, fl + 0.5 + j * 0.8, sz * (lb.hz - 0.5) - sz * 0.02], [P.companyRed, P.crepe, P.copper, P.strataRust][(i + j) % 4]!);
+    // (the ledgers' spines stand proud of the shelf's face: they were drawn at the shelf's own depth, inside its box, and the shelves read as bare dark boards)
+    for (let j = 0; j < 4; j++) box(k, [1.3, 0.34, 0.26], [x, fl + 0.5 + j * 0.8, sz * (lb.hz - 0.5) - sz * 0.2], [P.companyRed, P.crepe, P.copper, P.strataRust][(i + j) % 4]!);
   }
   box(k, [0.8, 0.08, 1.4], [-lb.hx + 0.8, fl + 0.9, 0], P.timberLight);
   box(k, [0.7, 0.9, 0.08], [-lb.hx + 0.8, fl + 0.45, 0.66], P.timber);
   box(k, [0.7, 0.9, 0.08], [-lb.hx + 0.8, fl + 0.45, -0.66], P.timber);
   box(k, [0.4, 0.45, 0.4], [-lb.hx + 1.5, fl + 0.22, 0.2], P.timber);
   const lw = k.worldPoint(-lb.hx * 0.15, fl + 2.3, 0);
-  glows.push({ x: lw[0], y: lw[1], z: lw[2] });
+  glows.push({ x: lw[0], y: lw[1], z: lw[2], lit: 0.7 });   // (the Records Room's lamp: visible through the door at any hour)
   const rrk = out.roofs.begin("records");
   rrk.setBase(0, 0, 0, 0);
   box(rrk, [C.pierIn - C.backX + 0.5, 0.4, C.recordsZ1 - C.recordsZ0 + 0.3], [(C.backX + C.pierIn) / 2, rg + fl + lb.wallH + 0.05, (C.recordsZ0 + C.recordsZ1) / 2], (p, n, o2) => (n.y < -0.5 ? o2.set(P.timberLight) : o2.set(P.chalk)));
@@ -436,7 +437,7 @@ function needle(k: Kit, x: number, y: number, z: number, r: number, h: number, s
 // ---- everything -----------------------------------------------------------------------------------------------------------------------------
 
 export interface VesperSolidParts {
-  glows: { x: number; y: number; z: number }[];
+  glows: { x: number; y: number; z: number; lit?: number }[];
   /** D-038: the doors drawn, and the roofs of the interiors (collected here, handed to the view by `buildVesperSolid`). */
   marks: DoorMark[];
   roofs: RoofKits;

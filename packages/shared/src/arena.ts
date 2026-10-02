@@ -185,7 +185,7 @@ export function createArena(seed: number): CollisionWorld {
         if (o.tag !== "ruin" || o.kind !== "circle") return false;
         const lx = Math.abs((o.x - x) * cy + (o.z - z) * sy);
         const lz = Math.abs(-(o.x - x) * sy + (o.z - z) * cy);
-        return Math.hypot(Math.max(0, lx - hx), Math.max(0, lz - hz)) < o.r + 0.5;
+        return Math.hypot(Math.max(0, lx - hx), Math.max(0, lz - hz)) < o.r + 0.1;
       })
     )
       continue;

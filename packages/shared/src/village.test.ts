@@ -207,13 +207,26 @@ describe("HOLLOWMERE: doors are doors and walls are walls (the shared movement s
   const plan = villagePlan(world.terrain);
 
   it("you can walk in through the door of every enterable building and stand inside it (any seed: the stilt houses' stairs follow the ground)", () => {
-    for (const seed of [7, 1, 42, 1234, 99999]) {
+    for (const seed of [7, 1, 42, 1234, 99999, 207616]) {
       const w2 = createArena(seed);
       for (const b of villagePlan(w2.terrain).buildings) {
         if (!["cottage", "stilt", "hall", "mill", "workshop"].includes(b.kind)) continue;
         const s = walk(w2, front(b, 5), { x: b.x - Math.cos(b.yaw) * 0.6, z: b.z - Math.sin(b.yaw) * 0.6 });
         expect(inside(b, { x: s.x, z: s.z }, 0.2), `${b.id} seed ${seed}: stopped at ${s.x.toFixed(1)},${s.z.toFixed(1)}`).toBe(true);
         expect(s.y, `${b.id} floor`).toBeGreaterThan(b.ground + b.spec.floor - 0.35);
+      }
+    }
+  });
+
+  it("a stilt house's last tread is within a body's step of the ground under it on every seed, including a bank that falls away fast (hub seed 207616: 0.49 m with 0.4 m rises)", () => {
+    for (const seed of [7, 42, 1337, 1247, 207616]) {
+      const w2 = createArena(seed);
+      for (const b of villagePlan(w2.terrain).buildings) {
+        if (b.kind !== "stilt") continue;
+        const i = b.steps.length - 1;
+        const p = toWorld(b, b.hx + 1.2 + 0.25 + i * 0.5, 0);
+        expect(b.steps[i]! - w2.terrain.height(p.x, p.z), `${b.id} seed ${seed}`).toBeLessThanOrEqual(0.42 + 1e-9);
+        for (let k = 0; k < b.steps.length; k++) expect((k === 0 ? b.ground + b.spec.floor : b.steps[k - 1]!) - b.steps[k]!, `${b.id} seed ${seed} rise ${k}`).toBeLessThanOrEqual(CHARACTER.stepHeight);
       }
     }
   });

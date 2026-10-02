@@ -256,4 +256,5 @@ describe("every stage stays walkable", () => {
 });
 
 // (re-recorded for D-038: Hollowmere's camp, village doors and footbridge deck were replanned on purpose: two tents, a crate, wider door steps and a deck at most a step above its bank; the obstacle COUNT is unchanged)
-const HOLLOWMERE_ARENA_7 = "473:741650406";
+// (re-recorded again for the hub-seed defects of D-038's follow-up: the village pads are relaxed so no street seam is steeper than a body can walk (the heights under every obstacle moved by up to ~1 m on the plaza), and one boulder that stood inside the aqueduct on seed 7 (rock at 24.91,-34.53) is no longer there: 473 -> 472. Nothing else moved: the crag, rock and tree streams are untouched.)
+const HOLLOWMERE_ARENA_7 = "472:1008680773";

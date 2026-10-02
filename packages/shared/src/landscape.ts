@@ -495,7 +495,7 @@ const PAD_CORE_EPS = 0.25;
  * Each pad is levelled to the average of the ground it covers, which on a slope or beside a pond can be a metre apart from its neighbour's
  * while the cores stand two metres apart: the street between them became a step (D-038 follow-up: Hollowmere seeds 1247, 1580 and nine more
  * of 200 had a 1.0+ gradient at the plaza/stilt-house seam, so a walker stuck on the first prop corner). The excess is taken from the pair in
- * proportion to the inverse of each pad's area (the big plaza moves least), a few sweeps, deterministic, pure.
+ * proportion to the fourth power of each pad's radius (the big plaza moves almost all of it: a house on stilts beside the pond keeps the ground it was built on, and the plaza is a graded square anyway), a few sweeps, deterministic, pure.
  */
 function relaxPadLevels(pads: readonly GroundPad[], natural: readonly number[]): number[] {
   const level = natural.slice();
@@ -508,13 +508,13 @@ function relaxPadLevels(pads: readonly GroundPad[], natural: readonly number[]):
         const b = pads[j]!;
         const dist = Math.hypot(a.x - b.x, a.z - b.z);
         const gap = dist - a.r - b.r;
-        if (gap >= a.blend + b.blend) continue; // (their blends do not meet)
+        if (gap >= 0.5 * (a.blend + b.blend)) continue; // (the ground between them runs back to its own shape before the two pads' pull is strong at once: no seam to mend)
         const allow = PAD_SEAM_SLOPE * ((gap > 0 ? gap : 0) + PAD_SEAM_RUN);
         const diff = level[j]! - level[i]!;
         const excess = Math.abs(diff) - allow;
         if (excess <= 1e-4) continue;
-        const wi = 1 / (a.r * a.r);
-        const wj = 1 / (b.r * b.r);
+        const wi = a.r ** 4;
+        const wj = b.r ** 4;
         const sgn = diff > 0 ? 1 : -1;
         level[i] = level[i]! + sgn * excess * (wi / (wi + wj));
         level[j] = level[j]! - sgn * excess * (wj / (wi + wj));

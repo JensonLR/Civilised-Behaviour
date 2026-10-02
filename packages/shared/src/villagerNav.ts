@@ -684,7 +684,7 @@ function resample(world: CollisionWorld, g: Graph, nodes: number[], from: Statio
     x[i] = px[k]! + (px[k + 1]! - px[k]!) * t;
     z[i] = pz[k]! + (pz[k + 1]! - pz[k]!) * t;
     clear[i] = (pc[k]! + (pc[k + 1]! - pc[k]!) * t) * Math.min(1, s / 2) * Math.min(1, (len - s) / 2);
-    cy = world.groundHeight(x[i]!, z[i]!, cy);
+    cy = world.groundHeight(x[i]!, z[i]!, Math.max(cy, world.terrainHeight(x[i]!, z[i]!)));   // (feet are never below the ground at the new point: a sample half a metre on, up a slope, is a step of the SLOPE's rise, not the last sample's stale height + a tread)
     y[i] = cy;
   }
   // round the corners (the grid's octagonal turns): each sample moves toward its neighbours' average if it can stand there, then the heights are followed again
@@ -702,7 +702,7 @@ function resample(world: CollisionWorld, g: Graph, nodes: number[], from: Statio
     }
     cy = from.y;
     for (let i = 0; i < n; i++) {
-      cy = world.groundHeight(x[i]!, z[i]!, cy);
+      cy = world.groundHeight(x[i]!, z[i]!, Math.max(cy, world.terrainHeight(x[i]!, z[i]!)));   // (feet are never below the ground at the new point: a sample half a metre on, up a slope, is a step of the SLOPE's rise, not the last sample's stale height + a tread)
       y[i] = cy;
     }
   }

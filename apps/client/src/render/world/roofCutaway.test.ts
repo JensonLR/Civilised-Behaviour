@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Scene, Vector3 } from "three";
-import { REGION_IDS, createRegionWorld, highmarkLevel, kessarLevel, saltmarketLevel, vesperLevel, villageLevel, type RegionId } from "@cb/shared";
+import { Color, Object3D, Scene, Vector3, type HemisphereLight } from "three";
+import { PALETTE, REGION_IDS, createRegionWorld, highmarkLevel, kessarLevel, saltmarketLevel, vesperLevel, villageLevel, type RegionId } from "@cb/shared";
 import { PRESETS } from "../../render/Stage.ts";
 import { createRegionView, type RegionView } from "./regionView.ts";
-import type { RoofSet } from "./rooms.ts";
+import { InteriorFill, type RoofSet } from "./rooms.ts";
 
 /**
  * THE CUTAWAY (D-038, docs/LEVEL_PLAN.md section 4, rule 7): while the local player is inside a room (`roomAt(rooms, x, z, 0.3)`) the view lifts that building's roof so the third-person camera never sits under a
@@ -74,5 +74,57 @@ describe("the roof over the room the player is in is lifted, and only that one",
     view.setViewer!(out(0.6).x, out(0.6).z);
     expect(roofs.hidden).toBeUndefined();
     view.dispose();
+  });
+});
+
+describe("a room the viewer stands in is lit (Vesper's and the Saltmarket's interiors read as near-black in the stills: D-038 follow-up)", () => {
+  const fillOf = (view: RegionView): HemisphereLight => view.root.getObjectByName("interior-fill") as HemisphereLight;
+  const settle = (view: RegionView, from: number): number => {
+    let t = from;
+    for (let i = 0; i < 40; i++) view.update(t += 0.1);
+    return t;
+  };
+  for (const [id, palette, level] of [["vesper", PALETTE.vesper, vesperLevel()], ["saltmarket", PALETTE.saltmarket, saltmarketLevel()]] as const) {
+    it(`${id}: a warm fill in the region's own palette is off outside a room, comes up inside every room, and goes out again`, () => {
+      const view = viewOf(id);
+      const fill = fillOf(view);
+      expect(fill, `${id} has an interior fill`).toBeDefined();
+      expect(fill.isHemisphereLight).toBe(true);
+      expect(fill.color.getHex()).toBe(new Color(id === "vesper" ? PALETTE.vesper.companyCream : PALETTE.saltmarket.salt).getHex()); // (a palette colour, not a literal)
+      expect(palette).toBeDefined();
+      let t = settle(view, 0);
+      expect(fill.intensity, "outside: nothing").toBe(0);
+      for (const room of level.rooms) {
+        view.setViewer!(room.x, room.z);
+        t = settle(view, t);
+        expect(fill.intensity, `${room.id}: inside, readable`).toBeGreaterThan(1);
+        view.setViewer!(0, 1000);
+        t = settle(view, t);
+        expect(fill.intensity, `${room.id}: outside again`).toBe(0);
+      }
+      view.dispose();
+    }, 60_000);
+  }
+
+  it("InteriorFill eases (never snaps), reaches its peak, and a long frame cannot jump it", () => {
+    const parent = new Object3D();
+    const f = new InteriorFill(parent, 0xffffff, 0x808080, 2);
+    expect(parent.children).toContain(f.light);
+    f.update(0);
+    expect(f.light.intensity).toBe(0);
+    f.setInside(true);
+    f.update(0.016);
+    const first = f.light.intensity;
+    expect(first).toBeGreaterThan(0);
+    expect(first).toBeLessThan(0.5); // (one 16 ms frame: a fraction of the way)
+    f.update(5); // a 5 s hitch is clamped to a quarter second
+    expect(f.light.intensity).toBeGreaterThan(first);
+    expect(f.light.intensity).toBeLessThan(2);
+    for (let t = 5; t < 8; t += 0.05) f.update(t);
+    expect(f.light.intensity).toBe(2);
+    expect(f.amount).toBe(1);
+    f.setInside(false);
+    for (let t = 8; t < 11; t += 0.05) f.update(t);
+    expect(f.light.intensity).toBe(0);
   });
 });

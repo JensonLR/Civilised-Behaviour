@@ -269,11 +269,18 @@ export function villagePlan(terrain: Terrain): VillagePlan {
     const ground = g(s.x, s.z);
     const steps: number[] = [];
     if (s.kind === "stilt") {
-      for (let i = 0; i < 6; i++) {
-        const p = toWorld(s, s.hx + 1.2 + 0.25 + i * 0.5, 0);
-        const top = ground + spec.floor - 0.4 * (i + 1);
-        steps.push(top);
-        if (top - g(p.x, p.z) <= 0.42) break;
+      // Six treads of 0.4 m, stopping as soon as the last is within 0.42 m of the ground under it. On a bank that falls away fast (hub seed 207616) the sixth was still 0.49 m above
+      // the ground, a hair under a body's 0.5 m step, and the door was reachable on a good day only: then the same six treads are laid at a 0.46 m rise, which a body also climbs.
+      for (const rise of [0.4, 0.46]) {
+        steps.length = 0;
+        for (let i = 0; i < 6; i++) {
+          const p = toWorld(s, s.hx + 1.2 + 0.25 + i * 0.5, 0);
+          const top = ground + spec.floor - rise * (i + 1);
+          steps.push(top);
+          if (top - g(p.x, p.z) <= 0.42) break;
+        }
+        const last = toWorld(s, s.hx + 1.2 + 0.25 + (steps.length - 1) * 0.5, 0);
+        if (steps[steps.length - 1]! - g(last.x, last.z) <= 0.42) break;
       }
     }
     return { ...s, ground, floorY: ground + spec.floor, spec, steps };

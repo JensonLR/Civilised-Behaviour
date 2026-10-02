@@ -89,7 +89,7 @@ const SEALED: SealedStyle = { frame: P.pilingDark, door: P.tarPlankDark, board: 
 /** What `stiltHouse` leaves behind: the doors drawn, the lamps lit inside, the roofs for the cutaway. */
 export interface HouseOut {
   marks: DoorMark[];
-  lamps: { x: number; y: number; z: number }[];
+  lamps: { x: number; y: number; z: number; lit?: number }[];
   roofs: RoofKits;
 }
 
@@ -164,7 +164,7 @@ function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb:
   if (lb.kind === "interior") {
     interiorShell(k, { id: lb.id, hx: b.hx, hz: b.hz, floor: fy, wallH, door: lb.door, doorH: lb.doorH, steps: lb.steps, t: lb.t ?? 0.3 }, { ...SHELL, outer: style === "customs" ? planks(seed, P.coralDark, P.tarPlankDark, P.coralCanvas) : planks(seed) }, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: b.yaw });
     const lw = k.worldPoint(-b.hx * 0.15, fy + Math.min(wallH - 0.5, 2.3), 0);
-    out.lamps.push({ x: lw[0], y: lw[1], z: lw[2] });
+    out.lamps.push({ x: lw[0], y: lw[1], z: lw[2], lit: 0.7 });   // (a lamp in a room burns bright even at noon: it is seen through the door at any hour)
     furnish(k, lb, fy, lod);
   } else {
     // a floor and a mass of wall: the hut's reed matting or the warehouse's planks
@@ -607,7 +607,7 @@ export interface SaltmarketSolid {
   /** One geometry per quarter of the map (so the frustum can cull); undefined where a quarter has nothing. */
   geometries: (BufferGeometry | undefined)[];
   /** Where the lanterns burn (the view adds a point of light at each): the street's, and one hung inside every room. */
-  lamps: { x: number; y: number; z: number }[];
+  lamps: { x: number; y: number; z: number; lit?: number }[];
   /** D-038: the doors drawn (one per declared door), and the roofs of the interiors (the cutaway's). */
   marks: DoorMark[];
   roofs: RoofSource | undefined;
@@ -619,7 +619,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
   const kits = [new Kit(), new Kit(), new Kit(), new Kit()];
   const kitAt = (x: number, z: number): Kit => kits[(x >= 0 ? 1 : 0) + (z >= -10 ? 2 : 0)]!;
-  const lamps: { x: number; y: number; z: number }[] = [];
+  const lamps: { x: number; y: number; z: number; lit?: number }[] = [];
 
   quay(kitAt(0, 125), lod);
   bridges(kitAt, lod);

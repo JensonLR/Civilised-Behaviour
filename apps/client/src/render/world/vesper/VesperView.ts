@@ -22,7 +22,7 @@ import { sheaveAt, sheaveGeometry } from "./works.ts";
 
 const WHITE = new Color(1, 1, 1);
 /** Peak intensity of the room's fill light (see `InteriorFill`): enough that a records room's shelves and floor read in a still at noon. */
-const INTERIOR_FILL = 1.2;
+const INTERIOR_FILL = 1.6;
 const fract = (x: number): number => x - Math.floor(x);
 
 interface SetOptions {
@@ -51,7 +51,7 @@ export class VesperView implements RegionView {
   private sheave?: Mesh;
   private sheaveHull?: Mesh;
   private dress?: VesperDress;
-  private glows: { x: number; y: number; z: number }[] = [];
+  private glows: { x: number; y: number; z: number; lit?: number }[] = [];
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
   /** D-038 follow-up: the lamp-and-lime-wash light of the room (or gallery) the viewer stands in. */
@@ -234,7 +234,7 @@ export class VesperView implements RegionView {
       }
     }
     add(buildBirds(d.birds, this.ambientU, kites));
-    add(buildLanternGlow(this.glows.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.glows.map(() => 0)));
+    add(buildLanternGlow(this.glows.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.glows.map((l) => l.lit ?? 0)));
     const rain = buildRain(d.rain, this.ambientU.uBaseY);
     if (rain) {
       this.track(rain.geometry);

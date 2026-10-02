@@ -22,7 +22,7 @@ import { buildSaltmarketWater } from "./water.ts";
 
 const WHITE = new Color(1, 1, 1);
 /** Peak intensity of the room's fill light (see `InteriorFill`): enough that a warehouse's planks and the customs desk read in a still at noon. */
-const INTERIOR_FILL = 1.2;
+const INTERIOR_FILL = 1.6;
 
 /** Tamarisk scrub: three feathery lobes in the delta's own greys and olives (palette colours only), lit from above. */
 function tamariskGeometry(lod: Lod): BufferGeometry {
@@ -67,7 +67,7 @@ export class SaltmarketView implements RegionView {
   private scenario?: ScenarioView;
   /** The flood's level now (metres above the hall's floor): `floodTarget`'s, held once the sale has ended. */
   private level: number = FLOOD.base;
-  private lamps: { x: number; y: number; z: number }[] = [];
+  private lamps: { x: number; y: number; z: number; lit?: number }[] = [];
   /** D-038: the roofs of the interiors (the cutaway), and the doors the view drew. */
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
@@ -281,7 +281,7 @@ export class SaltmarketView implements RegionView {
     }
     add(buildBirds(d.birds, this.ambientU, wheel));
     // the lanterns: a candle's glow by day, a flame at dusk
-    add(buildLanternGlow(this.lamps.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.lamps.map(() => 0)));
+    add(buildLanternGlow(this.lamps.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.lamps.map((l) => l.lit ?? 0)));
     const rain = buildRain(d.rain, this.ambientU.uBaseY);
     if (rain) {
       this.track(rain.geometry);
