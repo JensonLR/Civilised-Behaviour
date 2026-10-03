@@ -232,6 +232,32 @@ describe("the pause sheet", () => {
     expect(sheet().querySelector<HTMLElement>("#pause-save")!.hidden).toBe(true);
   });
 
+  it("carries the contract in full and the telegrams lately received, newest first (D-063: the HUD shows one line and short slips); neither shows when there is none", () => {
+    const pause = new Pause({
+      canvas,
+      invite: () => ({ code: "K7M2Q", link: "x", present: 1, seed: 1 }),
+      leave: () => undefined,
+      orders: () => ({ title: "Secure the River Crossing", items: [{ text: "Reach the toll bar", done: true, optional: false }, { text: "Clear the bridge", done: false, optional: true }] }),
+      dispatches: () => ["first news", "second news"],
+    });
+    pause.active = true;
+    pause.open();
+    const orders = sheet().querySelector<HTMLElement>(".orders")!;
+    expect(orders.hidden).toBe(false);
+    expect(orders.textContent).toContain("Secure the River Crossing");
+    expect(orders.querySelector("li.done")!.textContent).toBe("Reach the toll bar");
+    expect(orders.querySelector("li.optional")!.textContent).toMatch(/If you like.*Clear the bridge/);
+    const items = [...sheet().querySelectorAll(".dispatches li")].map((l) => l.textContent);
+    expect(items).toEqual(["second news", "first news"]);
+    pause.resume();
+    const bare = new Pause({ canvas, invite: () => undefined, leave: () => undefined, orders: () => undefined, dispatches: () => [] });
+    bare.active = true;
+    bare.open();
+    const all = [...document.querySelectorAll<HTMLElement>(".pause .orders, .pause .dispatches")];
+    expect(all.at(-1)!.hidden).toBe(true);
+    expect(all.at(-2)!.hidden).toBe(true);
+  });
+
   it("Replay tutorial restarts this campaign's orientation card and closes the sheet", () => {
     noteExpedition("K7M2Q", { name: "Ada" });
     const host = document.createElement("div");

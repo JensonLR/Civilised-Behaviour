@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CAMP, HILL } from "@cb/shared";
 import { DEG, distanceText, headingDegrees, headingName, headingName16, isCardinal, landmarks, stackRows, stripPlace, wrapPi, yawTo, type StripPlace } from "./compassLogic.ts";
 import { describeError, stepAt } from "./menuLogic.ts";
-import { TelegramQueue, readingTime } from "./telegramQueue.ts";
+import { STALE_S, TelegramQueue, readingTime } from "./telegramQueue.ts";
 import { VITALS_LABEL, vitalsLevel } from "./vitals.ts";
 import { plaqueVisible } from "./SoundPlaque.ts";
 
@@ -92,17 +92,29 @@ describe("telegram queue", () => {
     expect(q.push("   ")).toBe(false);
     for (let i = 0; i < 6; i++) q.push(`n${i}`);
     expect(q.queued).toBe(3);
-    q.tick(60);
+    q.tick(7.1);
     expect(q.shown[0]!.text).toBe("n3"); // n0..n2 were pushed out by newer news
     q.tick(5);
     q.push("rout"); // long enough after: a fresh slip
     expect(q.queued + q.shown.length).toBeGreaterThan(0);
   });
 
-  it("reading time grows with length between 4 and 11 seconds", () => {
-    expect(readingTime("hi")).toBe(4);
-    expect(readingTime("x".repeat(60))).toBeGreaterThan(5.5);
-    expect(readingTime("x".repeat(1000))).toBe(11);
+  it("reading time grows with length between 3 and 7 seconds (a glance: the whole text is in the dispatches)", () => {
+    expect(readingTime("hi")).toBe(3);
+    expect(readingTime("x".repeat(60))).toBeGreaterThan(4.4);
+    expect(readingTime("x".repeat(1000))).toBe(7);
+    expect(readingTime("a\nb" + "x".repeat(1000))).toBe(12);
+  });
+
+  it("old news never reaches the screen: a slip that waited longer than STALE_S for a place is dropped (it is in the dispatches log)", () => {
+    const q = new TelegramQueue(1);
+    q.push("first", 20);
+    q.push("second");
+    q.tick(STALE_S + 0.5);
+    expect(q.queued).toBe(0);
+    expect(q.shown.map((s) => s.text)).toEqual(["first"]);
+    q.tick(10);
+    expect(q.shown).toEqual([]);
   });
 });
 

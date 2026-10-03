@@ -80,13 +80,16 @@ describe("in-game interface lifecycle", () => {
     expect(leaked()).toEqual([]);
   });
 
-  it("the telegram stack shows three at a time, queues the rest, and lets every one go", () => {
+  it("the telegram stack shows its few at a time (D-063: two on a big screen, one on a phone), queues the rest, logs every one, and lets every one go", () => {
     const hud = new Hud(document.querySelector<HTMLElement>("#hud")!);
+    const max = hud.telegrams.queue.max;
+    expect(max).toBeLessThanOrEqual(2);
     for (let i = 0; i < 7; i++) hud.showNotice(`news ${i}`, 2);
-    expect(document.querySelectorAll(".telegram").length).toBe(3);
-    expect(hud.telegrams.queue.queued).toBe(4);
+    expect(document.querySelectorAll(".telegram").length).toBe(max);
+    expect(hud.telegrams.queue.queued).toBe(7 - max);
+    expect(hud.telegrams.log).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => `news ${i}`));
     vi.advanceTimersByTime(2100 * 3);
-    expect(document.querySelectorAll(".telegram").length).toBeLessThanOrEqual(3);
+    expect(document.querySelectorAll(".telegram").length).toBeLessThanOrEqual(max);
     vi.advanceTimersByTime(20000);
     expect(document.querySelectorAll(".telegram").length).toBe(0);
     expect(hud.telegrams.queue.queued).toBe(0);

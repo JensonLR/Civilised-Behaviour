@@ -244,3 +244,94 @@ body.touch-ui #hud .objectives { font-size: 0.74rem; width: min(16rem, 32vw); to
 body.touch-ui #hud .objectives .hint { display: none; }
 @media (max-height: 520px) { #hud .objectives .hint { display: none; } }
 body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
+
+/* ======================================================================================================================================
+   THE QUIET PLATE (D-063). A fresh player on a phone: "the telegrams block the screen... the glowing and loads of indicators is overwhelming, but I still have zero direction".
+   So: no glow (a tight paper edge on each letter, no pools of mist); ONE line under the heading strip saying what to do next (the contract's current step, or the guide's line)
+   and ONE marker in the world over the place; telegrams as small slips in the top-right corner, one at a time on a phone, never over the play area; and each indicator only
+   when it means something (the dial when hurt or armed, the armoury card with a piece in hand, the key hints for the first minute and a half, the invite code at camp).
+   (The !important flags below beat the older placement rules in style.css, whose :has() selectors outweigh these.)
+   ====================================================================================================================================== */
+#hud, .captions { --halo: 0 0 1px var(--paper), 0 0 1px var(--paper), 0 0 3px color-mix(in srgb, var(--paper) 85%, transparent); }
+#hud .objectives, #hud .arms, #hud .cannoncard, #hud .health, #hud .wounds, #hud .prompt, #hud .progress, #hud .codebar, #hud .help, #hud .compass .mark, #hud .compass .readout { background: none; box-shadow: none; }
+
+/* ---- the line: what to do next, centred under the heading strip ---- */
+#hud .objectives, #hud .guide { position: absolute; left: 50% !important; right: auto !important; top: calc(var(--edge-t) + 3.9rem) !important; transform: translateX(-50%) !important; width: max-content !important; max-width: min(34rem, 76vw); padding: 0; margin: 0; border: 0; border-radius: 0; text-align: center; color: var(--ink); text-shadow: var(--halo); pointer-events: none; font-size: 1rem; }
+#hud .guide[hidden], #hud.settled .objectives { display: none; }
+#hud .objectives::before { display: none; }
+#hud .objectives h2, #hud .guide .kicker { display: block; margin: 0 0 0.05rem; padding: 0; border: 0; font: 0.66rem var(--display); letter-spacing: 0.24em; text-transform: uppercase; color: var(--stamp); }
+#hud .objectives ul { display: inline; }
+#hud .objectives li { display: none; }
+#hud .objectives li.current { display: inline; font: italic 1.08rem/1.25 var(--serif); }
+#hud .objectives li .mark, #hud .objectives .hint { display: none; }
+#hud .objectives .dist, #hud .guide .dist { margin-left: 0.5em; font: 0.86rem var(--type); color: var(--stamp); }
+#hud .guide .text { font: italic 1.08rem/1.25 var(--serif); }
+#hud .objectives .timer { display: flex; justify-content: center; gap: 0.5em; margin: 0.1rem 0 0; padding: 0; border: 0; font: 0.74rem var(--display); letter-spacing: 0.14em; }
+#hud .objectives .timer[hidden] { display: none; }
+#hud .objectives .timer .clock { font: 0.86rem var(--type); }
+
+/* ---- the marker over the place ---- */
+#hud .goalmark { position: absolute; left: 0; top: 0; width: 8rem; margin: -2.3rem 0 0 -4rem; display: flex; flex-direction: column; align-items: center; pointer-events: none; color: var(--ink); text-shadow: var(--halo); will-change: transform; }
+#hud .goalmark[hidden] { display: none; }
+#hud .goalmark .flag { width: 1.3rem; height: 1.7rem; filter: var(--halo-svg); }
+#hud .goalmark .flag .pole { fill: none; stroke: var(--ink); stroke-width: 2; }
+#hud .goalmark .flag .cloth { fill: var(--stamp); }
+#hud .goalmark .arrow { display: none; width: 1.7rem; height: 1.7rem; fill: var(--stamp); filter: var(--halo-svg); transform: rotate(var(--turn, 0rad)); }
+#hud .goalmark.off .arrow { display: block; }
+#hud .goalmark.off .flag { display: none; }
+#hud .goalmark .label { font: 0.7rem var(--display); letter-spacing: 0.14em; }
+#hud .goalmark .mdist { font: italic 0.8rem var(--serif); }
+
+/* ---- the heading strip: the reading and the ticks; the places are small marks on the line, only the goal in red (its name and distance are the line's) ---- */
+#hud .compass .mark { top: 0.15rem !important; padding: 0; transform: translateX(-50%); opacity: 0.6; }
+#hud .compass .mark[data-edge="l"] { transform: translateX(0); }
+#hud .compass .mark[data-edge="r"] { transform: translateX(-100%); }
+#hud .compass .mark::before, #hud .compass .mark[data-row]::before { display: none; }
+#hud .compass .mark .name, #hud .compass .mark .dist { display: none !important; }
+#hud .compass .mark svg { width: 0.8rem; height: 0.8rem; }
+#hud .compass .mark[data-goal="1"] { opacity: 1; }
+
+/* ---- telegrams: small slips, top right, one line or two, no stamp; never over the play area ---- */
+#hud .telegrams { left: auto !important; right: var(--edge-r) !important; top: calc(var(--edge-t) + 0.2rem) !important; transform: none !important; width: min(21rem, 34vw) !important; align-items: flex-end; gap: 0.3rem; }
+#hud[data-region="hollowmere"] .telegrams { top: max(calc(var(--edge-t) + 0.2rem), calc(var(--codebar-b, 0px) + 0.35rem)) !important; }
+#hud .telegram { width: auto; max-width: 100%; padding: 0.22rem 0.65rem; font: 0.78rem/1.3 var(--type); letter-spacing: 0.02em; text-transform: none; transform: none !important; clip-path: none; border-radius: 2px; box-shadow: 0 0.08rem 0.3rem color-mix(in srgb, var(--scrim) 30%, transparent); }
+#hud .telegram::before, #hud .telegram[data-more]::after { content: none !important; }
+#hud .telegram .body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+#hud .telegrams.crowded .telegram:not(:last-child) { padding: 0.22rem 0.65rem; font-size: 0.78rem; }
+@keyframes telegramIn { from { opacity: 0; transform: translateX(0.6rem); } }
+
+/* ---- only when it means something ---- */
+#hud .health.idle { display: none; }
+#hud:not(.fresh) .help { display: none; }
+#hud:not([data-region="hollowmere"]) .codebar, body.touch-ui #hud .codebar { display: none; }
+body.touch-ui #hud[data-region="hollowmere"] .telegrams { top: calc(var(--edge-t) + 0.2rem) !important; }
+
+/* ---- the welcome card: a small paper document at the top left, while it is wanted (it says what the game is; the line says what next) ---- */
+#hud .orientation { left: var(--edge-l) !important; right: auto !important; top: calc(var(--edge-t) + 0.3rem) !important; width: min(23rem, 36vw) !important; padding: 0.6rem 0.85rem 0.6rem 0.9rem; font-size: 0.86rem; background: color-mix(in srgb, var(--field) 94%, transparent); box-shadow: 0 0.2rem 0.8rem color-mix(in srgb, var(--scrim) 30%, transparent); border-radius: 2px; text-shadow: none; }
+#hud .orientation::before { display: none; }
+#hud .orientation .tag { display: block !important; font-style: normal; font-size: 0.86rem; line-height: 1.35; opacity: 1; margin: 0.25rem 0 0.4rem; }
+#hud .orientation li:not(.current) { display: none; }
+#hud .orientation li.current { font-weight: 400; }
+#hud .orientation .hint { display: none !important; }
+#hud .orientation .foot { justify-content: flex-end; border-top: 0; margin-top: 0.2rem; padding-top: 0; }
+body.touch-ui #hud .orientation { width: min(17rem, 33vw) !important; font-size: 0.7rem; padding: 0.45rem 0.6rem; }
+body.touch-ui #hud .orientation .tag { font-size: 0.7rem; line-height: 1.3; margin: 0.15rem 0 0.25rem; }
+body.touch-ui #hud .orientation .society, body.touch-ui #hud .orientation ol { display: none; }
+body.touch-ui #hud .orientation h2 { font-size: 0.9rem; }
+/* (with the welcome card up, the line starts beside the card and wraps rather than running under it) */
+#hud.welcoming .guide { left: calc(var(--edge-l) + min(23rem, 36vw) + 1.2rem) !important; transform: none !important; max-width: calc(100vw - var(--edge-l) - min(23rem, 36vw) - 1.2rem - var(--edge-r) - 6rem); text-align: left; }
+body.touch-ui #hud.welcoming .guide { left: calc(var(--edge-l) + min(17rem, 33vw) + 1rem) !important; max-width: calc(100vw - var(--edge-l) - min(17rem, 33vw) - 1rem - 8rem); }
+
+/* ---- the down card keeps a sheet of paper behind it (it is the one thing that must be read at once) ---- */
+#hud .downed { background: color-mix(in srgb, var(--field) 92%, transparent); box-shadow: 0 0.3rem 1rem color-mix(in srgb, var(--scrim) 35%, transparent); border-radius: 2px; }
+
+/* ---- the pause sheet: the contract in full and the telegrams lately received ---- */
+html .pause .orders { margin: 0.4rem 0 0.2rem; text-align: left; }
+html .pause .orders[hidden], html .pause .dispatches[hidden] { display: none; }
+html .pause .orders h3 { margin: 0.3rem 0 0.2rem; font-size: 0.85rem; }
+html .pause .orders ul { margin: 0; padding-left: 1.1rem; font-size: 0.92rem; line-height: 1.3; }
+html .pause .orders li.done { text-decoration: line-through; opacity: 0.6; }
+html .pause .orders li.optional { font-style: italic; }
+html .pause .dispatches { margin: 0.2rem 0 0.4rem; text-align: left; font-size: 0.85rem; }
+html .pause .dispatches summary { cursor: pointer; font-family: var(--display); letter-spacing: 0.1em; color: var(--stamp); }
+html .pause .dispatches ol { margin: 0.3rem 0 0; padding-left: 1.1rem; max-height: 9rem; overflow-y: auto; font-family: var(--type); font-size: 0.8rem; line-height: 1.3; }

@@ -29,6 +29,9 @@ const el = (root: HTMLElement, tag: string, cls: string, html = ""): HTMLElement
 };
 
 /** What the armoury card shows this frame. */
+/** How long the armoury card stays after the hands go empty (ms). */
+const ARMS_LINGER_MS = 2500;
+
 export interface ArmsView {
   /** Weapon in hand (`WEAPON` id) or -1. */
   weapon: number;
@@ -88,6 +91,8 @@ export class CombatHud {
   private lastCannon: CannonHud | undefined;
   private offPrompt: (() => void) | undefined;
   private markTimer = 0;
+  private lastWeapon = -2;
+  private changedAt = -1e9;
   private readonly bearingTimers = new Float32Array(BEARINGS);
   private lastGap = -1;
 
@@ -138,8 +143,14 @@ export class CombatHud {
   updateArms(v: ArmsView): void {
     this.lastArms = v;
     const carrying = v.owned !== 0;
-    this.arms.hidden = !carrying;
-    if (!carrying) return;
+    // D-063: the armoury card shows with a piece in hand, and for a moment after a change (empty hands said "Empty hands" over five slots all game long)
+    const now = performance.now();
+    if (v.weapon !== this.lastWeapon) {
+      this.lastWeapon = v.weapon;
+      this.changedAt = now;
+    }
+    this.arms.hidden = !carrying || (v.weapon < 0 && now - this.changedAt > ARMS_LINGER_MS);
+    if (this.arms.hidden) return;
     const key = `${v.weapon}|${v.owned}|${v.ammo}|${v.reserve}|${v.reload}|${v.busy ? 1 : 0}|${v.gamepad ? 1 : 0}|${Math.round(v.wait * 8)}|${v.reloadKey ?? ""}|${deviceTracker.effective}`;
     if (key === this.shown) return;
     this.shown = key;

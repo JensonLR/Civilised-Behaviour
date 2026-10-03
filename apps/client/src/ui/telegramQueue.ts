@@ -10,12 +10,18 @@ export interface Slip {
   life: number;
 }
 
-/** Reading time for a slip: 3.2 s and 45 ms a character, between 4 and 11 seconds unless the caller says; a debrief (several lines, D-040) may stay up to 16. */
-export const readingTime = (text: string): number => Math.max(4, Math.min(text.includes("\n") ? 16 : 11, 3.2 + text.length * 0.045));
+/**
+ * How long a slip stays: 2.4 s and 35 ms a character, between 3 and 7 seconds unless the caller says; a debrief (several lines, D-040) up to 12. (D-063: slips stayed 4-11 s
+ * and arrived 3-8 a minute in a contract, so one was nearly always on the picture; the whole text is kept in the pause sheet's dispatches, so a slip only has to be glanced at.)
+ */
+export const readingTime = (text: string): number => Math.max(3, Math.min(text.includes("\n") ? 12 : 7, 2.4 + text.length * 0.035));
+
+/** News that has waited this long for a place is old news: it goes to the dispatches log without being shown (a queue of slips trickling on for a minute was the spam). */
+export const STALE_S = 12;
 
 export class TelegramQueue {
   readonly shown: Slip[] = [];
-  private readonly waiting: { text: string; life: number }[] = [];
+  private readonly waiting: { text: string; life: number; at: number }[] = [];
   private nextId = 1;
   /** The same text arriving again within this many seconds of being shown or queued is the same news, not a second slip. */
   static readonly DUPLICATE_WINDOW = 1.5;
@@ -39,7 +45,7 @@ export class TelegramQueue {
     if (this.shown.length < this.max) this.show(t, life);
     else {
       if (this.waiting.length >= this.maxWaiting) this.waiting.shift();
-      this.waiting.push({ text: t, life });
+      this.waiting.push({ text: t, life, at: this.clock });
     }
     return true;
   }
@@ -58,6 +64,10 @@ export class TelegramQueue {
         this.shown.splice(i, 1);
         changed = true;
       }
+    }
+    while (this.waiting.length > 0 && this.clock - this.waiting[0]!.at > STALE_S) {
+      this.waiting.shift();
+      changed = true;
     }
     while (this.shown.length < this.max && this.waiting.length > 0) {
       const w = this.waiting.shift()!;

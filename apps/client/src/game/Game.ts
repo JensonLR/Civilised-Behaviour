@@ -1,3 +1,5 @@
+import { Guide } from "../ui/Guide.ts";
+import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
 import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, npcKey, seedFromString } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
@@ -67,6 +69,8 @@ interface Actor {
 }
 
 const tmp = new Vector3();
+/** D-063: the key hints along the foot show for this long after the game starts (they are in the pause sheet's "How to play" for good). */
+const HINTS_FOR_MS = 90_000;
 const eyeSample = newEyeSample();
 /** Up to four walkers the grass bends away from (reused every frame). */
 const walkers = [0, 1, 2, 3].map(() => ({ x: 0, z: 0 }));
@@ -173,6 +177,14 @@ export class Game {
   private travelSig = "";
   private mapSig = "";
   private campaign: CampaignState | undefined;
+  /** D-063: the one line and the one marker that say what to do next (game/guidance.ts), recomputed a few times a second. */
+  private readonly guide: Guide;
+  private guidanceNow: Guidance | undefined;
+  private guideClock = 0;
+  private readonly bornAt = performance.now();
+  private guideTop = 0;
+  private landingRegion = "";
+  private wentAshore = false;
   private campaignRev = -1;
   /** D-035: the powers and the settlements, parsed from their JSON when their revision moves; and the identity of the collision world last built (bridge, outpost stage, telegraph). */
   private powers: PowersState | undefined;
@@ -259,6 +271,7 @@ export class Game {
     this.parley = new Parley(document.body);
     this.paper = new NewspaperView(document.body);
     this.tracker = new ObjectiveTracker(hud);
+    this.guide = new Guide(hud);
     this.orientation = new Orientation(hud, session.code); // (per campaign: the card is remembered under the join code, D-039)
     this.loadout = new LoadoutSheet(document.body);
     this.wheel = new CommandWheel(document.body, (c) => this.sendCommand(c));
@@ -593,6 +606,7 @@ export class Game {
       this.trackerClock = 8; // (~4 Hz at 30 fps)
       this.tracker.tick(this.worldNowMs);
     }
+    this.updateGuide();
     // the sailing: the card, the controls held off, the old sheets closed
     const phase = st.travelPhase ?? 0;
     const sig = `${phase}|${st.travelTo}|${Math.ceil(st.travelLeft ?? 0)}`;
@@ -713,6 +727,7 @@ export class Game {
     this.parley.dispose();
     this.paper.dispose();
     this.tracker.dispose();
+    this.guide.dispose();
     this.orientation.dispose();
     this.loadout.dispose();
     this.wheel.dispose();
@@ -1042,8 +1057,21 @@ export class Game {
     if (prompt === "" && (flags & FLAG.DOWNED) === 0) {
       // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks). Once the contract is settled the people
       // to parley with (the Warden, the court) have nothing more to say, but the dock still takes you home and the foundation still takes crates (the dock's prompt went too)
-      const found = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);
-      const st = found && (this.tracker.visibleOrders !== "resolved" || found.kind === "dock" || found.kind === "foundation") ? found : undefined;
+      const px = this.session.value(me, "x");
+      const pz = this.session.value(me, "z");
+      const found = findStation(this.builtRegion, px, pz, me.facing);
+      // D-063: abroad, you land ON the dock, and "Take the boat home" was the first thing a new arrival was offered. The boat waits until you have gone ashore and come back,
+      // or the contract is settled (the prompt is the server's own table either way: this only chooses when to offer it)
+      if (this.builtRegion !== this.landingRegion) {
+        this.landingRegion = this.builtRegion;
+        this.wentAshore = false;
+      }
+      if (!this.wentAshore) {
+        const home = regionMarks(this.builtRegion)[0];
+        if (!home || Math.hypot(px - home.x, pz - home.z) > 12) this.wentAshore = true;
+      }
+      const dockNow = this.builtRegion === "hollowmere" || this.wentAshore || this.tracker.visibleOrders === "resolved" || !this.tracker.visible;
+      const st = found && (found.kind !== "dock" || dockNow) && (this.tracker.visibleOrders !== "resolved" || found.kind === "dock" || found.kind === "foundation") ? found : undefined;
       if (st && st.kind === "foundation") {
         prompt = this.foundationText(undefined);
         foundation = true;
@@ -1080,6 +1108,59 @@ export class Game {
   }
 
   /** The heading strip follows the shore you stand on and the contract's next goal (D-040: it showed the hub's places everywhere). */
+  /** D-063: the contract in full, for the pause sheet (the HUD shows only the next step). */
+  orders(): { title: string; items: { text: string; done: boolean; optional: boolean }[] } | undefined {
+    const v = this.scenarioView;
+    if (!v || !Array.isArray(v.objectives) || v.objectives.length === 0) return undefined;
+    return { title: typeof v.title === "string" && v.title ? v.title : "Orders of the Day", items: v.objectives.map((o) => ({ text: String(o.text), done: !!o.done, optional: !!o.optional })) };
+  }
+
+  /** D-063: the telegrams lately received, newest last (the pause sheet lists them). */
+  dispatches(): readonly string[] {
+    return this.hud.telegrams.log;
+  }
+
+  /** D-063: what to do next, and where. The line under the heading strip (unless the contract's orders card is that line) and the marker over the place. */
+  private updateGuide(): void {
+    const st = this.session.room.state;
+    const me = this.session.predicted;
+    if (--this.guideClock <= 0) {
+      this.guideClock = 8;
+      this.guidanceNow = guidance({
+        region: this.builtRegion,
+        travelPhase: st.travelPhase ?? 0,
+        downed: me ? (me.flags & FLAG.DOWNED) !== 0 : false,
+        expeditions: this.campaign?.expeditions ?? 0,
+        view: this.scenarioView,
+      });
+      const ordersAreTheLine = this.tracker.visible && this.scenarioView?.phase !== "resolved";
+      this.guide.setLine(this.guidanceNow?.text, !ordersAreTheLine);
+      // where the line ends on screen: the marker stays below it (measured a few times a second, not every frame)
+      const lineEl = document.querySelector<HTMLElement>(ordersAreTheLine ? "#hud .objectives" : "#hud .guide");
+      this.guideTop = lineEl && !lineEl.hidden ? lineEl.getBoundingClientRect().bottom + 44 : 0;
+      // the HUD's quiet rules (plate.css): the invite code only at camp, where friends are invited; the key hints only for the first minute and a half
+      const root = document.getElementById("hud");
+      if (root) {
+        if (root.dataset.region !== this.builtRegion) root.dataset.region = this.builtRegion;
+        root.classList.toggle("fresh", performance.now() - this.bornAt < HINTS_FOR_MS);
+        root.classList.toggle("settled", this.scenarioView?.phase === "resolved");
+        root.classList.toggle("welcoming", this.orientation.showing);
+      }
+    }
+    const g = this.guidanceNow;
+    if (!g || g.x === undefined || g.z === undefined || !me) {
+      this.guide.place(0, 0, false, -1, "");
+      this.tracker.setDistance(-1);
+      return;
+    }
+    const mx = this.session.value(me, "x");
+    const mz = this.session.value(me, "z");
+    const dist = Math.hypot(g.x - mx, g.z - mz);
+    tmp.set(g.x, this.session.world.terrainHeight(g.x, g.z) + 2.6, g.z).project(this.stage.camera);
+    this.guide.place(tmp.x, tmp.y, tmp.z > 1, dist, g.label ?? "", 4, this.guideTop);
+    this.tracker.setDistance(dist >= 4 ? Math.round(dist) : -1);
+  }
+
   private refreshCompass(): void {
     this.hud.setCompass(regionMarks(this.builtRegion), this.builtRegion === "hollowmere" ? undefined : objectiveMark(this.builtRegion, this.scenarioView));
   }

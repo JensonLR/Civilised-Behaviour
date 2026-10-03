@@ -7,6 +7,14 @@ export function formatTimer(ms: number): string {
   const s = Number.isFinite(ms) && ms > 0 ? Math.ceil(ms / 1000) : 0;
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
+/** The first unfinished objective a player must do (optional side-goals only when nothing else is left): the one the line shows (D-063). */
+export function currentObjective(view: ScenarioView | undefined): { id: string; text: string } | undefined {
+  if (!view || !Array.isArray(view.objectives)) return undefined;
+  const main = view.objectives.find((o) => !o.done && !o.optional);
+  const any = main ?? view.objectives.find((o) => !o.done);
+  return any ? { id: String(any.id), text: String(any.text) } : undefined;
+}
+
 /** The card's heading before a contract names itself (and for an old server that sends no title). */
 export const DEFAULT_TITLE = "Orders of the Day";
 /** Under this many seconds the timer turns urgent (colour and weight, not just motion). */
@@ -26,6 +34,7 @@ export class ObjectiveTracker {
   private readonly label: HTMLElement;
   private readonly clock: HTMLElement;
   private readonly rows = new Map<string, HTMLLIElement>();
+  private readonly dist: HTMLElement;
   private endsAt = 0;
 
   constructor(parent: HTMLElement) {
@@ -49,7 +58,9 @@ export class ObjectiveTracker {
     this.clock = document.createElement("b");
     this.clock.className = "clock";
     this.timer.append(this.label, this.clock);
-    this.root.append(h, this.list, this.hint, this.timer);
+    this.dist = document.createElement("span");
+    this.dist.className = "dist";
+    this.root.append(h, this.list, this.dist, this.hint, this.timer);
     parent.appendChild(this.root);
   }
 
@@ -69,6 +80,7 @@ export class ObjectiveTracker {
     if (typeof view.complication === "string" && view.complication !== "none") this.root.dataset.complication = view.complication;
     else delete this.root.dataset.complication;
     const keep = new Set<string>();
+    const cur = currentObjective(view)?.id;
     let prev: HTMLLIElement | undefined;
     for (const o of view.objectives) {
       const id = String(o.id);
@@ -88,6 +100,7 @@ export class ObjectiveTracker {
       }
       li.classList.toggle("done", !!o.done);
       li.classList.toggle("optional", !!o.optional);
+      li.classList.toggle("current", id === cur); // (D-063: the HUD shows this one line; the whole list is on the pause sheet)
       const sr = li.children[1] as HTMLElement;
       const text = li.children[2] as HTMLElement;
       const srText = `${o.done ? "Done. " : ""}${o.optional ? "Optional. " : ""}`;
@@ -112,6 +125,12 @@ export class ObjectiveTracker {
     if (this.label.textContent !== label) this.label.textContent = label;
     this.endsAt = Number.isFinite(view.endsAtWorldMs) && view.endsAtWorldMs > 0 && label !== "" ? view.endsAtWorldMs : 0;
     if (this.endsAt === 0) this.timer.hidden = true;
+  }
+
+  /** Metres to the current objective's place (-1 or 0: none shown), from the guide's marker. */
+  setDistance(m: number): void {
+    const t = m > 0 ? `${m} m` : "";
+    if (this.dist.textContent !== t) this.dist.textContent = t;
   }
 
   /** Advance the countdown against the world clock (call ~4 times a second; cheap when there is no timer). */
