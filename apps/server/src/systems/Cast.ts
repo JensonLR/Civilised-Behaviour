@@ -105,6 +105,11 @@ export class Cast implements CastApi {
   private navQ: NavQuery | undefined;
 
   /** D-052: open ground on the nav grid (false before a world is set). */
+  /** D-060: a clear line on the nav grid (true before a world is set: nothing to block it). */
+  los(ax: number, az: number, bx: number, bz: number): boolean {
+    return this.navQ ? this.navQ.los(ax, az, bx, bz) : true;
+  }
+
   openAt(x: number, z: number): boolean {
     return this.navQ?.open(x, z) ?? false;
   }
