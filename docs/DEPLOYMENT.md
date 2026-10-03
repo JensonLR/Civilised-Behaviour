@@ -13,13 +13,7 @@ Free plan, Frankfurt, both pairs auto-deploy every push to `claude/civilised-beh
 
 The client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onrender.com`.
 
-### The older pair (created 2026-09-29; a duplicate)
-| Service | Type | URL | Render id | Health check |
-|---------|------|-----|-----------|--------------|
-| cb-server | Node web service | https://cb-server-86wx.onrender.com | srv-datqpblg1s2s73adt930 | `/health` (set 2026-10-02) |
-| cb-client | Static site | https://cb-client-42gz.onrender.com | srv-datqpe0u01pc73a6rm5g | n/a |
-
-Both pairs build the same branch, so every push builds four services. **Decided 2026-10-03: delete the older pair** (the owner took the recommendation: nothing links to it, the desktop shell and the play link use the pair above, and it doubles every build). Deleting needs the dashboard (each service → Settings → Delete); the agent's Render tools cannot delete and the session holds no API key. Until it is gone it keeps building; remove this table once it is.
+**The older duplicate pair is gone.** `cb-server` and `cb-client` (created 2026-09-29, same branch, nothing linked to them) were deleted by the owner in the dashboard on 2026-10-03 (checked through Render's API: only the pair above remains for this repo; `/health` 200 and the client 200 afterwards). Every push now builds two services, not four.
 
 **Verified (2026-10-02, after the PR #1 merge deployed):** `/health` 200; matchmaking `POST /matchmake/create/world` works; the `wss://` upgrade answers 101 and streams state to curl; and **two real Chromium sessions played together on the live game** through the play link: `scripts/deploy-smoke.mjs` (run as `NODE_USE_ENV_PROXY=1 CB_WS_RELAY=1`) founded expedition 5G53V in one browser (42.9 s including a cold start), joined it by code in the other, and each saw the other in the Hollowmere camp (screenshot looked at).
 **Why the relay:** in the Claude Code cloud sandbox, the browser's own `wss://` upgrade gets **404 from the sandbox's intercepting proxy** (`127.0.0.1` answers; `/root/.ccr/README.md` lists WebSocket upgrades as unsupported), while a CONNECT tunnel (curl, Node) is fine. It is not the deployment: the server logs the room as created, and Colyseus's transport never answers 404. `CB_WS_RELAY=1` hands the page's socket to Node's WebSocket, which tunnels through `HTTPS_PROXY`. A normal browser needs nothing.
