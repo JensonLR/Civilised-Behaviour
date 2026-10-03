@@ -25,6 +25,15 @@ export const PROP_DEFS: Record<PropKindId, PropDef> = {
   [PropKind.CHAIR]: { name: "chair", shape: "box", half: [0.25, 0.4, 0.25], mass: 5, carryable: true },
 };
 
+/**
+ * D-054: a powder keg with a lit fuse. Carrying a keg, RELOAD lights it (on a pad or a phone, the held USE that reloads); it goes off `seconds` later wherever it is, in
+ * the air, on the ground or still in somebody's arms, with the same blast as a keg that takes a ball (`radius`, the cannon's damage times `damageMul`), credited to whoever
+ * lit it. `PropState.fuse` carries what is left in tenths of a second, so every client can draw the sparks and play the hiss.
+ */
+export const KEG_FUSE = { seconds: 4, radius: 5, damageMul: 0.6 } as const;
+/** The replicated fuse (tenths of a second, 1..255; 0 = not lit) for `left` seconds. */
+export const fuseTenths = (left: number): number => (left > 0 ? Math.min(255, Math.max(1, Math.ceil(left * 10))) : 0);
+
 export const INTERACT = {
   /** Max horizontal distance from player centre to prop centre. */
   range: 2.0,

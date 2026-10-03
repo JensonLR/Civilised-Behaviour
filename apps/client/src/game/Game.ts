@@ -749,6 +749,21 @@ export class Game {
     this.syncAftermath(dt);
     this.combat.update(dt, this.controls.usingGamepad);
     this.props.sync(this.session.room.state.props, (p, f) => this.session.predict.value(p as never, f as never));
+    // D-054: a lit keg hisses, louder as it is nearer (and quicker as it burns down)
+    {
+      const me = this.session.predicted;
+      let d = Infinity;
+      let tenths = 0;
+      for (let i = 0; i < this.props.litCount && me; i++) {
+        const f = this.props.fuses[i]!;
+        const k = Math.hypot(f.x - me.x, f.y - me.y, f.z - me.z);
+        if (k < d) {
+          d = k;
+          tenths = f.tenths;
+        }
+      }
+      this.audio.fuse(d, tenths);
+    }
     this.updatePrompt();
     this.syncCampaign(now);
     this.demoBanner?.tick();
@@ -961,7 +976,11 @@ export class Game {
       // a barrel at the pier is a fuse waiting to be lit (the server checks the barrel and the range; this only says what the key will do)
       const spot = this.builtRegion !== "hollowmere" ? findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
       const heldKind = this.heldKind();
-      prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw` : `${use}  Drop     ${throwKey}  Throw`;
+      const fuse = this.heldFuse();
+      prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw`
+        // D-054: a keg in your arms can be lit (reload), and a lit one wants throwing (the seconds left are on the prompt: the fuse does not wait for a decision)
+        : heldKind === PropKind.BARREL && fuse > 0 ? `${throwKey}  Throw it!  (${Math.ceil(fuse / 10)})     ${use}  Drop`
+        : heldKind === PropKind.BARREL ? `${use}  Drop     ${throwKey}  Throw     {reload}  Light the fuse` : `${use}  Drop     ${throwKey}  Throw`;
     } else if ((flags & FLAG.DOWNED) === 0) {
       const downedId = findDownedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
         players.forEach((o, id) => id !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
@@ -1053,6 +1072,15 @@ export class Game {
   }
 
   /** The kind of prop the local player is holding, if any. */
+  /** D-054: the fuse of the keg in my arms (tenths of a second; 0 = not lit or not a keg). */
+  private heldFuse(): number {
+    let f = 0;
+    this.session.room.state.props.forEach((p) => {
+      if (p.holder === this.session.sessionId) f = p.fuse ?? 0;
+    });
+    return f;
+  }
+
   private heldKind(): number | undefined {
     let kind: number | undefined;
     this.session.room.state.props.forEach((p) => {

@@ -159,6 +159,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 /* Luggage tags over heads. */
 .taglayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .nametag { position: absolute; left: 0; top: 0; padding: 0.05rem 0.55rem 0.05rem 1.05rem; font-family: var(--display); font-size: 0.9rem; letter-spacing: 0.06em; white-space: nowrap; will-change: transform; border-radius: 2px 5px 5px 2px; border: 1px solid var(--brass-dark); clip-path: polygon(0 50%, 0.5rem 0, 100% 0, 100% 100%, 0.5rem 100%); }
+.nametag .honour { display: block; font-size: 0.7rem; line-height: 1.15; font-style: italic; letter-spacing: 0.03em; padding-bottom: 0.08rem; }
 .nametag::after { content: ""; position: absolute; left: 0.42rem; top: 50%; width: 0.28rem; height: 0.28rem; margin-top: -0.14rem; border-radius: 50%; background: var(--scrim); box-shadow: 0 0 0 1.5px var(--brass); }
 
 /* Context prompt: a ticket. */

@@ -74,6 +74,7 @@ export * from "./partyState.ts";
 export * from "./chaos.ts";
 export * from "./incidents.ts";
 export * from "./emblem.ts";
+export * from "./honours.ts";
 
 export * from "./scenarios/registry.ts";
 export * from "./scenarios/parleys.ts";

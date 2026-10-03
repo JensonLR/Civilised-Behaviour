@@ -94,6 +94,8 @@ export const PropState = schema({
   qw: t.float32(),
   /** Session id of the carrying player, or "". */
   holder: t.string(),
+  /** D-054: a lit keg's fuse, tenths of a second left (0 = not lit). */
+  fuse: t.uint8(),
 });
 export type PropStateType = SchemaType<typeof PropState>;
 

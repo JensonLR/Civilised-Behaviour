@@ -127,6 +127,25 @@ describe("incidents in a real room (D-052)", () => {
     expect(lastIncident(room)).toMatchObject({ id: "deserter", result: "enlisted" });
   }, 30_000);
 
+  it("a runaway horse: a saddled horse turns up loose; whoever gets in the saddle has caught it, and the commit pays the owner's reward", async () => {
+    const { room, me, notices } = await setup();
+    const before = new Set(room.state.mounts.keys());
+    me.send("debug", { cmd: "incident:runaway_horse" });
+    await until(() => [...room.state.mounts.keys()].some((k) => !before.has(k)), 4000, "the loose horse");
+    const id = [...room.state.mounts.keys()].find((k) => !before.has(k))!;
+    const horse = room.state.mounts.get(id)!;
+    expect(horse.rider).toBe("");
+    expect(notices.some((n) => n.includes("Catch it"))).toBe(true);
+    const t = (room as unknown as { world: { terrain: { waterDepth?: (x: number, z: number) => number } } }).world.terrain;
+    expect(t.waterDepth!(horse.x, horse.z)).toBeLessThanOrEqual(0);
+    beside(room, me.p, horse as unknown as PlayerStateType);
+    await hold(me, BUTTON.INTERACT, 150);
+    await until(() => horse.rider === me.id, 3000, "in the saddle");
+    await until(() => notices.some((n) => n.startsWith("You have caught")), 3000, "the reward telegram");
+    await commit(room, me);
+    expect(lastIncident(room)).toMatchObject({ id: "runaway_horse", result: "caught" });
+  }, 30_000);
+
   it("an incident nobody met is settled by the contract's end, and the next run never deals the same one", async () => {
     const { room, me } = await setup();
     me.send("debug", { cmd: "incident:courier" });

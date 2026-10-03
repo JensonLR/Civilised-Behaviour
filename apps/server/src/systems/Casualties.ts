@@ -40,6 +40,8 @@ export interface CasualtyHost {
   /** Where a player wakes up after a rout. */
   routSpawn(slot: number): { x: number; z: number };
   notify(text: string): void;
+  /** D-055: a revive or a dressing was finished by `by` on `target` (the honours list counts them). Optional: test hosts need not. */
+  helped?(by: string, target: string, kind: "revive" | "dress"): void;
   /** Seeded randomness for unaimed hits (zone, direction), so a campaign seed reproduces its injuries. */
   rng: Rng;
   /** Tell clients about a hit (cosmetic: flinch, blood, ragdoll impulse). */
@@ -359,6 +361,7 @@ export class Casualties {
           target.wounds = dressWound(target.wounds, target.missing); // one level, bounded by the floors (injury.ts)
           log.info("casualty.dressed", { target: r.target, by: reviverId });
         }
+        this.host.helped?.(reviverId, r.target, kind);
       }
     }
 

@@ -18,10 +18,13 @@ export interface PlateRow {
   npc: number;
   cmd: number;
   morale: number;
+  /** A player's honour (D-055: `PlayerState.title`, "" when undecorated). */
+  title?: string;
 }
 
 interface Entry {
   name: string;
+  title: string;
   connected: boolean;
   down: boolean;
   cmd: number;
@@ -80,7 +83,7 @@ export class PlateCache {
   private entry(id: string): Entry {
     let e = this.entries.get(id);
     if (!e) {
-      e = { name: "", connected: true, down: false, cmd: -1, band: "", hand: false, text: "", rayAt: -1e9, sight: false, seen: 0 };
+      e = { name: "", title: "", connected: true, down: false, cmd: -1, band: "", hand: false, text: "", rayAt: -1e9, sight: false, seen: 0 };
       this.entries.set(id, e);
     }
     if (e.seen !== this.frame) {
@@ -90,15 +93,17 @@ export class PlateCache {
     return e;
   }
 
-  /** The plate's text, rebuilt only on a change of (name, connected, down, order, nerve band). */
+  /** The plate's text, rebuilt only on a change of (name, title, connected, down, order, nerve band). A player's honour is a second line under the name (nameTags.ts sets it smaller), not while down. */
   text(id: string, p: PlateRow): string {
     const e = this.entry(id);
     const down = (p.flags & FLAG.DOWNED) !== 0;
     const hand = !down && this.handRoles.has(p.npc) && (this.roster === undefined || this.roster.has(id));
     const band = hand ? moraleBand(p.morale) : "";
     const cmd = hand ? p.cmd : -1;
-    if (e.text === "" || e.name !== p.name || e.connected !== p.connected || e.down !== down || e.hand !== hand || e.cmd !== cmd || e.band !== band) {
+    const title = p.npc === 0 && !down ? (p.title ?? "") : "";
+    if (e.text === "" || e.name !== p.name || e.title !== title || e.connected !== p.connected || e.down !== down || e.hand !== hand || e.cmd !== cmd || e.band !== band) {
       e.name = p.name;
+      e.title = title;
       e.connected = p.connected;
       e.down = down;
       e.hand = hand;
@@ -106,7 +111,7 @@ export class PlateCache {
       e.band = band;
       let t = (p.connected ? p.name : `${p.name} (reconnecting)`) + (down ? " ✚ DOWN" : "");
       if (hand) t += ` · ${cmd >= 0 && cmd < COMMAND_IDS.length ? COMMAND_IDS[cmd]! : FOLLOW} · ${band}`;
-      e.text = t;
+      e.text = title ? `${t}\n${title}` : t;
     }
     return e.text;
   }

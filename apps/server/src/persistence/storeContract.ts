@@ -160,6 +160,22 @@ export function storeContract(name: string, harness: StoreHarness): void {
       expect(await store.deleteByIdentity(keyOf(1))).toBe(0);
     });
 
+    it("deleteByIdentity reaches the sections: a key held in one (D-055: honours) is erased, members' or not, and other sections are untouched", async () => {
+      const honours = (by: Record<string, string[]>) => JSON.stringify({ v: 1, by });
+      await store.save(newRec(21, { owner: keyOf(4), members: [keyOf(4), keyOf(5)], sections: { honours: honours({ [keyOf(4)]: ["sturdy"], [keyOf(5)]: ["terror"] }), idle: "3" }, sectionVersions: { honours: 1, idle: 1 } }), null);
+      // a stale key nobody's book holds any more (only a section mentions it)
+      await store.save(newRec(22, { owner: keyOf(6), members: [keyOf(6)], sections: { honours: honours({ [keyOf(5)]: ["bandager"], [keyOf(6)]: ["peacemaker"] }) }, sectionVersions: { honours: 1 } }), null);
+      expect(await store.deleteByIdentity(keyOf(5))).toBe(2);
+      const a = await store.load(idOf(21));
+      expect(a?.members).toEqual([keyOf(4)]);
+      expect(JSON.parse(a!.sections.honours!)).toEqual({ v: 1, by: { [keyOf(4)]: ["sturdy"] } });
+      expect(a?.sections.idle).toBe("3");
+      const b = await store.load(idOf(22));
+      expect(JSON.parse(b!.sections.honours!)).toEqual({ v: 1, by: { [keyOf(6)]: ["peacemaker"] } });
+      expect(JSON.stringify([a, b])).not.toContain(keyOf(5));
+      expect(await store.deleteByIdentity(keyOf(5))).toBe(0);
+    });
+
     it("purgeDormant deletes only campaigns not saved within the window", async () => {
       await store.save(newRec(18), null);
       clock.t += 100 * DAY_MS;
