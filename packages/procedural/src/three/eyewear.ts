@@ -68,10 +68,18 @@ export function buildEyewear(fc: FaceCtx, hf: HeadFit, eye: EyeSpot, o: EyewearO
     return o.hatOn ? Math.min(y, o.seatY - 0.1) : y;
   };
   const glassR = (k: number): number => eye.radius * k;
-  /** A point on the head as seen (skin + hair), `off` metres out. */
+  /**
+   * A point on the head as seen (skin + hair), `off` metres out, at the height `yR` (x R above the head centre, as the band and the ear tops are measured). The direction's own
+   * height is solved for: the surface lies 1.1-1.3 R out over hair, so a direction at yR put the point 10-30 % higher, and arms meant for the ear tops rode up into a hat's band.
+   */
   const on = (sx: number, az: number, yR: number, off: number): V3 => {
-    const d = dir(sx, az, yR);
-    return hf.outer(d[0], d[1], d[2], off);
+    let yu = yR;
+    let p = hf.outer(...dir(sx, az, yu), off);
+    for (let k = 0; k < 3 && Math.abs(p[1] - cy) > 1e-6; k++) {
+      yu *= (yR * R) / (p[1] - cy);
+      p = hf.outer(...dir(sx, az, yu), off);
+    }
+    return p;
   };
 
   // ---- spectacle arms: from the hinge along the temple over the top of the ear, hooking behind it -----------------------------------------------------
