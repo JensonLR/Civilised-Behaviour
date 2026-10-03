@@ -27,6 +27,22 @@ function rig(opts: { here?: boolean; armed?: number } = {}) {
 }
 
 describe("Audience (fake host)", () => {
+  it("is leashed: going down or walking off the map table closes the sheet without a pick (it stayed open until one)", () => {
+    for (const leave of ["down", "away"] as const) {
+      const r = rig();
+      const power = audiencesAt(r.state().c, r.state().p)[0]!.power;
+      r.a.open("a", power);
+      r.a.tick();
+      expect(r.a.has("a")).toBe(true);
+      if (leave === "down") r.rows.get("a")!.flags = FLAG.DOWNED;
+      else r.setHere(false);
+      r.a.tick();
+      expect(r.a.has("a")).toBe(false);
+      expect(r.sent.at(-1)!.msg.closed).toBe(true);
+      expect(r.commits.length).toBe(0);
+    }
+  });
+
   it("opens for a pending power, walks to the end, commits once and tells its owner", () => {
     const r = rig();
     const power = audiencesAt(r.state().c, r.state().p)[0]!.power;

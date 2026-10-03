@@ -16,7 +16,7 @@ describe("saveLabel is honest", () => {
     expect(saveLabel({ kind: "unknown" })).toBe("");
     expect(saveLabel({ kind: "saving" })).toBe("Saving...");
     expect(saveLabel({ kind: "saved", at: at(14, 2) }, time)).toBe("Saved 14:02");
-    expect(saveLabel({ kind: "saved", at: 0 }, time)).toBe("Saving..."); // (a "saved" with no time yet is not yet a save)
+    expect(saveLabel({ kind: "saved", at: 0 }, time)).toBe(""); // (a "saved" with no time yet is not yet a save, and not a save in flight either: "Saving..." stood on the bar for good)
     expect(saveLabel({ kind: "unkept" })).toMatch(/^Not saved/);
     expect(saveLabel({ kind: "failed", at: 0 })).toMatch(/^Not saved/);
     expect(saveLabel({ kind: "unkept" }, time, true)).toBe("Not saved");

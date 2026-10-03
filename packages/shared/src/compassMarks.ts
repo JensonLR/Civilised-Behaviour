@@ -178,8 +178,10 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
  * The objective mark for a contract's view: the first unfinished, NOT optional objective that has a place (optional side-goals never steal the strip),
  * falling back to the first unfinished optional one with a place. Undefined when nothing is left that has a place.
  */
-export function objectiveMark(region: RegionId, view: { template: ScenarioTemplateId; objectives: readonly { id: string; done: boolean; optional?: boolean }[] } | undefined): PlaceMark | undefined {
+export function objectiveMark(region: RegionId, view: { template: ScenarioTemplateId; phase?: string; objectives: readonly { id: string; done: boolean; optional?: boolean }[] } | undefined): PlaceMark | undefined {
   if (!view) return undefined;
+  // a settled contract's unfinished objectives are moot: the flag points the way home (it used to stay on the last objective after the contract ended)
+  if (view.phase === "resolved") return { id: "goal", icon: "goal", label: "Boat home", ...landing(region) };
   const spots = OBJECTIVE_SPOTS[view.template];
   if (!spots) return undefined;
   let fallback: PlaceMark | undefined;

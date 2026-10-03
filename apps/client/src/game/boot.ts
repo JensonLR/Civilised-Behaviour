@@ -1,3 +1,4 @@
+import { LostLine, lostLineFor } from "../ui/LostLine.ts";
 import { attachUiSounds, startAmbience, startMusic, wakeAudio } from "../audio/index.ts";
 import { TouchControls } from "../input/TouchControls.ts";
 import { Controls } from "../input/Controls.ts";
@@ -202,6 +203,11 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     })
     .catch((e) => console.error("backdrop failed", e));
 
+  const lostLine = new LostLine();
+  let leavingPage = false;
+  window.addEventListener("pagehide", () => (leavingPage = true));
+  window.addEventListener("beforeunload", () => (leavingPage = true));
+
   async function enter(s: Session, name = ""): Promise<void> {
     backdropWanted = false;
     // (a demo that ran out while the world was still being built: the close has already happened, so the card is shown the moment the game exists)
@@ -221,6 +227,11 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     showHud(s);
     s.room.onLeave((code) => {
       if (code !== 4000) console.warn("Left room", code);
+      // the room is gone for good (the server shut down, or the reconnection gave up): say so instead of leaving the last frame's HUD frozen on the screen
+      if (!leavingPage && lostLineFor(code, DEMO.closeCode)) {
+        hud.hidden = true;
+        lostLine.show(() => location.assign(location.pathname));
+      }
     });
     await stage.precompile(); // link the game's shaders in parallel instead of one stall per first draw
     game.start();

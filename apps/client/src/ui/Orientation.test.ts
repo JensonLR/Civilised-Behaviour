@@ -79,6 +79,30 @@ describe("the first-run orientation card", () => {
     o.dispose();
   });
 
+  it("a finished card says it is showing (the game keeps ticking it), and leaves at once off the hub or when downed (it used to stay for good)", () => {
+    const finish = (): Orientation => {
+      const o = make();
+      walkAbout(o);
+      for (let i = 1; i <= 40; i++) tick(o, 8, 0, i * 0.05);
+      const ahead = yawTo(8, 0, CAMP.mapTable.x, CAMP.mapTable.z);
+      for (let i = 0; i < 60; i++) tick(o, 8, 0, ahead);
+      for (const sheet of ["paper", "loadout", "map"] as SheetKind[]) tick(o, 8, 0, ahead, { sheet });
+      expect(o.active).toBe(false);
+      expect(o.showing).toBe(true);
+      return o;
+    };
+    const a = finish();
+    tick(a, 8, 0, 0, { region: "kessar" });
+    expect(card().hidden).toBe(true);
+    expect(a.showing).toBe(false);
+    a.dispose();
+    localStorage.clear();
+    const b = finish();
+    tick(b, 8, 0, 0, { down: true });
+    expect(card().hidden).toBe(true);
+    b.dispose();
+  });
+
   it("finishes: the done line shows and lingers, then the card goes; it is remembered as seen and does not return", () => {
     const o = make();
     walkAbout(o);
@@ -388,6 +412,7 @@ describe("the card's style (no colour literals, reduced motion, larger text, pal
   it("never captures the pointer except on its own button, and sits clear of the heading strip", () => {
     expect(css).toMatch(/\.orientation \{[^}]*pointer-events: none/);
     expect(css).toMatch(/\.orientation \.skip \{[^}]*pointer-events: auto/);
-    expect(css).toMatch(/\.orientation \{[^}]*top: calc\(var\(--edge-t/);
+    // below the heading strip's rows AND below the expedition bar, however many rows that wraps to (its real bottom, --codebar-b)
+    expect(css).toMatch(/\.orientation \{[^}]*top: max\(calc\(var\(--edge-t[^;]*var\(--codebar-b/);
   });
 });
