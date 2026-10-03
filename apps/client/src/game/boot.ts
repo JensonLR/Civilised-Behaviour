@@ -1,4 +1,4 @@
-import { attachUiSounds, startAmbience, startMusic } from "../audio/index.ts";
+import { attachUiSounds, startAmbience, startMusic, wakeAudio } from "../audio/index.ts";
 import { TouchControls } from "../input/TouchControls.ts";
 import { Controls } from "../input/Controls.ts";
 import { applyDisplaySettings, getGfx, getReduceMotion, onSettingChange } from "../settings.ts";
@@ -56,6 +56,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   attachUiSounds(document.body);
   startAmbience(); // sound begins at the first click or key press (browsers require a gesture); the front door has wind, birds and a fire
   startMusic("menu");
+  if (isDesktop()) wakeAudio(); // (the desktop build needs no click for sound, and a pad-only player never clicks: D-049)
   window.addEventListener("keydown", (e) => {
     if (e.code === "F1" && !anyModalOpen()) {
       e.preventDefault();

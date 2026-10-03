@@ -30,6 +30,8 @@ export function windowOptions(o: { preload: string; info: DesktopInfo; packaged:
       webviewTag: false,
       devTools: !o.packaged,
       spellcheck: false,
+      // sound with no click first (Electron's default, pinned): a pad-only player, on a Deck or the console path, never clicks (D-049)
+      autoplayPolicy: "no-user-gesture-required",
       // the preload reads the shell's facts from here, so no synchronous IPC is needed to build `window.cbDesktop.info`
       additionalArguments: [`${INFO_ARG}${JSON.stringify(o.info)}`],
     },

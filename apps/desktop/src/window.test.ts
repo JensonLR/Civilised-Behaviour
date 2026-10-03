@@ -21,8 +21,9 @@ describe("window options", () => {
     expect(w.webviewTag).toBe(false);
     expect(w.devTools).toBe(false);
     expect(w.preload).toBe("/x/preload.cjs");
+    expect(w.autoplayPolicy).toBe("no-user-gesture-required"); // (sound for a pad-only player, who never clicks: D-049)
     // nothing that loosens the sandbox is present at all
-    expect(Object.keys(w).sort()).toEqual(["additionalArguments", "allowRunningInsecureContent", "contextIsolation", "devTools", "nodeIntegration", "nodeIntegrationInSubFrames", "nodeIntegrationInWorker", "preload", "sandbox", "spellcheck", "webSecurity", "webviewTag"]);
+    expect(Object.keys(w).sort()).toEqual(["additionalArguments", "allowRunningInsecureContent", "autoplayPolicy", "contextIsolation", "devTools", "nodeIntegration", "nodeIntegrationInSubFrames", "nodeIntegrationInWorker", "preload", "sandbox", "spellcheck", "webSecurity", "webviewTag"]);
   });
   it("dev tools only when unpackaged", () => {
     expect(windowOptions({ preload: "p", info, packaged: false }).webPreferences.devTools).toBe(true);

@@ -1,4 +1,4 @@
-import { JOIN_CODE_LENGTH, isValidJoinCode } from "@cb/shared";
+import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, isValidJoinCode } from "@cb/shared";
 
 export interface MenuHandlers {
   /** Found an expedition. `progress` names the stage reached ("Surveying the territory...") for the working card. */
@@ -10,6 +10,9 @@ export interface MenuHandlers {
    */
   onResume?(code: string, name: string, progress: (step: string) => void): Promise<void>;
 }
+
+/** The letters the pad's dial turns through for a name (lower case first, as most of a name is; down from "a" wraps straight to the capitals). */
+const NAME_DIAL = "abcdefghijklmnopqrstuvwxyz '-.ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** The join lookup found no live room for the code: a dormant campaign may be waiting, so the failure card offers to resume it. */
 export const isNoLiveCampaign = (message: string): boolean => /^No campaign with that code/i.test(message);
@@ -74,7 +77,7 @@ export class Menu {
         <h1 id="title">Civilised Behaviour</h1>
         <p class="tag">Charter for an expedition into territories not yet improved</p>
         <label>Name upon the manifest
-          <input id="name" maxlength="20" autocomplete="off" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
+          <input id="name" maxlength="20" autocomplete="off" data-pad-chars="${NAME_DIAL}" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
         </label>
         <div class="row" id="continue-row" hidden>
           <button id="continue" type="button" class="primary"><span class="cont-title">Continue</span><span class="cont-meta"></span></button>
@@ -91,9 +94,10 @@ export class Menu {
         </section>
         <div class="or">or present a code to join a party</div>
         <div class="row">
-          <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
+          <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" data-pad-chars="${JOIN_CODE_ALPHABET}" data-pad-send placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
           <button id="join">Join</button>
         </div>
+        <p id="dialhint" class="fine dialhint" hidden></p>
         <div class="row aux">
           <button id="options" class="quiet">Options</button>
           <button id="howto" class="quiet${hasSeenHowTo() ? "" : " new"}">How to play</button>
@@ -168,6 +172,16 @@ export class Menu {
     this.codeInput.addEventListener("input", () => (this.codeInput.value = this.codeInput.value.toUpperCase()));
     this.codeInput.addEventListener("keydown", (e) => e.key === "Enter" && void this.join());
     this.nameInput.addEventListener("keydown", (e) => e.key === "Enter" && !prefill && void this.run(() => handlers.onCreate(this.name(), this.rules(), (t) => this.progress(t)), false));
+    // the pad's letter dial (D-049): say how it works while it turns, under the code row where the eye is (the status line is often below the fold on a short screen)
+    const dialHint = root.querySelector<HTMLElement>("#dialhint")!;
+    root.addEventListener("paddial", (e) => {
+      const on = (e as CustomEvent<boolean>).detail;
+      const field = e.target as HTMLElement;
+      dialHint.textContent = on ? `Up and down turn the letter; left and right move along; X (Square) takes it out. Confirm to ${field.hasAttribute("data-pad-send") ? "join" : "finish"}; back to stop.` : "";
+      dialHint.hidden = !on;
+      if (on) field.closest("label, .row")!.after(dialHint);
+      if (on) dialHint.scrollIntoView?.({ block: "nearest" });
+    });
     startPadNav(root, () => !this.root.hidden && !anyModalOpen());
   }
 

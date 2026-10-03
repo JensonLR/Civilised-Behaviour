@@ -118,6 +118,12 @@ export function resumeOnGesture(): void {
   engine.resumeOnGesture();
 }
 
+/** Starts the sound without waiting for a click or a key: the desktop build at boot, and any pad input (D-049; a browser that wants a gesture first keeps it waiting, harmlessly). */
+export function wakeAudio(): void {
+  wire();
+  engine.wake();
+}
+
 /** One footfall on `surface` at `speed` m/s (louder when faster). Cadence is the caller's: see Stride in stride.ts and game/GameAudio.ts. */
 export function footstep(surface: Surface, speed: number, opts?: PlayOpts & { crouching?: boolean }): void {
   playSfx(`footstep_${surface}`, { ...opts, volume: (opts?.volume ?? 1) * stepVolume(speed, opts?.crouching ?? false) });

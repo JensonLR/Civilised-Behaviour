@@ -739,3 +739,7 @@ body.touch-ui #hud .orientation .foot { justify-content: flex-end; margin-top: 0
 }
 .t-portrait { position: fixed; inset: 0; z-index: 15; display: none; place-items: center; margin: 0; padding: 2rem; text-align: center; pointer-events: none; font: 1.2rem/1.4 var(--serif); color: var(--text); background: color-mix(in srgb, var(--scrim) 72%, transparent); }
 @media (orientation: portrait) { .t-portrait:not([hidden]) { display: grid; } }
+/* D-049, the pad's letter dial (PadNav): the letter being turned is the field's own selection, drawn as a stamp so it reads from the sofa */
+.panel input.dialing { outline: 3px solid var(--stamp); outline-offset: 2px; caret-color: transparent; }
+.panel input.dialing::selection { background: var(--stamp); color: var(--text); }
+.panel p.dialhint { margin: 0.3rem 0 0; font-style: italic; color: var(--stamp); }

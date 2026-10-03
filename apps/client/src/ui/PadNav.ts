@@ -1,4 +1,4 @@
-import { playSfx } from "../audio/index.ts";
+import { playSfx, wakeAudio } from "../audio/index.ts";
 
 /**
  * Generic gamepad navigation for DOM menus: D-pad/left stick up-down moves focus (in reading order, the focused control scrolled into view), left-right adjusts sliders, selects and
@@ -10,6 +10,33 @@ import { playSfx } from "../audio/index.ts";
 /** A held direction steps once, waits this long, then repeats this often (ms). */
 export const NAV_FIRST_REPEAT_MS = 420, NAV_REPEAT_MS = 150;
 
+/**
+ * THE LETTER DIAL (D-049, the console path): a text field with `data-pad-chars` (its alphabet) is typed by pad alone, with no keyboard on screen. A on the field starts the dial on its
+ * first letter (the letter being turned is the field's own selection, so it needs no drawing); up and down turn it through the alphabet, left and right move along (right past the end
+ * adds a letter, up to the field's maxlength), X (Square) takes the letter out, A stops (and, on a field marked `data-pad-send`, sends: an Enter keydown, which the field already answers) and B stops. The field hears `paddial` ({detail: true | false}) as the dial
+ * starts and stops, so its sheet can say how it works. Before this a pad player on a console or a Deck could not type the five letters of a friend's code.
+ */
+export function dialTurn(value: string, slot: number, dir: number, chars: string): string {
+  const ch = value[slot];
+  const at = ch === undefined ? -1 : chars.indexOf(ch); // (not indexOf(""): that is 0)
+  const next = chars[(((at < 0 ? (dir > 0 ? -1 : 0) : at) + dir) % chars.length + chars.length) % chars.length]!;
+  return value.slice(0, slot) + next + value.slice(slot + 1);
+}
+/** X (Square) takes out the letter being turned: [the new value, the new slot] (the slot stays put, or steps back off the end). */
+export function dialDelete(value: string, slot: number): [string, number] {
+  const v = value.slice(0, slot) + value.slice(slot + 1);
+  return [v, Math.max(0, Math.min(slot, v.length - 1))];
+}
+/** Left or right along the field: [the new value, the new slot]. Right past the last letter adds one (the alphabet's first), while the field has room. */
+export function dialMove(value: string, slot: number, dir: number, chars: string, maxLen: number): [string, number] {
+  if (dir < 0) return [value, Math.max(0, slot - 1)];
+  if (slot + 1 < value.length) return [value, slot + 1];
+  if (value.length >= maxLen) return [value, slot];
+  return [value + chars[0], value.length];
+}
+
+let padWoke = false;
+
 export function startPadNav(root: HTMLElement, isActive: () => boolean): () => void {
   let raf = 0;
   let moveCooldown = 0;
@@ -20,6 +47,9 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
   let bWas = false;
   let lbWas = false;
   let rbWas = false;
+  let xWas = false;
+  /** The field being typed by the dial, and the letter being turned. */
+  let dial: { el: HTMLInputElement; chars: string; slot: number } | null = null;
 
   /** A control in a `hidden` section of the root (the door's Continue row before there is anything to continue) is not a stop, whatever the layout engine says. */
   const insideHidden = (el: HTMLElement): boolean => {
@@ -63,9 +93,38 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     }
   };
 
-  /** A on the focused control: press a button, tab, link or switch; step a select to its next option (wrapping). A slider is moved by left and right, not A. */
+  const showDial = (): void => {
+    if (!dial) return;
+    dial.el.focus();
+    dial.el.setSelectionRange?.(dial.slot, dial.slot + 1);
+  };
+  const setDialValue = (v: string): void => {
+    if (!dial || v === dial.el.value) return;
+    dial.el.value = v;
+    dial.el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const startDial = (el: HTMLInputElement, chars: string): void => {
+    dial = { el, chars, slot: 0 };
+    if (!el.value) setDialValue(chars[0]!);
+    el.classList.add("dialing");
+    el.dispatchEvent(new CustomEvent("paddial", { detail: true, bubbles: true }));
+    showDial();
+  };
+  const endDial = (send: boolean): void => {
+    if (!dial) return;
+    const el = dial.el;
+    dial = null;
+    el.classList.remove("dialing");
+    el.setSelectionRange?.(el.value.length, el.value.length);
+    el.dispatchEvent(new CustomEvent("paddial", { detail: false, bubbles: true }));
+    if (send) el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  };
+
+  /** A on the focused control: press a button, tab, link or switch; step a select to its next option (wrapping); start the letter dial on a field that has one. A slider is moved by left and right, not A. */
   const activate = (el: HTMLElement): void => {
-    if (el instanceof HTMLSelectElement) {
+    if (el instanceof HTMLInputElement && el.dataset.padChars && !el.readOnly) {
+      startDial(el, el.dataset.padChars);
+    } else if (el instanceof HTMLSelectElement) {
       el.selectedIndex = (el.selectedIndex + 1) % Math.max(1, el.options.length);
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -79,6 +138,11 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     if (!isActive()) return;
     const pad = [...(navigator.getGamepads?.() ?? [])].find((p) => p?.connected && p.mapping === "standard");
     if (!pad) return;
+    // the first pad input asks for sound (a pad press is no gesture to a browser, which keeps it waiting for a click; the desktop build starts at once anyway)
+    if (!padWoke && pad.buttons.some((b) => b?.pressed)) {
+      padWoke = true;
+      wakeAudio();
+    }
     const now = performance.now();
     const ay = pad.axes[1] ?? 0;
     const ax = pad.axes[0] ?? 0;
@@ -86,6 +150,44 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     const down = ay > 0.6 || pad.buttons[13]?.pressed;
     const left = ax < -0.6 || pad.buttons[14]?.pressed;
     const right = ax > 0.6 || pad.buttons[15]?.pressed;
+
+    // the dial has the pad to itself until A sends or B stops (or its field goes: a sheet closed under it)
+    if (dial && (!dial.el.isConnected || dial.el.disabled || dial.el.offsetParent === null)) endDial(false);
+    if (dial) {
+      const d = dial;
+      const vdir = down ? -1 : up ? 1 : 0;
+      const hdir = right ? 1 : left ? -1 : 0;
+      const key = vdir !== 0 ? 12 + vdir : hdir !== 0 ? 15 + hdir : 0; // (never a menu direction, -1 or 1; one held direction at a time, each with its own first-step-then-repeat)
+      if (key !== 0 && (key !== navHeld || now >= moveCooldown)) {
+        moveCooldown = now + (key !== navHeld ? NAV_FIRST_REPEAT_MS : NAV_REPEAT_MS);
+        if (vdir !== 0) setDialValue(dialTurn(d.el.value, d.slot, vdir, d.chars));
+        else {
+          const [v, slot] = dialMove(d.el.value, d.slot, hdir, d.chars, d.el.maxLength > 0 ? d.el.maxLength : 32);
+          setDialValue(v);
+          d.slot = slot;
+        }
+        showDial();
+        playSfx("ui_hover");
+      }
+      navHeld = key;
+      const x = pad.buttons[2]?.pressed ?? false;
+      if (x && !xWas) {
+        const [v, slot] = dialDelete(d.el.value, d.slot);
+        setDialValue(v);
+        d.slot = slot;
+        showDial();
+      }
+      xWas = x;
+      const a = pad.buttons[0]?.pressed ?? false;
+      const b = pad.buttons[1]?.pressed ?? false;
+      if (a && !aWas) endDial(d.el.hasAttribute("data-pad-send"));
+      else if (b && !bWas) endDial(false);
+      aWas = a;
+      bWas = b;
+      lbWas = pad.buttons[4]?.pressed ?? false;
+      rbWas = pad.buttons[5]?.pressed ?? false;
+      return;
+    }
 
     const items = focusables();
     let current = document.activeElement as HTMLElement | null;
@@ -127,5 +229,8 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     rbWas = rb;
   };
   raf = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(raf);
+  return () => {
+    cancelAnimationFrame(raf);
+    endDial(false);
+  };
 }

@@ -420,3 +420,25 @@ describe("the expedition's world sounds through the engine (D-035)", () => {
     expect(lines).toEqual(['[the gun crew: "Fire!", left]', "[the day bell tolls at camp, ahead]", "[a rubber stamp falls]", "[hoofbeats, right]"]);
   });
 });
+
+describe("wake: sound without a click (D-049: a pad-only player on the desktop build never clicks)", () => {
+  it("creates the context and asks a suspended one to run; with no audio at all it reports false and does nothing", () => {
+    let resumes = 0;
+    const Suspended = class extends FakeCtx {
+      override state = "suspended";
+      override resume = () => (resumes++, Promise.resolve());
+    } as unknown as Ctor;
+    const e = new Engine();
+    expect(e.wake(Suspended)).toBe(true);
+    expect(e.state).toBe("suspended");
+    expect(resumes).toBeGreaterThan(0); // (init asks once; wake asks again: harmless)
+    const n = resumes;
+    e.wake(); // (idempotent: the same context, asked again)
+    expect(resumes).toBe(n + 1);
+    const running = new Engine();
+    expect(running.wake(Ctor)).toBe(true);
+    expect(running.state).toBe("running");
+    const none = new Engine();
+    expect(none.wake(undefined)).toBe(false);
+  });
+});
