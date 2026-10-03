@@ -1,7 +1,7 @@
 import { FLAG, type PlayerStateType } from "@cb/shared";
 import { npcKey, type CampaignState, type CastApi, type NpcSpec, type PlayersView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import {
-  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, dealIncident, incidentDelayS, incidentRoster, incidentStep, placeIncident,
+  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident,
   type IncidentEvent, type IncidentId, type IncidentRecord, type IncidentResult,
 } from "@cb/shared";
 
@@ -28,6 +28,10 @@ export interface IncidentsHost {
   fighting(): boolean;
   /** A deserter signs on as a hand where he stands; false when the tent is full. */
   join(name: string, lookSeed: number, at: { x: number; z: number }): boolean;
+  /** A saddled horse with nobody on it at `at` (the mounts' own); "" when the room has no room for another mount. */
+  looseHorse(at: { x: number; z: number }): string;
+  /** Who rides mount `id` ("" nobody, or the mount is gone). */
+  riderOf(id: string): string;
   hasRoom(): boolean;
 }
 
@@ -44,6 +48,9 @@ export class Incidents {
   private spec: NpcSpec | undefined;
   private wasDown = false;
   private reaim = 0;
+  /** The runaway horse's mount id, and what the notices call it. */
+  private horse = "";
+  private horseLabel = "";
 
   constructor(private readonly host: IncidentsHost) {}
 
@@ -80,6 +87,11 @@ export class Incidents {
     this.calm = this.host.fighting() ? 0 : this.calm + dt;
     if (!this.live) {
       if (this.forced || (this.t >= this.delay && this.calm >= INCIDENT.calmS)) this.fire();
+      return;
+    }
+    if (this.id === "runaway_horse") {
+      const rider = this.host.riderOf(this.horse);
+      if (rider && this.host.party.get(rider) && !this.host.party.get(rider)!.npc) this.settle({ t: "mounted" });
       return;
     }
     const row = this.row();
@@ -142,6 +154,8 @@ export class Incidents {
     this.wasDown = false;
     this.reaim = 0;
     this.forced = false;
+    this.horse = "";
+    this.horseLabel = "";
   }
 
   private fire(): void {
@@ -160,6 +174,17 @@ export class Incidents {
     const at = placeIncident({ x: sx / n, z: sz / n }, this.host.hostiles(), (x, z) => this.host.land(x, z), this.host.bounds(), seed);
     if (!at) {
       this.id = "none"; // nowhere open near the party: this run stays quiet (never in a wall)
+      return;
+    }
+    if (this.id === "runaway_horse") {
+      this.horse = this.host.looseHorse(at);
+      if (!this.horse) {
+        this.id = "none"; // (the room is at its mounts' cap)
+        return;
+      }
+      this.horseLabel = horseName(seed);
+      this.live = true;
+      this.host.notice(INCIDENT_OPEN.runaway_horse.replace("%n", this.horseLabel));
       return;
     }
     const specs = incidentRoster(this.id, at, this.host.region(), seed);
@@ -184,7 +209,8 @@ export class Incidents {
     const r = incidentStep(this.id, e);
     if (r === undefined) return;
     this.result = r;
-    if (this.spec) this.host.notice(INCIDENT_DONE[r].replace("%n", this.spec.name));
+    const who = this.spec?.name ?? (this.id === "runaway_horse" ? this.horseLabel : "");
+    if (who) this.host.notice(INCIDENT_DONE[r].replace("%n", who));
     // whoever is left goes about their business (a helped traveller, a courier who delivered or gave up, a deserter turned away)
     if (r !== "enlisted") this.host.cast.order("incident", { o: "flee" });
   }

@@ -533,6 +533,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       fighting: () => this.simT - this.lastShotT < INCIDENT.calmS || this.scenario?.phase === "fighting" || this.scenario?.phase === "escalated",
       join: (name, lookSeed, at) => this.followers.join(name, lookSeed, at),
+      looseHorse: (at) => this.mounts.spawnHorse({ x: at.x, z: at.z, yaw: 0 }, { coat: (this.state.seed ^ 0x40) >>> 0 }),
+      riderOf: (id) => this.state.mounts.get(id)?.rider ?? "",
       hasRoom: () => this.followers.hasRoom,
     });
     this.outposts = new Outposts({

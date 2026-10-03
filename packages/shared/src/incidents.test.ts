@@ -63,6 +63,10 @@ describe("incidents: chaos during play (D-052)", () => {
   it("each incident's people are civilians of the right sort, on no side, unarmed, in their own group", () => {
     for (const id of INCIDENT_IDS) {
       const r = incidentRoster(id, { x: 3, z: 4 }, "vesper", 9);
+      if (id === "runaway_horse") {
+        expect(r, "the horse is a mount, not a person").toEqual([]);
+        continue;
+      }
       expect(r.length).toBe(1);
       expect(r[0]).toMatchObject({ group: "incident", side: "neutral", brain: "civil", post: { x: 3, z: 4 } });
     }
@@ -80,6 +84,9 @@ describe("incidents: chaos during play (D-052)", () => {
     expect(incidentStep("deserter", { t: "use", room: true })).toBe("enlisted");
     expect(incidentStep("deserter", { t: "use", room: false })).toBe("turned_away");
     expect(incidentStep("deserter", { t: "shot" })).toBe("turned_away");
+    expect(incidentStep("runaway_horse", { t: "mounted" })).toBe("caught");
+    expect(incidentStep("runaway_horse", { t: "end" })).toBe("strayed");
+    expect(incidentStep("runaway_horse", { t: "use", room: true })).toBeUndefined();
   });
 
   it("the courier's arrears go into the purse, a helped traveller earns the home power's trust (the Ward in Kessar, a minor power elsewhere), and the record is kept and saved", () => {
@@ -88,6 +95,8 @@ describe("incidents: chaos during play (D-052)", () => {
     const paid = applyIncident(c, p, { id: "courier", result: "delivered", day: 2, region: "kessar" });
     expect(paid.c.purse).toBe(c.purse + INCIDENT.courierPay);
     expect(paid.c.sites.lastIncident).toEqual({ id: "courier", result: "delivered", day: 2, region: "kessar" });
+    expect(applyIncident(c, p, { id: "runaway_horse", result: "caught", day: 2, region: "highmark" }).c.purse).toBe(c.purse + INCIDENT.horseReward);
+    expect(applyIncident(c, p, { id: "runaway_horse", result: "strayed", day: 2, region: "highmark" }).c.purse).toBe(c.purse);
     const ward = applyIncident(c, p, { id: "wounded_traveller", result: "helped", day: 2, region: "kessar" });
     expect(ward.c.factions.ward.trust).toBe(Math.min(100, c.factions.ward.trust + INCIDENT.helpedTrust));
     expect(ward.p).toBe(p);

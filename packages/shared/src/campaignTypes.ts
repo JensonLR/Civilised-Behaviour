@@ -50,8 +50,8 @@ export interface SiteLedger {
   lastIncident?: IncidentRecord;
 }
 /** D-052: chaos during play (incidents.ts, docs/_notes/incidents.md). Append-only. */
-export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter";
-export type IncidentResult = "helped" | "passed_by" | "delivered" | "missed" | "enlisted" | "turned_away";
+export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter" | "runaway_horse";
+export type IncidentResult = "helped" | "passed_by" | "delivered" | "missed" | "enlisted" | "turned_away" | "caught" | "strayed";
 export interface IncidentRecord { id: Exclude<IncidentId, "none">; result: IncidentResult; day: number; region: RegionId }
 export interface CampaignState {
   v: 1; seed: number; day: number; expeditions: number; purse: number; lies: number;   // purse in pounds; lies = promises broken (negotiation leverage)
