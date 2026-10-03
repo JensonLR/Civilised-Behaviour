@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferGeometry, BufferAttribute, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
-import { KESSAR_ANCHORS as A, KESSAR_OUTPOST, PALETTE, outpostPlan, telegraphPoles, type CollisionWorld, type OutpostPiece, type RegionDress } from "@cb/shared";
+import { KESSAR_ANCHORS as A, KESSAR_OUTPOST, PALETTE, outpostPlan, telegraphPoles, type CollisionWorld, type OutpostPiece, type RegionDress, type RegionId } from "@cb/shared";
 import { Kit, blend, type ColourFn } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { tent } from "../landmarks.ts";
@@ -180,10 +180,10 @@ function launch(k: Kit, world: CollisionWorld): void {
   k.clearBase();
 }
 
-/** The whole dress as ONE geometry (undefined when nothing is to be drawn). `lod` 0 is the cheap shape the ink hull and the low preset use. */
-export function buildOutpostGeometry(world: CollisionWorld, dress: RegionDress, lod: Lod): BufferGeometry | undefined {
+/** The whole dress of `region` as ONE geometry (undefined when nothing is to be drawn). `lod` 0 is the cheap shape the ink hull and the low preset use. */
+export function buildOutpostGeometry(world: CollisionWorld, dress: RegionDress, lod: Lod, region: RegionId = "kessar"): BufferGeometry | undefined {
   const k = new Kit();
-  const plan = outpostPlan(dress.outpost);
+  const plan = outpostPlan(dress.outpost, region);
   for (const p of plan.pieces) {
     const gy = world.terrainHeight(p.x, p.z);
     switch (p.kind) {
@@ -206,9 +206,12 @@ export function buildOutpostGeometry(world: CollisionWorld, dress: RegionDress, 
       case "wall": wallSeg(k, p, gy); break;
     }
   }
-  if (dress.telegraph) telegraph(k, world);
-  if (dress.rivalPost > 0) rivalPost(k, world, dress.rivalPost as 1 | 2, lod);
-  if (dress.launch) launch(k, world);
+  // (the wire, the Syndicate's post and the launch stand at Kessar only: their lines and moorings are Kessar's; `regionDressOf` never sets them elsewhere)
+  if (region === "kessar") {
+    if (dress.telegraph) telegraph(k, world);
+    if (dress.rivalPost > 0) rivalPost(k, world, dress.rivalPost as 1 | 2, lod);
+    if (dress.launch) launch(k, world);
+  }
   k.clearBase();
   return k.build();
 }

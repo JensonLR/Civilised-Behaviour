@@ -31,7 +31,7 @@ describe("CampaignMap on five shores (D-036, D-037)", () => {
     const m = campaignMapOf(known, newSettlements(), undefined, mapPins(known, p, []), offers, newSettlements().tech, "hollowmere");
     const panel = new CampaignMap();
     panel.render(m);
-    expect(panel.root.textContent).toContain("Highmark: on offer: The Vacant Chair");
+    expect(panel.root.textContent).toContain("Highmark: no outpost of the Society yet: carry four crates to the foundation on the grass west of the Reed Landing; on offer: The Vacant Chair"); // (D-056: Highmark has a foundation too)
     expect(panel.root.textContent).toContain("Highmark: a day's sail");
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     drawCampaignOverlay(g, m);

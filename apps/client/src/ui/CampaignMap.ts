@@ -66,11 +66,14 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
   g.replaceChildren();
   if (!data) return;
   const kessar = data.regions.find((r) => r.id === "kessar");
-  if (kessar?.outpost) {
-    const s = svg("g", { class: "stamp outpost", transform: `translate(${KESSAR_AT.x - 24} ${KESSAR_AT.y + 28})` });
-    s.append(svg("rect", { x: -5, y: -5, width: 10, height: 10 }), svg("path", { d: `M-5 -5 L0 -${6 + rank(kessar.outpost.stage)} L5 -5` }));
+  // the Society's posts (D-056: one per region with a site), each stamped beside its shore
+  for (const r of data.regions) {
+    if (!r.outpost) continue;
+    const at = CHART_AT[r.id];
+    const s = svg("g", { class: "stamp outpost", transform: `translate(${at.x - 24} ${at.y + 28})` });
+    s.append(svg("rect", { x: -5, y: -5, width: 10, height: 10 }), svg("path", { d: `M-5 -5 L0 -${6 + rank(r.outpost.stage)} L5 -5` }));
     const t = svg("text", { x: 9, y: 4 });
-    t.textContent = `${kessar.outpost.name}: ${stageWord(kessar.outpost.stage).replace(/^an? /, "")}`;
+    t.textContent = `${r.outpost.name}: ${stageWord(r.outpost.stage).replace(/^an? /, "")}`;
     s.append(t);
     g.append(s);
   }
@@ -124,6 +127,9 @@ export const sailShort = (seconds: number): string => (seconds >= 5 ? "a day" : 
 export const sailLong = (seconds: number): string => (seconds >= 5 ? "a day's sail" : "half a day by steam launch");
 
 /** The text panel under the chart. `render` replaces its contents; call it whenever the map data changes. */
+/** Where each region's foundation lies, in the words of the shores list (D-056: the regions with a site). */
+const FOUNDATION_WHERE: Partial<Record<RegionId, string>> = { kessar: "south of the bridge", highmark: "on the grass west of the Reed Landing" };
+
 export class CampaignMap {
   readonly root = h("section", { class: "campaign", "aria-labelledby": "campaign-title" });
 
@@ -139,7 +145,7 @@ export class CampaignMap {
       const bits: string[] = [];
       if (r.here) bits.push("you are here");
       if (r.outpost) bits.push(`the Society holds ${stageWord(r.outpost.stage)}, ${r.outpost.name} (${PRIORITY_LABEL[r.outpost.priority]}; stores ${r.outpost.supply} of 100)`);
-      else if (r.id === "kessar") bits.push("no outpost of the Society yet: carry four crates to the foundation south of the bridge");
+      else if (FOUNDATION_WHERE[r.id]) bits.push(`no outpost of the Society yet: carry four crates to the foundation ${FOUNDATION_WHERE[r.id]}`);
       if (r.rivalPost > 0) bits.push(r.rivalPost >= 2 ? "the Syndicate has a trading post here" : "the Syndicate has a post here");
       if (r.offered) bits.push(`on offer: ${r.offered.title}`);
       shores.append(h("li", {}, h("strong", {}, r.name), `: ${bits.length ? bits.join("; ") : "nothing of note"}.`));

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { FLAG, FOUNDATION_CRATES, KESSAR_OUTPOST, PropKind, newCampaign, newSettlements, type CampaignState, type RegionClimate, type RegionId, type SettlementEvent, type SettlementsState } from "@cb/shared";
+import { FLAG, FOUNDATION_CRATES, KESSAR_OUTPOST, OUTPOST_SITES, PropKind, newCampaign, newSettlements, type CampaignState, type RegionClimate, type RegionId, type SettlementEvent, type SettlementsState } from "@cb/shared";
 import { Outposts, type OutpostsHost } from "./Outposts.ts";
 
 const GOOD: RegionClimate = { security: 80, trade: 80, hostility: 10, rivalPressure: 10, labour: 70 };
 
-function rig(over: { region?: RegionId; busy?: boolean; c?: CampaignState; s?: SettlementsState } = {}) {
+function rig(over: { region?: RegionId; busy?: boolean; c?: CampaignState; s?: SettlementsState; at?: { x: number; z: number } } = {}) {
   let c: CampaignState = over.c ?? { ...newCampaign(5), day: 3 };
   let s: SettlementsState = over.s ?? newSettlements();
-  const S = KESSAR_OUTPOST.site;
+  const S = over.at ?? KESSAR_OUTPOST.site;
   const rows = new Map<string, { x: number; z: number; flags: number; npc: number }>([
     ["a", { x: S.x + 1, z: S.z, flags: 0, npc: 0 }],
     ["b", { x: S.x + 40, z: S.z, flags: 0, npc: 0 }],
@@ -115,5 +115,22 @@ describe("Outposts (fake host)", () => {
     expect(raided.map((e) => e.kind)).toEqual(["raided"]);
     expect(r.o.raid("hollowmere", 5)).toEqual([]);
     r.o.onLeave("a");
+  });
+
+  it("D-056: at Highmark the crates found Highmark's post at its own foundation (one rebuild); Kessar's spot there is just grass; each post evolves in its own region's weather", () => {
+    const r = rig({ region: "highmark", at: OUTPOST_SITES.highmark!.site });
+    for (let i = 0; i < FOUNDATION_CRATES; i++) {
+      expect(r.o.onInteract("a", r.rows.get("a") as never, r.give(PropKind.CRATE))).toBe(true);
+      r.tick(1);
+    }
+    expect(r.s().posts.highmark!.stage).toBe("camp");
+    expect(r.s().posts.kessar).toBeUndefined();
+    expect(r.rebuilds()).toBe(1);
+    const k = rig({ region: "highmark", at: KESSAR_OUTPOST.site });
+    expect(k.o.onInteract("a", k.rows.get("a") as never, k.give(PropKind.CRATE))).toBe(false);
+    expect(k.s().posts.highmark).toBeUndefined();
+    const asked: RegionId[] = [];
+    r.o.evolve(4, (region) => { asked.push(region); return GOOD; });
+    expect(asked).toEqual(["highmark"]);
   });
 });

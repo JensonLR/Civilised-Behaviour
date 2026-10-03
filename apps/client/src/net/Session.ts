@@ -106,13 +106,13 @@ export class Session {
     return (campaignJson ? parseCampaign(campaignJson)?.crossing.bridge : undefined) ?? "intact";
   }
 
-  /** What the collision world depends on, read from the two replicated JSON strings (the server calls the same function): bridge, outpost stage, telegraph (D-035). */
-  static worldOptsOf(st: { campaign?: string; settlements?: string }): RegionWorldOpts {
-    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "");
+  /** What the collision world depends on, read from the two replicated JSON strings (the server calls the same function): bridge, outpost stage, telegraph (D-035), for the region the room stands in (D-056). */
+  static worldOptsOf(st: { campaign?: string; settlements?: string; region?: string }): RegionWorldOpts {
+    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "", isRegionId(st.region) ? st.region : "hollowmere");
   }
 
   /** The world's identity: the Game rebuilds the collision world and the scenery only when it changes. */
-  static worldKeyOf(st: { campaign?: string; settlements?: string }): string {
+  static worldKeyOf(st: { campaign?: string; settlements?: string; region?: string }): string {
     return worldKey(Session.worldOptsOf(st));
   }
 

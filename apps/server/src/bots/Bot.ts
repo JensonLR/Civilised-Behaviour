@@ -111,7 +111,7 @@ export class Bot {
   private worldSpec(): { region: RegionId; opts: RegionWorldOpts; key: string } {
     const st = this.room.state;
     const region = isRegionId(st.region) ? st.region : "hollowmere";
-    const opts = regionWorldOpts(st.campaign ?? "", st.settlements ?? "");
+    const opts = regionWorldOpts(st.campaign ?? "", st.settlements ?? "", region);
     return { region, opts, key: `${region}|${opts.bridge ?? "intact"}|${opts.outpost ?? "none"}|${opts.telegraph ? 1 : 0}` };
   }
 

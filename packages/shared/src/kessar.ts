@@ -7,7 +7,7 @@ import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLe
 import { PropKind, type PropSpawn } from "./props.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
-import { inOutpostRing, outpostObstacles } from "./outpost.ts";
+import { withOutpost } from "./outpost.ts";
 import type { OutpostStage } from "./worldTypes.ts";
 
 /**
@@ -521,13 +521,7 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
   }
   // D-035: the Society's outpost. The seeded dressing above is computed exactly as before at EVERY stage; a stage above "none" then clears the scatter out of the outpost's
   // ring (the same set at every stage, so a stage change moves nothing else) and appends its own colliders, which draw no random numbers. "none" is today's world, byte for byte.
-  const stage = opts?.outpost ?? "none";
-  if (stage !== "none") {
-    const kept = out.filter((o) => !((o.tag === "tree" || o.tag === ROCK_TAG) && inOutpostRing(o.x, o.z)));
-    out.length = 0;
-    out.push(...kept, ...outpostObstacles(stage, opts?.telegraph === true, terrain));
-  }
-  return out;
+  return withOutpost(out, terrain, "kessar", opts, ["tree", ROCK_TAG]);
 }
 
 /** Every story point of the newer sites, named (the dressing keeps clear of them and the tests prove each is open and reachable). */
