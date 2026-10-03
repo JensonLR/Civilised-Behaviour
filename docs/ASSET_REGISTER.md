@@ -37,3 +37,8 @@ Colyseus (MIT), @colyseus/schema (MIT).
 | `@fontsource/im-fell-english-sc` 5.x | IM Fell English SC | labels, buttons, headings | same |
 | `@fontsource/special-elite` 5.x | Special Elite | expedition codes, telegrams | Astigmatic, via Fontsource |
 Only the Latin subsets are imported (`apps/client/src/main.ts`). The earlier "system serif stack, no web fonts" note no longer applies.
+
+The Society's seal (D-053, 2026-10-03): the game's logo and icon set. No external asset: drawn as SVG by code (`packages/shared/src/emblem.ts`) in palette colours only, and
+rasterised by `scripts/icons.mts` (the pre-installed Chromium) into committed files: `apps/client/public/` (favicon.svg, favicon-32.png, apple-touch-icon.png,
+icon-192.png, icon-512.png, icon-maskable-512.png, manifest.webmanifest), `apps/website/brand/` (the same, plus seal.svg) and `apps/desktop/resources/icon.png`
+(1024 px, electron-builder's app icon). Original work; no attribution owed. The landing page sets its wordmark in the already-registered IM Fell English SC.
