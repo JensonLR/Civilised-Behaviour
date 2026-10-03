@@ -147,6 +147,18 @@ export function hire(party: PartyState, purse: number, id: string, seed: number,
   return { party: next, purse: purse - cand.wage, ok: true, why: `${cand.name} signs (£${cand.wage}).` };
 }
 
+/**
+ * D-052: a deserter signs on for rations: a rifleman with no signing fee and nothing owed yet, his loyalty untested (35). Refused when the tent is full (`FOLLOWER_CAP`) or he
+ * is already on the books. His id is derived from the seed and the day, so it is stable across a reload of the same run.
+ */
+export function enlist(party: PartyState, name: string, lookSeed: number, seed: number, day: number): { party: PartyState; ok: boolean; id: string } {
+  const id = `hand-x${(hash3(seed, day, 0xde5e) >>> 0).toString(36)}`;
+  if (party.roster.length >= FOLLOWER_CAP || party.roster.some((f) => f.id === id)) return { party, ok: false, id };
+  const next = cloneParty(party);
+  next.roster.push({ ...makeFollower("rifleman", seed, day, 7, 0), id, name: name.slice(0, 32), lookSeed: lookSeed >>> 0, loyalty: 35 });
+  return { party: next, ok: true, id };
+}
+
 /** Dismissal pays what is owed first (severance is a debt, not a gift); with the purse short the hand stays and the sheet says why. */
 export function dismiss(party: PartyState, purse: number, id: string): MoneyResult {
   const f = party.roster.find((r) => r.id === id);

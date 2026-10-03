@@ -72,6 +72,8 @@ export * from "./followers.ts";
 export * from "./command.ts";
 export * from "./partyState.ts";
 export * from "./chaos.ts";
+export * from "./incidents.ts";
+
 export * from "./scenarios/registry.ts";
 export * from "./scenarios/parleys.ts";
 // ---- D-035 campaign slice ----

@@ -3,6 +3,7 @@ import type {
   RegionId, ResolutionId, ScenarioOutcome, ScenarioTemplateId, SiteLedger, FactionStance,
 } from "./campaignTypes.ts";
 import { isRegionId } from "./campaignTypes.ts";
+import { INCIDENT_IDS, INCIDENT_RESULTS } from "./incidents.ts";
 import { hash3 } from "./rng.ts";
 import { FLAG_FX } from "./powersText.ts";
 import { NEW_RESOLUTIONS, NEW_TEMPLATE_IDS, NEW_TEMPLATE_RESOLUTIONS, isNewTemplate, pluck } from "./regionEndings.ts";
@@ -194,7 +195,17 @@ function parseSites(raw: unknown): SiteLedger {
     border: oneOf(r.border, ["quiet", "mediated", "ward", "syndicate", "war"] as const, "quiet"), lastComplication: oneOf(r.lastComplication, COMPLICATIONS, "none"),
     succession: oneOf(r.succession, ["open", "elder", "younger", "regency", "usurped", "sold"] as const, "open"),
     ends: parseEnds(r.ends),
+    ...parseLastIncident(r.lastIncident),
   };
+}
+
+/** D-052: the last incident, if it is a real one (an unknown id or result, or a bad region, drops it: the field is optional). Never throws. */
+function parseLastIncident(raw: unknown): Pick<SiteLedger, "lastIncident"> {
+  if (!isObj(raw)) return {};
+  const id = INCIDENT_IDS.find((x) => x === raw.id);
+  const result = INCIDENT_RESULTS.find((x) => x === raw.result);
+  if (!id || !result || !isRegionId(raw.region)) return {};
+  return { lastIncident: { id, result, day: clampI(raw.day, 0, 9999, 0), region: raw.region } };
 }
 
 /** D-037: the last ending of each of the four newer templates; an unknown template, or an ending that template cannot have, is dropped. Never throws. */

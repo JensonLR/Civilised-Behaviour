@@ -53,6 +53,9 @@ import {
   NPC_SIDE,
   WEAPONS,
   applyOutcome,
+  applyIncident,
+  INCIDENT,
+  INCIDENT_IDS,
   remit,
   askingToll,
   answerParley,
@@ -136,6 +139,7 @@ import { Casualties, type HitInfo } from "../systems/Casualties.ts";
 import { Cast } from "../systems/Cast.ts";
 import { Combat } from "../systems/Combat.ts";
 import { Followers } from "../systems/Followers.ts";
+import { Incidents } from "../systems/Incidents.ts";
 import { Mounts } from "../systems/Mounts.ts";
 import { Scenario } from "../systems/Scenario.ts";
 import { Audience } from "../systems/Audience.ts";
@@ -263,6 +267,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private cast!: Cast;
   private mounts!: Mounts;
   private followers!: Followers;
+  private incidents!: Incidents;
+  /** When the last shot was fired at anybody (simT): an incident waits for calm. */
+  private lastShotT = -1e9;
   /** Dev/test override of the contract offered at Kessar (JoinOptions.scenario); absent in play, where `pickTemplate` decides. */
   private forcedTemplate: ScenarioTemplateId | undefined;
   /** What the manifest brought, charged when the ship left Hollowmere and applied at landfall. */
@@ -280,7 +287,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
   /** Who can be helped (revived, dressed, dragged): the party and its hired hands, never an enemy. */
   private readonly helpable = {
-    forEach: (cb: (p: PlayerStateType, id: string) => void): void => this.state.players.forEach((p, id) => { if (!p.npc || NPC_SIDE[p.npc] === "party") cb(p, id); }),
+    forEach: (cb: (p: PlayerStateType, id: string) => void): void => this.state.players.forEach((p, id) => { if (!p.npc || NPC_SIDE[p.npc] === "party" || this.incidents?.owns(id)) cb(p, id); }),   // (D-052: and an incident's wounded traveller)
   };
 
   override async onCreate(options: JoinOptions): Promise<void> {
@@ -406,6 +413,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       hostile: (shooter, target) => this.cast.hostileTo(shooter, target),
       // being shot at: the site hears a declaration, and a soldier who saw nobody goes and looks where it came from (D-041)
       shotAt: (shooter, target) => {
+        this.lastShotT = this.simT;
+        this.incidents?.onHurt(target);
         this.scenario?.onShotAt(shooter, target);
         this.cast.shotFrom(target, shooter);
       },
@@ -496,6 +505,31 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       day: () => this.campaign.day,
       nowS: () => this.simT,
       seed,
+    });
+    // D-052: chaos during play (one incident per contract at most, dealt when it starts; the room only routes and commits)
+    this.incidents = new Incidents({
+      party: this.party,
+      cast: this.cast,
+      campaign: () => this.campaign,
+      region: () => this.state.region as RegionId,
+      bounds: () => REGIONS[this.state.region as RegionId].bounds,
+      seed,
+      notice: (text) => this.broadcast("notice", { text }),
+      hostiles: () => {
+        const out: { x: number; z: number }[] = [];
+        this.state.players.forEach((p) => {
+          const side = p.npc ? NPC_SIDE[p.npc] : undefined;
+          if (side && side !== "party" && side !== "neutral" && (p.flags & FLAG.DOWNED) === 0) out.push({ x: p.x, z: p.z });
+        });
+        return out;
+      },
+      land: (x, z) => {
+        const wd = (this.world.terrain as { waterDepth?: (x: number, z: number) => number }).waterDepth;
+        return (this.cast.openAt?.(x, z) ?? true) && (wd === undefined || wd(x, z) <= 0);
+      },
+      fighting: () => this.simT - this.lastShotT < INCIDENT.calmS || this.scenario?.phase === "fighting" || this.scenario?.phase === "escalated",
+      join: (name, lookSeed, at) => this.followers.join(name, lookSeed, at),
+      hasRoom: () => this.followers.hasRoom,
     });
     this.outposts = new Outposts({
       players: this.party,
@@ -596,6 +630,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       tickProbe.lap("other");
       if (!sailing) {
         this.scenario?.tick(ctx.dt);
+        this.incidents.tick(ctx.dt);
         tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
         tickProbe.lap("cast");
@@ -1003,6 +1038,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** INTERACT at a station. Returns true when the press was taken. The scenario checks its own ranges; the map/paper/dock come from the shared station table. */
   private useStation(sessionId: string, player: PlayerStateType, held: string | undefined): boolean {
     if (this.travel.busy) return true;
+    if (!held && this.incidents.onInteract(sessionId, player)) return true; // (a courier's dispatch, a deserter's offer: D-052)
     if (this.scenario?.onInteract(sessionId, player, held)) return true;
     if (this.outposts.onInteract(sessionId, player, held)) return true; // a carried crate at the foundation (D-035)
     if (held) return false; // arms full: a carried prop is dropped or thrown, never "used" on a table
@@ -1088,6 +1124,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (template === undefined) return;
     this.scenario = new Scenario(this.scenarioHost(), template);
     this.scenario.start();
+    this.incidents.begin(template);
   }
 
   /** The sailing has finished: tear the old region down, stand the new one up, put everybody on its landing. Runs at the end of a server tick. */
@@ -1096,6 +1133,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.scenario?.leave();
     this.scenario?.dispose();
     this.scenario = undefined;
+    this.incidents.reset();
     this.followers.endExpedition();
     this.cast.despawn();
     this.mounts.dispose();
@@ -1149,6 +1187,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // powers -> publish everything -> save. Each step is a pure function in shared/; this method only orders them and publishes.
     let c = applyOutcome(before, o);
     let p = powersAfterOutcome(before, c, this.powers, o);
+    // D-052: what became of this run's incident (the courier's arrears, a helped traveller's goodwill, the record the paper prints) rides on the same commit
+    const incident = this.incidents.take(before.day + 1);
+    if (incident) ({ c, p } = applyIncident(c, p, incident));
     // D-040: the Society pays for the story (by the column-inch), so an honest campaign is never stranded at HQ with an empty purse
     const pay = remit(c, o);
     c = pay.c;
@@ -1525,7 +1566,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (!any) return;
     const gone: string[] = [];
     this.state.players.forEach((p, id) => {
-      if (!p.npc || NPC_SIDE[p.npc] === "party") return; // a downed hired hand lies where he fell until someone revives him
+      if (!p.npc || NPC_SIDE[p.npc] === "party" || this.incidents.owns(id)) return; // a downed hired hand (or an incident's traveller, D-052) lies where he fell until someone revives him
       if ((p.flags & FLAG.DOWNED) === 0) return;
       const at = this.npcDownedAt.get(id);
       if (at === undefined) this.npcDownedAt.set(id, this.simT);
@@ -1575,6 +1616,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
+      if (hit?.by) this.incidents?.onHurt(sessionId);
       if (hit?.by) this.cast.shotFrom(sessionId, hit.by);
       if (down) this.mounts.onDown(sessionId); // he slides from the saddle
       else this.mounts.onHurt(sessionId, amount, hit); // a hard enough blow unseats him
@@ -1615,6 +1657,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         scenario: template, ...(TEMPLATE_REGION[template] !== "kessar" ? { region: TEMPLATE_REGION[template] } : {}), resolution: r as ResolutionId, toll: 40, paid: 0, bridge: this.campaign.crossing.bridge, brokePromise: false, seconds: 1,
         tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 },
       });
+    }
+    else if (cmd?.startsWith("incident:")) {
+      // incident:<id> : this run's incident is <id> and happens now, calm or not (QA + tests: the real one waits a minute or two and for 20 s without a shot)
+      const id = cmd.slice(9);
+      if (this.scenario && (INCIDENT_IDS as readonly string[]).includes(id)) this.incidents.force(id as (typeof INCIDENT_IDS)[number]);
     }
     else if (cmd?.startsWith("outpost:")) {
       // outpost:<stage> : the Society's outpost at Kessar exists at once at that stage (QA + e2e: the four crates are walked in resume.test)

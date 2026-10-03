@@ -1,6 +1,6 @@
 // Server capacity per instance (D-051): the PRODUCTION build in its own process, rooms added in steps (one walking bot each, from this process), and at every step the
 // server's own resident memory, CPU share and tick times. The soak (scripts/soak.mjs) runs its bots in the server's process, so its memory is not the server's; this is.
-// Usage: pnpm --filter @cb/server build && npx tsx scripts/capacity.mts [--steps 0,2,4,8,12] [--bots 1-4] [--settle 20] [--port 2596] [--out cap.json]
+// Usage: pnpm --filter @cb/server build && npx tsx scripts/capacity.mts [--steps 0,2,4,8,12] [--bots 1-4] [--settle 20] [--port 2599] [--out cap.json]
 // Never uses :2567. Prints one JSON line per step on stdout, then a summary with the marginal cost of a room (least squares over the steps).
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, rmdirSync, writeFileSync } from "node:fs";
@@ -14,7 +14,7 @@ const arg = (name: string, fallback: string): string => {
 const steps = arg("steps", "0,2,4,8,12").split(",").map(Number);
 const perRoom = Math.max(1, Math.min(4, Number(arg("bots", "1")))); // players per room (a full party is 4)
 const settleS = Number(arg("settle", "20"));
-const port = Number(arg("port", "2596"));
+const port = Number(arg("port", "2599"));
 const out = arg("out", "");
 // `--quota 0.1`: run the server under a hard CPU quota (a cgroup-v1 CFS quota, as a hosted instance is held: Render's free tier is 0.1 of a core). Needs root and a writable
 // /sys/fs/cgroup/cpu (true in the dev container). Busy loops sharing a core are NOT the same: the scheduler favours the mostly idle server, so it never feels the squeeze.

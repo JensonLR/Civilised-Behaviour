@@ -103,6 +103,11 @@ export class Cast implements CastApi {
   private war = new Set<string>();
   private worldRef: CollisionWorld | undefined;
   private navQ: NavQuery | undefined;
+
+  /** D-052: open ground on the nav grid (false before a world is set). */
+  openAt(x: number, z: number): boolean {
+    return this.navQ?.open(x, z) ?? false;
+  }
   private readonly bnav = new BudgetedNav(undefined as unknown as NavQuery);
   private rr = 0;
   private rain = 0;

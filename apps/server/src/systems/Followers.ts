@@ -3,7 +3,7 @@ import { FLAG, type PlayerStateType } from "@cb/shared";
 import type { ScenarioOutcome } from "@cb/shared";
 import { NPC_SIDE, type CastApi, type Intent, type NpcBrain, type PartyState, type PlayersView } from "@cb/shared";
 import { REFUSED, OBEYED, mindOf, resolveCommand, setIntent, type FollowerMind } from "@cb/shared";
-import { effectiveBravery, followerSpecs, hire, dismiss, newParty, settleRoster, startMorale, type SettleReport } from "@cb/shared";
+import { FOLLOWER_CAP, effectiveBravery, enlist, followerSpecs, hire, dismiss, newParty, settleRoster, startMorale, type SettleReport } from "@cb/shared";
 import { loadoutCost, prepEffects, trimLoadout, validateLoadout, type LoadoutCheck, type PrepEffects } from "@cb/shared";
 import { NO_COMMAND, commandIndex, parseCommandMsg, parseHireMsg, parseLoadoutMsg, parseParty, serializeParty } from "@cb/shared";
 import { moraleBand } from "@cb/shared";
@@ -315,29 +315,51 @@ export class Followers {
     this.landing = { x: near.x, z: near.z };
     const specs = followerSpecs(this.p, this.host.seed, near);
     const n = this.host.cast.spawn(specs);
-    for (const s of specs) {
-      const brain = this.host.brainOf(s.id);
-      const f = this.p.roster.find((r) => r.id === s.id);
-      if (!brain || !f) continue;
-      const mind = mindOf(brain);
-      mind.kind = f.kind;
-      mind.landX = near.x;
-      mind.landZ = near.z;
-      mind.bravery = effectiveBravery(f);
-      mind.paid = f.owed === 0 || this.p.provisions > 0;
-      mind.provisions = this.p.provisions > 0;
-      brain.morale.v = startMorale(f);
-      brain.morale.shock = 0;
-      setIntent(brain, { k: "follow" });
-      const h: Hand = { id: s.id, key: npcKeyOf(s.id), brain, mind, lastCmd: -1e9, tendId: "", tendDown: false, tendAt: -1e9, dressAt: -1e9, shownMorale: -1, shownCmd: -1 };
-      this.hands.set(s.id, h);
-      const row = this.host.cast.row(s.id);
-      if (row) {
-        setRow(row, "cmd", NO_COMMAND);
-        h.shownCmd = NO_COMMAND;
-      }
-    }
+    for (const s of specs) this.adopt(s.id);
     return n;
+  }
+
+  /** A spawned hand's mind: who he is, where the party landed, his nerve and his pay; following. */
+  private adopt(id: string): void {
+    const brain = this.host.brainOf(id);
+    const f = this.p.roster.find((r) => r.id === id);
+    if (!brain || !f) return;
+    const mind = mindOf(brain);
+    mind.kind = f.kind;
+    mind.landX = this.landing.x;
+    mind.landZ = this.landing.z;
+    mind.bravery = effectiveBravery(f);
+    mind.paid = f.owed === 0 || this.p.provisions > 0;
+    mind.provisions = this.p.provisions > 0;
+    brain.morale.v = startMorale(f);
+    brain.morale.shock = 0;
+    setIntent(brain, { k: "follow" });
+    const h: Hand = { id, key: npcKeyOf(id), brain, mind, lastCmd: -1e9, tendId: "", tendDown: false, tendAt: -1e9, dressAt: -1e9, shownMorale: -1, shownCmd: -1 };
+    this.hands.set(id, h);
+    const row = this.host.cast.row(id);
+    if (row) {
+      setRow(row, "cmd", NO_COMMAND);
+      h.shownCmd = NO_COMMAND;
+    }
+  }
+
+  /** D-052: an incident's deserter signs on where he stands (no fee). False when the tent is full. His body is spawned as a hand at `at`; the caller removes the incident's. */
+  join(name: string, lookSeed: number, at: { x: number; z: number }): boolean {
+    const r = enlist(this.p, name, lookSeed, this.host.seed, this.host.day());
+    if (!r.ok) return false;
+    this.p = r.party;
+    this.publish();
+    const spec = followerSpecs(this.p, this.host.seed, at).find((s) => s.id === r.id);
+    if (spec) {
+      this.host.cast.spawn([{ ...spec, post: { x: at.x, z: at.z } }]);
+      this.adopt(r.id);
+    }
+    return true;
+  }
+
+  /** Room on the roster for one more (the tent holds FOLLOWER_CAP). */
+  get hasRoom(): boolean {
+    return this.p.roster.length < FOLLOWER_CAP;
   }
 
   /** The party's stock of dressings and provisions, used by humans' own first aid and the surgeon. Returns false when there are none. */

@@ -1,5 +1,6 @@
 import type { CampaignState } from "./campaignTypes.ts";
 import { POWERS, WARD, askingToll, stanceOf, wardMemory } from "./factions.ts";
+import { incidentStory } from "./incidents.ts";
 import { fillTemplate } from "./negotiationText.ts";
 import {
   BRIDGE_CASUAL, DATELINE_TAIL, FILLER, HEADLINES, LEDGER_TAIL, MASTHEADS, NOTICES, NOTICE_COND, PROMISES, RIVAL_TIERS, SCANDAL, SPIN_CIVIL, SPIN_DEAD,
@@ -82,6 +83,9 @@ export function generatePaper(c: CampaignState, worldSeed: number, extras?: Pape
     story("prospectus", STORY_HEADS.prospectus,
       `${p.blurb} The asking toll is £${toll}. The bridge is ${c.crossing.bridge}. ${WARD.leader.speaker} is said to appreciate ${WARD.likes[hash3(s, 23, 4) % WARD.likes.length]}.`, 24);
   }
+  // D-052: what happened on the way (a traveller helped or passed by, a courier, a deserter): the Society's own little story, second only to the ledger
+  const inc = incidentStory(c);
+  if (inc) cands.push({ slug: "incident", head: cap(inc.head, PAPER_LIMITS.head), body: cap(inc.body, PAPER_LIMITS.body) });
   if (c.crossing.exposed) {
     story("scandal", STORY_HEADS.scandal, c.crossing.bribed ? pick(SCANDAL.pending, 25) : pick(SCANDAL.landed, 26), 27);
   }

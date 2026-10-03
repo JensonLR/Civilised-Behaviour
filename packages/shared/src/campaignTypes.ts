@@ -46,7 +46,13 @@ export interface SiteLedger {
   succession: "open" | "elder" | "younger" | "regency" | "usurped" | "sold";
   /** D-037: how the LAST run of each template that has no bespoke field above ended (the four of Vesper and Saltmarket); `applyOutcome` writes it, `parseCampaign` validates each value against that template's endings and defaults to {}. */
   ends: Partial<Record<ScenarioTemplateId, ResolutionId>>;
+  /** D-052: the last incident (incidents.ts): never dealt twice running, and printed in the next paper. Absent until the first one (and in every campaign saved before D-052). */
+  lastIncident?: IncidentRecord;
 }
+/** D-052: chaos during play (incidents.ts, docs/_notes/incidents.md). Append-only. */
+export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter";
+export type IncidentResult = "helped" | "passed_by" | "delivered" | "missed" | "enlisted" | "turned_away";
+export interface IncidentRecord { id: Exclude<IncidentId, "none">; result: IncidentResult; day: number; region: RegionId }
 export interface CampaignState {
   v: 1; seed: number; day: number; expeditions: number; purse: number; lies: number;   // purse in pounds; lies = promises broken (negotiation leverage)
   factions: Record<FactionId, FactionState>; crossing: CrossingState; tally: CasualtyTally; history: HistoryEntry[];   // history capped at 12
