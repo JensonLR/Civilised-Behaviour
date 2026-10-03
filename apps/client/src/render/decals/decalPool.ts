@@ -14,6 +14,8 @@ import { PALETTE, hashFloat } from "@cb/shared";
  */
 
 export const DECAL = { POOL: 0, SPATTER: 1, SPRAY: 2, DRAG: 3, SCORCH: 4, MUD: 5 } as const;
+/** A boot print: half its width (m) and its length over its width (15 x 33 cm: a boot, drawn a size up like everything else in this caricature, so a trail reads at camera distance). */
+export const PRINT = { halfWidth: 0.075, aspect: 2.2 } as const;
 export type DecalKind = (typeof DECAL)[keyof typeof DECAL];
 
 export type DecalPreset = "low" | "medium" | "high";
@@ -58,7 +60,8 @@ const BLOOD: Record<GoreLevel, Tone> = {
   off: { fresh: PALETTE.world.dirtDark, dry: mixHex(PALETTE.world.dirtDark, PALETTE.world.dust, 0.4) },
 };
 const SCORCH: Tone = { fresh: PALETTE.material.soot, dry: mixHex(PALETTE.camp.charred, PALETTE.camp.ash, 0.45) };
-const MUD: Tone = { fresh: PALETTE.world.mud, dry: mixHex(PALETTE.world.dirt, PALETTE.world.dust, 0.5) };
+/** A boot print (D-058): a pressed, wet impression, darker than any ground it is pressed into (the delta's mud included), drying to the colour of a cart's rut. */
+const MUD: Tone = { fresh: mixHex(PALETTE.world.rut, PALETTE.material.soot, 0.4), dry: PALETTE.world.rut };
 
 /** What a kind looks like at a gore level: undefined = not drawn. Sizes multiply the mark's own. */
 export interface DecalStyle {
@@ -70,7 +73,7 @@ export interface DecalStyle {
 
 // (built once: `styleFor` runs for every live mark every frame and must allocate nothing)
 const STYLE_SCORCH: DecalStyle = { tone: SCORCH, size: 1, glossy: false };
-const STYLE_MUD: DecalStyle = { tone: MUD, size: 1, glossy: false };
+const STYLE_MUD: DecalStyle = { tone: MUD, size: 1, glossy: true };
 const STYLE_FULL: DecalStyle = { tone: BLOOD.full, size: 1, glossy: true };
 const STYLE_REDUCED_POOL: DecalStyle = { tone: BLOOD.reduced, size: 0.7, glossy: false };
 const STYLE_REDUCED: DecalStyle = { tone: BLOOD.reduced, size: 0.65, glossy: false };
@@ -340,6 +343,11 @@ export class DecalPool {
   /** A fan of spray on a surface (a wall, the ground) from a wound: `dx, dy, dz` the way it was thrown; on a wall it runs down. */
   spray(x: number, y: number, z: number, nx: number, ny: number, nz: number, dx: number, dy: number, dz: number, length: number): number {
     return this.add(DECAL.SPRAY, x, y, z, nx, ny, nz, dx, dy, dz, length * 0.5, 2.1);
+  }
+
+  /** A boot print in soft ground (D-058): a small oval along the way the body walked (`dx, dz`), mud-toned, the shortest-lived and lowest-priority mark (it only ever displaces older mud). */
+  print(x: number, y: number, z: number, nx: number, ny: number, nz: number, dx: number, dz: number): number {
+    return this.add(DECAL.MUD, x, y, z, nx, ny, nz, dx, 0, dz, PRINT.halfWidth, PRINT.aspect);
   }
 
   /**

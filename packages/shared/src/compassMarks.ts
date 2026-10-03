@@ -4,7 +4,7 @@ import { KESSAR_ANCHORS, KESSAR_SITES } from "./campaignTypes.ts";
 import { HIGHMARK_ANCHORS, HIGHMARK_SITES, highmarkPlan } from "./highmark.ts";
 import { hqPins } from "./hqRoute.ts";
 import { HILL, JETTY } from "./landscape.ts";
-import { KESSAR_OUTPOST } from "./outpost.ts";
+import { KESSAR_OUTPOST, OUTPOST_SITES } from "./outpost.ts";
 import { RAID_SITES } from "./scenarios/outpostRaid.ts";
 import { SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS } from "./saltmarket.ts";
 import { SITES } from "./village.ts";
@@ -98,6 +98,9 @@ export function regionMarks(region: RegionId): readonly PlaceMark[] {
       ];
     }
   }
+  // D-056: the Society's foundation, wherever the region has one (the crates' destination: the playtest bots walked to it by its coordinates; a person needs the strip to find it)
+  const post = OUTPOST_SITES[region];
+  if (post) out = [...out, { id: "post", icon: "camp", label: "Society's post", x: post.site.x, z: post.site.z }];
   cache.set(region, out);
   return out;
 }

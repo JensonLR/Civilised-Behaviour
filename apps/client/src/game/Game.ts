@@ -16,7 +16,7 @@ import { ViewModel, modeFor, type ViewModelFrame } from "../render/ViewModel.ts"
 import { RagdollWorld } from "../render/Ragdoll.ts";
 import { BASE_SENSITIVITY, effectiveShake, getFov, getGore, getHeadBob, getReduceMotion, getHoldToSprint, getInvertY, getPadSensitivity, getSensitivity, getShowLimbs, getView, onSettingChange, setView } from "../settings.ts";
 import { playSfx, setListener } from "../audio/index.ts";
-import { regionSurface, surfaceAt } from "../audio/surface.ts";
+import { regionSurfaceAt } from "../audio/surface.ts";
 import { newSignals, type MusicSignals } from "../audio/musicLayers.ts";
 import { getAtmosphere } from "../render/world/atmosphere.ts";
 import { Aftermath, planAftermath, type AftermathItem, type AftermathSite } from "../render/world/aftermath.ts";
@@ -51,6 +51,11 @@ import { smoothRtt } from "../net/rtt.ts";
 import { frameDelta } from "./frameClock.ts";
 import { mapRoomView } from "./campaignView.ts";
 import { CombatView } from "./CombatView.ts";
+
+/** Ground wetness (0..1, the atmosphere's) above which grass and paths take a boot print (D-058); the delta's mud always does. */
+const PRINT_WET = 0.35;
+/** Standing water at (x, z) in a region's terrain (the regions that have any expose `waterDepth`; the hub's stream is `surfaceAt`'s business). */
+const waterOf = (world: { terrain: unknown }, x: number, z: number): number => (world.terrain as { waterDepth?: (x: number, z: number) => number }).waterDepth?.(x, z) ?? 0;
 
 interface Actor {
   body: CharacterActor;
@@ -189,7 +194,14 @@ export class Game {
     this.rig = new CameraRig(stage.camera, session.world, { fov: 65, sensitivity: 0.0022, invertY: false, shake: 1, headBob: getHeadBob() ? 1 : 0 });
     this.rig.setView(getView(), true);
     this.controls.settings.sensitivity = this.rig.settings.sensitivity;
-    this.audio = new GameAudio((x, z) => session.world.terrainHeight(x, z));
+    this.audio = new GameAudio(
+      (x, z) => session.world.terrainHeight(x, z),
+      // D-058: boot prints where the ground takes them: the delta's mud always; grass and paths once the weather has wet them
+      (x, z, vx, vz, foot, surface) => {
+        if (surface === "mud" || ((surface === "grass" || surface === "dirt") && getAtmosphere().wet > PRINT_WET)) this.stage.decals.printAt(x, z, vx, vz, foot);
+      },
+      (x, z) => waterOf(session.world, x, z),
+    );
     this.signals = newSignals(session.region);
     this.builtRegion = session.region;
     this.builtKey = NetSession.worldKeyOf(session.room.state);
@@ -890,7 +902,7 @@ export class Game {
   /** What the world is doing to a body standing at (x, y, z): the ground (mud in wet weather and in the delta, water to wash in), rain, and a blast lately near. Refreshed a few times a second per body. */
   private refreshGround(a: Actor, x: number, y: number, z: number): void {
     const g = a.ground;
-    const surf = regionSurface(this.builtRegion, surfaceAt(x, z, y - this.session.world.terrainHeight(x, z)));
+    const surf = regionSurfaceAt(this.builtRegion, x, z, y - this.session.world.terrainHeight(x, z), waterOf(this.session.world, x, z));
     const atm = getAtmosphere();
     g.rain = atm.rain;
     g.washing = surf === "water";
