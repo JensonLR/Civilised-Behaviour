@@ -498,7 +498,13 @@ export class CombatView {
 
     const mine = this.me;
     const me = this.predicted;
-    if (!mine || !me) return;
+    if (!mine || !me) {
+      // no local row (a rejoin in flight): the sight and the cannon's card must not stand frozen from the last frame
+      this.hud.updateSight({ visible: false, gap: 0, aiming: false });
+      this.hud.updateCannon(undefined);
+      this.lastPromptCannon = undefined;
+      return;
+    }
     const w = this.wish;
     const def = w >= 0 ? WEAPONS[w as WeaponId] : undefined;
     const busy = (me.flags & BUSY) !== 0;

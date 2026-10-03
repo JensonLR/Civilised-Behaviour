@@ -39,6 +39,8 @@ export interface IncidentsHost {
 
 /** How often the courier is re-pointed at the nearest player (seconds). */
 const COURIER_REAIM_S = 2;
+/** A settled courier or deserter turns away and is off the ground this many seconds later (his USE prompt went with him: it stayed while his body lingered). */
+export const INCIDENT_LEAVE_S = 6;
 
 export class Incidents {
   private id: IncidentId = "none";
@@ -53,6 +55,8 @@ export class Incidents {
   /** The runaway horse's mount id, and what the notices call it. */
   private horse = "";
   private horseLabel = "";
+  /** Seconds until a settled courier or deserter leaves the ground (0 = nobody leaving). */
+  private leaving = 0;
 
   constructor(private readonly host: IncidentsHost) {}
 
@@ -84,6 +88,10 @@ export class Incidents {
   }
 
   tick(dt: number): void {
+    if (this.leaving > 0) {
+      this.leaving -= dt;
+      if (this.leaving <= 0) this.host.cast.despawn("incident");
+    }
     if (this.id === "none" || this.result !== undefined) return;
     this.t += dt;
     this.calm = this.host.fighting() ? 0 : this.calm + dt;
@@ -163,6 +171,7 @@ export class Incidents {
     this.forced = false;
     this.horse = "";
     this.horseLabel = "";
+    this.leaving = 0;
   }
 
   private fire(): void {
@@ -220,6 +229,7 @@ export class Incidents {
     if (who) this.host.notice(INCIDENT_DONE[r].replace("%n", who));
     // whoever is left goes about their business (a helped traveller, a courier who delivered or gave up, a deserter turned away)
     if (r !== "enlisted") this.host.cast.order("incident", { o: "flee" });
+    if (r !== "enlisted" && (this.id === "courier" || this.id === "deserter")) this.leaving = INCIDENT_LEAVE_S;
   }
 
   private row(): PlayerStateType | undefined {

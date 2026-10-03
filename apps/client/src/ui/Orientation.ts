@@ -137,6 +137,11 @@ export class Orientation {
     return isActive(this.state);
   }
 
+  /** On screen (active, or finished and lingering): the game ticks it for as long as this is true, so a finished card still leaves. */
+  get showing(): boolean {
+    return this.visible;
+  }
+
   get current(): OrientationState {
     return this.state;
   }
@@ -147,10 +152,9 @@ export class Orientation {
    */
   tick(dt: number, x: number, z: number, yaw: number, region: string, sheet: SheetKind, down: boolean, device: Device): void {
     if (!isActive(this.state)) {
-      if (this.state.finished && !this.state.skipped && this.doneFor < DONE_LINGER_S) {
-        this.doneFor += dt;
-        if (this.doneFor >= DONE_LINGER_S) this.setVisible(false);
-      }
+      // finished: the card lingers with its done line, then goes; it goes at once off the hub or when downed (it used to stay for good: the game stopped ticking it)
+      if (this.state.finished && !this.state.skipped && this.doneFor < DONE_LINGER_S) this.doneFor += dt;
+      this.setVisible(region === "hollowmere" && !down);
       return;
     }
     const before = this.state;

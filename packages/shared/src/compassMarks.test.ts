@@ -60,6 +60,10 @@ describe("the heading strip points at the shore you stand on (D-040)", () => {
         expect([home!.x, home!.z]).toEqual([regionMarks(r)[0]!.x, regionMarks(r)[0]!.z]);
       }
     }
+    // a settled contract: whatever is left undone is moot, the flag is the boat home (it stayed on the last objective)
+    const settled = objectiveMark("kessar", { template: "secure_crossing", phase: "resolved", objectives: [{ id: "reach", done: false }] });
+    expect(settled!.label).toBe("Boat home");
+    expect([settled!.x, settled!.z]).toEqual([regionMarks("kessar")[0]!.x, regionMarks("kessar")[0]!.z]);
     // no contract, or nothing left with a place: no flag
     expect(objectiveMark("kessar", undefined)).toBeUndefined();
     expect(objectiveMark("kessar", { template: "secure_crossing", objectives: [{ id: "reach", done: true }] })).toBeUndefined();

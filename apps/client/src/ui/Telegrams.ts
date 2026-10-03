@@ -33,7 +33,7 @@ export class Telegrams {
 
   private step(): void {
     const now = performance.now();
-    const dt = Math.min(1, (now - this.last) / 1000);
+    const dt = (now - this.last) / 1000; // (uncapped: a background tab's interval runs once a second or slower, and a cap kept old news up for minutes)
     this.last = now;
     const changed = this.queue.tick(dt);
     for (const s of this.queue.shown) {

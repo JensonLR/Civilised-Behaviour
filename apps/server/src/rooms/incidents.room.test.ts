@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { INCIDENT_LEAVE_S } from "../systems/Incidents.ts";
 import { ColyseusTestServer } from "@colyseus/testing";
 import { BUTTON, FLAG, INCIDENT_DONE, MoveInput, ROOM_WORLD, npcKey, parseCampaign, parseParty, yawToWire, type PlayerStateType } from "@cb/shared";
 import { createGameServer } from "../app.ts";
@@ -89,6 +90,9 @@ describe("incidents in a real room (D-052)", () => {
     beside(room, me.p, room.state.players.get(key)!);
     await hold(me, BUTTON.INTERACT, 150);
     await until(() => notices.some((n) => n === INCIDENT_DONE.delivered), 3000, "the dispatch taken");
+    // he goes about his business and leaves the ground, taking his USE prompt with him (it stayed on screen while his body lingered)
+    expect(room.state.players.has(key)).toBe(true);
+    await until(() => !room.state.players.has(key), (INCIDENT_LEAVE_S + 3) * 1000, "the courier gone");
     await commit(room, me);
     expect(lastIncident(room)).toMatchObject({ id: "courier", result: "delivered", region: "kessar" });
   }, 30_000);
