@@ -138,7 +138,7 @@ interface PlayerCombat {
   aimElev: number;
   held: number;
   heldAt: number;
-  /** D-041: a trigger squeezed while the gun was not yet ready (drawing, or the last of its cooldown), kept for as long as it stays held. */
+  /** D-041: a trigger squeezed while the gun was not yet ready (drawing, the last of its cooldown, or, D-048, reloading), kept for as long as it stays held. */
   firePending: boolean;
 }
 
@@ -459,10 +459,13 @@ export class Combat {
     } else {
       // A squeeze during the draw (or the cooldown) is not lost: it fires the moment the gun is ready, if the trigger is still held. Once per press, so a held
       // trigger is never automatic fire. (The pad e2e drew a rifle and squeezed at once on a fast CI runner, and nothing ever came out of the barrel.)
+      // D-048: the end of a RELOAD too. Without it a player had to see the reload finish before squeezing, and the squeeze then crossed the wire: about a round trip
+      // lost per shot (the bad-network bot run: a rifle 4.7 -> 5.0..5.4 s a shot at 240 ms, and a lone defender down 1.8 s short of a fourth shot).
+      const busy = pc.ready > 0 || pc.reloadLeft > 0;
       if (!def?.ranged || (cmd.buttons & BUTTON.FIRE) === 0) pc.firePending = false;
-      else if ((pressed & BUTTON.FIRE) !== 0 && pc.ready > 0) pc.firePending = true;
-      if (def?.ranged && ((pressed & BUTTON.FIRE) !== 0 || (pc.firePending && pc.ready <= 0))) {
-        if (pc.ready <= 0) pc.firePending = false;
+      else if ((pressed & BUTTON.FIRE) !== 0 && busy) pc.firePending = true;
+      if (def?.ranged && ((pressed & BUTTON.FIRE) !== 0 || (pc.firePending && !busy))) {
+        if (!busy) pc.firePending = false;
         this.fire(sessionId, p, pc, def, def.ranged);
       }
       if ((pressed & BUTTON.MELEE) !== 0) {
