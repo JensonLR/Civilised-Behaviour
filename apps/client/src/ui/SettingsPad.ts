@@ -1,4 +1,4 @@
-import { PAD_INDEX, PAD_GLYPHS, deviceTracker, type InputDevice, type PromptId } from "../input/devices.ts";
+import { PAD_INDEX, PAD_GLYPHS, deviceTracker, type PromptId, padFamilyOf, type PadFamily } from "../input/devices.ts";
 import { glyphEl, onPromptChange } from "../input/glyphDom.ts";
 import { PAD_ACTIONS, PAD_BINDABLE, assignPad, defaultPadBindings, getPadBindings, setPadBindings, type PadAction, type PadButton } from "../input/padProfile.ts";
 import * as S from "../settings.ts";
@@ -28,7 +28,7 @@ const defaultPads: PadSource = () => (typeof navigator !== "undefined" ? navigat
 let uid = 0;
 
 /** The family whose control names the drop-downs use: the one in use, else Xbox. */
-const family = (): Exclude<InputDevice, "keyboard"> => (deviceTracker.effective === "keyboard" ? "xbox" : deviceTracker.effective);
+const family = (): PadFamily => padFamilyOf(deviceTracker.effective);
 
 export function buildPadSection(pads: PadSource = defaultPads): PadSection {
   const root = h("section", { class: "padsection", "aria-label": "Gamepad" });

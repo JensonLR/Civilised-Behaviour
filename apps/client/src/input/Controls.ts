@@ -4,6 +4,7 @@ import { AIM } from "./aim.ts";
 import { actionForCode, heldButtons, isHeld, tapButtonFor } from "./bindings.ts";
 import { deviceTracker, padFamily, PAD_INDEX, wireGlyphPreference, type PadControl } from "./devices.ts";
 import { Gesture, getPadBindings, rumble, shapeStick, type PadAction, type PadButton, type RumbleKind, type Stick2 } from "./padProfile.ts";
+import { TOUCH, TOUCH_BUTTONS, stickRuns, type TouchButton, type TouchSource } from "./touchLogic.ts";
 
 /** A sampled intent for one fixed simulation step. */
 export interface Intent {
@@ -76,6 +77,23 @@ export class Controls {
   /** The weapon the player wants in hand: a `WEAPON` id, or -1 for empty hands. Keys 1-5, the wheel and the d-pad change it; the game sends it with every input frame and the server has the final say. */
   weaponWish: WeaponId | -1 = -1;
 
+  /** The touch player asked for the pause sheet (the on-screen PAUSE button; the keyboard has Escape and the pad Start). */
+  onPause: (() => void) | undefined;
+  /** Set true while the last meaningful input came from the touch overlay (the aim assist serves it as it serves a pad). */
+  usingTouch = false;
+
+  // touch reader state (D-049): the overlay reports fingers, the rules are here beside the pad's
+  private touch: TouchSource | undefined;
+  private readonly tg = {} as Record<TouchButton, Gesture>;
+  private touchSeen = false;
+  private touchHeld = 0;
+  private touchAim = false;
+  private touchCrouch = false;
+  private touchUseUsable = false;
+  private touchOrdersWas = false;
+  /** The touch stick as last read (x right, y DOWN), for the step. */
+  readonly touchMove: Stick2 = { x: 0, y: 0 };
+
   // pad reader state
   private readonly gest = {} as Record<PadButton, Gesture>;
   private padHeld = 0;
@@ -105,6 +123,10 @@ export class Controls {
       this.padHeld = 0;
       this.aimToggled = false;
       for (const b of PAD_BUTTONS) this.gest[b].reset();
+      for (const b of TOUCH_BUTTONS) this.tg[b].reset();
+      this.touchHeld = 0;
+      this.touchAim = false;
+      this.touchCrouch = false;
     }
   }
 
@@ -113,11 +135,13 @@ export class Controls {
     readonly settings: ControlSettings,
   ) {
     for (const b of PAD_BUTTONS) this.gest[b] = new Gesture();
+    for (const b of TOUCH_BUTTONS) this.tg[b] = new Gesture();
     wireGlyphPreference();
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
       this.usingGamepad = false;
+      this.usingTouch = false;
       deviceTracker.note("keyboard");
       this.latched |= tapButtonFor(e.code); // keys whose press must never be lost between two input samples (bindings.ts)
       if (e.code === "F3") {
@@ -149,9 +173,12 @@ export class Controls {
       }
     });
     canvas.addEventListener("mousedown", (e) => {
+      // a touch also fires a "compatibility" mouse event: it is not a mouse (no pointer lock on a phone, and never a shot at a tap on the scenery)
+      if ((e as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
       if (document.pointerLockElement !== canvas) void canvas.requestPointerLock?.();
       this.mouseButtons |= 1 << e.button;
       this.usingGamepad = false;
+      this.usingTouch = false;
       deviceTracker.note("keyboard");
       if (e.button === 0 && !this.isBlocked) this.latched |= BUTTON.FIRE; // a click shorter than one input step must still be a shot
       if (e.button === 2 && !this.isBlocked && !getHoldToAim()) this.aimToggled = !this.aimToggled;
@@ -172,6 +199,7 @@ export class Controls {
       this.lookX += e.movementX;
       this.lookY += e.movementY;
       this.usingGamepad = false;
+      this.usingTouch = false;
       deviceTracker.note("keyboard");
     });
   }
@@ -190,9 +218,83 @@ export class Controls {
     rumble(this.pad(), kind, scale);
   }
 
-  /** The pad's assist is on for this player and this input (never for the mouse). */
+  /** The assist is on for this player and this input: a pad or a thumb on glass (never for the mouse). */
   get assistOn(): boolean {
-    return this.usingGamepad && getAimAssist();
+    return (this.usingGamepad || this.usingTouch) && getAimAssist();
+  }
+
+  /** Plugs in the touch overlay (D-049). Its fingers become the same intent as the pad's, by the same rules. */
+  attachTouch(t: TouchSource): void {
+    this.touch = t;
+  }
+
+  /** Reads the touch overlay once a frame (beside `pollPad`): gestures for every on-screen button, the stick, and the events (weapon, orders, view, pause). */
+  private pollTouch(dt: number): void {
+    const t = this.touch;
+    if (!t || !t.active) {
+      if (this.touchSeen) for (const b of TOUCH_BUTTONS) this.tg[b].reset();
+      this.touchSeen = false;
+      this.touchHeld = 0;
+      this.touchMove.x = this.touchMove.y = 0;
+      if (this.touchOrdersWas) {
+        this.touchOrdersWas = false;
+        this.onCommand?.("up");
+      }
+      return;
+    }
+    this.touchSeen = true;
+    t.showUse?.(this.canInteract());
+    const g = this.tg;
+    let any = t.move.x !== 0 || t.move.y !== 0;
+    const tapped = t.takePressed?.() ?? 0; // (a press already let go still counts as down for this one read: the next read lets go, a tap)
+    for (let i = 0; i < TOUCH_BUTTONS.length; i++) {
+      const b = TOUCH_BUTTONS[i]!;
+      if (g[b].update((t.down[b] || (tapped & (1 << i)) !== 0) && !this.isBlocked, dt).pressed) any = true;
+    }
+    if (any) {
+      this.usingTouch = true;
+      this.usingGamepad = false;
+      deviceTracker.note("touch");
+    }
+    this.touchMove.x = t.move.x;
+    this.touchMove.y = t.move.y;
+    if (this.isBlocked) {
+      this.touchHeld = 0;
+      return;
+    }
+    let held = 0;
+    for (const [b, bit] of [["fire", BUTTON.FIRE], ["jump", BUTTON.JUMP], ["melee", BUTTON.MELEE], ["grab", BUTTON.GRAB], ["throw", BUTTON.THROW]] as const) {
+      if (g[b].held) held |= bit;
+      if (g[b].pressed) this.latched |= bit; // (a tap shorter than one input step still counts)
+    }
+    // a thumb cannot hold aim and crouch while it steers: both are toggles on glass
+    if (g.aim.pressed) this.touchAim = !this.touchAim;
+    if (this.touchAim) held |= BUTTON.AIM;
+    if (g.crouch.pressed) this.touchCrouch = !this.touchCrouch;
+    if (this.touchCrouch) held |= BUTTON.CROUCH;
+    if (stickRuns(t.move)) held |= BUTTON.SPRINT;
+    // use / reload: the pad's rule exactly (a tap uses what is in reach, else reloads; a hold reloads unless the thing in reach is itself a hold)
+    const useG = g.use;
+    if (useG.pressed) {
+      this.touchUseUsable = this.canInteract();
+      this.latched |= this.touchUseUsable ? BUTTON.INTERACT : BUTTON.RELOAD;
+    }
+    if (useG.held) {
+      const holdUse = this.touchUseUsable && this.holdInteract();
+      if (holdUse || (this.touchUseUsable && useG.heldFor < useG.holdS)) held |= BUTTON.INTERACT;
+      if (useG.holdFired && !holdUse && this.touchUseUsable) this.latched |= BUTTON.RELOAD;
+    }
+    // arms: a tap is the next weapon, a hold puts it away
+    if (g.weapon.tapped) this.cycleWeapon(1);
+    if (g.weapon.holdFired) this.weaponWish = -1;
+    const orders = g.orders.held;
+    if (orders !== this.touchOrdersWas) {
+      this.touchOrdersWas = orders;
+      this.onCommand?.(orders ? "down" : "up");
+    }
+    if (g.view.pressed) this.onToggleView?.();
+    if (g.pause.pressed) this.onPause?.();
+    this.touchHeld = held;
   }
 
   /**
@@ -229,6 +331,7 @@ export class Controls {
     }
     if (any) {
       this.usingGamepad = true;
+      this.usingTouch = false;
       deviceTracker.note(padFamily(p.id));
     }
     if (this.isBlocked) {
@@ -290,9 +393,18 @@ export class Controls {
     this.lookY = 0;
     if (this.isBlocked) {
       this.pollPad(dt); // keeps the gestures current so a button held when the sheet closes is not a fresh press
+      this.pollTouch(dt);
+      this.touch?.takeLook(); // (a drag across a sheet is not a turn)
       return [0, 0];
     }
     this.pollPad(dt);
+    this.pollTouch(dt);
+    if (this.touchSeen && this.touch) {
+      // a drag on glass, in mouse pixels (the camera's sensitivity multiplies it like the mouse's); on the wheel it is the pointer
+      const [tx, ty] = this.touch.takeLook();
+      dx += tx * TOUCH.lookScale;
+      dy += ty * TOUCH.lookScale;
+    }
     const aiming = this.aiming;
     if (aiming) {
       dx *= AIM.look.mouseScale;
@@ -315,7 +427,10 @@ export class Controls {
       this.padFresh = false;
       return { moveF: 0, moveR: 0, buttons: 0 };
     }
-    if (!this.padFresh) this.pollPad(0);
+    if (!this.padFresh) {
+      this.pollPad(0);
+      this.pollTouch(0);
+    }
     this.padFresh = false;
     let f = (isHeld(k, "forward") ? 1 : 0) - (isHeld(k, "back") ? 1 : 0);
     let r = (isHeld(k, "right") ? 1 : 0) - (isHeld(k, "left") ? 1 : 0);
@@ -334,6 +449,15 @@ export class Controls {
       }
       buttons |= this.padHeld;
       if (!this.settings.holdToSprint && this.sprintToggled) buttons |= BUTTON.SPRINT;
+    }
+    if (this.touchSeen) {
+      const tx = this.touchMove.x;
+      const ty = this.touchMove.y;
+      if (tx || ty) {
+        r = tx;
+        f = -ty;
+      }
+      buttons |= this.touchHeld;
     }
     buttons |= this.latched;
     this.latched = 0;
@@ -364,7 +488,8 @@ export class Controls {
   /** Aiming now: the right mouse button or the pad's aim control, held (or toggled when the player chose that). */
   get aiming(): boolean {
     if (this.isBlocked) return false;
-    if (!getHoldToAim()) return this.aimToggled;
-    return (this.mouseButtons & 4) !== 0 || (this.padHeld & BUTTON.AIM) !== 0;
+    const touch = this.touchSeen && this.touchAim; // (aim on glass is always a toggle)
+    if (!getHoldToAim()) return this.aimToggled || touch;
+    return (this.mouseButtons & 4) !== 0 || (this.padHeld & BUTTON.AIM) !== 0 || touch;
   }
 }

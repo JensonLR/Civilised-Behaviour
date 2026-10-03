@@ -37,3 +37,10 @@ describe("the tab icon", () => {
     for (const hex of used) expect(allowed.has(hex.toLowerCase()), `${hex} from PALETTE.ui`).toBe(true);
   });
 });
+
+describe("the page itself carries no colour (D-049)", () => {
+  it("index.html names no colour: the theme colour and the icon are set from the palette at start-up", () => {
+    expect(html).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(html).toMatch(/<meta name="theme-color" content="" \/>/);
+  });
+});

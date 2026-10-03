@@ -756,7 +756,7 @@ export class Game {
     this.updateMusic(dt, me);
     if (this.orientation.active) {
       const pf = this.session.predicted;
-      if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad ? "pad" : "keyboard");
+      if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad || this.controls.usingTouch ? "pad" : "keyboard"); // (touch reads the pad copy: its tokens print the on-screen words, never "the mouse")
     }
 
     if (me) {

@@ -272,11 +272,18 @@ export type Gfx = "low" | "medium" | "high" | "test";
 export const GFX_PLAYER_LEVELS: readonly Gfx[] = ["low", "medium", "high"];
 export const GFX_LEVELS: readonly Gfx[] = [...GFX_PLAYER_LEVELS, "test"];
 let gfx: Gfx | undefined;
+/**
+ * The preset a first visit starts on: "low" where the primary pointer is a finger (a phone or a tablet: a mobile GPU, a hot hand and a battery; D-049), "medium" elsewhere. Only a
+ * default: the player's own choice is stored and wins.
+ */
+export function defaultGfx(coarse: boolean = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches): Gfx {
+  return coarse ? "low" : "medium";
+}
 /** Graphics preset. `?gfx=` overrides for the session (the e2e suite runs on `test`). */
 export function getGfx(): Gfx {
   if (gfx) return gfx;
   const raw = readStored("cb.gfx", "gfx");
-  gfx = raw === "low" || raw === "medium" || raw === "high" || raw === "test" ? raw : "medium";
+  gfx = raw === "low" || raw === "medium" || raw === "high" || raw === "test" ? raw : defaultGfx();
   return gfx;
 }
 export function setGfx(level: Gfx): void {

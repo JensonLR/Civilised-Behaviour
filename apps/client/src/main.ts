@@ -7,6 +7,8 @@ import { faviconSvg, paletteCssVars } from "@cb/shared";
 /** Publishes the shared palette as CSS custom properties so the interface and the 3D world can never drift apart. */
 for (const [name, value] of Object.entries(paletteCssVars())) document.documentElement.style.setProperty(name, value);
 document.querySelector<HTMLLinkElement>("link[rel=icon]")?.setAttribute("href", `data:image/svg+xml,${encodeURIComponent(faviconSvg())}`);
+// the phone's own bars take the backdrop's colour (D-049; from the palette, like every colour)
+document.querySelector<HTMLMetaElement>("meta[name=theme-color]")?.setAttribute("content", paletteCssVars()["--backdrop"]!);
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const params = new URLSearchParams(location.search);

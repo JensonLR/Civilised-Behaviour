@@ -11,9 +11,16 @@ describe("glyphs", () => {
         const g = glyphFor(p, d);
         expect(g.label.length, `${d}/${p}`).toBeGreaterThan(0);
         expect(g.name.length).toBeGreaterThan(0);
-        expect(g.kind).toBe(d === "keyboard" || PROMPT_PAD[p] === null ? "key" : "pad");
+        expect(g.kind).toBe(d === "keyboard" || d === "touch" || PROMPT_PAD[p] === null ? "key" : "pad");
       }
     }
+  });
+  it("touch (D-049) prints the words on the on-screen buttons, never a pad's shape", () => {
+    expect(glyphFor("fire", "touch").label).toBe("FIRE");
+    expect(glyphFor("interact", "touch").label).toBe("USE");
+    expect(glyphFor("reload", "touch").label).toBe("hold USE");
+    expect(glyphFor("pause", "touch").label).toBe("PAUSE");
+    for (const p of PROMPT_IDS) expect(glyphFor(p, "touch").kind, p).toBe("key");
   });
   it("the three families print their own shapes", () => {
     expect(glyphFor("jump", "xbox").label).toBe("A");
