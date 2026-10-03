@@ -218,3 +218,15 @@ describe("captions", () => {
     expect(vi.getTimerCount()).toBe(before);
   });
 });
+
+describe("the cards under the expedition bar follow its height", () => {
+  it("publishes the bar's real bottom as --codebar-b on the HUD (two rows once 'Saved' shows ran over the orientation card) and takes it away on leaving", () => {
+    const hudEl = document.querySelector<HTMLElement>("#hud")!;
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ bottom: 92.4 } as DOMRect);
+    const off = buildHudChrome(hudEl, "K7M2Q", "x");
+    expect(hudEl.style.getPropertyValue("--codebar-b")).toBe("92px");
+    off();
+    expect(hudEl.style.getPropertyValue("--codebar-b")).toBe("");
+    rect.mockRestore();
+  });
+});

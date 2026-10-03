@@ -661,6 +661,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (!sailing) {
         this.scenario?.tick(ctx.dt);
         this.incidents.tick(ctx.dt);
+        this.audience.tick();
         tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
         tickProbe.lap("cast");

@@ -38,6 +38,12 @@ export function buildHudChrome(hud: HTMLElement, code: string, link: string, sav
     timer = window.setTimeout(() => (button.textContent = "Copy invite"), 2500);
   });
   hud.prepend(bar);
+  // The bar wraps to two rows once the "Saved" line shows (and taller with large text): the cards under it on the right (the orientation card, a cannon's card) read its
+  // real bottom from --codebar-b instead of a fixed offset, which the second row ran over.
+  const publish = (): void => hud.style.setProperty("--codebar-b", `${Math.round(bar.getBoundingClientRect().bottom)}px`);
+  const sizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(publish);
+  sizes?.observe(bar);
+  publish();
   const help = document.createElement("div");
   help.className = "help";
   const hints = (device: InputDevice): string =>
@@ -52,6 +58,8 @@ export function buildHudChrome(hud: HTMLElement, code: string, link: string, sav
     offHints();
     offSave?.();
     window.clearTimeout(timer);
+    sizes?.disconnect();
+    hud.style.removeProperty("--codebar-b");
     bar.remove();
     help.remove();
   };

@@ -95,6 +95,12 @@ export class Audience {
     return true;
   }
 
+  /** Each tick: an audience is leashed to the map table like a scenario's parley to its speaker. Walk off or go down and the sheet closes (it stayed open until a pick or Escape). */
+  tick(): void {
+    if (this.runs.size === 0) return;
+    for (const sid of [...this.runs.keys()]) if (!this.standing(sid) || !this.host.atMapRoom(sid)) this.close(sid, "You wander off mid-sentence. They note the time.");
+  }
+
   onLeave(sid: string): void {
     this.runs.delete(sid);
     this.lastOpen.delete(sid);

@@ -215,6 +215,19 @@ variables (which come from `PALETTE.ui`); meaning is never colour alone (gauge =
 English (text), IM Fell English SC (labels, buttons), Special Elite (codes and telegrams); ornament is CSS/inline SVG only; nothing animates with `prefers-reduced-motion`.
 Review with `node scripts/shot.mjs "?x=1" out.png 1440x800 4000` (menu) and a scratch Playwright session for the in-game HUD (enter a campaign, send `debug` `hit:0:50`, `down`, `sever:4`).
 
+### The Survey Plate (D-062, 2026-10-03): the interface's current look
+The HUD is engraved ink drawn ON the picture, as a surveyor annotates a plate, not cards laid over it. `apps/client/src/ui/plate.css` is its sheet (scoped to `#hud`, and the sheets under `html .panel`); it
+supersedes the looks described in the passes below wherever they disagree (positions and behaviour from those passes still hold).
+- **Legibility without boxes.** Every stroke and letter carries a paper halo (`--halo`); a block of words sits on a feathered pool of paper (`--mist`: a translucent body with a wide blur, never a hard
+  edge). Large blocks (the contract, the orientation) keep their mist close so a corner of the picture is not washed out. High contrast trades the mist for solid paper and a ruled edge.
+- **The heading strip** is a map's scale bar: a hairline with ticks, the reading above it on its own mist with a stamp-red notch, the places hanging below on dotted leaders (the objective in stamp red).
+- **Telegrams** are ticker tape pasted on askew (Special Elite capitals, the stamp "TELEGRAM" at the left end); a crowded stack folds its older strips to one line.
+- **Vitality** is an engraved dial (ink ring, stamp-red danger arc, ink needle); the surgeon's note beside it is italic; **arms** are line silhouettes with the piece in small caps; the **prompt** is an
+  italic verb with the key as a wax seal; name plates over heads are italic names in ink.
+- **The sheets** (front door, pause, manual, settings, parley, broadsheet, map room, manifest) are one sheet of fine laid paper with a hairline rule inset: no leather, no brass corners. Choices are
+  ledger lines (a hairline under each; the one in hand gets a tint, a red margin rule and a pointing hand); the one action that matters is a flat rubber stamp in stamp red.
+- Mocked first as three directions over a real Highmark frame (Survey Plate, Field Kit, Gazette); the Survey Plate was chosen as the most distinctive and the least boxy.
+
 ### Interface, second pass (2026-09-30)
 - **Edges and order.** One margin (`--pad`: at least 0.9 rem, 2.4% of the short side, plus the platform's safe area) for everything hugging an edge. Top: the heading strip (centre), the expedition
   plaque (right), the telegram stack below the strip. Bottom-left: vitality gauge and surgeon's tag; bottom-right: armoury card over the key line; centre-low: the prompt ticket. Captions sit left above the gauge.

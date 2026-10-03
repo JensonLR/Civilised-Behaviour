@@ -33,7 +33,7 @@ export class Telegrams {
 
   private step(): void {
     const now = performance.now();
-    const dt = Math.min(1, (now - this.last) / 1000);
+    const dt = (now - this.last) / 1000; // (uncapped: a background tab's interval runs once a second or slower, and a cap kept old news up for minutes)
     this.last = now;
     const changed = this.queue.tick(dt);
     for (const s of this.queue.shown) {
@@ -67,6 +67,7 @@ export class Telegrams {
       this.els.set(s.id, el);
     }
     this.root.hidden = this.els.size === 0;
+    this.fold();
     const more = this.queue.queued;
     // the first slip wears the count of those still waiting (the stamp follows whichever slip is first)
     let first = true;
@@ -75,6 +76,17 @@ export class Telegrams {
       else c.removeAttribute("data-more");
       first = false;
     }
+  }
+
+  /**
+   * Three slips on a 720-line screen reached past the middle, under the reticle, and a hit marker's word printed over a slip's text. When the stack would cross into
+   * the aim zone (the middle of the picture, less 2.5 rem) every slip but the newest folds to one line: the older news has been read, the newest is whole.
+   */
+  private fold(): void {
+    this.root.classList.remove("crowded");
+    if (this.els.size < 2 || typeof window === "undefined") return;
+    const limit = window.innerHeight / 2 - 2.5 * (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    if (this.root.getBoundingClientRect().bottom > limit) this.root.classList.add("crowded");
   }
 
   clear(): void {

@@ -204,6 +204,15 @@ export class Hud {
     fillPrompt(this.prompt, text);
   }
 
+  /** The moment's marks off the screen (prompt, revive bar, the down card, the dot): while the game has no local row to read (a rejoin in flight) they would otherwise stand frozen. */
+  clearMoment(): void {
+    this.prompt.hidden = true;
+    this.lastPrompt = "";
+    this.progress.hidden = true;
+    this.downed.hidden = true;
+    this.crosshair.hidden = true;
+  }
+
   private updateWounds(mask: number, missing: number): void {
     const key = mask | (missing << 12);
     if (key === this.shownWounds) return;

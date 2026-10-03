@@ -26,7 +26,7 @@ export function saveLabel(s: SaveStatus, fmtTime: (at: number) => string = clock
     case "saving":
       return "Saving...";
     case "saved":
-      return s.at > 0 ? `Saved ${fmtTime(s.at)}` : "Saving...";
+      return s.at > 0 ? `Saved ${fmtTime(s.at)}` : ""; // (the room's first word, before any save: unknown, not "Saving...", which stood on the bar for good when no save followed)
     case "unkept":
       return short ? "Not saved" : "Not saved: this server keeps no files";
     case "failed":

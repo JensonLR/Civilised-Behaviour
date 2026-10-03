@@ -16,6 +16,12 @@ describe("interface colours come from the shared palette", () => {
     }
   });
 
+  it("the Survey Plate sheet (ui/plate.css, the HUD's and the sheets' look) names no colour at all: palette variables only", () => {
+    const plate = readFileSync(new URL("./ui/plate.css", import.meta.url), "utf8");
+    expect(plate).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(plate).not.toMatch(/\b(rgb|rgba|hsl|hsla)\(/);
+  });
+
   it("style.css has no hard-coded palette colours outside :root (use the variables)", () => {
     const outside = css.replace(/:root\s*\{[^}]*\}/, "");
     const uiHexes = Object.values(PALETTE.ui).map((n) => cssHex(n));

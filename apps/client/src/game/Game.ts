@@ -603,6 +603,7 @@ export class Game {
         this.parley.closeUi();
         this.paper.hide();
         this.loadout.closeUi();
+        this.mapRoom.closeRoom(); // (it stayed open under the sailing card and was still up, holding the controls, at landfall)
         this.wheel.cancel();
         this.controls.wheelOpen = false;
         if (phase === 2) this.sailing.show(st.travelTo, st.travelLeft ?? 0);
@@ -788,7 +789,7 @@ export class Game {
     this.demoBanner?.tick();
     this.content.update(dt, this.session.room.state);
     this.updateMusic(dt, me);
-    if (this.orientation.active) {
+    if (this.orientation.active || this.orientation.showing) {
       const pf = this.session.predicted;
       if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad || this.controls.usingTouch ? "pad" : "keyboard"); // (touch reads the pad copy: its tokens print the on-screen words, never "the mouse")
     }
@@ -955,7 +956,11 @@ export class Game {
   private updatePrompt(): void {
     const me = this.session.predicted;
     const mine = this.session.local;
-    if (!me || !mine) return;
+    if (!me || !mine) {
+      this.hud.clearMoment();
+      this.usable = false;
+      return;
+    }
     const pad = this.controls.usingGamepad;
     // prompt TOKENS (input/glyphDom.ts): the HUD draws each as the glyph of the device in use and the player's own binding, and draws it again when they pick up the other device
     const use = "{interact}";
@@ -1034,9 +1039,11 @@ export class Game {
         if (o && (o.flags & FLAG.DOWNED) === 0 && Math.hypot(o.x - mx, o.z - mz) <= INCIDENT.useR) prompt = `${use}  ${INCIDENT_PROMPT[inc].replace("%n", o.name)}`;
       }
     }
-    if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
-      // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks)
-      const st = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);
+    if (prompt === "" && (flags & FLAG.DOWNED) === 0) {
+      // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks). Once the contract is settled the people
+      // to parley with (the Warden, the court) have nothing more to say, but the dock still takes you home and the foundation still takes crates (the dock's prompt went too)
+      const found = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);
+      const st = found && (this.tracker.visibleOrders !== "resolved" || found.kind === "dock" || found.kind === "foundation") ? found : undefined;
       if (st && st.kind === "foundation") {
         prompt = this.foundationText(undefined);
         foundation = true;

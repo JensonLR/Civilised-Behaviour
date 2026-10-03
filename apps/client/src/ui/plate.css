@@ -1,0 +1,246 @@
+/* ======================================================================================================================================
+   THE SURVEY PLATE (D-062): the in-game HUD drawn as engraved ink on the picture, the way a surveyor annotates a plate - no boxes, no plaques.
+   Every line and letter carries a paper halo, and every block of words sits on a feathered mist of paper, so it reads on sky, grass, stone and
+   shadow alike without a card behind it. Telegrams are ticker tape pasted on askew; the key in a prompt is a wax seal.
+   This sheet is the HUD's look; it is scoped to #hud (and the name plates, captions) so it wins over the older rules in style.css.
+   Colours: palette variables only (a test rejects literals).
+   ====================================================================================================================================== */
+
+#hud, .captions {
+  --halo: 0 0 1px var(--paper), 0 0 2px var(--paper), 0 0 6px color-mix(in srgb, var(--paper) 90%, transparent), 0 0 14px color-mix(in srgb, var(--paper) 55%, transparent);
+  --halo-svg: drop-shadow(0 0 1px var(--paper)) drop-shadow(0 0 3px color-mix(in srgb, var(--paper) 85%, transparent));
+  --mist: color-mix(in srgb, var(--paper) 52%, transparent);
+  --mist-soft: color-mix(in srgb, var(--paper) 40%, transparent);
+  --hair: 1.5px;
+}
+
+/* a feathered pool of paper under a block of words: a translucent body with a wide blur round it, never a hard edge */
+#hud .objectives, #hud .orientation, #hud .arms, #hud .cannoncard, #hud .health, #hud .wounds, #hud .prompt, #hud .progress, #hud .downed, #hud .codebar, .captions .caption {
+  background: var(--mist); box-shadow: 0 0 2.2rem 1.5rem var(--mist); border: 0; border-radius: 2.2rem; color: var(--ink); text-shadow: var(--halo);
+}
+
+/* ---- the heading strip: a map's scale bar across the top ---------------------------------------------------------------------------- */
+#hud .compass { height: 1.7rem; }
+#hud .compass .strip { overflow: hidden; border: 0; border-radius: 0; background: none; box-shadow: none; border-bottom: var(--hair) solid var(--ink); filter: drop-shadow(0 1px 0 var(--paper)) drop-shadow(0 0 2px var(--paper)); -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
+#hud .compass .tick { bottom: 0; background: var(--ink); }
+#hud .compass .tick[data-label]::before { font-family: var(--display); color: var(--ink); }
+#hud .compass .tick.card::before { font-weight: 400; font-size: 0.95rem; }
+#hud .compass .readout { top: -0.15rem; transform: translate(-50%, -100%); min-width: 0; padding: 0.05rem 0.7rem; font: 1.02rem/1.1 var(--display); letter-spacing: 0.14em; background: var(--mist); border: 0; border-radius: 1rem; box-shadow: 0 0 0.7rem 0.5rem var(--mist); text-shadow: var(--halo); }
+#hud .compass .readout::before { bottom: auto; top: 100%; margin-top: 0.12rem; margin-left: -0.3rem; border: 0.3rem solid transparent; border-top-color: var(--stamp); border-bottom: 0; filter: drop-shadow(0 0 1px var(--paper)); }
+#hud .compass .readout::after { display: none; }
+#hud .compass { margin-top: 1.25rem; }
+#hud .compass .mark { top: 0.45rem; flex-direction: row; gap: 0.22rem; padding: 0.02rem 0.45rem; font: italic 0.92rem/1.15 var(--serif); letter-spacing: 0; background: var(--mist-soft); border: 0; border-radius: 1rem; box-shadow: 0 0 0.5rem 0.3rem var(--mist-soft); text-shadow: var(--halo); transform: translateX(-50%); }
+#hud .compass .mark::before { display: block; top: -0.45rem; height: 0.45rem; margin-left: -0.5px; border-left: 1px solid var(--ink); }
+#hud .compass .mark svg { width: 0.9rem; height: 0.9rem; fill: var(--ink); filter: var(--halo-svg); }
+#hud .compass .mark svg .k { stroke: var(--paper); }
+#hud .compass .mark .name { font: 0.82rem var(--display); letter-spacing: 0.1em; font-style: normal; }
+#hud .compass .mark .dist { font: italic 0.9rem var(--serif); opacity: 1; }
+#hud .compass .mark[data-row="1"] { top: 2.15rem; }
+#hud .compass .mark[data-row="2"] { top: 3.85rem; }
+#hud .compass .mark[data-row="3"] { top: 5.55rem; }
+#hud .compass .mark[data-row="1"]::before { top: -2.15rem; height: 2.15rem; }
+#hud .compass .mark[data-row="2"]::before { top: -3.85rem; height: 3.85rem; }
+#hud .compass .mark[data-row="3"]::before { top: -5.55rem; height: 5.55rem; }
+#hud .compass .mark[data-row]::before { border-left-style: dotted; }
+#hud .compass .mark[data-edge="l"] { transform: translateX(0); }
+#hud .compass .mark[data-edge="r"] { transform: translateX(-100%); }
+#hud .compass .mark[data-goal="1"] { background: var(--mist); color: var(--stamp); border: 0; z-index: 1; }
+#hud .compass .mark[data-goal="1"] svg { fill: var(--stamp); }
+#hud .compass .mark[data-goal="1"]::before { border-left: 1.5px solid var(--stamp); }
+
+/* ---- the expedition number: a line of italic in the corner, the invite an underlined word ---------------------------------------- */
+#hud .codebar { padding: 0.15rem 0.6rem; gap: 0.6rem; font: italic 0.92rem var(--serif); letter-spacing: 0; box-shadow: 0 0 1rem 0.6rem var(--mist); }
+#hud .codebar b { font: 1rem var(--type); letter-spacing: 0.24em; color: var(--stamp); }
+#hud .codebar .saveline { font-size: 0.82rem; }
+#hud .codebar button { min-height: 0; padding: 0; font: 0.84rem var(--display); letter-spacing: 0.12em; color: var(--ink); background: none; border: 0; border-bottom: 1px solid var(--ink); border-radius: 0; box-shadow: none; text-shadow: var(--halo); }
+#hud .codebar button:active { transform: none; }
+
+/* ---- key hints: faint ink along the foot, no band ----------------------------------------------------------------------------------- */
+#hud .help { padding: 0.1rem 0.8rem; font-size: 0.82rem; color: var(--ink); background: var(--mist-soft); box-shadow: 0 0 1rem 0.6rem var(--mist-soft); border: 0; border-radius: 1rem; text-shadow: var(--halo); }
+#hud .help .glyph { font-size: 0.86em; }
+
+/* ---- the contract and the orientation: annotations hung from a hairline ------------------------------------------------------------ */
+#hud .objectives, #hud .orientation { padding: 0.5rem 0.9rem 0.6rem 1.25rem; }
+#hud .objectives::before, #hud .orientation::before { content: ""; position: absolute; left: 0.3rem; top: 0.7rem; bottom: 0.7rem; width: var(--hair); background: var(--ink); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--paper) 70%, transparent); }
+#hud .objectives h2 { margin: 0 0 0.25rem; padding: 0; font-size: 1.2em; letter-spacing: 0.08em; text-transform: none; color: var(--stamp); border: 0; }
+#hud .objectives li { font-size: 1.04em; line-height: 1.28; }
+#hud .objectives li .mark::before, #hud .orientation li .mark::before { content: ""; display: inline-block; width: 0.62rem; height: 0.62rem; border: var(--hair) solid var(--ink); border-radius: 50%; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--paper) 70%, transparent); }
+#hud .objectives li.done .mark::before, #hud .orientation li.done .mark::before { background: var(--stamp); border-color: var(--stamp); }
+#hud .objectives .hint { border-top: 0; font-style: italic; padding-top: 0.15rem; }
+#hud .objectives .timer { margin-top: 0.5rem; padding: 0.3rem 0 0; font: 0.92rem var(--display); letter-spacing: 0.12em; color: var(--stamp); background: none; border-top: var(--hair) solid var(--stamp); text-shadow: var(--halo); }
+#hud .objectives .timer .clock { font: 1.1rem var(--type); letter-spacing: 0.04em; }
+#hud .objectives .timer.urgent { background: none; }
+#hud .objectives .timer.urgent .clock { font-weight: 400; color: var(--stamp-dark); }
+#hud .orientation .society { color: var(--stamp); }
+#hud .orientation h2 { border-bottom: 0; padding-bottom: 0; font-size: 1.2rem; }
+#hud .orientation .foot { border-top: var(--hair) solid color-mix(in srgb, var(--ink) 40%, transparent); }
+#hud .orientation .skip { text-shadow: none; background: color-mix(in srgb, var(--paper) 70%, transparent); }
+
+/* ---- telegrams: ticker tape pasted on, each strip a little askew ----------------------------------------------------------------- */
+#hud .telegrams { top: calc(var(--edge-t) + 8rem); gap: 0.55rem; align-items: center; }
+#hud .telegram { width: fit-content; max-width: 100%; padding: 0.42rem 1.1rem 0.42rem 6.4rem; font: 0.94rem/1.32 var(--type); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink);
+  background: linear-gradient(180deg, var(--field), var(--paper) 62%, var(--paper-2)); border: 0;
+  box-shadow: 0 0.18rem 0.6rem color-mix(in srgb, var(--scrim) 38%, transparent);
+  clip-path: polygon(0 6%, 1.2% 0, 100% 0, 99.5% 50%, 100% 100%, 0.8% 100%, 0 92%); transform: rotate(-0.7deg); }
+#hud .telegram:nth-child(even) { transform: rotate(0.55deg); }
+#hud .telegram::before { content: "TELEGRAM"; left: 0.95rem; right: auto; top: 0.62rem; font: 0.66rem var(--display); letter-spacing: 0.26em; color: var(--stamp); text-align: left; }
+#hud .telegram .body { white-space: pre-line; }
+#hud .telegram[data-more]:not([data-more=""])::after { right: auto; left: 0.95rem; top: auto; bottom: 0.32rem; padding: 0; font: italic 0.66rem var(--serif); letter-spacing: 0; color: var(--stamp); background: none; text-transform: none; }
+#hud .telegrams.crowded .telegram:not(:last-child) { padding: 0.18rem 1.1rem 0.18rem 1.1rem; font-size: 0.84rem; }
+@keyframes telegramIn { from { opacity: 0; transform: translateY(-0.6rem) rotate(-2deg); } }
+
+/* ---- vitality: an engraved dial on the plate --------------------------------------------------------------------------------------- */
+#hud .health { padding: 0.2rem 0.4rem 0.3rem; width: 7.2rem; border-radius: 50% 50% 1.6rem 1.6rem; font: 0.8rem var(--display); letter-spacing: 0.22em; }
+#hud .health .gauge { filter: var(--halo-svg); }
+#hud .health .gauge .ring { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+#hud .health .gauge .bezel { fill: none; stroke: color-mix(in srgb, var(--ink) 35%, transparent); stroke-width: 0.7; }
+#hud .health .gauge .face { fill: color-mix(in srgb, var(--field) 55%, transparent); stroke: none; }
+#hud .health .gauge .tick { stroke: var(--ink); }
+#hud .health .gauge .zone { stroke: var(--stamp); stroke-dasharray: none; stroke-width: 3.6; }
+#hud .health .gauge .needle { stroke: var(--ink); stroke-width: 2; }
+#hud .health .gauge .hub { fill: var(--stamp); stroke: var(--ink); stroke-width: 0.8; }
+#hud .health .gauge .num { font-size: 13px; fill: var(--ink); }
+
+/* ---- the surgeon's note beside it ---------------------------------------------------------------------------------------------- */
+#hud .wounds { padding: 0.3rem 0.9rem; clip-path: none; font: italic 0.9rem var(--serif); letter-spacing: 0; }
+#hud .wounds::after { display: none; }
+
+/* ---- arms: the piece named in small caps, the rounds as engraved cartridges, the slots as numerals ------------------------------- */
+#hud .arms { padding: 0.4rem 0.8rem 0.5rem; min-width: 0; }
+#hud .arms .hotbar { gap: 0.5rem; }
+#hud .arms .slot { width: 2.7rem; height: 1.35rem; border: 0; background: none; opacity: 0.55; }
+#hud .arms .slot svg { width: 2.3rem; height: 1rem; fill: var(--ink); filter: var(--halo-svg); opacity: 1; }
+#hud .arms .slot kbd { left: -0.3rem; top: -0.35rem; color: var(--ink); text-shadow: var(--halo); }
+#hud .arms .slot.on { opacity: 1; background: none; border: 0; box-shadow: none; transform: none; }
+#hud .arms .slot.on::after { content: ""; position: absolute; left: 0.2rem; right: 0.2rem; bottom: -0.25rem; height: 2px; background: var(--stamp); }
+#hud .arms .slot.on svg { fill: var(--ink); }
+#hud .arms .slot.on kbd { color: var(--stamp); }
+#hud .arms .slot.lack { opacity: 0.22; }
+#hud .arms .pname { font-size: 1.05rem; letter-spacing: 0.12em; }
+#hud .arms .pips i { width: 0.42rem; height: 0.95rem; border-width: var(--hair); }
+#hud .arms .pips i.full { background: var(--ink); }
+#hud .arms .reserve { font: 1.05rem var(--type); }
+#hud .arms .gauge .bar, #hud .cannoncard .bar, #hud .progress .bar { height: 0.42rem; border: 0; border-radius: 0; background: color-mix(in srgb, var(--ink) 18%, transparent); box-shadow: none; }
+#hud .arms .gauge .fill, #hud .cannoncard .fill, #hud .progress .fill { background: var(--ink); }
+#hud .cannoncard { padding: 0.5rem 1rem 0.6rem; }
+#hud .cannoncard .ct { color: var(--stamp); }
+
+/* ---- the prompt: a wax seal for the key and the verb in italic ----------------------------------------------------------------- */
+#hud .prompt { padding: 0.3rem 1.1rem; font: italic 1.25rem var(--serif); letter-spacing: 0.01em; }
+#hud .prompt .glyph { font-size: 0.8em; min-width: 1.9em; height: 1.9em; margin-right: 0.35em; padding: 0 0.35em; vertical-align: -0.38em; color: var(--text); background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--stamp) 75%, var(--text)), var(--stamp) 55%, var(--stamp-dark)); border: 0; border-radius: 50%; box-shadow: 0 0.1em 0.3em color-mix(in srgb, var(--scrim) 45%, transparent), inset 0 0 0 0.16em color-mix(in srgb, var(--stamp-dark) 60%, transparent); text-shadow: none; font-style: normal; }
+
+/* ---- revive: a hairline filling with ink ------------------------------------------------------------------------------------------ */
+#hud .progress { padding: 0.4rem 1.2rem 0.5rem; font: 0.95rem var(--display); letter-spacing: 0.1em; }
+
+/* ---- down: a line of stamp-red capitals between two rules --------------------------------------------------------------------- */
+#hud .downed { padding: 0.7rem 2.4rem 0.8rem; transform: translateX(-50%); }
+#hud .downed .title { color: var(--stamp); letter-spacing: 0.2em; text-shadow: var(--halo); }
+#hud .downed .title::before, #hud .downed .title::after { content: ""; display: block; height: var(--hair); margin: 0.2rem auto; width: 70%; background: linear-gradient(90deg, transparent, var(--ink), transparent); }
+
+/* ---- name plates over heads: italic names in ink -------------------------------------------------------------------------------- */
+.taglayer .nametag { padding: 0 0.2rem; font: italic 0.95rem var(--serif); letter-spacing: 0; color: var(--ink); background: none; border: 0; border-radius: 0; clip-path: none;
+  text-shadow: 0 0 1px var(--paper), 0 0 2px var(--paper), 0 0 6px color-mix(in srgb, var(--paper) 90%, transparent); }
+.taglayer .nametag::after { display: none; }
+.taglayer .nametag .honour { font: 0.7rem var(--display); letter-spacing: 0.1em; font-style: normal; color: var(--stamp); }
+
+/* ---- captions: italic on a dark mist (they carry speech and sound, and must read over anything) ------------------------------- */
+.captions .caption { color: var(--text); background: color-mix(in srgb, var(--scrim) 58%, transparent); box-shadow: 0 0 1rem 0.5rem color-mix(in srgb, var(--scrim) 58%, transparent); text-shadow: none; border: 0; border-radius: 1rem; }
+
+/* ---- accessibility: high contrast trades the mist for solid paper and a ruled edge ---------------------------------------------- */
+:root[data-contrast="high"] #hud .objectives, :root[data-contrast="high"] #hud .orientation, :root[data-contrast="high"] #hud .arms, :root[data-contrast="high"] #hud .health,
+:root[data-contrast="high"] #hud .wounds, :root[data-contrast="high"] #hud .prompt, :root[data-contrast="high"] #hud .progress, :root[data-contrast="high"] #hud .downed, :root[data-contrast="high"] #hud .codebar {
+  background: var(--field); box-shadow: 0 0 0 2px var(--ink); border-radius: 0.3rem;
+}
+:root[data-contrast="high"] #hud .telegram { box-shadow: 0 0 0 2px var(--ink); }
+:root[data-contrast="high"] .taglayer .nametag { background: var(--field); box-shadow: 0 0 0 1.5px var(--ink); }
+
+/* the larger blocks of words keep their mist close: a wide feather over a big card washed out a whole corner of the picture */
+#hud .objectives, #hud .orientation { background: color-mix(in srgb, var(--paper) 66%, transparent); box-shadow: 0 0 1rem 0.55rem color-mix(in srgb, var(--paper) 66%, transparent); border-radius: 1rem; }
+
+/* ======================================================================================================================================
+   THE SHEETS (D-062): every paper the game hands you (the front door, pause, the manual, settings, a parley, the broadsheet, the map room, the manifest) is one sheet of
+   fine laid paper with a hairline engraved rule inset - no leather binding, no brass corners. Choices are ledger lines, not boxes: a hairline under each, a red ink mark in
+   the margin on the one in hand. The one thing to do is a flat rubber stamp. (`html` prefix: these must win over the component sheets loaded after this file.)
+   ====================================================================================================================================== */
+html .panel {
+  border: 0; border-radius: 2px;
+  background: radial-gradient(ellipse at 50% 30%, transparent 60%, color-mix(in srgb, var(--brass-dark) 14%, transparent) 100%), linear-gradient(176deg, var(--field), var(--paper) 45%, var(--paper-2));
+  box-shadow: 0 1.4rem 3rem color-mix(in srgb, var(--scrim) 55%, transparent), 0 0.2rem 0.5rem color-mix(in srgb, var(--scrim) 35%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); outline-offset: -0.75rem;
+}
+html .panel::after { content: none; }
+html .overlay { background: color-mix(in srgb, var(--scrim) 66%, transparent); }
+html .panel .society { color: var(--stamp); letter-spacing: 0.24em; }
+html .panel .rule { color: var(--ink); }
+html .panel .rule::before, html .panel .rule::after { height: 0; border-bottom: 0; border-top-width: 1px; opacity: 0.5; }
+html .sheet h2 { text-shadow: none; }
+html .sheet h3 { color: var(--stamp); border-bottom: 1px solid color-mix(in srgb, var(--ink) 35%, transparent); letter-spacing: 0.18em; }
+
+/* ledger-line buttons */
+html .panel button, html .codebar button {
+  color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 0; box-shadow: none;
+  position: relative; transition: background 0.12s, color 0.12s;
+}
+html .panel button:hover { filter: none; background: color-mix(in srgb, var(--paper-2) 55%, transparent); }
+html .panel button:active { transform: none; box-shadow: none; background: color-mix(in srgb, var(--paper-2) 85%, transparent); }
+html .panel button:hover::before, html .panel button:focus-visible::before { content: "\261E"; position: absolute; left: 0.2rem; top: 50%; transform: translateY(-50%); font-family: var(--serif); font-size: 1.1em; color: var(--stamp); }
+html .panel button.primary { color: var(--text); background: var(--stamp); border: 0; border-radius: 2px; box-shadow: 0 0.12rem 0 var(--stamp-dark); text-shadow: none; }
+html .panel button.primary:hover { background: color-mix(in srgb, var(--stamp) 88%, var(--text)); }
+html .panel button.primary:hover::before, html .panel button.primary:focus-visible::before { color: var(--text); }
+html .panel button.danger { color: var(--stamp-dark); border-style: solid; border-bottom: 1px dashed var(--stamp-dark); }
+html .panel button:disabled { opacity: 0.45; }
+html .panel button:disabled::before { content: none; }
+html .panel :focus-visible { outline: 2px solid var(--stamp); outline-offset: 2px; box-shadow: none; }
+/* a ledger line in hand: a tint, the red margin rule and the pointing hand, not a box round it */
+html .panel button:focus-visible { outline: 0; background: color-mix(in srgb, var(--paper-2) 70%, transparent); box-shadow: inset 3px 0 0 var(--stamp); }
+html .panel button.primary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; box-shadow: 0 0.12rem 0 var(--stamp-dark); background: var(--stamp); }
+html .creator .posebar button[aria-checked="true"], html .creator .presets button[aria-pressed="true"] { background: none; box-shadow: none; color: var(--stamp); border-bottom: 2px solid var(--stamp); font-weight: 400; }
+html .pause .menu { gap: 0.15rem; }
+html .pause .menu .pair { gap: 0.15rem 0.6rem; }
+
+/* index tabs as ruled words */
+html .panel .tabs { border-bottom: 1px solid color-mix(in srgb, var(--ink) 35%, transparent); gap: 0.6rem; }
+html .panel .tabs button { background: none; border-bottom: 2px solid transparent; padding: 0.2rem 0.3rem; }
+html .panel .tabs button[aria-selected="true"] { background: none; border-top: 0; border-bottom: 2px solid var(--stamp); color: var(--stamp); padding-top: 0.2rem; box-shadow: none; }
+html .panel .tabs button:hover::before, html .panel .tabs button:focus-visible::before { content: none; }
+
+/* small controls */
+html .panel select { border: 0; border-bottom: 1px solid var(--ink); border-radius: 0; background: transparent; }
+html .panel button.keycap { border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); border-bottom-width: 2px; border-radius: 3px; background: color-mix(in srgb, var(--field) 70%, transparent); }
+html .panel button.keycap::before { content: none !important; }
+html .seg button { border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent); }
+html .seg button[aria-pressed="true"] { background: var(--paper-2); box-shadow: none; color: var(--stamp); }
+html .seg button::before { content: none !important; }
+html .sheet input.tick { border: 1px solid var(--ink); border-radius: 50%; background: transparent; box-shadow: none; }
+html .sheet input.tick:checked { background: var(--stamp); border-color: var(--stamp); }
+html .sheet input.tick:checked::after { content: ""; }
+
+/* a parley: the speaker's words in the margin's red rule, the answers as ledger lines with the price at the right */
+html .sheet.parley .line { border-left: 2px solid var(--stamp); background: none; padding: 0.3rem 0.9rem; font-size: 1.15rem; }
+html .sheet.parley .options { gap: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
+html .sheet.parley .opt { padding: 0.55rem 0.6rem 0.55rem 1.6rem; }
+html .sheet.parley .opt .key { font-weight: 400; }
+/* the map room's destinations and the broadsheet's notices: ruled, not boxed */
+html .maproom .dest { border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); background: none; }
+html .maproom .dest:has(input:checked) { outline: 0; background: color-mix(in srgb, var(--paper-2) 70%, transparent); box-shadow: inset 2px 0 0 var(--stamp); }
+html .maproom .chartwrap { box-shadow: none; border: 1px solid var(--ink); }
+html .paper .notices { border: 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+html .paper .columns { column-rule-color: color-mix(in srgb, var(--ink) 35%, transparent); }
+html .loadout .ledger { border-top-color: var(--ink); }
+html .loadout .lrow { border-bottom: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
+
+:root[data-contrast="high"] html .panel, :root[data-contrast="high"] .panel { outline: 2px solid var(--ink); outline-offset: -0.6rem; }
+:root[data-contrast="high"] .panel button { border-bottom: 2px solid var(--ink); }
+html .sheet.parley .opt:focus-visible { outline: 0; }
+html .maproom .dest:has(input:focus-visible) { outline: 0; box-shadow: inset 3px 0 0 var(--stamp); background: color-mix(in srgb, var(--paper-2) 70%, transparent); }
+/* (the fold, restated at this sheet's weight: the older slips lose the stamp and keep to one line) */
+#hud .telegrams.crowded .telegram:not(:last-child)::before { content: none; }
+#hud .telegrams.crowded .telegram:not(:last-child) .body { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud .telegrams.crowded .telegram:not(:last-child)[data-more]:not([data-more=""])::after { content: none; }
+/* a short screen: the slips ride higher (over the lower rows of pins, never down to the sight) */
+@media (max-height: 34rem) { #hud .telegrams { top: calc(var(--edge-t) + 4.2rem); } #hud .telegram { font-size: 0.84rem; padding-top: 0.3rem; padding-bottom: 0.3rem; } }
+/* on glass, and on a short screen, the contract keeps to its steps and its clock (the paragraph is the parley's and the manual's), small, and clear of the dial that moves up out of the thumbs' way */
+body.touch-ui #hud .objectives { font-size: 0.74rem; width: min(16rem, 32vw); top: calc(var(--edge-t) + 0.3rem); }
+body.touch-ui #hud .objectives .hint { display: none; }
+@media (max-height: 520px) { #hud .objectives .hint { display: none; } }
+body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
