@@ -223,6 +223,24 @@ for (const variant of [fileVariant, pgVariant]) {
       expect(json(won[0]!.value as WorldRoom)).toEqual(saved);
     }, 60000);
 
+    it("a stranger's resume racing a member's cannot block it (security review, D-048: the stranger used to take the campaign's claim before the membership check)", async () => {
+      const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED + 6, token: TOKEN })) as unknown as WorldRoom;
+      const code = room.state.code;
+      const a = await join(room);
+      await a.c.leave();
+      await room.disconnect();
+      const store = await getRoomConfig().persistence!.store();
+      await until(async () => !!(await store.findByCode(code)), 5000, "the record");
+      const STRANGER = "5d6e7f80-91a2-4b3c-8d4e-5f6a7b8c9d0e";
+      const [stranger, member] = await Promise.allSettled([
+        colyseus.createRoom(ROOM_WORLD, { resume: code, token: STRANGER }),
+        colyseus.createRoom(ROOM_WORLD, { resume: code, token: TOKEN }),
+      ]);
+      expect(stranger.status).toBe("rejected");
+      expect(member.status, member.status === "rejected" ? String((member as PromiseRejectedResult).reason) : "").toBe("fulfilled");
+      expect(((member as PromiseFulfilledResult<unknown>).value as WorldRoom).state.code).toBe(code);
+    }, 60000);
+
     it("a section damaged at THIS version is played on fresh values and its bytes are kept as damaged_<key> through every later save (persistence review (e))", async () => {
       const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED + 4, token: TOKEN })) as unknown as WorldRoom;
       const code = room.state.code;

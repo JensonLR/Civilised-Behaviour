@@ -42,7 +42,7 @@ export function originUpgradeGuard(policy: OriginPolicy): BeforeUpgradeHandler {
  * rooms, and CORS headers stop reflecting arbitrary origins with credentials. Patches the shared
  * matchmaking controller (Colyseus documents overriding getCorsHeaders); returns a restore function.
  */
-export function installMatchmakingOriginPolicy(policy: OriginPolicy): () => void {
+export function installMatchmakingOriginPolicy(policy: OriginPolicy, guard?: (method: string, auth: { headers?: Headers; ip?: string } | undefined) => void): () => void {
   const c = matchMaker.controller;
   const original = {
     invokeMethod: c.invokeMethod,
@@ -53,6 +53,7 @@ export function installMatchmakingOriginPolicy(policy: OriginPolicy): () => void
   c.invokeMethod = function (this: typeof c, method, roomName, clientOptions, authContext) {
     const origin = authContext?.headers?.get?.("origin");
     if (!policy.allows(origin)) throw new ServerError(403, "origin not allowed"); // Colyseus uses the code as the HTTP status
+    guard?.(method, authContext as never); // (rate and capacity limits: throws a ServerError whose code is the status)
     return original.invokeMethod.call(this, method, roomName, clientOptions, authContext);
   };
   c.getCorsHeaders = (headers: Headers) => ({

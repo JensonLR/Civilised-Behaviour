@@ -52,6 +52,13 @@ export class Pilot {
     this.log.push({ t: Math.round(this.secs * 10) / 10, what });
   }
 
+  /** The prediction's report card (corrections, drift, pops): what a bad network does to this player's view of themself. */
+  get netStats(): { correctionMax: number; correctionMean: number; driftPeak: number; popMax: number } | undefined {
+    if (!this.bot) return undefined;
+    const s = this.bot.stats();
+    return { correctionMax: s.correctionMax, correctionMean: s.correctionMean, driftPeak: s.driftPeak, popMax: s.popMax };
+  }
+
   async join(url: string, opts: Partial<JoinOptions>): Promise<void> {
     this.bot = await Bot.create(url, this.name, (tick, self) => this.step(tick, self), opts);
     const room = this.bot.room;

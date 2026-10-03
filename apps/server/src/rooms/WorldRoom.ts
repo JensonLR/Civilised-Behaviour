@@ -286,7 +286,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   override async onCreate(options: JoinOptions): Promise<void> {
     // RESUME (D-035): a saved campaign comes back by its join code, for a former member only; every refusal is the same error (no enumeration).
     const resume = await this.resumeFrom(options);
-    const seed = resume ? resume.rec.seed : Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
+    // a creator-chosen seed is a QA lever like `region`: the seed also seeds combat, casualties and the hire pool, so in production a creator could pick a known world (security review, D-048)
+    const seed = resume ? resume.rec.seed : getRoomConfig().debugCommands && Number.isInteger(options?.seed) ? (options.seed as number) >>> 0 : (Math.random() * 0xffffffff) >>> 0;
     this.state.seed = seed;
     this.state.code = resume ? resume.rec.code : await this.freshJoinCode();
     // Campaign rule: the server default, which the creator may switch off (never on when the server has it off).
@@ -777,6 +778,16 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const code = typeof options.resume === "string" ? options.resume.toUpperCase() : "";
     const id = parseIdentity(options.token);
     if (!rt || !isValidJoinCode(code) || !id) return deny("request");
+    const store = await rt.store();
+    const key = identityKey(id, rt.cfg.pepper);
+    // membership FIRST, touching no claim: a stranger holding a known code used to take the campaign's claim for the length of a store read, so a member resuming at
+    // that moment was told the campaign was live (security review, D-048; floodable)
+    const member = async (): Promise<CampaignRecord | undefined> => {
+      const r = await store.findByCode(code);
+      return r && canResume(r, key) ? r : undefined;
+    };
+    // (a room of this campaign still writing its last save may not have written its FIRST yet: then the answer waits for it, below; otherwise no record, no claim)
+    if (!(await member()) && !WorldRoom.campaignClaims.get(code)?.closing) return deny("not a member");
     let other = WorldRoom.campaignClaims.get(code);
     for (let i = 0; other?.closing && i < 200; i++) {
       await new Promise((r) => setTimeout(r, 25)); // a room of this campaign is writing its last save: wait for it, then load what it wrote
@@ -784,9 +795,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     }
     if (other) return deny("live");
     this.takeClaim(code); // (synchronous after the last await: two resumes cannot both pass)
-    const store = await rt.store();
-    const rec = await store.findByCode(code);
-    if (!rec || !canResume(rec, identityKey(id, rt.cfg.pepper))) return deny("not a member");
+    // and load again under the claim: a closing room may have saved since the first read, and the room must start from the LAST save
+    const rec = await member();
+    if (!rec) return deny("not a member");
     const live = await matchMaker.query({ name: ROOM_WORLD });
     if (live.some((r) => r.roomId !== this.roomId && (r.metadata as { code?: string } | undefined)?.code === code)) return deny("live");
     const r = restore(CAMPAIGN_CODECS, rec);
