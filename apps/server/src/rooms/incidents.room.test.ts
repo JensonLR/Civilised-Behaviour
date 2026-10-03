@@ -84,7 +84,7 @@ describe("incidents in a real room (D-052)", () => {
     me.send("debug", { cmd: "incident:courier" });
     const key = npcKey("incident-courier");
     await until(() => room.state.players.has(key), 4000, "the courier");
-    expect(notices.some((n) => n.includes("SOCIETY - URGENT - ARREARS"))).toBe(true);
+    await until(() => notices.some((n) => n.includes("SOCIETY - URGENT - ARREARS")), 3000, "the courier's telegram");
     dry(room, room.state.players.get(key)!);
     beside(room, me.p, room.state.players.get(key)!);
     await hold(me, BUTTON.INTERACT, 150);
@@ -122,7 +122,7 @@ describe("incidents in a real room (D-052)", () => {
     expect(hand.kind).toBe("rifleman");
     await until(() => room.state.players.has(npcKey(hand.id)), 3000, "his body as a hand");
     expect(room.state.players.has(key)).toBe(false);
-    expect(notices.some((n) => n.includes("signs on"))).toBe(true);
+    await until(() => notices.some((n) => n.includes("signs on")), 3000, "the signing notice");
     await commit(room, me);
     expect(lastIncident(room)).toMatchObject({ id: "deserter", result: "enlisted" });
   }, 30_000);
@@ -135,7 +135,7 @@ describe("incidents in a real room (D-052)", () => {
     const id = [...room.state.mounts.keys()].find((k) => !before.has(k))!;
     const horse = room.state.mounts.get(id)!;
     expect(horse.rider).toBe("");
-    expect(notices.some((n) => n.includes("Catch it"))).toBe(true);
+    await until(() => notices.some((n) => n.includes("Catch it")), 3000, "the hail"); // (the server's state is read in-process, the notice comes over the socket: wait for it)
     const t = (room as unknown as { world: { terrain: { waterDepth?: (x: number, z: number) => number } } }).world.terrain;
     expect(t.waterDepth!(horse.x, horse.z)).toBeLessThanOrEqual(0);
     beside(room, me.p, horse as unknown as PlayerStateType);
