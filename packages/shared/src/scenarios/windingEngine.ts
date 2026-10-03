@@ -247,8 +247,8 @@ const HINT: Record<string, string> = {
 const DONE: Record<string, string> = {
   engine_fouled: "The Syndicate's engine is full of the gorge and will not turn again this season. Take the ore barge home from Staithe Landing.",
   engine_blown: "The winding house has fewer walls than it had this morning, and the cross-cut is buried. Take the ore barge home.",
-  engine_bought: "The engine has a cracked flywheel, according to the man you paid. Take the ore barge home.",
-  vein_struck: "The cross-cut broke through and the Syndicate has the vein. Take the ore barge home.",
+  engine_bought: "The engine has a cracked flywheel, according to the man you paid, who is now the Syndicate's leading authority on cracked flywheels. Take the ore barge home.",
+  vein_struck: "The cross-cut broke through and the Syndicate has the vein. The Company will collect the rent on its engine regardless. Take the ore barge home.",
   abandoned: "The expedition is down. The engine thumps on. Take the barge home and explain.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
@@ -265,12 +265,12 @@ function view(s: EngineState, now: number): ScenarioView {
     { id: "stop", text: res === "vein_struck" ? "Lost: the cross-cut struck the vein" : res === "abandoned" ? "Lost: the expedition went down" : "Stop the cross-cut before it reaches the vein", done: won },
   ];
   if (res === undefined && (s.asked || s.near.yard > 0) && s.keg === "none") {
-    objectives.push({ id: "feed", text: s.alarm && !broken(s) ? "The boiler's feed is watched now: break the guards first" : "Foul the boiler at the west wall with a crate of grit from the tailings heap, unseen", done: false, optional: true });
+    objectives.push({ id: "feed", text: s.alarm && !broken(s) ? "The boiler's feed is watched now: break the guards first" : "Carry grit from the tailings heap to the boiler, unseen", done: false, optional: true });
   }
-  if (res === undefined && s.asked && s.keg === "none") objectives.push({ id: "keg", text: "Or: the Company's powder keg, by its magazine near the fall", done: false, optional: true });
+  if (res === undefined && s.asked && s.keg === "none") objectives.push({ id: "keg", text: "Or fetch the Company's powder keg from its magazine", done: false, optional: true });
   if (res === undefined && s.keg !== "none") objectives.push({ id: "fuse", text: s.keg === "set" ? "The fuse is lit. Get clear." : "The powder has gone off", done: s.keg === "fired", optional: true });
   if (res === undefined && s.challengeUntil > 0) objectives.push({ id: "challenge", text: "A guard has challenged you: clear off the terrace", done: false, optional: true });
-  if (res === undefined && s.alarm && s.keg === "none") objectives.push({ id: "guards", text: `Break the terrace guards (${total(s) - standing(s)} of ${total(s)})`, done: broken(s), optional: true });
+  if (res === undefined && s.alarm && s.keg === "none") objectives.push({ id: "guards", text: `Down or rout the terrace guards (${total(s) - standing(s)} of ${total(s)})`, done: broken(s), optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the ore barge home from Staithe Landing", done: false });
 
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
@@ -326,7 +326,7 @@ const observe: ObserveSpec = {
 
 export const windingEngineTemplate: TemplateDef<EngineState> = {
   id: "winding_engine", title: "The Winding Engine",
-  brief: "The Syndicate has leased the Company's winding engine at Vesper and is driving a cross-cut at the vein. Foul its boiler unseen, blow it up with the Company's own powder, pay its engineer to find a fault, or watch it strike ore.",
+  brief: "The Company has leased its winding engine to the Syndicate, which it calls diversification, and the Syndicate is driving a cross-cut at the vein with it. When it breaks through, the gorge's best ore is theirs. Foul the boiler with grit while the guards look away, blow it up with the Company's own powder, pay the engineer to discover a fault, or watch it strike.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { beatOut: [E0.beat[0]!, E0.beat[1]!], beatBack: [E0.beat[1]!, E0.beat[0]!] },
   props: [

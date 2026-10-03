@@ -66,6 +66,8 @@ interface Actor {
   /** What the world is doing to this body (mud, a blast, rain, water): refreshed a few times a second, read every frame by the actor's `stepExposure`. */
   ground: { mud: number; blast: number; rain: number; washing: boolean };
   groundIn: number;
+  /** performance.now() of the last pool this body bled where it fell (D-064): one pool per fall, not one per blow on a body already down. */
+  bledAt: number;
 }
 
 const tmp = new Vector3();
@@ -248,7 +250,10 @@ export class Game {
     this.combat = new CombatView(stage, session, controls, this.rig, () => this.actors, hud);
     this.combat.viewmodel = this.viewmodel;
     this.combat.audio = this.audio;
-    this.combat.onBlast = (x, z) => this.ledger.noteBlast(x, z);
+    this.combat.onBlast = (x, z, radius) => {
+      this.ledger.noteBlast(x, z);
+      this.debris.blast(x, z, radius * 0.9); // (limbs on the ground go up again: D-064)
+    };
     this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
     this.groundTorches = new GroundTorches(stage.scene);
     controls.canInteract = () => this.usable;
@@ -1305,8 +1310,19 @@ export class Game {
     if (!a || !p) return;
     const h = a.body.height;
     const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;
-    this.hitFx.burst(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power, getGore());
-    if (getGore() === "off") this.combat.fx.bodyDust(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power);
+    const gore = getGore();
+    const x = this.session.value(p, "x");
+    const z = this.session.value(p, "z");
+    this.hitFx.burst(x, this.session.value(p, "y") + h * frac, z, e.dx, e.dz, e.power, gore);
+    // D-064: a hard blow to the head fountains (the Gore setting decides what the drops are: blood, brown, or dust and stars)
+    if (e.zone === ZONE.HEAD && e.power >= 0.5) this.hitFx.burst(x, this.session.value(p, "y") + h * 0.95, z, e.dx * 0.4, e.dz * 0.4, 1, gore, 1);
+    // ...and a body that goes down bleeds where it falls (a little along the blow, where the fall carries it); once per fall
+    const now = performance.now();
+    if (e.down && now - a.bledAt > 15_000) {
+      a.bledAt = now;
+      this.hitFx.bleedOut(x + e.dx * 0.8, z + e.dz * 0.8, 0.55 + 0.45 * e.power);
+    }
+    if (gore === "off") this.combat.fx.bodyDust(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power);
     this.audio.hurt(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), p.look, e.power, e.id === this.session.sessionId);
     a.body.hit(e, a.body.facing); // the heading as drawn: in first person the local body turns with the camera
     if (e.id === this.session.sessionId) this.rig.addShake(0.25 + e.power * 0.5);
@@ -1322,20 +1338,24 @@ export class Game {
     const a = this.actors.get(e.id);
     if (e.id === this.session.sessionId) this.rig.addShake(0.6 + e.power * 0.4);
     const victim = this.session.room.state.players.get(e.id);
-    if (victim) this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
+    if (victim) {
+      this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
+      this.audio.hurt(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, 1, e.id === this.session.sessionId); // (and the victim has an opinion about it)
+    }
     if (!a || !getShowLimbs()) return;
     const piece = a.body.detachLimb(e.limb as LimbId);
     if (!piece) return;
     const gore = getGore();
-    this.hitFx.burst(piece.position.x, piece.position.y, piece.position.z, e.dx, e.dz, 1, gore);
+    this.hitFx.burst(piece.position.x, piece.position.y, piece.position.z, e.dx, e.dz, 1, gore, 0.8); // the joint fountains
     this.debris.spawn(piece, e.dx, e.dz, e.power, gore);
+    if (victim) this.hitFx.bleedOut(this.session.value(victim, "x"), this.session.value(victim, "z"), 0.5); // and the stump bleeds where they stand
   }
 
   private addActor(p: PlayerStateType): Actor {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
     body.onTorchDropped = (x, y, z, yaw, seed) => this.groundTorches.drop(x, y, z, yaw, seed);
     const key = seedFromString(`${p.slot}:${p.name}:${p.npc}`) & 0xffff;
-    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015 };
+    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015, bledAt: -Infinity };
   }
 
   private removeActor(a: Actor): void {

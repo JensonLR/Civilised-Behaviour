@@ -53,7 +53,7 @@ export function dealComplication(c: CampaignState, id: ScenarioTemplateId, seed:
 export const COMPLICATION_HINT: Record<ComplicationId, string> = {
   none: "",
   rival_scouts: "Syndicate scouts are about: they will be early.",
-  rain: "It is going to rain: footsteps and fuses are both affected.",
+  rain: "It is going to rain: footsteps carry less, and fuses sulk.",
   reinforcements: "More men are on their way, which the briefing described as 'a rumour with boots'.",
   rival_bid: "The Syndicate has bid for the prize: the deadline is shorter than the brief said.",
   outriders: "A Syndicate scout rides ahead of the wagon, and he will see you if you let him.",

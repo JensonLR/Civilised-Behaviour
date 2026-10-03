@@ -58,6 +58,27 @@ describe("Ragdoll", () => {
     rig.dispose();
   });
 
+  it("D-064: a blast throws the body up as well as away (lift), and a kick mid-fall throws it on", () => {
+    const peak = (lift: number, kick = false): number => {
+      const { rig, anim } = standing(6);
+      const rd = world.spawn(rig, launch({ power: 1, lift }))!;
+      const y0 = rd.pelvis.y;
+      let top = y0;
+      for (let i = 0; i < 30 && rd.phase === "sim"; i++) {
+        if (kick && i === 6) expect(rd.kick(1, 0, 1, 1)).toBe(true);
+        frame(anim, rd);
+        top = Math.max(top, rd.pelvis.y);
+      }
+      rd.dispose();
+      rig.dispose();
+      return top - y0;
+    };
+    const bullet = peak(0);
+    const blast = peak(1);
+    expect(blast).toBeGreaterThan(bullet + 0.4);
+    expect(peak(0, true)).toBeGreaterThan(bullet + 0.2);
+  });
+
   it("the shove sends the body the way the blow pushed it, and harder blows go further", () => {
     const travel = (dx: number, dz: number, power: number): Vector3 => {
       const { rig, anim } = standing(5);

@@ -72,6 +72,8 @@ export interface HitInfo {
   severBias?: number;
   /** Who dealt it (a session id or an `npc:` row key), when known: the campaign layer reads it to tell a declaration of war from an accident. */
   by?: string;
+  /** 0..1, blasts only: how hard it threw the body up (carried to the clients on the hit event; cosmetic). */
+  lift?: number;
 }
 
 interface Revive {
@@ -132,7 +134,8 @@ export class Casualties {
     }
     const down = p.health === 0;
     const power = Math.min(1, amount / 60);
-    this.host.emitHit({ id: sessionId, zone, dx: dx / len, dz: dz / len, power, down });
+    const lift = hit.lift !== undefined && hit.lift > 0 ? Math.min(1, hit.lift) : 0;
+    this.host.emitHit(lift > 0 ? { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down, lift } : { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down });
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
     // so unrelated hits never consume randomness.
     const target = zoneLimb(zone);
@@ -141,6 +144,33 @@ export class Casualties {
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
     if (down) this.down(sessionId, p);
+  }
+
+  /**
+   * D-064: a blast caught somebody already down. Nothing about their health changes (the downed are past harm: revive or rout decides them), but the body is THROWN (a cosmetic hit
+   * event the clients ragdoll), and a fallen ENEMY or stranger (an NPC row) may come apart: the same sever roll a blow to that limb would get. A downed member of the party is only
+   * thrown; their limbs answer to blows they took standing (a lost limb is a campaign scar, never a cannon's afterthought on a body that could not dodge).
+   */
+  toss(sessionId: string, dirX: number, dirZ: number, power: number, lift: number, severDamage: number, severBias = 1): void {
+    const p = this.host.players.get(sessionId);
+    if (!p || (p.flags & FLAG.DOWNED) === 0 || !(power > 0)) return;
+    let dx = dirX;
+    let dz = dirZ;
+    const len = Math.hypot(dx, dz);
+    if (len > 1e-6) {
+      dx /= len;
+      dz /= len;
+    } else {
+      dx = 0;
+      dz = 1;
+    }
+    const zone = pickZone(this.host.rng);
+    const pw = Math.min(1, power);
+    this.host.emitHit({ id: sessionId, zone, dx, dz, power: pw, down: true, lift: Math.max(0, Math.min(1, lift)) });
+    const target = zoneLimb(zone);
+    if (p.npc === 0 || target === undefined || !this.host.dismemberment() || (p.missing & target) !== 0) return;
+    const chance = severChance(severDamage * Math.max(0, severBias), woundLevel(p.wounds, zone));
+    if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx, dz, pw);
   }
 
   /** Takes a limb off (state + event). Also the entry point for scripted losses (campaign events, debug). No-op if already gone. */

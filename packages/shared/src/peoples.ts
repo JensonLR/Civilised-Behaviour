@@ -34,6 +34,7 @@ export interface PeopleDef {
   /** What their buildings are made of and coloured: the dress takes its dyes from here (LEVEL_PLAN.md names the same words per region). */
   architecture: string;
   /** Their dyes, commonest first (`DYE`). */
+  /** D-065: the first two are the garment's (never the Society's khaki or navy: a native in sand or indigo read as an explorer at ten metres); the rest are trim, hat and wrap. */
   dyes: readonly DyeName[];
   /** What reads at 30 m: the silhouette in four words. */
   silhouette: string;
@@ -46,7 +47,7 @@ export const PEOPLE: Readonly<Record<PeopleId, PeopleDef>> = {
     id: "mereborn", name: "the Mereborn", home: "hollowmere",
     blurb: "Hill-and-river villagers who have learned that a smile is cheaper than a lawsuit and an invoice is only a sort of weather.",
     architecture: "lime-washed walls over river-stone footings, dark framing, indigo doors, teal shutters, clay-tile and scaled-shingle roofs",
-    dyes: ["indigo", "teal", "ochre", "sand", "olive", "rust"],
+    dyes: ["teal", "ochre", "rust", "olive", "indigo", "sand"],
     silhouette: "broad reed rain-hat, long smock, clogs, lime-dabbed hands",
     grand: "the Keeper of the Hours and the hall's elders, in plum and a tall tiered hat",
   },
@@ -54,7 +55,7 @@ export const PEOPLE: Readonly<Record<PeopleId, PeopleDef>> = {
     id: "kessarine", name: "the Kessarine", home: "kessar",
     blurb: "Coast and hill-fort folk of the Ward of the Nine Lamps: tall, lean, lamp-bearing, and professionally unsurprised by anybody's paperwork.",
     architecture: "ochre sandstone, red-tile roofs, ward-red banners and ward-blue cloth, iron lamp-brackets at every door",
-    dyes: ["rust", "indigo", "ochre", "sand", "red", "stone"],
+    dyes: ["rust", "ochre", "indigo", "red", "sand", "stone"],
     silhouette: "tall and narrow, ankle-length lamp-robe, pointed lamp-hood, a small lamp at the belt",
     grand: "the Lamp-Wardens, in red with nine brass lamps on a chain",
   },
@@ -78,7 +79,7 @@ export const PEOPLE: Readonly<Record<PeopleId, PeopleDef>> = {
     id: "brinefolk", name: "the Brinefolk", home: "saltmarket",
     blurb: "Delta stilt-dwellers and the Brine Houses' factors: waders and counters of beads, who sell the tide by deed and everything else by the lot.",
     architecture: "silvered timber on stilts, pale lime, house banners in teal and ox, salt-pan white, glass floats on every rail",
-    dyes: ["teal", "olive", "sand", "ox", "stone", "indigo"],
+    dyes: ["teal", "ox", "olive", "stone", "sand", "indigo"],
     silhouette: "short and round, wading smock, wide flat tide-hat, float-cord and net",
     grand: "the House heads, in ox and teal with a long tally-bead sash",
   },
@@ -86,7 +87,7 @@ export const PEOPLE: Readonly<Record<PeopleId, PeopleDef>> = {
     id: "wayfarers", name: "the Wayfarers", home: "visitors",
     blurb: "Traders, sailors and pilgrims of all the other peoples who pass through the Society's depot: each wears their own people's dress with a travelling kit over it.",
     architecture: "none: they sleep on boats and in the tavern",
-    dyes: ["sand", "olive", "indigo", "ochre", "rust", "teal"],
+    dyes: ["olive", "rust", "ochre", "teal", "indigo", "sand"],
     silhouette: "any of the others, plus a pack, a bedroll or a trade-sample case",
     grand: "the harbour-master's guests, in a mix of two peoples' finest",
   },

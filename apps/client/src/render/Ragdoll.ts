@@ -17,7 +17,7 @@ type Body = InstanceType<Rapier["RigidBody"]>;
  */
 export const RAGDOLL = {
   /** Simultaneous ragdolls. Four players plus headroom for NPCs later; more requests fall back to the plain animation. */
-  maxLive: 6,
+  maxLive: 8,
   fixedDt: 1 / 60,
   maxStepsPerFrame: 3,
   solverIterations: 10,
@@ -91,6 +91,8 @@ export interface RagdollLaunch {
   power: number;
   /** ZONE that was hit. */
   zone: number;
+  /** 0..1, blasts (D-064): how hard the body is thrown UP as well as away. */
+  lift?: number;
 }
 
 const _q = new Quaternion();
@@ -231,7 +233,8 @@ export class Ragdoll {
 
     const seed = this.seedPose();
     const dirLen = Math.hypot(launch.dx, launch.dz) || 1;
-    const push = 1.0 + launch.power * 3.2;
+    const lift = Math.max(0, Math.min(1, launch.lift ?? 0));
+    const push = (1.0 + launch.power * 3.2) * (1 + lift * 1.3);
     const hitBody = ZONE_BODY[launch.zone] ?? "torso";
     for (let i = 0; i < ORDER.length; i++) {
       const name = ORDER[i]!;
@@ -251,12 +254,13 @@ export class Ragdoll {
       body.setLinvel(
         {
           x: launch.vx * RAGDOLL.inheritVelocity + (launch.dx / dirLen) * push * k * (0.7 + Math.random() * 0.3),
-          y: launch.vy * RAGDOLL.inheritVelocity + 1.0 + launch.power * 1.6,
+          y: launch.vy * RAGDOLL.inheritVelocity + 1.0 + launch.power * 1.6 + lift * (5 + Math.random() * 1.5),
           z: launch.vz * RAGDOLL.inheritVelocity + (launch.dz / dirLen) * push * k * (0.7 + Math.random() * 0.3),
         },
         true,
       );
-      body.setAngvel({ x: (Math.random() - 0.5) * 3, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 3 }, true);
+      const tumble = 3 + lift * 7; // (a blast cartwheels a body; a bullet only turns it)
+      body.setAngvel({ x: (Math.random() - 0.5) * tumble, y: (Math.random() - 0.5) * tumble, z: (Math.random() - 0.5) * tumble }, true);
       this.bodies.push(body);
     }
 
@@ -334,6 +338,23 @@ export class Ragdoll {
     this.anchorX = x;
     this.anchorZ = z;
     this.hasAnchor = true;
+  }
+
+  /**
+   * D-064: a second blow while the body is still falling (a blast landing on a body already going down): every part is shoved along it and up, and the fall runs on. Only in the
+   * simulated phase; a body blending out or done is handed a fresh ragdoll by its actor instead.
+   */
+  kick(dx: number, dz: number, power: number, lift: number): boolean {
+    if (this.phase !== "sim" || this.bodies.length === 0) return false;
+    const len = Math.hypot(dx, dz) || 1;
+    const push = (1 + power * 3.2) * (1 + lift * 1.3);
+    for (const b of this.bodies) {
+      const m = b.mass();
+      b.applyImpulse({ x: (dx / len) * push * m, y: (0.6 + lift * 5.5) * m, z: (dz / len) * push * m }, true);
+    }
+    this.calm = 0;
+    this.age = Math.min(this.age, RAGDOLL.maxSimSeconds - 1.2); // (enough time left to land)
+    return true;
   }
 
   /** Called by the world after every fixed step: ages the fall and decides when it has settled (or run too long). */

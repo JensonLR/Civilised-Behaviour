@@ -247,10 +247,10 @@ const HINT: Record<string, string> = {
   fighting: "The raiders are going for the yard. Two of them in it together, long enough, and the stores go up. Break them before that.",
 };
 const DONE: Record<string, string> = {
-  post_held: "The raid broke in the post's yard. The stores stand. Sail home from the landing.",
-  post_burned: "The stores are ash and the raiders have the post's flag. The post itself stands, weaker. Sail home from the landing.",
-  protection_paid: "The raiders were paid to leave. The post stands; the Syndicate has a client. Sail home from the landing.",
-  abandoned: "The expedition is down, and the raiders have the yard. Sail home and explain.",
+  post_held: "The raid broke in the post's yard. The stores stand, and the watch has a story it will tell until it dies of old age. Take the boat home.",
+  post_burned: "The stores are ash and the raiders have the post's flag. The post itself stands, weaker and well lit. Take the boat home from the landing.",
+  protection_paid: "The raiders were paid to leave. The post stands; the Syndicate has a client, and the Society has a standing order. Take the boat home.",
+  abandoned: "The expedition is down, and the raiders have the yard. Take the boat home and explain.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   reinforcements: "The raiding party is bigger than the agent's last letter said.",
@@ -265,10 +265,10 @@ function view(s: RaidState, now: number): ScenarioView {
     { id: "post", text: "Get to the Society's post before the raiders do", done: s.near.post > 0 || s.landed },
     { id: "defend", text: res === "post_burned" ? "Lost: the stores were burned" : res === "abandoned" ? "Lost: the expedition went down" : "Keep the raiders' torches out of the post's yard", done: won },
   ];
-  if (res === undefined && s.landed && !s.attacking && !s.captainGone) objectives.push({ id: "captain", text: `Hear the captain's offer (£${s.price} for a season's protection), or refuse it`, done: false, optional: true });
+  if (res === undefined && s.landed && !s.attacking && !s.captainGone) objectives.push({ id: "captain", text: `Hear the captain out (£${s.price} for "protection"), or refuse`, done: false, optional: true });
   if (res === undefined && s.attacking) objectives.push({ id: "break", text: `Drop or rout ${needed(s)} of the ${s.crew.total} raiders (${Math.min(brokenCount(s), needed(s))} so far)`, done: isBroken(s), optional: true });
-  if (res === undefined && s.attacking && s.inYard.length > 0) objectives.push({ id: "yard", text: `Raiders in the yard: ${s.inYard.length} (two together for ${torchS(s)} seconds burn the stores)`, done: false, optional: true });
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
+  if (res === undefined && s.attacking && s.inYard.length > 0) objectives.push({ id: "yard", text: `Drive the raiders out of the yard (${s.inYard.length} inside)`, done: false, optional: true });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
@@ -343,7 +343,7 @@ const observe: ObserveSpec = {
 
 export const outpostRaidTemplate: TemplateDef<RaidState> = {
   id: "outpost_raid", title: "The Raid on the Post",
-  brief: "The Syndicate means to raid the Society's post on Kessar's south bank, and this time the party is there. Hold the yard, pay the raiders' captain for a season's \"protection\", or watch the stores burn.",
+  brief: "The Syndicate means to raid the Society's post on Kessar's south bank, and for once the party is there when it lands. Its captain will stop at the gate and offer a season's \"protection\" at a reasonable price; the Society's insurers have already declined the post as a fire risk. Hold the yard, pay him, or watch the stores burn.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { assault: RAID_SITES.assault },
   sites: { yard: SITE, muster: RAID_SITES.muster },

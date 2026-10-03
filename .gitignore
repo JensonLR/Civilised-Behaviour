@@ -21,3 +21,6 @@ apps/desktop/release/
 # the desktop shell's client build (vite --mode desktop), never the web deploy
 dist-desktop/
 soak*.json
+
+# Claude Code agent worktrees (tooling state, never project content)
+.claude/worktrees/

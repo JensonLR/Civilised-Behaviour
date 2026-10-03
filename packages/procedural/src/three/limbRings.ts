@@ -130,7 +130,7 @@ function clampLeg(rings: Ring[], P: Proportions): Ring[] {
 }
 
 /** Trouser cuts by index (spec.trousers). */
-export const TR = { TAILORED: 0, STRIPED: 1, BREECHES: 2, BAGGY: 3, PLUS_FOURS: 4, JODHPURS: 5, SHORTS: 6 } as const;
+export const TR = { TAILORED: 0, STRIPED: 1, BREECHES: 2, BAGGY: 3, PLUS_FOURS: 4, JODHPURS: 5, SHORTS: 6, WRAP: 7 } as const;
 
 /** Thigh sections in the hip frame (hanging down) of the spec's trouser cut, before the top is rounded into the hip. */
 export function trouserRings(c: BodyCtx): Ring[] {

@@ -280,17 +280,17 @@ function leave(s: MineState): ReturnType<TemplateDef<MineState>["leave"]> {
 
 const HINT: Record<string, string> = {
   approach: "The Lower Gallery is at the head of the gorge, behind a fall of rock the Company calls a schedule variance. Eleven men are on the other side. Walk up the ore road.",
-  waiting: "The fall is shored with pit-props from the Company's yard (carry a crate to it) and dug by hand (INTERACT with empty hands, over and over). The foreman has a schedule and the Guild has a bill. A barrel of powder by the magazine is faster, and rather louder.",
+  waiting: "The fall is shored with pit-props from the Company's yard (carry a crate to it) and dug by hand (Use at the fall with empty hands, over and over). The foreman has a schedule and the Guild has a bill. A barrel of powder by the magazine is faster, and rather louder.",
   parley: "They are listening. Mind what you promise; the Company minutes everything and the Guild minutes the minutes.",
   rigging: "The fuse is lit. Whatever else you meant to do at the fall, you now mean to do it somewhere else.",
   fighting: "The yard has taken sides. The foreman and the choir have run for it, and the fall is still a fall.",
 };
 const DONE: Record<string, string> = {
-  dug_out: "Eleven miners out, by hand, behind the shoring. The Guild is disappointed in a professional way. Sail home from the Staithe Landing.",
-  blasted_through: "The way is open and the roof has been moved. The Guild has been informed, and is already on the road. Sail home from the landing.",
-  sealed: "The Lower Gallery is sealed. The Company's schedule is met. The Guild will bill you for having been told. Sail home from the landing.",
-  consecrated: "The Guild has the gallery, a lamp, a bell and a very long hymn. The funeral is for the living and the invoice is for you. Sail home from the landing.",
-  abandoned: "The expedition is down. The gorge is unmoved. Sail home and explain yourselves.",
+  dug_out: "Eleven miners out, by hand, behind the shoring. The Guild is disappointed in a professional way. Take the ore barge home from Staithe Landing.",
+  blasted_through: "The way is open and the roof has been rearranged. The Guild has been informed, and is already on the road with a hymn and a tape measure. Take the ore barge home.",
+  sealed: "The Lower Gallery is sealed on schedule, with eleven men behind it. The Company is satisfied. The Guild will bill you for having been told. Take the ore barge home.",
+  consecrated: "The Guild has the gallery, a lamp, a bell and a very long hymn. The funeral is for the living and the invoice is for you. Take the ore barge home.",
+  abandoned: "The expedition is down. The gorge is unmoved. Take the ore barge home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rain: "Rain is gathering on the plateau, and the Company wants the gallery shut before the dry river runs: its schedule is short.",
@@ -302,15 +302,15 @@ function view(s: MineState, now: number): ScenarioView {
   const freed = res === "dug_out" || res === "blasted_through";
   const objectives: ObjectiveView[] = [
     { id: "approach", text: "Walk up the ore road to the Lower Gallery", done: s.near.fall > 0 || s.phase !== "approach" },
-    { id: "timber", text: `Shore the fall with timber: carry a crate to it (${Math.min(s.timber, MINE.timberNeed)} of ${MINE.timberNeed})`, done: s.timber >= MINE.timberNeed, optional: true },
-    { id: "dig", text: `Dig the fall by hand (${Math.floor(s.dig)}%)`, done: s.dig >= 100, optional: true },
-    { id: "foreman", text: s.bought ? "The foreman's schedule has been revised" : s.form === "filed" ? "The Variance Form is stamped" : s.form === "pending" ? "The Variance Form is with the Stamp" : "Settle the foreman's schedule (handling charge, or a Variance Form)", done: s.bought || s.form === "filed", optional: true },
-    { id: "guild", text: s.vigil ? "The choir keeps its vigil at the fall" : `Hear the Guild's bill (£${s.price.bill}); the choir arrives when the air runs out`, done: s.vigil || res === "consecrated", optional: true },
-    { id: "miners", text: `Eleven miners behind the fall (${Math.max(0, s.miners.total - dead(s))} alive)`, done: freed },
+    { id: "timber", text: `Shore the fall: carry timber crates to it (${Math.min(s.timber, MINE.timberNeed)} of ${MINE.timberNeed})`, done: s.timber >= MINE.timberNeed, optional: true },
+    { id: "dig", text: `Dig at the fall by hand, empty-handed (${Math.floor(s.dig)}%)`, done: s.dig >= 100, optional: true },
+    { id: "foreman", text: s.bought ? "The foreman's schedule has been revised" : s.form === "filed" ? "The Variance Form is stamped" : s.form === "pending" ? "The Variance Form is with the Stamp" : "Stop the foreman's clock: pay, or file a Variance Form", done: s.bought || s.form === "filed", optional: true },
+    { id: "guild", text: s.vigil ? "The choir keeps its vigil at the fall" : `Hear the Dirge-Master's bill (£${s.price.bill}), if you must`, done: s.vigil || res === "consecrated", optional: true },
+    { id: "miners", text: `Eleven miners behind the fall: get them out (${Math.max(0, s.miners.total - dead(s))} alive)`, done: freed },
   ];
   if (s.keg !== "none" && res === undefined) objectives.push({ id: "keg", text: s.keg === "set" ? "The keg is lit. Get clear." : "The powder has gone off", done: s.keg === "fired", optional: true });
-  if (s.hostile && res === undefined) objectives.push({ id: "peace", text: "The yard has taken sides", done: false, optional: true });
-  if (res !== undefined) objectives.push({ id: "home", text: "Sail home from the Staithe Landing", done: false });
+  if (s.hostile && res === undefined) objectives.push({ id: "peace", text: "The yard has scattered; the fall is still there", done: false, optional: true });
+  if (res !== undefined) objectives.push({ id: "home", text: "Take the ore barge home from Staithe Landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked.foreman) hint += ` (The foreman's schedule seals at ${Math.round(s.sealAt)} seconds unless somebody pays for it.)`;
   if (res === undefined && s.asked.guild) hint += " (The Guild's choir arrives at the end of the air, which it has measured on its own account.)";
@@ -376,7 +376,7 @@ const observe: ObserveSpec = {
 
 export const mineRescueTemplate: TemplateDef<MineState> = {
   id: "mine_rescue", title: "The Lower Gallery",
-  brief: "Eleven miners are behind a fall in the Lower Gallery. Dig them out by hand behind shoring, blast through, let the Company seal the gallery, or let the Guild consecrate it; the Guild bills per outcome and the foreman bills per hour.",
+  brief: "Eleven miners are behind a fall in the Lower Gallery, entered in the Company's books as a schedule variance. The foreman means to seal it on time; the Lamentation Guild has a choir standing by and an invoice for every outcome. Shore the fall and dig them out by hand, blast through with the Company's powder, buy off the foreman's schedule, or let the Company and the Guild divide the afternoon.",
   init, reduce, view, outcome, roster, leave, observe,
   props: [...VESPER_STOCK.timber.map((p, i) => ({ id: `timber${i}`, kind: PropKind.CRATE as number, x: p.x, z: p.z })), { id: "keg", kind: PropKind.BARREL as number, x: VESPER_STOCK.keg.x, z: VESPER_STOCK.keg.z }],
   sites: { blast: VESPER_STOCK.blast, fall: VESPER_STOCK.dig, adit: VESPER_ANCHORS.adit },

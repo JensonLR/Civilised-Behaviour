@@ -303,10 +303,16 @@ export class CharacterActor {
     const sin = Math.sin(facing);
     this.anim.flinch(e.dx * cos - e.dz * sin, e.dx * sin + e.dz * cos, e.power);
     this.painTimer = 0.5 + e.power * 0.7;
-    if (!e.down || this.ragdoll) return;
+    if (!e.down) return;
+    const lift = e.lift ?? 0;
+    // D-064: a blast finding a body still in the air throws it on; a body already lying (or easing back into the pose) is picked up and thrown again
+    if (this.ragdoll) {
+      if (lift > 0) this.ragdoll.kick(e.dx, e.dz, e.power, lift);
+      return;
+    }
     const world = this.ragdolls();
     if (!world) return;
-    this.ragdoll = world.spawn(this.rig, { vx: this.lastVx, vy: this.lastVy, vz: this.lastVz, dx: e.dx, dz: e.dz, power: e.power, zone: e.zone });
+    this.ragdoll = world.spawn(this.rig, { vx: this.lastVx, vy: this.lastVy, vz: this.lastVz, dx: e.dx, dz: e.dz, power: e.power, zone: e.zone, lift });
   }
 
   /**

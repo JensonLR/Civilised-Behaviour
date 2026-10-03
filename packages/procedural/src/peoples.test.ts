@@ -3,7 +3,7 @@ import { DYE, PALETTE, PEOPLE, PEOPLE_IDS, WAYFARER_MIX, type PeopleId } from "@
 import * as C from "./catalog.ts";
 import { COLONIAL_CODED, PEOPLE_ADDITIONS_LANDED, PEOPLE_CATALOG_ADDITIONS, PEOPLE_OVERLAYS, applyPeople, codedList, type AdditionKey } from "./peoples.ts";
 import { readFileSync } from "node:fs";
-import { FIELDS, generateCharacter, HISTORY_KEYS, NATIVE_FROM, sanitizeSpec } from "./spec.ts";
+import { FIELDS, applyClientAppearance, generateCharacter, HISTORY_KEYS, NATIVE_FROM, sanitizeSpec, societyDress } from "./spec.ts";
 
 /**
  * The contract's own tests (package C extends them): the overlay is deterministic, never touches skin, eye or hair colour or history, strips the colonial uniform, keeps the people apart on
@@ -94,7 +94,7 @@ describe("overlays and catalogue additions", () => {
     const names = Object.values(PEOPLE_CATALOG_ADDITIONS).flat() as string[];
     expect(new Set(names).size).toBe(names.length);
     for (const n of names) expect(banned.test(n), n).toBe(false);
-    const lists: Record<AdditionKey, readonly string[]> = { HATS: C.HATS, JACKETS: C.JACKETS, NECKWEAR: C.NECKWEAR, FACE_PAINT: C.FACE_PAINT, HAIR_STYLES: C.HAIR_STYLES, HAIR_ACCESSORIES: C.HAIR_ACCESSORIES, HIP_GEAR: C.HIP_GEAR, BOOTS: C.BOOTS };
+    const lists: Record<AdditionKey, readonly string[]> = { HATS: C.HATS, JACKETS: C.JACKETS, NECKWEAR: C.NECKWEAR, FACE_PAINT: C.FACE_PAINT, HAIR_STYLES: C.HAIR_STYLES, HAIR_ACCESSORIES: C.HAIR_ACCESSORIES, HIP_GEAR: C.HIP_GEAR, BOOTS: C.BOOTS, TROUSERS: C.TROUSERS };
     for (const k of Object.keys(PEOPLE_CATALOG_ADDITIONS) as AdditionKey[]) {
       const add = PEOPLE_CATALOG_ADDITIONS[k];
       if (!PEOPLE_ADDITIONS_LANDED) continue;
@@ -116,8 +116,8 @@ describe("the fictional peoples (D-038): silhouettes, dress, the guardrails", ()
   });
 
   it("NATIVE_FROM is where the additions start (end of each list), so the whole addition block is what the generic generator skips", () => {
-    const lists: Record<string, readonly string[]> = { hat: C.HATS, jacket: C.JACKETS, neckwear: C.NECKWEAR, facePaint: C.FACE_PAINT, hair: C.HAIR_STYLES, hairAcc: C.HAIR_ACCESSORIES, hipGear: C.HIP_GEAR, boots: C.BOOTS };
-    const keys: Record<string, AdditionKey> = { hat: "HATS", jacket: "JACKETS", neckwear: "NECKWEAR", facePaint: "FACE_PAINT", hair: "HAIR_STYLES", hairAcc: "HAIR_ACCESSORIES", hipGear: "HIP_GEAR", boots: "BOOTS" };
+    const lists: Record<string, readonly string[]> = { hat: C.HATS, jacket: C.JACKETS, neckwear: C.NECKWEAR, facePaint: C.FACE_PAINT, hair: C.HAIR_STYLES, hairAcc: C.HAIR_ACCESSORIES, hipGear: C.HIP_GEAR, boots: C.BOOTS, trousers: C.TROUSERS };
+    const keys: Record<string, AdditionKey> = { hat: "HATS", jacket: "JACKETS", neckwear: "NECKWEAR", facePaint: "FACE_PAINT", hair: "HAIR_STYLES", hairAcc: "HAIR_ACCESSORIES", hipGear: "HIP_GEAR", boots: "BOOTS", trousers: "TROUSERS" };
     for (const [field, from] of Object.entries(NATIVE_FROM)) {
       expect(lists[field]!.slice(from), field).toEqual([...PEOPLE_CATALOG_ADDITIONS[keys[field]!]]);
     }
@@ -172,5 +172,29 @@ describe("the fictional peoples (D-038): silhouettes, dress, the guardrails", ()
   it("no catalogue name in any list is a real people's dress or a real tradition (the old Fez, Poncho and Top Knot stay in the creator, never on a native)", () => {
     const banned = /\b(turban|kimono|kilt|sari|kaftan|keffiyeh|sombrero|beret|war paint|headdress|burka|hijab|yarmulke|tartan|sarong|dashiki|lederhosen)\b/i;
     for (const list of [C.HATS, C.JACKETS, C.NECKWEAR, C.FACE_PAINT, C.HAIR_STYLES, C.HAIR_ACCESSORIES, C.HIP_GEAR, C.BOOTS]) for (const n of list) expect(banned.test(n), n).toBe(false);
+  });
+});
+
+describe("D-065: the peoples and the Society share no dress", () => {
+  it("a native never wears anything a player can (no trousers, boots, coat or cape of the Society's), and always a wrap", () => {
+    for (const p of PEOPLE_IDS) {
+      for (let s = 1; s <= 120; s++) {
+        const spec = applyPeople(generateCharacter(s * 977), p, s) as unknown as Record<string, number>;
+        expect(C.TROUSERS[spec.trousers!], `${p} seed ${s}`).toBe("Wrap Skirt");
+        expect(spec.jacket!, `${p} seed ${s} jacket ${C.JACKETS[spec.jacket!]}`).toBeGreaterThanOrEqual(NATIVE_FROM.jacket!);
+        expect(["Tall Riding", "Spats", "Spurred", "Puttees", "Wellingtons", "Hobnailed", "Ankle"]).not.toContain(C.BOOTS[spec.boots!]);
+      }
+    }
+  });
+
+  it("a player never wears anything a native does: societyDress clears every people's option, wherever a look comes in", () => {
+    for (let s = 1; s <= 200; s++) {
+      const native = applyPeople(generateCharacter(s), PEOPLE_IDS[s % PEOPLE_IDS.length]!, s);
+      const mine = societyDress(native) as unknown as Record<string, number>;
+      for (const [field, from] of Object.entries(NATIVE_FROM)) expect(mine[field]!, `seed ${s} ${field}`).toBeLessThan(from);
+      // and the creator's hand-over keeps it so (a pasted native look, a preset)
+      const handed = applyClientAppearance(generateCharacter(s + 1), native) as unknown as Record<string, number>;
+      for (const [field, from] of Object.entries(NATIVE_FROM)) expect(handed[field]!, `seed ${s} ${field}`).toBeLessThan(from);
+    }
   });
 });

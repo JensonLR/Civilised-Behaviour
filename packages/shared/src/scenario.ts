@@ -177,41 +177,41 @@ export function scenarioOutcome(s: ScenarioState): ScenarioOutcome | undefined {
 // ---- what the HUD shows (authored) -------------------------------------------------------------------------------------------------------------
 
 const HINT: Record<CrossingPhase, string> = {
-  approach: "Follow the road north to the toll bar. The Ward owns the only bridge for forty miles and has opinions about it.",
-  standoff: "The Lamp-Warden is at her bar. Talk to her, or consider the alternatives: a rifle, or a barrel from the powder cart south of the bridge.",
-  parley: "The Warden is listening. Mind what you promise; she keeps receipts.",
-  fighting: "The garrison is armed and offended. Put six in ten of them down or to flight and the bar is yours.",
+  approach: "Follow the road north to the toll bar. The Lamp-Warden will name a price; the Syndicate, when it arrives, will name a higher one, and she knows it.",
+  standoff: "The Lamp-Warden is at her bar. Walk up and Use to talk. The alternatives are a rifle, or a barrel from the powder cart south of the bridge, carried to the pier.",
+  parley: "The Warden is listening. Mind what you promise; she keeps receipts, and she reads them to people.",
+  fighting: "The garrison is armed and offended. Put six in ten of them down or to flight and the bar is yours, along with the Ward's lasting attention.",
   rigging: "The fuse is lit. Nobody should be standing on the bridge, least of all you.",
 };
 const DONE_HINT: Record<CrossingResolution, string> = {
-  paid: "Toll paid, receipt stamped. The bar lifts. Sail home from the landing when you are ready.",
-  bargained: "Toll haggled down. The bar lifts, resentfully. Sail home from the landing.",
-  bribed: "A quiet word and a quiet envelope. The bar lifts. The Syndicate will hear of it. Sail home from the landing.",
-  forced: "The garrison is broken and the bar is yours. The Ward will remember. Sail home from the landing.",
-  sabotaged: "The bridge is gone. Structurally, it was always a suggestion. Sail home from the landing.",
-  rival_secured: "The Syndicate bought the crossing while you dithered. Sail home and read about it.",
-  abandoned: "The expedition is down. The Ward is unmoved. Sail home and explain yourselves.",
+  paid: "Toll paid, receipt stamped, bar up. The Society has bought the use of a bridge it will describe as its own. Take the boat home from the landing.",
+  bargained: "Toll haggled down. The bar lifts, resentfully, and the Warden makes a note of your faces for next time. Take the boat home from the landing.",
+  bribed: "A quiet word and a quieter envelope. The bar lifts, and somewhere a quartermaster is pricing boots. The Syndicate will hear of it. Take the boat home.",
+  forced: "The garrison is broken and the bar is yours. The Ward will remember every name; the paper will remember none. Take the boat home from the landing.",
+  sabotaged: "The bridge is gone. Structurally, it was always a suggestion. Nobody will be charging a toll on it now, including you. Take the boat home.",
+  rival_secured: "The Syndicate bought the crossing while you were still being polite about it. Take the boat home and read about it.",
+  abandoned: "The expedition is down. The Ward is unmoved, and the toll has not come down either. Take the boat home and explain yourselves.",
 };
 
 export function scenarioView(s: ScenarioState, worldMsNow: number): ScenarioView {
   const res = s.resolution;
   const won = res !== undefined && res !== "abandoned" && res !== "rival_secured";
   const objectives: ObjectiveView[] = [
-    { id: "reach", text: "Reach the Ward's toll bar", done: s.phase !== "approach" },
+    { id: "reach", text: "Walk north to the Ward's toll bar", done: s.phase !== "approach" },
     {
       id: "secure",
-      text: res === "rival_secured" ? "Lost: the Syndicate bought the crossing" : res === "abandoned" ? "Lost: the expedition went down" : "Secure the river crossing, by whatever means",
+      text: res === "rival_secured" ? "Lost: the Syndicate bought the crossing" : res === "abandoned" ? "Lost: the expedition went down" : "Get the bar raised: talk to the Lamp-Warden, or don't",
       done: won,
     },
   ];
   if (s.phase === "fighting" || (s.hostile && s.phase !== "resolved")) {
     const need = Math.ceil(s.total * SCENARIO.routFraction);
-    objectives.push({ id: "rout", text: `Break the garrison (${Math.min(need, s.total - s.alive)} of ${need})`, done: res === "forced", optional: true });
+    objectives.push({ id: "rout", text: `Down or rout the garrison (${Math.min(need, s.total - s.alive)} of ${need})`, done: res === "forced", optional: true });
   }
   if (s.phase === "rigging" || res === "sabotaged") {
-    objectives.push({ id: "clear", text: "Clear the deck before the fuse burns", done: res === "sabotaged", optional: true });
+    objectives.push({ id: "clear", text: "Get off the bridge before the fuse burns", done: res === "sabotaged", optional: true });
   }
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
 
   const wet = s.rain >= SCENARIO.wetRain && s.phase !== "resolved";
   let hint = s.phase === "resolved" ? (res ? (DONE_HINT as Record<string, string>)[res] ?? "" : "The bridge is a ruin already. The ford will do.") : HINT[s.phase as CrossingPhase];

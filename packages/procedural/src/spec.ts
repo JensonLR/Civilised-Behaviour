@@ -131,7 +131,7 @@ const FROZEN_OPTIONS: Readonly<Record<string, number>> = {
  * Where the NATIVE-PEOPLES options start in each list (D-038): `applyPeople` draws them for the fictional peoples; the generic generator (the Society's folk, the creator's dice) never
  * does, so adding them changed nobody who already existed.
  */
-export const NATIVE_FROM: Readonly<Record<string, number>> = { hat: 21, jacket: 11, neckwear: 9, facePaint: 7, hair: 17, hairAcc: 6, hipGear: 10, boots: 9 };
+export const NATIVE_FROM: Readonly<Record<string, number>> = { hat: 21, jacket: 11, neckwear: 9, facePaint: 7, hair: 17, hairAcc: 6, hipGear: 10, boots: 9, trousers: 7 };
 /** Chance that a generated character picks one of the options appended later, per field. */
 const NOVELTY_ODDS: Readonly<Record<string, number>> = { hat: 0.34, hair: 0.34, jacket: 0.3, moustache: 0.25, beard: 0.25, boots: 0.3, eyewear: 0.3, trousers: 0.25 };
 /** Chance that a batch field is set at all (default 0.4). Rare vanity (tattoos, face paint) stays rare so a crowd reads as a crowd. */
@@ -327,9 +327,20 @@ export const HISTORY_KEYS = ["scars", "teeth", "eyepatch", "burnt", "woodenLeg",
 
 /** Applies a client-submitted look on top of the server's record: appearance from the client, history from the server. */
 export function applyClientAppearance(current: CharacterSpec, incoming: CharacterSpec): CharacterSpec {
-  const out = { ...incoming };
+  const out = societyDress(incoming);
   for (const k of HISTORY_KEYS) out[k] = current[k];
   return out;
+}
+
+/**
+ * D-065: an explorer dresses as the Society, never as the peoples they visit. Every option a people wears (the catalogue from `NATIVE_FROM` on: the reed brims, lamp robes, wraps
+ * and sandals) is the peoples' alone, as the Society's uniform is never theirs (peoples.ts `COLONIAL_CODED`): a player's look is cleared of them wherever it enters (the creator, a
+ * pasted code, the server's join and its look change). Returns a copy.
+ */
+export function societyDress(spec: CharacterSpec): CharacterSpec {
+  const out = { ...spec } as Record<string, number>;
+  for (const [k, from] of Object.entries(NATIVE_FROM)) if ((out[k] ?? 0) >= from) out[k] = 0;
+  return out as unknown as CharacterSpec;
 }
 
 /** Randomise while keeping campaign history (scars, teeth...) intact: used by the creator's dice button. */

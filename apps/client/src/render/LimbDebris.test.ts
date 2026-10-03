@@ -52,6 +52,33 @@ describe("LimbDebris", () => {
     expect(stuck).toEqual([]);
   });
 
+  it("D-064: a blast throws the limbs lying near it up and away again; one out of reach stays put", () => {
+    const d = new LimbDebris(new Scene(), flat);
+    const near = limb();
+    near.position.set(1, 1.1, 0);
+    const far = limb();
+    far.position.set(30, 1.1, 0);
+    d.spawn(near, 0, 1, 0.3, "full");
+    d.spawn(far, 0, 1, 0.3, "full");
+    run(d, 8);
+    const rest = { nx: near.position.x, fx: far.position.x, fz: far.position.z };
+    let lands = 0;
+    d.onLand = () => lands++;
+    d.blast(0, near.position.z, 5);
+    let top = 0;
+    for (let t = 0; t < 0.4; t += 1 / 30) {
+      d.update(1 / 30);
+      top = Math.max(top, near.position.y);
+    }
+    expect(top).toBeGreaterThan(0.5);
+    run(d, 8);
+    expect(near.position.x).toBeGreaterThan(rest.nx + 1); // away from the blast (it was east of it)
+    expect(near.position.y).toBeCloseTo(DEBRIS.restHeight, 3); // and down again
+    expect(lands).toBe(1); // (where it lands it bleeds again)
+    expect(far.position.x).toBeCloseTo(rest.fx, 5);
+    expect(far.position.z).toBeCloseTo(rest.fz, 5);
+  });
+
   it("follows uneven ground", () => {
     const scene = new Scene();
     const d = new LimbDebris(scene, (x) => 0.5 + 0.2 * Math.sin(x));

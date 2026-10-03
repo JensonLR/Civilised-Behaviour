@@ -31,6 +31,11 @@ export const PROP_DEFS: Record<PropKindId, PropDef> = {
  * lit it. `PropState.fuse` carries what is left in tenths of a second, so every client can draw the sparks and play the hiss.
  */
 export const KEG_FUSE = { seconds: 4, radius: 5, damageMul: 0.6 } as const;
+/**
+ * D-064: powder catches. A blast lights every keg within `reach` x its radius on a short fuse that grows with distance (`base` + `perMetre` x d seconds), so a stack of kegs goes
+ * up as a ripple, nearest first, rather than all on one tick: loud, legible, and still a quarter-second's warning to whoever is standing in it.
+ */
+export const KEG_CHAIN = { reach: 0.9, base: 0.25, perMetre: 0.07 } as const;
 /** The replicated fuse (tenths of a second, 1..255; 0 = not lit) for `left` seconds. */
 export const fuseTenths = (left: number): number => (left > 0 ? Math.min(255, Math.max(1, Math.ceil(left * 10))) : 0);
 

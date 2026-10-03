@@ -293,11 +293,11 @@ const HINT: Record<string, string> = {
   tension: "The water is over the second step. Whatever is standing at the hammer is what is sold.",
 };
 const DONE: Record<string, string> = {
-  lot_won: "The Tide Concession is the Society's, knocked down at the hammer in an inch of water. Sail home from the quay and charge somebody for the weather.",
-  consortium: "A pooled lot: the Houses and the Society, jointly, on a salt-stained sheet. Sail home from the quay and wait for the shares.",
-  shorted: "The lot is the Society's, and nobody has been paid for it. The Houses will remember. Sail home from the quay while the hall still has a floor.",
-  washed_out: "The sale closed in the flood, to nobody's credit. Sail home from the quay and read about it.",
-  abandoned: "The expedition is down. The tide is unmoved. Sail home and explain yourselves.",
+  lot_won: "The Tide Concession is the Society's, knocked down at the hammer in an inch of water. Take the boat home and charge somebody for the weather.",
+  consortium: "A pooled lot: the Houses and the Society, jointly, on a salt-stained sheet. Take the boat home and wait for the shares, and the arguments.",
+  shorted: "The lot is the Society's, and nobody has been paid for it. The Houses will remember. Take the boat home while the hall still has a floor.",
+  washed_out: "The sale closed in the flood, to nobody's credit, and the Concession goes back on the tide table. Take the boat home and read about it.",
+  abandoned: "The expedition is down. The tide is unmoved. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rain: "Rain on the Exchange: the tide is early and the hammer falls a minute sooner.",
@@ -311,13 +311,13 @@ function view(s: MarketState, now: number): ScenarioView {
   const rivalsOut = s.gone + (s.factorDown || s.factorPooled ? 1 : 0);
   const standing = Math.max(s.bid, s.short);
   const objectives: ObjectiveView[] = [
-    { id: "hall", text: "Walk to the Exchange", done: s.near.hall > 0 || s.phase !== "approach" },
+    { id: "hall", text: "Walk the boardwalk to the Exchange", done: s.near.hall > 0 || s.phase !== "approach" },
     { id: "bid", text: standing > 0 ? `A bid of £${standing} stands${s.short > s.bid ? " (short: no cash behind it)" : ""}; the price is now £${askAt(s)}` : `Place a bid (the price is £${askAt(s)} and rising with the water)`, done: standing > 0, optional: true },
-    { id: "paddles", text: `Thin the paddles (${Math.min(5, rivalsOut)} of 5 rivals out)`, done: rival === 0, optional: true },
+    { id: "paddles", text: `Thin the rival paddles (${Math.min(5, rivalsOut)} of 5 out)`, done: rival === 0, optional: true },
     { id: "pool", text: `Pool a consortium (${Math.min(MARKET.signatures, s.signed)} of ${MARKET.signatures} signatures)`, done: s.signed >= MARKET.signatures, optional: true },
-    { id: "lot", text: res === "abandoned" ? "Lost: the expedition went down" : res === "washed_out" ? "Lost: the sale closed in the flood" : "Take the lot, by whatever means", done: won },
+    { id: "lot", text: res === "abandoned" ? "Lost: the expedition went down" : res === "washed_out" ? "Lost: the sale closed in the flood" : "Hold the winning paddle when the hammer falls", done: won },
   ];
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the quay", done: false });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the quay", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked.head) hint += ` (A House-Head's hint: the loudest paddle in the room stops at £${rival}.)`;
   if (res === undefined && s.asked.auctioneer) hint += ` (The Auctioneer's reserve is £${s.reserve} and it rises ${MARKET.riseStep} every half-minute.)`;
@@ -371,7 +371,7 @@ const observe: ObserveSpec = {
 
 export const floodedMarketTemplate: TemplateDef<MarketState> = {
   id: "flooded_market", title: "The Auction at High Water",
-  brief: "The Exchange floods at every spring tide, and the Houses hold their lot auction in it regardless. Win the lot, pool a consortium, short it, or watch the sale wash out: the hammer falls at high water.",
+  brief: "The Brine Houses auction the Tide Concession of Ossuary Bay in their own Exchange at spring tide; the Exchange floods, and the Houses count the water as part of the price. Four House-Heads and a Syndicate factor will bid, and the reserve rises with the tide. Outbid them, thin the paddles, pool a consortium with a House, sell the lot short, or watch it wash out.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { hall: SALTMARKET_ANCHORS.exchange },
 };

@@ -94,15 +94,15 @@ describe("the four endings through the real runner, one commit each", () => {
     const { f, s } = newRun();
     stake(f, s, 2);
     run(f, s, 110);                       // the Syndicate pegs the lowest open corner
-    expect(objective(f, "peg-0")).toMatch(/the Syndicate's peg/);
+    expect(objective(f, "peg-0")).toMatch(/is the Syndicate's$/);
     // before the surveyors are broken their peg stays in the ground
     stake(f, s, 0);
-    expect(objective(f, "peg-0")).toMatch(/the Syndicate's peg/);
+    expect(objective(f, "peg-0")).toMatch(/is the Syndicate's$/);
     breakSurveyors(f, s);
     expect(lastView(f).phase).toBe("fighting");
-    expect(objective(f, "peg-0")).toMatch(/can be pulled/);
+    expect(objective(f, "peg-0")).toMatch(/^Pull the Syndicate's peg/);
     expect(stake(f, s, 0), "the peg comes out").toBe(true);
-    expect(objective(f, "peg-0")).toMatch(/^Peg the north-west corner$/);
+    expect(objective(f, "peg-0")).toMatch(/^Peg the north-west corner \(Use\)$/);
     for (const i of [0, 1, 3]) stake(f, s, i);
     expect(pegsMine(f)).toBe(4);
     pick(f, s, "assayer", /File the claim/);
@@ -281,7 +281,7 @@ describe("hostile input at every entry point", () => {
     stake(f, s, 2);
     run(f, s, 110);
     expect(stake(f, s, 0), "taken (it is a conversation with a surveyor)").toBe(true);
-    expect(objective(f, "peg-0")).toMatch(/the Syndicate's peg$/);
+    expect(objective(f, "peg-0")).toMatch(/is the Syndicate's$/);
     expect(stake(f, s, 2)).toBe(true);
     expect(pegsMine(f)).toBe(1);
     expect(notices(f).join(" ")).toMatch(/already yours/);

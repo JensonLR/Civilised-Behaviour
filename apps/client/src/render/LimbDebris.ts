@@ -4,9 +4,9 @@ import { PALETTE } from "@cb/shared";
 
 export const DEBRIS = {
   /** Severed limbs alive at once; the oldest is dropped first. Four players can only lose four limbs each, and most are gone within seconds. */
-  max: 8,
+  max: 16,
   /** Seconds a limb lies about before it shrinks away. */
-  life: 25,
+  life: 40,
   fade: 1.5,
   gravity: 13,
   restitution: 0.32,
@@ -89,6 +89,32 @@ export class LimbDebris {
       landed: false,
       lying,
     });
+  }
+
+  /**
+   * D-064: a blast at (x, z) throws whatever limbs lie within `radius` up and away again (they land again, and bleed again where they land). Falloff with distance; a piece
+   * already in the air is simply hurried along.
+   */
+  blast(x: number, z: number, radius: number): void {
+    if (!(radius > 0)) return;
+    for (const s of this.pieces) {
+      const g = s.group;
+      const dx = g.position.x - x;
+      const dz = g.position.z - z;
+      const d = Math.hypot(dx, dz);
+      if (d > radius) continue;
+      const f = 1 - d / radius;
+      const ux = d > 1e-3 ? dx / d : Math.cos(s.age * 7);
+      const uz = d > 1e-3 ? dz / d : Math.sin(s.age * 7);
+      s.vx += ux * (3 + 7 * f);
+      s.vz += uz * (3 + 7 * f);
+      s.vy = Math.max(s.vy, 0) + 4 + 7 * f;
+      s.wx += (Math.random() - 0.5) * 24 * f;
+      s.wy += (Math.random() - 0.5) * 12 * f;
+      s.wz += (Math.random() - 0.5) * 24 * f;
+      s.landed = false;
+      g.position.y += 0.02; // (off the ground, or the contact test would catch it again before it rises)
+    }
   }
 
   update(dt: number): void {

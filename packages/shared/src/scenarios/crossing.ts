@@ -171,8 +171,8 @@ function leave(s: CrossingRun): ResolutionId | undefined {
 function view(s: CrossingRun, now: number): ScenarioView {
   const v = scenarioView(s.core, now);
   if (s.settledStart && s.core.resolution === undefined) {
-    v.hint = `The crossing is on the books: the Ward's ledger is closed for ${s.daysLeft} more day${s.daysLeft === 1 ? "" : "s"}. The bar is up, the lamps are lit, and nobody will take your money again. The ford will do for other business.`;
-    const objectives: ObjectiveView[] = [{ id: "books", text: "The crossing is settled (nothing left to win here)", done: true }, { id: "home", text: "Sail home from the landing dock", done: false }];
+    v.hint = `The crossing is on the books: the Ward's ledger is closed for ${s.daysLeft} more day${s.daysLeft === 1 ? "" : "s"}. The bar is up, the lamps are lit, and nobody will take your money twice. The ford will do for other business.`;
+    const objectives: ObjectiveView[] = [{ id: "books", text: "Crossing settled: nothing left to win here", done: true }, { id: "home", text: "Take the boat home from the landing", done: false }];
     v.objectives = objectives;
   }
   return v;
@@ -201,7 +201,7 @@ const observe: ObserveSpec = {
 
 export const crossingTemplate: TemplateDef<CrossingRun> = {
   id: "secure_crossing", title: "Secure the River Crossing",
-  brief: "The Ward owns the only bridge for forty miles and charges for the privilege. Cross it, by whatever means: pay, haggle, bribe, break the garrison, or drop the bridge in the river.",
+  brief: "The Ward of the Nine Lamps owns the only bridge for forty miles, and its Lamp-Warden sets the toll by how badly you need it. The Syndicate is on its way with a chequebook. Pay her, haggle, bribe her quartermaster, break her garrison, or put a barrel under the pier and file it as a survey.",
   init, reduce, view, outcome,
   roster: (c, seed, _s, presence): NpcSpec[] => {
     const ruined = c.crossing.bridge === "collapsed";

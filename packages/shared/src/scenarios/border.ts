@@ -153,7 +153,7 @@ function reduce(s: BorderState, e: ScenarioInput): Reduction<BorderState> {
           const survey = { ...s.survey, [e.kind === "ward_post" ? "ward" : "rival"]: true };
           const n = fin(relieve({ ...closed, survey }, BORDER.surveyRelief));
           if (survey.ward && survey.rival) {
-            return { s: { ...n, witness: BORDER.witnessS }, fx: [say(`Both sides agree to a joint survey, which is to say both chains go out at once and somebody neutral stands at the Stone while they do. You are, God help the border, the neutral party. Stand at Marker Stone No. 4 for ${BORDER.witnessS} seconds, and keep everybody's hands where they are.`)] };
+            return { s: { ...n, witness: BORDER.witnessS }, fx: [say(`Both sides agree to a joint survey, which is to say both chains go out at once and somebody neutral stands at the Stone while they do. You are, against all precedent, the neutral party. Stand at Marker Stone No. 4 for ${BORDER.witnessS} seconds, and keep everybody's hands where they are.`)] };
           }
           return { s: n, fx: [say(survey.ward ? "The Ward patrol has agreed to a joint survey. Now the Syndicate." : "The Syndicate has agreed to a joint survey. Now the Ward patrol.")] };
         }
@@ -199,25 +199,25 @@ function view(s: BorderState, now: number): ScenarioView {
   const won = res === "mediated" || res === "sided_ward" || res === "sided_syndicate";
   const objectives: ObjectiveView[] = [
     { id: "reach", text: "Reach Marker Stone No. 4 in the ford", done: s.phase !== "approach" },
-    { id: "talk", text: `Talk to both sides (${(s.survey.ward ? 1 : 0) + (s.survey.rival ? 1 : 0)} of 2 agree to a joint survey)`, done: s.survey.ward && s.survey.rival },
-    ...(s.witness >= 0 && res === undefined ? [{ id: "witness", text: `Stand witness at the Stone while the chains go out (${Math.ceil(s.witness)} s)`, done: s.witness === 0 } satisfies ObjectiveView] : []),
-    { id: "settle", text: res === "provoked" ? "Lost: somebody fired first" : res === "escalated" ? "Lost: the border went to war" : "Settle the border, by whatever means", done: won },
+    { id: "talk", text: `Talk both banks into a joint survey (${(s.survey.ward ? 1 : 0) + (s.survey.rival ? 1 : 0)} of 2)`, done: s.survey.ward && s.survey.rival },
+    ...(s.witness >= 0 && res === undefined ? [{ id: "witness", text: `Stand at the Stone while the chains go out (${Math.ceil(s.witness)} s)`, done: s.witness === 0 } satisfies ObjectiveView] : []),
+    { id: "settle", text: res === "provoked" ? "Lost: somebody fired first" : res === "escalated" ? "Lost: the border went to war" : "Settle the border before somebody fires", done: won },
   ];
-  if (s.envelope && res === undefined) objectives.push({ id: "stone", text: "Pull Marker Stone No. 4 (INTERACT at the Stone)", done: false, optional: true });
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
+  if (s.envelope && res === undefined) objectives.push({ id: "stone", text: "Pull Marker Stone No. 4 out of the ford (Use)", done: false, optional: true });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   const HINT: Record<string, string> = {
-    approach: "Marker Stone No. 4 stands in the ford. A Ward patrol is on the north bank and Syndicate surveyors on the south. Both are armed with rifles, rulers and grievances.",
+    approach: "Marker Stone No. 4 stands in the ford. A Ward patrol is on the north bank and Syndicate surveyors on the south, armed with rifles, rulers and grievances. Wade out to the Stone and Use to talk to either side; both will try to recruit you.",
     tension: `Both sides are shouting across the water. The tension is ${Math.round(s.tension)} of 100. Talk lowers it. Shooting does not.`,
     parley: "Somebody is listening. Choose your words with a ruler.",
     escalated: "The two sides are shooting at each other. You are not the target. For now.",
   };
   const DONE: Record<string, string> = {
-    mediated: "Peace, by signature. Sail home from the dock.",
-    sided_ward: "The Ward is pleased and the Syndicate is gone. You are being detained, courteously. Sail home when released.",
-    sided_syndicate: "The Stone is out of the ford. The Ward has opinions. Sail home from the dock.",
-    provoked: "You fired first. The border is not impressed. Sail home from the dock.",
-    escalated: "The ford is spent and the border is on the map in a worse place. Sail home from the dock.",
-    abandoned: "The expedition is down. The border keeps its own counsel. Sail home and explain.",
+    mediated: "Peace, by signature, in triplicate, with the third copy already disputed. Take the boat home.",
+    sided_ward: "The Ward is grateful and the Syndicate has gone. You are being detained as witnesses, courteously and at length. Take the boat home when released.",
+    sided_syndicate: "The Stone is out of the ford, and the border has moved by one surveyor's afternoon. The Ward has its rifles up. Take the boat home.",
+    provoked: "You fired first. Both banks agree on that, which is the only thing they have ever agreed on. Take the boat home.",
+    escalated: "The ford is spent brass and the border is on the map in a worse place. Both sides will blame the Society, in writing. Take the boat home.",
+    abandoned: "The expedition is down. The border keeps its own counsel. Take the boat home and explain.",
   };
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   const ch = COMPLICATION_HINT[s.complication];
@@ -274,7 +274,7 @@ const observe: ObserveSpec = {
 
 export const borderTemplate: TemplateDef<BorderState> = {
   id: "border_incident", title: "Marker Stone No. 4",
-  brief: "The border runs through a ford, and both sides have brought lawyers with rifles. Keep the peace, sell it, or start the war, and mind the Stone.",
+  brief: "Marker Stone No. 4 stands in a ford that two maps disagree about. A Ward patrol holds the north bank and Syndicate surveyors the south, and each has brought a lawyer with a rifle. Talk both into a joint survey, learn the Syndicate's plan and sell it to the Ward, take the Syndicate's envelope and move the Stone, or wait for somebody's nerve to go.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { marker: KESSAR_SITES.border.marker },
 };

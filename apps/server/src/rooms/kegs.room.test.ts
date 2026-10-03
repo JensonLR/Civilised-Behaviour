@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { BUTTON, FLAG, KEG_FUSE, MoveInput, PropKind, ROOM_WORLD, yawToWire, type PlayerStateType } from "@cb/shared";
+import { BUTTON, FLAG, KEG_CHAIN, KEG_FUSE, MoveInput, PropKind, ROOM_WORLD, yawToWire, type PlayerStateType } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
@@ -104,4 +104,28 @@ describe("lit powder kegs (D-054)", () => {
     expect(room.state.props.has(quiet)).toBe(true);
     expect(room.state.props.get(quiet)!.fuse).toBe(0);
   }, 40_000);
+  it("D-064: powder catches. One keg going off lights its neighbours on short fuses and the stack goes up as a ripple; a keg out of reach is untouched", async () => {
+    const { room, me, keg } = await setup();
+    const spawn = (x: number, z: number) => (room as unknown as { spawnPropAt(kind: number, x: number, z: number): string | undefined }).spawnPropAt(PropKind.BARREL, x, z)!;
+    // a row of kegs well away from the sapper, and one far beyond the blast's reach
+    const x0 = me.p.x + 14;
+    const z0 = me.p.z;
+    const first = spawn(x0, z0);
+    const near = spawn(x0 + 2, z0);
+    const next = spawn(x0 + 4, z0); // out of the first blast's reach (4 m > 0.9 x 5), but within the second's
+    const far = spawn(x0 + 14, z0);
+    void keg;
+    const lit = (room as unknown as { lightKeg(id: string, by: string): void });
+    lit.lightKeg(first, (me as unknown as { id: string }).id);
+    await until(() => !room.state.props.has(first), (KEG_FUSE.seconds + 3) * 1000, "the first keg gone off");
+    // its neighbour caught: lit on a short fuse, not the full one
+    const nf = room.state.props.get(near)?.fuse ?? 0;
+    expect(nf).toBeGreaterThan(0);
+    expect(nf).toBeLessThanOrEqual(Math.ceil((KEG_CHAIN.base + 2.5 * KEG_CHAIN.perMetre) * 10));
+    await until(() => !room.state.props.has(near), 2000, "the neighbour gone off");
+    await until(() => !room.state.props.has(next), 2000, "the ripple carried to the third");
+    await sleep(800);
+    expect(room.state.props.has(far)).toBe(true);
+    expect(room.state.props.get(far)!.fuse).toBe(0);
+  }, 30_000);
 });

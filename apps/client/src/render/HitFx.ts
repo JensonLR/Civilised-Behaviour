@@ -14,7 +14,7 @@ import type { DecalField } from "./decals/DecalField.ts";
 
 export const HITFX = {
   /** Live particle cap (a hit spawns 6-18; four players can only produce so many per second). */
-  maxParticles: 160,
+  maxParticles: 240,
   /** Ground stains kept; the oldest is recycled. */
   maxDecals: 40,
   /** Seconds before a decal has shrunk away completely. */
@@ -35,7 +35,7 @@ interface Style {
 
 // "off" keeps the impact readable with a harmless burst of dust and stars: same timing, no blood.
 const STYLES: Record<GoreLevel, Style> = {
-  full: { colors: [...PALETTE.hitFx.full], count: [7, 18], size: 0.045, speed: 4.2, stain: 0.5, stainColor: PALETTE.hitFx.stain },
+  full: { colors: [...PALETTE.hitFx.full], count: [9, 22], size: 0.045, speed: 4.2, stain: 0.5, stainColor: PALETTE.hitFx.stain },
   reduced: { colors: [...PALETTE.hitFx.reduced], count: [4, 9], size: 0.035, speed: 3.2, stain: 0, stainColor: 0 },
   off: { colors: [...PALETTE.hitFx.off], count: [5, 10], size: 0.04, speed: 3.6, stain: 0, stainColor: 0 },
 };
@@ -113,7 +113,8 @@ export class HitFx {
    * A blow landed at (x,y,z) pushing the victim along the unit vector (dx,dz); `power` 0..1. Particles fly with the blow and
    * fan out; with gore off the same burst is dust.
    */
-  burst(x: number, y: number, z: number, dx: number, dz: number, power: number, gore: GoreLevel): void {
+  /** `up` 0..1 throws the drops upward as well (a head wound, a severed joint: a fountain, not a splash). */
+  burst(x: number, y: number, z: number, dx: number, dz: number, power: number, gore: GoreLevel, up = 0): void {
     if (!(power > 0) || !Number.isFinite(x + y + z + dx + dz)) return;
     const st = STYLES[gore];
     if (this.field) {
@@ -122,7 +123,7 @@ export class HitFx {
       const ground = this.groundAt(x, z);
       const reach = 0.5 + 0.9 * Math.min(1, power);
       this.field.spatterAt(x + (dx / len) * reach, z + (dz / len) * reach, dx, dz, 0.22 + 0.3 * Math.min(1, power));
-      if (power > 0.55 && y - ground < 1.9) this.field.sprayAt(x + (dx / len) * 0.2, z + (dz / len) * 0.2, dx, dz, 0.9 + 1.1 * power);
+      if (power > 0.45 && y - ground < 1.9) this.field.sprayAt(x + (dx / len) * 0.2, z + (dz / len) * 0.2, dx, dz, 0.9 + 1.1 * power);
     }
     const n = Math.round(st.count[0] + (st.count[1] - st.count[0]) * Math.min(1, power));
     for (let k = 0; k < n; k++) {
@@ -138,7 +139,7 @@ export class HitFx {
       const sn = Math.sin(spread);
       this.vx[i] = (dx * c - dz * sn) * s;
       this.vz[i] = (dx * sn + dz * c) * s;
-      this.vy[i] = 1.2 + Math.random() * 2.8 * (0.5 + power);
+      this.vy[i] = 1.2 + Math.random() * 2.8 * (0.5 + power) + up * (2 + Math.random() * 3.5);
       this.life[i] = 0.5 + Math.random() * 0.6;
       this.size[i] = st.size * (0.6 + Math.random() * 0.9);
       this.stainable[i] = Math.random() < st.stain ? 1 : 0;
