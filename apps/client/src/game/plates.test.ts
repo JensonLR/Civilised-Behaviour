@@ -124,3 +124,21 @@ describe("only the party's own hands carry orders and nerve (D-048)", () => {
     expect(c.text("npc:hand-1", hand)).toBe("Pike");
   });
 });
+
+describe("a player's honour rides on their plate (D-055)", () => {
+  it("is a second line under the name, changes when the title does, and stands aside while they are down; NPCs never wear one", () => {
+    const c = new PlateCache(HANDS);
+    c.beginFrame();
+    const ada = row({ name: "Ada", title: "Twice Mended" });
+    expect(c.text("p", ada)).toBe("Ada\nTwice Mended");
+    ada.title = "Terror of the Ledger";
+    expect(c.text("p", ada)).toBe("Ada\nTerror of the Ledger");
+    ada.flags = FLAG.DOWNED;
+    expect(c.text("p", ada)).toBe("Ada ✚ DOWN");
+    ada.flags = 0;
+    ada.connected = false;
+    expect(c.text("p", ada)).toBe("Ada (reconnecting)\nTerror of the Ledger");
+    expect(c.text("s", row({ name: "Sentry 1", npc: NPC.SENTRY, title: "Terror of the Ledger" }))).toBe("Sentry 1");
+    expect(c.text("q", row({ name: "Bea", title: "" }))).toBe("Bea");
+  });
+});

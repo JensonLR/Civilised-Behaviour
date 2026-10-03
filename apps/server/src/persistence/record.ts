@@ -73,11 +73,45 @@ export function stamped(rec: CampaignRecord, expectedRev: number | null, savedAt
  * not a member. The owner is re-pointed at the first remaining member; rev moves on; `savedAt` is kept (dormancy is not reset).
  */
 export function removeIdentity(rec: CampaignRecord, key: string): { rec: CampaignRecord | undefined; changed: boolean } {
-  if (!rec.members.includes(key) && rec.owner !== key) return { rec, changed: false };
+  const member = rec.members.includes(key) || rec.owner === key;
+  const scrub = forgetInSections(rec.sections, key);
+  if (!member && !scrub.changed) return { rec, changed: false };
   const members = rec.members.filter((m) => m !== key);
   const first = members[0];
   if (first === undefined) return { rec: undefined, changed: true };
-  return { rec: { ...rec, members, owner: rec.owner === key ? first : rec.owner, rev: rec.rev + 1 }, changed: true };
+  return { rec: { ...rec, members, owner: rec.owner === key ? first : rec.owner, sections: scrub.sections, rev: rec.rev + 1 }, changed: true };
+}
+
+/**
+ * Erasure reaches the sections too (D-055: the honours section is keyed by member keys, and a module added later may hold keys as well): in every section that mentions
+ * the key, each JSON object property NAMED by it and each array entry EQUAL to it is dropped; a section that mentions it and is not JSON is dropped whole (it comes back
+ * fresh on the next load). Sections that never mention the key are returned as they were. Pure.
+ */
+export function forgetInSections(sections: Readonly<Record<string, string>>, key: string): { sections: Record<string, string>; changed: boolean } {
+  const out: Record<string, string> = {};
+  let changed = false;
+  for (const [name, json] of Object.entries(sections)) {
+    if (!key || !json.includes(key)) {
+      out[name] = json;
+      continue;
+    }
+    changed = true;
+    try {
+      out[name] = JSON.stringify(scrubKey(JSON.parse(json), key));
+    } catch {
+      // not JSON: dropped whole
+    }
+  }
+  return { sections: out, changed };
+}
+
+function scrubKey(v: unknown, key: string): unknown {
+  if (Array.isArray(v)) return v.filter((x) => x !== key).map((x) => scrubKey(x, key));
+  if (typeof v === "string" && v.includes(key)) return v.split(key).join("");
+  if (typeof v !== "object" || v === null) return v;
+  const o: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v)) if (k !== key) o[k] = scrubKey(x, key);
+  return o;
 }
 
 /** A brand-new, never-stored record (rev 0). `members` starts as the creator. */

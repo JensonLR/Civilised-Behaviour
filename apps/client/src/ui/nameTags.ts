@@ -49,7 +49,15 @@ export class NameTags {
     }
     if (p.text !== text) {
       p.text = text;
-      p.el.textContent = text;
+      const nl = text.indexOf("\n");
+      p.el.textContent = nl < 0 ? text : text.slice(0, nl);
+      if (nl >= 0) {
+        // a player's honour (D-055): a second, smaller line (its own block, so the plate is measured at the size it is drawn)
+        const honour = document.createElement("span");
+        honour.className = "honour";
+        honour.textContent = text.slice(nl + 1);
+        p.el.appendChild(honour);
+      }
       p.el.dataset.role = String(role);
       p.w = 0; // re-measured below, once it is on the page
     }

@@ -3,7 +3,7 @@ import type { PgDatabase } from "drizzle-orm/pg-core";
 import { log } from "../log.ts";
 import { MIGRATION_LOCK, PG_MIGRATIONS } from "./pgMigrations.ts";
 import { campaignMembers, campaigns, schemaVersion } from "./pgSchema.ts";
-import { checkExpected, precheck, stamped, validateRecord } from "./record.ts";
+import { checkExpected, forgetInSections, precheck, stamped, validateRecord } from "./record.ts";
 import type { CampaignRecord, CampaignStore, SaveResult } from "./types.ts";
 
 /** Any Drizzle Postgres database: `drizzle-orm/postgres-js` in production, `drizzle-orm/pglite` in tests. The driver is injected. */
@@ -127,7 +127,9 @@ export class PgStore implements CampaignStore {
     return this.db.transaction(async (tx) => {
       const member = await tx.select({ id: campaignMembers.campaignId }).from(campaignMembers).where(eq(campaignMembers.identityKey, identityKey));
       const owned = await tx.select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.owner, identityKey));
-      const ids = [...new Set([...member.map((m) => m.id), ...owned.map((o) => o.id)])];
+      // (D-055: a section may hold the key too, the honours'; strpos, not LIKE: a base64url key carries `_`, which LIKE reads as a wildcard)
+      const mentioned = await tx.select({ id: campaigns.id }).from(campaigns).where(sql`strpos(${campaigns.sections}::text, ${identityKey}) > 0`);
+      const ids = [...new Set([...member.map((m) => m.id), ...owned.map((o) => o.id), ...mentioned.map((o) => o.id)])];
       for (const id of ids) {
         await tx.delete(campaignMembers).where(and(eq(campaignMembers.campaignId, id), eq(campaignMembers.identityKey, identityKey)));
         const left = await tx.select({ k: campaignMembers.identityKey }).from(campaignMembers).where(eq(campaignMembers.campaignId, id)).orderBy(asc(campaignMembers.position));
@@ -136,10 +138,16 @@ export class PgStore implements CampaignStore {
           await tx.delete(campaigns).where(eq(campaigns.id, id));
           continue;
         }
+        const [row] = await tx.select({ sections: campaigns.sections }).from(campaigns).where(eq(campaigns.id, id));
+        const scrub = forgetInSections(row?.sections ?? {}, identityKey);
         // savedAt is deliberately untouched: erasing a person must not reset the campaign's dormancy clock.
         await tx
           .update(campaigns)
-          .set({ rev: sql`${campaigns.rev} + 1`, owner: sql`case when ${campaigns.owner} = ${identityKey} then ${first.k} else ${campaigns.owner} end` })
+          .set({
+            rev: sql`${campaigns.rev} + 1`,
+            owner: sql`case when ${campaigns.owner} = ${identityKey} then ${first.k} else ${campaigns.owner} end`,
+            ...(scrub.changed ? { sections: scrub.sections } : {}),
+          })
           .where(eq(campaigns.id, id));
       }
       return ids.length;

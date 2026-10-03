@@ -1,5 +1,5 @@
 import {
-  DAYS_IDLE_CAP, newCampaign, newParty, newPowers, newSettlements, parseCampaign, parseParty, parsePowers, parseSettlements, serializeCampaign, serializeParty, serializePowers, serializeSettlements,
+  DAYS_IDLE_CAP, newCampaign, newHonours, parseHonours, serializeHonours, type HonoursState, newParty, newPowers, newSettlements, parseCampaign, parseParty, parsePowers, parseSettlements, serializeCampaign, serializeParty, serializePowers, serializeSettlements,
   type CampaignState, type PartyState, type PowersState, type SettlementsState,
 } from "@cb/shared";
 import type { AnyCodec } from "../persistence/sections.ts";
@@ -17,6 +17,8 @@ export const CAMPAIGN_CODECS: readonly AnyCodec[] = [
   // idle days the rival is owed and has not yet been paid (they are paid at the first commit). Saved because every join and leave saves a fresh `savedAt`: kept only in the room,
   // a resume that ended no contract forgot them (the persistence review's finding (c)). A record from before this section has none: fresh, 0 owed.
   { key: "idle", version: 1, fresh: () => 0, parse: (j: string) => parseIdle(j), serialize: (v: number) => String(parseIdle(String(v)) ?? 0) },
+  // D-055: each member's last three honours, keyed by the same HMAC key the membership list holds (a record from before this section has none: fresh, nobody decorated)
+  { key: "honours", version: 1, fresh: () => newHonours(), parse: (j: string) => parseHonours(j), serialize: (v: HonoursState) => serializeHonours(v) },
 ];
 
 /** Whole idle days owed, 0..DAYS_IDLE_CAP; anything else (hostile, garbled) is not a section. */

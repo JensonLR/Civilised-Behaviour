@@ -32,6 +32,8 @@ export interface IncidentsHost {
   looseHorse(at: { x: number; z: number }): string;
   /** Who rides mount `id` ("" nobody, or the mount is gone). */
   riderOf(id: string): string;
+  /** D-055: `sid` settled an incident kindly by their own hand (the honours list counts it). Optional. */
+  kind?(sid: string): void;
   hasRoom(): boolean;
 }
 
@@ -91,7 +93,10 @@ export class Incidents {
     }
     if (this.id === "runaway_horse") {
       const rider = this.host.riderOf(this.horse);
-      if (rider && this.host.party.get(rider) && !this.host.party.get(rider)!.npc) this.settle({ t: "mounted" });
+      if (rider && this.host.party.get(rider) && !this.host.party.get(rider)!.npc) {
+        this.settle({ t: "mounted" });
+        this.host.kind?.(rider);
+      }
       return;
     }
     const row = this.row();
@@ -111,7 +116,7 @@ export class Incidents {
   }
 
   /** USE pressed by a standing player. True when the press was this incident's (the courier's dispatch, the deserter's offer). */
-  onInteract(_sid: string, p: PlayerStateType): boolean {
+  onInteract(sid: string, p: PlayerStateType): boolean {
     if (!this.live || this.result !== undefined || (this.id !== "courier" && this.id !== "deserter")) return false;
     const row = this.row();
     if (!row || (row.flags & FLAG.DOWNED) !== 0 || Math.hypot(row.x - p.x, row.z - p.z) > INCIDENT.useR || Math.abs(row.y - p.y) > 1.6) return false;
@@ -123,6 +128,8 @@ export class Incidents {
       this.host.cast.despawn("incident");
       if (!this.host.join(this.spec.name, this.spec.lookSeed, at)) this.result = "turned_away";
     }
+    const settled = this.result as IncidentResult | undefined;
+    if (settled === "delivered" || settled === "enlisted") this.host.kind?.(sid);
     return true;
   }
 

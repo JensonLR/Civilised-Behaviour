@@ -56,6 +56,14 @@ import {
   applyIncident,
   INCIDENT,
   INCIDENT_IDS,
+  HONOUR_TITLE,
+  awardHonour,
+  decorate,
+  newDeeds,
+  newHonours,
+  titleOf,
+  type Deeds,
+  type HonoursState,
   KEG_FUSE,
   fuseTenths,
   remit,
@@ -272,6 +280,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private mounts!: Mounts;
   private followers!: Followers;
   private incidents!: Incidents;
+  /** D-055: each member's honours (saved), each session's member key, and what each player has done in the contract under way. */
+  private honours: HonoursState = newHonours();
+  private readonly memberKey = new Map<string, string>();
+  private readonly deeds = new Map<string, Deeds>();
   /** When the last shot was fired at anybody (simT): an incident waits for calm. */
   private lastShotT = -1e9;
   /** Dev/test override of the contract offered at Kessar (JoinOptions.scenario); absent in play, where `pickTemplate` decides. */
@@ -318,6 +330,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.settlements = resume ? (resume.values.settlements as SettlementsState) : newSettlements();
     // owed days: the ones a previous visit saved unpaid, plus the absence since that save (capped: a long absence and an uneventful visit never stack past the cap)
     this.pendingIdle = resume ? Math.min(DAYS_IDLE_CAP, ((resume.values.idle as number | undefined) ?? 0) + resume.idle) : 0;
+    this.honours = resume ? ((resume.values.honours as HonoursState | undefined) ?? newHonours()) : newHonours();
     this.heldSections = resume?.newer ?? [];
     // `region` and `scenario` are QA levers: production (debugCommands off) ignores them, whatever the client sends. A resumed campaign always starts at HQ.
     const dev = cfg.debugCommands;
@@ -377,6 +390,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         },
         routSpawn: (slot) => regionSpawn(this.state.region as RegionId, slot, MAX_PLAYERS),
         notify: (text) => this.broadcast("notice", { text }),
+        // D-055: a finished revive or dressing is a deed (an incident's traveller got up counts as kindness on the road, D-052)
+        helped: (by, target) => {
+          if (by === target) return;
+          const d = this.deedsOf(by);
+          if (d) this.incidents?.owns(target) ? d.kindness++ : d.helped++;
+        },
         rng: new Rng(seed ^ 0x5eed_c0de),
         emitHit: (e) => this.broadcast("hit", e),
         emitSever: (e) => this.broadcast("sever", e),
@@ -535,6 +554,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       join: (name, lookSeed, at) => this.followers.join(name, lookSeed, at),
       looseHorse: (at) => this.mounts.spawnHorse({ x: at.x, z: at.z, yaw: 0 }, { coat: (this.state.seed ^ 0x40) >>> 0 }),
       riderOf: (id) => this.state.mounts.get(id)?.rider ?? "",
+      kind: (sid) => {
+        const d = this.deedsOf(sid);
+        if (d) d.kindness++;
+      },
       hasRoom: () => this.followers.hasRoom,
     });
     this.outposts = new Outposts({
@@ -749,7 +772,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (this.saver) {
       const id = parseIdentity(options?.token);
       if (id) {
-        this.saver.addMember(id); // an HMAC key, never the id; saved with the next save
+        const key = this.saver.addMember(id); // an HMAC key, never the id; saved with the next save
+        // (honours are kept only for those in the book: a joiner a full book could not take is never remembered, so nothing of theirs is either)
+        if (this.saver.record?.members.includes(key)) this.memberKey.set(client.sessionId, key);
+        player.title = titleOf(this.honours, key); // D-055: a member wears the latest honour this campaign gave them
         this.persist();
       }
     }
@@ -795,6 +821,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.woodenLeg.delete(client.sessionId);
     this.lastRefusal.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
+    this.memberKey.delete(client.sessionId);
+    this.deeds.delete(client.sessionId);
     this.travel.onLeave(player.slot);
     metrics.players--;
     this.persist(); // (also when the last player leaves: the campaign is on disk before the room goes)
@@ -913,7 +941,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private persistNow(): Promise<SaveResult | undefined> {
     if (!this.saver) return Promise.resolve(undefined);
     try {
-      const live: Record<string, unknown> = { campaign: this.campaign, party: parseParty(this.state.party) ?? newParty(), powers: this.powers, settlements: this.settlements, idle: this.pendingIdle };
+      const live: Record<string, unknown> = { campaign: this.campaign, party: parseParty(this.state.party) ?? newParty(), powers: this.powers, settlements: this.settlements, idle: this.pendingIdle, honours: this.honours };
       for (const k of this.heldSections) delete live[k]; // (a section a newer build wrote is not ours to overwrite)
       const snap = snapshot(CAMPAIGN_CODECS, live);
       return this.saver.saveNow(snap).then((r) => {
@@ -1138,6 +1166,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.scenario = new Scenario(this.scenarioHost(), template);
     this.scenario.start();
     this.incidents.begin(template);
+    this.deeds.clear(); // (honours count from a contract's start: D-055)
   }
 
   /** The sailing has finished: tear the old region down, stand the new one up, put everybody on its landing. Runs at the end of a server tick. */
@@ -1229,6 +1258,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") debrief.push(this.settlementLine(e));
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
     debrief.push(...this.followers.settle(o).slice(0, 4));
+    const honoured = this.awardHonours(o);
+    if (honoured) debrief.push(honoured);
+    this.persist(); // (the honours section changed with the titles)
     this.broadcast("notice", { text: debrief.join("\n") });
     log.info("campaign.outcome", { roomId: this.roomId, resolution: o.resolution, day: this.campaign.day });
   }
@@ -1435,11 +1467,51 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.combat.explode(owner, WEAPON.CANNON, { ...b, radius: KEG_FUSE.radius, damage: Math.round(b.damage * KEG_FUSE.damageMul) }, at.x, at.y, at.z, "");
   }
 
+  /** D-055: what a member did this contract (created on first use). */
+  private deedsOf(sid: string): Deeds | undefined {
+    const p = this.state.players.get(sid);
+    if (!p || p.npc) return undefined;
+    let d = this.deeds.get(sid);
+    if (!d) this.deeds.set(sid, (d = newDeeds()));
+    return d;
+  }
+
+  /** D-055: somebody went down: a member counts it against themselves, and a member who put down an enemy counts it for themselves. */
+  private noteDown(victim: string, p: PlayerStateType, by: string): void {
+    if (!p.npc) {
+      const d = this.deedsOf(victim);
+      if (d) d.downed++;
+      return;
+    }
+    const side = NPC_SIDE[p.npc];
+    if (by && side !== "party" && side !== "neutral") {
+      const d = this.deedsOf(by);
+      if (d) d.foesDowned++;
+    }
+  }
+
+  /** D-055, at the commit: each member present earns at most one honour from their own deeds; the latest is worn, the last three are kept. Returns the debrief line. */
+  private awardHonours(o: ScenarioOutcome): string {
+    const named: string[] = [];
+    this.party.forEach((p, sid) => {
+      const h = awardHonour(this.deeds.get(sid) ?? newDeeds(), o);
+      if (!h) return;
+      const key = this.memberKey.get(sid);
+      if (key) this.honours = decorate(this.honours, key, h);
+      p.title = HONOUR_TITLE[h];
+      named.push(`${p.name}, ${HONOUR_TITLE[h]}`);
+    });
+    this.deeds.clear();
+    return named.length ? `The Society's honours: ${named.join("; ")}.` : "";
+  }
+
   /** D-054: the fuse is lit. Everyone near hears it (the clients draw the sparks and play the hiss from `PropState.fuse`). */
   private lightKeg(id: string, by: string): void {
     const ps = this.state.props.get(id);
     if (!ps) return;
     this.lit.set(id, { left: KEG_FUSE.seconds, owner: by });
+    const d = this.deedsOf(by);
+    if (d) d.kegs++;
     ps.fuse = fuseTenths(KEG_FUSE.seconds);
   }
 
@@ -1666,6 +1738,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const down = (p.flags & FLAG.DOWNED) !== 0;
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
       if (hit?.by) this.incidents?.onHurt(sessionId);
+      if (down) this.noteDown(sessionId, p, hit?.by ?? "");
       if (hit?.by) this.cast.shotFrom(sessionId, hit.by);
       if (down) this.mounts.onDown(sessionId); // he slides from the saddle
       else this.mounts.onHurt(sessionId, amount, hit); // a hard enough blow unseats him
