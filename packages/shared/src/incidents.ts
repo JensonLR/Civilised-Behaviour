@@ -137,7 +137,7 @@ export function applyIncident(c: CampaignState, p: PowersState, r: IncidentRecor
 
 const TRAVELLER_NAMES = ["Old Tamsin Rook", "Bettany Quill", "Ezer Hollin", "Mag Fennick", "Tobiah Drane"] as const;
 const COURIER_NAMES = ["Runner Pell", "Runner Abernathy", "Runner Quist", "Runner Lugg"] as const;
-const HORSE_NAMES = ["a grey mare called Patience", "a bay gelding called Mr. Pemberton", "a chestnut called Second Opinion", "a piebald called Arrears"] as const;
+const HORSE_NAMES = ["a mare called Patience", "a gelding called Mr. Pemberton", "a cob called Second Opinion", "a horse called Arrears"] as const;   // (no colours: the coat is drawn from the seed, and a telegram calling a dun "piebald" was the first look's)
 /** The runaway horse's name for the notices (it has no row of its own: it is a mount). */
 export const horseName = (seed: number): string => HORSE_NAMES[hash3(seed >>> 0, 4, 0xa11e) % HORSE_NAMES.length]!;
 const DESERTER_NAMES = ["Private Ambrose Teal", "Corporal Silas Venn", "Drummer Kit Marlow"] as const;   // (a roster name is at most 32 characters: partyState.ts)
