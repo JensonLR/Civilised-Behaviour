@@ -22,6 +22,8 @@ export interface MountRowView {
   rider: string;
   hitch: string;
   phase: number;
+  /** Heading (radians, 0 = -Z): which way a hoof print points (D-058). Optional: fakes need not. */
+  facing?: number;
 }
 
 export interface CannonRowView {
@@ -59,6 +61,8 @@ interface HoofTrack {
   /** The gait of the last frame (GAIT.*). */
   gait: number;
   seen: number;
+  /** The side the last hoof print fell (D-058): they alternate. */
+  side: 1 | -1;
 }
 interface GunTrack {
   phase: number;
@@ -91,7 +95,7 @@ export class ContentAudio {
   private sRev = -1;
   private view: ContentView | undefined;
 
-  constructor(private readonly opts: { sfx?: Sfx; outpostSite?: () => { x: number; z: number } | undefined } = {}) {
+  constructor(private readonly opts: { sfx?: Sfx; outpostSite?: () => { x: number; z: number } | undefined; onHoof?: (x: number, z: number, dx: number, dz: number, side: 1 | -1) => void } = {}) {
     this.sfx = opts.sfx ?? GAME_SFX;
   }
   private readonly sfx: Sfx;
@@ -120,7 +124,7 @@ export class ContentAudio {
     if (row.kind !== MOUNT_KIND.horse) return;
     let t = this.hoofs.get(id);
     if (!t) {
-      t = { cad: new HoofCadence(), rider: row.rider, hitch: row.hitch, gait: 0, seen: this.frame };
+      t = { cad: new HoofCadence(), rider: row.rider, hitch: row.hitch, gait: 0, seen: this.frame, side: 1 };
       this.hoofs.set(id, t);
     }
     t.seen = this.frame;
@@ -140,6 +144,14 @@ export class ContentAudio {
       const key = GAIT_KEYS[g]!;
       const vol = t.cad.loud * (row.rider !== "" || row.hitch !== "" ? 1 : 0.85);
       for (let k = 0; k < beats; k++) this.putAt("hoof", row.x, row.y, row.z, vol, key);
+    }
+    // D-058: each beat leaves a hoof print where the ground takes one (the Game decides where), alternating either side of the line the horse walks
+    if (beats > 0 && live && this.opts.onHoof) {
+      const f = row.facing ?? 0;
+      for (let k = 0; k < beats; k++) {
+        t.side = t.side === 1 ? -1 : 1;
+        this.opts.onHoof(row.x, row.z, -Math.sin(f), -Math.cos(f), t.side);
+      }
     }
   };
 

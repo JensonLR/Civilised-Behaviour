@@ -305,4 +305,14 @@ describe("boot prints (D-058)", () => {
     expect(Math.sign(xOf(l))).toBe(-Math.sign(xOf(r)));
     expect(f.printAt(0, 0, 0.1, 0.1, 1)).toBe(-1);
   });
+
+  it("a hoof print is the mud mark's second shape (info.w = 1, round), a boot print the first", () => {
+    const p = new DecalPool(DECAL_CAP.low, 5);
+    const boot = p.print(0, 0, 0, UP[0], UP[1], UP[2], 1, 0);
+    const hoof = p.hoof(2, 0, 0, UP[0], UP[1], UP[2], 1, 0);
+    expect(p.kindOf(hoof)).toBe(DECAL.MUD);
+    expect(p.info[hoof * DECAL_ATTR + 3]).toBe(1);
+    expect(p.info[boot * DECAL_ATTR + 3]).toBe(0);
+    expect(p.axis[hoof * DECAL_ATTR + 3]).toBe(1);
+  });
 });

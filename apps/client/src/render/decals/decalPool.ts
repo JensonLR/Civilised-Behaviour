@@ -16,6 +16,8 @@ import { PALETTE, hashFloat } from "@cb/shared";
 export const DECAL = { POOL: 0, SPATTER: 1, SPRAY: 2, DRAG: 3, SCORCH: 4, MUD: 5 } as const;
 /** A boot print: half its width (m) and its length over its width (15 x 33 cm: a boot, drawn a size up like everything else in this caricature, so a trail reads at camera distance). */
 export const PRINT = { halfWidth: 0.075, aspect: 2.2 } as const;
+/** A hoof print's radius (m): a horseshoe about 16 cm across, a size up like the boots. */
+export const HOOF_R = 0.09;
 export type DecalKind = (typeof DECAL)[keyof typeof DECAL];
 
 export type DecalPreset = "low" | "medium" | "high";
@@ -348,6 +350,13 @@ export class DecalPool {
   /** A boot print in soft ground (D-058): a small oval along the way the body walked (`dx, dz`), mud-toned, the shortest-lived and lowest-priority mark (it only ever displaces older mud). */
   print(x: number, y: number, z: number, nx: number, ny: number, nz: number, dx: number, dz: number): number {
     return this.add(DECAL.MUD, x, y, z, nx, ny, nz, dx, 0, dz, PRINT.halfWidth, PRINT.aspect);
+  }
+
+  /** A hoof print (D-058): a horseshoe crescent, the toe along the way the horse went; the MUD kind's second shape (`info.w` = 1 tells the shader). */
+  hoof(x: number, y: number, z: number, nx: number, ny: number, nz: number, dx: number, dz: number): number {
+    const i = this.add(DECAL.MUD, x, y, z, nx, ny, nz, dx, 0, dz, HOOF_R, 1);
+    if (i >= 0) this.info[i * DECAL_ATTR + 3] = 1;
+    return i;
   }
 
   /**

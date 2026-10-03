@@ -148,7 +148,14 @@ export class Game {
   private pingTimer = 0;
   private readonly audio: GameAudio;
   /** Hoofbeats, the sailing, the paper, the day bell and the gun crew, from replicated state only (D-035). */
-  private readonly content = new ContentAudio({ outpostSite: () => OUTPOST_SITES[this.builtRegion]?.site });
+  private readonly content = new ContentAudio({
+    outpostSite: () => OUTPOST_SITES[this.builtRegion]?.site,
+    // D-058: hoof prints, on the same ground rule as the boots (the delta's mud always; grass and paths when wet)
+    onHoof: (x, z, dx, dz, side) => {
+      const surface = regionSurfaceAt(this.builtRegion, x, z, 0, waterOf(this.session.world, x, z));
+      if (surface === "mud" || ((surface === "grass" || surface === "dirt") && getAtmosphere().wet > PRINT_WET)) this.stage.decals.hoofAt(x, z, dx, dz, side);
+    },
+  });
   private readonly offSettings: () => void;
   // --- the campaign layer: map room, sailing, parley, the paper, the orders of the day ---
   private readonly mapRoom: MapRoom;
