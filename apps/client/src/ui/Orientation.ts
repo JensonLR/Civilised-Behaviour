@@ -35,7 +35,11 @@ export function replayOrientation(): void {
 }
 
 /** The glyph family the card prints: the keyboard's, or the pad in use (the tracker's own, or the Xbox set when the game says "pad" before any pad press has been seen). */
-const glyphDevice = (device: Device): InputDevice => (device === "keyboard" ? "keyboard" : deviceTracker.effective === "keyboard" ? "xbox" : deviceTracker.effective);
+const glyphDevice = (device: Device): InputDevice => {
+  const e = deviceTracker.effective;
+  if (e === "touch") return "touch"; // (D-049: a touch player is told about the on-screen buttons, whichever page the card was on)
+  return device === "keyboard" ? "keyboard" : e === "keyboard" ? "xbox" : e;
+};
 
 export class Orientation {
   private state: OrientationState;

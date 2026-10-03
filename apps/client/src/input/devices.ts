@@ -13,9 +13,16 @@ import { getPadBindings, type PadAction } from "./padProfile.ts";
  * Package I owns this file after the landing and fills in the detection and the DOM glyph rendering; the NAMES here are the integration contract and do not change.
  */
 
-/** The three glyph families. A pad that is neither Xbox nor PlayStation shows the Xbox set (the layout is the W3C standard mapping either way). */
-export type InputDevice = "keyboard" | "xbox" | "playstation";
-export const INPUT_DEVICES: readonly InputDevice[] = ["keyboard", "xbox", "playstation"];
+/**
+ * The glyph families. A pad that is neither Xbox nor PlayStation shows the Xbox set (the layout is the W3C standard mapping either way). "touch" (D-049) is the on-screen overlay:
+ * its prompts name the buttons drawn on the glass. It is never a glyph PREFERENCE (a player pins keyboard or a pad family; touch follows the fingers).
+ */
+export type InputDevice = "keyboard" | "xbox" | "playstation" | "touch";
+export const INPUT_DEVICES: readonly InputDevice[] = ["keyboard", "xbox", "playstation", "touch"];
+/** The pad families (the devices with pad glyphs). */
+export type PadFamily = Exclude<InputDevice, "keyboard" | "touch">;
+/** The pad family to show for a device: itself for a pad, else the Xbox set (a keyboard or touch player looking at pad rows, e.g. the manual's pad page). */
+export const padFamilyOf = (d: InputDevice): PadFamily => (d === "xbox" || d === "playstation" ? d : "xbox");
 
 /** The player's glyph choice: "auto" follows the last-used device (defined with the other settings, re-exported here). */
 export { GLYPH_PREFERENCES, type GlyphPreference } from "../settings.ts";
@@ -93,12 +100,27 @@ export const PROMPT_KEY: Readonly<Partial<Record<PromptId, string>>> = {
 
 const PAD_REBINDABLE: ReadonlySet<PromptId> = new Set<PromptId>(["jump", "crouch", "interact", "melee", "throw", "grab", "sprint", "view", "aim", "fire"]);
 
+/**
+ * What a touch player sees for each prompt: the words on the on-screen button (TouchControls.ts draws the same words), or what to do with the thumbs. A prompt with no touch control
+ * (menu navigation: the sheets are tapped) reads as a plain word.
+ */
+export const TOUCH_LABEL: Readonly<Record<PromptId, string>> = {
+  forward: "left thumb", back: "left thumb", left: "left thumb", right: "left thumb", move: "left thumb", look: "drag right", sprint: "thumb to the rim",
+  crouch: "CROUCH", jump: "JUMP", interact: "USE", reload: "hold USE", melee: "MELEE", throw: "THROW", grab: "GRAB", command: "hold ORDERS", view: "VIEW",
+  aim: "AIM", fire: "FIRE", pause: "PAUSE", confirm: "tap", cancel: "tap outside", skip: "tap Skip", tabPrev: "tap the tab", tabNext: "tap the tab",
+  menuUp: "tap", menuDown: "tap", menuLeft: "tap", menuRight: "tap", weaponPrev: "ARMS", weaponNext: "ARMS", holster: "hold ARMS", wheelPick: "drag",
+};
+
 export type Glyph =
   | { kind: "key"; label: string; name: string }
   | { kind: "pad"; control: PadControl; label: string; name: string; shape: string; hold: boolean };
 
 /** What to print for `prompt` on `device`. Keyboard prompts read the live bindings (a rebind shows up at once); an unbound action reads "unbound". Never throws. */
 export function glyphFor(prompt: PromptId, device: InputDevice): Glyph {
+  if (device === "touch") {
+    const label = TOUCH_LABEL[prompt] ?? prompt;
+    return { kind: "key", label, name: label };
+  }
   if (device === "keyboard") {
     const action = ACTIONS.find((a) => a.id === prompt);
     if (action) {
@@ -120,7 +142,7 @@ export function glyphFor(prompt: PromptId, device: InputDevice): Glyph {
   // the rebindable pad actions follow the player's own layout; reload rides on the Use control (held)
   const bound = prompt === "reload" ? getPadBindings().interact : PAD_REBINDABLE.has(prompt) ? getPadBindings()[prompt as PadAction] : undefined;
   const control = bound ?? p.control;
-  const g = PAD_GLYPHS[device][control];
+  const g = PAD_GLYPHS[padFamilyOf(device)][control];
   return { kind: "pad", control, label: g.label, name: g.name, shape: g.shape, hold: p.hold === true };
 }
 

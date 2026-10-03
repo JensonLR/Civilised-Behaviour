@@ -20,6 +20,7 @@ import { regionSurface, surfaceAt } from "../audio/surface.ts";
 import { newSignals, type MusicSignals } from "../audio/musicLayers.ts";
 import { getAtmosphere } from "../render/world/atmosphere.ts";
 import { Aftermath, planAftermath, type AftermathItem, type AftermathSite } from "../render/world/aftermath.ts";
+import { GroundTorches } from "../render/torch.ts";
 import { BattleLedger } from "./battleLedger.ts";
 import { MusicSignaller } from "./musicSignals.ts";
 import { FIRST_PERSON } from "../render/firstPerson.ts";
@@ -106,6 +107,8 @@ export class Game {
   /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
   private readonly ledger = new BattleLedger();
   private readonly aftermath: Aftermath;
+  /** Torches lying where the raiders who carried them fell, burning down (scenery). */
+  private readonly groundTorches: GroundTorches;
   /** What the last plan was made from (three scalars, compared every frame: no string is built in the frame loop). */
   private aftermathFor = { region: "" as string, rev: -1, gore: "" as string };
   private aftermathSite: { key: string; site: AftermathSite } | undefined;
@@ -216,6 +219,7 @@ export class Game {
     this.combat.audio = this.audio;
     this.combat.onBlast = (x, z) => this.ledger.noteBlast(x, z);
     this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
+    this.groundTorches = new GroundTorches(stage.scene);
     controls.canInteract = () => this.usable;
     controls.holdInteract = () => this.useHold;
     this.overlay = new DebugOverlay(debugEl, {
@@ -548,6 +552,7 @@ export class Game {
     if ((st.partyRev ?? 0) !== this.partyRev) {
       this.partyRev = st.partyRev ?? 0;
       this.party = parseParty(st.party) ?? newParty();
+      this.plates.setRoster(this.party.roster.map((f) => f.id));
       if (this.loadout.isOpen) this.loadout.update(this.loadoutView());
     }
     if ((st.scenarioRev ?? 0) !== this.scenarioRev) {
@@ -629,6 +634,7 @@ export class Game {
         this.ledger.reset();
         this.signaller.reset();
         this.aftermath.show([], getGore());
+        this.groundTorches.clear();
         this.aftermathFor.rev = -1;
         this.aftermathSite = undefined;
       }
@@ -673,6 +679,7 @@ export class Game {
     this.hitFx.dispose();
     this.debris.dispose();
     this.aftermath.dispose();
+    this.groundTorches.dispose();
     this.controls.canInteract = () => true;
     this.controls.holdInteract = () => false;
     this.controls.lookSlow = 1;
@@ -737,6 +744,7 @@ export class Game {
     this.hitFx.update(dt);
     this.debris.update(dt);
     this.aftermath.update(dt);
+    this.groundTorches.update(dt);
     this.ledger.note(this.session.room.state.players);
     this.syncAftermath(dt);
     this.combat.update(dt, this.controls.usingGamepad);
@@ -748,7 +756,7 @@ export class Game {
     this.updateMusic(dt, me);
     if (this.orientation.active) {
       const pf = this.session.predicted;
-      if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad ? "pad" : "keyboard");
+      if (pf) this.orientation.tick(dt, this.session.value(pf, "x"), this.session.value(pf, "z"), this.rig.yaw, this.builtRegion, this.orientationSample(), (pf.flags & FLAG.DOWNED) !== 0, this.controls.usingGamepad || this.controls.usingTouch ? "pad" : "keyboard"); // (touch reads the pad copy: its tokens print the on-screen words, never "the mouse")
     }
 
     if (me) {
@@ -1180,6 +1188,7 @@ export class Game {
 
   private addActor(p: PlayerStateType): Actor {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
+    body.onTorchDropped = (x, y, z, yaw, seed) => this.groundTorches.drop(x, y, z, yaw, seed);
     const key = seedFromString(`${p.slot}:${p.name}:${p.npc}`) & 0xffff;
     return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015 };
   }

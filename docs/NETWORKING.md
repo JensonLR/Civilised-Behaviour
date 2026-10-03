@@ -45,6 +45,16 @@ Requests without an `Origin` header (curl, native/Electron main-process, bots) p
 Tests: `origins.test.ts` (mutation-checked: fail when enforcement is off). `/health` and `/metrics` are still readable by
 non-browser clients; `/metrics` exposes counts only.
 
+## Rate limits and the client's address (D-048, `clientIp.ts`, `app.ts`)
+Because a client without an `Origin` passes the origin policy, room creation is limited separately: `create`/`joinOrCreate` (a new campaign or a resume) get
+`ROOM_CREATE_BURST` per address then one per `ROOM_CREATE_EVERY_S` (production default 6, then one per 20 s; 429), and past `MAX_ROOMS` live rooms
+every create is refused (production default 40; 503). The join-code lookup keeps its 10-then-1-per-6-s limit. The address is the right-most
+`X-Forwarded-For` entry `TRUST_PROXY_HOPS` from the end (production default 1, the platform's own proxy), or a header the trusted edge overwrites
+(`CLIENT_IP_HEADER`), never the first entry: that one is whatever the client wrote (measured on the live server before the fix: thirteen forged lookups,
+none limited). Addresses are used as bucket keys only: never stored or logged. Tests: `clientIp.test.ts`, `matchmakeLimits.test.ts` (both fail on the old key).
+NOT verified on Render: which hop Render's proxy appends (its guidance is Express's `trust proxy 1`, i.e. one hop; this sandbox's own egress address
+appears to rotate, so the live limiter could not be measured from here). If real players behind one proxy share a bucket, set `CLIENT_IP_HEADER`.
+
 ## Input budget and hitch tolerance (D-017)
 The server applies at most ~1.05 input frames per tick per player on average (bucket of 12 for hitches); excess is dropped and counted
 (`inputFramesDropped`). A client silent for >12 ticks (400 ms) is stepped with zero input so it lands and stops. Measured: flooding 3 frames/step:

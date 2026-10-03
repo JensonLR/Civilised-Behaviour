@@ -1,6 +1,7 @@
-import { Server, createEndpoint, createRouter, matchMaker } from "@colyseus/core";
+import { Server, ServerError, createEndpoint, createRouter, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { ROOM_WORLD, isValidJoinCode } from "@cb/shared";
+import { clientIp } from "./clientIp.ts";
 import type { ServerConfig } from "./config.ts";
 import { log } from "./log.ts";
 import { metrics } from "./metrics.ts";
@@ -13,10 +14,8 @@ import { WorldRoom } from "./rooms/WorldRoom.ts";
 /** Code lookups are the only unauthenticated enumeration surface: 10 burst, then 1 per 6 s per IP. */
 const codeLookupLimiter = new RateLimiter(10, 1 / 6);
 
-function clientIp(request: Request | undefined): string {
-  const fwd = request?.headers.get("x-forwarded-for");
-  return fwd?.split(",")[0]?.trim() || "local";
-}
+/** Matchmaking methods that start a room (a new campaign, a resume): the expensive ones (a world, a cast, a 30 Hz tick, a save record). */
+const CREATES = new Set(["create", "joinOrCreate"]);
 
 export function createGameServer(config: ServerConfig): Server {
   const origins = createOriginPolicy(config.allowedOrigins);
@@ -34,7 +33,7 @@ export function createGameServer(config: ServerConfig): Server {
       return ctx.json({ error: "origin_not_allowed" });
     }
     const code = String(ctx.params?.code ?? "").toUpperCase();
-    if (!codeLookupLimiter.take(clientIp(ctx.request))) {
+    if (!codeLookupLimiter.take(clientIp(ctx.request?.headers, undefined, config.clientIp))) {
       ctx.setStatus(429);
       return ctx.json({ error: "rate_limited" });
     }
@@ -58,7 +57,13 @@ export function createGameServer(config: ServerConfig): Server {
   });
   server.router = createRouter({ health, metrics: metricsEndpoint, lookup }) as never;
   server.define(ROOM_WORLD, WorldRoom);
-  const restoreMatchmaking = installMatchmakingOriginPolicy(origins);
+  // Room creation was unlimited (security review, D-048): one script could start rooms (and save records) faster than the one game thread can tick them.
+  const createLimiter = config.roomCreate ? new RateLimiter(config.roomCreate.burst, 1 / config.roomCreate.everyS) : undefined;
+  const restoreMatchmaking = installMatchmakingOriginPolicy(origins, (method, auth) => {
+    if (!CREATES.has(method)) return;
+    if (config.maxRooms > 0 && metrics.rooms >= config.maxRooms) throw new ServerError(503, "The Society's offices are full just now. Try again in a few minutes.");
+    if (createLimiter && !createLimiter.take(clientIp(auth?.headers, auth?.ip, config.clientIp))) throw new ServerError(429, "Too many new expeditions from here at once. Wait a moment and try again.");
+  });
   server.onShutdown(async () => {
     restoreMatchmaking();
     await persistence.close();

@@ -2,9 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: the HUD and the touch controls keep clear of a notch through env(safe-area-inset-*); the page is a game, not a document, so a double tap never zooms (touch-action in the CSS) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Civilised Behaviour - a 1-4 player co-op satirical expedition game." />
     <title>Civilised Behaviour</title>
+    <!-- empty until main.ts sets the palette-built seal (faviconSvg), so no request for a /favicon.ico that does not exist -->
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>

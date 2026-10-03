@@ -2,6 +2,7 @@ import type { CampaignState, CasualtyTally, ComplicationId, ObjectiveView, Scena
 import { NPC } from "../campaignTypes.ts";
 import { COMPLICATION_HINT, dealComplication } from "../chaos.ts";
 import type { NpcSpec } from "../expeditionTypes.ts";
+import { FOLLOWER_DEFS } from "../followers.ts";
 import { KESSAR_OUTPOST } from "../outpost.ts";
 import { hash3 } from "../rng.ts";
 import type { ScenarioInput } from "../scenario.ts";
@@ -29,6 +30,13 @@ export const RAID = {
   torchS: 15, rainTorch: 10, torchersNeeded: 2,
   /** D-047: a post's stout sheds take longer to fire (seconds added by stage): the fort is worth defending from, not a blind wall the raiders swarm through. */
   stout: { none: 0, camp: 0, trading_post: 3, fortified_outpost: 10, settlement: 12, town: 15 } as Readonly<Record<OutpostStage, number>>,
+  /**
+   * The post's own WATCH by stage: riflemen the Society keeps at a stockaded post. A lone defender cannot hold a fortified post without them (the bot playtest, D-047: four of four
+   * lost within seconds of contact, the stockade hiding the raiders until they were at sabre range); a stockade is a place that has a watch. They come down from the tower to stand
+   * inside the gate when the PARTY gets to the post, and not before: a party that stays away still loses its stores (with the watch out alone, three held a town by themselves and
+   * two fought the raiders to a standstill at a fort for seven minutes: bot playtest, D-048). The party's side, answering fire like hired hands: they never start the fight.
+   */
+  watch: { none: 0, camp: 0, trading_post: 0, fortified_outpost: 2, settlement: 2, town: 3 } as Readonly<Record<OutpostStage, number>>,
   /** Share of the raiders down or routed that breaks the raid. */
   brokenFraction: 0.7,
   /** How widely the raiders spread at their ranks while the captain talks (metres across). */
@@ -69,6 +77,9 @@ export interface RaidState extends BaseState {
   inYard: string[]; torchSince: number;
   /** D-047: seconds the post's own sheds add to the torch time (by its stage when the contract began). */
   stout?: number;
+  /** The post's watch (`RAID.watch` by its stage when the contract began); absent at a post with no stockade. `watchOut`: it has come down to stand with the party. */
+  watch?: number;
+  watchOut?: boolean;
   captainGone: boolean;
   price: number;
   purse: number; spent: number; paid: number;
@@ -87,6 +98,7 @@ function init(c: CampaignState, _asking: number, seed: number, presence?: RivalP
     raidAt: Math.round(RAID.raidMin + (h(1) % (RAID.raidMax - RAID.raidMin + 1)) + (complication === "fog" ? RAID.fogRaid : 0)),
     demandUntil: 0, attacking: false, crew: { alive: n, routed: 0, down: 0, total: n }, inYard: [], torchSince: 0, captainGone: false,
     ...(presence?.partyPost && RAID.stout[presence.partyPost] > 0 ? { stout: RAID.stout[presence.partyPost] } : {}),
+    ...(presence?.partyPost && RAID.watch[presence.partyPost] > 0 ? { watch: RAID.watch[presence.partyPost] } : {}),
     price: rnd5(...RAID.priceProtection, h(2)), purse: int(c.purse, 0, 99999, 0), spent: 0, paid: 0, tally: zeroTally(), brokePromise: false,
   };
 }
@@ -145,7 +157,13 @@ function reduce(s: RaidState, e: ScenarioInput): Reduction<RaidState> {
     case "near": {
       if (e.at !== "post") return stay(s);
       const k = int(e.party, 0, 8, 0);
-      return s.near.post === k ? stay(s) : stay(fin({ ...s, near: { post: k } }));
+      if (s.near.post === k) return stay(s);
+      const n = fin({ ...s, near: { post: k } });
+      // the party is at the post: the watch comes down from the tower and stands with it (once)
+      if (k > 0 && (s.watch ?? 0) > 0 && !s.watchOut) {
+        return { s: { ...n, watchOut: true }, fx: [{ k: "spawn", group: "late:watch" }, say(`The post's watch comes down from the tower to stand with you: ${s.watch} Society pensioners with rifles, at the gate. They will answer fire; they will not start it.`)] };
+      }
+      return stay(n);
     }
     case "hostile": {
       if (e.at !== "late:raiders" && e.at !== "late:captain") return stay(s);
@@ -254,6 +272,9 @@ function view(s: RaidState, now: number): ScenarioView {
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
+  if (res === undefined && (s.watch ?? 0) > 0) {
+    hint += s.watchOut ? ` The post's watch (${s.watch} rifles) stands inside the gate: it answers fire, it does not start it.` : ` The post keeps a watch (${s.watch} rifles); it will stand with you once you are there.`;
+  }
   const clock: [string, number] = !s.landed ? ["The raiders land", s.raidAt - s.t] : s.demandUntil > 0 && !s.attacking ? ["The captain's watch", s.demandUntil - s.t]
     : s.torchSince > 0 ? ["The stores catch", s.torchSince + torchS(s) - s.t] : ["", 0];
   const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(clock[0], res !== undefined ? 0 : clock[1], now), template: "outpost_raid", title: "The Raid on the Post" };
@@ -276,8 +297,11 @@ const RAIDERS = ["Raider Gilbert Tamsin", "Raider Odile Fenchurch", "Raider Barn
 // (torch-bearers: a torch in one hand leaves a blade in the other. The bot playtest's lone rifle went down to two pistol and rifle shots 7 s into the assault with
 // two rifles in the base five; the defence is meant to be shooting them on the open ground before the yard, so only the reinforcements bring a long gun)
 const ARMS: readonly WeaponId[] = [WEAPON.PISTOL, WEAPON.SABRE, WEAPON.BLUNDERBUSS, WEAPON.SABRE, WEAPON.SABRE, WEAPON.RIFLE, WEAPON.SABRE];
+const WATCH = ["Watchman Abel Crouch (Society pensioner)", "Watchwoman Dorcas Pim (Society pensioner)", "Watchman Elias Mote (Society pensioner)"] as const;
+/** Where the watch stands: inside the gate, either side of it, looking down the gap at the north approach and across the yard behind them. */
+export const WATCH_POSTS = [{ x: SITE.x - 3, z: SITE.z - 13 }, { x: SITE.x + 3, z: SITE.z - 13 }, { x: SITE.x, z: SITE.z - 9 }] as const;
 
-/** The raiding party (five, seven with reinforcements) and its captain, all held back until the launch lands. */
+/** The raiding party (five, seven with reinforcements) and its captain, held back until the launch lands; and, at a stockaded post, its watch, held back until the party gets there. */
 function roster(_c: CampaignState, seed: number, s: RaidState): NpcSpec[] {
   const L = RAID_SITES.landing;
   const out: NpcSpec[] = [];
@@ -287,6 +311,14 @@ function roster(_c: CampaignState, seed: number, s: RaidState): NpcSpec[] {
       id: `raider-${i}`, role: NPC.RAIDER,   // (their own role so the client can give them torches; a Syndicate soldier in every other respect)
        faction: "rival", side: "rival", group: "late:raiders", post: { x: L.x + Math.cos(a) * 2.2, z: L.z + Math.sin(a) * 2.2 }, weapon: ARMS[i]!,
       lookSeed: hash3(seed >>> 0, i, 0x2a1d), name: RAIDERS[i]!, skill: 38 + (hash3(seed >>> 0, i, 0x2a2) % 16), bravery: 40 + (hash3(seed >>> 0, i, 0x2a3) % 25), brain: "garrison",
+    });
+  }
+  // the post's watch: the Society's riflemen, held back until the party reaches the post (a garrison brain holds its post; the party side answers fire and never starts it)
+  const rifle = FOLLOWER_DEFS.rifleman;
+  for (let i = 0; i < Math.min(s.watch ?? 0, WATCH.length); i++) {
+    out.push({
+      id: `watch-${i}`, role: rifle.role, faction: "ward", side: "party", group: "late:watch", post: { ...WATCH_POSTS[i]! }, weapon: rifle.weapon, look: { ...rifle.look },
+      lookSeed: hash3(seed >>> 0, i, 0x3a1d), name: WATCH[i]!, skill: rifle.skill, bravery: rifle.bravery, brain: "garrison",
     });
   }
   // (a garrison brain, like the convoy's driver: the Cast's civil brain stands still, and the captain has to walk to the muster with his men; he is no braver than a consultant)

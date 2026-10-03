@@ -444,13 +444,23 @@ class Engine {
 
   // ---- gesture -----------------------------------------------------------------------------------------------------------------------
 
+  /**
+   * Creates the context if need be and asks it to run. Where no gesture is needed (the desktop build: Electron's autoplay policy is "no-user-gesture-required") it runs at once; in a
+   * browser without a gesture it stays suspended and the gesture listeners finish the job. D-049: a pad's buttons are not a gesture to a browser, and before this a pad-only player
+   * on the desktop build (a Deck, the console path) heard nothing until they touched a key or the mouse. False when there is no audio at all.
+   */
+  wake(ctor?: Ctor): boolean {
+    if (!this.init(ctor)) return false;
+    if (this.ctx?.state === "suspended") settle(this.ctx.resume());
+    return true;
+  }
+
   /** Installs one-shot listeners so the first click/key/touch creates and resumes the context (browsers require a gesture). */
   resumeOnGesture(): void {
     if (this.gestureBound || typeof window === "undefined" || this.state === "unsupported") return;
     this.gestureBound = true;
     const go = (): void => {
-      if (!this.init()) return;
-      if (this.ctx?.state === "suspended") settle(this.ctx.resume());
+      if (!this.wake()) return;
       if (this.ctx?.state === "running") {
         for (const ev of ["pointerdown", "keydown", "touchstart", "click"]) window.removeEventListener(ev, go, true);
       }

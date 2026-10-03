@@ -52,6 +52,13 @@ export class Pilot {
     this.log.push({ t: Math.round(this.secs * 10) / 10, what });
   }
 
+  /** The prediction's report card (corrections, drift, pops): what a bad network does to this player's view of themself. */
+  get netStats(): { correctionMax: number; correctionMean: number; driftPeak: number; popMax: number } | undefined {
+    if (!this.bot) return undefined;
+    const s = this.bot.stats();
+    return { correctionMax: s.correctionMax, correctionMean: s.correctionMean, driftPeak: s.driftPeak, popMax: s.popMax };
+  }
+
   async join(url: string, opts: Partial<JoinOptions>): Promise<void> {
     this.bot = await Bot.create(url, this.name, (tick, self) => this.step(tick, self), opts);
     const room = this.bot.room;
@@ -300,14 +307,16 @@ export class Pilot {
     await this.sleep(350);
     const t = this.bot.room.state.players.get(key);
     if (t) this.aim({ x: t.x, y: t.y + 1.25, z: t.z });
-    await this.press(BUTTON.FIRE | BUTTON.AIM);
-    await this.sleep(150);
-    const fired = this.me!.shots !== shots0;
+    // squeeze and hold until it goes off, as a person does: a squeeze in the last of a reload fires as the reload completes (D-048), so a lagged player's squeeze is not wasted
+    this.hold = BUTTON.FIRE | BUTTON.AIM;
+    const fired = await this.until(() => this.me!.shots !== shots0, 1500, `the shot at ${key}`);
+    this.hold = BUTTON.AIM;
     if (!fired) this.note(`NO SHOT at ${key}: weapon ${this.me!.weapon} ammo ${this.me!.ammo} reserve ${this.me!.reserve} flags ${this.me!.flags}`);
-    if (this.me!.ammo === 0) {
+    if (this.me!.ammo === 0 && (this.me!.reserve ?? 0) > 0) {
       this.hold = 0;
       await this.press(BUTTON.RELOAD);
-      await this.until(() => (this.me?.ammo ?? 0) > 0 || (this.me?.reserve ?? 0) === 0, 6000, "reload");
+      // aim again with the last quarter of the reload bar to go (what the player sees, a half trip late; aiming takes the bot ~0.65 s), not when the server has said it is loaded (a whole trip later)
+      await this.until(() => (this.me?.ammo ?? 0) > 0 || (this.me?.reload ?? 0) >= 75 || (this.me?.reserve ?? 0) === 0, 6000, "reload");
     }
     return fired;
   }

@@ -286,3 +286,77 @@ describe("the activation rules", () => {
     wheel.dispose();
   });
 });
+
+describe("the letter dial (D-049: a join code by pad alone)", () => {
+  it("dialTurn wraps both ways and starts an empty slot at the ends of the alphabet; dialMove grows the field to its limit", async () => {
+    const { dialTurn, dialMove } = await import("./PadNav.ts");
+    expect(dialTurn("A", 0, 1, "ABC")).toBe("B");
+    expect(dialTurn("C", 0, 1, "ABC")).toBe("A");
+    expect(dialTurn("A", 0, -1, "ABC")).toBe("C");
+    expect(dialTurn("AB", 2, 1, "ABC")).toBe("ABA");
+    expect(dialTurn("AB", 2, -1, "ABC")).toBe("ABC");
+    expect(dialMove("AB", 0, 1, "ABC", 5)).toEqual(["AB", 1]);
+    expect(dialMove("AB", 1, 1, "ABC", 5)).toEqual(["ABA", 2]);
+    expect(dialMove("ABCAB", 4, 1, "ABC", 5)).toEqual(["ABCAB", 4]);
+    expect(dialMove("AB", 0, -1, "ABC", 5)).toEqual(["AB", 0]);
+    const { dialDelete } = await import("./PadNav.ts");
+    expect(dialDelete("ABC", 1)).toEqual(["AC", 1]);
+    expect(dialDelete("ABC", 2)).toEqual(["AB", 1]);
+    expect(dialDelete("A", 0)).toEqual(["", 0]);
+  });
+
+  it("A starts the dial, up/down/right type a code, A sends it as Enter; B stops without sending; the menu around it keeps its focus", async () => {
+    const { startPadNav } = await import("./PadNav.ts");
+    const root = document.createElement("div");
+    root.innerHTML = `<input id="code" maxlength="3" data-pad-chars="ABC" data-pad-send /><input id="name" maxlength="4" data-pad-chars="xyz" /><button id="after">after</button>`;
+    document.body.append(root);
+    const code = root.querySelector<HTMLInputElement>("#code")!;
+    const name = root.querySelector<HTMLInputElement>("#name")!;
+    const sent: string[] = [];
+    const dials: boolean[] = [];
+    code.addEventListener("keydown", (e) => e.key === "Enter" && sent.push(code.value));
+    name.addEventListener("keydown", (e) => e.key === "Enter" && sent.push(name.value));
+    root.addEventListener("paddial", (e) => dials.push((e as CustomEvent<boolean>).detail));
+    const stop = startPadNav(root, () => true);
+    const RIGHT = 15;
+    code.focus();
+    tap(A); // the dial starts on "A"
+    expect(code.classList.contains("dialing")).toBe(true);
+    expect(code.value).toBe("A");
+    tap(UP); // B
+    tap(RIGHT); // BA
+    tap(DOWN); // BC
+    tap(RIGHT); // BCA
+    tap(RIGHT); // (full: stays)
+    tap(UP); // BCB
+    expect(code.value).toBe("BCB");
+    expect(active()).toBe(code); // up and down turned letters; they did not move the menu's focus
+    tap(A);
+    expect(sent).toEqual(["BCB"]);
+    expect(code.classList.contains("dialing")).toBe(false);
+    expect(dials).toEqual([true, false]);
+    // the name field: A stops it but sends nothing (finishing a name must not found a campaign); B stops too, and does not close the sheet
+    let back = 0;
+    root.addEventListener("padback", () => back++);
+    tap(DOWN);
+    expect(active()).toBe(name);
+    tap(A);
+    tap(UP);
+    tap(A);
+    expect(name.value).toBe("y");
+    expect(sent).toEqual(["BCB"]);
+    tap(A); // X takes the letter out
+    tap(2);
+    expect(name.value).toBe("");
+    tap(UP);
+    tap(B);
+    expect(name.value).toBe("x");
+    tap(A);
+    tap(B);
+    expect(back).toBe(0);
+    expect(name.classList.contains("dialing")).toBe(false);
+    tap(DOWN); // the menu moves again
+    expect(active().id).toBe("after");
+    stop();
+  });
+});

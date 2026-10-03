@@ -233,6 +233,10 @@ describe("CampaignSaver", () => {
     const saved = store.calls[0]!.rec;
     expect(saved.members.length).toBe(8);
     expect(saved.members).toContain(keyOf(1)); // the owner is never evicted
+    // a full book evicts NOBODY (persistence review (b)): anyone holding a live join code could rejoin under fresh device ids and push the real members out, who then
+    // could never resume; the first real joiner is still there after twelve more, and the overflow simply is not remembered
+    expect(saved.members).toContain(key);
+    expect(saved.members.slice(0, 2)).toEqual([keyOf(1), key]);
     expect(JSON.stringify(saved)).not.toContain(raw);
   });
 

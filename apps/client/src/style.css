@@ -26,7 +26,7 @@
   font-size: 17px;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdrop); color: var(--ink); }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdrop); color: var(--ink); touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
 
 /* ---- shared surfaces ---- */
@@ -217,8 +217,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 
 /* Interface scale: one number (1 = 100%, times 1.2 for "larger text") scales every rem in the menus and the HUD. */
 /* ...but never let the interface outgrow a short window: on an 800 x 450 screen 5.2vh caps it at 1.38x however much was asked for. */
-:root { font-size: max(12px, min(calc(17px * var(--ui-scale, 1)), 5.2vh)); }
-#hud { font-size: max(11px, min(calc(16px * var(--ui-scale, 1)), 4.9vh)); }
+/* ...and past 1080p it grows with the screen (D-049: a 4K screen or a television showed a quarter-size interface, unreadable from a sofa): 17 px is 0.885vw of 1920 and 1.574vh of 1080,
+   so at 1080p and below nothing changes and at 2160p everything is twice the size. The player's scale still multiplies it. */
+:root { font-size: max(12px, min(calc(max(17px, min(0.885vw, 1.574vh)) * var(--ui-scale, 1)), 5.2vh)); }
+#hud { font-size: max(11px, min(calc(max(16px, min(0.833vw, 1.481vh)) * var(--ui-scale, 1)), 4.9vh)); }
 .help { max-width: calc(100vw - 33rem); overflow: hidden; text-overflow: ellipsis; }
 
 /* Two-tone focus ring: an ink line inside a stamp-red ring, so it reads on paper, on brass and on the red stamp button alike. */
@@ -665,3 +667,79 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 .codebar .saveline[hidden] { display: none; }
 .pause .menu .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
 .pause .saveline[data-state="failed"], .pause .saveline[data-state="unkept"] { color: var(--stamp); opacity: 1; }
+
+/* ---- touch controls (D-049): input/TouchControls.ts. Sizes follow the short side of the screen; every finger target is at least 44 px; the edges keep clear of notches. ---- */
+.touch-layer { position: fixed; inset: 0; z-index: 10; pointer-events: none; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  --tb: clamp(44px, 10.5vmin, 76px); --tf: clamp(62px, 17vmin, 116px); --tg: clamp(6px, 1.5vmin, 12px);
+  --edge-t: max(0.6rem, env(safe-area-inset-top, 0px)); --edge-r: max(0.6rem, env(safe-area-inset-right, 0px)); --edge-b: max(0.6rem, env(safe-area-inset-bottom, 0px)); --edge-l: max(0.6rem, env(safe-area-inset-left, 0px)); }
+.touch-layer[hidden] { display: none; }
+.t-look { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
+.t-stick-zone { position: absolute; left: 0; bottom: 0; width: 44%; height: 70%; pointer-events: auto; touch-action: none; }
+.t-ring { position: absolute; left: calc(var(--edge-l) + var(--r, 56px) + 1rem); bottom: auto; top: calc(100% - var(--edge-b) - var(--r, 56px) - 1rem); width: calc(var(--r, 56px) * 2); height: calc(var(--r, 56px) * 2); margin: calc(var(--r, 56px) * -1) 0 0 calc(var(--r, 56px) * -1); border-radius: 50%; pointer-events: none;
+  border: 2px solid color-mix(in srgb, var(--paper) 55%, transparent); background: color-mix(in srgb, var(--ink) 16%, transparent); opacity: 0.35; transition: opacity 0.12s; }
+.t-ring.on { opacity: 1; }
+.t-knob { position: absolute; left: 50%; top: 50%; width: 44%; height: 44%; margin: -22% 0 0 -22%; border-radius: 50%; background: color-mix(in srgb, var(--paper) 88%, transparent); border: 2px solid var(--brass-dark); box-shadow: var(--shadow); }
+.t-btn { pointer-events: auto; touch-action: none; display: grid; place-items: center; width: var(--tb); height: var(--tb); padding: 0; border-radius: 50%; border: 2px solid var(--brass-dark);
+  background: color-mix(in srgb, var(--paper) 74%, transparent); color: var(--ink); font: 400 calc(var(--tb) * 0.21)/1 var(--display); letter-spacing: 0.04em; box-shadow: var(--shadow); -webkit-tap-highlight-color: transparent; }
+.t-btn.down { background: var(--brass); color: var(--paper); transform: scale(0.94); }
+.t-btn[hidden] { display: none; }
+.t-main { position: absolute; right: var(--edge-r); bottom: var(--edge-b); display: grid; grid-template-areas: "use aim" "jump fire"; gap: var(--tg); align-items: end; justify-items: end; }
+.t-main .t-use { grid-area: use; } .t-main .t-aim { grid-area: aim; } .t-main .t-jump { grid-area: jump; }
+.t-main .t-fire { grid-area: fire; width: var(--tf); height: var(--tf); font-size: calc(var(--tf) * 0.19); background: color-mix(in srgb, var(--stamp) 78%, transparent); color: var(--text); border-color: var(--stamp-dark); }
+.t-main .t-fire.down { background: var(--stamp-dark); }
+.t-side { position: absolute; right: calc(var(--edge-r) + var(--tf) + var(--tb) + var(--tg) * 3); bottom: var(--edge-b); display: grid; grid-template-columns: repeat(2, auto); gap: calc(var(--tg) * 0.8); align-items: end; }
+.t-side .t-btn { width: calc(var(--tb) * 0.82); height: calc(var(--tb) * 0.82); font-size: calc(var(--tb) * 0.17); }
+.t-top { position: absolute; right: var(--edge-r); top: calc(var(--edge-t) + 5.6rem); display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--tg) * 0.7); }
+.t-top .t-btn { width: auto; min-width: calc(var(--tb) * 1.1); height: calc(var(--tb) * 0.66); padding: 0 0.7em; border-radius: 3px; font-size: calc(var(--tb) * 0.18); }
+.t-top .t-btn.on { background: var(--brass); }
+/* the HUD makes room for the thumbs: the key hints go (the buttons carry their words), the arms card moves to the bottom middle, the gauge and captions move up out of the thumbs' way */
+body.touch-ui #hud .help { display: none; }
+body.touch-ui #hud .arms, body.touch-ui #hud .cannoncard { right: auto; left: 50%; bottom: var(--edge-b, 0.6rem); transform: translateX(-50%) scale(0.86); transform-origin: 50% 100%; min-width: 0; }
+body.touch-ui #hud .health { bottom: auto; top: 46%; transform: scale(0.78); transform-origin: 0 50%; }
+body.touch-ui .captions { bottom: auto; top: 22%; }
+/* the HUD's own buttons stay tappable over the touch layer: the HUD is pointer-events:none, so its empty space passes the finger through to the look and stick zones */
+body.touch-ui #hud { z-index: 11; }
+/* the orientation card and the contract card take the top LEFT, compact (the right belongs to the thumbs); the notices sit between them and the top-right controls */
+body.touch-ui #hud .orientation { right: auto; left: var(--edge-l); top: calc(var(--edge-t) + 0.2rem); width: min(19rem, 36vw); font-size: 0.78rem; padding: 0.45rem 0.6rem 0.5rem; }
+body.touch-ui #hud:has(.orientation:not([hidden])) .telegrams, body.touch-ui #hud:has(.objectives:not([hidden])) .telegrams { left: calc(var(--edge-l) + min(19rem, 36vw) + 0.8rem); right: auto; transform: none; width: min(26rem, calc(100vw - var(--edge-l) - min(19rem, 36vw) - 0.8rem - var(--edge-r) - var(--tf, 118px) - var(--tb, 76px) * 2)); }
+/* a short screen (a phone held sideways): the orientation card keeps its steps and its Skip, and drops the paragraph that explains them (the manual has it) */
+@media (max-height: 520px) {
+  #hud .orientation .tag, #hud .orientation .hint { display: none; }
+  #hud .orientation .foot { justify-content: flex-end; }
+  #hud .orientation ol { gap: 0.1rem; }
+}
+/* on glass the card stays SHORT, clear of the left thumb (a finger landing near Skip was adjusted onto it by the browser: the first touch run skipped the orientation instead of
+   walking): the current step only, with its words and Skip; the list of the rest is the manual's */
+body.touch-ui #hud .orientation li:not(.current) { display: none; }
+body.touch-ui #hud .orientation .tag, body.touch-ui #hud .orientation .hint { display: none; }
+body.touch-ui #hud .orientation .foot { justify-content: flex-end; margin-top: 0.3rem; }
+/* D-049: no sheet is ever cut off. A sheet taller than the screen scrolls as a whole (the ones with their own scrolling body never need to), measured in the DYNAMIC viewport where
+   there is one, so a phone's own browser bars are counted; on a phone held sideways the pause sheet's buttons go two abreast */
+.panel.sheet { overflow-y: auto; max-height: calc(100dvh - 2rem); overscroll-behavior: contain; }
+@media (max-height: 34rem) {
+  .panel.sheet, .panel.sheet.settings, .panel.sheet.howto { max-height: calc(100dvh - 1rem); }
+  .pause .menu { grid-template-columns: 1fr 1fr; }
+  .pause .menu > button:first-child, .pause .menu > button:last-child { grid-column: 1 / -1; }
+  .pause .menu .pair { display: contents; }
+  .pause .fine, .pause .society { display: none; }
+}
+/* the manual's intro and tabs took the whole height on a phone (either way up) and the controls list shrank to a line or to nothing: there its body takes its own height and the
+   sheet scrolls as a whole */
+@media (max-height: 34rem), (max-width: 30rem) {
+  .sheet.howto .body { flex: none; overflow: visible; }
+}
+/* D-049, the responsive pass. The door's panels always leave the bottom strip for the sound plaque (it overlapped the panel's last line on every size); a narrow phone's
+   sheets wrap their segmented switch and their button row instead of running off the edge; a phone held upright is asked, plainly, to turn */
+#menu > .panel { max-height: calc(100dvh - 6rem); }
+@media (max-width: 30rem) {
+  .seg { flex-wrap: wrap; }
+  .seg button { flex: 1 1 30%; min-width: 0; padding-left: 0.3rem; padding-right: 0.3rem; font-size: 0.82rem; }
+  .sheet .actions { flex-wrap: wrap; }
+  .sheet .actions > button { flex: 1 1 40%; }
+}
+.t-portrait { position: fixed; inset: 0; z-index: 15; display: none; place-items: center; margin: 0; padding: 2rem; text-align: center; pointer-events: none; font: 1.2rem/1.4 var(--serif); color: var(--text); background: color-mix(in srgb, var(--scrim) 72%, transparent); }
+@media (orientation: portrait) { .t-portrait:not([hidden]) { display: grid; } }
+/* D-049, the pad's letter dial (PadNav): the letter being turned is the field's own selection, drawn as a stamp so it reads from the sofa */
+.panel input.dialing { outline: 3px solid var(--stamp); outline-offset: 2px; caret-color: transparent; }
+.panel input.dialing::selection { background: var(--stamp); color: var(--text); }
+.panel p.dialhint { margin: 0.3rem 0 0; font-style: italic; color: var(--stamp); }

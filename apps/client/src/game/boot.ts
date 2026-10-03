@@ -1,4 +1,5 @@
-import { attachUiSounds, startAmbience, startMusic } from "../audio/index.ts";
+import { attachUiSounds, startAmbience, startMusic, wakeAudio } from "../audio/index.ts";
+import { TouchControls } from "../input/TouchControls.ts";
 import { Controls } from "../input/Controls.ts";
 import { applyDisplaySettings, getGfx, getReduceMotion, onSettingChange } from "../settings.ts";
 import { motion, motionScale } from "../render/world/atmosphere.ts";
@@ -55,6 +56,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   attachUiSounds(document.body);
   startAmbience(); // sound begins at the first click or key press (browsers require a gesture); the front door has wind, birds and a fire
   startMusic("menu");
+  if (isDesktop()) wakeAudio(); // (the desktop build needs no click for sound, and a pad-only player never clicks: D-049)
   window.addEventListener("keydown", (e) => {
     if (e.code === "F1" && !anyModalOpen()) {
       e.preventDefault();
@@ -67,6 +69,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   let controls!: Controls;
   let preview!: CreatorPreview;
   let pause!: Pause;
+  let touch!: TouchControls;
   let game: Game | undefined;
   let session: Session | undefined;
   // D-036: the storefront seam (a no-op on the web). A friend's invite arrives as a valid join code and nothing else: at the front door it joins, in a game it returns to the door with
@@ -144,7 +147,12 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       if (k === "gfx" || k === "all") stage.setPreset(getGfx());
     });
     controls = new Controls(canvas, { sensitivity: 0.0022, padSensitivity: 1, holdToSprint: true });
-    onInputBlocked((blocked) => (controls.blocked = blocked)); // a settings / pause / manual sheet is up: hands off the game
+    touch = new TouchControls();
+    controls.attachTouch(touch); // (D-049: a phone's thumbs, the same intent as the pad's)
+    onInputBlocked((blocked) => {
+      controls.blocked = blocked; // a settings / pause / manual sheet is up: hands off the game
+      touch.blocked = blocked;
+    });
     new Captions(document.body);
     stage.setTime(17.2); // the front door sits at golden hour in the camp; a joined room's clock takes over (Game feeds it to the stage)
     pause = new Pause({
@@ -219,6 +227,8 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     canvas.focus();
     startMusic("game");
     pause.active = true;
+    controls.onPause = () => pause.open();
+    touch.inGame = true;
     if (import.meta.env.MODE !== "production") {
       (window as unknown as Record<string, unknown>).__cb = { session: s, game, stage, controls, pause };
     }

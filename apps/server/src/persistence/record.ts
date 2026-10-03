@@ -96,14 +96,12 @@ export function createRecord(init: { id?: string; code: string; seed: number; ow
   };
 }
 
-/** Adds an identity key to `members`; at the cap the oldest non-owner makes room. Returns a new record. */
+/**
+ * Adds an identity key to `members`. A full book evicts nobody: the joiner plays while the room is live but is not remembered (the persistence review's finding (b): evicting
+ * the oldest let anyone holding a live join code rejoin under fresh device ids and push the real members out, who could then never resume). A member leaves the book only
+ * by asking (`removeIdentity`, the privacy deletion). Returns the same record when nothing changes.
+ */
 export function withMember(rec: CampaignRecord, key: string): CampaignRecord {
-  if (rec.members.includes(key)) return rec;
-  const members = [...rec.members];
-  if (members.length >= MAX_MEMBERS) {
-    const i = members.findIndex((m) => m !== rec.owner);
-    members.splice(i < 0 ? 0 : i, 1);
-  }
-  members.push(key);
-  return { ...rec, members };
+  if (rec.members.includes(key) || rec.members.length >= MAX_MEMBERS) return rec;
+  return { ...rec, members: [...rec.members, key] };
 }

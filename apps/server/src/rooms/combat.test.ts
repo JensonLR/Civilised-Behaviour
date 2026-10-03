@@ -539,6 +539,69 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       await sleep(100);
     }, 30000);
 
+    it("D-048: a trigger squeezed during a reload fires the moment the reload completes if still held (once); let go before the end, and nothing fires", async () => {
+      const { room, ps } = await setup(1);
+      const [a] = ps as [Player];
+      place(a.p, 0, 0);
+      combatOf(room).give(a.id);
+      const dir = openBearing(room, 20);
+      const yaw = yawTo({ x: 0, z: 0 }, { x: Math.cos(dir), z: Math.sin(dir) });
+      await equip(a, WEAPON.RIFLE);
+      const send = async (buttons: number, ms: number): Promise<void> => {
+        const end = Date.now() + ms;
+        do {
+          frame(a, { buttons, yaw, aimYaw: yaw, aimElev: 0, weapon: WEAPON.RIFLE });
+          await sleep(33);
+        } while (Date.now() < end);
+      };
+      const reloadLeft = (): number => combatOf(room).inspect(a.id)!.reloadLeft;
+      for (const holdOn of [true, false]) {
+        // one round (the rifle holds one), then reload
+        await send(BUTTON.AIM | BUTTON.FIRE, 100);
+        await send(BUTTON.AIM, 1000);
+        await send(BUTTON.AIM | BUTTON.RELOAD, 100);
+        await send(BUTTON.AIM, 300);
+        expect(reloadLeft()).toBeGreaterThan(1);
+        const shots = a.p.shots;
+        // squeeze mid-reload: nothing yet
+        await send(BUTTON.AIM | BUTTON.FIRE, 300);
+        expect(a.p.shots).toBe(shots);
+        if (holdOn) {
+          // held to the end: it fires on the first frame the server handles after the reload is done, then never again for the same squeeze. Watched per FRAME at the
+          // combat system's own door, not by the wall clock (the first cut sampled the reload before a 33 ms send, so a slow CI runner whose ticks finished the reload and
+          // fired inside one send read as "fired early": a timing assertion, now gone)
+          const combat = combatOf(room) as unknown as { onFrame: (id: string, ...rest: unknown[]) => boolean };
+          const real = combat.onFrame.bind(combat);
+          const frames: { held: boolean; reloadDone: boolean; fired: boolean }[] = [];
+          combat.onFrame = (id, ...rest) => {
+            if (id !== a.id) return real(id, ...rest);
+            const reloadDone = reloadLeft() <= 0;
+            const before = combatOf(room).inspect(a.id)!.shots;
+            const r = real(id, ...rest);
+            frames.push({ held: ((rest[1] as { buttons: number }).buttons & BUTTON.FIRE) !== 0, reloadDone, fired: combatOf(room).inspect(a.id)!.shots !== before });
+            return r;
+          };
+          const t0 = Date.now();
+          while (Date.now() - t0 < 5000 && a.p.shots === shots) await send(BUTTON.AIM | BUTTON.FIRE, 33);
+          combat.onFrame = real;
+          expect(a.p.shots).toBe((shots + 1) & 255);
+          const first = frames.findIndex((f) => f.held && f.reloadDone);
+          expect(first, "a held frame after the reload was done").toBeGreaterThanOrEqual(0);
+          expect(frames[first]!.fired, "fired on the first held frame after the reload was done").toBe(true);
+          expect(frames.slice(0, first).some((f) => f.fired), "nothing fired during the reload").toBe(false);
+          await send(BUTTON.AIM | BUTTON.FIRE, 600);
+          expect(a.p.shots).toBe((shots + 1) & 255);
+          await send(BUTTON.AIM, 100);
+        } else {
+          // let go before the end: the squeeze is spent, and the gun stays loaded
+          await send(BUTTON.AIM, Math.ceil(reloadLeft() * 1000) + 600);
+          expect(reloadLeft()).toBe(0);
+          expect(a.p.shots).toBe(shots);
+          expect(combatOf(room).inspect(a.id)!.mag[WEAPON.RIFLE]).toBe(1);
+        }
+      }
+    }, 40000);
+
     it("every blow and ball carries its weapon's sever bias into the wound rule (umbrella none, sabre more than the plain rule)", async () => {
       const { room, ps } = await setup(2);
       const [a, b] = ps as [Player, Player];

@@ -1,3 +1,4 @@
+import type { ClientIpPolicy } from "./clientIp.ts";
 import { WORLD_CLOCK } from "@cb/shared";
 import { persistenceConfig, type PersistenceConfig } from "./persistence/saver.ts";
 import { parseDemoEnv, type DemoConfig } from "./systems/Demo.ts";
@@ -29,6 +30,15 @@ export interface ServerConfig {
   persistence: PersistenceConfig;
   /** The bounded web demo (DEMO_MODE=1, DEMO_SESSION_SECONDS only outside production; D-036). Garbage means off. */
   demo: DemoConfig;
+  /**
+   * Where a request's address comes from, for rate limits (D-048): CLIENT_IP_HEADER (a header the trusted edge overwrites) and TRUST_PROXY_HOPS (proxies appending to
+   * X-Forwarded-For in front of the server; production default 1, Render's guidance; elsewhere 0).
+   */
+  clientIp: ClientIpPolicy;
+  /** Room creations (new campaigns and resumes) per address: ROOM_CREATE_BURST, then one per ROOM_CREATE_EVERY_S seconds. Production default 6 then one per 20 s; elsewhere off. 0 = off. */
+  roomCreate: { burst: number; everyS: number } | undefined;
+  /** Live rooms this process will hold (MAX_ROOMS): a create past it is refused, not queued. Production default 40; elsewhere 0 = no cap. */
+  maxRooms: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -72,6 +82,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     errors.push(e instanceof Error ? e.message.replace(/^Invalid persistence configuration:\n - /, "").replace(/\n - /g, "; ") : "persistence configuration invalid");
   }
 
+  const prod = nodeEnv === "production";
+  const int = (name: string, fallback: number, lo: number, hi: number): number => {
+    const v = env[name] === undefined || env[name] === "" ? fallback : Number(env[name]);
+    if (!Number.isInteger(v) || v < lo || v > hi) {
+      errors.push(`${name} must be an integer ${lo}-${hi}`);
+      return fallback;
+    }
+    return v;
+  };
+  const ipHeader = (env.CLIENT_IP_HEADER ?? "").trim().toLowerCase();
+  if (ipHeader && !/^[a-z0-9-]{1,40}$/.test(ipHeader)) errors.push("CLIENT_IP_HEADER must be a header name");
+  const clientIp: ClientIpPolicy = { trustHops: int("TRUST_PROXY_HOPS", prod ? 1 : 0, 0, 5), ...(ipHeader ? { header: ipHeader } : {}) };
+  const burst = int("ROOM_CREATE_BURST", prod ? 6 : 0, 0, 1000);
+  const everyS = int("ROOM_CREATE_EVERY_S", 20, 1, 3600);
+  const roomCreate = burst > 0 ? { burst, everyS } : undefined;
+  const maxRooms = int("MAX_ROOMS", prod ? 40 : 0, 0, 10_000);
+
   if (errors.length) throw new Error(`Invalid server configuration:\n - ${errors.join("\n - ")}`);
-  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs, persistence, demo: parseDemoEnv(env) };
+  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs, persistence, demo: parseDemoEnv(env), clientIp, roomCreate, maxRooms };
 }

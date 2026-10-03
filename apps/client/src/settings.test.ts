@@ -71,3 +71,11 @@ describe("head bob setting", () => {
     expect((await load({ search: "?headbob=1", reducedMotion: true })).settings.getHeadBob()).toBe(true);
   });
 });
+
+describe("graphics default by device (D-049)", () => {
+  it("a first visit on a touch-first screen starts on low (a phone's GPU and battery); elsewhere medium; the player's choice is not touched", async () => {
+    const { defaultGfx } = await import("./settings.ts");
+    expect(defaultGfx(true)).toBe("low");
+    expect(defaultGfx(false)).toBe("medium");
+  });
+});

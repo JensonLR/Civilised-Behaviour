@@ -243,3 +243,53 @@ test("a pad alone: front door, walk, turn, jump, sheets by glyph, fire, reload, 
 
   expect(errors).toEqual([]);
 });
+
+test("a pad alone joins a friend's party: the letter dial types the code at the door (D-049)", async ({ browser }) => {
+  test.setTimeout(480_000);
+  // the host founds a campaign with the keyboard; its code is what the guest must dial
+  const hostCtx = await browser.newContext();
+  const host = await hostCtx.newPage();
+  await host.addInitScript(() => localStorage.setItem("cb.skipTutorials", "1"));
+  await host.goto("/?gfx=test");
+  await host.fill("#name", "Host");
+  await host.click("#create");
+  await expect.poll(() => host.evaluate(() => (window as unknown as { __cb?: { session: { room: { state: { code: string } } } } }).__cb?.session.room.state.code ?? ""), { timeout: 180_000 }).toMatch(/^[A-Z2-9]{5}$/);
+  const code = await host.evaluate(() => (window as unknown as { __cb: { session: { room: { state: { code: string } } } } }).__cb.session.room.state.code);
+
+  const guestCtx = await browser.newContext();
+  const page = await guestCtx.newPage();
+  await page.addInitScript(installPad, XBOX_ID);
+  await page.addInitScript(() => {
+    localStorage.setItem("cb.name", "Padwise");
+    localStorage.setItem("cb.skipTutorials", "1");
+  });
+  await page.goto("/?gfx=test");
+  await page.waitForSelector("#code", { timeout: 120_000 });
+  const focused = () => page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName || "");
+  for (let i = 0; i < 16 && (await focused()) !== "code"; i++) await tap(page, "down");
+  expect(await focused()).toBe("code");
+
+  // A starts the dial on the alphabet's first letter; each letter is turned the short way round, then right moves along
+  const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  await tap(page, "a");
+  await expect(page.locator("#code.dialing")).toBeVisible();
+  await expect(page.locator("#dialhint")).toContainText("Confirm to join");
+  const value = () => page.evaluate(() => (document.querySelector("#code") as HTMLInputElement).value);
+  for (let slot = 0; slot < code.length; slot++) {
+    if (slot > 0) await tap(page, "right");
+    const want = ALPHABET.indexOf(code[slot]!);
+    const fwd = want; // (each new slot starts on "A", index 0)
+    const steps = fwd <= ALPHABET.length / 2 ? fwd : fwd - ALPHABET.length;
+    for (let s = 0; s < Math.abs(steps); s++) await tap(page, steps > 0 ? "up" : "down");
+    expect((await value())[slot], `slot ${slot}`).toBe(code[slot]);
+    if (slot === 2) await page.screenshot({ path: "test-results/pad-dial.png" });
+  }
+  expect(await value()).toBe(code);
+  await tap(page, "a"); // sends: the door joins
+  await expect.poll(() => page.evaluate(() => {
+    const h = (window as unknown as { __cb?: { session: { room: { state: { code: string; players: Map<string, unknown> } } } } }).__cb;
+    return h ? `${h.session.room.state.code}:${h.session.room.state.players.size}` : "";
+  }), { timeout: 180_000 }).toBe(`${code}:2`);
+  await hostCtx.close();
+  await guestCtx.close();
+});

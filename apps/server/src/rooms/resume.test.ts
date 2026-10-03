@@ -223,6 +223,53 @@ for (const variant of [fileVariant, pgVariant]) {
       expect(json(won[0]!.value as WorldRoom)).toEqual(saved);
     }, 60000);
 
+    it("a stranger's resume racing a member's cannot block it (security review, D-048: the stranger used to take the campaign's claim before the membership check)", async () => {
+      const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED + 6, token: TOKEN })) as unknown as WorldRoom;
+      const code = room.state.code;
+      const a = await join(room);
+      await a.c.leave();
+      await room.disconnect();
+      const store = await getRoomConfig().persistence!.store();
+      await until(async () => !!(await store.findByCode(code)), 5000, "the record");
+      const STRANGER = "5d6e7f80-91a2-4b3c-8d4e-5f6a7b8c9d0e";
+      const [stranger, member] = await Promise.allSettled([
+        colyseus.createRoom(ROOM_WORLD, { resume: code, token: STRANGER }),
+        colyseus.createRoom(ROOM_WORLD, { resume: code, token: TOKEN }),
+      ]);
+      expect(stranger.status).toBe("rejected");
+      expect(member.status, member.status === "rejected" ? String((member as PromiseRejectedResult).reason) : "").toBe("fulfilled");
+      expect(((member as PromiseFulfilledResult<unknown>).value as WorldRoom).state.code).toBe(code);
+    }, 60000);
+
+    it("a section damaged at THIS version is played on fresh values and its bytes are kept as damaged_<key> through every later save (persistence review (e))", async () => {
+      const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED + 4, token: TOKEN })) as unknown as WorldRoom;
+      const code = room.state.code;
+      const a = await join(room);
+      await a.c.leave();
+      await room.disconnect();
+      const store = await getRoomConfig().persistence!.store();
+      await until(async () => !!(await store.findByCode(code)), 5000, "the record");
+      const r0 = (await store.findByCode(code))!;
+      const garbled = '{"rival":{"day":3,"go';
+      expect((await store.save({ ...r0, sections: { ...r0.sections, powers: garbled } }, r0.rev)).ok).toBe(true);
+      const back = (await colyseus.createRoom(ROOM_WORLD, { resume: code, token: TOKEN })) as unknown as WorldRoom;
+      expect(parsePowers(back.state.powers)).toBeTruthy(); // played on fresh values
+      const b = await join(back);
+      await b.c.leave();
+      await back.disconnect();
+      await until(async () => (await store.findByCode(code))!.sections["damaged_powers"] !== undefined, 5000, "the damaged copy saved");
+      const rec = (await store.findByCode(code))!;
+      expect(rec.sections["damaged_powers"]).toBe(garbled);
+      expect(parsePowers(rec.sections.powers!)).toBeTruthy(); // the live section is a good one again
+      // a second visit keeps the copy untouched
+      const third = (await colyseus.createRoom(ROOM_WORLD, { resume: code, token: TOKEN })) as unknown as WorldRoom;
+      const c = await join(third);
+      await c.c.leave();
+      await third.disconnect();
+      await until(async () => (await store.findByCode(code))!.rev > rec.rev, 5000, "the third visit saved");
+      expect((await store.findByCode(code))!.sections["damaged_powers"]).toBe(garbled);
+    }, 60000);
+
     it("a section written by a NEWER build is played on fresh values but never saved over (a downgrade must not destroy the newer data)", async () => {
       const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED + 3, token: TOKEN })) as unknown as WorldRoom;
       const code = room.state.code;
@@ -285,6 +332,40 @@ for (const variant of [fileVariant, pgVariant]) {
         });
         expect(parseCampaign(back.state.campaign)!.day).toBe(3);
         expect(parsePowers(back.state.powers)!.rival.day).toBe(4); // still two days ahead of the ledger: no more idle days, and it waits for the ledger to catch up
+      }, 60000);
+
+      it("idle days owed survive a resume that ends no contract (persistence review (c): a join and leave used to save a fresh savedAt and forget them)", async () => {
+        const room = (await colyseus.createRoom(ROOM_WORLD, { seed: SEED + 5, token: TOKEN })) as unknown as WorldRoom;
+        const code = room.state.code;
+        const a = await join(room);
+        await a.c.leave();
+        await room.disconnect();
+        const store = await getRoomConfig().persistence!.store();
+        await until(async () => !!(await store.findByCode(code)), 5000, "the record");
+        clock!.now = -(2 * DAY_MS + 3600_000);
+        const r0 = (await store.findByCode(code))!;
+        await store.save({ ...r0 }, r0.rev);
+        clock!.now = 0;
+        // resume, join and leave (each saves, with a fresh savedAt), end NO contract, and close
+        const first = (await colyseus.createRoom(ROOM_WORLD, { resume: code, token: TOKEN })) as unknown as WorldRoom;
+        const revBefore = (await store.findByCode(code))!.rev;
+        const b = await join(first);
+        await b.c.leave();
+        await first.disconnect();
+        await until(async () => (await store.findByCode(code))!.rev > revBefore, 5000, "the uneventful visit saved");
+        // and resume again at once: the two days are still owed, and the first commit pays them
+        const back = (await colyseus.createRoom(ROOM_WORLD, { resume: code, token: TOKEN })) as unknown as WorldRoom;
+        const c0 = parseCampaign(back.state.campaign)!;
+        (back as unknown as { commitOutcome(o: unknown): void }).commitOutcome({
+          scenario: "secure_crossing", resolution: "paid", toll: 40, paid: 10, bridge: "intact", brokePromise: false, seconds: 1,
+          tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 },
+        });
+        const c1 = parseCampaign(back.state.campaign)!;
+        expect(c1.day).toBe(c0.day + 1);
+        expect(parsePowers(back.state.powers)!.rival.day).toBe(c1.day + 2);
+        // paid once: the next save owes nothing, so a third resume gives nothing more
+        await back.disconnect();
+        await until(async () => (await store.findByCode(code))!.sections.idle === "0", 5000, "nothing owed once paid");
       }, 60000);
     }
   });

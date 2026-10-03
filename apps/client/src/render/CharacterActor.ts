@@ -1,4 +1,4 @@
-import { Mesh, MeshBasicMaterial, SphereGeometry, type Group, type Scene, type Vector3 } from "three";
+import { Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
 import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
@@ -29,6 +29,8 @@ export const FIRST_PERSON_ARMS = {
   carry: { shoulder: 0.85, elbow: 1.05, inward: 0.5 },
   kneel: { shoulder: 0.5, elbow: 0.5, inward: 0.15 },
 } as const;
+
+const dropAt = new Vector3();
 
 /** Root pitch of a fully downed figure; mirrors the animator (`j.root.rotation.x = down * (PI / 2 - 0.1)`). */
 const LIE_ANGLE = Math.PI / 2 - 0.1;
@@ -99,6 +101,9 @@ export class CharacterActor {
   /** D-047: built on the first frame that wants one. */
   private torch?: TorchHold;
   private torchT = 0;
+  private torchWasOn = false;
+  /** A lit torch left the hand because the body went down: where it fell (world x, ground y, z) and the way it lies. Set by the game (`GroundTorches`); absent = it just goes out. */
+  onTorchDropped?: (x: number, y: number, z: number, yaw: number, seed: number) => void;
   private lastVy = 0;
   private lastVx = 0;
   private lastVz = 0;
@@ -374,6 +379,12 @@ export class CharacterActor {
       this.torch.attach(this.rig.joints.wristL);
     }
     if (torchOn) this.heldGrip.L = 0.85;
+    // the bearer went down: the torch falls where the hand was, instead of vanishing with the grip (read before `update` hides it)
+    if (this.torchWasOn && !torchOn && this.torch && ((pose.flags & FLAG.DOWNED) !== 0 || this.ragdoll !== undefined)) {
+      this.torch.group.getWorldPosition(dropAt);
+      this.onTorchDropped?.(dropAt.x, pose.y, dropAt.z, pose.facing + 1.2, this.fallbackSeed);
+    }
+    this.torchWasOn = torchOn;
     this.torchT += dt;
     this.torch?.update(torchOn, this.torchT);
     this.hands.update(dt, pose.flags, Math.hypot(pose.vx, pose.vz), this.anim.currentExpression, this.heldGrip.L, this.heldGrip.R);

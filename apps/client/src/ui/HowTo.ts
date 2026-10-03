@@ -1,7 +1,7 @@
 import { emitSetting, readStored, writeStored } from "../settings.ts";
-import { connectedPadFamily, deviceTracker, type InputDevice } from "../input/devices.ts";
+import { connectedPadFamily, deviceTracker, padFamilyOf, type PadFamily } from "../input/devices.ts";
 import { glyphEl, onPromptChange } from "../input/glyphDom.ts";
-import { keyboardRows, padRows, type ControlRow } from "./controlsInfo.ts";
+import { keyboardRows, padRows, touchRows, type ControlRow } from "./controlsInfo.ts";
 import { Modal, h } from "./modal.ts";
 import { sheetHints } from "./sheetHints.ts";
 import { openSettings } from "./Settings.ts";
@@ -21,7 +21,9 @@ export const markHowToSeen = (): void => {
   emitSetting("seenHowTo");
 };
 
-export type Device = "keyboard" | "pad";
+export type Device = "keyboard" | "pad" | "touch";
+/** A touch screen is the primary pointer (a phone or a tablet): the manual offers the touch page. */
+const touchScreen = (): boolean => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 /** Which device to show first: a connected standard gamepad means a pad player; otherwise keyboard and mouse. */
 export function detectDevice(pads: readonly (Pick<Gamepad, "connected" | "mapping"> | null)[] | undefined = typeof navigator !== "undefined" ? navigator.getGamepads?.() : undefined): Device {
@@ -40,6 +42,7 @@ class HowToCard {
   private readonly list = h("dl", { class: "keys" });
   private readonly kb = h("button", { type: "button", "aria-pressed": "true" }, "Keyboard & mouse");
   private readonly pad = h("button", { type: "button", "aria-pressed": "false" }, "Gamepad");
+  private readonly touch = h("button", { type: "button", "aria-pressed": "false" }, "Touch");
 
   constructor() {
     const done = h("button", { type: "button", class: "primary", "data-autofocus": true }, "Understood");
@@ -54,6 +57,7 @@ class HowToCard {
     });
     this.kb.addEventListener("click", () => this.show("keyboard"));
     this.pad.addEventListener("click", () => this.show("pad"));
+    this.touch.addEventListener("click", () => this.show("touch"));
     this.modal.panel.append(
       h("p", { class: "society" }, "The Imperial Cartographic & Improvement Society"),
       h("h2", { id: "howto-title" }, "Field Manual"),
@@ -62,7 +66,7 @@ class HowToCard {
         "div",
         { class: "body" },
         h("ol", { class: "steps" }, ...STEPS.map((s) => h("li", {}, s))),
-        h("div", { class: "seg", role: "group", "aria-label": "Show controls for" }, this.kb, this.pad),
+        h("div", { class: "seg", role: "group", "aria-label": "Show controls for" }, this.kb, this.pad, this.touch),
         this.list,
       ),
       h("div", { class: "actions" }, opts, replay, done),
@@ -71,23 +75,25 @@ class HowToCard {
     this.modal.onClose = () => markHowToSeen();
     // a pad picked up (or put down) while the card is open: the list follows, no reload
     onPromptChange((e) => {
-      if (this.modal.isOpen) this.show(e === "keyboard" ? "keyboard" : "pad");
+      if (this.modal.isOpen) this.show(e === "keyboard" ? "keyboard" : e === "touch" ? "touch" : "pad");
     });
   }
 
   /** The pad family whose shapes the pad list draws: the one in use, else the connected pad's, else the Xbox set. */
-  private family(): Exclude<InputDevice, "keyboard"> {
+  private family(): PadFamily {
     const e = deviceTracker.effective;
-    return e !== "keyboard" ? e : connectedPadFamily() ?? "xbox";
+    return e === "xbox" || e === "playstation" ? padFamilyOf(e) : connectedPadFamily() ?? "xbox";
   }
 
   private show(d: Device): void {
     this.device = d;
     this.kb.setAttribute("aria-pressed", String(d === "keyboard"));
     this.pad.setAttribute("aria-pressed", String(d === "pad"));
+    this.touch.setAttribute("aria-pressed", String(d === "touch"));
+    this.touch.hidden = d !== "touch" && !touchScreen() && deviceTracker.device !== "touch"; // (only where there is glass to touch)
     this.list.className = d === "pad" ? "keys pads" : "keys";
     const fam = this.family();
-    const rows: ControlRow[] = d === "keyboard" ? keyboardRows() : padRows(fam);
+    const rows: ControlRow[] = d === "keyboard" ? keyboardRows() : d === "touch" ? touchRows() : padRows(fam);
     this.list.replaceChildren(
       ...rows.map((r) =>
         h(
@@ -106,7 +112,8 @@ class HowToCard {
   }
 
   open(opener?: HTMLElement | null): void {
-    this.show(deviceTracker.device !== "keyboard" ? "pad" : detectDevice());
+    const dev = deviceTracker.device;
+    this.show(dev === "touch" ? "touch" : dev !== "keyboard" ? "pad" : touchScreen() ? "touch" : detectDevice());
     this.modal.open(opener);
   }
 

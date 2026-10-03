@@ -1,5 +1,5 @@
 import { ACTIONS, getBindings, keyLabel, type ActionId } from "../input/bindings.ts";
-import { glyphFor, type InputDevice, type PromptId } from "../input/devices.ts";
+import { glyphFor, type InputDevice, type PadFamily, type PromptId } from "../input/devices.ts";
 
 /** One row of a controls list: what to press, and what it does. `keys` are the labels (one per cap); `prompts` are the same controls as prompt ids, for the DOM glyph renderer. */
 export interface ControlRow {
@@ -30,7 +30,7 @@ const PAD_ROWS: readonly { prompts: PromptId[]; what: string }[] = [
 ];
 
 /** The gamepad layout for a pad family, as rows for the how-to card and the settings page. */
-export const padRows = (device: Exclude<InputDevice, "keyboard"> = "xbox"): ControlRow[] =>
+export const padRows = (device: PadFamily = "xbox"): ControlRow[] =>
   PAD_ROWS.map((r) => ({ keys: r.prompts.map((p) => glyphFor(p, device).label), what: r.what, prompts: r.prompts }));
 
 const keys = (id: ActionId): string[] => getBindings()[id].filter(Boolean).map(keyLabel);
@@ -60,7 +60,28 @@ export function keyboardRows(): ControlRow[] {
 }
 
 /** Rows for the device in use. */
-export const controlRows = (device: InputDevice): ControlRow[] => (device === "keyboard" ? keyboardRows() : padRows(device));
+export const controlRows = (device: InputDevice): ControlRow[] => (device === "keyboard" ? keyboardRows() : device === "touch" ? touchRows() : padRows(device));
+
+/** The touch overlay (D-049), as rows for the manual: the words are the ones drawn on the on-screen buttons (`TOUCH_LABEL`), none written twice. */
+const TOUCH_ROWS: readonly { prompts: PromptId[]; what: string }[] = [
+  { prompts: ["move"], what: "Move: the stick appears where your thumb lands, on the left" },
+  { prompts: ["sprint"], what: "Run: push the stick to its rim, forward" },
+  { prompts: ["look"], what: "Look: drag anywhere free on the right" },
+  { prompts: ["fire"], what: "Fire (hold for as long as the gun allows)" },
+  { prompts: ["aim"], what: "Aim over the shoulder (a tap on, a tap off)" },
+  { prompts: ["jump"], what: "Jump" },
+  { prompts: ["interact"], what: "Use, pick up, revive; reload when there is nothing to use" },
+  { prompts: ["reload"], what: "Reload, wherever you stand" },
+  { prompts: ["crouch"], what: "Crouch (a tap down, a tap up)" },
+  { prompts: ["melee"], what: "Melee" },
+  { prompts: ["grab"], what: "Grab or drag a comrade" },
+  { prompts: ["throw"], what: "Throw what you carry" },
+  { prompts: ["weaponNext"], what: "Next weapon (a tap); hold to put it away" },
+  { prompts: ["command"], what: "Command the hands: hold, drag to pick, let go to send" },
+  { prompts: ["view"], what: "Switch first / third person" },
+  { prompts: ["pause"], what: "Pause" },
+];
+export const touchRows = (): ControlRow[] => TOUCH_ROWS.map((r) => ({ keys: r.prompts.map((p) => glyphFor(p, "touch").label), what: r.what, prompts: r.prompts }));
 
 /** Groups for the rebinding list. */
 export const ACTION_GROUPS: readonly string[] = [...new Set(ACTIONS.map((a) => a.group))];

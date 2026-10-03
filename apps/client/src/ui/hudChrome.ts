@@ -41,7 +41,9 @@ export function buildHudChrome(hud: HTMLElement, code: string, link: string, sav
   const help = document.createElement("div");
   help.className = "help";
   const hints = (device: InputDevice): string =>
-    device === "keyboard"
+    device === "touch"
+      ? "" // (the on-screen buttons carry their own words: D-049)
+      : device === "keyboard"
       ? "{pause} pause · F1 manual · {move} move · {sprint} sprint · {jump} jump · {crouch} crouch · {view} view"
       : "{pause} pause · {move} move · {jump} jump · {aim} aim · {fire} fire · {interact} use · {view} view";
   const offHints = bindPrompt(help, hints);

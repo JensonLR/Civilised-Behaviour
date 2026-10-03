@@ -161,3 +161,24 @@ describe("CharacterActor third-person aim", () => {
     expect(remote.facing).toBe(1.1);
   });
 });
+
+describe("CharacterActor torch (the raid's raiders)", () => {
+  it("a bearer who goes down drops the lit torch where the hand was, once; carrying something only puts it away", () => {
+    const a = new CharacterActor(new Scene(), look(12), 3, false);
+    const drops: [number, number, number][] = [];
+    a.onTorchDropped = (x, y, z) => drops.push([x, y, z]);
+    settle(a, pose(FLAG.GROUNDED, { torch: true }));
+    expect(drops).toEqual([]);
+    // busy hands (a carried crate) put it away: no drop
+    settle(a, pose(FLAG.GROUNDED | FLAG.CARRYING, { torch: true }), 5);
+    expect(drops).toEqual([]);
+    settle(a, pose(FLAG.GROUNDED, { torch: true }), 5);
+    // down: it falls, near the body, on the body's ground (y), and only on the frame it fell
+    settle(a, pose(FLAG.GROUNDED | FLAG.DOWNED, { torch: true }), 30);
+    expect(drops.length).toBe(1);
+    const [x, y, z] = drops[0]!;
+    expect(Math.hypot(x - 2, z + 3)).toBeLessThan(1.5);
+    expect(y).toBe(0);
+    a.dispose();
+  });
+});

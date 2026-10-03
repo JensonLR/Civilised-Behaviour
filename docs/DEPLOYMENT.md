@@ -3,23 +3,22 @@
 Status: interim test deployment on Render (free plan, see D-011). Railway/Cloudflare/R2 plan below is the intended production target and is not built yet; no Dockerfile exists.
 
 ## Interim: Render (D-011)
-Services `cb-server` (Node web service) and `cb-client` (static site), Frankfurt, free plan, branch `claude/civilised-behaviour-architecture-jtce2l`, config mirrored in `render.yaml`. Free instances sleep after ~15 min idle: WebSockets drop and the next connection cold-starts (~30-60 s). Test use only; move to an always-on plan before any real playtest.
+Free plan, Frankfurt, both pairs auto-deploy every push to `claude/civilised-behaviour-architecture-jtce2l`; config mirrored in `render.yaml`. Free instances sleep after ~15 min idle: WebSockets drop and the next connection cold-starts (~30-60 s). Test use only; move to an always-on plan before any real playtest.
 
-### Live test deployment (created 2026-09-29)
-| Service | Type | URL | Render id |
-|---------|------|-----|-----------|
-| cb-server | Node web service, free, Frankfurt | https://civilised-behaviour-server.onrender.com (`/health`, `/metrics`) | srv-datqpblg1s2s73adt930 |
-| cb-client | Static site | https://civilised-behaviour.onrender.com | srv-datqpe0u01pc73a6rm5g |
+### The play link (created 2026-10-01; this is the pair to hand out)
+| Service | Type | URL | Render id | Health check |
+|---------|------|-----|-----------|--------------|
+| civilised-behaviour-server | Node web service | https://civilised-behaviour-server.onrender.com (`/health`, `/metrics`) | srv-dave76id0e5s73flf2u0 | `/health` (set by the owner 2026-10-03, read back from the Render API) |
+| civilised-behaviour | Static site | https://civilised-behaviour.onrender.com | srv-dave78id0e5s73flf9u0 | n/a |
 
-Both auto-deploy on every push to the branch. Client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onrender.com`.
+The client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onrender.com`.
 
-**Verified:** both deploys build and go live; `/health` 200; client page loads; matchmaking `POST /matchmake/create/world` works from the
-client origin; server logs show real joins/leaves from a curl WebSocket handshake and from the Colyseus Node SDK over `wss://`.
-**Not verified:** a full browser session against the deployment. The sandbox's Chromium gets a 404 on the `wss://` upgrade while curl and the
-Node SDK succeed with identical headers, so this looks like a sandbox-proxy artefact, but it is unproven. Open the client URL in a normal
-browser (two tabs) to confirm; `scripts/deploy-smoke.mjs <clientUrl>` automates it where the network allows.
+**The older duplicate pair is gone.** `cb-server` and `cb-client` (created 2026-09-29, same branch, nothing linked to them) were deleted by the owner in the dashboard on 2026-10-03 (checked through Render's API: only the pair above remains for this repo; `/health` 200 and the client 200 afterwards). Every push now builds two services, not four.
 
-**Known gaps:** Render health-check path is not set (the MCP tool cannot set it; set `/health` in the dashboard). `ALLOWED_ORIGINS` is enforced (see NETWORKING.md); the Electron build's renderer origin must be added to it when that app exists. First request after idle cold-starts the instance.
+**Verified (2026-10-02, after the PR #1 merge deployed):** `/health` 200; matchmaking `POST /matchmake/create/world` works; the `wss://` upgrade answers 101 and streams state to curl; and **two real Chromium sessions played together on the live game** through the play link: `scripts/deploy-smoke.mjs` (run as `NODE_USE_ENV_PROXY=1 CB_WS_RELAY=1`) founded expedition 5G53V in one browser (42.9 s including a cold start), joined it by code in the other, and each saw the other in the Hollowmere camp (screenshot looked at).
+**Why the relay:** in the Claude Code cloud sandbox, the browser's own `wss://` upgrade gets **404 from the sandbox's intercepting proxy** (`127.0.0.1` answers; `/root/.ccr/README.md` lists WebSocket upgrades as unsupported), while a CONNECT tunnel (curl, Node) is fine. It is not the deployment: the server logs the room as created, and Colyseus's transport never answers 404. `CB_WS_RELAY=1` hands the page's socket to Node's WebSocket, which tunnels through `HTTPS_PROXY`. A normal browser needs nothing.
+
+**Known gaps:** `ALLOWED_ORIGINS` is enforced (see NETWORKING.md); the Electron build's renderer origin must be added to it when that app exists. First request after idle cold-starts the instance.
 
 ## Target
 - Web + demo: Cloudflare Workers Static Assets; large assets on R2 behind a custom asset domain (not r2.dev), immutable hashed filenames.
@@ -28,7 +27,8 @@ browser (two tabs) to confirm; `scripts/deploy-smoke.mjs <clientUrl>` automates 
 
 ## Server env (validated in `apps/server/src/config.ts`)
 `NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (optional until M10),
-`SIMULATED_LATENCY_MS` (must be 0 in production).
+`SIMULATED_LATENCY_MS` (must be 0 in production), and the abuse limits (D-048; see NETWORKING.md): `TRUST_PROXY_HOPS` (production default 1),
+`CLIENT_IP_HEADER` (optional), `ROOM_CREATE_BURST` / `ROOM_CREATE_EVERY_S` (production default 6 / 20 s; 0 turns it off), `MAX_ROOMS` (production default 40; 0 = no cap).
 
 Campaign persistence (`apps/server/src/persistence`, read by `persistenceConfig`; fails fast with a readable list):
 | Variable | Default | Meaning |
