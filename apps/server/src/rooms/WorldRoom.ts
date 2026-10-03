@@ -140,7 +140,7 @@ import {
   type ScenarioOutcome,
   type ScenarioView,
 } from "@cb/shared";
-import { HISTORY_KEYS, applyClientAppearance, applyPeople, decodeSpec, encodeSpec, generateCharacter, specFromUntrusted } from "@cb/procedural";
+import { HISTORY_KEYS, applyClientAppearance, applyPeople, decodeSpec, encodeSpec, generateCharacter, societyDress, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { Demo } from "../systems/Demo.ts";
@@ -752,7 +752,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     player.slot = slot;
     player.connected = true;
     // Untrusted look -> valid canonical spec; a fresh join never carries history (that is campaign-owned).
-    const incoming = specFromUntrusted(options?.look, seedFromString(client.sessionId));
+    const incoming = societyDress(specFromUntrusted(options?.look, seedFromString(client.sessionId))); // (D-065: an explorer never wears a people's dress)
     const blank = { ...incoming };
     for (const k of HISTORY_KEYS) blank[k] = 0;
     player.look = encodeSpec(blank);

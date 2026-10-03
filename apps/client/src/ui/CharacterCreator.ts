@@ -1,4 +1,4 @@
-import { FIELDS, PALETTES, encodeSpec, type CharacterSpec, type FieldDef, type FieldKey } from "@cb/procedural";
+import { FIELDS, NATIVE_FROM, PALETTES, encodeSpec, societyDress, type CharacterSpec, type FieldDef, type FieldKey } from "@cb/procedural";
 import {
   POSES,
   POSE_EVENT,
@@ -176,6 +176,7 @@ export class CharacterCreator {
 
   /** Records a new look and shows it: one function for every way the look can change. `group` coalesces a drag on one control into one undo step. */
   private commit(next: CharacterSpec, group?: string): void {
+    next = societyDress(next); // (D-065: the peoples' dress is theirs; the dice and a pasted code cannot land on it either)
     if (!this.history.record(next, group, performance.now())) return;
     this.spec = this.history.current;
     this.refresh();
@@ -348,7 +349,7 @@ export class CharacterCreator {
     } else if (f.options) {
       const sel = el("select");
       sel.setAttribute("aria-label", f.label);
-      f.options.forEach((label, i) => sel.append(new Option(label, String(i))));
+      f.options.slice(0, NATIVE_FROM[f.key] ?? f.options.length).forEach((label, i) => sel.append(new Option(label, String(i)))); // (D-065: the Society's wardrobe only)
       sel.addEventListener("change", () => this.commit({ ...this.spec, [f.key]: Number(sel.value) } as CharacterSpec, f.key));
       this.sync.set(f.key, (v) => {
         sel.value = String(v);

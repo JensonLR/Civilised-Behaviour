@@ -41,10 +41,11 @@ export const COLONIAL_CODED: Partial<Record<TagField | "epaulettes" | "decoratio
   // (D-041: the owner's "the people we colonise should not look like us" was still unmet: natives wore the Society's caps, waistcoats, collars, breeches, riding boots, gloves and
   // whiskers under their own hats. Everything a Victorian gentleman's outfitter sold is now the Society's alone.)
   hat: ["Top Hat", "Bowler", "Pith Helmet", "Shako", "Bicorne", "Plumed Helmet", "Boater", "Fez", "Veiled Pith", "Tricorn", "Kepi", "Deerstalker", "Topee", "Busby", "Peaked Cap", "Flat Cap", "Slouch Hat", "Wide-Awake", "Sou'wester", "Nightcap"],
-  jacket: ["Frock Coat", "Tunic", "Greatcoat", "Hunting Jacket", "Poncho", "Smoking Jacket", "Naval Reefer", "Norfolk Jacket", "Waistcoat"],
+  jacket: ["Frock Coat", "Tunic", "Greatcoat", "Hunting Jacket", "Poncho", "Smoking Jacket", "Naval Reefer", "Norfolk Jacket", "Waistcoat", "Cape", "Shirt Sleeves"],
   shirt: ["Striped", "Checked", "Wing Collar", "Ruffled Jabot"],
-  trousers: ["Striped", "Breeches", "Plus-Fours", "Jodhpurs"],
-  boots: ["Tall Riding", "Spats", "Spurred", "Puttees", "Wellingtons", "Hobnailed"],
+  // (D-065: "completely different from the players": the Society's trousers, boots and plain capes are now the Society's alone too; a native walks in a wrap and sandals)
+  trousers: ["Plain", "Striped", "Breeches", "Baggy", "Plus-Fours", "Jodhpurs", "Tropical Shorts"],
+  boots: ["Tall Riding", "Spats", "Spurred", "Puttees", "Wellingtons", "Hobnailed", "Ankle"],
   gloves: ["White Cotton", "Leather", "Gauntlets"],
   sideburns: ["Mutton Chops", "Flourishing", "Bushy Wings", "Piccadilly Weepers", "Sculpted Points"],
   neckwear: ["Cravat", "Bow Tie", "Ascot", "Ruff"],
@@ -71,6 +72,8 @@ export const PEOPLE_CATALOG_ADDITIONS = {
   HAIR_ACCESSORIES: ["Copper Rings", "Bone Pins", "Glass Beads", "Herd Tags"],
   HIP_GEAR: ["Small Lamp", "Herd Bell", "Tally Cord", "Net Bag"],
   BOOTS: ["Reed Sandals", "Mud Pattens"],
+  // D-065: the native lower body. The peoples walked on the Society's trousers under their own smocks; a wrap turns a smock into a long garment and gives a shawl a skirt
+  TROUSERS: ["Wrap Skirt"],
 } as const;
 export type AdditionKey = keyof typeof PEOPLE_CATALOG_ADDITIONS;
 /** Flipped by package C when every name above is in the catalogue AND has geometry (the audit test then requires it). */
@@ -89,7 +92,8 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     body: { height: [90, 190], torsoWidth: [110, 220], belly: [60, 190], headScale: [90, 190], shoulderWidth: [90, 180], handScale: [120, 220], footScale: [100, 190] },
     pick: {
       hat: w(["Reed Brim", 7], ["None", 2]),
-      jacket: w(["Stone Smock", 7], ["Shirt Sleeves", 1], ["Cape", 1]),
+      jacket: w(["Stone Smock", 1]),
+      trousers: w(["Wrap Skirt", 1]),
       boots: w(["Clogs", 4], ["Reed Sandals", 3], ["Slippers", 1]),
       shirt: w(["Collarless", 3], ["Work Shirt", 2]),
       neckwear: w(["None", 4], ["Neckerchief", 3], ["Scarf", 2]),
@@ -106,8 +110,9 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     body: { height: [175, 255], torsoWidth: [40, 120], torsoDepth: [60, 130], belly: [0, 90], headScale: [50, 130], shoulderWidth: [60, 140], legLength: [150, 255], armLength: [140, 230], handScale: [110, 200], posture: [150, 255] },
     pick: {
       hat: w(["Lamp Hood", 7], ["None", 1]),
-      jacket: w(["Lamp Robe", 7], ["Cape", 1]),
-      boots: w(["Slippers", 3], ["Reed Sandals", 2], ["Ankle", 1]),
+      jacket: w(["Lamp Robe", 1]),
+      trousers: w(["Wrap Skirt", 1]),
+      boots: w(["Slippers", 3], ["Reed Sandals", 2]),
       shirt: w(["Collarless", 3], ["Plain", 1]),
       neckwear: w(["Lamp Chain", 3], ["Scarf", 2], ["None", 2]),
       facePaint: w(["None", 5], ["Lamp Soot Line", 4]),
@@ -123,8 +128,9 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     body: { height: [110, 220], torsoWidth: [150, 255], torsoDepth: [120, 220], belly: [60, 200], shoulderWidth: [170, 255], armLength: [110, 200], handScale: [170, 255], footScale: [140, 230], headScale: [80, 170], posture: [120, 230] },
     pick: {
       hat: w(["Sheaf Hat", 7], ["None", 1]),
-      jacket: w(["Herd Cloak", 7], ["Cape", 1]),
-      boots: w(["Reed Sandals", 3], ["Clogs", 2], ["Mud Pattens", 1], ["Ankle", 1]),
+      jacket: w(["Herd Cloak", 1]),
+      trousers: w(["Wrap Skirt", 1]),
+      boots: w(["Reed Sandals", 3], ["Clogs", 2], ["Mud Pattens", 1]),
       shirt: w(["Work Shirt", 3], ["Collarless", 2]),
       neckwear: w(["Bell Collar", 3], ["Bead Strings", 2], ["Scarf", 2], ["None", 1]),
       hair: w(["Braid Crown", 3], ["Plait", 2], ["Shaggy Mane", 2], ["Curls", 1], ["Shoulder Curtain", 1]),
@@ -141,8 +147,9 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     body: { height: [80, 190], torsoWidth: [30, 110], torsoDepth: [60, 130], belly: [0, 70], headScale: [100, 200], shoulderWidth: [40, 120], armLength: [140, 230], posture: [20, 110], age: [90, 230], jaw: [90, 200] },
     pick: {
       hat: w(["Dust Wrap", 7], ["None", 1]),
-      jacket: w(["Crepe Shawl", 7], ["Cape", 1]),
-      boots: w(["Ankle", 3], ["Mud Pattens", 2], ["Reed Sandals", 1]),
+      jacket: w(["Crepe Shawl", 1]),
+      trousers: w(["Wrap Skirt", 1]),
+      boots: w(["Mud Pattens", 3], ["Reed Sandals", 2], ["Slippers", 1]),
       shirt: w(["Collarless", 3], ["Plain", 1]),
       neckwear: w(["Memorial Beads", 4], ["Muffler", 2], ["None", 2]),
       facePaint: w(["Ash Brow", 4], ["None", 4], ["Soot Smudges", 2]),
@@ -158,14 +165,14 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     body: { height: [20, 120], torsoWidth: [150, 255], torsoDepth: [140, 230], belly: [140, 255], headScale: [100, 200], shoulderWidth: [90, 170], legLength: [10, 100], armLength: [60, 140], footScale: [150, 255], handScale: [110, 210] },
     pick: {
       hat: w(["Tide Hat", 6], ["Net Cap", 3], ["None", 1]),
-      jacket: w(["Wading Smock", 7], ["Shirt Sleeves", 1]),
+      jacket: w(["Wading Smock", 1]),
       boots: w(["Mud Pattens", 4], ["Reed Sandals", 2]),
       shirt: w(["Work Shirt", 3], ["Collarless", 2]),
       neckwear: w(["Float Cord", 4], ["Bead Strings", 2], ["None", 2]),
       facePaint: w(["Tide Lines", 4], ["None", 5]),
       hair: w(["Salt Locks", 4], ["Tied Tail", 2], ["Curls", 1], ["Shaggy Mane", 1]),
       hipGear: w(["Net Bag", 3], ["Tally Cord", 3], ["Coiled Rope", 1]),
-      trousers: w(["Tropical Shorts", 3], ["Baggy", 3], ["Plain", 1]),
+      trousers: w(["Wrap Skirt", 1]),
     },
     grandOdds: 0.2,
     grandPick: { hipGear: w(["Tally Cord", 1]), neckwear: w(["Bead Strings", 1]), jacket: w(["Court Cloak", 1]) },
@@ -178,7 +185,7 @@ const rangeAt = (r: Range, u: number): number => Math.round(r[0] + (r[1] - r[0])
 export const codedList = (f: string): readonly string[] =>
   f === "epaulettes" ? C.EPAULETTES : f === "decoration" ? C.DECORATIONS : f === "eyewear" ? C.EYEWEAR : f === "sideburns" ? C.SIDEBURNS : FIELD_LIST[f as TagField];
 /** What replaces a colonial pick where the field's first option is not "nothing" (boots[0] is the riding boot). */
-const REPLACE: Readonly<Record<string, string>> = { hair: "Curls", boots: "Reed Sandals", gloves: "None", sideburns: "None" };
+const REPLACE: Readonly<Record<string, string>> = { hair: "Curls", boots: "Reed Sandals", gloves: "None", sideburns: "None", trousers: "Wrap Skirt", jacket: "Stone Smock" };
 
 /** A name from a weighted table that exists in the catalogue (additions not yet landed are skipped); undefined if none does. */
 function drawName(table: Weighted, list: readonly string[], rng: Rng): string | undefined {
@@ -237,7 +244,7 @@ export function applyPeople(spec: CharacterSpec, people: PeopleId, seed: number)
   // dress in the people's own dyes
   const dyes: number[] = PEOPLE[id].dyes.map((d) => DYE[d]);
   const dye = (i: number): number => dyes[i % dyes.length]!;
-  out.jacketColor = dye(rng.int(0, 2));
+  out.jacketColor = dye(rng.int(0, 1)); // (the people's own two: shared peoples.ts)
   out.trousersColor = dye(rng.int(1, 4));
   out.hatColor = dye(rng.int(0, 5));
   if (out.hatColor === out.jacketColor) out.hatColor = dye(dyes.indexOf(out.hatColor) + 2);

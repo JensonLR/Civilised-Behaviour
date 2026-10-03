@@ -401,8 +401,24 @@ export function skirtRings(c: BodyCtx, len: number, flare: number, color: number
   return skirtShapeRings(c, { len, flare, color, hemC, legRings, open });
 }
 
-/** How far below the waist a closed coat skirt hangs (0 = none, or open in front so the legs must show). */
+/**
+ * D-065: the native wrap (TROUSERS "Wrap Skirt"): a closed cloth from the waist to the knee. Under a closed coat skirt it lengthens that skirt (one surface, never two crossing);
+ * under a coat open at the front (a robe, a cloak) the robe stands as it is and the legs below are its leggings; with no skirt at all it is a skirt of its own, in the trouser cloth.
+ */
+const WRAP_LEN = 1.08;
+/** The first of the peoples' own garments (spec.ts NATIVE_FROM.jacket; not imported: spec.ts is upstream of the geometry and this keeps the dependency one way). */
+const NATIVE_JACKET_FROM = 11;
+const isWrap = (spec: CharacterSpec): boolean => spec.trousers === 7; // (limbRings.ts TR.WRAP: limbRings imports this file, so not imported back)
+
+/** How far below the waist a closed coat skirt hangs (0 = none, or open in front so the legs must show). The native wrap counts (D-065). */
 export function closedSkirtLength(spec: CharacterSpec, P: Proportions): number {
+  const coat = coatClosedLength(spec, P);
+  const sk = coatSkirtSpec(spec, P);
+  if (!isWrap(spec) || (sk?.open && sk.len > P.legUpper * WRAP_LEN)) return coat;
+  return Math.max(coat, P.legUpper * WRAP_LEN);
+}
+
+function coatClosedLength(spec: CharacterSpec, P: Proportions): number {
   switch (spec.jacket) {
     case JACKET.TUNIC:
       return P.legUpper * 0.5;
@@ -424,26 +440,33 @@ export function closedSkirtLength(spec: CharacterSpec, P: Proportions): number {
 }
 
 /** The skirt of the spec's jacket: how far it hangs below the waist, how much it flares at the hem, and whether it is cut open at the front (frock coat, greatcoat). */
-export function skirtSpec(spec: CharacterSpec, P: Proportions): { len: number; flare: number; open: boolean } | undefined {
+export function skirtSpec(spec: CharacterSpec, P: Proportions): { len: number; flare: number; open: boolean; wrap?: boolean } | undefined {
+  const coat = coatSkirtSpec(spec, P);
+  if (!isWrap(spec) || (coat?.open && coat.len > P.legUpper * WRAP_LEN)) return coat; // (a long robe stays open in front, or it is walked through: the legs below are its leggings)
+  if (coat) return { len: Math.max(coat.len, P.legUpper * WRAP_LEN), flare: Math.max(coat.flare, 1.1), open: false };
+  return { len: P.legUpper * WRAP_LEN, flare: 1.1, open: false, wrap: true };
+}
+
+function coatSkirtSpec(spec: CharacterSpec, P: Proportions): { len: number; flare: number; open: boolean } | undefined {
   switch (spec.jacket) {
     case JACKET.FROCK:
       return { len: P.legUpper * 1.0, flare: 1.12, open: true };
     case JACKET.GREATCOAT:
       return { len: P.legUpper * 1.4, flare: 1.32, open: true };
     case JACKET.TUNIC:
-      return { len: closedSkirtLength(spec, P), flare: 1.12, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.12, open: false };
     case JACKET.HUNTING:
-      return { len: closedSkirtLength(spec, P), flare: 1.05, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.05, open: false };
     case JACKET.NAVAL:
-      return { len: closedSkirtLength(spec, P), flare: 1.06, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.06, open: false };
     case JACKET.NORFOLK:
-      return { len: closedSkirtLength(spec, P), flare: 1.08, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.08, open: false };
     case JACKET.SMOKING:
-      return { len: closedSkirtLength(spec, P), flare: 1.1, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.1, open: false };
     case JACKET.STONE_SMOCK:
-      return { len: closedSkirtLength(spec, P), flare: 1.1, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.1, open: false };
     case JACKET.WADING_SMOCK:
-      return { len: closedSkirtLength(spec, P), flare: 1.06, open: false };
+      return { len: coatClosedLength(spec, P), flare: 1.06, open: false };
     case JACKET.LAMP_ROBE: // ankle-length and split at the front (a closed bell would be walked through)
       return { len: P.legUpper * 1.2, flare: 1.1, open: true };
     case JACKET.HERD_CLOAK:
@@ -466,15 +489,17 @@ const SKIRT_FOLDS = 7;
 export function dressSkirts(b: PartBuilder, c: BodyCtx, legRings?: readonly Ring[]): void {
   const { spec, P } = c;
   const j = spec.jacket;
-  const coat = c.jacketC;
-  const hemC = soil(tone(coat, 0.7), 0.22);
   const sc = P.scale;
   const sk = skirtSpec(spec, P);
   if (!sk || sk.len <= 0) return;
+  const coat = sk.wrap ? c.trouserC : c.jacketC; // (a wrap with no coat over it is the trouser cloth)
+  const hemC = soil(tone(coat, 0.7), 0.22);
   const { len, flare, open } = sk;
   // the lining: a contrast silk, seen from below, through the vent and along every free edge
-  const lining = tone(singe(dyeAt(PALETTE.cloth, spec.jacketColor + 4), c.burnt), 0.9);
+  const lining = tone(singe(dyeAt(PALETTE.cloth, (sk.wrap ? spec.trousersColor : spec.jacketColor) + 4), c.burnt), 0.9);
   const rings = skirtRings(c, len, flare, coat, hemC, legRings, open);
+  // D-065: the peoples' garments (and the wrap) carry a woven border in the hat's dye, the Society's never do
+  const band = j >= NATIVE_JACKET_FROM || sk.wrap || isWrap(spec) ? tone(singe(dyeAt(PALETTE.cloth, spec.hatColor === spec.jacketColor ? spec.hatColor + 3 : spec.hatColor), c.burnt), 0.95) : undefined;
   if (PartBuilder.lod > 0 && !open) {
     // (a crowd figure needs the bell, not every fold section)
     b.loft(rings.filter((_, i) => i === 0 || i >= rings.length - 3 || i % 2 === 0), coat, undefined, undefined, undefined, { capTop: false });
@@ -525,6 +550,7 @@ export function dressSkirts(b: PartBuilder, c: BodyCtx, legRings?: readonly Ring
       // (the folds are drawn in the cloth as well as in the shape: valleys a shade darker, deeper toward the hem, so they read under the flat toon light)
       color: (phi, t) => {
         if (t < 0.03) return hemC;
+        if (band !== undefined && ((t > 0.06 && t < 0.14) || (t > 0.18 && t < 0.21))) return band; // (a woven border: no tailor's hem looks like it)
         const ridge = 0.5 + 0.5 * Math.cos(SKIRT_FOLDS * phi + Math.PI);
         const depth = 0.05 + 0.16 * (1 - t);
         return lerpColor(tone(coat, 0.94 - 0.06 * (1 - t) - depth), tone(coat, 1.0 - 0.06 * (1 - t)), ridge);

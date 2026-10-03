@@ -39,6 +39,7 @@ const NEEDS: Partial<Record<FieldKey, Partial<CharacterSpec>>> = {
   hatTrim: { hat: 6 },
   hatColor: { hat: 6 },
   shirt: { jacket: 3 },
+  trousers: { jacket: 0 }, // (D-065: the wrap is a skirt of its own only with no coat skirt over it; under the frock coat it is the leggings)
   shirtColor: { jacket: 0 },
   trouserTrim: { trousers: 1 },
   ring: { gloves: 0 },
