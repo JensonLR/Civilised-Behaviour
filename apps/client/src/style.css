@@ -526,7 +526,7 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 .wounds { left: calc(var(--edge-l) + 7.7rem); bottom: var(--edge-b); }
 .help { right: var(--edge-r); bottom: var(--edge-b); }
 .arms { right: var(--edge-r); bottom: calc(var(--edge-b) + 2.3rem); }
-.cannoncard { right: var(--edge-r); top: calc(var(--edge-t) + 4rem); }
+.cannoncard { right: var(--edge-r); top: max(calc(var(--edge-t) + 4rem), calc(var(--codebar-b, 0px) + 0.5rem)); } /* (under the expedition bar, however many rows it wraps to) */
 @media (max-width: 62rem) { .arms { bottom: var(--edge-b); } }
 /* Captions sit on the left, above the gauge, where the picture is least busy and nothing else of ours is: the armoury card owns the right. */
 .captions { right: auto; left: max(var(--pad), env(safe-area-inset-left, 0px)); bottom: calc(max(var(--pad), env(safe-area-inset-bottom, 0px)) + 8.6rem); align-items: flex-start; width: min(92vw, 24rem); }
