@@ -7,6 +7,8 @@ import { distToPaths, levelOf, planBuilding, roomObstacles, type LevelBuilding, 
 import type { AuditDoor } from "./levelAudit.ts";
 import { PropKind, type PropKindId, type PropSpawn } from "./props.ts";
 import { Rng, hash3, hashFloat } from "./rng.ts";
+import { withOutpost } from "./outpost.ts";
+import type { OutpostStage } from "./worldTypes.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
 
 /**
@@ -491,7 +493,7 @@ export function highmarkLevel(): RegionLevel {
 // ---- colliders ----------------------------------------------------------------------------------------------------------------------------
 
 /** Everything solid in Highmark: the walls, the ramps' sides, the buildings, the gatehouse, the court's furniture, the milestones, the camp, the quay, then the seeded scrub on its own Rng stream. */
-export function highmarkObstacles(terrain: Terrain, seed: number): Obstacle[] {
+export function highmarkObstacles(terrain: Terrain, seed: number, opts?: { outpost?: OutpostStage; telegraph?: boolean }): Obstacle[] {
   const plan = highmarkPlan();
   const g = (x: number, z: number): number => terrain.height(x, z);
   const out: Obstacle[] = [];
@@ -584,14 +586,15 @@ export function highmarkObstacles(terrain: Terrain, seed: number): Obstacle[] {
     out.push({ kind: "circle", tag: "rock", x, z, r, y0: y - 1.2, y1: y + r * 1.5 });   // a termite mound
     k++;
   }
-  return out;
+  // D-056: the Society's outpost on the grass west of the landing (the dressing above is the same at every stage; a stage clears it out of the ring and adds its own)
+  return withOutpost(out, terrain, "highmark", opts, ["tree", "rock"]);
 }
 
 const A_BOUNDS = HIGHMARK_ANCHORS.bounds;
 
-export function createHighmarkWorld(seed: number): CollisionWorld {
+export function createHighmarkWorld(seed: number, opts?: { outpost?: OutpostStage; telegraph?: boolean }): CollisionWorld {
   const terrain = createHighmarkTerrain(seed);
-  return new CollisionWorld(terrain, highmarkObstacles(terrain, seed), HIGHMARK_ANCHORS.bounds);
+  return new CollisionWorld(terrain, highmarkObstacles(terrain, seed, opts), HIGHMARK_ANCHORS.bounds);
 }
 
 /** The landing: a ring of up to four on the quay-side bank (never in the water, never on the planks). */
@@ -669,10 +672,10 @@ export interface HerdPlan {
 export const HERD_CAP = 96;
 
 const HERD_BASE: readonly { cx: number; cz: number; r: number; n: number }[] = [
-  { cx: -46, cz: 24, r: 15, n: 26 }, { cx: 50, cz: 52, r: 17, n: 24 }, { cx: -60, cz: 84, r: 13, n: 20 }, { cx: 48, cz: 88, r: 12, n: 22 },
+  { cx: -46, cz: 24, r: 15, n: 26 }, { cx: 50, cz: 52, r: 17, n: 24 }, { cx: -100, cz: 62, r: 13, n: 20 }, { cx: 48, cz: 88, r: 12, n: 22 },
 ];
 
-/** Four herds, 92 animals in all: grazing drift deterministic from (seed, worldSec), their ground always >= 28 m from the road and well off the hill. */
+/** Four herds, 92 animals in all: grazing drift deterministic from (seed, worldSec), their ground always >= 28 m from the road and well off the hill (and, D-056, off the outpost's ground: the west herd grazes beyond it). */
 export function herdPlan(seed: number): HerdPlan {
   const rng = new Rng(seed ^ 0x4e7d5);
   const herds = HERD_BASE.map((h) => ({ cx: h.cx + rng.range(-3, 3), cz: h.cz + rng.range(-3, 3), r: h.r, speed: rng.range(0.3, 0.5), n: h.n }));

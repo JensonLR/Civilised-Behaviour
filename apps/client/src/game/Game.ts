@@ -4,7 +4,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, KESSAR_OUTPOST, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { Session } from "../net/Session.ts";
@@ -143,7 +143,7 @@ export class Game {
   private pingTimer = 0;
   private readonly audio: GameAudio;
   /** Hoofbeats, the sailing, the paper, the day bell and the gun crew, from replicated state only (D-035). */
-  private readonly content = new ContentAudio({ outpostSite: () => KESSAR_OUTPOST.site });
+  private readonly content = new ContentAudio({ outpostSite: () => OUTPOST_SITES[this.builtRegion]?.site });
   private readonly offSettings: () => void;
   // --- the campaign layer: map room, sailing, parley, the paper, the orders of the day ---
   private readonly mapRoom: MapRoom;
@@ -357,7 +357,7 @@ export class Game {
     if (!c) return;
     const s = this.settlements ?? newSettlements();
     const p = this.powers ?? newPowers(this.session.room.state.seed);
-    this.stage.setDress(regionDressOf(s, p.rival, "kessar"));
+    this.stage.setDress(regionDressOf(s, p.rival, this.builtRegion)); // (D-056: the post of the shore you stand on)
     this.stage.setHistory(historyPieces(c, s));
   }
 
@@ -1060,10 +1060,11 @@ export class Game {
 
   /** The words at the outpost's foundation (D-035): how many crates are down, what the carried thing will do. */
   private foundationText(held: PropKindId | undefined): string {
-    const f = foundationStatus(this.settlements ?? newSettlements(), "kessar");
-    const name = this.settlements?.posts.kessar?.name ?? "the outpost";
+    const here = this.builtRegion;
+    const f = foundationStatus(this.settlements ?? newSettlements(), here);
+    const name = this.settlements?.posts[here]?.name ?? "the outpost";
     if (f.standing) {
-      if (held === undefined) return `${name}: ${STAGE_LABEL[this.settlements!.posts.kessar!.stage]}. Carry crates, barrels and chairs here to keep it alive.`;
+      if (held === undefined) return `${name}: ${STAGE_LABEL[this.settlements!.posts[here]!.stage]}. Carry crates, barrels and chairs here to keep it alive.`;
       return held === PropKind.BOTTLE ? "A bottle does not found anything" : `Deliver the ${PROP_DEFS[held].name} to ${name}`;
     }
     const n = Math.min(FOUNDATION_CRATES, f.crates + 1);

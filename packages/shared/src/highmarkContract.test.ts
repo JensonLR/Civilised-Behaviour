@@ -32,7 +32,7 @@ describe("Highmark contract (D-036)", () => {
     expect(Array.isArray(regionProps("highmark", 7, w))).toBe(true);
     expect(regionNavOptions("highmark", w).tag).toBe("highmark");
     expect(regionNavOptions("hollowmere", createRegionWorld("hollowmere", 7))).toEqual({});
-    expect(stationsFor("highmark").map((s) => s.id)).toEqual(["dock", "chamberlain", "elder", "younger"]);
+    expect(stationsFor("highmark").map((s) => s.id)).toEqual(["dock", "foundation", "chamberlain", "elder", "younger"]);
     expect(stationsFor("highmark").filter((s) => s.kind === "court")).toHaveLength(3);
     const near = HIGHMARK_SITES.chamberlain;
     expect(findStation("highmark", near.x, near.z + 1, 0)?.id).toBe("chamberlain");

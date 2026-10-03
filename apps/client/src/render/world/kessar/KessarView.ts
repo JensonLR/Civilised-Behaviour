@@ -18,7 +18,7 @@ import { buildKessarCloth, createKessarAtlas, kessarClothMaterial } from "./clot
 import { buildKessarGround, buildKessarSkirt, kessarCover } from "./ground.ts";
 import { palmGeometry, palmHullGeometry } from "./palms.ts";
 import { buildKessarSites } from "./sites.ts";
-import { buildOutpostGeometry, buildRoadRibbon } from "./outpost.ts";
+import { OutpostDress } from "../outpostDress.ts";
 import { kessarPlan, type KessarTerrain } from "./shared.ts";
 import { buildKessarSolid } from "./structures.ts";
 import { buildKessarWater } from "./water.ts";
@@ -53,9 +53,7 @@ export class KessarView implements RegionView {
   private water?: WaterUniforms;
   private rainMesh?: Mesh;
   /** What the Society and the Syndicate have built (D-035): swapped in place by `applyDress`, no world rebuild. */
-  private dressGroup?: Group;
-  private dressDisposables: { dispose(): void }[] = [];
-  private dressKey = "";
+  private readonly dress: OutpostDress;
   /** D-038: the toll booth's roof (the cutaway), the doors drawn, and the lamps hung inside the rooms. */
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
@@ -70,6 +68,7 @@ export class KessarView implements RegionView {
     this.root.name = "world";
     setToonLite(detail.liteShading);
     scene.add(this.root);
+    this.dress = new OutpostDress(this.root, world, detail.outlines, "kessar");
     this.hillU = createHillUniforms(sun);
     const terrain = world.terrain as KessarTerrain;
     this.addGround(terrain);
@@ -268,54 +267,10 @@ export class KessarView implements RegionView {
     }
   }
 
-  // ---- the dress: the outpost, the roads, the wire, the launch, the Syndicate's post -------------------------------------------------------
+  // ---- the dress: the outpost, the roads, the wire, the launch, the Syndicate's post (swapped in place: outpostDress.ts) ----------------------------
 
-  /**
-   * Swaps the outpost group in place (D-035): its stage's solids and the foundation's stakes, the telegraph, the launch and the Syndicate's own post as ONE merged solid with its
-   * ink hull, and the road as a ground-pass ribbon. The collision world is the integrator's business (`worldKey`); this only changes what is drawn.
-   */
   applyDress(d: RegionDress): void {
-    const key = `${d.outpost}|${d.rivalPost}|${d.road}|${d.telegraph}|${d.launch}`;
-    if (key === this.dressKey) return;
-    this.dressKey = key;
-    this.clearDress();
-    const group = new Group();
-    group.name = "outpost";
-    const lod = this.detail.outlines ? 1 : 0;
-    const geo = buildOutpostGeometry(this.world, d, lod);
-    if (geo) {
-      const hull = this.detail.outlines ? buildOutpostGeometry(this.world, d, 0) : undefined;
-      this.dressDisposables.push(geo);
-      if (hull) this.dressDisposables.push(hull);
-      const mat = toonMaterial({ wetDark: 0.8 });
-      this.dressDisposables.push(mat);
-      makeSolid(group, geo, mat, { name: "outpost", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
-    }
-    const road = buildRoadRibbon(this.world, d.road);
-    if (road) {
-      this.dressDisposables.push(road);
-      const mat = toonMaterial({ wetDark: 0.8 });
-      mat.polygonOffset = true;
-      mat.polygonOffsetFactor = -2;
-      mat.polygonOffsetUnits = -2;
-      this.dressDisposables.push(mat);
-      const mesh = new Mesh(road, mat);
-      mesh.name = "road-paint";
-      mesh.receiveShadow = true;
-      group.add(mesh);
-    }
-    this.root.add(group);
-    this.dressGroup = group;
-    this.count();
-  }
-
-  private clearDress(): void {
-    if (this.dressGroup) {
-      this.root.remove(this.dressGroup);
-      this.dressGroup = undefined;
-    }
-    for (const d of this.dressDisposables) d.dispose();
-    this.dressDisposables = [];
+    if (this.dress.apply(d)) this.count();
   }
 
   // ---- the day ---------------------------------------------------------------------------------------------------------------------------
@@ -378,7 +333,7 @@ export class KessarView implements RegionView {
   }
 
   dispose(): void {
-    this.clearDress();
+    this.dress.clear();
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;

@@ -4,6 +4,7 @@ import { clampI, parseCampaign, stanceOf } from "./factions.ts";
 import { CRATE_LINES, DELIVER_LINES, FOUNDATION_ONLY_CRATES, FOUNDED_LINES, OUTPOST_NAMES, REFUSED_LINES, SETTLEMENT_NEWS, STAGE_LABEL } from "./outpostText.ts";
 import { PropKind, type PropKindId } from "./props.ts";
 import { hash3 } from "./rng.ts";
+import { OUTPOST_SITES } from "./outpost.ts";
 import {
   FOUNDATION_CRATES, OUTPOST_STAGES, SETTLEMENTS_JSON_MAX, type OutpostPriority, type OutpostStage, type OutpostState, type PaperItem, type RegionClimate, type RegionDress, type RegionWorldOpts,
   type RivalAgent, type SettlementEvent, type SettlementsState, type TechState,
@@ -242,17 +243,17 @@ function priorityOf(p: OutpostState, climate: RegionClimate, tech: TechState): O
   return best;
 }
 
-function holds(p: OutpostState, c: CampaignState): boolean {
+function holds(p: OutpostState, pros: number): boolean {
   switch (p.stage) {
     case "trading_post": return p.supply >= STAGE_RULES.trading_post.supply - H && p.trade >= STAGE_RULES.trading_post.trade - H;
     case "fortified_outpost": return p.security >= STAGE_RULES.fortified_outpost.security - H && p.supply >= STAGE_RULES.trading_post.supply - H;
     case "settlement": return p.supply >= STAGE_RULES.settlement.supply - H && p.trade >= STAGE_RULES.settlement.trade - H && p.security >= STAGE_RULES.settlement.security - H;
-    case "town": return p.supply >= STAGE_RULES.town.supply - H && p.trade >= STAGE_RULES.town.trade - H && c.factions.ward.prosperity >= STAGE_RULES.town.prosperity - H;
+    case "town": return p.supply >= STAGE_RULES.town.supply - H && p.trade >= STAGE_RULES.town.trade - H && pros >= STAGE_RULES.town.prosperity - H;
     default: return true;
   }
 }
 
-function promotion(p: OutpostState, c: CampaignState, climate: RegionClimate, tech: TechState): OutpostStage | undefined {
+function promotion(p: OutpostState, pros: number, climate: RegionClimate, tech: TechState): OutpostStage | undefined {
   const R = STAGE_RULES;
   const toSettlement = p.supply >= R.settlement.supply && p.trade >= R.settlement.trade && p.security >= R.settlement.security && tech.road >= 1;
   switch (p.stage) {
@@ -261,7 +262,7 @@ function promotion(p: OutpostState, c: CampaignState, climate: RegionClimate, te
       if (toSettlement) return "settlement";
       return p.security >= R.fortified_outpost.security && (climate.hostility >= R.fortified_outpost.threat || climate.rivalPressure >= R.fortified_outpost.threat) ? "fortified_outpost" : undefined;
     case "fortified_outpost": return toSettlement ? "settlement" : undefined;
-    case "settlement": return p.supply >= R.town.supply && p.trade >= R.town.trade && c.factions.ward.prosperity >= R.town.prosperity && (tech.telegraph || tech.launch) ? "town" : undefined;
+    case "settlement": return p.supply >= R.town.supply && p.trade >= R.town.trade && pros >= R.town.prosperity && (tech.telegraph || tech.launch) ? "town" : undefined;
     default: return undefined;
   }
 }
@@ -271,7 +272,7 @@ function promotion(p: OutpostState, c: CampaignState, climate: RegionClimate, te
  * priority drifts, then (only once the stage has lasted its `DWELL`) the stage is held, lost or earned. A camp that starves or is raided twice falls and is `ruined` (refounding
  * takes four crates again). Returns the new state and what happened, for the paper and for the powers. Inputs are never mutated.
  */
-export function evolveSettlements(s: SettlementsState, c: CampaignState, climate: RegionClimate, day: number): { s: SettlementsState; events: SettlementEvent[] } {
+export function evolveSettlements(s: SettlementsState, c: CampaignState, climateOf: RegionClimate | ((region: RegionId) => RegionClimate), day: number): { s: SettlementsState; events: SettlementEvent[] } {
   const events: SettlementEvent[] = [];
   const posts: SettlementsState["posts"] = {};
   let tech = s.tech;
@@ -280,6 +281,9 @@ export function evolveSettlements(s: SettlementsState, c: CampaignState, climate
       posts[k] = p0;
       continue;
     }
+    // D-056: each post grows in its own region's weather; the town's prosperity gate reads the region's home (Kessar: the Ward's own figure, as before)
+    const climate = typeof climateOf === "function" ? climateOf(k) : climateOf;
+    const pros = k === "kessar" ? c.factions.ward.prosperity : climate.trade;
     let p: OutpostState = { ...p0 };
     p.supply = pct(p.supply - SUPPLY_DECAY);
     p.security = toward(p.security, pct(0.7 * climate.security + STAGE_SECURITY[p.stage]), 4);
@@ -291,7 +295,7 @@ export function evolveSettlements(s: SettlementsState, c: CampaignState, climate
     p.priority = priorityOf(p, climate, tech);
     if (day - p.stageSince >= DWELL[p.stage as Exclude<OutpostStage, "none">]) {
       const starving = p.crates >= STAGE_RULES.starved.days;
-      if (starving || p.raids >= 2 || !holds(p, c)) {
+      if (starving || p.raids >= 2 || !holds(p, pros)) {
         const lower = rank(p.stage) - 1;
         if (lower < 1) {
           events.push({ kind: "abandoned", day, region: k, stage: "none", name: p.name });
@@ -301,7 +305,7 @@ export function evolveSettlements(s: SettlementsState, c: CampaignState, climate
           events.push({ kind: "demoted", day, region: k, stage: p.stage, name: p.name });
         }
       } else {
-        const up = promotion(p, c, climate, tech);
+        const up = promotion(p, pros, climate, tech);
         if (up) {
           p = { ...p, stage: up, stageSince: day };
           events.push({ kind: "promoted", day, region: k, stage: up, name: p.name });
@@ -328,11 +332,12 @@ export function regionDressOf(s: SettlementsState, rival: Pick<RivalAgent, "post
 }
 
 /** What the COLLISION world depends on, from the two replicated JSON strings (both sides call this, so they build the same world). Garbage in = the plain world. */
-export function regionWorldOpts(campaignJson: string, settlementsJson: string): RegionWorldOpts {
+export function regionWorldOpts(campaignJson: string, settlementsJson: string, region: RegionId = "kessar"): RegionWorldOpts {
   const c = parseCampaign(campaignJson);
   const s = parseSettlements(settlementsJson);
-  const stage = s?.posts.kessar?.stage ?? "none";
-  return { bridge: c?.crossing.bridge ?? "intact", outpost: stage, telegraph: stage !== "none" && s?.tech.telegraph === true };
+  // (D-056: the post of the region asked about; the wire only ever runs where the region has a line, which telegraphPoles decides)
+  const stage = OUTPOST_SITES[region] ? s?.posts[region]?.stage ?? "none" : "none";
+  return { bridge: c?.crossing.bridge ?? "intact", outpost: stage, telegraph: stage !== "none" && s?.tech.telegraph === true && OUTPOST_SITES[region]?.telegraph !== undefined };
 }
 
 /** The world's identity: rebuild the collision world only when this changes. A rigged bridge and an intact one are the same world. */
@@ -359,14 +364,17 @@ export function settlementDispatches(_s: SettlementsState, ev: readonly Settleme
 /** The events the state itself implies, newest first (the client has no event stream: it reads the paper's dispatches out of the settlements it replicates). */
 export function settlementNews(s: SettlementsState): SettlementEvent[] {
   const out: SettlementEvent[] = [];
-  const p = s.posts.kessar;
-  if (p) {
-    if (p.stage !== "none") {
-      out.push({ kind: "founded", day: p.foundedDay, region: "kessar", stage: "camp", name: p.name });
-      if (rank(p.stage) > 1) out.push({ kind: "promoted", day: p.stageSince, region: "kessar", stage: p.stage, name: p.name });
-      if (p.raidedDay > 0) out.push({ kind: "raided", day: p.raidedDay, region: "kessar", stage: p.stage, name: p.name });
-    } else if (p.ruined) out.push({ kind: "abandoned", day: p.stageSince, region: "kessar", stage: "none", name: p.name });
+  for (const region of REGION_IDS) {
+    const q = s.posts[region];
+    if (!q) continue;
+    if (q.stage !== "none") {
+      out.push({ kind: "founded", day: q.foundedDay, region, stage: "camp", name: q.name });
+      if (rank(q.stage) > 1) out.push({ kind: "promoted", day: q.stageSince, region, stage: q.stage, name: q.name });
+      if (q.raidedDay > 0) out.push({ kind: "raided", day: q.raidedDay, region, stage: q.stage, name: q.name });
+    } else if (q.ruined) out.push({ kind: "abandoned", day: q.stageSince, region, stage: "none", name: q.name });
   }
+  // (the road, the wire and the launch are Kessar's: they run from its post)
+  const p = s.posts.kessar;
   const nm = p?.name ?? "";
   const st = p?.stage ?? "none";
   if (s.tech.since.road > 0) out.push({ kind: "road", day: s.tech.since.road, region: "kessar", stage: st, name: nm });

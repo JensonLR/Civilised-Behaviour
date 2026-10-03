@@ -9,8 +9,11 @@ import { kessarNavOptions } from "./garrison.ts";
 import { createKessarTerrain, createKessarWorld, kessarObstacles, kessarRiverHalf, kessarRiverZ, kessarWallRun } from "./kessar.ts";
 import { createCharState, stepCharacter, yawToWire, type CharState } from "./movement.ts";
 import { NavQuery, buildNavGrid, newNavPath } from "./nav.ts";
-import { KESSAR_OUTPOST, OUTPOST_SITES, RING_R, YARD_R, outpostObstacles, outpostPlan, telegraphPoles } from "./outpost.ts";
-import { createRegionWorld, findStation, stationsFor } from "./regions.ts";
+import { KESSAR_OUTPOST, OUTPOST_REGIONS, OUTPOST_SITES, RING_R, YARD_R, outpostObstacles, outpostPlan, telegraphPoles } from "./outpost.ts";
+import { createRegionWorld, findStation, regionNavOptions, stationsFor } from "./regions.ts";
+import { HIGHMARK_ANCHORS, createHighmarkTerrain, createHighmarkWorld, herdPlan, highmarkSitePoints } from "./highmark.ts";
+import { foundOutpost, newSettlements, regionWorldOpts, serializeSettlements } from "./settlement.ts";
+import { newCampaign, serializeCampaign } from "./factions.ts";
 import { OUTPOST_STAGES, type OutpostStage } from "./worldTypes.ts";
 import { OUTPOST_SIGNS, FOUNDATION_SIGN } from "./outpostText.ts";
 
@@ -258,3 +261,93 @@ describe("every stage stays walkable", () => {
 // (re-recorded for D-038: Hollowmere's camp, village doors and footbridge deck were replanned on purpose: two tents, a crate, wider door steps and a deck at most a step above its bank; the obstacle COUNT is unchanged)
 // (re-recorded again for the hub-seed defects of D-038's follow-up: the village pads are relaxed so no street seam is steeper than a body can walk (the heights under every obstacle moved by up to ~1 m on the plaza), and one boulder that stood inside the aqueduct on seed 7 (rock at 24.91,-34.53) is no longer there: 473 -> 472. Nothing else moved: the crag, rock and tree streams are untouched.)
 const HOLLOWMERE_ARENA_7 = "472:1008680773";
+
+// ---- D-056: the Society's second post, at Highmark; none in the gorge or the free port -----------------------------------------------------------------------
+
+describe("Highmark's outpost (D-056)", () => {
+  const HS = OUTPOST_SITES.highmark!;
+  const S = HS.site, R = HS.rivalSite;
+  const HL = HIGHMARK_ANCHORS.landing;
+  const scatter = (o: Obstacle): boolean => o.tag === "tree" || o.tag === "rock";
+
+  it("the sites: flat, dry, inside the bounds, 30+ m from every story point, the rival 35-45 m off; the foundation is a station; no wire; Vesper and the Saltmarket have none", () => {
+    expect(OUTPOST_REGIONS.sort()).toEqual(["highmark", "kessar"]);
+    expect(OUTPOST_SITES.vesper).toBeUndefined();
+    expect(OUTPOST_SITES.saltmarket).toBeUndefined();
+    expect(Math.hypot(R.x - S.x, R.z - S.z)).toBeGreaterThan(35);
+    expect(Math.hypot(R.x - S.x, R.z - S.z)).toBeLessThan(45);
+    expect(Math.hypot(S.x - HL.x, S.z - HL.z), "a short carry from the landing").toBeLessThan(60);
+    for (const seed of SEEDS) {
+      const t = createHighmarkTerrain(seed);
+      for (const site of [S, R]) {
+        let lo = Infinity, hi = -Infinity;
+        for (let a = 0; a < 16; a++) {
+          const h = t.height(site.x + Math.cos((a * Math.PI) / 8) * 6, site.z + Math.sin((a * Math.PI) / 8) * 6);
+          lo = Math.min(lo, h);
+          hi = Math.max(hi, h);
+        }
+        expect(hi - lo, `seed ${seed} relief`).toBeLessThan(1.6);
+        expect(t.waterDepth?.(site.x, site.z) ?? 0).toBe(0);
+        expect(Math.hypot(site.x, site.z)).toBeLessThan(HIGHMARK_ANCHORS.bounds - 6);
+      }
+    }
+    for (const p of highmarkSitePoints()) expect(Math.hypot(p.x - S.x, p.z - S.z), p.id).toBeGreaterThan(30);
+    expect(telegraphPoles("highmark")).toEqual([]);
+    const st = stationsFor("highmark").find((x) => x.kind === "foundation")!;
+    expect(st).toMatchObject({ x: S.x, z: S.z });
+    expect(findStation("highmark", S.x, S.z, 0)?.kind).toBe("foundation");
+    for (const r of ["vesper", "saltmarket", "hollowmere"] as const) expect(stationsFor(r).some((x) => x.kind === "foundation"), r).toBe(false);
+  });
+
+  it("every piece at every stage stands on dry land, clear of everything the region built, inside the bounds; the herds graze clear of the ring", () => {
+    for (const seed of SEEDS) {
+      const plain = createHighmarkWorld(seed);
+      const t = createHighmarkTerrain(seed);
+      for (const p of outpostPlan("town", "highmark").pieces.filter((x) => x.solid)) {
+        const r = p.shape === "circle" ? p.hx : Math.hypot(p.hx, p.hz);
+        expect(t.waterDepth?.(p.x, p.z) ?? 0, `${p.kind} dry`).toBe(0);
+        expect(Math.hypot(p.x, p.z) + r).toBeLessThan(HIGHMARK_ANCHORS.bounds - 4);
+        for (const o of plain.obstacles) if (!scatter(o)) expect(insideObstacle(o, p.x, p.z, r + 0.5), `seed ${seed} ${p.kind} vs ${o.tag}`).toBe(false);
+      }
+      for (const h of herdPlan(seed).herds) expect(Math.hypot(h.cx - S.x, h.cz - S.z), "herd ground").toBeGreaterThan(h.r * 1.2 + RING_R + 3);
+    }
+  });
+
+  it("'none' is the plain world; a stage clears the scatter out of the ring, empties the yard and moves nothing outside it; the world opts follow the region", () => {
+    for (const seed of SEEDS) {
+      const plain = createHighmarkWorld(seed);
+      expect(hashOf(createRegionWorld("highmark", seed, { outpost: "none" }))).toBe(hashOf(plain));
+      expect(hashOf(createRegionWorld("highmark", seed, {}))).toBe(hashOf(plain));
+      const far = (w: CollisionWorld): string[] => w.obstacles.filter((o) => Math.hypot(o.x - S.x, o.z - S.z) >= RING_R).map((o) => `${o.kind}:${o.tag}:${o.x.toFixed(3)}:${o.z.toFixed(3)}`);
+      for (const st of STAGES) {
+        const w = createRegionWorld("highmark", seed, { outpost: st, telegraph: true });
+        expect(far(w), st).toEqual(far(plain));
+        for (const o of w.obstacles) expect(insideObstacle(o, S.x, S.z, YARD_R - 0.3), `${st}: ${o.tag} in the yard`).toBe(false);
+        expect(w.obstacles.some((o) => scatter(o) && Math.hypot(o.x - S.x, o.z - S.z) < RING_R)).toBe(false);
+        expect(hashOf(w), "no wire at Highmark").toBe(hashOf(createRegionWorld("highmark", seed, { outpost: st })));
+      }
+    }
+    const c = serializeCampaign(newCampaign(7));
+    const s = serializeSettlements({ ...newSettlements(), posts: { highmark: { ...foundOutpost(newSettlements(), "highmark", newCampaign(7), 7).posts.highmark!, stage: "settlement" } }, tech: { ...newSettlements().tech, telegraph: true } });
+    expect(regionWorldOpts(c, s, "highmark")).toMatchObject({ outpost: "settlement", telegraph: false });
+    expect(regionWorldOpts(c, s, "kessar").outpost).toBe("none");
+    expect(regionWorldOpts(c, s, "vesper").outpost).toBe("none");
+    expect(regionWorldOpts(c, s).outpost).toBe("none");
+  });
+
+  it("the nav grid reaches the yard from the landing at every stage, and the real movement step walks into the yard and inside the stockade", () => {
+    for (const st of OUTPOST_STAGES) {
+      const w = createHighmarkWorld(7, { outpost: st });
+      const q = new NavQuery(buildNavGrid(w, regionNavOptions("highmark", w)));
+      const path = newNavPath();
+      expect(q.open(S.x, S.z), `${st} yard open`).toBe(true);
+      expect(q.path(HL.x, HL.z - 3, S.x, S.z, path), `${st} yard reachable`).toBe(true);
+      expect(path.complete).toBe(true);
+    }
+    for (const st of ["fortified_outpost", "town"] as const) {
+      const r = reach(createHighmarkWorld(7, { outpost: st }), { x: HL.x, z: HL.z - 3 });
+      expect(r(S.x, S.z), `${st} yard`).toBe(true);
+      if (st === "fortified_outpost") expect(r(S.x, S.z - 12), "inside the stockade").toBe(true);
+    }
+  }, 180_000);
+});

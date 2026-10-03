@@ -70,7 +70,7 @@ export class Outposts {
       this.host.send(sid, "notice", { text: "The Syndicate has put a signboard on the ruin and a man beside the signboard. The foundation will not be raised while they hold the crossing." });
       return true;
     }
-    const before = worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(s)));
+    const before = worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(s), region));
     const d = deliverTo(s, region, kind as PropKindId, c, this.host.seed);
     if (!d.accepted) {
       this.host.send(sid, "notice", { text: d.line });
@@ -82,20 +82,22 @@ export class Outposts {
     this.host.setSettlements(d.s, d.events);
     if (d.events.some((e) => e.kind === "founded")) this.host.notice(d.line);
     else this.host.send(sid, "notice", { text: d.line });
-    if (worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(d.s))) !== before) this.host.rebuildWorld();
+    if (worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(d.s), region)) !== before) this.host.rebuildWorld();
     return true;
   }
 
   /** The daily rules (once per campaign day, from the commit pipeline). Publishes through the host and rebuilds the world when a stage or the telegraph changed it. */
-  evolve(day: number, climate: RegionClimate, extra: readonly SettlementEvent[] = []): SettlementEvent[] {
+  evolve(day: number, climate: RegionClimate | ((region: RegionId) => RegionClimate), extra: readonly SettlementEvent[] = []): SettlementEvent[] {
     const c = this.host.campaign();
     const s0 = this.host.settlements();
-    const before = worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(s0)));
+    const here = this.host.region();
+    const before = worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(s0), here));
     const r = evolveSettlements(s0, c, climate, day);
     const events = [...extra, ...r.events];
     if (events.length === 0 && serializeSettlements(r.s) === serializeSettlements(s0)) return [];
     this.host.setSettlements(r.s, events);
-    if (worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(r.s))) !== before && this.host.region() === "kessar") this.host.rebuildWorld();
+    // (only the region the party stands in has a world to rebuild: a post elsewhere is built when they land there)
+    if (worldKey(regionWorldOpts(serializeCampaign(c), serializeSettlements(r.s), here)) !== before) this.host.rebuildWorld();
     return events;
   }
 

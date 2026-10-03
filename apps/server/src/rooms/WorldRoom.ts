@@ -103,6 +103,7 @@ import {
   findStation,
   isNpcKey,
   isRegionId,
+  OUTPOST_SITES,
   isTemplateId,
   regionNavOptions,
   TEMPLATE_REGION,
@@ -1250,7 +1251,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (raided.raid) events.push(...this.outposts.raid("kessar", c.day));
     if (raided.defended) this.commitSettlements(defendOutpost(this.settlements, "kessar"), []);
     for (const e of adv.events) if (e.kind === "raided_outpost") events.push(...this.outposts.raid(e.region, e.day));
-    events.push(...this.outposts.evolve(c.day, regionClimate(c, p, "kessar")));   // (the outposts publish themselves and tell the powers: commitSettlements)
+    events.push(...this.outposts.evolve(c.day, (r) => regionClimate(c, p, r)));   // (each post in its own region's weather, D-056; the outposts publish themselves and tell the powers: commitSettlements)
     this.publishCampaign();
     this.publishPowers();
     // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
@@ -1415,7 +1416,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
    * Once published the two are the same text, which is what the clients build from.
    */
   private worldOpts(): RegionWorldOpts {
-    return regionWorldOpts(serializeCampaign(this.campaign), serializeSettlements(this.settlements));
+    return regionWorldOpts(serializeCampaign(this.campaign), serializeSettlements(this.settlements), this.state.region as RegionId);
   }
 
   private consumeProp(id: string): void {
@@ -1786,12 +1787,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (this.scenario && (INCIDENT_IDS as readonly string[]).includes(id)) this.incidents.force(id as (typeof INCIDENT_IDS)[number]);
     }
     else if (cmd?.startsWith("outpost:")) {
-      // outpost:<stage> : the Society's outpost at Kessar exists at once at that stage (QA + e2e: the four crates are walked in resume.test)
-      const stage = cmd.slice(8) as OutpostStage;
-      if (!(OUTPOST_STAGES as readonly string[]).includes(stage) || stage === "none") return;
-      const base = foundOutpost(this.settlements, "kessar", this.campaign, this.state.seed).posts.kessar!;
-      const events: SettlementEvent[] = [{ kind: "founded", day: this.campaign.day, region: "kessar", stage, name: base.name }];
-      this.commitSettlements({ ...this.settlements, posts: { ...this.settlements.posts, kessar: { ...base, stage, supply: 60, security: 50, trade: 50 } } }, events);
+      // outpost:<stage>[@<region>] : the Society's outpost (at Kessar unless a region with a site is named, D-056) exists at once at that stage (QA + e2e: the four crates are walked in resume.test)
+      const [st, at = "kessar"] = cmd.slice(8).split("@");
+      const stage = st as OutpostStage;
+      if (!(OUTPOST_STAGES as readonly string[]).includes(stage) || stage === "none" || !isRegionId(at) || !OUTPOST_SITES[at]) return;
+      const base = foundOutpost(this.settlements, at, this.campaign, this.state.seed).posts[at]!;
+      const events: SettlementEvent[] = [{ kind: "founded", day: this.campaign.day, region: at, stage, name: base.name }];
+      this.commitSettlements({ ...this.settlements, posts: { ...this.settlements.posts, [at]: { ...base, stage, supply: 60, security: 50, trade: 50 } } }, events);
       this.rebuildWorld();
       // (QA: a contract nothing has happened in yet starts again, so it sees the post as it would have in play, where the post is founded long before)
       if (this.state.region === "kessar" && this.scenario && this.scenario.phase === "planning" && this.scenario.resolution === undefined) {

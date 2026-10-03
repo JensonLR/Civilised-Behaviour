@@ -14,12 +14,18 @@ export const YARD_R = 5;
 export const RING_R = 32;
 
 /**
- * The foundation site and the Syndicate's rival post, per region (only Kessar has either). Final numbers, proven open, flat and reachable by outpost.test.ts:
- * the foundation lies on the south bank between the landing (0, 88) and the Dry Cut (36, 36), the rival post 40 m east of it.
+ * The foundation site and the Syndicate's rival post, per region. Final numbers, proven open, flat, dry and reachable by outpost.test.ts:
+ * - Kessar: on the south bank between the landing (0, 88) and the Dry Cut (36, 36), the rival post 40 m east of it; the telegraph runs to the bridge (`telegraph`).
+ * - Highmark (D-056): on the grass 56 m west of the Reed Landing, clear of the herds' grounds (the west herd grazes further off for it) and of every story point.
+ * Vesper and the Saltmarket have none, on purpose: a full town plan (32 m round) fits nowhere in the gorge or among the canals (`scripts`: the site search of D-056),
+ * and the fiction agrees: the Company leases no ground in its gorge and the Consortium's free port lets nobody build a flag.
  */
-export const OUTPOST_SITES: Partial<Record<RegionId, { site: { x: number; z: number }; rivalSite: { x: number; z: number } }>> = {
-  kessar: { site: { x: 30, z: 72 }, rivalSite: { x: 69, z: 62 } },
+export const OUTPOST_SITES: Partial<Record<RegionId, { site: { x: number; z: number }; rivalSite: { x: number; z: number }; telegraph?: readonly { x: number; z: number }[] }>> = {
+  kessar: { site: { x: 30, z: 72 }, rivalSite: { x: 69, z: 62 }, telegraph: [{ x: 8, z: 60 }, { x: 5, z: 44 }, { x: 4.4, z: 33 }] },
+  highmark: { site: { x: -52, z: 98 }, rivalSite: { x: -89, z: 108 } },
 };
+/** The regions a party can found a post in. */
+export const OUTPOST_REGIONS = Object.keys(OUTPOST_SITES) as RegionId[];
 /** Kessar's, for the callers that only ever ask about Kessar. */
 export const KESSAR_OUTPOST = OUTPOST_SITES.kessar!;
 
@@ -100,11 +106,11 @@ export function outpostPlan(stage: OutpostStage, region: RegionId = "kessar"): O
   return { stage, site, pieces, gate };
 }
 
-/** The telegraph's poles: from the foundation along the south-bank track to the bridge's south abutment, one every ~16 m, set off the road. */
+/** The telegraph's poles: from the foundation along the region's line (Kessar: the south-bank track to the bridge's south abutment), one every ~16 m, set off the road. None where the region has no line. */
 export function telegraphPoles(region: RegionId = "kessar"): { x: number; z: number }[] {
   const at = OUTPOST_SITES[region];
-  if (!at) return [];
-  const path = [at.site, { x: 8, z: 60 }, { x: 5, z: 44 }, { x: 4.4, z: 33 }];
+  if (!at?.telegraph) return [];
+  const path = [at.site, ...at.telegraph];
   const out: { x: number; z: number }[] = [];
   for (let i = 0; i + 1 < path.length; i++) {
     const a = path[i]!, b = path[i + 1]!;
@@ -131,6 +137,17 @@ export function outpostObstacles(stage: OutpostStage, telegraph: boolean, terrai
   }
   if (telegraph) for (const q of telegraphPoles(region)) out.push({ kind: "circle", tag: "pole", x: q.x, z: q.z, r: 0.16, y0: g(q.x, q.z) - 1, y1: g(q.x, q.z) + 7 });
   return out;
+}
+
+/**
+ * A region's obstacles with its outpost: the seeded scatter (`scatterTags`) is cleared out of the ring and the stage's colliders appended (the same set cleared at every stage
+ * above "none", so a stage change moves nothing else). "none" returns `out` untouched: the plain world, byte for byte. Shared by every region with a site (D-056).
+ */
+export function withOutpost(out: Obstacle[], terrain: Terrain, region: RegionId, opts: { outpost?: OutpostStage; telegraph?: boolean } | undefined, scatterTags: readonly ObstacleTag[]): Obstacle[] {
+  const stage = opts?.outpost ?? "none";
+  if (stage === "none" || !OUTPOST_SITES[region]) return out;
+  const kept = out.filter((o) => !((o.tag !== undefined && scatterTags.includes(o.tag)) && inOutpostRing(o.x, o.z, 0, region)));
+  return [...kept, ...outpostObstacles(stage, opts?.telegraph === true, terrain, region)];
 }
 
 /** The foundation's footprint, for the scatter keep-out (kessar.ts) and anything that must stay clear of the site at every stage. */

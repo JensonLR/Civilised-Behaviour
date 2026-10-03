@@ -1,4 +1,4 @@
-import { BUTTON, FLAG, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
+import { BUTTON, FLAG, OUTPOST_SITES, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
 import type { Pilot } from "./pilot.ts";
 
 export interface Plan {
@@ -345,6 +345,22 @@ export const PLANS: Plan[] = [
       // the neutral party stands at the Stone while both chains go out
       await p.goTo(KS.border.marker.x, KS.border.marker.z, { within: 2, sprint: false, label: "Marker Stone No. 4" });
       await p.until(() => p.view?.resolution !== undefined, 45_000, "resolution");
+    },
+  },
+  {
+    // D-056: the Society's second post, founded by hand: the three crates on the landing and the one at the drovers' camp, carried to the foundation on the grass
+    name: "highmark-found-post",
+    join: { region: "highmark", scenario: "succession_dispute", seed: SEED },
+    async run(p) {
+      const F = OUTPOST_SITES.highmark!.site;
+      const from: [number, number][] = [[H.landing.x, H.landing.z - 6], [H.landing.x, H.landing.z - 6], [H.landing.x, H.landing.z - 6], [HS.drovers.x, HS.drovers.z]];
+      for (const [x, z] of from) {
+        if (!(await carry(p, PropKind.CRATE, x, z, F.x, F.z, "deliver to the foundation", 3))) break;
+        p.note(`FOUNDATION ${JSON.parse(p.bot.room.state.settlements || "{}").posts?.highmark?.crates ?? "?"} crates down`);
+      }
+      const stage = (): string => JSON.parse(p.bot.room.state.settlements || "{}").posts?.highmark?.stage ?? "none";
+      await p.until(() => stage() === "camp", 4000, "the camp founded");
+      p.note(`HIGHMARK POST ${stage()}`);
     },
   },
   {

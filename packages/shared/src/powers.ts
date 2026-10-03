@@ -248,7 +248,13 @@ export function powersAfterSettlement(c: CampaignState, p0: PowersState, ev: rea
   if (ev.length === 0) return p0;
   const p = cloneState(p0);
   for (const e of ev) {
-    if (e.kind === "founded") {
+    if (e.kind === "founded" && e.region === "highmark") {
+      // D-056: a post on the grass is the Reapers' business (a market for the barley, a well) and the Syndicate's annoyance; Kessar's flags are Kessar's (the raid is theirs)
+      p.minor.reapers.trust = pct(p.minor.reapers.trust + 6, 20);
+      p.minor.reapers.prosperity = pct(p.minor.reapers.prosperity + 3, 45);
+      p.rival.grudge = pct(p.rival.grudge + 6, p.rival.grudge);
+      p.log = withLog(p.log, { day: e.day, kind: "settle_founded_highmark", a: "reapers", b: "rival", n: 1 });
+    } else if (e.kind === "founded") {
       p.flags = withFlag(p.flags, "party_post");
       p.minor.brine.trust = pct(p.minor.brine.trust + 6, 20);
       p.minor.brine.prosperity = pct(p.minor.brine.prosperity + 4, 60);
@@ -263,7 +269,8 @@ export function powersAfterSettlement(c: CampaignState, p0: PowersState, ev: rea
       p.rival.progress = Math.min(100, p.rival.progress); // the raid was the payout: nothing more to claim
       p.log = withLog(p.log, { day: e.day, kind: "settle_raided", a: "rival", b: "ward", n: 1 });
     } else if (e.kind === "abandoned") {
-      p.flags = withoutFlag(withoutFlag(p.flags, "party_post"), "party_post_raided");
+      // (the flags speak of Kessar's post, the one the Syndicate can raid: a post lost elsewhere leaves them alone)
+      if (e.region === "kessar") p.flags = withoutFlag(withoutFlag(p.flags, "party_post"), "party_post_raided");
       p.log = withLog(p.log, { day: e.day, kind: "settle_abandoned", a: "ward", n: 1 });
     } else if (e.kind === "promoted" && (e.stage === "settlement" || e.stage === "town")) {
       p.minor.reapers.prosperity = pct(p.minor.reapers.prosperity + 3, 45);
@@ -282,7 +289,8 @@ const clamp100 = (v: number): number => Math.min(100, Math.max(0, Math.round(v))
 const PRESSURE: Record<PowersState["rival"]["goal"], number> = { buy_crossing: 40, survey_route: 45, arm_brine: 30, found_post: 55, sabotage_party: 75, lie_low: 5 };
 
 /** The region's mood in five numbers (0..100) for the settlement rules: security from the Ward's strength and its quarrel with the Syndicate; trade from the Houses, prosperity and the crossing. */
-export function regionClimate(c: CampaignState, p: PowersState, _region: RegionId): RegionClimate {
+export function regionClimate(c: CampaignState, p: PowersState, region: RegionId): RegionClimate {
+  if (region === "highmark") return highmarkClimate(p);
   const w = c.factions.ward, r = p.rival;
   const wr = p.rel["ward|rival"];
   const controlTrade = c.crossing.control === "ward" || c.crossing.control === "society" ? 25 : c.crossing.control === "rival" ? 15 : 8;
@@ -292,6 +300,22 @@ export function regionClimate(c: CampaignState, p: PowersState, _region: RegionI
     hostility: clamp100(0.5 * w.grievance + 0.3 * r.grudge + 5),
     rivalPressure: clamp100(PRESSURE[r.goal] * (0.5 + r.escort / 100) + 0.2 * r.grudge),
     labour: clamp100(0.5 * p.minor.reapers.prosperity + 0.3 * p.minor.reapers.trust + 10),
+  };
+}
+
+/**
+ * D-056: Highmark's weather for the Society's post there, from its home power, the Reapers (their strength keeps the grass road quiet, their prosperity and goodwill are the
+ * trade, their grievance and the Syndicate's grudge the hostility). The Syndicate presses hardest where it is; elsewhere at half. Labour is the Reapers' either way.
+ */
+function highmarkClimate(p: PowersState): RegionClimate {
+  const h = p.minor.reapers, r = p.rival;
+  const here = r.where.region === "highmark" ? 1 : 0.5;
+  return {
+    security: clamp100(0.5 * h.militaryStrength + 0.2 * h.trust - 0.2 * r.escort + 25),
+    trade: clamp100(0.35 * h.prosperity + 0.25 * h.trust + 0.1 * p.minor.brine.trust + 15),
+    hostility: clamp100(0.5 * h.grievance + 0.3 * r.grudge + 5),
+    rivalPressure: clamp100(here * (PRESSURE[r.goal] * (0.5 + r.escort / 100) + 0.2 * r.grudge)),
+    labour: clamp100(0.5 * h.prosperity + 0.3 * h.trust + 10),
   };
 }
 

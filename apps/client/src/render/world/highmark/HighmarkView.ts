@@ -23,6 +23,7 @@ import { landmarkFog, landmarkInk } from "./landmark.ts";
 import { buildHighmarkSolid, type LanternRoom } from "./structures.ts";
 import { buildHighmarkWater } from "./water.ts";
 import { buildGranaryScale, buildScythes } from "./strikeProps.ts";
+import { OutpostDress } from "../outpostDress.ts";
 
 const WHITE = new Color(1, 1, 1);
 /** The hill rings start 112 m out (HILL_RINGS[0]: 150 - 38); this scale puts that foot just past the ground mesh's half-side (bounds + 30). */
@@ -53,6 +54,7 @@ export class HighmarkView implements RegionView {
   private water?: WaterUniforms;
   private rainMesh?: Mesh;
   private herds?: Herds;
+  private readonly dress: OutpostDress;
 
   constructor(
     private readonly scene: Scene,
@@ -62,6 +64,7 @@ export class HighmarkView implements RegionView {
     seed = 7,
   ) {
     this.root.name = "world";
+    this.dress = new OutpostDress(this.root, world, detail.outlines, "highmark");
     setToonLite(detail.liteShading);
     scene.add(this.root);
     this.hillU = createHillUniforms(sun);
@@ -318,10 +321,10 @@ export class HighmarkView implements RegionView {
     }
   }
 
-  // ---- the dress: Highmark has no outpost (the Society builds at Kessar only), so there is nothing to swap -----------------------------------
+  // ---- the dress: the Society's post on the grass west of the landing (D-056; swapped in place: outpostDress.ts) ------------------------------
 
-  applyDress(_d: RegionDress): void {
-    /* not this slice: a Highmark outpost is not in D-036 */
+  applyDress(d: RegionDress): void {
+    if (this.dress.apply(d)) this.count();
   }
 
   // ---- the day ---------------------------------------------------------------------------------------------------------------------------
@@ -372,6 +375,7 @@ export class HighmarkView implements RegionView {
   }
 
   dispose(): void {
+    this.dress.clear();
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;

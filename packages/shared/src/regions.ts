@@ -96,9 +96,9 @@ export function regionNavOptions(id: RegionId, world: CollisionWorld): NavOption
   return id === "kessar" ? kessarNavOptions(world) : id === "highmark" ? highmarkNavOptions(world) : id === "vesper" ? vesperNavOptions(world) : id === "saltmarket" ? saltmarketNavOptions(world) : {};
 }
 
-/** The collision world of a region. `opts` (bridge, outpost stage, telegraph) only matter to Kessar: the world is a pure function of (seed, those). */
+/** The collision world of a region. `opts` (bridge, outpost stage, telegraph) matter where they exist (the bridge to Kessar, the outpost to Kessar and Highmark): the world is a pure function of (seed, those). */
 export function createRegionWorld(id: RegionId, seed: number, opts?: RegionWorldOpts): CollisionWorld {
-  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : id === "highmark" ? createHighmarkWorld(seed)
+  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph }) : id === "highmark" ? createHighmarkWorld(seed, { outpost: opts?.outpost, telegraph: opts?.telegraph })
     : id === "vesper" ? createVesperWorld(seed) : id === "saltmarket" ? createSaltmarketWorld(seed) : createArena(seed);
 }
 
@@ -132,6 +132,8 @@ const KESSAR_STATIONS: readonly UseStation[] = [
 // D-036: Highmark's court. The people are the scenario's (NPC rows); these are the HUD's prompts and the server's "court" use points (kind "court", acted on through the scenario).
 const HIGHMARK_STATIONS: readonly UseStation[] = [
   { id: "dock", kind: "dock", x: H.landing.x, z: H.landing.z, r: 4, prompt: "Take the barge home" },
+  // D-056: the Society's second foundation, on the grass west of the landing (acted on exactly as Kessar's)
+  { id: "foundation", kind: "foundation", x: OUTPOST_SITES.highmark!.site.x, z: OUTPOST_SITES.highmark!.site.z, r: YARD_R - 1, prompt: "Deliver a crate to the foundation" },
   { id: "chamberlain", kind: "court", x: HS.chamberlain.x, z: HS.chamberlain.z, r: 2.6, prompt: "Address the Chamberlain" },
   { id: "elder", kind: "court", x: HS.claimants.elder.x, z: HS.claimants.elder.z, r: 2.6, prompt: "Hear the elder claimant" },
   { id: "younger", kind: "court", x: HS.claimants.younger.x, z: HS.claimants.younger.z, r: 2.6, prompt: "Hear the younger claimant" },
