@@ -503,7 +503,7 @@ export function buildHat(h: HatCtx): void {
       const cr = dome({ k: 1.1, m1: R * 0.07, full: (f) => 1 + 0.05 * Math.sin(Math.PI * f) });
       for (let i = 0; i < 3; i++) strip(cr, hy + R * (0.06 + 0.22 * i), R * 0.12, tone(hatC, i % 2 ? 0.8 : 1.12), R * (0.012 + 0.004 * i));
       if (!coarse) {
-        const phi = Math.PI + 0.25 + hairBackSide(spec.hair);
+        const phi = Math.PI + 0.25 + Math.max(hairBackSide(spec.hair), spec.hairAcc === 2 ? 0.6 : 0); // (to one side of a tail of hair, and of a comb worn low behind: D-061)
         const yH = hy + R * 0.18;
         const ys = Array.from({ length: 6 }, (_, i) => yH - (R * 1.3 * i) / 5);
         const prof = hf.hangProfile(phi, ys, { gap: R * 0.07 + 0.01, slope: 1.6, maxR: R * 1.5, outer: (y) => Math.max(hf.headOuter(phi, y), y >= hy ? ringAtAz(cr.radiusAt(y), phi) : 0) + R * 0.09 + hairBackExtra(spec.hair, R) });

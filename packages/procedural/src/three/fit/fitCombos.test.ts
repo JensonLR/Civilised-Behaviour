@@ -136,7 +136,7 @@ describe("fit combinations on the extreme shape grid", () => {
 /** Worst in cm and number of combinations above the tolerance, as of the day this test was written (D-038). Lower them when a fix lands. */
 const RATCHET: Record<string, { worstCm: number; count: number }> = {
   "hatHair.depth": { worstCm: 0, count: 0 }, // (was 6.9 cm / 22 before nightcap and dust-wrap tails lay outside the hair; a strand through a brim is zero)
-  "hairAccHat.depth": { worstCm: 2.1, count: 7 }, // (combs and pins under wide brims)
+  "hairAccHat.depth": { worstCm: 0, count: 0 }, // (was 2.1 / 7, combs and pins under wide brims; D-061: a dust wrap's tail hangs beside a comb, pins under a hat sit lower and cross flatter)
   "eyewearHat.depth": { worstCm: 0.6, count: 0 }, // (was 5.3 / 112, then 3.8 / 25, then 3.8 / 18; D-047 keeps the front of every brim up over spectacles; D-061: arms and straps sit at the height they are meant to, and a hat rests on spectacle arms over the ears)
   "longHair.depth": { worstCm: 0.2, count: 0 }, // (was 4.1 cm at the start of the pass; the target is 0.3)
   "neckwear.accessoryPenetration": { worstCm: 2.2, count: 8 }, // (a neckerchief meeting a pack strap)
