@@ -29,6 +29,8 @@ export class TouchControls implements TouchSource {
   private readonly ring: HTMLElement;
   private readonly knob: HTMLElement;
   private readonly fullBtn: HTMLElement;
+  /** "Turn the device on its side": its own element ABOVE the HUD (inside the touch layer the HUD drew over it: the first portrait look). */
+  private readonly portrait: HTMLElement;
   private stickId = -1;
   private ax = 0;
   private ay = 0;
@@ -78,7 +80,8 @@ export class TouchControls implements TouchSource {
       if (doc.fullscreenElement) void doc.exitFullscreen?.();
       else void doc.documentElement.requestFullscreen?.({ navigationUI: "hide" }).catch(() => undefined);
     });
-    el("p", "t-portrait", this.root, "Turn the device on its side: the field wants the width.");
+    this.portrait = el("p", "t-portrait", doc.body, "Turn the device on its side: the field wants the width.");
+    this.portrait.hidden = true;
 
     // the stick: appears where the thumb lands, kept whole on the screen
     stickZone.addEventListener("pointerdown", (e) => {
@@ -199,6 +202,7 @@ export class TouchControls implements TouchSource {
     const on = this.active;
     const touch = deviceTracker.device === "touch";
     this.doc.body.classList.toggle("touch-ui", touch);
+    this.portrait.hidden = !on;
     if (this.root.hidden === !on) return;
     this.root.hidden = !on;
     if (!on) {

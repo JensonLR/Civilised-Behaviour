@@ -217,8 +217,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 
 /* Interface scale: one number (1 = 100%, times 1.2 for "larger text") scales every rem in the menus and the HUD. */
 /* ...but never let the interface outgrow a short window: on an 800 x 450 screen 5.2vh caps it at 1.38x however much was asked for. */
-:root { font-size: max(12px, min(calc(17px * var(--ui-scale, 1)), 5.2vh)); }
-#hud { font-size: max(11px, min(calc(16px * var(--ui-scale, 1)), 4.9vh)); }
+/* ...and past 1080p it grows with the screen (D-049: a 4K screen or a television showed a quarter-size interface, unreadable from a sofa): 17 px is 0.885vw of 1920 and 1.574vh of 1080,
+   so at 1080p and below nothing changes and at 2160p everything is twice the size. The player's scale still multiplies it. */
+:root { font-size: max(12px, min(calc(max(17px, min(0.885vw, 1.574vh)) * var(--ui-scale, 1)), 5.2vh)); }
+#hud { font-size: max(11px, min(calc(max(16px, min(0.833vw, 1.481vh)) * var(--ui-scale, 1)), 4.9vh)); }
 .help { max-width: calc(100vw - 33rem); overflow: hidden; text-overflow: ellipsis; }
 
 /* Two-tone focus ring: an ink line inside a stamp-red ring, so it reads on paper, on brass and on the red stamp button alike. */
@@ -690,9 +692,6 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 .t-top { position: absolute; right: var(--edge-r); top: calc(var(--edge-t) + 5.6rem); display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--tg) * 0.7); }
 .t-top .t-btn { width: auto; min-width: calc(var(--tb) * 1.1); height: calc(var(--tb) * 0.66); padding: 0 0.7em; border-radius: 3px; font-size: calc(var(--tb) * 0.18); }
 .t-top .t-btn.on { background: var(--brass); }
-.t-portrait { display: none; position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); max-width: 80vw; margin: 0; padding: 0.8rem 1.1rem; text-align: center; pointer-events: none;
-  font: 1.05rem/1.4 var(--serif); color: var(--ink); background: linear-gradient(var(--paper), var(--paper-2)); border: 2px solid var(--brass-dark); border-radius: 3px; box-shadow: var(--shadow); }
-@media (orientation: portrait) { .t-portrait { display: block; } }
 /* the HUD makes room for the thumbs: the key hints go (the buttons carry their words), the arms card moves to the bottom middle, the gauge and captions move up out of the thumbs' way */
 body.touch-ui #hud .help { display: none; }
 body.touch-ui #hud .arms, body.touch-ui #hud .cannoncard { right: auto; left: 50%; bottom: var(--edge-b, 0.6rem); transform: translateX(-50%) scale(0.86); transform-origin: 50% 100%; min-width: 0; }
@@ -724,3 +723,19 @@ body.touch-ui #hud .orientation .foot { justify-content: flex-end; margin-top: 0
   .pause .menu .pair { display: contents; }
   .pause .fine, .pause .society { display: none; }
 }
+/* the manual's intro and tabs took the whole height on a phone (either way up) and the controls list shrank to a line or to nothing: there its body takes its own height and the
+   sheet scrolls as a whole */
+@media (max-height: 34rem), (max-width: 30rem) {
+  .sheet.howto .body { flex: none; overflow: visible; }
+}
+/* D-049, the responsive pass. The door's panels always leave the bottom strip for the sound plaque (it overlapped the panel's last line on every size); a narrow phone's
+   sheets wrap their segmented switch and their button row instead of running off the edge; a phone held upright is asked, plainly, to turn */
+#menu > .panel { max-height: calc(100dvh - 6rem); }
+@media (max-width: 30rem) {
+  .seg { flex-wrap: wrap; }
+  .seg button { flex: 1 1 30%; min-width: 0; padding-left: 0.3rem; padding-right: 0.3rem; font-size: 0.82rem; }
+  .sheet .actions { flex-wrap: wrap; }
+  .sheet .actions > button { flex: 1 1 40%; }
+}
+.t-portrait { position: fixed; inset: 0; z-index: 15; display: none; place-items: center; margin: 0; padding: 2rem; text-align: center; pointer-events: none; font: 1.2rem/1.4 var(--serif); color: var(--text); background: color-mix(in srgb, var(--scrim) 72%, transparent); }
+@media (orientation: portrait) { .t-portrait:not([hidden]) { display: grid; } }

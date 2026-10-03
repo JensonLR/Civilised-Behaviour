@@ -21,7 +21,7 @@ export class SoundPlaque {
     this.el = document.createElement("div");
     this.el.className = "soundplaque";
     this.el.setAttribute("role", "status");
-    this.el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9z"/><path d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" class="w"/></svg><span>Click anywhere to enable sound</span>`;
+    this.el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9z"/><path d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" class="w"/></svg><span>${typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? "Tap" : "Click"} anywhere to enable sound</span>`; // (a phone is tapped: D-049)
     this.el.hidden = true;
     parent.appendChild(this.el);
     for (const ev of ["pointerdown", "keydown", "touchstart"]) window.addEventListener(ev, this.wake, { capture: true });

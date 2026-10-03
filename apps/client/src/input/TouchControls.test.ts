@@ -30,8 +30,12 @@ describe("TouchControls (the DOM overlay)", () => {
     expect(dev.deviceTracker.device).toBe("touch");
     expect(t.root.hidden).toBe(false);
     expect(document.body.classList.contains("touch-ui")).toBe(true);
+    // the portrait notice lives above the HUD (its own element) and is offered only while the controls are
+    const notice = document.querySelector<HTMLElement>("body > .t-portrait")!;
+    expect(notice.hidden).toBe(false);
     t.blocked = true;
     expect(t.root.hidden).toBe(true);
+    expect(notice.hidden).toBe(true);
     t.blocked = false;
     dev.deviceTracker.note("keyboard");
     expect(t.root.hidden).toBe(true);
