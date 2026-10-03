@@ -8,7 +8,7 @@ Free plan, Frankfurt, both pairs auto-deploy every push to `claude/civilised-beh
 ### The play link (created 2026-10-01; this is the pair to hand out)
 | Service | Type | URL | Render id | Health check |
 |---------|------|-----|-----------|--------------|
-| civilised-behaviour-server | Node web service | https://civilised-behaviour-server.onrender.com (`/health`, `/metrics`) | srv-dave76id0e5s73flf2u0 | **not set** (owner: set `/health` at https://dashboard.render.com/web/srv-dave76id0e5s73flf2u0 → Settings → Health Checks; the MCP tool cannot) |
+| civilised-behaviour-server | Node web service | https://civilised-behaviour-server.onrender.com (`/health`, `/metrics`) | srv-dave76id0e5s73flf2u0 | `/health` (set by the owner 2026-10-03, read back from the Render API) |
 | civilised-behaviour | Static site | https://civilised-behaviour.onrender.com | srv-dave78id0e5s73flf9u0 | n/a |
 
 The client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onrender.com`.
@@ -19,12 +19,12 @@ The client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onren
 | cb-server | Node web service | https://cb-server-86wx.onrender.com | srv-datqpblg1s2s73adt930 | `/health` (set 2026-10-02) |
 | cb-client | Static site | https://cb-client-42gz.onrender.com | srv-datqpe0u01pc73a6rm5g | n/a |
 
-Both pairs build the same branch, so every push builds four services. Whether to delete the older pair is the owner's decision (deleting a service is not undone); nothing links to it.
+Both pairs build the same branch, so every push builds four services. **Decided 2026-10-03: delete the older pair** (the owner took the recommendation: nothing links to it, the desktop shell and the play link use the pair above, and it doubles every build). Deleting needs the dashboard (each service → Settings → Delete); the agent's Render tools cannot delete and the session holds no API key. Until it is gone it keeps building; remove this table once it is.
 
 **Verified (2026-10-02, after the PR #1 merge deployed):** `/health` 200; matchmaking `POST /matchmake/create/world` works; the `wss://` upgrade answers 101 and streams state to curl; and **two real Chromium sessions played together on the live game** through the play link: `scripts/deploy-smoke.mjs` (run as `NODE_USE_ENV_PROXY=1 CB_WS_RELAY=1`) founded expedition 5G53V in one browser (42.9 s including a cold start), joined it by code in the other, and each saw the other in the Hollowmere camp (screenshot looked at).
 **Why the relay:** in the Claude Code cloud sandbox, the browser's own `wss://` upgrade gets **404 from the sandbox's intercepting proxy** (`127.0.0.1` answers; `/root/.ccr/README.md` lists WebSocket upgrades as unsupported), while a CONNECT tunnel (curl, Node) is fine. It is not the deployment: the server logs the room as created, and Colyseus's transport never answers 404. `CB_WS_RELAY=1` hands the page's socket to Node's WebSocket, which tunnels through `HTTPS_PROXY`. A normal browser needs nothing.
 
-**Known gaps:** the play-link server's health check (above). `ALLOWED_ORIGINS` is enforced (see NETWORKING.md); the Electron build's renderer origin must be added to it when that app exists. First request after idle cold-starts the instance.
+**Known gaps:** `ALLOWED_ORIGINS` is enforced (see NETWORKING.md); the Electron build's renderer origin must be added to it when that app exists. First request after idle cold-starts the instance.
 
 ## Target
 - Web + demo: Cloudflare Workers Static Assets; large assets on R2 behind a custom asset domain (not r2.dev), immutable hashed filenames.
