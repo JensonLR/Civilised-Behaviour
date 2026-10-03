@@ -23,12 +23,19 @@ export { faceSurfaceZ };
 /** Above a hat's band by this much (x R, in direction space) the skull is entirely inside the hat's crown: those cells are not drawn (hats.test.ts proves it). */
 export const HAT_COVERS_ABOVE = 0.16;
 
-/** Height of a hat's band (x R above the head centre): the hat's own seat, or just above the ears when they are taller than that (a hat rests on top of tall ears, never through them). */
+/** Eyewear whose arms hook over the tops of the ears (spectacles, smoked glasses, half-moons, owl specs). */
+const ARMS_OVER_EARS: ReadonlySet<number> = new Set([2, 5, 8, 11]);
+
+/**
+ * Height of a hat's band (x R above the head centre): the hat's own seat, or just above the ears when they are taller than that (a hat rests on top of tall ears, never through
+ * them). Spectacle arms lie over the ear tops, so with them on the band rests on the arms instead (D-061: the sides of a brim came down through them).
+ */
 export function hatSeat(fc: FaceCtx, hf: HeadFit): number {
   const base = HAT_SEAT[fc.spec.hat] ?? 0.5;
   if (fc.spec.hat === 0) return 0;
   const ear = hf.ear(1);
-  return Math.min(0.82, Math.max(base, (ear.top[1] - fc.cy) / fc.P.headRadius + 0.05));
+  const over = ARMS_OVER_EARS.has(fc.spec.eyewear) ? 0.18 : 0.05;
+  return Math.min(0.82, Math.max(base, (ear.top[1] - fc.cy) / fc.P.headRadius + over));
 }
 
 /** The head fit of a spec exactly as buildHead sets it up (hair thickness known), for tests and tools. */

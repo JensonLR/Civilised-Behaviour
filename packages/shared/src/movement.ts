@@ -77,7 +77,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   // ---- intent ----------------------------------------------------------------------------
   let f = cmd.moveF / 127;
   let r = cmd.moveR / 127;
-  let mag = Math.hypot(f, r);
+  let mag = Math.sqrt(f * f + r * r); // (not Math.hypot: a builtin call boxes its arguments and result on every step; see mount.ts trailStep)
   if (mag > 1) {
     f /= mag;
     r /= mag;
@@ -123,7 +123,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   const maxDv = rate * control * dt;
   const dvx = wantVx - s.vx;
   const dvz = wantVz - s.vz;
-  const dvLen = Math.hypot(dvx, dvz);
+  const dvLen = Math.sqrt(dvx * dvx + dvz * dvz);
   if (dvLen <= maxDv || dvLen < 1e-9) {
     s.vx = wantVx;
     s.vz = wantVz;
@@ -212,7 +212,7 @@ export function stepCharacter(s: CharState, cmd: MoveCommand, dt: number, world:
   }
 
   // ---- facing --------------------------------------------------------------------------------------
-  const speed = Math.hypot(s.vx, s.vz);
+  const speed = Math.sqrt(s.vx * s.vx + s.vz * s.vz);
   // The body faces where the camera looks while aiming or attacking (a swing or a shot goes where the player is looking).
   if ((buttons & (BUTTON.AIM | BUTTON.FIRE | BUTTON.MELEE)) !== 0 && !downed) {
     s.facing = approachAngle(s.facing, Math.atan2(sinY, cosY), MOVEMENT.turnRate * dt); // (the camera looks along (-sin, -cos): facing = yaw)
@@ -248,7 +248,7 @@ function stepDragged(s: CharState, dt: number, world: CollisionWorld): void {
 function walkable(world: CollisionWorld, s: CharState, nx: number, nz: number): boolean {
   const dx = nx - s.x;
   const dz = nz - s.z;
-  const dist = Math.hypot(dx, dz);
+  const dist = Math.sqrt(dx * dx + dz * dz);
   if (dist < 1e-6) return true;
   const rise = world.terrainHeight(nx, nz) - world.terrainHeight(s.x, s.z);
   return rise <= 0 || rise / dist <= CHARACTER.maxSlope;

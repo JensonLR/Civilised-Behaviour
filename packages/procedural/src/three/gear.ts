@@ -36,6 +36,8 @@ export interface TorsoFrame {
   layer: number;
   /** How proud the cloth already laid on the trunk is at lateral offset x, torso height y (a medal on a lapel stands on it). */
   layerAt(x: number, y: number): number;
+  /** The same by azimuth (front or back alike): what a strap running over the shoulder and down the back lies on. */
+  layerAtPhi(phi: number, y: number): number;
   /** How far the body's outermost cloth reaches from the spine around the hips (torso, coat skirt, thighs), the widest over torso-frame heights y..y1 (an item that hangs down a skirt clears the skirt's widest part). */
   reach(y: number, y1?: number): { x: number; f: number; b: number };
   /** Half-axes of the surface round the neck at height y (bare neck, torso top and collar) plus a gap. */
@@ -85,8 +87,14 @@ function shoulderStrap(f: TorsoFrame, sx: 1 | -1, o: { yBack: number; xBack: num
 /** A cross-body strap: from one shoulder over the chest to the opposite hip (front) and back down the back (a sling, a satchel or an order ribbon). */
 export function crossStrap(f: TorsoFrame, color: number, half: number, o: { sign: 1 | -1; hipY: number; hipPhi: number; front?: boolean; back?: boolean; thick?: number }): void {
   const { s, h } = f;
-  const xs = o.sign * 0.5 * s.section(h * 0.87).rx;
-  const ys = shoulderY(s, h, Math.abs(xs));
+  let xs = o.sign * 0.5 * s.section(h * 0.87).rx;
+  let ys = shoulderY(s, h, Math.abs(xs));
+  // (over the shoulder clear of the collar: on a broad or a short-necked body half the trunk's width is under a standing collar, and the strap sank into it by 2 cm)
+  const clear = f.neck(ys).rx + half * 1.15;
+  if (Math.abs(xs) < clear) {
+    xs = o.sign * clear;
+    ys = shoulderY(s, h, clear);
+  }
   const front = s.atX(xs, ys, 0).phi;
   const back = s.atX(xs, ys, 0, true).phi;
   // (hipPhi is the azimuth of the low front end for the +1 strap; the other shoulder mirrors it)
@@ -95,7 +103,8 @@ export function crossStrap(f: TorsoFrame, color: number, half: number, o: { sign
   if (o.front !== false) stops.push({ phi: lowFront, y: o.hipY });
   stops.push({ phi: front, y: ys }, { phi: back, y: ys });
   if (o.back !== false) stops.push({ phi: Math.PI - lowFront, y: o.hipY });
-  ribbon(f.b, s, color, stops, half, o.thick ?? STRAP, { base: f.layer, round: o.front === false ? "end" : o.back === false ? "start" : "both" });
+  // (each sample lies on the cloth under IT: a collar or a yoke stands prouder than the coat's facings, and a strap laid at one height sank into them over the shoulder)
+  ribbon(f.b, s, color, stops, half, o.thick ?? STRAP, { base: f.layer, baseAt: (phi, y) => Math.max(f.layer, f.layerAtPhi(phi, y)), round: o.front === false ? "end" : o.back === false ? "start" : "both" });
 }
 
 const brassOf = (f: TorsoFrame): number => f.accent;
@@ -486,9 +495,11 @@ export function pushOut(f: TorsoFrame, p: V3, gap = 0.012): V3 {
 function beltHang(f: TorsoFrame, item: V3, half = 0.014): void {
   const sx = item[0] < 0 ? -1 : 1;
   const y = f.h * 0.17 - 0.018;
-  const side = f.trunk.at(sx * Math.PI * 0.5, y, 0.008).p;
+  // (from the OUTER cloth, not the trunk: under a poncho, a greatcoat or a robe the strap started inside the coat; and every sample clear of the skirt, not just the ends)
+  const side = f.s.at(sx * Math.PI * 0.5, y, f.layer + 0.008).p;
   const mid: V3 = [(side[0] + item[0]) / 2 + sx * 0.012, Math.max(item[1], y - 0.04) + (y - item[1]) * 0.35, (side[2] + item[2]) / 2];
-  f.b.sweep(curve([side, mid, item], 6), () => ({ rx: 0.006, rz: half, pow: 2.4 }), singe(LEATHER, f.burnt), { side: [0, 0, 1], segments: 4, round: "both" });
+  const path = curve([side, mid, item], 6).map((p, i, a) => (i === 0 || i === a.length - 1 ? p : pushOut(f, p, 0.012)));
+  f.b.sweep(path, () => ({ rx: 0.006, rz: half, pow: 2.4 }), singe(LEATHER, f.burnt), { side: [0, 0, 1], segments: 4, round: "both" });
 }
 
 export function addHipGear(f: TorsoFrame): void {
@@ -535,7 +546,7 @@ export function addHipGear(f: TorsoFrame): void {
       const t = i / 6;
       const x = x0 + (x1 - x0) * t;
       const y = y0 + (y1 - y0) * t - 0.055 * Math.sin(Math.PI * t);
-      pts.push(s.atX(x, y, lift).p);
+      pts.push(s.atX(x, y, Math.max(lift, f.layerAt(x, y) + 0.006)).p); // (over a cloak's front edges, not through them)
     }
     b.sweep(pts, () => ({ rx: 0.006, rz: 0.006, pow: 2 }), brass, { side: [0, 0, 1], segments: 4, round: "both" });
     const w = s.atX(x1, y1 - 0.04, 0);
@@ -555,7 +566,13 @@ export function addHipGear(f: TorsoFrame): void {
     for (const sx of [-1, 1]) {
       const ta = s.atX(sx * nk.rx * 1.0, top, base).p;
       const tb = s.atX(sx * 0.05, y + 0.14, base).p;
-      b.sweep(curve([ta, tb, [sx * 0.04, y + 0.07 * u, glassZ + 0.01]], 6), () => ({ rx: 0.014, rz: 0.006, pow: 2.5 }), leather, { side: [0, 0, 1], segments: 5, round: "end" });
+      // (each sample of the strap lies on the coat where the coat stands further forward than the curve: over a big belly the curve from the chest to the glasses dipped into it)
+      const path = curve([ta, tb, [sx * 0.04, y + 0.07 * u, glassZ + 0.01]], 6).map((p, i, a): V3 => {
+        if (i === a.length - 1) return p;
+        const q = s.atX(p[0], p[1], base + 0.006).p;
+        return q[2] < p[2] ? [p[0], p[1], q[2]] : p;
+      });
+      b.sweep(path, () => ({ rx: 0.014, rz: 0.006, pow: 2.5 }), leather, { side: [0, 0, 1], segments: 5, round: "end" });
     }
     for (const sx of [-1, 1]) {
       b.cylinder(0.026, 0.04, 0.14 * u, leather, [sx * 0.04, y, glassZ]);

@@ -279,3 +279,40 @@ describe("cost", () => {
     field.dispose();
   });
 });
+
+describe("boot prints (D-058)", () => {
+  it("a print is a small mud oval along the walk; a crowd's worth of prints never pushes out a pool of blood, only older prints", () => {
+    const p = new DecalPool(DECAL_CAP.low, 5);
+    const pool = p.pool(0, 0, 0, UP[0], UP[1], UP[2], 0.6);
+    expect(pool).toBeGreaterThanOrEqual(0);
+    const i = p.print(1, 0, 1, UP[0], UP[1], UP[2], 0, 1);
+    expect(p.kindOf(i)).toBe(DECAL.MUD);
+    for (let k = 0; k < 5000; k++) {
+      p.print(k * 0.3, 0, (k % 11) * 0.4, UP[0], UP[1], UP[2], 1, 0);
+      if (k % 50 === 0) p.update(0.05);
+    }
+    expect(p.kindOf(pool)).toBe(DECAL.POOL);
+    expect(p.countOf(DECAL.MUD)).toBeLessThanOrEqual(DECAL_CAP.low);
+  });
+
+  it("the field sets left and right prints either side of the line walked, and none for a body shuffling on the spot", () => {
+    const f = new DecalField(new Scene(), () => 0, "low", 3);
+    const l = f.printAt(0, 0, 0, -2, -1);
+    const r = f.printAt(0, 0, 0, -2, 1);
+    expect(l).toBeGreaterThanOrEqual(0);
+    expect(r).toBeGreaterThanOrEqual(0);
+    const xOf = (i: number): number => f.pool.pos[i * DECAL_ATTR]!;
+    expect(Math.sign(xOf(l))).toBe(-Math.sign(xOf(r)));
+    expect(f.printAt(0, 0, 0.1, 0.1, 1)).toBe(-1);
+  });
+
+  it("a hoof print is the mud mark's second shape (info.w = 1, round), a boot print the first", () => {
+    const p = new DecalPool(DECAL_CAP.low, 5);
+    const boot = p.print(0, 0, 0, UP[0], UP[1], UP[2], 1, 0);
+    const hoof = p.hoof(2, 0, 0, UP[0], UP[1], UP[2], 1, 0);
+    expect(p.kindOf(hoof)).toBe(DECAL.MUD);
+    expect(p.info[hoof * DECAL_ATTR + 3]).toBe(1);
+    expect(p.info[boot * DECAL_ATTR + 3]).toBe(0);
+    expect(p.axis[hoof * DECAL_ATTR + 3]).toBe(1);
+  });
+});

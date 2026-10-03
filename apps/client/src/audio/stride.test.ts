@@ -79,3 +79,33 @@ describe("the ground by region (D-038)", () => {
     }
   });
 });
+
+describe("the ground under a boot, region by region (D-058)", () => {
+  it("never hears the hub's stream, hill or paths on another shore; hears the region's own water, roads and the Saltmarket's planks", async () => {
+    const { regionSurfaceAt } = await import("./surface.ts");
+    const { highmarkRoadDistance, saltmarketPlan } = await import("@cb/shared");
+    // where the hub's stream runs (surfaceAt says water) Kessar's beach is sand, and the hub's hill plateau is not stone in Highmark
+    let wet: { x: number; z: number } | undefined;
+    for (let x = -60; x <= 60 && !wet; x += 2) for (let z = -60; z <= 60 && !wet; z += 2) if (surfaceAt(x, z) === "water") wet = { x, z };
+    expect(wet).toBeDefined();
+    expect(regionSurfaceAt("hollowmere", wet!.x, wet!.z)).toBe("water");
+    expect(regionSurfaceAt("kessar", wet!.x, wet!.z)).toBe("sand");
+    expect(regionSurfaceAt("highmark", HILL.x, HILL.z)).not.toBe("stone");
+    // real water: the region's own depth
+    expect(regionSurfaceAt("kessar", 0, 0, 0, 0.4)).toBe("water");
+    expect(regionSurfaceAt("saltmarket", 30, 60, 0, 0.02)).not.toBe("water");
+    // the Saltmarket: planks on the boardwalk, mud off it
+    const walk = saltmarketPlan().boardwalks[0]!.pts;
+    const mid = { x: (walk[1]!.x + walk[2]!.x) / 2, z: (walk[1]!.z + walk[2]!.z) / 2 };
+    expect(regionSurfaceAt("saltmarket", mid.x, mid.z)).toBe("plank");
+    expect(regionSurfaceAt("saltmarket", mid.x + 6, mid.z)).toBe("mud");
+    // Highmark: the Processional Road is dirt, the grass beside it grass
+    let road: { x: number; z: number } | undefined;
+    for (let x = -40; x <= 40 && !road; x += 1) for (let z = 40; z <= 118 && !road; z += 1) if (highmarkRoadDistance(x, z) < 0.5) road = { x, z };
+    expect(road).toBeDefined();
+    expect(regionSurfaceAt("highmark", road!.x, road!.z)).toBe("dirt");
+    expect(regionSurfaceAt("highmark", road!.x + 12, road!.z)).toBe("grass");
+    // anything raised is wood everywhere
+    expect(regionSurfaceAt("vesper", 0, 0, 0.6)).toBe("wood");
+  });
+});

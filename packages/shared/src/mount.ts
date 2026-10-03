@@ -91,7 +91,7 @@ const scratch: Vec2 = { x: 0, z: 0 };
 function climbable(world: CollisionWorld, x0: number, z0: number, nx: number, nz: number): boolean {
   const dx = nx - x0;
   const dz = nz - z0;
-  const dist = Math.hypot(dx, dz);
+  const dist = Math.sqrt(dx * dx + dz * dz);
   if (dist < 1e-6) return true;
   const rise = world.terrainHeight(nx, nz) - world.terrainHeight(x0, z0);
   return rise <= 0 || rise / dist <= MOUNT.maxSlope;
@@ -114,7 +114,7 @@ export function stepMounted(s: CharState, cmd: MoveCommand, dt: number, world: C
   // ---- the stick ------------------------------------------------------------------------------------------------------------------------------
   let f = cmd.moveF / 127;
   let r = cmd.moveR / 127;
-  let mag = Math.hypot(f, r);
+  let mag = Math.sqrt(f * f + r * r);
   if (mag > 1) {
     f /= mag;
     r /= mag;

@@ -87,7 +87,7 @@ export function buildHairAccessory(c: FaceCtx, hatOn: boolean): void {
     // three hairpins fanned out, each a slim metal shaft with a pearl or gem head
     const heads = [PALETTE.trim.pearl, PALETTE.trim.gemRed, PALETTE.trim.pearl];
     for (let k = 0; k < 3; k++) {
-      const d: V3 = low ? [0.75, 0.15 + k * 0.12, 0.65] : [0.75, 0.5 + k * 0.14, 0.05 + k * 0.28];
+      const d: V3 = low ? [0.75, 0.04 + k * 0.1, 0.65] : [0.75, 0.5 + k * 0.14, 0.05 + k * 0.28]; // (under a hat all three stay under a brim that slopes down behind: D-061)
       // (the pin is stuck into the hair: its shaft starts at the skin and comes out through the hair)
       const lift = headFit(c).hairLift(d[0], d[1], d[2]);
       const { p, n, t2 } = frame(c, d, -lift + R * 0.01);
@@ -122,7 +122,7 @@ export function buildHairAccessory(c: FaceCtx, hatOn: boolean): void {
     } else if (a === 7) {
       // bone pins: two long pins crossed through the hair, ivory
       for (const sgn of [-1, 1]) {
-        const dir = norm(add(add(t1, t2, sgn * 0.7), n, 0.15));
+        const dir = norm(add(add(t1, t2, sgn * (low ? 0.35 : 0.7)), n, 0.15)); // (crossed flatter under a hat, so the upper pin stays under the brim: D-061)
         const len = R * 0.62;
         b.cylinder(R * 0.02, R * 0.02, len, PALETTE.trim.ivory, add(add(p, n, R * 0.02), dir, len * 0.45), orient(dir));
         b.sphere(R * 0.04, PALETTE.trim.ivory, add(add(p, n, R * 0.02), dir, len * 0.95));

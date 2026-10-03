@@ -49,7 +49,7 @@ describe("the compass pins the dock and the map table", () => {
     const ids = marks.map((m) => m.dataset.id);
     for (const hub of ["camp", "village", "observatory", "map", "dock"]) expect(ids).not.toContain(hub);
     // the toll bar place is under the flag, so it is not drawn twice
-    expect(ids).toEqual(["landing", "fort", "syndicate", "goal"]);
+    expect(ids).toEqual(["landing", "fort", "syndicate", "post", "goal"]); // (D-056: the Society's post is a place too)
     const flag = marks.find((m) => m.dataset.goal === "1")!;
     expect(flag.querySelector(".name")!.textContent).toBe("Toll bar");
     expect(flag.dataset.named).toBe("1");

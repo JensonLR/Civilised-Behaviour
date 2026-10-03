@@ -136,13 +136,13 @@ describe("fit combinations on the extreme shape grid", () => {
 /** Worst in cm and number of combinations above the tolerance, as of the day this test was written (D-038). Lower them when a fix lands. */
 const RATCHET: Record<string, { worstCm: number; count: number }> = {
   "hatHair.depth": { worstCm: 0, count: 0 }, // (was 6.9 cm / 22 before nightcap and dust-wrap tails lay outside the hair; a strand through a brim is zero)
-  "hairAccHat.depth": { worstCm: 2.2, count: 7 }, // (combs and pins under wide brims)
-  "eyewearHat.depth": { worstCm: 3.8, count: 18 }, // (was 5.3 / 112, then 3.8 / 25; D-047 keeps the front of every brim up over spectacles: the rest are straps and arms meeting a brim swept down behind, the sou'wester's and the topee's)
+  "hairAccHat.depth": { worstCm: 0, count: 0 }, // (was 2.1 / 7, combs and pins under wide brims; D-061: a dust wrap's tail hangs beside a comb, pins under a hat sit lower and cross flatter)
+  "eyewearHat.depth": { worstCm: 0.6, count: 0 }, // (was 5.3 / 112, then 3.8 / 25, then 3.8 / 18; D-047 keeps the front of every brim up over spectacles; D-061: arms and straps sit at the height they are meant to, and a hat rests on spectacle arms over the ears)
   "longHair.depth": { worstCm: 0.2, count: 0 }, // (was 4.1 cm at the start of the pass; the target is 0.3)
-  "neckwear.accessoryPenetration": { worstCm: 2.2, count: 8 }, // (a neckerchief meeting a pack strap)
+  "neckwear.accessoryPenetration": { worstCm: 2.2, count: 8 }, // (located in D-061: every finding is the neckerchief's triangle at the centre of the chest, tucked inside a garment that closes over it - tunic, greatcoat, poncho, herd cloak, Norfolk, smock - hidden, as one is worn; plus a cravat/ascot knot at 0.9 cm. Not pack straps)
   "neckwear.accessorySink": { worstCm: 0.9, count: 40 }, // (epaulette fringe; was 1.3 / 100)
-  "shoulder.accessoryPenetration": { worstCm: 1.2, count: 3 },
+  "shoulder.accessoryPenetration": { worstCm: 0.9, count: 2 }, // (was 1.2 / 3; D-059's shoulder crossing)
   "shoulder.accessorySink": { worstCm: 1.0, count: 64 }, // (was 1.4 / 136)
-  "beltHip.accessoryPenetration": { worstCm: 2.4, count: 31 }, // (a bandolier over a coat's skirt with hip gear; was 3.3 / 34)
+  "beltHip.accessoryPenetration": { worstCm: 1.5, count: 1 }, // (was 3.3 / 34, then 2.4 / 31; D-059: straps cross the shoulder clear of the collar, hanging tails and belt hangers clear the skirt at every sample, the field glasses' strap rides over a belly; left: a diagonal sash round the side of a court cloak on the narrowest torso)
   "beltHip.accessorySink": { worstCm: 1.1, count: 1 }, // (was 1.9 / 13)
 };

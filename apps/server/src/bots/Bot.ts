@@ -48,7 +48,10 @@ export interface BotStats {
   popMax: number;
   popP99: number;
   popCount: number;
-  /** Reconciler drift: persistent component (ema) and worst single divergence (peak) vs the server, metres. */
+  /**
+   * Reconciler drift in POSITION, metres: persistent component (ema) and the worst recent correction (peak), folded per reconcile exactly as the SDK folds its own (ema 0.1, peak x0.9).
+   * Not the SDK's meter: that one takes the largest change over every predicted field, so a server-owned flag (a crate picked up, a crouch) read as 10 "metres" on every carrying route.
+   */
   driftEma: number;
   driftPeak: number;
   /** Largest per-reconcile POSITION correction (x/y/z only), metres. Flag flips (down, carry...) are not "corrections". */
@@ -74,6 +77,7 @@ export class Bot {
   private timer: ReturnType<typeof setInterval> | undefined;
   private tickNo = 0;
   private correctionMax = 0;
+  private readonly posDrift = { ema: 0, peak: 0 };
   private correctionSum = 0;
   private correctionCount = 0;
   private readonly correctionLog: { tick: number; mag: number }[] = [];
@@ -175,8 +179,8 @@ export class Bot {
       popMax: sorted[sorted.length - 1] ?? 0,
       popP99: sorted[Math.floor(sorted.length * 0.99)] ?? 0,
       popCount: this.pops.filter((p) => p > 0.05).length,
-      driftEma: this.reconciler?.drift.ema ?? 0,
-      driftPeak: this.reconciler?.drift.peak ?? 0,
+      driftEma: this.posDrift.ema,
+      driftPeak: this.posDrift.peak,
       correctionMax: this.correctionMax,
       correctionMean: this.correctionCount ? this.correctionSum / this.correctionCount : 0,
       corrections: this.correctionLog.slice(),
@@ -220,6 +224,8 @@ export class Bot {
       const c = rc.lastCorrection;
       const mag = Math.hypot(c.x ?? 0, c.y ?? 0, c.z ?? 0);
       this.correctionMax = Math.max(this.correctionMax, mag);
+      this.posDrift.ema += (mag - this.posDrift.ema) * 0.1;
+      this.posDrift.peak = Math.max(mag, this.posDrift.peak * 0.9);
       this.correctionSum += mag;
       this.correctionCount++;
       if (this.correctionLog.length < 4096) this.correctionLog.push({ tick: this.tickNo, mag });

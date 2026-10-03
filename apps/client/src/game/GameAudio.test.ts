@@ -83,3 +83,20 @@ describe("events", () => {
     expect(sfx()).toContain("gore_bad_breath");
   });
 });
+
+describe("footfalls feed the boot prints (D-058)", () => {
+  it("each footstep sound is one step on the hook, the feet alternate, the surface is the one the sound used; a downed body leaves none", () => {
+    const steps: { foot: number; surface: string }[] = [];
+    const a = new GameAudio(() => 0, (_x, _z, _vx, _vz, foot, surface) => steps.push({ foot, surface }));
+    for (let i = 0; i < 90; i++) a.actor("p", true, 1 / 30, i * 0.1, 0, 0, 3, 0, 0, FLAG.GROUNDED);
+    const sounds = calls.filter((c) => c.fn === "footstep").length;
+    expect(sounds).toBeGreaterThan(2);
+    expect(steps.length).toBe(sounds);
+    for (let i = 1; i < steps.length; i++) expect(steps[i]!.foot).toBe(-steps[i - 1]!.foot);
+    const heard = calls.filter((c) => c.fn === "footstep").map((c) => c.args[0]);
+    expect(steps.map((s) => s.surface)).toEqual(heard);
+    const before = steps.length;
+    for (let i = 0; i < 60; i++) a.actor("p", true, 1 / 30, 9, 0, 0, 3, 0, 0, FLAG.GROUNDED | FLAG.DOWNED);
+    expect(steps.length).toBe(before);
+  });
+});

@@ -52,6 +52,20 @@ describe("ContentAudio: hooves and tack from the mount rows", () => {
     expect(r.plays.filter((p) => p.x === 0)).toEqual([]); // the wagon
   });
 
+  it("D-058: every hoofbeat lays a hoof print along the horse's heading, the sides alternating; a standing horse and a wagon lay none", () => {
+    const r = recorder();
+    const prints: { x: number; dx: number; dz: number; side: number }[] = [];
+    const c = new ContentAudio({ sfx: r.sfx, onHoof: (x, _z, dx, dz, side) => prints.push({ x, dx, dz, side }) });
+    const w = world({ mounts: { h1: horse({ speed: 6.4, rider: "p1", facing: Math.PI / 2 }), h2: horse({ x: 50, speed: 0 }), w1: { ...horse({ x: 0 }), kind: MOUNT_KIND.wagon, speed: 6.4 } } });
+    frames(c, w, 300);
+    const beats = named(r.plays, "hoof").length;
+    expect(beats).toBeGreaterThan(4);
+    expect(prints.length).toBe(beats);
+    expect(prints.every((p) => p.x === 10)).toBe(true);
+    for (const p of prints) expect(p.dx).toBeCloseTo(-1, 5); // facing PI/2 heads -x
+    for (let i = 1; i < prints.length; i++) expect(prints[i]!.side).toBe(-prints[i - 1]!.side);
+  });
+
   it("the gait names the key: a horse that speeds up goes walk -> trot -> canter -> gallop, one tack jingle per step up from the trot", () => {
     const r = recorder();
     const c = new ContentAudio({ sfx: r.sfx });

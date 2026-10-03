@@ -115,16 +115,32 @@ const FRAG = /* glsl */ `
       cover = max(disc, rays * 0.8) * (0.7 + 0.3 * (1.0 - r));
       shade = 0.55 + 0.75 * smoothstep(0.05, 0.85, r);
     } else {
-      // MUD: a handful of blotches and flecks
-      for (int i = 0; i < 7; i++) {
-        float fi = float(i);
-        float ang = h1(vSeed * 41.0 + fi) * 6.2831;
-        float rad = sqrt(h1(vSeed * 9.0 + fi * 2.0)) * 0.75;
-        vec2 c = vec2(cos(ang), sin(ang)) * rad;
-        float rr = 0.07 + 0.2 * h1(vSeed * 3.0 + fi * 7.0);
-        cover = max(cover, 1.0 - smoothstep(rr - 0.03, rr, length(q - c)));
+      if (vInfo.w > 0.5) {
+        // MUD, second shape: a hoof print (D-058), a horseshoe crescent open at the heel (-x), with nail dots along the shoe and the frog's dent in the middle
+        float rr = length(q * vec2(1.0, 1.08));
+        float ring = (1.0 - smoothstep(0.86, 0.96, rr)) * smoothstep(0.5, 0.6, rr);
+        float open = smoothstep(-0.55, -0.35, q.x);
+        float frog = (1.0 - smoothstep(0.18, 0.3, length((q - vec2(-0.05, 0.0)) * vec2(1.0, 1.8)))) * 0.6;
+        cover = max(ring * open, frog);
+        float nails = 0.0;
+        for (int i = 0; i < 6; i++) {
+          float ang = mix(-2.2, 2.2, float(i) / 5.0);
+          nails = max(nails, 1.0 - smoothstep(0.04, 0.07, length(q - vec2(cos(ang), sin(ang)) * 0.73)));
+        }
+        shade = mix(1.0, 0.75, nails * ring);
+      } else {
+      // MUD: a boot print (D-058), the toe forward along the walk (+x): a sole and a separate heel, a little ragged where the mud gave, faint tread across the sole,
+      // pressed darker at the middle and wet-glossy while fresh. (The quad is stretched by the mark's aspect, so the ellipses read as a boot, not a disc.)
+      vec2 sq = (q - vec2(0.24, 0.0)) / vec2(0.66, 0.86);
+      vec2 hq = (q - vec2(-0.64, 0.0)) / vec2(0.3, 0.74);
+      float rag = 0.06 * sin(a * 7.0 + vSeed * 6.2831);
+      float sole = 1.0 - smoothstep(0.86 + rag, 1.0 + rag, length(sq));
+      float heel = 1.0 - smoothstep(0.84 + rag, 1.0 + rag, length(hq));
+      cover = max(sole, heel);
+      float tread = 0.5 + 0.5 * sin(q.x * 26.0);
+      shade = mix(0.82, 1.0, smoothstep(0.2, 0.9, max(length(sq) * sole, length(hq) * heel))) * mix(1.0, 0.9, tread * sole);
+      col = mix(col, vec3(0.9, 0.86, 0.8) * 0.5 + col * 0.5, (1.0 - smoothstep(0.0, 0.5, length(sq - vec2(0.15, 0.25)))) * wet * 0.35);
       }
-      shade = 0.9 + 0.2 * h1(floor(a * 3.0) + vSeed * 9.0);
     }
     // an ink-like darker edge where the coverage thins, a firm contour
     float line = smoothstep(0.05, 0.4, cover);
@@ -261,6 +277,25 @@ export class DecalField {
   sprayAt(x: number, z: number, dx: number, dz: number, length: number): number {
     const n = this.groundNormal(x, z);
     return this.pool.spray(x, this.groundTop(x, z, length * 0.5), z, n.x, n.y, n.z, dx, 0, dz, length);
+  }
+
+  /** A boot print at (x, z), heading (dx, dz), set to one side of the line the body walks (`foot` +1 right, -1 left). */
+  printAt(x: number, z: number, dx: number, dz: number, foot: 1 | -1): number {
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.3) return -1; // (shuffling on the spot leaves no trail of prints)
+    const ux = dx / len, uz = dz / len;
+    const px = x - uz * 0.11 * foot, pz = z + ux * 0.11 * foot;
+    const n = this.groundNormal(px, pz);
+    return this.pool.print(px, this.groundTop(px, pz, 0.15), pz, n.x, n.y, n.z, ux, uz);
+  }
+
+  /** A hoof print at (x, z), the horse heading (dx, dz), set a hand's breadth to one side of its line (`side`). */
+  hoofAt(x: number, z: number, dx: number, dz: number, side: 1 | -1): number {
+    const len = Math.sqrt(dx * dx + dz * dz) || 1;
+    const ux = dx / len, uz = dz / len;
+    const px = x - uz * 0.16 * side, pz = z + ux * 0.16 * side;
+    const n = this.groundNormal(px, pz);
+    return this.pool.hoof(px, this.groundTop(px, pz, 0.12), pz, n.x, n.y, n.z, ux, uz);
   }
 
   /** A body dragged: call every frame it moves. */

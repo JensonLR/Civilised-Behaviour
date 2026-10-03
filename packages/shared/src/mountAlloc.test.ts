@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { STEP_DT } from "./constants.ts";
-import type { CollisionWorld } from "./collision.ts";
-import { trailStep, type Trailer } from "./mount.ts";
+import { BUTTON, STEP_DT } from "./constants.ts";
+import { CollisionWorld } from "./collision.ts";
+import { createCharState, stepCharacter, type MoveCommand } from "./movement.ts";
+import { MOUNT_FLAG, stepMounted, trailStep, type Trailer } from "./mount.ts";
 import { bytesPerCall } from "./bytesPerCall.testutil.ts";
 
 /**
@@ -34,5 +35,31 @@ describe("trailStep allocation", () => {
     });
     expect(sink).toBeDefined();
     expect(array).toBeGreaterThanOrEqual(16);
+  });
+
+  it("a rider's step costs what a walker's step costs (their own code: a flat world with a rock and a wall to push against), and neither more than a few boxed numbers", () => {
+    // (On a real world both read hundreds of bytes and the rider ~1.6x the walker: that is the engine boxing the terrain's noise samples, which the horse takes more of, not the step. The old
+    // comparison there read 27 B or 101 B on the same commit, by whether a scavenge fell inside its 20,000-call windows: bytesPerCall.testutil.ts.)
+    const w = new CollisionWorld({ height: () => 0 }, [
+      { kind: "circle", tag: "rock", x: 6, z: 0, r: 1, y0: -1, y1: 2 },
+      { kind: "box", tag: "wall", x: -6, z: 0, hx: 1, hz: 3, yaw: 0.3, y0: -1, y1: 3 },
+    ], 60);
+    const m = createCharState(0, 0, w);
+    m.flags |= MOUNT_FLAG.MOUNTED;
+    const k = createCharState(0, 0, w);
+    const c: MoveCommand = { moveF: 127, moveR: 0, yaw: 0, buttons: BUTTON.SPRINT };
+    const mounted = bytesPerCall((i) => {
+      c.yaw = (i * 37) & 0xffff;
+      if ((i & 255) === 0) m.x = m.z = 0; // (back to the middle now and then: the body keeps meeting the rock and the wall)
+      stepMounted(m, c, STEP_DT, w);
+    });
+    const walker = bytesPerCall((i) => {
+      c.yaw = (i * 37) & 0xffff;
+      if ((i & 255) === 0) k.x = k.z = 0;
+      stepCharacter(k, c, STEP_DT, w);
+    });
+    expect(mounted).toBeLessThanOrEqual(walker + 16);
+    expect(mounted).toBeLessThanOrEqual(64);
+    expect(walker).toBeLessThanOrEqual(64);
   });
 });

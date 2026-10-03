@@ -4,7 +4,7 @@ import { MUSIC_LAYERS, newMusicState, stepMusic, type MusicLayerId, type MusicMo
 import { ambienceMood } from "../audio/mixDuck.ts";
 import { getAdaptiveMusic } from "../settings.ts";
 import { Stride } from "../audio/stride.ts";
-import { regionSurface, surfaceAt } from "../audio/surface.ts";
+import { regionSurfaceAt, type Surface } from "../audio/surface.ts";
 
 interface Track {
   stride: Stride;
@@ -12,6 +12,8 @@ interface Track {
   /** Most negative vertical speed since leaving the ground (for how hard the landing is). */
   fall: number;
   seen: boolean;
+  /** The foot that lands next (+1 right, -1 left): the boot prints alternate. */
+  foot: 1 | -1;
 }
 
 /** The plain jolly bed (Adaptive music off): nothing but the bed. */
@@ -34,12 +36,20 @@ export class GameAudio {
   private region = "hollowmere";
   private readonly mood = newMusicState();
 
-  constructor(private readonly ground: (x: number, z: number) => number) {}
+  /**
+   * @param onStep  each footfall, on the same stride law as the footstep sound (the Game lays a boot print in mud: D-058): where, which way the body moves, which foot, and the surface.
+   */
+  constructor(
+    private readonly ground: (x: number, z: number) => number,
+    private readonly onStep?: (x: number, z: number, vx: number, vz: number, foot: 1 | -1, surface: Surface) => void,
+    /** Standing water over the ground at (x, z), metres (the region's terrain): the splash under a boot. */
+    private readonly water?: (x: number, z: number) => number,
+  ) {}
 
   private track(id: string, flags: number): Track {
     let t = this.tracks.get(id);
     if (!t) {
-      t = { stride: new Stride(), flags, fall: 0, seen: true };
+      t = { stride: new Stride(), flags, fall: 0, seen: true, foot: 1 };
       this.tracks.set(id, t);
     }
     return t;
@@ -68,7 +78,10 @@ export class GameAudio {
 
     // Footfalls, on the animator's stride law.
     if (!downed && t.stride.advance(dt, speed, grounded)) {
-      footstep(regionSurface(this.region, surfaceAt(x, z, y - this.ground(x, z))), speed, { x, y, z, crouching: (flags & FLAG.CROUCHING) !== 0, volume: isMe ? 1 : 0.9 });
+      const surface = regionSurfaceAt(this.region, x, z, y - this.ground(x, z), this.water?.(x, z) ?? 0);
+      footstep(surface, speed, { x, y, z, crouching: (flags & FLAG.CROUCHING) !== 0, volume: isMe ? 1 : 0.9 });
+      this.onStep?.(x, z, vx, vz, t.foot, surface);
+      t.foot = t.foot === 1 ? -1 : 1;
     }
     if (!grounded && vy < t.fall) t.fall = vy;
     if (wasGrounded && !grounded && vy > 2.5) playSfx("jump", { x, y, z, volume: isMe ? 1 : 0.8 });

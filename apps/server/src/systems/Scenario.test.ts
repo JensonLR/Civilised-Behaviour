@@ -25,6 +25,9 @@ class FakeCast implements CastApi {
   counts = new Map<string, CastCount>();
   despawned: string[] = [];
   cap = 99;
+  /** D-060: the nav grid's line of sight, as the test wants it (a wall between everyone, or none). */
+  blocked = false;
+  los(): boolean { return !this.blocked; }
   constructor(readonly players: Map<string, Row>) {}
   spawn(specs: readonly NpcSpec[]): number {
     let n = 0;
@@ -184,6 +187,23 @@ describe("the runner: start, publish, dispose", () => {
     expect(f.players.has("npc:porter-1")).toBe(true);
     expect(f.cast.despawned).not.toContain("*");
     expect(f.players.has("npc:deserter-0")).toBe(false);
+  });
+
+  it("D-060: a watcher in range sees the party only with a clear line to them (a wall between hides a party standing at his elbow)", () => {
+    const f = fake();
+    const s = setup(f, "hostage_rescue", row("p1", 0, 88));
+    run(f, s, 1);
+    const d = f.players.get("npc:deserter-0")!;
+    const p = f.players.get("p1")!;
+    p.x = d.x + 3;
+    p.z = d.z + 3;
+    const hailed = (): boolean => f.views.some((v) => /answer|business|seen you/i.test(v.hint));
+    f.cast.blocked = true;
+    run(f, s, 3);
+    expect(hailed()).toBe(false);
+    f.cast.blocked = false;
+    run(f, s, 3);
+    expect(hailed()).toBe(true);
   });
 
   it("copes with the cast refusing spawns at the cap", () => {

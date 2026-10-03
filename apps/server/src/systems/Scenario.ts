@@ -474,7 +474,10 @@ export class Scenario {
     }
   }
 
-  /** Who has seen the party: a standing member of the group within `sight` metres of a standing human (shorter in rain and fog, and for someone crouching). Edge-triggered. */
+  /**
+   * Who has seen the party: a standing member of the group within `sight` metres of a standing human (shorter in rain and fog, and for someone crouching) WITH A CLEAR LINE to them
+   * (D-060: the nav grid's line of sight, the same the Cast's soldiers fight by; until now a lookout saw through the Orchard's walls and the drop-house). Edge-triggered.
+   */
   private observeSeen(): void {
     if (this.def.observe.seen.length === 0) return;
     const k = (this.wasWet ? WET_SIGHT : 1) * (this.complication === "fog" ? FOG_SIGHT : 1) * (this.complication === "rain" ? WET_SIGHT : 1);
@@ -487,7 +490,10 @@ export class Scenario {
         if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
         for (const p of this.real) {
           if (!p.connected || (p.flags & FLAG.DOWNED) !== 0) continue;
-          if (Math.hypot(p.x - row.x, p.z - row.z) <= ((p.flags & FLAG.CROUCHING) !== 0 ? range * CROUCH_SIGHT : range)) { sees = true; break; }
+          if (Math.hypot(p.x - row.x, p.z - row.z) > ((p.flags & FLAG.CROUCHING) !== 0 ? range * CROUCH_SIGHT : range)) continue;
+          if (this.host.cast.los?.(row.x, row.z, p.x, p.z) === false) continue;
+          sees = true;
+          break;
         }
         if (sees) break;
       }
