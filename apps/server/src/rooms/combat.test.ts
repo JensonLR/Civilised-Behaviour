@@ -567,19 +567,28 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
         await send(BUTTON.AIM | BUTTON.FIRE, 300);
         expect(a.p.shots).toBe(shots);
         if (holdOn) {
-          // held to the end: it fires as the reload completes, then never again for the same squeeze
-          let firedAfterMs = -1;
+          // held to the end: it fires on the first frame the server handles after the reload is done, then never again for the same squeeze. Watched per FRAME at the
+          // combat system's own door, not by the wall clock (the first cut sampled the reload before a 33 ms send, so a slow CI runner whose ticks finished the reload and
+          // fired inside one send read as "fired early": a timing assertion, now gone)
+          const combat = combatOf(room) as unknown as { onFrame: (id: string, ...rest: unknown[]) => boolean };
+          const real = combat.onFrame.bind(combat);
+          const frames: { held: boolean; reloadDone: boolean; fired: boolean }[] = [];
+          combat.onFrame = (id, ...rest) => {
+            if (id !== a.id) return real(id, ...rest);
+            const reloadDone = reloadLeft() <= 0;
+            const before = combatOf(room).inspect(a.id)!.shots;
+            const r = real(id, ...rest);
+            frames.push({ held: ((rest[1] as { buttons: number }).buttons & BUTTON.FIRE) !== 0, reloadDone, fired: combatOf(room).inspect(a.id)!.shots !== before });
+            return r;
+          };
           const t0 = Date.now();
-          while (Date.now() - t0 < 5000) {
-            const done = reloadLeft() <= 0;
-            await send(BUTTON.AIM | BUTTON.FIRE, 33);
-            if (a.p.shots !== shots) {
-              firedAfterMs = done ? 0 : -2;
-              break;
-            }
-          }
+          while (Date.now() - t0 < 5000 && a.p.shots === shots) await send(BUTTON.AIM | BUTTON.FIRE, 33);
+          combat.onFrame = real;
           expect(a.p.shots).toBe((shots + 1) & 255);
-          expect(firedAfterMs, "fired on the frame the reload was done").toBe(0);
+          const first = frames.findIndex((f) => f.held && f.reloadDone);
+          expect(first, "a held frame after the reload was done").toBeGreaterThanOrEqual(0);
+          expect(frames[first]!.fired, "fired on the first held frame after the reload was done").toBe(true);
+          expect(frames.slice(0, first).some((f) => f.fired), "nothing fired during the reload").toBe(false);
           await send(BUTTON.AIM | BUTTON.FIRE, 600);
           expect(a.p.shots).toBe((shots + 1) & 255);
           await send(BUTTON.AIM, 100);
