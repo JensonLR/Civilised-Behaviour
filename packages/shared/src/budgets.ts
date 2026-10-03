@@ -57,8 +57,8 @@ export interface SoakReport {
   rssMB: number;
   net: { downBytesPerClientPerS: number; upBytesPerClientPerS: number; messagesPerClientPerS: number };
   /**
-   * What the bots saw of the server: `correctionMax` is the worst single POSITION correction in metres (a soak that desyncs is not a pass); `driftPeak` is the reconciler's own
-   * drift meter in raw field units (a position error is metres, but a flag flip such as a mount or a crouch counts as its bit value, so a peak of 4 or 10 is a flag, not a desync).
+   * What the bots saw of the server: `correctionMax` is the worst single POSITION correction in metres (a soak that desyncs is not a pass); `driftPeak` is the worst recent position
+   * correction folded as the reconciler folds its drift (metres; until D-057 it was the SDK's own meter, in raw field units, where a flag flip such as a crate or a crouch read as 4 or 10).
    */
   bots: { correctionMax: number; driftPeak: number };
   /** What the harness's bots and rooms really did in the window (a soak that stood still would pass every budget): rounds fired and blows landed, seconds ridden, metres walked, reconnects, saves. */

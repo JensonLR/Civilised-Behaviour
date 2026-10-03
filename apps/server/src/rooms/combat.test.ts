@@ -872,6 +872,14 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       const { room, ps } = await setup(2);
       const [a, b] = ps as [Player, Player];
       const cannon = cannonOf(room);
+      // Loading is timed in SIMULATED seconds (the sum of the dt the combat system is ticked with), not by the wall clock: a starved CI runner ticks late and would read a slow load.
+      const sys = combatOf(room) as unknown as { tick(dt: number): void };
+      const realTick = sys.tick.bind(sys);
+      let sim = 0;
+      sys.tick = (dt: number) => {
+        sim += dt;
+        realTick(dt);
+      };
       expect(cannon.phase).toBe(0);
       expect(cannon.shells).toBe(CANNON.shells);
       crewAt(room, a.p, 0);
@@ -882,14 +890,14 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
         return () => clearInterval(timer);
       };
       let release = hold(a);
-      const t0 = Date.now();
       await until(() => cannon.phase === 1, 1500, "loading begins");
+      const t0 = sim;
       expect(a.p.flags & FLAG.OPERATING).toBeTruthy();
-      await sleep(CANNON.loadSeconds * 1000 * 0.75);
+      await until(() => sim - t0 >= CANNON.loadSeconds * 0.75, CANNON.loadSeconds * 4000, "75% of the full-speed time, simulated");
       expect(cannon.phase).toBe(1); // half speed: nowhere near done at 75% of the full-speed time
       expect(cannon.crew).toBe(1);
-      await until(() => cannon.phase === 2, CANNON.loadSeconds * 2200, "loaded alone");
-      const solo = (Date.now() - t0) / 1000;
+      await until(() => cannon.phase === 2, CANNON.loadSeconds * 4000, "loaded alone");
+      const solo = sim - t0;
       expect(solo).toBeGreaterThan(CANNON.loadSeconds * 1.6);
       expect(cannon.shells).toBe(CANNON.shells - 1);
       release();
@@ -905,9 +913,9 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       await until(() => cannon.phase === 3, 1500, "fuse lit");
       await until(() => cannon.phase === 0, 3000, "fired");
       expect(cannon.fired).toBe(1);
-      const t1 = Date.now();
-      await until(() => cannon.phase === 2, CANNON.loadSeconds * 1500, "loaded by two");
-      const pair = (Date.now() - t1) / 1000;
+      const t1 = sim;
+      await until(() => cannon.phase === 2, CANNON.loadSeconds * 3000, "loaded by two");
+      const pair = sim - t1;
       expect(pair).toBeLessThan(CANNON.loadSeconds * 1.4);
       expect(pair).toBeGreaterThan(CANNON.loadSeconds * 0.6);
       release();

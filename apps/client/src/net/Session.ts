@@ -202,16 +202,29 @@ export class Session {
       step: (ctx: { dt: number }, state: PlayerStateType, cmd: MoveInputType) =>
         stepCharacter(state, cmd as MoveCommand, ctx.dt, this.world),
       smoothMs: 65,
-      // Turns on the SDK's drift telemetry (it is off unless watched). The tolerance is huge so it never warns.
+      // Turns on the SDK's correction telemetry (it is off unless watched). The tolerance is huge so it never warns.
       warnOnDivergence: 1e9,
+      onReconcile: () => this.foldDrift(),
     } as never);
     return me;
   }
 
-  /** Reconciler drift vs the server (metres): `ema` persistent, `peak` worst. Zero means prediction matches. */
+  private readonly posDrift = { ema: 0, peak: 0, last: 0 };
+  /** One reconcile's POSITION correction, folded as the SDK folds its drift (ema 0.1, peak x0.9): the SDK's own meter counts every predicted field, so a flag (a crate, a crouch) read as metres. */
+  private foldDrift(): void {
+    const c = (this.reconciler as unknown as { lastCorrection?: Record<string, number> } | undefined)?.lastCorrection;
+    if (!c) return;
+    const x = c.x ?? 0, y = c.y ?? 0, z = c.z ?? 0;
+    const mag = Math.sqrt(x * x + y * y + z * z);
+    const d = this.posDrift;
+    d.ema += (mag - d.ema) * 0.1;
+    d.peak = Math.max(mag, d.peak * 0.9);
+    d.last = mag;
+  }
+
+  /** Prediction drift vs the server in POSITION (metres): `ema` persistent, `peak` worst recent, `lastCorrection` the latest. Zero means prediction matches. */
   get drift(): { ema: number; peak: number; lastCorrection: number } {
-    const r = this.reconciler as unknown as { drift: { ema: number; peak: number }; lastCorrectionMag: number } | undefined;
-    return { ema: r?.drift.ema ?? 0, peak: r?.drift.peak ?? 0, lastCorrection: r?.lastCorrectionMag ?? 0 };
+    return { ema: this.posDrift.ema, peak: this.posDrift.peak, lastCorrection: this.posDrift.last };
   }
 
   get local(): PlayerStateType | undefined {

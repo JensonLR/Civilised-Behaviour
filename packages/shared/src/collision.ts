@@ -120,7 +120,7 @@ export class CollisionWorld {
           }
         }
       }
-      const d = Math.hypot(pos.x, pos.z);
+      const d = Math.sqrt(pos.x * pos.x + pos.z * pos.z); // (hot: every resolve; Math.hypot boxes)
       const limit = this.boundsRadius - radius;
       if (d > limit) {
         pos.x *= limit / d;

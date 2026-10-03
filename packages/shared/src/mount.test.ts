@@ -3,7 +3,6 @@ import { BUTTON, FLAG, STEP_DT } from "./constants.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { createRegionWorld, regionSpawn } from "./regions.ts";
 import { Rng } from "./rng.ts";
-import { bytesPerCall } from "./bytesPerCall.testutil.ts";
 import { LIMB } from "./limbs.ts";
 import { ZONE, setWound } from "./wounds.ts";
 import { axisToWire, createCharState, stepCharacter, yawToWire, type CharState, type MoveCommand } from "./movement.ts";
@@ -267,7 +266,7 @@ describe("stepMounted: world", () => {
     }
   });
 
-  it("is bit-for-bit deterministic and allocation-free", () => {
+  it("is bit-for-bit deterministic", () => {
     const w = createRegionWorld("hollowmere", 9);
     const make = (): MoveCommand[] => {
       const rng = new Rng(5);
@@ -279,21 +278,7 @@ describe("stepMounted: world", () => {
       return s;
     };
     expect(play()).toEqual(play());
-    // Boxing counts depend on the path the body takes (a body pressed against a wall stores Smis, a free one stores doubles), so the comparison is made on the world its
-    // budget was calibrated on: Hollowmere without the HQ route's finger-posts (hqRoute.ts), which lie in the camp's neighbourhood and change who gets stuck where.
-    const wb = new CollisionWorld(w.terrain, w.obstacles.filter((o) => o.tag !== "fingerpost" && o.tag !== "house" && o.tag !== "vprop"), w.boundsRadius); // (D-038: nor the village, whose doors and walls were replanned: the 100,000-step circuit passes through it, and a body pinned in a doorway stores Smis)
-    const m = rider(wb, 2, 3);
-    const k = createCharState(2, 3, wb);
-    const c = cmd({ buttons: BUTTON.SPRINT });
-    const mounted = bytesPerCall((i) => {
-      c.yaw = (i * 37) & 0xffff;
-      stepMounted(m, c, STEP_DT, wb);
-    });
-    const walker = bytesPerCall((i) => {
-      c.yaw = (i * 37) & 0xffff;
-      stepCharacter(k, c, STEP_DT, wb);
-    });
-    expect(mounted).toBeLessThanOrEqual(walker * 1.3 + 16);
+    // (its allocation is measured in mountAlloc.test.ts, on a world that costs nothing: on a real world the bytes are the engine boxing the terrain's noise, which the horse samples more often than a man on foot)
   });
 });
 
