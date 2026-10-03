@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CampaignState, ScenarioOutcome } from "../campaignTypes.ts";
-import { NPC_CAP } from "../campaignTypes.ts";
+import { NPC, NPC_CAP } from "../campaignTypes.ts";
 import { applyOutcome, newCampaign } from "../factions.ts";
 import { newPowers } from "../powers.ts";
 import { raidAftermath } from "../raidAftermath.ts";
@@ -13,7 +13,9 @@ import { kessarNavOptions } from "../garrison.ts";
 import { createKessarWorld } from "../kessar.ts";
 import { NavQuery, buildNavGrid } from "../nav.ts";
 import { OUTPOST_STAGES } from "../worldTypes.ts";
-import { RAID, RAID_SITES, outpostRaidTemplate as def, type RaidState } from "./outpostRaid.ts";
+import { KESSAR_OUTPOST, outpostPlan } from "../outpost.ts";
+import { WEAPON } from "../weapons.ts";
+import { RAID, RAID_SITES, WATCH_POSTS, outpostRaidTemplate as def, type RaidState } from "./outpostRaid.ts";
 import { answerSiteParley, openSiteParley } from "./parleys.ts";
 import { pickTemplate } from "./registry.ts";
 import type { Fx } from "./types.ts";
@@ -155,6 +157,41 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect("stout" in def.init(C, 0, SEED, presence())).toBe(false);
   });
 
+  it("a stockaded post keeps a watch: riflemen on the party's side, by stage, who come down to the gate when the party reaches the post (once), never if it stays away", () => {
+    const presence = (partyPost?: string): RivalPresence => ({ goal: "sabotage_party", arrivesInS: 200, escort: 1, wagon: false, surveyors: 1, postStage: 0, raidDue: true, ...(partyPost ? { partyPost } : {}) } as RivalPresence);
+    for (const st of OUTPOST_STAGES) {
+      const s0 = def.init(C, 0, SEED, presence(st));
+      const want = RAID.watch[st];
+      expect(s0.watch ?? 0, st).toBe(want);
+      const watch = def.roster(C, SEED, s0).filter((p) => p.id.startsWith("watch-"));
+      expect(watch.length, st).toBe(want);
+      for (const w of watch) {
+        expect(w).toMatchObject({ side: "party", group: "late:watch", brain: "garrison", weapon: WEAPON.RIFLE, role: NPC.HIRED_RIFLE });
+        expect(Math.hypot(w.post.x - KESSAR_OUTPOST.site.x, w.post.z - KESSAR_OUTPOST.site.z), `${st}: inside the stockade`).toBeLessThan(15);
+      }
+      // nobody is on the ground until something calls them
+      expect(def.roster(C, SEED, s0).every((p) => p.group.startsWith("late:"))).toBe(true);
+      // the party reaches the post: the watch comes out, once (not again on a second arrival), and the tracker says so
+      const spawned = (fx: Fx[]): number => fx.filter((f) => typeof f === "object" && f.k === "spawn" && f.group === "late:watch").length;
+      const arrived = drive([{ t: "near", at: "post", party: 1 }, { t: "near", at: "post", party: 0 }, { t: "near", at: "post", party: 2 }], s0);
+      expect(spawned(arrived.fx), st).toBe(want > 0 ? 1 : 0);
+      if (want > 0) {
+        expect(def.view(s0, 0).hint).toContain("it will stand with you once you are there");
+        expect(def.view(arrived.s, 0).hint).toContain(`The post's watch (${want} rifles) stands inside the gate`);
+        expect(said(arrived.fx)).toContain(`${want} Society pensioners with rifles`);
+      } else expect(def.view(arrived.s, 0).hint).not.toContain("watch (");
+      // a party that never comes has no watch: the raid lands, attacks and burns with nobody out
+      const away = drive([...ticks(s0.raidAt + 1), { t: "hostile", at: "late:raiders" }], s0);
+      expect(spawned(away.fx), `${st} away`).toBe(0);
+      // and a resolved raid calls nobody
+      expect(spawned(def.reduce({ ...s0, phase: "resolved", resolution: "post_burned" }, { t: "near", at: "post", party: 1 }).fx)).toBe(0);
+    }
+    expect(RAID.watch.fortified_outpost, "a fortified post is held with help").toBeGreaterThan(0);
+    // a stage only has a watch if it has a stockade to keep (the gate the watch stands inside)
+    for (const st of OUTPOST_STAGES) expect(RAID.watch[st] > 0, st).toBe(outpostPlan(st).gate !== undefined);
+    expect("watch" in def.init(C, 0, SEED, presence())).toBe(false);
+  });
+
   it("the people and the observe spec agree; under the cap", () => {
     const r = def.roster(C, SEED, S0);
     const ids = r.map((p) => p.id);
@@ -224,6 +261,13 @@ describe("the raid's ground (D-045): every stage, both bridges, five seeds", () 
       // (the bot playtest's town-stage check found 52,58 -> 46,60 through a house; the Cast does not plan between a route's points)
       for (const r of [RAID_SITES.route, RAID_SITES.assault]) for (let i = 1; i < r.length; i++) {
         expect(q.los(r[i - 1]!.x, r[i - 1]!.z, r[i]!.x, r[i]!.z), `${st} ${bridge} @${seed}: ${r[i - 1]!.x},${r[i - 1]!.z} -> ${r[i]!.x},${r[i]!.z}`).toBe(true);
+      }
+      // the watch stands on open ground and sees out of the gate to where the assault comes round to it, and across the yard
+      const gateApproach = RAID_SITES.assault[RAID_SITES.route.length + 1]!;
+      for (const w of WATCH_POSTS.slice(0, RAID.watch[st])) {
+        expect(q.open(w.x, w.z), `${st} ${bridge} @${seed}: watch ${w.x},${w.z} open`).toBe(true);
+        expect(q.los(w.x, w.z, gateApproach.x, gateApproach.z), `${st} ${bridge} @${seed}: watch ${w.x},${w.z} sees the gate's approach`).toBe(true);
+        expect(q.los(w.x, w.z, KESSAR_OUTPOST.site.x, KESSAR_OUTPOST.site.z), `${st} ${bridge} @${seed}: watch ${w.x},${w.z} sees the yard`).toBe(true);
       }
     }
   }, 600_000);
