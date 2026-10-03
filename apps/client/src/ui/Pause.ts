@@ -16,6 +16,9 @@ export interface PauseDeps {
   save?: { status(): SaveStatus; now(): Promise<SaveStatus>; subscribe(fn: (s: SaveStatus) => void): () => void };
   /** Leave the expedition (the page returns to the front door). */
   leave(): void;
+  /** D-063: the contract in full (the HUD shows only its next step) and the telegrams lately received (a slip is only a glance). Both optional. */
+  orders?(): { title: string; items: { text: string; done: boolean; optional: boolean }[] } | undefined;
+  dispatches?(): readonly string[];
   /** The demo only (D-036): a button that opens the wish-list card. Absent in the full game. */
   wishlist?(): void;
 }
@@ -32,6 +35,8 @@ export class Pause {
   private readonly copy = h("button", { type: "button" }, "Copy invite");
   private readonly leaveBtn = h("button", { type: "button", class: "danger" }, "Leave expedition");
   private readonly saveLine = h("p", { class: "fine saveline", id: "pause-save" });
+  private readonly ordersBox = h("section", { class: "orders" });
+  private readonly dispatchBox = h("details", { class: "dispatches" });
   private readonly saveBtn = h("button", { type: "button", "data-act": "save-now" }, "Save now");
   private readonly quitBtn = h("button", { type: "button", "data-act": "save-quit" }, "Save and quit");
   private quitting = false;
@@ -66,6 +71,8 @@ export class Pause {
       h("h2", { id: "pause-title" }, "Expedition Halted"),
       this.info,
       this.saveLine,
+      this.ordersBox,
+      this.dispatchBox,
       h("div", { class: "menu" }, resume, this.saveBtn, h("div", { class: "pair" }, how, opts), h("div", { class: "pair" }, replay, this.copy), ...(wish ? [wish] : []), this.quitBtn, this.leaveBtn),
       h("p", { class: "fine" }, "The world does not wait for you. Your comrades are still on the march."),
       sheetHints({ choose: "Choose", close: "Resume" }).el,
@@ -135,8 +142,41 @@ export class Pause {
     }
     this.copy.hidden = !inv;
     this.copy.textContent = "Copy invite";
+    this.drawOrders();
     playSfx("ui_click");
     this.modal.open(null);
+  }
+
+  /** The contract in full and the last telegrams (text only, from the wire: set as textContent). */
+  private drawOrders(): void {
+    const o = this.deps.orders?.();
+    this.ordersBox.replaceChildren();
+    this.ordersBox.hidden = !o || o.items.length === 0;
+    if (o && o.items.length > 0) {
+      const list = h("ul", {});
+      for (const it of o.items) {
+        const li = h("li", { class: `${it.done ? "done" : ""}${it.optional ? " optional" : ""}`.trim() });
+        li.textContent = `${it.optional ? "(If you like) " : ""}${it.text}`;
+        list.append(li);
+      }
+      const head = h("h3", {});
+      head.textContent = o.title;
+      this.ordersBox.append(head, list);
+    }
+    const d = this.deps.dispatches?.() ?? [];
+    this.dispatchBox.replaceChildren();
+    this.dispatchBox.hidden = d.length === 0;
+    if (d.length > 0) {
+      const sum = h("summary", {});
+      sum.textContent = `Telegrams lately received (${d.length})`;
+      const list = h("ol", {});
+      for (const t of d.slice(-12).reverse()) {
+        const li = h("li", {});
+        li.textContent = t;
+        list.append(li);
+      }
+      this.dispatchBox.append(sum, list);
+    }
   }
 
   resume(): void {

@@ -161,6 +161,8 @@ export class Hud {
     this.health.setAttribute("aria-valuenow", String(pct));
     this.health.dataset.state = state;
     const down_ = (v.flags & FLAG.DOWNED) !== 0;
+    // D-063: whole and unarmed, the dial steps back (the edges of the picture hatch in as health falls, and a weapon drawn brings it up again)
+    this.health.classList.toggle("idle", frac >= 100 && !down_ && v.armed !== true);
     const level = vitalsLevel(frac, down_ || pct === 0);
     if (level !== this.level) {
       this.level = level;

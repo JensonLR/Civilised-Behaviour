@@ -6,8 +6,10 @@ import { typeset } from "./typeset.ts";
  * (telegramQueue.ts). Slips slide in and fade out (not under reduced motion: the stylesheet turns animation off).
  */
 export class Telegrams {
-  /** (a short window shows fewer at once: three slips would cover the picture on an 800 x 450 screen) */
-  readonly queue = new TelegramQueue(typeof window !== "undefined" && window.innerHeight < 560 ? 2 : 3);
+  /** (D-063: one slip at a time on a phone or a small window, two on a big screen: three slips covered the picture, and on a phone the sights) */
+  readonly queue = new TelegramQueue(typeof window !== "undefined" && (window.innerHeight < 600 || window.innerWidth < 900 || window.matchMedia?.("(pointer: coarse)").matches) ? 1 : 2);
+  /** Every dispatch, newest last (the last 40): the pause sheet lists them, so nothing a slip skipped or cut short is lost. */
+  readonly log: string[] = [];
   private readonly root: HTMLElement;
   private readonly els = new Map<number, HTMLElement>();
   private timer = 0;
@@ -24,6 +26,8 @@ export class Telegrams {
 
   push(text: string, seconds?: number): void {
     if (!this.queue.push(text, seconds)) return;
+    this.log.push(text.trim());
+    if (this.log.length > 40) this.log.shift();
     this.render();
     if (!this.timer) {
       this.last = performance.now();

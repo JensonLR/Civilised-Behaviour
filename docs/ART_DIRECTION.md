@@ -215,6 +215,12 @@ variables (which come from `PALETTE.ui`); meaning is never colour alone (gauge =
 English (text), IM Fell English SC (labels, buttons), Special Elite (codes and telegrams); ornament is CSS/inline SVG only; nothing animates with `prefers-reduced-motion`.
 Review with `node scripts/shot.mjs "?x=1" out.png 1440x800 4000` (menu) and a scratch Playwright session for the in-game HUD (enter a campaign, send `debug` `hit:0:50`, `down`, `sever:4`).
 
+### The quiet plate (D-063, 2026-10-03): what is on screen, and when
+On top of the Survey Plate's look: **one line** under the heading strip says what to do next (game/guidance.ts) and **one flag** in the world marks the place (ui/Guide.ts); everything else earns
+its place by meaning something now. No pools of mist (a tight paper edge only). Telegrams are small slips top-right, never over the play area (one at a time on a phone; the pause
+sheet keeps them all). The dial shows when hurt or armed, the armoury card with a piece in hand, the key hints for the first 90 s, the invite code at camp; the heading strip's
+places are small marks, only the goal in red. A new screen element must answer "what does the player do with this, now?" before it goes on the HUD.
+
 ### The Survey Plate (D-062, 2026-10-03): the interface's current look
 The HUD is engraved ink drawn ON the picture, as a surveyor annotates a plate, not cards laid over it. `apps/client/src/ui/plate.css` is its sheet (scoped to `#hud`, and the sheets under `html .panel`); it
 supersedes the looks described in the passes below wherever they disagree (positions and behaviour from those passes still hold).

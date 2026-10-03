@@ -159,6 +159,8 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     pause = new Pause({
       canvas,
       invite: () => (session ? { code: session.code, link: `${location.origin}${location.pathname}?join=${session.code}`, present: realPlayers(session), seed: session.room.state.seed } : undefined),
+      orders: () => game?.orders(),
+      dispatches: () => game?.dispatches() ?? [],
       // where the save stands and "Save now" / "Save and quit" (the demo saves nothing: its sheet has no save controls)
       ...(isDemo()
         ? {}
