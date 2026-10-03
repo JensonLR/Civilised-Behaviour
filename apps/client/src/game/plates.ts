@@ -43,7 +43,20 @@ export class PlateCache {
   private wantedLast = 0;
   private touched = 0;
 
+  /** The party's own hands, by plate key (`npc:<roster id>`): undefined = every row of a hand's role counts (tests, and before the roster first arrives). */
+  private roster: ReadonlySet<string> | undefined;
+
   constructor(private readonly handRoles: ReadonlySet<number>) {}
+
+  /**
+   * Who is on the party's roster. A hand's plate carries its order and nerve; a man of a hand's ROLE who is not on it (the post's watch, D-048: the hired rifleman's kit, the
+   * Society's pay) is not yours to order, and his plate read "follow · broken" (seen in the first look at the watch).
+   */
+  setRoster(ids: Iterable<string>): void {
+    const next = new Set<string>();
+    for (const id of ids) next.add(`npc:${id}`);
+    this.roster = next;
+  }
 
   get size(): number {
     return this.entries.size;
@@ -81,7 +94,7 @@ export class PlateCache {
   text(id: string, p: PlateRow): string {
     const e = this.entry(id);
     const down = (p.flags & FLAG.DOWNED) !== 0;
-    const hand = !down && this.handRoles.has(p.npc);
+    const hand = !down && this.handRoles.has(p.npc) && (this.roster === undefined || this.roster.has(id));
     const band = hand ? moraleBand(p.morale) : "";
     const cmd = hand ? p.cmd : -1;
     if (e.text === "" || e.name !== p.name || e.connected !== p.connected || e.down !== down || e.hand !== hand || e.cmd !== cmd || e.band !== band) {

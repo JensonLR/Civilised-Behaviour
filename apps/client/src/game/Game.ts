@@ -552,6 +552,7 @@ export class Game {
     if ((st.partyRev ?? 0) !== this.partyRev) {
       this.partyRev = st.partyRev ?? 0;
       this.party = parseParty(st.party) ?? newParty();
+      this.plates.setRoster(this.party.roster.map((f) => f.id));
       if (this.loadout.isOpen) this.loadout.update(this.loadoutView());
     }
     if ((st.scenarioRev ?? 0) !== this.scenarioRev) {

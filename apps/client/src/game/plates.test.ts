@@ -106,3 +106,21 @@ describe("the sight ray: cached per NPC for 0.15 s and spread across frames", ()
     expect(c.size).toBe(1);
   });
 });
+
+describe("only the party's own hands carry orders and nerve (D-048)", () => {
+  it("a man of a hand's role who is not on the roster (the post's watch) has a plain plate; a hand on it keeps the order and band; a changed roster takes effect", () => {
+    const c = new PlateCache(HANDS);
+    c.setRoster(["hand-1"]);
+    const watch = row({ name: "Watchman Abel Crouch (Society pensioner)", npc: NPC.HIRED_RIFLE, cmd: 255, morale: 0 });
+    const hand = row({ name: "Pike", npc: NPC.HIRED_RIFLE, cmd: 255, morale: 90 });
+    c.beginFrame();
+    expect(c.text("npc:watch-0", watch)).toBe("Watchman Abel Crouch (Society pensioner)");
+    expect(c.text("npc:hand-1", hand)).toContain("· follow ·");
+    c.setRoster(["hand-1", "watch-0"]);
+    c.beginFrame();
+    expect(c.text("npc:watch-0", watch)).toContain("· follow ·");
+    c.setRoster([]);
+    c.beginFrame();
+    expect(c.text("npc:hand-1", hand)).toBe("Pike");
+  });
+});
