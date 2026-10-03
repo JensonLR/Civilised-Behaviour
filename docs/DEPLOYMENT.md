@@ -28,7 +28,7 @@ The client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onren
 ## Server env (validated in `apps/server/src/config.ts`)
 `NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (optional until M10),
 `SIMULATED_LATENCY_MS` (must be 0 in production), and the abuse limits (D-048; see NETWORKING.md): `TRUST_PROXY_HOPS` (production default 1),
-`CLIENT_IP_HEADER` (optional), `ROOM_CREATE_BURST` / `ROOM_CREATE_EVERY_S` (production default 6 / 20 s; 0 turns it off), `MAX_ROOMS` (production default 40; 0 = no cap).
+`CLIENT_IP_HEADER` (on Render: `true-client-ip`, set in `render.yaml`; Render's right-most forwarded entry is a Cloudflare edge, D-050), `ROOM_CREATE_BURST` / `ROOM_CREATE_EVERY_S` (production default 6 / 20 s; 0 turns it off), `MAX_ROOMS` (production default 40; 0 = no cap).
 
 Campaign persistence (`apps/server/src/persistence`, read by `persistenceConfig`; fails fast with a readable list):
 | Variable | Default | Meaning |

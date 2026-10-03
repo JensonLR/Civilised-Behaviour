@@ -14,6 +14,15 @@ describe("clientIp (rate-limit keys; security review D-048)", () => {
     expect(clientIp(h({ "x-forwarded-for": "203.0.113.9, 198.51.100.7, 172.16.0.3" }), undefined, { trustHops: 2 })).toBe("198.51.100.7");
   });
 
+  it("Render (D-050): X-Forwarded-For is '<client>, <Cloudflare edge>', so one hop names the EDGE, which changes per request; the edge's True-Client-IP names the player", () => {
+    const render = { header: "true-client-ip", trustHops: 1 };
+    const edges = ["172.70.1.10", "172.70.9.44", "162.158.3.7"];
+    const keys = edges.map((edge) => clientIp(h({ "true-client-ip": "198.51.100.7", "x-forwarded-for": `203.0.113.66, 198.51.100.7, ${edge}` }), "10.0.0.5", render));
+    expect(new Set(keys)).toEqual(new Set(["198.51.100.7"])); // one player, one bucket, whatever the edge and whatever was forged in front
+    const hopOnly = edges.map((edge) => clientIp(h({ "x-forwarded-for": `198.51.100.7, ${edge}` }), "10.0.0.5", { trustHops: 1 }));
+    expect(new Set(hopOnly).size).toBe(edges.length); // the D-048 setting alone: a fresh bucket per edge, i.e. no limit at all
+  });
+
   it("a trusted edge header wins when it holds an address; garbage is never a key; no proxy trusted means the peer, or one shared bucket", () => {
     expect(clientIp(h({ "cf-connecting-ip": "2001:db8::1", "x-forwarded-for": "9.9.9.9" }), undefined, { header: "cf-connecting-ip", trustHops: 1 })).toBe("2001:db8::1");
     expect(clientIp(h({ "cf-connecting-ip": "<script>", "x-forwarded-for": "9.9.9.9" }), undefined, { header: "cf-connecting-ip", trustHops: 1 })).toBe("9.9.9.9");
