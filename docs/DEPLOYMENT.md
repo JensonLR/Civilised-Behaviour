@@ -25,10 +25,23 @@ The client is built with `VITE_SERVER_URL=wss://civilised-behaviour-server.onren
 - Game server: Railway, single Node process hosting many 1-4 player rooms + PostgreSQL. No Redis until measured load needs multiple processes.
 - Staging + production environments; health endpoint `/health` (exists); graceful shutdown (Colyseus `gracefullyShutdown` enabled).
 
+## Capacity (D-051, measured with `scripts/capacity.mts`)
+| | per full room (4 players) | fixed | what one instance holds |
+|---|---|---|---|
+| CPU | ~0.02-0.025 core at HQ; more in the field (NPC ticks ~0.8 ms vs ~0.45) | ~0.03-0.05 core | a 0.1-core quota (free tier): four or five busy rooms |
+| Memory | ~7-9 MB after the first room's one-off ~170 MB | ~100-160 MB idle | 512 MB: well over the CPU limit |
+
+New rooms are admitted against the game thread's measured lateness (`ROOM_SHED_LAG_MS`, production 20 ms): a busy instance answers 503 to a new campaign (the door asks
+again on its own) and keeps every running room's tick. Building a room under a tenth of a core holds the thread late for about ten seconds, so on the free tier two
+parties founding campaigns at the same moment will see the door wait. To hold more: a larger plan first (no code), then shards by join-code range (designed in D-051,
+not built). Re-measure: `pnpm --filter @cb/server build && npx tsx scripts/capacity.mts --steps 0,2,4,8 --bots 4 [--quota 0.1 --shed 20]` (the quota needs root).
+
+**Client caching (owner action, dashboard):** static site -> Settings -> Headers: path `/assets/*`, `Cache-Control: public, max-age=31536000, immutable` (mirrored in `render.yaml`).
+
 ## Server env (validated in `apps/server/src/config.ts`)
 `NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (optional until M10),
 `SIMULATED_LATENCY_MS` (must be 0 in production), and the abuse limits (D-048; see NETWORKING.md): `TRUST_PROXY_HOPS` (production default 1),
-`CLIENT_IP_HEADER` (on Render: `true-client-ip`, set in `render.yaml`; Render's right-most forwarded entry is a Cloudflare edge, D-050), `ROOM_CREATE_BURST` / `ROOM_CREATE_EVERY_S` (production default 6 / 20 s; 0 turns it off), `MAX_ROOMS` (production default 40; 0 = no cap).
+`CLIENT_IP_HEADER` (on Render: `true-client-ip`, set in `render.yaml`; Render's right-most forwarded entry is a Cloudflare edge, D-050), `ROOM_CREATE_BURST` / `ROOM_CREATE_EVERY_S` (production default 6 / 20 s; 0 turns it off), `MAX_ROOMS` (production default 40; 0 = no cap), `ROOM_SHED_LAG_MS` (production default 20: new campaigns are refused while the game thread's timers run that late, D-051; 0 = off).
 
 Campaign persistence (`apps/server/src/persistence`, read by `persistenceConfig`; fails fast with a readable list):
 | Variable | Default | Meaning |
