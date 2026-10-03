@@ -129,6 +129,8 @@ export interface RibbonStop {
 export interface RibbonOpts {
   /** Thickness of the cloth the ribbon lies over (the coat's facings): the ribbon's inner face sits 2 mm above it. */
   base?: number;
+  /** The cloth's thickness where each sample lies (azimuth, height), when it varies along the way (a collar, a yoke): overrides `base` per sample. */
+  baseAt?: (phi: number, y: number) => number;
   round?: "both" | "start" | "end";
   /** Colour along the ribbon (t = 0..1): stripes on a muffler, a fringe at an end. */
   colorAt?: (t: number) => number;
@@ -160,7 +162,7 @@ export function ribbon(b: PartBuilder, s: Surf, color: number, stops: readonly R
       // position on the drawn polygon, lifted along the SMOOTH normal (which is also the ribbon's side reference: no twist at the polygon's edges)
       const q = s.at(phi, y, 0);
       const n = s.normal(phi, y);
-      const lift = seat(thick, o.base ?? 0);
+      const lift = seat(thick, o.baseAt ? o.baseAt(phi, y) : o.base ?? 0);
       path.push([q.p[0] + n[0] * lift, q.p[1] + n[1] * lift, q.p[2] + n[2] * lift]);
       normals.push(n);
     }

@@ -63,6 +63,11 @@ function cartridge(f: TorsoFrame, p: V3, tilt = 0, big = 1): void {
   b.cone(0.011 * big, 0.025 * big, PALETTE.material.iron, [p[0] - Math.sin(tilt) * 0.06 * big, p[1] + 0.062 * big, p[2]], [0, 0, tilt]);
 }
 
+/** Every sampled point of a hanging tail pushed clear of the body's outermost cloth (`pushOut` on the control points alone left the curve between them bowing into a flared coat skirt). */
+function clearOf(f: TorsoFrame, pts: V3[], gap: number): V3[] {
+  return pts.map((p, i) => (i === 0 ? p : pushOut(f, p, gap)));
+}
+
 export function addBelt(f: TorsoFrame, c: BodyCtx): void {
   const { b, h, spec, burnt, accent, trunk } = f;
   if (spec.jacket === 7) return; // (a poncho covers the belt)
@@ -90,7 +95,7 @@ export function addBelt(f: TorsoFrame, c: BodyCtx): void {
     const k = on(h * waist, -0.9, 0.028);
     b.sphere(0.03, tone(rope, 0.9), k, [1, 1, 0.8]);
     for (const [dx, len] of [[-0.02, 0.24], [0.03, 0.18]] as const) {
-      b.sweep(curve([k, pushOut(f, [k[0] + dx, k[1] - len * 0.5, k[2] - 0.02], 0.014), pushOut(f, [k[0] + dx * 2, k[1] - len, k[2] - 0.015], 0.014)], 6), (t) => ({ rx: 0.011 * (1 - 0.3 * t), rz: 0.011 * (1 - 0.3 * t), pow: 2, color: t > 0.85 ? tone(rope, 1.3) : rope }), rope, { side: [1, 0, 0], segments: 5, round: "both" });
+      b.sweep(clearOf(f, curve([k, pushOut(f, [k[0] + dx, k[1] - len * 0.5, k[2] - 0.02], 0.014), pushOut(f, [k[0] + dx * 2, k[1] - len, k[2] - 0.015], 0.014)], 6), 0.03), (t) => ({ rx: 0.011 * (1 - 0.3 * t), rz: 0.011 * (1 - 0.3 * t), pow: 2, color: t > 0.85 ? tone(rope, 1.3) : rope }), rope, { side: [1, 0, 0], segments: 5, round: "both" });
     }
   }
   if (belt === 4) {
@@ -158,7 +163,7 @@ export function addSash(f: TorsoFrame, c: BodyCtx): void {
     const k = fr.at(0, 0, 0.019 + 0.03);
     b.sphere(0.04, tone(red, 0.9), k, [1, 1, 0.8], fr.rot);
     for (const [dx, len] of [[0.03, 0.26], [0.09, 0.2]] as const) {
-      b.sweep(curve([k, pushOut(f, [k[0] + dx * 0.5, k[1] - len * 0.5, k[2] - 0.02], 0.034), pushOut(f, [k[0] + dx, k[1] - len, k[2] - 0.015], 0.034)], 6), () => ({ rx: 0.03 * 0.9, rz: 0.012, pow: 2.4 }), red, { side: [1, 0, 0], segments: 5 });
+      b.sweep(clearOf(f, curve([k, pushOut(f, [k[0] + dx * 0.5, k[1] - len * 0.5, k[2] - 0.02], 0.034), pushOut(f, [k[0] + dx, k[1] - len, k[2] - 0.015], 0.034)], 6), 0.05), () => ({ rx: 0.03 * 0.9, rz: 0.012, pow: 2.4 }), red, { side: [1, 0, 0], segments: 5 });
       for (let i = 0; i < 4; i++) { const tp = pushOut(f, [k[0] + dx + (i - 1.5) * 0.012, k[1] - len - 0.03, k[2] - 0.015], 0.034); b.box(0.006, 0.05, 0.006, gold, tp); }
     }
   }
