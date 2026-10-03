@@ -388,6 +388,7 @@ describe("the card's style (no colour literals, reduced motion, larger text, pal
   it("never captures the pointer except on its own button, and sits clear of the heading strip", () => {
     expect(css).toMatch(/\.orientation \{[^}]*pointer-events: none/);
     expect(css).toMatch(/\.orientation \.skip \{[^}]*pointer-events: auto/);
-    expect(css).toMatch(/\.orientation \{[^}]*top: calc\(var\(--edge-t/);
+    // below the heading strip's rows AND below the expedition bar, however many rows that wraps to (its real bottom, --codebar-b)
+    expect(css).toMatch(/\.orientation \{[^}]*top: max\(calc\(var\(--edge-t[^;]*var\(--codebar-b/);
   });
 });
