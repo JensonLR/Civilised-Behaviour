@@ -229,16 +229,16 @@ function leave(s: ClaimState): ReturnType<TemplateDef<ClaimState>["leave"]> {
 
 const HINT: Record<string, string> = {
   approach: "The pegging ground is on the west bench, a long walk up the gorge. The Syndicate's surveyors are already there with a theodolite and a brochure.",
-  waiting: "Four pegs make a claim; three and the clerk's form file it. Stake the open corners (INTERACT), then the Assay House on the east bench (the clerk, a fee, a stamp). The Syndicate pegs a corner every minute or so. The clerk has views on joint claims and on surveys.",
+  waiting: "Four pegs make a claim; three and the clerk's form file it. Stake the open corners (Use at a peg), then the Assay House on the east bench (the clerk, a fee, a stamp). The Syndicate pegs a corner every minute or so. The clerk has views on joint claims and on surveys.",
   parley: "The clerk is listening. He has been listening for eleven years and has not once been surprised.",
   fighting: "A shot has been fired. The surveyors have run and the guards are coming down the road. The pegs, for the moment, are nobody's.",
 };
 const DONE: Record<string, string> = {
-  staked: "Claim registered: three pegs and the form, first at the counter. Sail home from the Staithe Landing.",
-  jumped: "Claim registered after the Syndicate's pegs came out of the ground. The paperwork will describe this as a clarification. Sail home from the landing.",
-  partnered: "A joint claim, sealed by the Guild. Everybody has half of something. Sail home from the landing.",
-  outpaced: "The Syndicate's claim is registered and the Society's notes are an appendix. Sail home from the landing.",
-  abandoned: "The expedition is down. The pegging ground is unmoved. Sail home and explain yourselves.",
+  staked: "Claim registered: three pegs and the form, first at the counter. The clerk was very nearly surprised. Take the ore barge home from Staithe Landing.",
+  jumped: "Claim registered after the Syndicate's pegs came out of the ground. The paperwork will describe this as a clarification. Take the ore barge home.",
+  partnered: "A joint claim, sealed by the Guild. Everybody has half of something, and nobody yet knows what. Take the ore barge home.",
+  outpaced: "The Syndicate's claim is registered and the Society's notes are an appendix to it. Take the ore barge home.",
+  abandoned: "The expedition is down. The pegging ground is unmoved. Take the ore barge home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rival_scouts: "Syndicate scouts have been on the bench since dawn: the first Syndicate peg will come early.",
@@ -247,20 +247,20 @@ const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
 
 function pegText(s: ClaimState, i: number): string {
   const who = s.pegs[i];
-  return who === 1 ? `Peg the ${NAME(i)} corner: yours` : who === 2 ? `The ${NAME(i)} corner: the Syndicate's peg${broken(s) || s.fraud ? " (can be pulled)" : ""}` : `Peg the ${NAME(i)} corner`;
+  return who === 1 ? `The ${NAME(i)} corner is pegged: yours` : who === 2 ? (broken(s) || s.fraud ? `Pull the Syndicate's peg at the ${NAME(i)} corner` : `The ${NAME(i)} corner is the Syndicate's`) : `Peg the ${NAME(i)} corner (Use)`;
 }
 
 function view(s: ClaimState, now: number): ScenarioView {
   const res = s.resolution;
   const won = res === "staked" || res === "jumped" || res === "partnered";
   const objectives: ObjectiveView[] = [
-    { id: "ground", text: "Walk up the gorge to the pegging ground (the west bench)", done: s.near.ground > 0 || s.phase !== "approach" },
+    { id: "ground", text: "Walk up the gorge to the pegging ground on the west bench", done: s.near.ground > 0 || s.phase !== "approach" },
     ...s.pegs.map((_, i): ObjectiveView => ({ id: `peg-${i}`, text: pegText(s, i), done: s.pegs[i] === 1, optional: true })),
-    { id: "file", text: `File the claim at the Assay House (${CLAIM.need} pegs and none of the Syndicate's inside them; £${s.price.fee})`, done: res === "staked" || res === "jumped", optional: true },
-    { id: "claim", text: res === "outpaced" ? "Lost: the Syndicate's claim is registered" : res === "abandoned" ? "Lost: the expedition went down" : "Win the claim, by whatever means", done: won },
+    { id: "file", text: `File at the Assay House: ${CLAIM.need} pegs, none of theirs (£${s.price.fee})`, done: res === "staked" || res === "jumped", optional: true },
+    { id: "claim", text: res === "outpaced" ? "Lost: the Syndicate's claim is registered" : res === "abandoned" ? "Lost: the expedition went down" : "Peg three corners, then file at the Assay House", done: won },
   ];
   if (res === undefined && s.fraud) objectives.push({ id: "provisional", text: "The Syndicate's survey is marked PROVISIONAL", done: true, optional: true });
-  if (res !== undefined) objectives.push({ id: "home", text: "Sail home from the Staithe Landing", done: false });
+  if (res !== undefined) objectives.push({ id: "home", text: "Take the ore barge home from Staithe Landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
@@ -315,7 +315,7 @@ const observe: ObserveSpec = {
 
 export const claimRaceTemplate: TemplateDef<ClaimState> = {
   id: "claim_race", title: "The Claim Race",
-  brief: "A seam of something expensive has been found on the west bench. The Syndicate's surveyors and the Society both want the pegs, one pegging ground and the same afternoon. Be first with the form, pull their pegs by force or fraud, share the claim, or arrive second and take notes.",
+  brief: "Something expensive has been found in the rock of the west bench, and the Assay House will register whoever brings three pegs and a form to its counter first. The Syndicate's surveyors are already there with a theodolite and a brochure. Out-peg them, pull their pegs by force or by doubting their survey, offer to share, or come second and write a very good report.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { pegging: VESPER_ANCHORS.pegging, assay: VESPER_ANCHORS.assay },
 };

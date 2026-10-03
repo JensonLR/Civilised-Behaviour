@@ -280,11 +280,11 @@ const HINT: Record<string, string> = {
   fighting: "The strike-breakers have turned on you instead of the barley. Whatever is agreed today will be agreed over this, before the rain.",
 };
 const DONE: Record<string, string> = {
-  honest_measure: "An honest bushel, two signatures, and the Compact back in the barley at the old rate. Sail home from the Reed Landing.",
-  bought_back: "The Compact is back at work on the Society's money. The royal bushel is as large as ever. Sail home from the landing.",
-  strike_broken: "The Syndicate's men are cutting the Crown's barley, and the Compact is watching them do it. Sail home from the landing.",
-  barley_lost: "The rain has the barley. Nobody won; everybody will pay for bread. Sail home from the landing.",
-  abandoned: "The expedition is down. The barley is still standing, for now. Sail home and explain yourselves.",
+  honest_measure: "An honest bushel, two signatures, and the Compact back in the barley at the old rate. The Crown calls it a rounding correction. Take the boat home from the Reed Landing.",
+  bought_back: "The Compact is back at work on the Society's money, and the royal bushel is as large as ever. This harvest is paid for; the next is not. Take the boat home.",
+  strike_broken: "The Syndicate's bonded men are cutting the Crown's barley, and the Compact is watching from the hedge with a long memory. Take the boat home.",
+  barley_lost: "The rain has the barley. Nobody won; everybody will pay for bread, and the Houses are already selling it. Take the boat home.",
+  abandoned: "The expedition is down. The barley is still standing, for now. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rain: "The rain is early this year: the barley has less time than anyone would like.",
@@ -301,14 +301,14 @@ function view(s: StrikeState, now: number): ScenarioView {
   ];
   if (told) {
     objectives.push({ id: "bushel", text: s.proof ? "The royal bushel is weighed: a third too large" : s.stewardGone ? "Nobody is left to weigh the royal bushel for" : "Carry the royal bushel from the granary scale to the Steward", done: s.proof, optional: true });
-    objectives.push({ id: "steward", text: s.stewardGone && !s.agreed.steward ? "The Steward has gone up the hill" : "The Steward signs an honest measure", done: s.agreed.steward, optional: true });
-    objectives.push({ id: "compact", text: s.refused && !s.agreed.compact ? "The Compact will not deal with the Society today" : `The Compact signs too (or takes a bonus of £${s.price.bonus})`, done: s.agreed.compact || res === "bought_back", optional: true });
+    objectives.push({ id: "steward", text: s.stewardGone && !s.agreed.steward ? "The Steward has gone up the hill" : "Get the Steward to sign an honest measure", done: s.agreed.steward, optional: true });
+    objectives.push({ id: "compact", text: s.refused && !s.agreed.compact ? "The Compact will not deal with the Society today" : `Get the Compact to sign too (or pay its £${s.price.bonus} bonus)`, done: s.agreed.compact || res === "bought_back", optional: true });
   }
   objectives.push({ id: "settle", text: res === "abandoned" ? "Lost: the expedition went down" : res === "strike_broken" ? "Broken: the Syndicate's men are in the barley" : res === "barley_lost" ? "Lost: the rain reached the barley first" : "Get the Compact back in the barley before the rain", done: back });
   if (s.landed && res === undefined) {
-    objectives.push({ id: "breakers", text: s.fight ? "The strike-breakers are fighting you instead of reaping" : !s.marched ? "Strike-breakers mustering on the quay" : `Strike-breakers on the road (${Math.min(s.inField, STRIKE.breakersNeeded)} of ${STRIKE.breakersNeeded} in the barley)`, done: s.fight, optional: true });
+    objectives.push({ id: "breakers", text: s.fight ? "The strike-breakers are fighting you instead of reaping" : !s.marched ? "Strike-breakers are mustering on the quay" : `Strike-breakers on the road (${Math.min(s.inField, STRIKE.breakersNeeded)} of ${STRIKE.breakersNeeded} in the barley)`, done: s.fight, optional: true });
   }
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the Reed Landing", done: false });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the Reed Landing", done: false });
 
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked.reaper && !s.proof) hint += " (The Foreperson: \"Up the hill, on the granary terrace, by the first granary. A thing weighed in front of witnesses is proof.\")";
@@ -371,7 +371,7 @@ const observe: ObserveSpec = {
 
 export const reapersStrikeTemplate: TemplateDef<StrikeState> = {
   id: "reapers_strike", title: "The Reapers' Strike",
-  brief: "Harvest week at Highmark, and the Reapers' Compact has laid down its scythes over a royal bushel a third too large. Pay them back to work, prove the fraud to the Crown's Steward, or watch the Syndicate's strike-breakers do the reaping; the rain is coming either way.",
+  brief: "Harvest week at Highmark, and the Reapers' Compact has laid down its scythes: the Crown pays them by a royal bushel a third larger than the one it sells by, and calls the difference tradition. A Syndicate barge of strike-breakers is on the river and the rain is due. Pay a harvest bonus, carry the royal bushel to the Steward and prove the fraud, or let the barge settle it.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { breakers: [{ x: 0, z: 100 }, { x: -4, z: 84 }, { x: -14, z: 62 }, { x: -26, z: 46 }, { x: S0.barley.x, z: S0.barley.z }] },
   props: [{ id: "bushel", kind: PropKind.BARREL, x: S0.scale.x, z: S0.scale.z }],

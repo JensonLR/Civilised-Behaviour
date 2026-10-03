@@ -363,12 +363,12 @@ const HINT: Record<string, string> = {
   tension: "The harvest bell has rung. The Assembly will ratify whatever it has been persuaded of; if it has been persuaded of nothing, the Syndicate's cheque will be cashed by default.",
 };
 const DONE: Record<string, string> = {
-  backed_elder: "Princess Orla sits the chair, by Seniority and by two scythes. Sail home from the Reed Landing.",
-  backed_younger: "Prince Dunstan sits the chair, by Acclamation, and by two scythes and some applause. Sail home from the landing.",
-  regency: "A regency: three signatures and a chair nobody sits in, which is what stability looks like. Sail home from the landing.",
-  usurped: "The chair has an occupant, and the court is learning to describe it as an early succession. Sail home from the landing.",
-  crown_sold: "The Crown's concession is the Syndicate's, countersigned and stamped. The chair is a very expensive hat stand. Sail home from the landing.",
-  abandoned: "The expedition is down. The King is, as ever, pending. Sail home and explain yourselves.",
+  backed_elder: "Princess Orla sits the chair, by Seniority and two scythes, and has already asked to see the receipts. Take the boat home from the Reed Landing.",
+  backed_younger: "Prince Dunstan sits the chair, by Acclamation, two scythes and a band he did not have to pay for. Take the boat home from the landing.",
+  regency: "A regency: three signatures and a chair nobody sits in, which is what stability looks like from the outside. Take the boat home from the landing.",
+  usurped: "The chair has an occupant, and the court is learning to call it an early succession. Take the boat home before it learns anything else.",
+  crown_sold: "The Crown's concession is the Syndicate's, countersigned and stamped. The chair is a very expensive hat stand. Take the boat home from the landing.",
+  abandoned: "The expedition is down. The King is, as ever, pending. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rain: "Rain is coming, and the Grange wants the barley in: the bell will ring early.",
@@ -382,15 +382,15 @@ function view(s: SuccessionState, now: number): ScenarioView {
   const v3 = votes(s);
   const objectives: ObjectiveView[] = [
     { id: "court", text: "Climb the Processional Road to the court", done: s.near.court > 0 || s.phase !== "approach" },
-    { id: "form", text: s.form === "pending" ? "Form 11 is with the Stamp" : "Get the Chamberlain's Form 11 in order (filed, or expedited)", done: formOk(s), optional: true },
-    { id: "heir", text: s.heir.elder === "regency" && s.heir.younger === "regency" ? "A regency: three signatures" : s.heir.elder === "pledged" ? "Princess Orla is pledged the chair" : s.heir.younger === "pledged" ? "Prince Dunstan is pledged the chair" : "Back an heir, or broker a regency (both heirs)", done: s.heir.elder === "pledged" || s.heir.younger === "pledged" || (s.heir.elder === "regency" && s.heir.younger === "regency"), optional: true },
-    { id: "grange", text: `Win the Grange: a barrel of grain for each delegate (${Math.min(v3, 3)} of ${Math.max(SUCCESSION.votesToRatify, present(s))})`, done: v3 >= SUCCESSION.votesToRatify, optional: true },
-    { id: "chair", text: res === "abandoned" ? "Lost: the expedition went down" : res === "crown_sold" ? "Settled: the Crown was sold" : "Settle the chair, by whatever means", done: won },
+    { id: "form", text: s.form === "pending" ? "Form 11 is with the Stamp" : "Get the Chamberlain's Form 11 filed (or expedited)", done: formOk(s), optional: true },
+    { id: "heir", text: s.heir.elder === "regency" && s.heir.younger === "regency" ? "A regency: three signatures" : s.heir.elder === "pledged" ? "Princess Orla is pledged the chair" : s.heir.younger === "pledged" ? "Prince Dunstan is pledged the chair" : "Back an heir, or talk both heirs into a regency", done: s.heir.elder === "pledged" || s.heir.younger === "pledged" || (s.heir.elder === "regency" && s.heir.younger === "regency"), optional: true },
+    { id: "grange", text: `Carry a barrel of grain to each delegate (${Math.min(v3, 3)} of ${Math.max(SUCCESSION.votesToRatify, present(s))})`, done: v3 >= SUCCESSION.votesToRatify, optional: true },
+    { id: "chair", text: res === "abandoned" ? "Lost: the expedition went down" : res === "crown_sold" ? "Settled: the Crown was sold" : "Settle who sits the Vacant Chair before the bell", done: won },
   ];
-  if (s.cheque !== "none") objectives.push({ id: "cheque", text: s.cheque === "taken" ? "The Syndicate's cheque is in your pocket" : "Decide about the Syndicate's cheque", done: s.cheque === "taken", optional: true });
-  if (s.hostile && res === undefined) objectives.push({ id: "break", text: `Break the court guard (${Math.min(Math.ceil(s.guards.total * SUCCESSION.brokenFraction), broken(s))} of ${Math.ceil(s.guards.total * SUCCESSION.brokenFraction)})`, done: guardBroken(s), optional: true });
-  if (s.hostile && guardBroken(s) && res === undefined) objectives.push({ id: "sit", text: "Sit somebody in the Vacant Chair (INTERACT)", done: false, optional: true });
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the Reed Landing", done: false });
+  if (s.cheque !== "none") objectives.push({ id: "cheque", text: s.cheque === "taken" ? "The Syndicate's cheque is in your pocket" : "Take the envoy's cheque, or leave it on the table", done: s.cheque === "taken", optional: true });
+  if (s.hostile && res === undefined) objectives.push({ id: "break", text: `Down or rout the court guard (${Math.min(Math.ceil(s.guards.total * SUCCESSION.brokenFraction), broken(s))} of ${Math.ceil(s.guards.total * SUCCESSION.brokenFraction)})`, done: guardBroken(s), optional: true });
+  if (s.hostile && guardBroken(s) && res === undefined) objectives.push({ id: "sit", text: "Sit somebody in the Vacant Chair (Use)", done: false, optional: true });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the Reed Landing", done: false });
 
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked.chamberlain) hint += " (The Chamberlain's order of precedence: herself, then the heirs by seniority, then the Assembly, then Anyone Else.)";
@@ -461,7 +461,7 @@ void SD;
 
 export const successionTemplate: TemplateDef<SuccessionState> = {
   id: "succession_dispute", title: "The Vacant Chair",
-  brief: "The King of Highmark has been pending for six years and two heirs have opinions about the chair. Back one, broker a regency, sit somebody down by force, or watch a cheque do it for you; the Reapers' Assembly ratifies at the harvest bell.",
+  brief: "The King of Highmark has been pending for six years, and the Vacant Chair has three bidders: Princess Orla by Seniority, Prince Dunstan by Acclamation, the Syndicate by cheque. The Reapers' Assembly ratifies at the harvest bell, and the Lord Chamberlain ratifies nothing without Form 11. Back an heir, broker a regency, buy the vote in grain, take the cheque, or seat somebody by force.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { throne: THRONE(), court: HIGHMARK_ANCHORS.capital.court },
 };

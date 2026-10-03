@@ -309,17 +309,17 @@ function leave(s: SmugglingState): ReturnType<TemplateDef<SmugglingState>["leave
 
 const HINT: Record<string, string> = {
   approach: "A barge lies at the reed cove with four unmarked crates under a tarpaulin. The drop-house is in the west reeds: the boardwalk crosses the Customs Bridge, the Long Cut's bridge and the Reed Bridge, and the Constabulary patrols between them. Start at the cove.",
-  extract: "The cargo is yours to move. Carry the crates one at a time to the drop-house door (INTERACT with a crate in hand). The patrol walks the boardwalk: crouch, and it has to come a good deal closer to see you; the reed flats north of the cuts are slower and quieter. The Tide-Reeve at the Customs House can square a patrol; the lantern at the cove can draw it off.",
+  extract: "The cargo is yours to move. Carry the crates one at a time to the drop-house door (Use there with a crate in hand). The patrol walks the boardwalk: crouch, and it has to come a good deal closer to see you; the reed flats north of the cuts are slower and quieter. The Tide-Reeve at the Customs House can square a patrol; the lantern at the cove can draw it off.",
   standoff: "A patrolman has seen you. Answer him before the cargo is impounded: a declaration or a courtesy at the Customs House, a shot, or the barge's plug.",
   parley: "The Tide-Reeve is listening. Mind what you declare; he keeps carbon copies.",
   fighting: "The Customs House is awake. Break the patrol, and then there is only the cargo and the explanation.",
 };
 const DONE: Record<string, string> = {
-  landed: "The cargo is landed. The Houses will notice in the morning; the Constabulary will notice in the afternoon; nobody will notice in the evening. Sail home from the quay when you are ready.",
-  impounded: "The Constabulary has the cargo. It will be sold on by the Houses at auction, for a great deal more than anybody paid for it. Sail home from the quay.",
-  scuttled: "The barge is on the bottom of the cove, and so is the evidence. Sail home from the quay and think about the profit.",
-  informed: "You informed on yourself, and were paid for it. The Houses are delighted; the Syndicate has been told that somebody has. Sail home from the quay.",
-  abandoned: "The expedition is down. The reeds are unmoved. Sail home and explain yourselves.",
+  landed: "The cargo is landed. The Houses will notice in the morning; the Constabulary will notice in the afternoon; nobody will notice in the evening. Take the boat home from the quay.",
+  impounded: "The Constabulary has the cargo. It will be sold on by the Houses at auction, for a great deal more than anybody paid for it, including you. Take the boat home.",
+  scuttled: "The barge is on the bottom of the cove, and so is the evidence, and so is the profit. Take the boat home from the quay.",
+  informed: "You informed on yourself, and were paid for it. The Houses are delighted; the Syndicate has been told that somebody has. Take the boat home from the quay.",
+  abandoned: "The expedition is down. The reeds are unmoved. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   fog: "Fog on the delta: the patrol sees half as far, which is not the same as half as well. So do you.",
@@ -333,13 +333,13 @@ function view(s: SmugglingState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { id: "cove", text: "Reach the barge at the reed cove", done: s.loaded },
     { id: "carry", text: `Carry the crates to the drop-house door (${Math.min(s.delivered, SMUGGLE.need)} of ${SMUGGLE.need})`, done: s.delivered >= SMUGGLE.need },
-    { id: "reeve", text: s.declared ? "The barge is declared at the Customs House" : permitted(s) ? "A stamped passage is in your pocket" : "Square the Tide-Reeve: declare, or a courtesy", done: s.declared || s.permit > 0, optional: true },
+    { id: "reeve", text: s.declared ? "The barge is declared at the Customs House" : permitted(s) ? "A stamped passage is in your pocket" : "Square the Tide-Reeve: declare, or pay a courtesy", done: s.declared || s.permit > 0, optional: true },
     { id: "lamp", text: s.lit ? "The lantern is lit: the patrol is at the berth" : "Light the lantern at the cove to draw the patrol off", done: s.lit, optional: true },
-    { id: "land", text: res === "abandoned" ? "Lost: the expedition went down" : res === "impounded" ? "Lost: the cargo was impounded" : res === "scuttled" ? "Settled: the barge was scuttled" : res === "informed" ? "Settled: you informed on yourselves" : "Land the cargo, by whatever means", done: won },
+    { id: "land", text: res === "abandoned" ? "Lost: the expedition went down" : res === "impounded" ? "Lost: the cargo was impounded" : res === "scuttled" ? "Settled: the barge was scuttled" : res === "informed" ? "Settled: you informed on yourselves" : "Land the cargo before slack water ends", done: won },
   ];
-  if (s.challenge > 0 && res === undefined) objectives.push({ id: "answer", text: `Answer the patrol (${Math.ceil(s.challenge)} s)`, done: false, optional: true });
-  if (s.alarm && res === undefined) objectives.push({ id: "break", text: "Break the Customs House's men", done: guardBroken(s), optional: true });
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the quay", done: false });
+  if (s.challenge > 0 && res === undefined) objectives.push({ id: "answer", text: `Answer the patrolman (${Math.ceil(s.challenge)} s)`, done: false, optional: true });
+  if (s.alarm && res === undefined) objectives.push({ id: "break", text: "Down or rout the Customs House's men", done: guardBroken(s), optional: true });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the quay", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked) hint += " (The Reeve's hint: lit at the cove, the lantern draws the patrol off for a minute; a stamped passage keeps it civil for four.)";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
@@ -406,7 +406,7 @@ const LINE: readonly { x: number; z: number }[] = [{ x: -14, z: 70 }, { x: -12, 
 
 export const smugglingRunTemplate: TemplateDef<SmugglingState> = {
   id: "smuggling_run", title: "The Quiet Barge",
-  brief: "A barge of unmarked crates must cross the Houses' customs lines at slack water. Land it at the drop-house, lose it to the Tide Constabulary, scuttle it, or inform on it yourselves.",
+  brief: "A barge of unmarked crates waits in a reed cove. The Society wants them landed at a drop-house in the west reeds, and has declined to say what is in them, on the grounds that it would then have to declare it. Slip them past the Tide Constabulary at slack water, square the Tide-Reeve, scuttle the barge if it comes to that, or inform on yourselves and collect the reward.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { line: LINE, back: [...LINE].reverse(), lure: [{ x: -34, z: 70 }, { x: -44, z: 76 }] },
   props: Array.from({ length: SMUGGLE.crates }, (_, i) => ({ id: `cargo-${i}`, kind: PropKind.CRATE, x: SALTMARKET_SITES.cargo.x + [-1.2, 0.2, 1.4, -0.2][i]!, z: SALTMARKET_SITES.cargo.z + [-0.8, 0.9, -0.5, -1.8][i]! })),

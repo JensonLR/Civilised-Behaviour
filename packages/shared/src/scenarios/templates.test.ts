@@ -602,6 +602,25 @@ describe("determinism, views and the linger", () => {
     }
   });
 
+  it("every objective reads alone as the HUD's one line of direction: short, and in the player's words", () => {
+    // D-063 shows the first unfinished objective by itself under the compass, so each line must stand alone: ~60 characters, the control called "Use" (as the
+    // key prompts say), and never the old "by whatever means", which told a fresh player nothing about where to go or what to do there
+    for (const id of TEMPLATE_IDS) {
+      const def = T[id];
+      const c = cm(11);
+      const s0 = def.init(c, 40, 11);
+      const steps: ScenarioInput[][] = [[], def.observe.near.map((n) => near(n.id, 2)), [{ t: "arrive", party: 2 }, { t: "hostile" }], ticks(90, 3), ticks(400, 5), [{ t: "party_down" }]];
+      let s = s0;
+      for (const step of steps) {
+        s = drive(def, c, step, s).s;
+        for (const o of def.view(s, 1000).objectives) {
+          expect(o.text.length, `${id}: ${o.text}`).toBeLessThanOrEqual(60);
+          expect(o.text, id).not.toMatch(/INTERACT|by whatever means/);
+        }
+      }
+    }
+  });
+
   it("the linger counts from the resolution", () => {
     const def = T.hostage_rescue;
     const c = calm("hostage_rescue");

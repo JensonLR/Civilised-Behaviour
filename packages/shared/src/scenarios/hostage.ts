@@ -223,12 +223,12 @@ function view(s: HostageState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { id: "find", text: "Find the deserters' camp at Hangman's Orchard", done: s.seen || s.near.camp > 0 || s.near.cage > 0 || s.phase !== "planning" },
     // (before the cage, so the compass points at the man you must answer)
-    ...(hailed ? [{ id: "explain", text: "You have been hailed: speak to the colour-sergeant, or walk away", done: false }] : []),
-    { id: "free", text: res === "hostage_lost" ? "Lost: Mr. Quim did not come home" : "Get Mr. Quim out of the cage, by whatever means", done: s.cage || won },
+    ...(hailed ? [{ id: "explain", text: "Hailed: talk to the colour-sergeant, or walk away", done: false }] : []),
+    { id: "free", text: res === "hostage_lost" ? "Lost: Mr. Quim did not come home" : "Get Mr. Quim out of the cage: pay, sneak or shoot", done: s.cage || won },
   ];
-  if (s.alarm && !won && res === undefined) objectives.push({ id: "break", text: `Break the captors (${Math.min(need, broken(s))} of ${need})`, done: broken(s) >= need, optional: true });
+  if (s.alarm && !won && res === undefined) objectives.push({ id: "break", text: `Down or rout the deserters (${Math.min(need, broken(s))} of ${need})`, done: broken(s) >= need, optional: true });
   objectives.push({ id: "dock", text: "Walk Mr. Quim to the landing dock alive", done: won });
-  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Sail home from the landing dock", done: false });
+  if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
 
   const HINT: Record<string, string> = {
     planning: "Mr. Percival Quim, junior surveyor and insured, is in a cage at Hangman's Orchard in the north-east scrub. The deserters are carousing. Approach by the ford: the lookout on the south-west rise will hail anyone who walks up, and crouching keeps you out of sight.",
@@ -238,11 +238,11 @@ function view(s: HostageState, now: number): ScenarioView {
     extract: s.alarm ? "Quim is out and the camp is awake. Get him to the landing dock alive." : "Quim is out and nobody knows. Walk him to the landing dock, quietly.",
   };
   const DONE: Record<string, string> = {
-    ransomed: "Paid in full, with a receipt on a biscuit-tin lid. Sail home from the dock.",
-    rescued: "Rescued, late and loudly. Sail home from the dock.",
-    slipped_away: "Out without a shot. Nobody will believe it. Sail home from the dock.",
-    hostage_lost: "Mr. Quim is gone. The insurance people are not amused. Sail home from the dock.",
-    abandoned: "The expedition is down. The Orchard is unmoved. Sail home and explain.",
+    ransomed: "Paid in full; the receipt is a biscuit-tin lid. The Orchard's deserters are now the best-funded unit in Kessar. Take the boat home.",
+    rescued: "Rescued, late and loudly, and the Orchard is a good deal quieter for it. Take the boat home from the dock.",
+    slipped_away: "Out without a shot. Nobody will believe it, least of all the Society, which had budgeted for a funeral. Take the boat home.",
+    hostage_lost: "Mr. Quim is gone. His insurers have begun reading the small print aloud, slowly, to the Society. Take the boat home.",
+    abandoned: "The expedition is down. The Orchard opens another bottle. Take the boat home and explain.",
   };
   let hint = res !== undefined ? DONE[res] ?? "" : hailed ? "They have seen you and want an answer. Walk up to the colour-sergeant (he has the pistol) and Use to talk, or walk well away before they lose patience." : HINT[s.phase] ?? "";
   const ch = COMPLICATION_HINT[s.complication];
@@ -298,7 +298,7 @@ const observe: ObserveSpec = {
 
 export const hostageTemplate: TemplateDef<HostageState> = {
   id: "hostage_rescue", title: "The Cartwright's Cage",
-  brief: "A junior surveyor named Percival Quim, insured for a sum the Society would rather not pay out, sits in a cage wagon in the deserters' camp at Hangman's Orchard. Pay, sneak or shoot, and be home before the Syndicate outbids you.",
+  brief: "Mr. Percival Quim, junior surveyor, sits in a cage wagon at Hangman's Orchard, held by deserters who have read his insurance policy more closely than the Society ever did. They will sell him back; the Syndicate will buy him first if you dawdle. Pay the colour-sergeant, open the cage while the Orchard drinks, or break the camp and walk him home.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { cage: KESSAR_SITES.hostage.cage, camp: KESSAR_SITES.hostage.cage },
   opening: () => [],
