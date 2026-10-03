@@ -496,6 +496,22 @@ describe("Cast: the people who are not soldiers", () => {
   });
 });
 
+describe("Cast: gore in plain view (D-064)", () => {
+  it("a limb coming off shakes the victim's friends more than a fall alone, and sends a civilian running with no shot fired", () => {
+    const r = rig();
+    r.cast.spawn([spec("s1"), spec("s2", { post: { x: 4, z: 0 } }), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: -5, z: 0 } })]);
+    r.tick(3);
+    const brain = (k: string) => (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get(k)!.brain;
+    const before = brain("npc:s2").morale.shock;
+    r.rows.get("npc:s1")!.missing = 1; // an arm in the road (no shot, no noise: the sight of it alone)
+    r.tick(2);
+    expect(brain("npc:s2").morale.shock - before).toBeGreaterThan(CAST.goreShock * 0.8); // (less a tick or two of recovery)
+    r.tick(60);
+    const h = r.rows.get("npc:h1")!;
+    expect(h.x).toBeLessThan(-7); // ran from it (it lay to his east)
+  });
+});
+
 describe("Cast: budgets", () => {
   it("at most NAV.queriesPerTick paths per tick, and every brain gets a turn (round robin)", () => {
     const perTick: number[] = [];

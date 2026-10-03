@@ -12,10 +12,27 @@ describe("HitFx", () => {
     const fx = make();
     fx.burst(0, 1, 0, 1, 0, 0.8, "full");
     const n = fx.liveParticles;
-    expect(n).toBeGreaterThanOrEqual(7);
-    expect(n).toBeLessThanOrEqual(18);
+    expect(n).toBeGreaterThanOrEqual(9);
+    expect(n).toBeLessThanOrEqual(22);
     run(fx, 2);
     expect(fx.liveParticles).toBe(0);
+  });
+
+  it("D-064: `up` throws the drops higher (a head wound fountains), and they still come down within the same two seconds", () => {
+    const top = (up: number): number => {
+      const fx = make();
+      fx.burst(0, 1, 0, 1, 0, 1, "full", up);
+      const ys = (fx as unknown as { py: Float32Array }).py;
+      let best = 0;
+      for (let t = 0; t < 0.6; t += 1 / 30) {
+        fx.update(1 / 30);
+        for (const y of ys) best = Math.max(best, y);
+      }
+      run(fx, 2);
+      expect(fx.liveParticles).toBe(0);
+      return best;
+    };
+    expect(top(1)).toBeGreaterThan(top(0) + 0.3);
   });
 
   it("is hard-capped: hammering it never exceeds the particle or decal pools", () => {

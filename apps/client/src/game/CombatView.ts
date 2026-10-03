@@ -100,7 +100,7 @@ export class CombatView {
   /** Blasts heard lately as (x, z, time) triples (soot on bodies near them): a short ring, newest last. */
   private readonly blasts: number[] = [];
   /** Told once for every blast (x, z): the battlefield's ledger keeps its place (game/battleLedger.ts). */
-  onBlast: ((x: number, z: number) => void) | undefined;
+  onBlast: ((x: number, z: number, radius: number) => void) | undefined;
   private readonly projectiles: Projectiles;
   private readonly hud: CombatHud;
   private readonly cannons = new Map<string, CannonView>();
@@ -446,7 +446,7 @@ export class CombatView {
     else sfx.sound("explosion", { x: e.x, y: e.y, z: e.z });
     this.blasts.push(e.x, e.z, this.time);
     if (this.blasts.length > 24) this.blasts.splice(0, 3);
-    this.onBlast?.(e.x, e.z);
+    this.onBlast?.(e.x, e.z, e.radius);
     const d = Math.hypot(e.x - this.stage.camera.position.x, e.z - this.stage.camera.position.z);
     this.controls.rumble("blast", Math.max(0.15, 1 - d / (e.radius * 8)));
     this.rig.addShake(Math.max(0, 1 - d / (e.radius * 8)) * 0.95);

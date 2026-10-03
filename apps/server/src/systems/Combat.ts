@@ -86,6 +86,10 @@ export interface CombatHost {
   blasted?(id: string, speed: number): void;
   /** A free prop was struck by a ranged round (the room blows a powder keg up). */
   propShot?(propId: string, shooter: string): void;
+  /** D-064: a blast caught a body already down (Casualties.toss: thrown, and a fallen NPC may come apart). */
+  toss?(id: string, dirX: number, dirZ: number, power: number, lift: number, severDamage: number, severBias: number): void;
+  /** D-064: a blast went off, credited to `owner` (the room lights the powder kegs it reaches). */
+  blastAt?(owner: string, x: number, y: number, z: number, radius: number): void;
   /**
    * D-041: a PERSON's round passed close by an NPC (within `NEAR_MISS_M` of its chest, before the round met the world). Being shot at is a declaration as plain as being hit:
    * the playtest emptied a rifle at the Ward's sentries from the bridge, every round into the parapet beside them, and they never looked up.
@@ -153,6 +157,8 @@ interface Pending {
   dirZ: number;
   knock: number;
   stumble: number;
+  /** 0..1: a blast's throw (D-064), carried to the hit event. */
+  lift: number;
   point: { x: number; y: number; z: number };
 }
 
@@ -702,13 +708,13 @@ export class Combat {
     this.host.emitImpact({ id: shooter, x: c.x, y: c.y, z: c.z, nx: c.nx, ny: c.ny, nz: c.nz, s: c.surface, w: weapon });
   }
 
-  private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number): void {
+  private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number, lift = 0): void {
     const t = this.host.players.get(target);
     if (!t || !(damage > 0)) return;
     const k = key * 32 + (t.slot & 31); // (NPC rows take slots 16+, so every victim of one blast keeps its own entry)
     let h = this.pending.get(k);
     if (!h) {
-      h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, point: { x, y, z } };
+      h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, lift: 0, point: { x, y, z } };
       this.pending.set(k, h);
     }
     h.damage += damage;
@@ -723,6 +729,7 @@ export class Combat {
     h.dirZ += dz;
     h.knock = Math.max(h.knock, knock);
     h.stumble = Math.max(h.stumble, stumble);
+    h.lift = Math.max(h.lift, lift);
   }
 
   /** Turns the hits gathered this tick into damage: one wound event per shot per victim, however many pellets landed. */
@@ -747,7 +754,7 @@ export class Combat {
       // ffScale softens a comrade's hit; the garrison is an enemy and takes the whole blow.
       const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : this.partySide(t) && this.partySide(this.host.players.get(h.shooter)) ? def.ffScale : 1);
       const before = t.missing;
-      this.host.damage(h.target, damage, { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter });
+      this.host.damage(h.target, damage, h.lift > 0 ? { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, lift: h.lift } : { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter });
       this.knock(t, dirX, dirZ, h.knock, h.stumble, 0);
       this.stats.hits++;
       metrics.hitsLanded++;
@@ -928,9 +935,19 @@ export class Combat {
     const centre = { x: 0, y: 0, z: 0 };
     const key = this.shotCounter++ >>> 0;
     this.host.players.forEach((t, id) => {
-      if (id === direct || (t.flags & FLAG.DOWNED) !== 0 || !t.connected) return;
+      if (id === direct || !t.connected) return;
       const self = id === owner;
       if (!self && !this.hittable(owner, id, t)) return;
+      if ((t.flags & FLAG.DOWNED) !== 0) {
+        // D-064: the fallen are thrown too (and a fallen enemy may come apart): bodies do not lie politely still under a cannonade
+        if (!this.host.toss) return;
+        const d = Math.hypot(t.x - x, t.y + 0.3 - y, t.z - z);
+        const f = blastFalloff(d, b.radius);
+        if (f <= 0.1) return;
+        const h = Math.hypot(t.x - x, t.z - z) || 1;
+        this.host.toss(id, (t.x - x) / h, (t.z - z) / h, Math.min(1, (b.damage * f) / 60), f, b.damage * f, WEAPONS[weapon].severBias);
+        return;
+      }
       const pose = this.poseOf(t, undefined);
       const d = blastDistance(pose, x, y, z);
       let f = blastFalloff(d, b.radius);
@@ -946,7 +963,7 @@ export class Combat {
       const dirZ = dz / h;
       const zone = pickZone(this.host.rng);
       // (the blast is unaimed: the zone is a seeded roll, so a campaign seed reproduces its casualties)
-      this.addHit(owner, id, weapon, b.damage * f, zone, dirX, dirZ, b.knock * f, Math.max(0.8, 1.2 * f), t.x, t.y + 1, t.z, key);
+      this.addHit(owner, id, weapon, b.damage * f, zone, dirX, dirZ, b.knock * f, Math.max(0.8, 1.2 * f), t.x, t.y + 1, t.z, key, f);
       // Lift: a blast throws people up as well as away.
       this.knock(t, 0, 0, 0, 0, b.knock * 0.55 * f);
       this.host.blasted?.(id, b.knock * f);
@@ -964,6 +981,7 @@ export class Combat {
       const l = d || 1;
       this.host.physics.shoveProp(id, dx / l, dy / l + 0.5, dz / l, b.propImpulse * f, tr.x, tr.y, tr.z, COMBAT.maxPropSpeed);
     }
+    this.host.blastAt?.(owner, x, y, z, b.radius);
   }
 
   // ---- the cannon -----------------------------------------------------------------------------------------------------------------

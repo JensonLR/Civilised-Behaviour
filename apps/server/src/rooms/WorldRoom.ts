@@ -64,6 +64,7 @@ import {
   titleOf,
   type Deeds,
   type HonoursState,
+  KEG_CHAIN,
   KEG_FUSE,
   fuseTenths,
   remit,
@@ -444,6 +445,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
       propShot: (id, shooter) => this.propShot(id, shooter),
+      toss: (id, dx, dz, power, lift, dmg, bias) => this.casualties.toss(id, dx, dz, power, lift, dmg, bias),
+      blastAt: (owner, x, y, z, radius) => this.powderCatches(owner, x, y, z, radius),
     });
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
     this.cast = new Cast({
@@ -1469,6 +1472,24 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.combat.explode(owner, WEAPON.CANNON, { ...b, radius: KEG_FUSE.radius, damage: Math.round(b.damage * KEG_FUSE.damageMul) }, at.x, at.y, at.z, "");
   }
 
+  /**
+   * D-064: powder catches. Every keg a blast reaches (loose, or in somebody's arms) is lit on a short fuse that grows with its distance (KEG_CHAIN), credited to whoever set off the
+   * first: a stack goes up as a ripple. A keg already burning keeps the shorter of its fuse and the new one.
+   */
+  private powderCatches(owner: string, x: number, y: number, z: number, radius: number): void {
+    const reach = radius * KEG_CHAIN.reach;
+    this.state.props.forEach((ps, id) => {
+      if (ps.kind !== PropKind.BARREL) return;
+      const d = Math.hypot(ps.x - x, ps.y - y, ps.z - z);
+      if (d > reach) return;
+      const left = KEG_CHAIN.base + d * KEG_CHAIN.perMetre;
+      const f = this.lit.get(id);
+      if (f && f.left <= left) return;
+      this.lit.set(id, { left, owner: f?.owner ?? owner });
+      ps.fuse = fuseTenths(left);
+    });
+  }
+
   /** D-055: what a member did this contract (created on first use). */
   private deedsOf(sid: string): Deeds | undefined {
     const p = this.state.players.get(sid);
@@ -1850,6 +1871,20 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     } else if (cmd === "keg") {
       // D-054 QA: a powder keg a step ahead (to light, throw and watch)
       this.spawnPropAt(PropKind.BARREL, player.x - Math.sin(player.facing) * 1.3, player.z - Math.cos(player.facing) * 1.3);
+    } else if (cmd === "powder") {
+      // D-064 QA: a row of five kegs from 6 m ahead, 1.8 m apart, the nearest lit on a 2 s fuse (to watch the powder catch)
+      const fx = -Math.sin(player.facing);
+      const fz = -Math.cos(player.facing);
+      let first: string | undefined;
+      for (let k = 0; k < 5; k++) {
+        const id = this.spawnPropAt(PropKind.BARREL, player.x + fx * (6 + k * 1.8), player.z + fz * (6 + k * 1.8));
+        first ??= id;
+      }
+      if (first) {
+        this.lit.set(first, { left: 2, owner: client.sessionId });
+        const ps = this.state.props.get(first);
+        if (ps) ps.fuse = fuseTenths(2);
+      }
     } else if (cmd === "nearProp") {
       // Stand 1.2 m south of the closest free prop, facing it.
       let best: { x: number; y: number; z: number } | undefined;

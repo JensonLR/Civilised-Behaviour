@@ -88,7 +88,7 @@ class BudgetedNav implements NavApi {
 }
 
 export const CAST = {
-  sightClear: 28, sightWet: 16, allyRange: 15, tokens: 2, witnessShock: 16, hurtShock: 0.35, noiseShock: 4, underFireSeconds: 4,
+  sightClear: 28, sightWet: 16, allyRange: 15, tokens: 2, witnessShock: 16, goreShock: 12, hurtShock: 0.35, noiseShock: 4, underFireSeconds: 4,
   civilFleeSeconds: 6, civilFleeRange: 22, followRange: 40,
 } as const;
 
@@ -494,7 +494,10 @@ export class Cast implements CastApi {
       r.brain.hurtAt = now;
       r.brain.morale.shock = Math.min(60, r.brain.morale.shock + Math.max(0, r.lastHp - row.health) * CAST.hurtShock);
     }
-    if (popcount(row.missing) > popcount(r.lastMissing)) r.brain.morale.shock = Math.min(60, r.brain.morale.shock + CAST.witnessShock);
+    if (popcount(row.missing) > popcount(r.lastMissing)) {
+      r.brain.morale.shock = Math.min(60, r.brain.morale.shock + CAST.witnessShock);
+      this.witnessGore(r, row);
+    }
     r.lastHp = row.health;
     r.lastWounds = row.wounds;
     r.lastMissing = row.missing;
@@ -551,6 +554,27 @@ export class Cast implements CastApi {
     if (r.tx !== "") {
       r.hasEnemy = true;
       r.td = Math.sqrt(bestD2);
+    }
+  }
+
+  /**
+   * D-064: a row lost a limb in plain view. Its friends nearby are shaken on top of anything a fall does (an arm in the road breaks a line faster than a man lying down), and every
+   * civilian near enough to see it bolts, whether or not there was a report.
+   */
+  private witnessGore(victim: Rec, row: PlayerStateType): void {
+    const now = this.host.worldMs() / 1000;
+    for (const o of this.recs) {
+      if (o === victim || o.gone) continue;
+      const orow = this.host.players.get(o.key);
+      if (!orow || (orow.flags & FLAG.DOWNED) !== 0) continue;
+      const d = Math.hypot(orow.x - row.x, orow.z - row.z);
+      if (o.civil) {
+        if (d <= CAST.civilFleeRange) {
+          o.fleeUntil = now + CAST.civilFleeSeconds;
+          o.fleeX = row.x;
+          o.fleeZ = row.z;
+        }
+      } else if (o.side === victim.side && d <= CAST.allyRange) o.brain.morale.shock = Math.min(60, o.brain.morale.shock + CAST.goreShock);
     }
   }
 
