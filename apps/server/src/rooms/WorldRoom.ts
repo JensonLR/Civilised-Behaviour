@@ -144,7 +144,7 @@ import { CAMPAIGN_CODECS } from "./campaignCodecs.ts";
 import { CampaignSaver } from "../persistence/saver.ts";
 import { canResume, identityKey, parseIdentity } from "../persistence/identity.ts";
 import { createRecord } from "../persistence/record.ts";
-import { idleDays, restore, snapshot } from "../persistence/sections.ts";
+import { idleDays, quarantineDamaged, restore, snapshot } from "../persistence/sections.ts";
 import type { CampaignRecord, SaveResult } from "../persistence/types.ts";
 import { Travel } from "../systems/Travel.ts";
 
@@ -304,7 +304,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.campaign = resume ? (resume.values.campaign as CampaignState) : newCampaign(seed);
     this.powers = resume ? (resume.values.powers as PowersState) : newPowers(seed);
     this.settlements = resume ? (resume.values.settlements as SettlementsState) : newSettlements();
-    this.pendingIdle = resume ? Math.min(DAYS_IDLE_CAP, resume.idle) : 0;
+    // owed days: the ones a previous visit saved unpaid, plus the absence since that save (capped: a long absence and an uneventful visit never stack past the cap)
+    this.pendingIdle = resume ? Math.min(DAYS_IDLE_CAP, ((resume.values.idle as number | undefined) ?? 0) + resume.idle) : 0;
     this.heldSections = resume?.newer ?? [];
     // `region` and `scenario` are QA levers: production (debugCommands off) ignores them, whatever the client sends. A resumed campaign always starts at HQ.
     const dev = cfg.debugCommands;
@@ -792,7 +793,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (r.repaired.length) log.warn("room.resume_repaired", { roomId: this.roomId, sections: r.repaired });
     log.info("room.resume", { roomId: this.roomId, code, rev: rec.rev });
     if (r.newer.length) log.warn("room.resume_newer_sections", { roomId: this.roomId, sections: r.newer, note: "written by a newer build; kept untouched, not saved over" });
-    return { rec, values: r.values, idle: idleDays(rec.savedAt, Date.now()), newer: r.newer };
+    // a section damaged at this version is replaced by a fresh one, so keep its bytes first (as `damaged_<key>`, carried verbatim by every later save)
+    const q = quarantineDamaged(rec, r);
+    if (q.kept.length || q.skipped.length) log.warn("room.resume_damaged_kept", { roomId: this.roomId, kept: q.kept, skipped: q.skipped });
+    return { rec: { ...rec, sections: q.sections, sectionVersions: q.sectionVersions }, values: r.values, idle: idleDays(rec.savedAt, Date.now()), newer: r.newer };
   }
 
   private takeClaim(code: string): void {
@@ -856,7 +860,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private persistNow(): Promise<SaveResult | undefined> {
     if (!this.saver) return Promise.resolve(undefined);
     try {
-      const live: Record<string, unknown> = { campaign: this.campaign, party: parseParty(this.state.party) ?? newParty(), powers: this.powers, settlements: this.settlements };
+      const live: Record<string, unknown> = { campaign: this.campaign, party: parseParty(this.state.party) ?? newParty(), powers: this.powers, settlements: this.settlements, idle: this.pendingIdle };
       for (const k of this.heldSections) delete live[k]; // (a section a newer build wrote is not ours to overwrite)
       const snap = snapshot(CAMPAIGN_CODECS, live);
       return this.saver.saveNow(snap).then((r) => {

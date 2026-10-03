@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DAYS_IDLE_CAP as IDLE_DAYS_CAP } from "@cb/shared";
-import { idleDays, restore, snapshot, type AnyCodec } from "./sections.ts";
-import { DAY_MS } from "./types.ts";
+import { idleDays, quarantineDamaged, restore, snapshot, type AnyCodec } from "./sections.ts";
+import { SECTION_RE } from "./record.ts";
+import { DAY_MS, MAX_RECORD_BYTES, MAX_SECTIONS } from "./types.ts";
 
 interface Box { n: number }
 const boxCodec = (key: string, version = 1): AnyCodec => ({
@@ -65,6 +66,48 @@ describe("snapshot / restore", () => {
 
   it("a live value that is absent is not written", () => {
     expect(snapshot(codecs, { campaign: { n: 1 } }).sections).toEqual({ campaign: '{"n":1}' });
+  });
+});
+
+describe("quarantineDamaged (persistence review (e))", () => {
+  const codecs = [boxCodec("campaign"), boxCodec("party"), boxCodec("powers", 2)];
+  type Rec = { seed: number; sections: Record<string, string>; sectionVersions: Record<string, number> };
+  const rec: Rec = { seed: 77, sections: { campaign: "{{garbage", party: '{"n":5}', powers: '{"n":6,"later":1}' }, sectionVersions: { campaign: 1, party: 1, powers: 3 } };
+
+  it("a section that failed to parse at THIS version is kept as damaged_<key>, verbatim, before the fresh one replaces it; a newer build's section is not (it is held whole)", () => {
+    const r = restore(codecs, rec);
+    const q = quarantineDamaged(rec, r);
+    expect(q.kept).toEqual(["campaign"]);
+    expect(q.sections["damaged_campaign"]).toBe("{{garbage");
+    expect(q.sectionVersions["damaged_campaign"]).toBe(1);
+    expect("damaged_powers" in q.sections).toBe(false);
+    // the copy obeys the record's own rules (the first cut used "damaged.campaign": a dot fails SECTION_RE and the store refused the whole save, silently losing the copy)
+    for (const k of Object.keys(q.sections)) expect(SECTION_RE.test(k), k).toBe(true);
+    expect(Object.keys(q.sectionVersions).sort()).toEqual(Object.keys(q.sections).sort());
+    // and the next save (fresh values over the known keys) leaves the damaged copy alone: it is an unknown key, carried verbatim
+    const next = { ...q.sections, ...snapshot(codecs, r.values).sections };
+    expect(next["damaged_campaign"]).toBe("{{garbage");
+    expect(restore(codecs, { seed: 77, sections: next, sectionVersions: q.sectionVersions }).unknown).toContain("damaged_campaign");
+    expect(rec.sections).not.toHaveProperty("damaged_campaign"); // pure
+  });
+
+  it("the FIRST damaged copy is kept (a second failure does not overwrite it); nothing to keep leaves the record as it was", () => {
+    const once = quarantineDamaged(rec, restore(codecs, rec));
+    const again: Rec = { ...once, sections: { ...once.sections, campaign: "{{other garbage" } };
+    const twice = quarantineDamaged(again, restore(codecs, again));
+    expect(twice.sections["damaged_campaign"]).toBe("{{garbage");
+    expect(twice.kept).toEqual([]);
+    const clean: Rec = { seed: 1, sections: { campaign: '{"n":1}' }, sectionVersions: { campaign: 1 } };
+    expect(quarantineDamaged(clean, restore(codecs, clean))).toMatchObject({ kept: [], sections: clean.sections });
+  });
+
+  it("never pushes a record past its limits: too many sections, or too many bytes, and the copy is skipped (reported as skipped)", () => {
+    const many: Record<string, string> = { campaign: "{{garbage" };
+    for (let i = 0; Object.keys(many).length < MAX_SECTIONS; i++) many[`x${i}`] = "1";
+    const full: Rec = { seed: 1, sections: many, sectionVersions: { campaign: 1 } };
+    expect(quarantineDamaged(full, restore(codecs, full))).toMatchObject({ kept: [], skipped: ["campaign"] });
+    const big: Rec = { seed: 1, sections: { campaign: "{" + "x".repeat(MAX_RECORD_BYTES / 2 + 10) }, sectionVersions: { campaign: 1 } };
+    expect(quarantineDamaged(big, restore(codecs, big))).toMatchObject({ kept: [], skipped: ["campaign"] });
   });
 });
 
