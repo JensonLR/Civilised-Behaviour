@@ -97,6 +97,19 @@ export class GameAudio {
     }
   }
 
+  /** D-054: the nearest lit keg is `distance` metres away (Infinity: none lit). The hiss fades out by 30 m and quickens as the fuse burns down (`tenths` left). */
+  fuse(distance: number, tenths: number): void {
+    if (Number.isFinite(distance) && distance < 30) {
+      this.hissing = true;
+      const near = 1 - distance / 30;
+      playSfx("fuse_hiss", { volume: near * near, pitch: 1 + Math.max(0, 40 - tenths) / 40 * 0.25 });
+    } else if (this.hissing) {
+      this.hissing = false;
+      stopSfx("fuse_hiss");
+    }
+  }
+  private hissing = false;
+
   /** A body was hit: the victim cries out, in a voice that belongs to their face. */
   hurt(x: number, y: number, z: number, look: string, power: number, isMe: boolean): void {
     playSfx("hurt", { x, y, z, seed: seedFromString(look), volume: (isMe ? 1 : 0.9) * Math.min(1, 0.55 + power) });

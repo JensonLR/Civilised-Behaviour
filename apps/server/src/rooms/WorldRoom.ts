@@ -56,6 +56,8 @@ import {
   applyIncident,
   INCIDENT,
   INCIDENT_IDS,
+  KEG_FUSE,
+  fuseTenths,
   remit,
   askingToll,
   answerParley,
@@ -224,6 +226,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private prevButtons = new Map<string, number>();
   /** sessionId -> prop id currently carried. */
   private carrying = new Map<string, string>();
+  /** D-054: lit powder kegs (prop id -> seconds left and who lit it). */
+  private readonly lit = new Map<string, { left: number; owner: string }>();
   private readonly hold = { x: 0, y: 0, z: 0 };
   private usedSlots = new Set<number>();
   private emptyTicks = new Map<string, number>();
@@ -643,6 +647,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       this.combat.tick(ctx.dt);
       tickProbe.lap("combat");
       this.physics.step(ctx.dt);
+      this.burnFuses(ctx.dt);
       tickProbe.lap("physics");
       for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
       tickProbe.lap("props");
@@ -998,6 +1003,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if ((pressed & BUTTON.INTERACT) !== 0 && this.useStation(sessionId, player, held)) return;
 
     if (held) {
+      // D-054: RELOAD with a keg in your arms lights its fuse (then throw it, or do not dawdle)
+      if ((pressed & BUTTON.RELOAD) !== 0 && this.state.props.get(held)?.kind === PropKind.BARREL && !this.lit.has(held)) {
+        this.lightKeg(held, sessionId);
+        return;
+      }
       if (pressed & (BUTTON.INTERACT | BUTTON.THROW)) {
         // Throw strength comes from the arms (injury.ts): a maimed thrower lobs weakly; with no throw strength it is just a drop.
         injuryMods(player.wounds, player.missing, (player.flags & FLAG.PEG_LEG) !== 0, this.mods);
@@ -1092,6 +1102,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const ps = new PropState();
       ps.kind = spawn.kind;
       ps.holder = "";
+      ps.fuse = 0;
       this.state.props.set(body.id, ps);
       this.writeProp(body.id, true);
     }
@@ -1151,6 +1162,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const old = this.physics;
     metrics.physicsBodies -= old.props.size;
     old.dispose();
+    this.lit.clear(); // (a fuse does not cross the water: the next region's props may reuse the ids)
     this.state.region = to;
     this.buildRegion(to);
     this.startScenario(to);
@@ -1373,6 +1385,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   }
 
   private consumeProp(id: string): void {
+    this.lit.delete(id);
     const ps = this.state.props.get(id);
     if (!ps) return;
     const holder = ps.holder;
@@ -1395,6 +1408,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const ps = new PropState();
     ps.kind = kind;
     ps.holder = "";
+    ps.fuse = 0;
     this.state.props.set(body.id, ps);
     this.writeProp(body.id, true);
     metrics.physicsBodies++;
@@ -1405,11 +1419,44 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private propShot(id: string, shooter: string): void {
     const ps = this.state.props.get(id);
     if (!ps || ps.kind !== PropKind.BARREL || ps.holder !== "") return;
+    this.kegBlast(id, shooter);
+  }
+
+  /** A keg goes off where it is (shot, or its fuse ran out: in the air, on the ground, or in somebody's arms), credited to `owner`. The site hears of it first. */
+  private kegBlast(id: string, owner: string): void {
+    const ps = this.state.props.get(id);
+    if (!ps) return;
     const at = { x: ps.x, y: ps.y, z: ps.z };
     this.scenario?.onProp("destroyed", id);
     this.consumeProp(id);
     const b = WEAPONS[WEAPON.CANNON].ranged!.blast!;
-    this.combat.explode(shooter, WEAPON.CANNON, { ...b, radius: 5, damage: Math.round(b.damage * 0.6) }, at.x, at.y, at.z, "");
+    this.combat.explode(owner, WEAPON.CANNON, { ...b, radius: KEG_FUSE.radius, damage: Math.round(b.damage * KEG_FUSE.damageMul) }, at.x, at.y, at.z, "");
+  }
+
+  /** D-054: the fuse is lit. Everyone near hears it (the clients draw the sparks and play the hiss from `PropState.fuse`). */
+  private lightKeg(id: string, by: string): void {
+    const ps = this.state.props.get(id);
+    if (!ps) return;
+    this.lit.set(id, { left: KEG_FUSE.seconds, owner: by });
+    ps.fuse = fuseTenths(KEG_FUSE.seconds);
+  }
+
+  /** Burns the lit fuses down; a fuse that reaches the powder sets the keg off where it is. */
+  private burnFuses(dt: number): void {
+    if (this.lit.size === 0) return;
+    const due: [string, string][] = [];
+    for (const [id, f] of this.lit) {
+      f.left -= dt;
+      const ps = this.state.props.get(id);
+      if (!ps) {
+        this.lit.delete(id);
+        continue;
+      }
+      const t = fuseTenths(f.left);
+      if (ps.fuse !== t) ps.fuse = t;
+      if (f.left <= 0) due.push([id, f.owner]);
+    }
+    for (const [id, owner] of due) this.kegBlast(id, owner);
   }
 
   /** A hired porter picks a prop up (the same hold a player uses, keyed by the row). */
@@ -1722,6 +1769,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       player.facing = 0;
       player.vx = 0;
       player.vz = 0;
+    } else if (cmd === "keg") {
+      // D-054 QA: a powder keg a step ahead (to light, throw and watch)
+      this.spawnPropAt(PropKind.BARREL, player.x - Math.sin(player.facing) * 1.3, player.z - Math.cos(player.facing) * 1.3);
     } else if (cmd === "nearProp") {
       // Stand 1.2 m south of the closest free prop, facing it.
       let best: { x: number; y: number; z: number } | undefined;

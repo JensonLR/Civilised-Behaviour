@@ -479,6 +479,15 @@ const tackJingle = def({
   ],
 });
 
+/** D-054: a lit fuse on a powder keg: a hard, even sizzle (overlapping bursts of high noise) with crackles on it, in a 1.2 s loop (every layer ends inside the period). */
+const fuseHiss = def({
+  group: "body", peakDb: -12, ui: true, reverb: 0.05, prio: 3, cap: 1, gap: 0, variants: 1, loop: 1.2, jitter: 0,
+  layers: (p) => [
+    ...[0, 0.3, 0.6].map((t) => N({ at: t, atk: 0.05, dec: 0.5, peak: 0.55, f: [hp(2600), bp(5200, 0.8)] })),
+    ...[0.07, 0.19, 0.33, 0.52, 0.71, 0.86, 1.02].map((t) => N({ at: t + p.rng.next() * 0.03, dec: 0.012, peak: 0.6 + p.rng.next() * 0.3, f: [bp(3000 + p.rng.next() * 2500, 2)] })),
+  ],
+});
+
 /** A ship under way: timbers working, a rope, the slop of water on the hull, in a seamless 2.4 s loop (every layer ends inside the period). */
 const sailCreak = def({
   group: "ambient", peakDb: -16, ui: true, reverb: 0.1, prio: 1, cap: 1, gap: 0, variants: 1, loop: 2.4, jitter: 0,
@@ -618,6 +627,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   ui_confirm: uiConfirm,
   ui_error: uiError,
   revive_hold: reviveHold,
+  fuse_hiss: fuseHiss,
   revive_done: reviveDone,
   hurt,
   down,
