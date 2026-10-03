@@ -109,7 +109,120 @@ async function carry(p: Pilot, kind: number, fx: number, fz: number, tx: number,
   return true;
 }
 
+
+/**
+ * D-052 in play: the incident `id` happens now (QA lever: the real deal waits a minute or two and for calm, and is random), and the pilot meets it as a person would:
+ * notes how far off it turned up, walks to it, settles it by hand (a held revive, a press, the saddle), and notes how long that took.
+ */
+async function meetIncident(p: Pilot, id: "wounded_traveller" | "courier" | "deserter" | "runaway_horse"): Promise<boolean> {
+  const mountsBefore = new Set(p.bot.room.state.mounts.keys());
+  const t0 = p.secs;
+  const key = id === "wounded_traveller" ? "incident-traveller" : `incident-${id}`; // (the roster's ids, shared/incidents.ts)
+  p.debug(`incident:${id}`);
+  const where = (): { x: number; z: number } | undefined => {
+    if (id === "runaway_horse") {
+      let m: { x: number; z: number } | undefined;
+      p.bot.room.state.mounts.forEach((h, k) => {
+        if (!mountsBefore.has(k)) m = h;
+      });
+      return m;
+    }
+    return p.npc(key);
+  };
+  if (!(await p.until(() => where() !== undefined, 6000, `the ${id}`))) return false;
+  const at = where()!;
+  p.note(`INCIDENT ${id} ${Math.hypot(at.x - p.pos.x, at.z - p.pos.z).toFixed(1)} m away`);
+  const settled = (): boolean => p.notices.some((n) => /You have caught|thanks you twice|dispatch is a cheque|signs on for/.test(n));
+  if (id === "wounded_traveller") {
+    const n = p.npc(key)!;
+    await p.goTo(n.x, n.z, { within: 1.2, label: "the traveller" });
+    await p.face(n.x, n.z);
+    p.holdButtons(BUTTON.INTERACT);
+    await p.until(() => ((p.npc(key)?.flags ?? FLAG.DOWNED) & FLAG.DOWNED) === 0, 8000, "the traveller up");
+    p.holdButtons(0);
+  } else if (id === "runaway_horse") {
+    // a horse is not a person: it may have wandered, so walk to where it is NOW, twice if need be
+    for (let i = 0; i < 3 && !settled(); i++) {
+      const h = where()!;
+      await p.goTo(h.x, h.z, { within: 1.4, label: "the horse" });
+      await p.face(h.x, h.z);
+      await p.use("into the saddle");
+      await p.until(settled, 2000, "in the saddle");
+    }
+  } else {
+    // the courier walks to the party (the deserter waits): close the gap, then press
+    for (let i = 0; i < 4 && !settled(); i++) {
+      const n = p.npc(key);
+      if (!n) break;
+      await p.goTo(n.x, n.z, { within: 1.8, label: id });
+      await p.face(n.x, n.z);
+      await p.use(id === "courier" ? "take the dispatch" : "sign him on");
+      await p.until(settled, 1500, "settled");
+    }
+  }
+  const ok = await p.until(settled, 3000, `${id} settled`);
+  p.note(`INCIDENT ${id} ${ok ? "settled" : "NOT settled"} after ${(p.secs - t0).toFixed(0)} s`);
+  if (id === "runaway_horse" && ok) await p.use("dismount"); // (a rider's USE is the saddle's: on foot again for the toll bar)
+  return ok;
+}
+
 export const PLANS: Plan[] = [
+  {
+    name: "incident-traveller",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["paid", "bargained"],
+    async run(p) {
+      await p.goTo((A.landing.x + A.tollBar.x) / 2, (A.landing.z + A.tollBar.z) / 2, { label: "up from the landing" });
+      await meetIncident(p, "wounded_traveller");
+      await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
+      if (!(await talkTo(p, "warden", 1.4))) return;
+      (await p.pick(/^Pay|Agree|Pay the toll/i)) >= 0 || (await p.pick(/Haggle|bargain/i));
+      await p.until(() => p.view?.resolution !== undefined, 8000, "settled");
+      await sailHome(p, A.landing);
+    },
+  },
+  {
+    name: "incident-courier",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["paid", "bargained"],
+    async run(p) {
+      await p.goTo((A.landing.x + A.tollBar.x) / 2, (A.landing.z + A.tollBar.z) / 2, { label: "up from the landing" });
+      await meetIncident(p, "courier");
+      await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
+      if (!(await talkTo(p, "warden", 1.4))) return;
+      (await p.pick(/^Pay|Agree|Pay the toll/i)) >= 0 || (await p.pick(/Haggle|bargain/i));
+      await p.until(() => p.view?.resolution !== undefined, 8000, "settled");
+      await sailHome(p, A.landing);
+    },
+  },
+  {
+    name: "incident-deserter",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["paid", "bargained"],
+    async run(p) {
+      await p.goTo((A.landing.x + A.tollBar.x) / 2, (A.landing.z + A.tollBar.z) / 2, { label: "up from the landing" });
+      await meetIncident(p, "deserter");
+      await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
+      if (!(await talkTo(p, "warden", 1.4))) return;
+      (await p.pick(/^Pay|Agree|Pay the toll/i)) >= 0 || (await p.pick(/Haggle|bargain/i));
+      await p.until(() => p.view?.resolution !== undefined, 8000, "settled");
+      await sailHome(p, A.landing);
+    },
+  },
+  {
+    name: "incident-horse",
+    join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
+    expect: ["paid", "bargained"],
+    async run(p) {
+      await p.goTo((A.landing.x + A.tollBar.x) / 2, (A.landing.z + A.tollBar.z) / 2, { label: "up from the landing" });
+      await meetIncident(p, "runaway_horse");
+      await p.goTo(A.tollBar.x, A.tollBar.z + 3, { label: "toll bar" });
+      if (!(await talkTo(p, "warden", 1.4))) return;
+      (await p.pick(/^Pay|Agree|Pay the toll/i)) >= 0 || (await p.pick(/Haggle|bargain/i));
+      await p.until(() => p.view?.resolution !== undefined, 8000, "settled");
+      await sailHome(p, A.landing);
+    },
+  },
   {
     name: "crossing-pay",
     join: { region: "kessar", scenario: "secure_crossing", seed: SEED },
