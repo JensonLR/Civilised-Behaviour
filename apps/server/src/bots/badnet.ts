@@ -49,6 +49,21 @@ export function startBadNet(listenPort: number, targetPort: number, o: BadNetOpt
   const sockets = new Set<Socket>();
   const pipe = (from: Socket, to: Socket): void => {
     let last = 0;
+    // ONE queue per direction, drained in order by one timer: a timer per chunk (the first cut) reordered chunks due within the same millisecond, because Node orders
+    // timers only to the millisecond (CI caught "...008006007..."), and TCP never reorders
+    const queue: { at: number; buf: Buffer }[] = [];
+    let timer: NodeJS.Timeout | undefined;
+    let closed = false;
+    const drain = (): void => {
+      timer = undefined;
+      const now = Date.now();
+      while (queue.length && queue[0]!.at <= now) {
+        const q = queue.shift()!;
+        if (!to.destroyed) to.write(q.buf);
+      }
+      if (queue.length) timer = setTimeout(drain, Math.max(1, Math.ceil(queue[0]!.at - now)));
+      else if (closed) to.destroy();
+    };
     from.on("data", (buf: Buffer) => {
       const now = Date.now();
       const r = releaseAt(now, last, o, rand);
@@ -56,9 +71,13 @@ export function startBadNet(listenPort: number, targetPort: number, o: BadNetOpt
       chunks++;
       if (r.stalled) stalls++;
       maxHoldMs = Math.max(maxHoldMs, r.at - now);
-      setTimeout(() => { if (!to.destroyed) to.write(buf); }, r.at - now);
+      queue.push({ at: r.at, buf });
+      timer ??= setTimeout(drain, Math.max(1, Math.ceil(queue[0]!.at - now)));
     });
-    from.on("close", () => setTimeout(() => to.destroy(), Math.max(0, last - Date.now()) + 5));
+    from.on("close", () => {
+      closed = true;
+      if (!queue.length && !timer) to.destroy();
+    });
     from.on("error", () => to.destroy());
   };
   const server: Server = createServer((client) => {
