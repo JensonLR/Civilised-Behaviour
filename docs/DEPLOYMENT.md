@@ -33,7 +33,8 @@ Both pairs build the same branch, so every push builds four services. **Decided 
 
 ## Server env (validated in `apps/server/src/config.ts`)
 `NODE_ENV`, `PORT` (default 2567), `LOG_LEVEL`, `ALLOWED_ORIGINS` (required in production), `DATABASE_URL` (optional until M10),
-`SIMULATED_LATENCY_MS` (must be 0 in production).
+`SIMULATED_LATENCY_MS` (must be 0 in production), and the abuse limits (D-048; see NETWORKING.md): `TRUST_PROXY_HOPS` (production default 1),
+`CLIENT_IP_HEADER` (optional), `ROOM_CREATE_BURST` / `ROOM_CREATE_EVERY_S` (production default 6 / 20 s; 0 turns it off), `MAX_ROOMS` (production default 40; 0 = no cap).
 
 Campaign persistence (`apps/server/src/persistence`, read by `persistenceConfig`; fails fast with a readable list):
 | Variable | Default | Meaning |
