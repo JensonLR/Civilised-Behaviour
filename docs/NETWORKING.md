@@ -52,8 +52,7 @@ every create is refused (production default 40; 503). The join-code lookup keeps
 `X-Forwarded-For` entry `TRUST_PROXY_HOPS` from the end (production default 1, the platform's own proxy), or a header the trusted edge overwrites
 (`CLIENT_IP_HEADER`), never the first entry: that one is whatever the client wrote (measured on the live server before the fix: thirteen forged lookups,
 none limited). Addresses are used as bucket keys only: never stored or logged. Tests: `clientIp.test.ts`, `matchmakeLimits.test.ts` (both fail on the old key).
-NOT verified on Render: which hop Render's proxy appends (its guidance is Express's `trust proxy 1`, i.e. one hop; this sandbox's own egress address
-appears to rotate, so the live limiter could not be measured from here). If real players behind one proxy share a bucket, set `CLIENT_IP_HEADER`.
+ON RENDER (measured after the D-048 deploy, D-050): one hop is WRONG. Render's edge is Cloudflare, `X-Forwarded-For` arrives as `<client>, <Cloudflare edge>`, and the right-most entry is an edge address that changes per request: fourteen lookups from one stable address (checked against an IP echo) never met the limit, forged entries or none. Production sets `CLIENT_IP_HEADER=true-client-ip` (in `render.yaml` and on the service), the header Render's edge sets; `TRUST_PROXY_HOPS=1` stays as the fallback. Re-measured live after that change: fourteen lookups each forging a different `True-Client-IP` and `X-Forwarded-For` got ten answers, then 429: the edge overwrites the header.
 
 ## Input budget and hitch tolerance (D-017)
 The server applies at most ~1.05 input frames per tick per player on average (bucket of 12 for hitches); excess is dropped and counted

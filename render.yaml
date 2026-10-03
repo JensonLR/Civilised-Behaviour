@@ -18,6 +18,10 @@ services:
         value: 22
       - key: LOG_LEVEL
         value: info
+      # Rate limits key on the player's address (D-048, D-050). Render's edge is Cloudflare: X-Forwarded-For arrives as "<client>, <Cloudflare edge>", so its right-most entry
+      # is an edge address that changes per request (measured live: fourteen lookups from one address never met the limit). Render's edge sets True-Client-IP.
+      - key: CLIENT_IP_HEADER
+        value: true-client-ip
       # ALLOWED_ORIGINS is a comma list, exact match: the hosted client's origin AND `app://game` (the desktop shell's renderer; docs/DEPLOYMENT.md). Without app:// every desktop
       # connection is refused with 403. The demo is a SEPARATE service with DEMO_MODE=1 (and a client built with VITE_DEMO=1); this blueprint has no demo service.
       - key: ALLOWED_ORIGINS
@@ -28,6 +32,12 @@ services:
     branch: claude/civilised-behaviour-architecture-jtce2l
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cb/client build
     staticPublishPath: apps/client/dist
+    # D-051: the bundles under /assets are content-hashed (a new build has new names), so they can be kept for a year; index.html keeps Render's short default. The live
+    # services are NOT driven by this file (it mirrors them): this header is set in the dashboard, static site -> Settings -> Headers.
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     envVars:
       - key: VITE_SERVER_URL
         sync: false

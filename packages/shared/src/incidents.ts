@@ -1,0 +1,172 @@
+import type { CampaignState, IncidentId, IncidentRecord, IncidentResult, RegionId, ScenarioTemplateId } from "./campaignTypes.ts";
+import { NPC } from "./campaignTypes.ts";
+import type { NpcSpec } from "./expeditionTypes.ts";
+import { hash3 } from "./rng.ts";
+import { WEAPON } from "./weapons.ts";
+import type { MinorPowerId, PowersState } from "./worldTypes.ts";
+
+/**
+ * INCIDENTS (D-052, docs/_notes/incidents.md): chaos DURING play. The complication (chaos.ts) is dealt as a contract starts and is part of its plan; an incident is
+ * one small, separate thing that happens partway through, near the party, out of the fight's way: a wounded traveller on the path, a courier with a dispatch, a deserter
+ * with his hands up. At most one per run, never the same one twice running. Everything here is pure (the server's `systems/Incidents.ts` spawns, watches and routes the
+ * presses); its result rides on the contract's outcome and is committed with it.
+ */
+export type { IncidentId, IncidentRecord, IncidentResult };
+export const INCIDENT_IDS: readonly Exclude<IncidentId, "none">[] = ["wounded_traveller", "courier", "deserter"];
+export const INCIDENT_RESULTS: readonly IncidentResult[] = ["helped", "passed_by", "delivered", "missed", "enlisted", "turned_away"];
+
+export const INCIDENT = {
+  /** Seconds of the run before it may happen, and how long the party must have gone without hostilities. */
+  delayMinS: 60, delayMaxS: 150, calmS: 20,
+  /** How far from the party's centre it is placed (metres), and how far from any hostile it should be. */
+  distMin: 22, distMax: 32, clearOfHostiles: 18,
+  /** The Society's arrears the courier carries (pounds), and the trust a helped traveller earns with the region's home power. */
+  courierPay: 15, helpedTrust: 4,
+  /** Metres from an incident's person inside which a press of USE is taken (the server's rule and the client's prompt). */
+  useR: 2.6,
+  /** Roughly half of runs are quiet: the weight of "none" against each incident. */
+  noneWeight: 3, entryWeight: 1,
+} as const;
+
+/** Each region's home power, whose trust a kindness on its roads earns (Kessar's is the Ward, kept on the campaign itself). */
+export const HOME_POWER: Readonly<Record<RegionId, "ward" | MinorPowerId | undefined>> = { hollowmere: undefined, kessar: "ward", highmark: "reapers", vesper: "choir", saltmarket: "brine" };
+/** A local of each region (their own people come with the role: peoples.ts `peopleForNpc`). */
+const LOCAL_ROLE: Readonly<Record<RegionId, number>> = { hollowmere: NPC.DRIVER, kessar: NPC.DRIVER, highmark: NPC.HERDER, vesper: NPC.MINER, saltmarket: NPC.BARGEMAN };
+
+const TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10, winding_engine: 11, outpost_raid: 12 };
+
+/** The incident this run will carry ("none": a quiet run). Deterministic from the campaign seed, the day and the template; the last one is never dealt again. */
+export function dealIncident(c: CampaignState, template: ScenarioTemplateId, region: RegionId, seed: number): IncidentId {
+  if (region === "hollowmere" || HOME_POWER[region] === undefined) return "none";
+  const last = c.sites.lastIncident?.id;
+  const pool = INCIDENT_IDS.filter((id) => id !== last);
+  const total = INCIDENT.noneWeight + pool.length * INCIDENT.entryWeight;
+  let roll = hash3(seed >>> 0, Math.max(0, Math.round(c.day)), 0x1ac1d, TAG[template]) % total;
+  if (roll < INCIDENT.noneWeight) return "none";
+  roll -= INCIDENT.noneWeight;
+  return pool[Math.floor(roll / INCIDENT.entryWeight)]!;
+}
+
+/** Seconds into the run it may fire (it then also waits for calm). */
+export const incidentDelayS = (c: CampaignState, template: ScenarioTemplateId, seed: number): number =>
+  INCIDENT.delayMinS + (hash3(seed >>> 0, Math.max(0, Math.round(c.day)), 0xde1a, TAG[template]) % (INCIDENT.delayMaxS - INCIDENT.delayMinS + 1));
+
+/**
+ * Where it happens: on one of eight bearings from the party's centre, 22..32 m out, the first open spot in the bounds; of those, the one farthest from every hostile
+ * (preferring any clear of them by `clearOfHostiles`). Undefined when nothing is open (it then does not happen: never in a wall).
+ */
+export function placeIncident(party: { x: number; z: number }, hostiles: readonly { x: number; z: number }[], open: (x: number, z: number) => boolean, bounds: number, seed: number): { x: number; z: number } | undefined {
+  let best: { x: number; z: number } | undefined;
+  let bestScore = -1;
+  const turn = (hash3(seed >>> 0, 0x91ace, 0) % 8) * (Math.PI / 4);
+  for (let b = 0; b < 8; b++) {
+    const a = turn + (b * Math.PI) / 4;
+    for (const d of [INCIDENT.distMin, (INCIDENT.distMin + INCIDENT.distMax) / 2, INCIDENT.distMax]) {
+      const x = party.x + Math.sin(a) * d;
+      const z = party.z + Math.cos(a) * d;
+      if (Math.hypot(x, z) > bounds - 4 || !open(x, z)) continue; // (a region is a disc: REGIONS[r].bounds)
+      let near = Infinity;
+      for (const h of hostiles) near = Math.min(near, Math.hypot(h.x - x, h.z - z));
+      const score = Math.min(near, 200);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, z };
+      }
+      break; // (the nearest open distance on this bearing stands for it)
+    }
+  }
+  return best;
+}
+
+/** The people of an incident (group "incident"). The wounded traveller is spawned standing and the server lays them down. */
+export function incidentRoster(id: IncidentId, at: { x: number; z: number }, region: RegionId, seed: number): NpcSpec[] {
+  const look = (k: number): number => hash3(seed >>> 0, k, 0x1c1d) >>> 0;
+  const base = { faction: "ward" as const, side: "neutral" as const, group: "incident", post: { x: at.x, z: at.z }, weapon: WEAPON.FISTS, skill: 10, bravery: 20, brain: "civil" as const };
+  const pick = (names: readonly string[], k: number): string => names[hash3(seed >>> 0, k, 0xa11e) % names.length]!;
+  switch (id) {
+    case "wounded_traveller":
+      return [{ ...base, id: "incident-traveller", role: LOCAL_ROLE[region], lookSeed: look(1), name: pick(TRAVELLER_NAMES, 1) }];
+    case "courier":
+      return [{ ...base, id: "incident-courier", role: NPC.DRIVER, lookSeed: look(2), name: pick(COURIER_NAMES, 2) }];
+    case "deserter":
+      return [{ ...base, id: "incident-deserter", role: NPC.DESERTER, lookSeed: look(3), name: pick(DESERTER_NAMES, 3) }];
+    default:
+      return [];
+  }
+}
+
+/** The row ids of the people a press of USE is for (the traveller is revived the ordinary way). */
+export const INCIDENT_USE_IDS: Readonly<Record<string, Exclude<IncidentId, "none">>> = { "incident-courier": "courier", "incident-deserter": "deserter" };
+
+/** What happened to it. `revived`, `use` and `shot` come from the server; `end` is the contract ending (or the party sailing) before the party acted. */
+export type IncidentEvent = { t: "revived" } | { t: "use"; room: boolean } | { t: "shot" } | { t: "end" };
+
+/** The result an event settles, or undefined (it goes on). `room` on `use`: whether the roster has room for the deserter. */
+export function incidentStep(id: Exclude<IncidentId, "none">, e: IncidentEvent): IncidentResult | undefined {
+  switch (id) {
+    case "wounded_traveller":
+      return e.t === "revived" ? "helped" : e.t === "shot" || e.t === "end" ? "passed_by" : undefined;
+    case "courier":
+      return e.t === "use" ? "delivered" : e.t === "shot" || e.t === "end" ? "missed" : undefined;
+    case "deserter":
+      return e.t === "use" ? (e.room ? "enlisted" : "turned_away") : e.t === "shot" || e.t === "end" ? "turned_away" : undefined;
+  }
+}
+
+/** The campaign and the powers after an incident (pure): the courier's arrears, a helped traveller's goodwill with the home power, and the record for the paper. */
+export function applyIncident(c: CampaignState, p: PowersState, r: IncidentRecord): { c: CampaignState; p: PowersState } {
+  let nc: CampaignState = { ...c, sites: { ...c.sites, lastIncident: { ...r } } };
+  let np = p;
+  if (r.result === "delivered") nc = { ...nc, purse: Math.min(99999, nc.purse + INCIDENT.courierPay) };
+  if (r.result === "helped") {
+    const home = HOME_POWER[r.region];
+    if (home === "ward") nc = { ...nc, factions: { ...nc.factions, ward: { ...nc.factions.ward, trust: Math.min(100, nc.factions.ward.trust + INCIDENT.helpedTrust) } } };
+    else if (home) np = { ...np, minor: { ...np.minor, [home]: { ...np.minor[home], trust: Math.min(100, np.minor[home].trust + INCIDENT.helpedTrust) } } };
+  }
+  return { c: nc, p: np };
+}
+
+// ---- copy (authored; registered in docs/AI_CONTENT_REGISTER.md) ------------------------------------------------------------------------------------------------
+
+const TRAVELLER_NAMES = ["Old Tamsin Rook", "Bettany Quill", "Ezer Hollin", "Mag Fennick", "Tobiah Drane"] as const;
+const COURIER_NAMES = ["Runner Pell", "Runner Abernathy", "Runner Quist", "Runner Lugg"] as const;
+const DESERTER_NAMES = ["Private Ambrose Teal", "Corporal Silas Venn", "Drummer Kit Marlow"] as const;   // (a roster name is at most 32 characters: partyState.ts)
+
+/** The notice when it begins (`%n` = the person's name). */
+export const INCIDENT_OPEN: Record<Exclude<IncidentId, "none">, string> = {
+  wounded_traveller: "Someone is lying by the path: %n, hurt and alone. Reviving them costs a minute you may not have.",
+  courier: "%n is coming at a trot with a satchel marked SOCIETY - URGENT - ARREARS. Meet him and take it.",
+  deserter: "%n, late of the colours, is walking towards you with his hands up and his rifle left somewhere sensible. He wants a word.",
+};
+/** What the USE prompt reads at their side (the traveller is revived the ordinary way). */
+export const INCIDENT_PROMPT: Record<Exclude<IncidentId, "none">, string> = { wounded_traveller: "Revive %n", courier: "Take the dispatch from %n", deserter: "Hear %n out" };
+/** The notice when it settles. */
+export const INCIDENT_DONE: Record<IncidentResult, string> = {
+  helped: "%n is on their feet, thanks you twice, and will tell everyone on this road. Word of it reaches the right ears.",
+  passed_by: "%n is left where they lay. Somebody will remember which party walked past.",
+  delivered: `The dispatch is a cheque: the Society's arrears, £${INCIDENT.courierPay}, with a note asking you to spend it slowly.`,
+  missed: "The courier did not reach you. The Society will assume you were busy, which is not a compliment.",
+  enlisted: "%n signs on for nothing but rations and a clean record. He knows which end of a rifle to hold, and now so do you.",
+  turned_away: "%n goes his own way, which was, in fairness, always the plan.",
+};
+/** The regions' names as the paper prints them (the same as `REGIONS[r].name`; a test holds them together: regions.ts pulls in every world builder, the paper should not). */
+export const REGION_NAME: Readonly<Record<RegionId, string>> = { hollowmere: "Hollowmere Depot", kessar: "Kessar Reach", highmark: "Highmark", vesper: "Vesper Gorge", saltmarket: "Saltmarket Delta" };
+
+/** The paper's story about the last incident, when it belongs to the expedition being reported (`day`: the latest history entry's), else undefined. */
+export function incidentStory(c: CampaignState): { head: string; body: string } | undefined {
+  const r = c.sites.lastIncident;
+  const latest = c.history[c.history.length - 1];
+  if (!r || !latest || r.day !== latest.day) return undefined;
+  const t = INCIDENT_PAPER[r.result];
+  return { head: t.head, body: t.body.replace("%r", REGION_NAME[r.region]) };
+}
+
+/** The paper's line about the last incident (`%r` = the region's name). */
+export const INCIDENT_PAPER: Record<IncidentResult, { head: string; body: string }> = {
+  helped: { head: "SOCIETY PARTY STOPS FOR STRANGER", body: "On the road in %r an expedition paused to revive a traveller, an event local opinion is still trying to fit into its view of us." },
+  passed_by: { head: "TRAVELLER LEFT BY THE ROAD", body: "In %r a wounded local was passed by a Society party in a hurry. The Society regrets the hurry." },
+  delivered: { head: "ARREARS PAID IN THE FIELD", body: "A Society runner found his party in %r and paid what was owed, setting a precedent the accounts office is keen not to repeat." },
+  missed: { head: "COURIER RETURNS UNOPENED", body: "A satchel of the Society's arrears toured %r and came home. It has been entered as a saving." },
+  enlisted: { head: "DESERTER FINDS NEW EMPLOYER", body: "A soldier who left his post in %r has taken another, with a Society party, on terms described as 'rations and amnesia'." },
+  turned_away: { head: "VOLUNTEER DECLINED", body: "A man offering his rifle to a Society party in %r was sent on his way. He is believed to be offering it elsewhere." },
+};

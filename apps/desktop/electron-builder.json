@@ -7,7 +7,7 @@
   "publish": null,
   "directories": {
     "output": "release",
-    "buildResources": "build"
+    "buildResources": "resources"
   },
   "files": [
     "dist/main.cjs",

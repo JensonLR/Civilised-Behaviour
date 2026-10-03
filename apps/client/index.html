@@ -8,8 +8,12 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Civilised Behaviour - a 1-4 player co-op satirical expedition game." />
     <title>Civilised Behaviour</title>
-    <!-- empty until main.ts sets the palette-built seal (faviconSvg), so no request for a /favicon.ico that does not exist -->
-    <link rel="icon" href="data:," />
+    <!-- the Society's seal (D-053): files generated from the palette by scripts/icons.mts. Safari's favourites and home screen read the touch icon, Android the manifest -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Civilised" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>

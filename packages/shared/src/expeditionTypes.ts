@@ -34,7 +34,7 @@ export interface CastCount { alive: number; routed: number; down: number; total:
 export type PlayersView = { forEach(cb: (p: PlayerStateType, id: string) => void): void; get(id: string): PlayerStateType | undefined };
 export interface CastApi {
   spawn(specs: readonly NpcSpec[]): number; order(group: string, o: CastOrder): void; setWar(a: NpcSide, b: NpcSide, on: boolean): void; count(group: string): CastCount; row(id: string): PlayerStateType | undefined;
-  defineRoute(name: string, pts: readonly { x: number; z: number }[]): void; noise(x: number, z: number, radius: number, src: string): void; despawn(group?: string): void; /** One NPC off the ground by id (D-047: a hand dismissed at the hub; optional so test fakes need not grow it). */ despawnOne?(id: string): void; tick(dt: number): void; setWorld(w: CollisionWorld): void; atWar(roleA: number, roleB: number): boolean;
+  defineRoute(name: string, pts: readonly { x: number; z: number }[]): void; noise(x: number, z: number, radius: number, src: string): void; despawn(group?: string): void; /** One NPC off the ground by id (D-047: a hand dismissed at the hub; optional so test fakes need not grow it). */ despawnOne?(id: string): void; /** D-052: is (x, z) open ground on the nav grid (optional: fakes need not). */ openAt?(x: number, z: number): boolean; tick(dt: number): void; setWorld(w: CollisionWorld): void; atWar(roleA: number, roleB: number): boolean;
 }
 export interface NavPath { n: number; x: Float32Array; z: Float32Array; complete: boolean }   // NAV.pathMax = 48 waypoints, preallocated by the caller
 export interface NavApi {

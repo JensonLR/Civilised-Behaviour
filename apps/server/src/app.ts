@@ -3,6 +3,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { ROOM_WORLD, isValidJoinCode } from "@cb/shared";
 import { clientIp } from "./clientIp.ts";
 import type { ServerConfig } from "./config.ts";
+import { LoadGauge, DEFAULT_LOAD } from "./load.ts";
 import { log } from "./log.ts";
 import { metrics } from "./metrics.ts";
 import { createOriginPolicy, installMatchmakingOriginPolicy, originUpgradeGuard } from "./origins.ts";
@@ -17,14 +18,14 @@ const codeLookupLimiter = new RateLimiter(10, 1 / 6);
 /** Matchmaking methods that start a room (a new campaign, a resume): the expensive ones (a world, a cast, a 30 Hz tick, a save record). */
 const CREATES = new Set(["create", "joinOrCreate"]);
 
-export function createGameServer(config: ServerConfig): Server {
+export function createGameServer(config: ServerConfig, load: LoadGauge = new LoadGauge({ ...DEFAULT_LOAD, maxLagMs: config.shedLagMs })): Server {
   const origins = createOriginPolicy(config.allowedOrigins);
   const persistence = createPersistence(config.persistence, log);
   setRoomConfig({ debugCommands: config.debugCommands, routSeconds: config.routSeconds, dismemberment: config.dismemberment, friendlyFire: config.friendlyFire, dayStartHour: config.dayStartHour, dayMinutes: config.dayMinutes, persistence, demo: config.demo });
   const health = createEndpoint("/health", { method: "GET" }, async (ctx) =>
     ctx.json({ ok: true, env: config.nodeEnv, uptimeS: Math.round(process.uptime()) }),
   );
-  const metricsEndpoint = createEndpoint("/metrics", { method: "GET" }, async (ctx) => ctx.json(metrics.snapshot()));
+  const metricsEndpoint = createEndpoint("/metrics", { method: "GET" }, async (ctx) => ctx.json({ ...metrics.snapshot(), lagMs: Math.round(load.lagMs * 10) / 10, shedding: load.busy() }));
 
   // Join-by-code: resolves a private campaign's room id. The client then joins by id.
   const lookup = createEndpoint("/campaign/:code", { method: "GET" }, async (ctx) => {
@@ -61,10 +62,12 @@ export function createGameServer(config: ServerConfig): Server {
   const createLimiter = config.roomCreate ? new RateLimiter(config.roomCreate.burst, 1 / config.roomCreate.everyS) : undefined;
   const restoreMatchmaking = installMatchmakingOriginPolicy(origins, (method, auth) => {
     if (!CREATES.has(method)) return;
-    if (config.maxRooms > 0 && metrics.rooms >= config.maxRooms) throw new ServerError(503, "The Society's offices are full just now. Try again in a few minutes.");
+    if ((config.maxRooms > 0 && metrics.rooms >= config.maxRooms) || load.busy()) throw new ServerError(503, "The Society's offices are full just now. Try again in a few minutes.");
     if (createLimiter && !createLimiter.take(clientIp(auth?.headers, auth?.ip, config.clientIp))) throw new ServerError(429, "Too many new expeditions from here at once. Wait a moment and try again.");
   });
+  load.start();
   server.onShutdown(async () => {
+    load.stop();
     restoreMatchmaking();
     await persistence.close();
     log.info("server.shutdown");

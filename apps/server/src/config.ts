@@ -39,6 +39,11 @@ export interface ServerConfig {
   roomCreate: { burst: number; everyS: number } | undefined;
   /** Live rooms this process will hold (MAX_ROOMS): a create past it is refused, not queued. Production default 40; elsewhere 0 = no cap. */
   maxRooms: number;
+  /**
+   * New rooms are refused while the game thread's timers run late (the event loop's delay, median of ~10 s) by ROOM_SHED_LAG_MS or more (D-051: a fixed cap cannot fit every
+   * plan; a tenth of a core holds about four busy rooms). Joins to running rooms are never refused for it. Production default 20 ms; elsewhere 0 = off.
+   */
+  shedLagMs: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -98,7 +103,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const everyS = int("ROOM_CREATE_EVERY_S", 20, 1, 3600);
   const roomCreate = burst > 0 ? { burst, everyS } : undefined;
   const maxRooms = int("MAX_ROOMS", prod ? 40 : 0, 0, 10_000);
+  const shedLagMs = int("ROOM_SHED_LAG_MS", prod ? 20 : 0, 0, 1000);
 
   if (errors.length) throw new Error(`Invalid server configuration:\n - ${errors.join("\n - ")}`);
-  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs, persistence, demo: parseDemoEnv(env), clientIp, roomCreate, maxRooms };
+  return { nodeEnv, port, allowedOrigins, logLevel, databaseUrl, debugCommands, routSeconds, dismemberment, friendlyFire, dayStartHour, dayMinutes, simulatedLatencyMs, persistence, demo: parseDemoEnv(env), clientIp, roomCreate, maxRooms, shedLagMs };
 }

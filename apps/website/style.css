@@ -81,3 +81,6 @@ code, .mono { font-family: var(--type); font-size: 0.88em; }
   html, body { background: none; }
   .page { box-shadow: none; border-color: var(--ink); }
 }
+
+/* D-053: the Society's seal at the head of the letter, pressed a little crooked as a real one is */
+header .seal { display: block; width: clamp(96px, 22vw, 152px); height: auto; margin: 0 auto 0.4rem; transform: rotate(-4deg); filter: drop-shadow(0 3px 2px color-mix(in srgb, var(--scrim) 35%, transparent)); }

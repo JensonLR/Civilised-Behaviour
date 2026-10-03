@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { seedFromString } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, npcKey, seedFromString } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -987,6 +987,15 @@ export class Game {
       }
     }
     if (prompt === "" && (flags & FLAG.DOWNED) === 0) prompt = this.combat.cannonPrompt(use);
+    if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
+      // D-052: an incident's courier or deserter within reach (the server's own reach, `INCIDENT.useR`)
+      const mx = this.session.value(me, "x");
+      const mz = this.session.value(me, "z");
+      for (const [rowId, inc] of Object.entries(INCIDENT_USE_IDS)) {
+        const o = players.get(npcKey(rowId));
+        if (o && (o.flags & FLAG.DOWNED) === 0 && Math.hypot(o.x - mx, o.z - mz) <= INCIDENT.useR) prompt = `${use}  ${INCIDENT_PROMPT[inc].replace("%n", o.name)}`;
+      }
+    }
     if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
       // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks)
       const st = findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing);

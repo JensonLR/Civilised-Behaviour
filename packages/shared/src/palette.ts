@@ -619,18 +619,3 @@ export function paletteCssVars(): Record<string, string> {
   };
 }
 
-/**
- * The tab icon: a Society wax seal (stamp red, brass rim) with a compass needle, north in paper and south in brass. Built from the palette like every other colour, and served as a
- * data URL at start-up (the page's `<link rel="icon">` starts empty so the browser never asks the server for a /favicon.ico that does not exist).
- */
-export function faviconSvg(): string {
-  const u = PALETTE.ui;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
-    `<circle cx="16" cy="16" r="14.5" fill="${cssHex(u.stamp)}" stroke="${cssHex(u.brass)}" stroke-width="2.5"/>` +
-    `<path d="M16 5 L20.5 16 L11.5 16 Z" fill="${cssHex(u.paper)}"/>` +
-    `<path d="M16 27 L20.5 16 L11.5 16 Z" fill="${cssHex(u.brass)}"/>` +
-    `<circle cx="16" cy="16" r="1.8" fill="${cssHex(u.ink)}"/>` +
-    `</svg>`
-  );
-}

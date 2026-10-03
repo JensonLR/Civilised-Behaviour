@@ -7,7 +7,7 @@ import { Session, serverUrl } from "../net/Session.ts";
 import { pickPlatform } from "../platform/Platform.ts";
 import { PlatformLink } from "../platform/PlatformLink.ts";
 import { isDemo, isDesktop, wishlistLink } from "../platform/flags.ts";
-import { probeServer, reachText } from "../platform/serverReach.ts";
+import { patientProgress, probeServer, reachText, retryBusy } from "../platform/serverReach.ts";
 import { REACH_CHECKING } from "../platform/reachCopy.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
 import { Stage } from "../render/Stage.ts";
@@ -234,18 +234,23 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     }
   }
 
+  // D-051: a quiet server sleeps (the free tier, after 15 idle minutes) and takes up to a minute to wake: knock as the door opens, so it is usually up by the time a name is
+  // written, and say so if the first telegram is slow, instead of a door that looks stuck
+  if (!isDesktop()) void probeServer(serverUrl(), undefined, 90_000);
+  const patient = patientProgress;
+
   const menu: Menu = new Menu(menuEl, {
     onCreate: async (name, rules, progress) => {
       backdropWanted = false; // (from the click, not from the session: the camp behind the door is not worth building now)
-      progress("Posting the telegram...");
-      const s = await Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}), ...(startScenario ? { scenario: startScenario } : {}) });
+      const done = patient(progress, "Posting the telegram...");
+      const s = await retryBusy(() => Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}), ...(startScenario ? { scenario: startScenario } : {}) }), progress).finally(done);
       progress("Reply received. Packing the trunks...");
       await enter(s, name);
     },
     onJoin: async (code, name, progress) => {
       backdropWanted = false;
-      progress("Presenting your code...");
-      const s = await Session.join(code, name, look);
+      const done = patient(progress, "Presenting your code...");
+      const s = await Session.join(code, name, look).finally(done);
       progress("Reply received. Packing the trunks...");
       await enter(s, name);
     },
@@ -256,19 +261,21 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       : {
           onResume: async (code: string, name: string, progress: (step: string) => void) => {
             backdropWanted = false;
-            progress("Consulting the Society's files...");
+            const done = patient(progress, "Consulting the Society's files...");
             // (a campaign left a moment ago may still be putting its last save away: for an expedition played in the last half minute, ask again a few times before giving up)
             const recent = (listExpeditions().find((e) => e.code === code)?.lastPlayed ?? 0) > Date.now() - 30_000;
             let s: Session | undefined;
             for (let attempt = 0; !s; attempt++) {
               try {
-                s = await Session.create(name, look, { resume: code });
+                s = await retryBusy(() => Session.create(name, look, { resume: code }), progress);
               } catch (e) {
+                done();
                 if (!recent || attempt >= 4 || !isDormantSave(e instanceof Error ? e.message : "")) throw e;
                 progress("The file is being put away. Asking again...");
                 await idleFor(700);
               }
             }
+            done();
             progress("The file is found. Packing the trunks...");
             await enter(s, name);
           },
