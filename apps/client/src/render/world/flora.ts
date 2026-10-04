@@ -143,9 +143,11 @@ export function pineGeometry(lod: Lod): BufferGeometry {
 export function snagGeometry(lod: Lod): BufferGeometry {
   const k = new Kit();
   const rad = lod ? 6 : 5;
+  // (bark cracks only: a "dark foot" read the height in each limb's own frame, so every segment of the trunk began dark and the joints showed as
+  // steps; where the snag meets the ground the contact band darkens it, D-079)
   const dead: ColourFn = (p, _n, out) => {
     const crack = Math.sin(Math.atan2(p.z, p.x) * 5 + p.y * 1.7) * 0.5 + 0.5;
-    blend(out, W.snag, W.trunk, crack * 0.42 + (1 - smooth(0, 1.2, p.y)) * 0.3);
+    blend(out, W.snag, W.trunk, crack * 0.42 + 0.1);
   };
   k.limb([0, -0.3, 0], [-0.12, 1.5, 0], 0.4, 0.3, dead, rad);
   k.limb([-0.12, 1.5, 0], [0.1, 3.0, 0.05], 0.3, 0.21, dead, rad);
