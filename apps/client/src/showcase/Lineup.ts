@@ -17,6 +17,7 @@ import { LabStage } from "./LabStage.ts";
  *   pose=walk     walk|idle|carry|crouch|air|down|run|sprint|kneel|haul|aim|pistol|sabre|cannon (aim/pistol/sabre/cannon pose the arms for a weapon and draw it; sw=0.4 sets a blow's progress);
  *   wield=rifle   rifle|blunderbuss|pistol|sabre|umbrella in the hands (any pose), aimw=1 aiming it, sw=0.4 a blow in flight
  *                 steps=N settles the animator for N frames (default 90) so different gait phases can be reviewed
+ *   acts=0        no idle acts, but the bearing's resting stance (D-066)
  *   act=0         no idle acts / ambient life (a plain standing pose; the idle acts move the arms and make fit stills differ from figure to figure)
  *   shapes=stubbyWide,tallThin,seed3   one figure per named fit-audit body shape (FIT_SHAPES names); the sliders come from the shape, everything else from the seeded character
  *   people=kessarine|all   re-draw every figure as a person of that fictional people (applyPeople; "all" cycles the six; "wayfarers" for the hub mix)
@@ -155,6 +156,7 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
     }
     stage.scene.add(rig.root);
     const anim = new CharacterAnimator(rig);
+    if (params.get("acts") === "0") anim.idleActs = false; // (D-066: the bearing's stance without the fidgets)
     if (params.get("act") === "0") anim.autoBlink = false; // no idle acts (hat touch, stretch, watch ...): a plain standing pose for fit reviews
     anim.setExpression(exprs[i % exprs.length]!);
     rigs.push({ rig, anim });
