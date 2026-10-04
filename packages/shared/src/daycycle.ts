@@ -318,6 +318,12 @@ export function worldHours(startHour: number, worldMs: number, dayMinutes: numbe
   return hourOfPhase(phaseOfHour(startHour) + (worldMs / 1000) * (PHASE_DAY / daySeconds(dayMinutes)));
 }
 
+/** The start hour that makes `worldHours(start, worldMs, dayMinutes)` read `hour` now (the QA `hour:` command; the inverse of `worldHours`). */
+export function startHourFor(hour: number, worldMs: number, dayMinutes: number): number {
+  if (!(dayMinutes > 0) || !Number.isFinite(dayMinutes) || !Number.isFinite(worldMs)) return wrapHours(hour);
+  return hourOfPhase(phaseOfHour(hour) - (worldMs / 1000) * (PHASE_DAY / daySeconds(dayMinutes)));
+}
+
 /**
  * How many dawns the world has seen (day 0 runs from the world's birth to its first dawn at 05:12). The night belongs to the day that began at
  * the dawn before it, so the moon keeps one phase through a whole night.

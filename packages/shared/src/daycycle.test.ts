@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE, chroma as hexChroma } from "./palette.ts";
-import { CLOCK, WORLD_CLOCK, advanceClock, clockRate, createDayState, dayState, hourOfPhase, parseClock, phaseOfHour, sanitizeDayMinutes, sunElevation, worldHours, wrapHours, type DayState, type Vec3 } from "./daycycle.ts";
+import { CLOCK, WORLD_CLOCK, advanceClock, clockRate, createDayState, dayState, hourOfPhase, parseClock, phaseOfHour, sanitizeDayMinutes, startHourFor, sunElevation, worldHours, wrapHours, type DayState, type Vec3 } from "./daycycle.ts";
 
 const HOURS = Array.from({ length: 24 * 8 }, (_, i) => i / 8);
 const colours = (d: DayState) => [d.sun, d.top, d.mid, d.horizon, d.glow, d.hemiSky, d.hemiGround];
@@ -242,3 +242,14 @@ describe("the world clock (server-owned)", () => {
 
 const DARK_TO_TEST = 5.2;
 const DARK_FROM_TEST = 20.6;
+
+describe("startHourFor (the QA hour: command)", () => {
+  it("inverts worldHours: whatever the world's age and day length, the clock then reads the asked hour", () => {
+    for (const minutes of [12, 24, 48])
+      for (const ageMs of [0, 61_000, 3_600_000, 9_000_000])
+        for (const h of [0, 5.2, 9, 13.5, 18.6, 21, 23.9]) {
+          const d = Math.abs(worldHours(startHourFor(h, ageMs, minutes), ageMs, minutes) - h);
+          expect(Math.min(d, 24 - d)).toBeLessThan(1e-6); // (on the clock face: 23.999... is midnight)
+        }
+  });
+});

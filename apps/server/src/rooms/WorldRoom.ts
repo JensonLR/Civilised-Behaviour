@@ -140,6 +140,7 @@ import {
   type RegionId,
   type ScenarioOutcome,
   type ScenarioView,
+  startHourFor,
 } from "@cb/shared";
 import { HISTORY_KEYS, applyClientAppearance, applyPeople, decodeSpec, encodeSpec, generateCharacter, societyDress, specFromUntrusted } from "@cb/procedural";
 import { log } from "../log.ts";
@@ -1803,7 +1804,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (arg === "all") this.combat.give(client.sessionId);
       else if (isCarried(Number(arg))) this.combat.give(client.sessionId, Number(arg) as never);
     }
-    else if (cmd?.startsWith("tp:")) {
+    else if (cmd?.startsWith("hour:")) {
+      // set the world's clock to this hour now (renders and QA at night, at dusk); the day count follows the clock, as it would
+      const h = Number(cmd.slice(5));
+      if (Number.isFinite(h)) {
+        this.syncClock(true);
+        this.state.dayStartHour = startHourFor(h, this.state.worldMs, this.state.dayMinutes);
+      }
+    } else if (cmd?.startsWith("tp:")) {
       // tp:<x>:<z>[:<facing>] : stand somewhere (QA, screenshots)
       const [, x, z, f] = cmd.split(":");
       if (Number.isFinite(Number(x)) && Number.isFinite(Number(z))) {
