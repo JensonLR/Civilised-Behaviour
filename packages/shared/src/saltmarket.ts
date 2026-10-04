@@ -1,3 +1,4 @@
+import { ARRIVAL_INLAND } from "./campaignTypes.ts";
 import type { UseStation } from "./campaignTypes.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { distToPaths, inDoorApron, levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
@@ -552,7 +553,7 @@ export function createSaltmarketWorld(seed: number): CollisionWorld {
 export function saltmarketSpawn(index: number, count = 4): { x: number; z: number } {
   const a = (index / Math.max(count, 1)) * Math.PI * 2 + Math.PI / 4;
   const L0 = SALTMARKET_ANCHORS.landing;
-  return { x: L0.x + Math.cos(a) * 2.6, z: L0.z - 1.4 + Math.sin(a) * 1.2 };
+  return { x: L0.x + Math.cos(a) * 2.6, z: L0.z - 1.4 - ARRIVAL_INLAND + Math.sin(a) * 1.2 } /* (D-070: up the shore, off the jetty's first planks) */;
 }
 
 /**

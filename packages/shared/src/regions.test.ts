@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { liveRegions } from "./regionStatus.ts";
 import { createArena } from "./arena.ts";
 import { CAMP, hqPlan } from "./camp.ts";
-import { KESSAR_ANCHORS as A, REGION_IDS } from "./campaignTypes.ts";
+import { ARRIVAL_INLAND, KESSAR_ANCHORS as A, REGION_IDS } from "./campaignTypes.ts";
 import { JETTY } from "./landscape.ts";
 import { REGIONS, createRegionWorld, findStation, regionProps, regionSpawn, stationsFor } from "./regions.ts";
 
@@ -42,10 +42,18 @@ describe("regions", () => {
     }
   });
 
-  it("kessar's arrivals ring the landing", () => {
+  it("D-070: every abroad arrival rings a point up the shore from its landing: off the jetty (the camera behind the party starts over land), and within the dock's proposal reach", () => {
     for (let i = 0; i < 4; i++) {
       const s = regionSpawn("kessar", i, 4);
-      expect(Math.hypot(s.x - A.landing.x, s.z - A.landing.z)).toBeCloseTo(2.6, 5);
+      expect(Math.hypot(s.x - A.landing.x, s.z - (A.landing.z - ARRIVAL_INLAND))).toBeCloseTo(2.6, 5);
+    }
+    for (const id of ["kessar", "highmark", "vesper", "saltmarket"] as const) {
+      const dock = stationsFor(id).find((st) => st.kind === "dock")!;
+      for (let i = 0; i < 4; i++) {
+        const s = regionSpawn(id, i, 4);
+        expect(s.z, `${id} ${i} is up the shore`).toBeLessThan(dock.z - 1);
+        expect(Math.hypot(s.x - dock.x, s.z - dock.z), `${id} ${i} can still propose a sailing`).toBeLessThanOrEqual(dock.r + 4); // (WorldRoom MAP_REACH_SLACK)
+      }
     }
   });
 });

@@ -108,6 +108,8 @@ export interface UseStation { id: string; kind: StationKind; x: number; z: numbe
 export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10, CHAMBERLAIN: 11, CLAIMANT: 12, COURT_GUARD: 13, HERDER: 14,
   FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20, RAIDER: 21 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three; D-047: the Syndicate's torch-bearing raiders)
 export const NPC_CAP = 24, FOLLOWER_CAP = 4, SETTLED_DAYS = 3, HOSTAGE_DEADLINE_S = 480, CONVOY_DEPART_S = 60, BORDER_ESCALATE_S = 240, NAME_TAG_RANGE = 30, SAIL_SECONDS = 6, ARRIVE_TIMEOUT_S = 30, PROPOSE_TIMEOUT_S = 20, RIVAL_ARRIVES_S = 420, RIVAL_PARLEY_S = 60, RESOLVED_LINGER_S = 45;
+/** D-070: how far up the shore (metres, toward the interior: -z on every abroad map) the party's arrival ring stands from its landing, so the first frame is the land and not the jetty. */
+export const ARRIVAL_INLAND = 4;
 /** Story coordinates of Kessar Reach (metres, x east, z south, y from terrain). B builds the geometry around them; C puts people on them. Frozen. */
 export const KESSAR_ANCHORS = {
   bounds: 120, landing: { x: 0, z: 88 }, bridge: { x: 0, z: 20, length: 22, width: 5.5 }, river: { z: 20, halfWidth: 9 },    // river runs east-west, bridge north-south

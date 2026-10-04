@@ -1,3 +1,4 @@
+import { ARRIVAL_INLAND } from "./campaignTypes.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { KESSAR_ANCHORS as A, KESSAR_SITES as SITES, type BridgeState } from "./campaignTypes.ts";
 import { segmentDistance } from "./landscape.ts";
@@ -543,7 +544,9 @@ export function createKessarWorld(seed: number, bridge: BridgeState = "intact", 
 /** The landing: a ring of up to four on the beach (never on the pier). */
 export function kessarSpawn(index: number, count = 4): { x: number; z: number } {
   const a = (index / Math.max(count, 1)) * Math.PI * 2 + Math.PI / 4;
-  return { x: A.landing.x + Math.cos(a) * 2.6, z: A.landing.z + Math.sin(a) * 2.6 };
+  // (D-070: the ring stands ARRIVAL_INLAND metres up the beach from the landing: on the landing itself the camera, behind the party, hung over the pier's first planks and the first
+  // frame of every expedition was a slab of timber. Still within the dock's proposal reach, so a party can sail straight back)
+  return { x: A.landing.x + Math.cos(a) * 2.6, z: A.landing.z - ARRIVAL_INLAND + Math.sin(a) * 2.6 };
 }
 
 /**
