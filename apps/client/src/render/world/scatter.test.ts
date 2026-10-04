@@ -150,3 +150,14 @@ describe("where things grow", () => {
     expect(obstacles.length).toBe(plan.cliffs.length);
   });
 });
+
+describe("the front door's figure", () => {
+  it("stands on trodden ground: no grass or flower within the stand (MENU_STAND agrees with CreatorPreview's BACKDROP)", async () => {
+    const { BACKDROP } = await import("../CreatorPreview.ts");
+    const { MENU_STAND, planScatter } = await import("./scatter.ts");
+    expect([MENU_STAND.x, MENU_STAND.z]).toEqual([BACKDROP.x, BACKDROP.z]);
+    const { createArena } = await import("@cb/shared");
+    const plan = planScatter(createArena(7), { grassTufts: 5000, flowers: 900, bushes: 130, clutter: 1 });
+    for (const it of [...plan.grass, ...plan.daisies, ...plan.cups]) expect(Math.hypot(it.x - MENU_STAND.x, it.z - MENU_STAND.z)).toBeGreaterThanOrEqual(MENU_STAND.r);
+  });
+});
