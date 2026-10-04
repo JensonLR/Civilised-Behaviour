@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshToonMaterial, SRGBColorSpace } from "three";
+import { letterSign } from "../signLettering.ts";
 import { PALETTE, cssHex, type Terrain } from "@cb/shared";
 import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
@@ -154,8 +155,6 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.restore();
   }
   // ---- the signboards: cream strips, brown lettering
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
   KESSAR_SIGNS.forEach((text, i) => {
     const y = SIGN_Y + i * SIGN_H;
     ctx.fillStyle = c(K.wardCream);
@@ -164,13 +163,7 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.lineWidth = 6;
     ctx.strokeRect(3, y + 3, ATLAS_W - 6, SIGN_H - 6);
     ctx.fillStyle = c(K.timber);
-    let size = 38;
-    ctx.font = `${size}px "IM Fell English SC", "IM Fell English", serif`;
-    while (size > 18 && ctx.measureText(text).width > ATLAS_W - 40) {
-      size -= 2;
-      ctx.font = `${size}px "IM Fell English SC", "IM Fell English", serif`;
-    }
-    ctx.fillText(text, 20, y + SIGN_H / 2 + 2);
+    letterSign(ctx, text, 0, y, ATLAS_W, SIGN_H);
   });
 }
 

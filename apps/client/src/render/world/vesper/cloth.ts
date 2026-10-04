@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshToonMaterial, SRGBColorSpace } from "three";
+import { letterSign } from "../signLettering.ts";
 import { PALETTE, VESPER_SEALED_SIGNS, VESPER_SIGNS, cssHex, vesperLevel, type Terrain } from "./shared.ts";
 import { pushPlaques } from "../plaques.ts";
 import { sharedToonRamp } from "@cb/procedural/three";
@@ -172,8 +173,6 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.restore();
   }
   // ---- the signboards: bone strips, brown lettering
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
   [...VESPER_SIGNS, ...SEALED_TEXTS].forEach((text, i) => {
     const y = SIGN_Y + i * SIGN_H;
     ctx.fillStyle = c(P.strataBone);
@@ -182,13 +181,7 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.lineWidth = 6;
     ctx.strokeRect(3, y + 3, ATLAS_W - 6, SIGN_H - 6);
     ctx.fillStyle = c(P.timber);
-    let size = 38;
-    ctx.font = `${size}px "IM Fell English SC", "IM Fell English", serif`;
-    while (size > 16 && ctx.measureText(text).width > ATLAS_W - 40) {
-      size -= 2;
-      ctx.font = `${size}px "IM Fell English SC", "IM Fell English", serif`;
-    }
-    ctx.fillText(text, 20, y + SIGN_H / 2 + 2);
+    letterSign(ctx, text, 0, y, ATLAS_W, SIGN_H);
   });
 }
 
