@@ -126,6 +126,7 @@ export const FIELD_BATCHES: readonly { start: number; salt: number }[] = [
 const FROZEN_OPTIONS: Readonly<Record<string, number>> = {
   noseStyle: 6, hair: 10, moustache: 10, beard: 8, sideburns: 4, hat: 11, jacket: 6, shirt: 4, trousers: 4, boots: 4, belt: 3, eyewear: 5, sash: 3,
   neckwear: 4, pack: 5, hipGear: 5, gloves: 3,
+  skin: 8, // (D-067: the deeper tones appended after are drawn as novelties, so an old seed keeps its face)
 };
 /**
  * Where the NATIVE-PEOPLES options start in each list (D-038): `applyPeople` draws them for the fictional peoples; the generic generator (the Society's folk, the creator's dice) never

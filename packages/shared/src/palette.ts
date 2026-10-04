@@ -349,7 +349,8 @@ export const PALETTE = {
   metal: [0xd0a94a, 0xc0c0c8, 0xb8732f, 0xd9d0b8],
 
   /** Skin: eight tones, light to deep, one warm hue family. Blush, shadow and lips are derived from these, never picked. */
-  skin: [0xf3cfb3, 0xe8b998, 0xd29c76, 0xb07a55, 0x8f5d40, 0x6d4531, 0xecc0a6, 0xdcae8c],
+  // (append-only: a look stores the index. D-067 appended four deeper tones: bronze, chestnut, golden umber, red-brown; every one keeps the ink, lash and tattoo lines legible)
+  skin: [0xf3cfb3, 0xe8b998, 0xd29c76, 0xb07a55, 0x8f5d40, 0x6d4531, 0xecc0a6, 0xdcae8c, 0x9a6844, 0x7a4b30, 0x80603f, 0x7e4a36],
 
   hair: [0x1c1410, 0x3b2616, 0x6a4423, 0x9a6a2f, 0xc79a4a, 0xa64a24, 0x8a8a8a, 0xe6e2d6, 0x2a2a3a, 0x7a2a1a],
 

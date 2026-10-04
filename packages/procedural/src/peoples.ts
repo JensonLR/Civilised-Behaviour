@@ -29,6 +29,11 @@ export interface PeopleOverlay {
   /** Chance (0..1) that the "grand" variant of the people appears in a crowd of the people: it uses `grandPick` over `pick`. */
   grandOdds: number;
   grandPick: Partial<Record<TagField, Weighted>>;
+  /**
+   * D-067 (the owner's decision, legal-approved): the people's skin, drawn from the DARKER end of the palette (`PALETTE.skin` indices, weighted). Every people has a band of several
+   * tones, so a crowd is never one colour, and the bands differ in weight so the peoples differ among themselves. Players keep the whole palette, the deep tones included.
+   */
+  skin: readonly (readonly [index: number, weight: number])[];
 }
 
 const w = (...pairs: (readonly [string, number])[]): Weighted => pairs;
@@ -104,6 +109,7 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     },
     grandOdds: 0.1,
     grandPick: { hat: w(["Tiered Hat", 1]), jacket: w(["Court Cloak", 1]), sash: w(["Waist", 1]) },
+    skin: [[3, 1], [4, 2], [8, 3], [10, 3], [11, 1]],
   },
   kessarine: {
     id: "kessarine",
@@ -122,6 +128,7 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     },
     grandOdds: 0.18,
     grandPick: { jacket: w(["Lamp Robe", 1]), neckwear: w(["Lamp Chain", 1]), hat: w(["Lamp Hood", 1]) },
+    skin: [[4, 2], [5, 3], [9, 3], [11, 2]],
   },
   marchers: {
     id: "marchers",
@@ -141,6 +148,7 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     },
     grandOdds: 0.16,
     grandPick: { jacket: w(["Court Cloak", 1]), hat: w(["Bell Crown", 1]), neckwear: w(["Bead Strings", 1]), sash: w(["Tasselled Waist", 1]) },
+    skin: [[4, 2], [5, 2], [8, 1], [9, 3], [11, 2]],
   },
   vesperine: {
     id: "vesperine",
@@ -159,6 +167,7 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     },
     grandOdds: 0.14,
     grandPick: { neckwear: w(["Memorial Beads", 1]), jacket: w(["Crepe Shawl", 1]), hat: w(["Tiered Hat", 1]) },
+    skin: [[5, 3], [9, 2], [10, 1], [11, 3]],
   },
   brinefolk: {
     id: "brinefolk",
@@ -176,6 +185,7 @@ export const PEOPLE_OVERLAYS: Readonly<Record<Exclude<PeopleId, "wayfarers">, Pe
     },
     grandOdds: 0.2,
     grandPick: { hipGear: w(["Tally Cord", 1]), neckwear: w(["Bead Strings", 1]), jacket: w(["Court Cloak", 1]) },
+    skin: [[3, 1], [4, 3], [8, 3], [9, 1], [10, 2]],
   },
 };
 
@@ -201,7 +211,7 @@ function drawName(table: Weighted, list: readonly string[], rng: Rng): string | 
 }
 
 /**
- * Re-draws `spec` as a person of `people` (a wayfarer is resolved to one of the mix by `seed`, and then wears a travelling kit). Deterministic in (spec, people, seed); touches no skin, eye or
+ * Re-draws `spec` as a person of `people` (a wayfarer is resolved to one of the mix by `seed`, and then wears a travelling kit). Deterministic in (spec, people, seed); draws the skin from the people's darker band (D-067); touches no eye or
  * hair colour; never touches history (scars, teeth, patch, burns, legs, hook). Dyes come from the people's own dye list.
  */
 export function applyPeople(spec: CharacterSpec, people: PeopleId, seed: number): CharacterSpec {
@@ -230,6 +240,20 @@ export function applyPeople(spec: CharacterSpec, people: PeopleId, seed: number)
     const list = codedList(f);
     const cur = list[out[f] ?? 0];
     if (cur !== undefined && names.includes(cur)) out[f] = Math.max(0, list.indexOf(REPLACE[f] ?? list[0]!));
+  }
+  // the people's skin (D-067): a weighted draw from its own band of the darker tones
+  {
+    const band = o.skin.filter(([i]) => i >= 0 && i < C.SKIN_TONES.length);
+    const total = band.reduce((s, [, k]) => s + k, 0);
+    let t = rng.range(0, total);
+    for (const [i, k] of band) {
+      t -= k;
+      if (t <= 0) {
+        out.skin = i;
+        break;
+      }
+    }
+    if (t > 0 && band.length) out.skin = band[band.length - 1]![0];
   }
   out.medals = 0;
   out.medalStyle = 0;

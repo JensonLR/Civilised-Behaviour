@@ -9,8 +9,9 @@ import { NPC, type RegionId } from "./campaignTypes.ts";
  * GUARDRAILS (CLAUDE.md "fictional cultures only"; a test scans these strings and C's catalogue names):
  *  - Every people is FICTIONAL and named after nothing real. None is a recolour of a real nation's dress: no turbans, fezzes, ponchos, kimonos, top knots, kilts, saris, war paint
  *    copied from a real tradition. A garment is described by WHAT IT DOES for the people who wear it (a rain-hat, a lamp-hood, a mourning shawl), never by whom it resembles.
- *  - They differ by SILHOUETTE (proportions, hats, hems), DRESS, ORNAMENT, hair arrangement, painted marks and the colours of their own buildings: never by skin tone, never by
- *    face shapes that echo a real people's caricature. Skin and hair colour span the whole palette in EVERY people (the palette's own rule: "caricature bodies, not ethnic types").
+ *  - They differ by SILHOUETTE (proportions, hats, hems), DRESS, ORNAMENT, hair arrangement, painted marks, the colours of their own buildings and (D-067, the owner's decision,
+ *    legal-approved 2026-10-04) SKIN drawn from the darker end of the palette, a band of several tones per people so no crowd is one colour; never by face shapes that echo a real
+ *    people's caricature. Hair colour spans the whole palette in every people; players keep the whole skin palette, the deep tones included.
  *  - They are people with trades, rank, humour and opinions, not a uniform: every people has a working class and a grand one (`grand`), and the satire still lands on the
  *    Society, the Syndicate and the institutions. The Society's folk (players, hired hands, the Syndicate, deserters, the Society's own staff at the depot) KEEP the colonial look: the contrast is the point.
  *  - Append-only: ids and ordering are the wire of nothing yet, but tests, saves and the lineup showcase will index them.

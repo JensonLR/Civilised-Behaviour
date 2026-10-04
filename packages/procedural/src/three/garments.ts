@@ -9,6 +9,7 @@ import { JACKET_CUT, torsoRings } from "./fit/torsoShape.ts";
 import { skirtRings as skirtShapeRings } from "./fit/skirtShape.ts";
 import { collarKind, collarSections, neckOuter, type CollarKind } from "./fit/collarShape.ts";
 import { dressNativeJacket } from "./nativeJackets.ts";
+import { BEARINGS, bearingOf } from "./bearing.ts";
 import { patchSurface, polySurface, type Surf } from "./fit/surface.ts";
 import { bandAround, buttonOn, frameAt, hangingStrip } from "./fit/torsoKit.ts";
 import { backZ, dyeAt, frontZ, legRadius, neckRadii, waistHalf, ringAt, ringSurface, soil, tone, type BodyCtx } from "./bodyKit.ts";
@@ -493,7 +494,10 @@ export function dressSkirts(b: PartBuilder, c: BodyCtx, legRings?: readonly Ring
   const sk = skirtSpec(spec, P);
   if (!sk || sk.len <= 0) return;
   const coat = sk.wrap ? c.trouserC : c.jacketC; // (a wrap with no coat over it is the trouser cloth)
-  const hemC = soil(tone(coat, 0.7), 0.22);
+  // D-067: the land on the hem (river mud, silt, sand, dust), fading to nothing a third of the way up; a Society coat has none
+  const wear = BEARINGS[bearingOf(spec)].wear;
+  const worn = (col: number, t: number): number => (wear && t < 0.46 ? lerpColor(col, wear.color, wear.amount * (1 - t / 0.46) ** 1.2) : col);
+  const hemC = worn(soil(tone(coat, 0.7), 0.22), 0);
   const { len, flare, open } = sk;
   // the lining: a contrast silk, seen from below, through the vent and along every free edge
   const lining = tone(singe(dyeAt(PALETTE.cloth, (sk.wrap ? spec.trousersColor : spec.jacketColor) + 4), c.burnt), 0.9);
@@ -550,10 +554,10 @@ export function dressSkirts(b: PartBuilder, c: BodyCtx, legRings?: readonly Ring
       // (the folds are drawn in the cloth as well as in the shape: valleys a shade darker, deeper toward the hem, so they read under the flat toon light)
       color: (phi, t) => {
         if (t < 0.03) return hemC;
-        if (band !== undefined && ((t > 0.06 && t < 0.14) || (t > 0.18 && t < 0.21))) return band; // (a woven border: no tailor's hem looks like it)
+        if (band !== undefined && ((t > 0.06 && t < 0.14) || (t > 0.18 && t < 0.21))) return worn(band, t); // (a woven border: no tailor's hem looks like it)
         const ridge = 0.5 + 0.5 * Math.cos(SKIRT_FOLDS * phi + Math.PI);
         const depth = 0.05 + 0.16 * (1 - t);
-        return lerpColor(tone(coat, 0.94 - 0.06 * (1 - t) - depth), tone(coat, 1.0 - 0.06 * (1 - t)), ridge);
+        return worn(lerpColor(tone(coat, 0.94 - 0.06 * (1 - t) - depth), tone(coat, 1.0 - 0.06 * (1 - t)), ridge), t);
       },
       // a two-layer skirt: the lining shows from below and through the vent, and every free edge has a rolled rim (LOD0 only)
       thick: 0.008,

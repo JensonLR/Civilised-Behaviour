@@ -18,6 +18,8 @@ Read first: `docs/BUILD_STATE.md` (where we are), `docs/DECISIONS.md` (why), `do
 - **No runtime LLMs.** Newspapers/dialogue are authored templates + deterministic generation. Utility-scored AI.
 - **Fictional cultures only.** Satire targets institutions, never a real ethnicity/nation/religion/protected group.
   Local societies have agency, factions, humour, and manipulate the players back. Keep the comedy smart.
+  The native peoples are drawn from the darker end of the skin palette, several tones per people (owner's decision,
+  legal-approved, D-067); players choose freely from the whole palette. Native dress suits each people's land.
 - **Every asset/AI-generated content is registered** in `docs/ASSET_REGISTER.md` / `docs/AI_CONTENT_REGISTER.md`.
 - Gore has Full/Reduced/Off and dismemberment On/Off; gameplay must not depend on gore for readability.
 - No ads, energy, pay-to-win, gambling, loot boxes. Payments only via storefronts. Minimise personal data (`docs/PRIVACY_DATA_MAP.md`).

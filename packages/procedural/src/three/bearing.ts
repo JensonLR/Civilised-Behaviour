@@ -1,3 +1,4 @@
+import { PALETTE } from "@cb/shared";
 import * as C from "../catalog.ts";
 import type { CharacterSpec } from "../spec.ts";
 
@@ -21,21 +22,26 @@ export interface Bearing {
   roll: number;
   /** Head pitch at rest, radians (+ bows the head; - lifts the chin). */
   bow: number;
+  /**
+   * D-067: what the land does to the cloth. The hem of a people's garment fades into its ground (river mud, delta silt, coastal sand, savannah dust, red canyon dust) by `amount`
+   * at the very hem, thinning to nothing a third of the way up. The Society's coats are pressed by a valet; theirs is undefined.
+   */
+  wear?: { color: number; amount: number };
 }
 
 export const BEARINGS: Readonly<Record<BearingId, Bearing>> = {
   // (the explorers keep every habit they had: the watch, the brim, the hands behind the back)
   society: { stance: "hang", acts: ["look", "shrug", "hat", "watch", "behind", "stretch", "shuffle", "scratch", "lookUp", "tap", "sway"], roll: 1, bow: 0 },
   // stone-cutters at their own pace: arms folded, a stretch for the back, a shrug for the Society
-  mereborn: { stance: "fold", acts: ["look", "shrug", "stretch", "scratch", "sway"], roll: 1.2, bow: 0 },
+  mereborn: { stance: "fold", acts: ["look", "shrug", "stretch", "scratch", "sway"], roll: 1.2, bow: 0, wear: { color: PALETTE.world.mud, amount: 0.75 } },
   // lamp-keepers: upright, hands together at the waist, an eye on the sky; they glide
-  kessarine: { stance: "clasp", acts: ["look", "lookUp", "sway"], roll: 0.45, bow: -0.06 },
+  kessarine: { stance: "clasp", acts: ["look", "lookUp", "sway"], roll: 0.45, bow: -0.06, wear: { color: PALETTE.kessar.sand, amount: 0.7 } },
   // herders: hands behind the back like a man surveying his own field, a tapping foot, a look at the weather
-  marchers: { stance: "behind", acts: ["look", "lookUp", "tap", "shuffle", "stretch"], roll: 1.4, bow: 0 },
+  marchers: { stance: "behind", acts: ["look", "lookUp", "tap", "shuffle", "stretch"], roll: 1.4, bow: 0, wear: { color: PALETTE.world.dust, amount: 0.65 } },
   // mourners: head bowed, hands clasped low, and very little else
-  vesperine: { stance: "clasp", acts: ["look", "sway"], roll: 0.8, bow: 0.2 },
+  vesperine: { stance: "clasp", acts: ["look", "sway"], roll: 0.8, bow: 0.2, wear: { color: PALETTE.vesper.strataRust, amount: 0.7 } },
   // waders: hands on the hips, a rolling walk, a shrug and a scratch
-  brinefolk: { stance: "akimbo", acts: ["shrug", "scratch", "sway", "shuffle", "look"], roll: 2.2, bow: 0 },
+  brinefolk: { stance: "akimbo", acts: ["shrug", "scratch", "sway", "shuffle", "look"], roll: 2.2, bow: 0, wear: { color: PALETTE.saltmarket.silt, amount: 0.8 } },
 };
 
 const BY_JACKET: Readonly<Record<string, BearingId>> = { "Stone Smock": "mereborn", "Lamp Robe": "kessarine", "Herd Cloak": "marchers", "Crepe Shawl": "vesperine", "Wading Smock": "brinefolk" };
