@@ -126,7 +126,14 @@ export class Pause {
   open(): void {
     if (this.modal.isOpen) return;
     const inv = this.deps.invite();
-    this.info.textContent = inv ? `Expedition No. ${inv.code} · World seed ${inv.seed} · ${inv.present} present` : "";
+    // each phrase kept whole (a narrow sheet broke "World seed" from its number); the line only breaks at the dots
+    const phrases = inv ? [`Expedition No. ${inv.code}`, `World seed ${inv.seed}`, `${inv.present} present`] : [];
+    this.info.replaceChildren(...phrases.flatMap((t, i) => {
+      const span = document.createElement("span");
+      span.style.whiteSpace = "nowrap";
+      span.textContent = t;
+      return i ? [" · ", span] : [span];
+    }));
     const save = this.deps.save;
     this.unsave?.();
     this.unsave = undefined;

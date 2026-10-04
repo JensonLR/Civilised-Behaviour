@@ -240,7 +240,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 .overlay[hidden] { display: none; }
 .panel.sheet { width: min(94vw, 46rem); max-height: calc(100vh - 2rem); display: flex; flex-direction: column; overflow: hidden; padding-bottom: 1.1rem; }
 .panel.sheet.settings { height: min(39rem, calc(100vh - 2rem)); } /* a fixed height, so the tab strip never jumps between pages */
-.panel.sheet.pause { width: min(92vw, 25rem); }
+.panel.sheet.pause { width: min(92vw, 27.5rem); } /* ("Replay tutorial" on one line in its half) */
 .panel.sheet.howto { width: min(94vw, 42rem); height: min(37rem, calc(100vh - 2rem)); }
 .sheet h2 { margin: 0.35rem 0 0; text-align: center; font-family: var(--display); font-weight: 400; font-size: 1.8rem; letter-spacing: 0.06em; line-height: 1.1; text-shadow: 0 1px 0 color-mix(in srgb, var(--text) 70%, transparent); }
 .sheet h3 { margin: 1rem 0 0.1rem; font-family: var(--display); font-weight: 400; font-size: 1.05rem; letter-spacing: 0.14em; color: var(--brass-dark); border-bottom: 1.5px solid var(--brass-dark); }
