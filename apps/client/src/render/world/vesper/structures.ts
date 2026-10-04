@@ -488,9 +488,13 @@ export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, par
     k.limb([b.x, y - 0.2, b.z], [b.x, y + b.top + 0.4, b.z], 0.1, 0.075, P.timber, 6);
     k.add(new SphereGeometry(0.14, 5, 4), { at: [b.x, y + b.top + 0.5, b.z], colour: P.glowLamp });
   }
+  // a sign is a board on a post (there was only the post, run up between the two lettered sheets and through their middles): the post stops under the board, braced out to it
   for (const s of plan.signs) {
     const y = g(s.x, s.z);
-    k.limb([s.x, y - 0.1, s.z], [s.x, y + 2.15, s.z], 0.07, 0.06, P.timber, 5);
+    k.setBase(s.x, y, s.z, s.yaw);   // (local +x is the board's face normal, as the cloth's decals have it; the board runs along local z)
+    k.limb([0, -0.1, 0], [0, 1.6, 0], 0.07, 0.06, P.timber, 5);
+    for (const sz of [-1, 1]) k.limb([0, 0.95, 0], [0, 1.6, sz * 0.75], 0.03, 0.03, P.timber, 3);
+    box(k, [0.09, 0.52, 2.5], [0, 1.85, 0], P.timber);   // (centred on the decal: cloth.ts letters it at 1.85, 5.5 cm out: 1 cm proud of each face)
+    k.clearBase();
   }
-  void box;
 }

@@ -1,6 +1,7 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry, TorusGeometry } from "three";
 import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, hash3, saltmarketLevel, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
+import { SIGN_BOARD } from "./cloth.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, type DoorMark, type LevelBuilding, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
 
@@ -667,13 +668,16 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
     lamp(kitAt(l.x, l.z), l.x, l.z, y, l.h);
     lamps.push({ x: l.x, y: y + l.h + 0.22, z: l.z });
   }
-  // the signboards' posts (the boards themselves are the cloth mesh's decals)
+  // the signboards: a board between two posts (the lettering is the cloth mesh's decal on each face). There was no board: the two lettered sheets hung
+  // 11 cm apart in the air, and from above you looked down between them onto the far one's mirrored back.
   for (const sg of plan.signs) {
     const y = g(sg.x, sg.z);
     const rx = Math.sin(sg.yaw), rz = -Math.cos(sg.yaw);
     const k = kitAt(sg.x, sg.z);
-    for (const side of [-1, 1]) k.limb([sg.x + rx * side * 1.12, y - 0.3, sg.z + rz * side * 1.12], [sg.x + rx * side * 1.12, y + 2.2, sg.z + rz * side * 1.12], 0.07, 0.06, P.tarPlankDark, 5);
-    k.limb([sg.x - rx * 1.2, y + 2.15, sg.z - rz * 1.2], [sg.x + rx * 1.2, y + 2.15, sg.z + rz * 1.2], 0.05, 0.05, P.tarPlankLight, 4);
+    const post = SIGN_BOARD.w / 2 + 0.05;   // (just outside the board's ends, which sink a little into them: the posts no longer cross the lettering)
+    for (const side of [-1, 1]) k.limb([sg.x + rx * side * post, y - 0.3, sg.z + rz * side * post], [sg.x + rx * side * post, y + 2.2, sg.z + rz * side * post], 0.07, 0.06, P.tarPlankDark, 5);
+    k.limb([sg.x - rx * (post + 0.08), y + 2.15, sg.z - rz * (post + 0.08)], [sg.x + rx * (post + 0.08), y + 2.15, sg.z + rz * (post + 0.08)], 0.05, 0.05, P.tarPlankLight, 4);
+    k.add(new BoxGeometry(SIGN_BOARD.w, SIGN_BOARD.h, SIGN_BOARD.d), { at: [sg.x, y + SIGN_BOARD.y, sg.z], rot: [0, Math.PI / 2 - sg.yaw, 0], colour: P.tarPlankDark });
   }
   // free-standing banners hang from a pole (the Houses' and the Constabulary's hang on the Exchange's beam, the campanile and the flagpole)
   // every cloth hangs from a rod along its top edge (the cloth's frame: `n` its face, `r` along it, as `buildSaltmarketCloth` lays it), and the rod is held by something standing

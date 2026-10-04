@@ -274,10 +274,12 @@ export function createSaltmarketAtlas(): CanvasTexture | undefined {
 }
 
 export const SIGN_SIZE = { w: 2.5, h: 0.468 } as const;
+/** The board the lettering is laid on (structures.ts builds it): its centre height over the ground, and its thickness (each decal sits 5 mm proud of a face). */
+export const SIGN_BOARD = { w: SIGN_SIZE.w, h: SIGN_SIZE.h, d: 0.1, y: 1.85 } as const;
 
 /**
  * The cloth and lettering geometry: position, normal, uv, wave. Banners hang from their rods (the weight grows down the cloth, so the hem ripples and the rod stays put); the signboards' lettering is a decal on
- * both faces of each board (wave 0), and the boards themselves are drawn here as thin tarred slabs on two posts.
+ * both faces of each board (wave 0); the boards and their posts are structures.ts's (SIGN_BOARD).
  */
 export function buildSaltmarketCloth(terrain: Terrain): BufferGeometry | undefined {
   const plan = saltmarketPlan();
@@ -315,7 +317,7 @@ export function buildSaltmarketCloth(terrain: Terrain): BufferGeometry | undefin
   }
   for (const s of plan.signs) {
     const [u0, v0, u1, v1] = signUv(s.text);
-    const y = terrain.height(s.x, s.z) + 1.85;
+    const y = terrain.height(s.x, s.z) + SIGN_BOARD.y;
     const nx = Math.cos(s.yaw);
     const nz = Math.sin(s.yaw);
     for (const side of [1, -1]) {
@@ -323,8 +325,8 @@ export function buildSaltmarketCloth(terrain: Terrain): BufferGeometry | undefin
       const fz = nz * side;
       const rx = fz;
       const rz = -fx;
-      const px = s.x + fx * 0.055;
-      const pz = s.z + fz * 0.055;
+      const px = s.x + fx * (SIGN_BOARD.d / 2 + 0.005);
+      const pz = s.z + fz * (SIGN_BOARD.d / 2 + 0.005);
       const hw = SIGN_SIZE.w / 2 - 0.05;
       const hh = SIGN_SIZE.h / 2 - 0.03;
       const corner = (u: number, v: number): [number, number, number] => [px + rx * u * hw, y + v * hh, pz + rz * u * hw];
