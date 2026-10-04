@@ -33,7 +33,7 @@ describe("incidents: chaos during play (D-052)", () => {
     }
     expect((counts.none ?? 0) / n).toBeGreaterThan(0.4);
     expect((counts.none ?? 0) / n).toBeLessThan(0.65);
-    for (const id of INCIDENT_IDS) expect(counts[id] ?? 0, id).toBeGreaterThan(n * 0.1);
+    for (const id of INCIDENT_IDS) expect(counts[id] ?? 0, id).toBeGreaterThan(((n * 0.5) / INCIDENT_IDS.length) * 0.6); // (each a fair share of the non-quiet half: at least 0.6 of an even split)
     for (const t of TEMPLATES) {
       const d = incidentDelayS(newCampaign(3), t, 3);
       expect(d).toBeGreaterThanOrEqual(INCIDENT.delayMinS);
@@ -63,8 +63,8 @@ describe("incidents: chaos during play (D-052)", () => {
   it("each incident's people are civilians of the right sort, on no side, unarmed, in their own group", () => {
     for (const id of INCIDENT_IDS) {
       const r = incidentRoster(id, { x: 3, z: 4 }, "vesper", 9);
-      if (id === "runaway_horse") {
-        expect(r, "the horse is a mount, not a person").toEqual([]);
+      if (id === "runaway_horse" || id === "powder_wagon") {
+        expect(r, "the horse is a mount and the wagon is kegs, not a person").toEqual([]);
         continue;
       }
       expect(r.length).toBe(1);
@@ -87,6 +87,12 @@ describe("incidents: chaos during play (D-052)", () => {
     expect(incidentStep("runaway_horse", { t: "mounted" })).toBe("caught");
     expect(incidentStep("runaway_horse", { t: "end" })).toBe("strayed");
     expect(incidentStep("runaway_horse", { t: "use", room: true })).toBeUndefined();
+    expect(incidentStep("powder_wagon", { t: "kegs", left: INCIDENT.wagonKegs - 1 })).toBe("salvaged");
+    expect(incidentStep("powder_wagon", { t: "kegs", left: INCIDENT.wagonSalvage })).toBe("salvaged");
+    expect(incidentStep("powder_wagon", { t: "kegs", left: INCIDENT.wagonSalvage - 1 })).toBe("went_up");
+    expect(incidentStep("powder_wagon", { t: "end" })).toBe("went_up");
+    expect(incidentStep("powder_wagon", { t: "shot" })).toBeUndefined();
+    expect(incidentStep("powder_wagon", { t: "use", room: true })).toBeUndefined();
   });
 
   it("the courier's arrears go into the purse, a helped traveller earns the home power's trust (the Ward in Kessar, a minor power elsewhere), and the record is kept and saved", () => {

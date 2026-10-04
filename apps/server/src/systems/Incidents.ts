@@ -1,7 +1,7 @@
 import { FLAG, type PlayerStateType } from "@cb/shared";
 import { npcKey, type CampaignState, type CastApi, type NpcSpec, type PlayersView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import {
-  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident,
+  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident, wagonName,
   type IncidentEvent, type IncidentId, type IncidentRecord, type IncidentResult,
 } from "@cb/shared";
 
@@ -32,6 +32,11 @@ export interface IncidentsHost {
   looseHorse(at: { x: number; z: number }): string;
   /** Who rides mount `id` ("" nobody, or the mount is gone). */
   riderOf(id: string): string;
+  /** D-071: spill `n` powder kegs in a ring round `at`, the first one lit on a `fuseS` fuse (credited to ACCIDENT_OWNER); the ids of those that could be placed. Optional. */
+  spillKegs?(at: { x: number; z: number }, n: number, ring: number, fuseS: number): string[];
+  /** Whether prop `id` is still in the world (a keg that went off is gone), and whether a fuse burns on it. */
+  propLive?(id: string): boolean;
+  propLit?(id: string): boolean;
   /** D-055: `sid` settled an incident kindly by their own hand (the honours list counts it). Optional. */
   kind?(sid: string): void;
   hasRoom(): boolean;
@@ -54,7 +59,10 @@ export class Incidents {
   private reaim = 0;
   /** The runaway horse's mount id, and what the notices call it. */
   private horse = "";
+  /** The name the notices give a horse or a wagon (they have no row of their own). */
   private horseLabel = "";
+  /** D-071: the powder wagon's kegs. */
+  private kegs: string[] = [];
   /** Seconds until a settled courier or deserter leaves the ground (0 = nobody leaving). */
   private leaving = 0;
 
@@ -97,6 +105,14 @@ export class Incidents {
     this.calm = this.host.fighting() ? 0 : this.calm + dt;
     if (!this.live) {
       if (this.forced || (this.t >= this.delay && this.calm >= INCIDENT.calmS)) this.fire();
+      return;
+    }
+    if (this.id === "powder_wagon") {
+      // settled when no fuse burns among the kegs any more (a chain lights the next before the last has gone): how many are still on the road
+      const live = this.host.propLive ?? (() => false);
+      const lit = this.host.propLit ?? (() => false);
+      if (this.kegs.some((k) => live(k) && lit(k))) return;
+      this.settle({ t: "kegs", left: this.kegs.filter((k) => live(k)).length });
       return;
     }
     if (this.id === "runaway_horse") {
@@ -171,6 +187,7 @@ export class Incidents {
     this.forced = false;
     this.horse = "";
     this.horseLabel = "";
+    this.kegs = [];
     this.leaving = 0;
   }
 
@@ -190,6 +207,17 @@ export class Incidents {
     const at = placeIncident({ x: sx / n, z: sz / n }, this.host.hostiles(), (x, z) => this.host.land(x, z), this.host.bounds(), seed);
     if (!at) {
       this.id = "none"; // nowhere open near the party: this run stays quiet (never in a wall)
+      return;
+    }
+    if (this.id === "powder_wagon") {
+      this.kegs = this.host.spillKegs?.(at, INCIDENT.wagonKegs, INCIDENT.wagonRing, INCIDENT.wagonFuseS) ?? [];
+      if (this.kegs.length < INCIDENT.wagonSalvage) {
+        this.id = "none"; // (no room for the kegs: the room is at its props' cap; it stays quiet)
+        return;
+      }
+      this.horseLabel = wagonName(seed);
+      this.live = true;
+      this.host.notice(INCIDENT_OPEN.powder_wagon.replace("%n", this.horseLabel[0]!.toUpperCase() + this.horseLabel.slice(1)));
       return;
     }
     if (this.id === "runaway_horse") {
@@ -225,8 +253,11 @@ export class Incidents {
     const r = incidentStep(this.id, e);
     if (r === undefined) return;
     this.result = r;
-    const who = this.spec?.name ?? (this.id === "runaway_horse" ? this.horseLabel : "");
-    if (who) this.host.notice(INCIDENT_DONE[r].replace("%n", who));
+    const who = this.spec?.name ?? (this.id === "runaway_horse" || this.id === "powder_wagon" ? this.horseLabel : "");
+    if (who) {
+      const t = INCIDENT_DONE[r].replace("%n", who);
+      this.host.notice(t[0]!.toUpperCase() + t.slice(1)); // (a wagon's name opens "the Syndicate's ...")
+    }
     // whoever is left goes about their business (a helped traveller, a courier who delivered or gave up, a deserter turned away)
     if (r !== "enlisted") this.host.cast.order("incident", { o: "flee" });
     if (r !== "enlisted" && (this.id === "courier" || this.id === "deserter")) this.leaving = INCIDENT_LEAVE_S;
