@@ -189,7 +189,7 @@ describe("Ragdoll", () => {
       random.mockRestore();
     }
     expect(worst, where).toBeLessThanOrEqual(0.2 + 0.03); // (Ragdoll.ts HINGE_GIVE, and a step's worth of drift before the stop sees it; one fall in forty once went 0.39 rad past)
-  });
+  }, 30_000); // 120 full falls of physics: ~2.5 s alone, past vitest's 5 s default on a loaded CI runner
 
   it("the limits agree with the animator: knees bend the way the animator bends them, elbows too (a sign error once folded ragdoll knees forward)", () => {
     const rig = buildCharacter(generateCharacter(3), { outline: false });
