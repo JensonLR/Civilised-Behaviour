@@ -1,7 +1,7 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
 import { PALETTE, kessarLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
 import type { WorldInkClass } from "@cb/procedural/three";
-import { atmoUniforms, motion } from "../atmosphere.ts";
+import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, type Lod } from "../flora.ts";
 import { buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
@@ -67,6 +67,7 @@ export class KessarView implements RegionView {
   ) {
     this.root.name = "world";
     setToonLite(detail.liteShading);
+    if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
     this.dress = new OutpostDress(this.root, world, detail.outlines, "kessar");
     this.hillU = createHillUniforms(sun);

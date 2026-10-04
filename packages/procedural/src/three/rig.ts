@@ -121,7 +121,57 @@ function toonRamp(): DataTexture {
   return (ramp = tex);
 }
 
-const clothMaterial = (): MeshToonMaterial => (sharedMaterial ??= new MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() }));
+/** D-078: the bones whose geometry is clothes (a sleeve, a coat, trousers, a skirt): their vertices are woven unless skin or leather. */
+const CLOTH_BONES = /^(pelvis|torso|upperArm|foreArm|upperLeg|lowerLeg)/;
+
+/**
+ * D-078: the characters' clothes were flat fills beside a world that has grain (D-075). Fabric vertices (`fab`) now carry a woven surface worked out in
+ * the BONE's own space (so it travels with the sleeve, never swims): a fine over-under of threads about 9 mm apart, which fades out where the threads
+ * would be finer than a couple of pixels, and a soft mottle of wear and dye that stays at any distance. It only darkens and lightens the dye; skin,
+ * leather, hair and the face are untouched.
+ */
+const WEAVE_VERT_HEAD = /* glsl */ `
+  attribute float fab;
+  varying float vFab;
+  varying vec3 vLoc;
+`;
+const WEAVE_FRAG_HEAD = /* glsl */ `
+  varying float vFab;
+  varying vec3 vLoc;
+  float wHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float wNoise(vec3 x) {
+    vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(wHash(i), wHash(i + vec3(1,0,0)), f.x), mix(wHash(i + vec3(0,1,0)), wHash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(wHash(i + vec3(0,0,1)), wHash(i + vec3(1,0,1)), f.x), mix(wHash(i + vec3(0,1,1)), wHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+`;
+const WEAVE_BODY = /* glsl */ `
+  if (vFab > 0.5) {
+    vec3 q = vLoc * 110.0;
+    float a = q.y, b = q.x + q.z;
+    float weave = sin(a * 3.14159) * sin(b * 3.14159);
+    float px = fwidth(a) + fwidth(b);
+    float fine = 1.0 - smoothstep(0.25, 0.7, px);
+    float mott = wNoise(vLoc * 7.0) * 0.6 + wNoise(vLoc * 23.0) * 0.4;
+    diffuseColor.rgb *= 1.0 + weave * 0.075 * fine + (mott - 0.5) * 0.11;
+  }
+`;
+
+function makeClothMaterial(): MeshToonMaterial {
+  const m = new MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", `#include <common>\n${WEAVE_VERT_HEAD}`)
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFab = fab; vLoc = position;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\n${WEAVE_FRAG_HEAD}`)
+      .replace("#include <color_fragment>", `#include <color_fragment>\n${WEAVE_BODY}`);
+  };
+  m.customProgramCacheKey = (): string => "charWeave";
+  return m;
+}
+
+const clothMaterial = (): MeshToonMaterial => (sharedMaterial ??= makeClothMaterial());
 
 function cached(key: string, make: () => BufferGeometry | undefined): BufferGeometry | undefined {
   const hit = geometryCache.get(key);
@@ -314,6 +364,18 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (outlineOn) ensureHull(a);
   };
   const attach = (bone: string, parent: Group, make: () => BufferGeometry | undefined, morphs = false): void => {
+    // D-078: the bones that are clothes mark their vertices as fabric (except skin and leather), for the material's weave
+    if (CLOTH_BONES.test(bone)) {
+      const inner = make;
+      make = () => {
+        PartBuilder.fabric = { except: [skin, leatherC] };
+        try {
+          return inner();
+        } finally {
+          PartBuilder.fabric = undefined;
+        }
+      };
+    }
     const a: Attachment = { bone, parent, make, morphs };
     attachments.push(a);
     if (!(mergedOn && lod >= 1)) ensureMesh(a); // (a merged crowd rig never builds per-bone geometry at levels 1 and 2)

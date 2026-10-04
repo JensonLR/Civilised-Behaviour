@@ -84,3 +84,26 @@ describe("D-077: the camera fade", () => {
     expect(on.key).not.toBe(compile(toonMaterial({ fade: false })).key);
   });
 });
+
+describe("D-079: planted, not set down", () => {
+  it("scenery darkens where it meets the ground (from the baked heights); the ground itself and lite shading do not", async () => {
+    setToonLite(false, 2);
+    const wall = compile(toonMaterial());
+    expect(wall.fs).toContain("uniform sampler2D uGround");
+    expect(wall.fs).toContain("touch");
+    expect(compile(toonMaterial({ fade: false, wetDark: 1 })).fs).not.toContain("uGround");
+    setToonLite(true, 2);
+    expect(compile(toonMaterial()).fs).not.toContain("uGround");
+    setToonLite(false, 2);
+    // the bake: heights land where the shader looks for them (texel (i, j) is x = i, z = j across the square)
+    const { atmoUniforms, bakeGroundHeights } = await import("./atmosphere.ts");
+    const tex = bakeGroundHeights({ terrainHeight: (x: number, z: number) => x * 0.01 + z * 0.001 }, 100, 64);
+    expect(atmoUniforms.uGroundRect.value.toArray()).toEqual([-100, -100, 200, 1]);
+    const { DataUtils } = await import("three");
+    const data = tex.image.data as Uint16Array;
+    const at = (i: number, j: number): number => DataUtils.fromHalfFloat(data[j * 64 + i]!);
+    const x = (i: number): number => -100 + ((i + 0.5) / 64) * 200;
+    expect(at(60, 3)).toBeCloseTo(x(60) * 0.01 + x(3) * 0.001, 2);
+    expect(at(3, 60)).toBeCloseTo(x(3) * 0.01 + x(60) * 0.001, 2);
+  });
+});

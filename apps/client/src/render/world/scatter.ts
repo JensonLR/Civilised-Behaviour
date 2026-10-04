@@ -160,7 +160,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
       const kind = treeSpecies(x, z);
       const s = 0.9 + far.next() * 0.55;
       const it = item(x, drawnY(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next());
-      if (Number.isNaN(it.y) || (treeDensity < 1 && h01(32, x, z) >= treeDensity)) continue; // (after the draws above, so thinning never shifts the trees that stay)
+      if (Number.isNaN(it.y) || blocked(x, z, 1.2) || (treeDensity < 1 && h01(32, x, z) >= treeDensity)) continue; // (never through a wall out there: Kessar's runs past the playable edge) // (after the draws above, so thinning never shifts the trees that stay)
       plan[kind].push(it);
     }
   }

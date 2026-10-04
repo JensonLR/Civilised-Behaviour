@@ -37,13 +37,15 @@ const _wall = newWorldHit();
 /** The hip-fire shoulder offset (m) and the head height the follow camera orbits; the aim camera blends from the first to `AIM.camera.shoulder`. */
 const HIP_SHOULDER = 0.55;
 const HEAD_Y = 1.55;
-/** The follow camera never comes closer to the head than this when a wall squeezes it (the head is about 0.2 m across; this keeps the lens clear of it and of the neck). */
+/** Below this the follow camera does not bother casting for walls (it is at the head already). */
 const MIN_FOLLOW = 0.85;
 /**
  * The lens has a body: besides the ray from the head to the lens, two more go to the lens's left and right edges this far out. A trunk or a post just
  * BESIDE the line (missed by a single ray) would otherwise sit a hand's breadth from the lens and fill half the picture.
  */
 export const LENS_RADIUS = 0.32;
+/** The nearest the follow camera comes to the head when a wall is right behind it: just behind the eyes (inside the head, which is drawn see-through then). */
+const LENS_FLOOR = 0.12;
 
 /**
  * The player's camera. Two views share one yaw/pitch (the input stream reports yaw so the shared movement step stays camera-relative):
@@ -249,6 +251,14 @@ export class CameraRig {
     }
   }
 
+  /** One of the lens's three rays (side 0 the centre, 1 its right edge, -1 its left): the fraction of the way out to the first solid, less the clearance (1 = clear). */
+  private lensRay(hx: number, hy: number, hz: number, wx: number, wy: number, wz: number, side: number, cosY: number, sinY: number): number {
+    const ex = wx + cosY * LENS_RADIUS * side;
+    const ez = wz - sinY * LENS_RADIUS * side;
+    const el = Math.hypot(ex, wy, ez);
+    return rayWorld(this.world, hx, hy, hz, ex / el, wy / el, ez / el, el, _wall) ? (_wall.t - AIM.camera.wallClearance) / el : 1;
+  }
+
   /**
    * The follow camera, tracked every frame so a switch back has no pop. Aiming blends (`blendAim`) the shoulder out to `AIM.camera.shoulder`, the distance in to `distanceScale`, and
    * turns the view to look straight down the aim (the picture's middle is what the shot meets and the body sits to the side); the lens tightens in `update`. A wall behind the character
@@ -290,19 +300,32 @@ export class CameraRig {
     const wz = this.desired.z - hz;
     const wl = Math.hypot(wx, wy, wz);
     if (wl > MIN_FOLLOW) {
-      // the nearest hit, as a fraction of the way out, over the centre ray and the rays to the lens's two edges (right = the camera's own right)
+      // How far out (a fraction of the line) the centre ray and the rays to the lens's left and right edges get before something stops them
+      // (right = the camera's own right). Something beside the lens on ONE side slides the lens toward the middle (a parapet along the path, a
+      // trunk at the lens's elbow) instead of hauling the camera in to the back of the head; the centre blocked, or both sides, pulls it in.
+      const fC = this.lensRay(hx, hy, hz, wx, wy, wz, 0, cosY, sinY);
+      const fR = this.lensRay(hx, hy, hz, wx, wy, wz, 1, cosY, sinY);
+      const fL = this.lensRay(hx, hy, hz, wx, wy, wz, -1, cosY, sinY);
       let frac = 1;
-      for (let side = -1; side <= 1; side++) {
-        const ex = wx + cosY * LENS_RADIUS * side;
-        const ez = wz - sinY * LENS_RADIUS * side;
-        const el = Math.hypot(ex, wy, ez);
-        if (rayWorld(this.world, hx, hy, hz, ex / el, wy / el, ez / el, el, _wall)) frac = Math.min(frac, (_wall.t - AIM.camera.wallClearance) / el);
+      if (fR < 1 && fL < 1) frac = Math.min(fC, fR, fL);
+      else if (fC < 1 || fR < 1 || fL < 1) {
+        // blocked on one side only: slide toward the free side (the shoulder's offset and the lens's own width, at most), then judge the slid line alone
+        const side = fR < 1 || (fC < 1 && fL >= 1) ? 1 : -1;
+        const slide = (shoulder + LENS_RADIUS) * clamp((1 - Math.min(fC, fR, fL)) * 6, 0, 1);
+        const sx = wx - cosY * slide * side;
+        const sz = wz + sinY * slide * side;
+        const sl = Math.hypot(sx, wy, sz);
+        if (rayWorld(this.world, hx, hy, hz, sx / sl, wy / sl, sz / sl, sl, _wall)) frac = (_wall.t - AIM.camera.wallClearance) / sl;
+        this.desired.set(hx + sx, hy + wy, hz + sz);
       }
       if (frac < 1) {
-        const keep = clamp(frac * wl, MIN_FOLLOW, wl);
-        this.wallPull = wl - keep;
-        const k = keep / wl;
-        this.desired.set(hx + wx * k, hy + wy * k, hz + wz * k);
+        const dx = this.desired.x - hx, dy = this.desired.y - hy, dz = this.desired.z - hz;
+        const dl = Math.hypot(dx, dy, dz);
+        // never inside the wall: a wall nearer than MIN_FOLLOW is followed all the way in (the body is drawn see-through then, Game.ts), down to just behind the eyes
+        const keep = clamp(frac * dl, LENS_FLOOR, dl);
+        this.wallPull = dl - keep;
+        const k = keep / dl;
+        this.desired.set(hx + dx * k, hy + dy * k, hz + dz * k);
       }
     }
 
@@ -318,7 +341,10 @@ export class CameraRig {
       this.focus.y + 1.35 - 0.7 * dk + Math.sin(this.clock * 0.53 + 1) * 0.07 * dk,
       this.focus.z,
     );
-    const line = ak + rk; // how far the view looks down the line (aimed or ready) rather than at the wearer's chest
+    // how far the view looks down the line (aimed or ready) rather than at the wearer's chest; a camera a wall has pushed in to the head looks the way
+    // the player looks too (from there the chest is straight down)
+    const close = 1 - clamp((this.thirdPos.distanceTo(this.focus) - 1.6) / 1.4, 0, 1);
+    const line = Math.max(ak + rk, close * close * (3 - 2 * close));
     if (line > 0) {
       const far = 30;
       this.thirdLook.set(this.thirdPos.x - sinY * cp * far, this.thirdPos.y - Math.sin(pitch) * far, this.thirdPos.z - cosY * cp * far);

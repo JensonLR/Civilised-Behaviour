@@ -1,6 +1,6 @@
 import { BoxGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
 import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type ScenarioView } from "@cb/shared";
-import { atmoUniforms, motion } from "../atmosphere.ts";
+import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, type Lod } from "../flora.ts";
 import { buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
@@ -66,6 +66,7 @@ export class HighmarkView implements RegionView {
     this.root.name = "world";
     this.dress = new OutpostDress(this.root, world, detail.outlines, "highmark");
     setToonLite(detail.liteShading);
+    if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
     this.hillU = createHillUniforms(sun);
     const terrain = world.terrain as HighmarkTerrain;

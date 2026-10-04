@@ -99,27 +99,35 @@ describe("wall clearance and the head", () => {
     expect(camera.position.distanceTo(head)).toBeGreaterThan(0.8);
   });
 
-  it("with the wall pressed against the back, the lens still keeps its distance from the head", () => {
+  it("with the wall pressed against the back, the lens stays on this side of the wall (it comes in to the head, which is drawn see-through, never into the wall)", () => {
+    // the wall's near face is 0.2 m behind the feet: there is no room behind the head at all
     const wall: Obstacle = { kind: "box", x: feet.x, z: feet.z + 0.5, hx: 6, hz: 0.3, yaw: 0, y0: 0, y1: 6 };
     const { r, camera } = rig(flat([wall]));
     run(r, 2, true);
-    const head = new Vector3(feet.x, 1.55, feet.z);
-    expect(camera.position.distanceTo(head)).toBeGreaterThan(0.8);
+    expect(camera.position.z).toBeLessThan(feet.z + 0.2);
   });
 
-  it("a trunk BESIDE the line to the lens (missed by the centre ray) still pulls the camera in: the lens never sits against it", () => {
-    // hip camera, yaw 0: the lens sits ~5.6 m behind (+Z) and 0.55 m right (+X). A trunk whose bark is a hand (0.18 m) to the right of the line to the lens, 0.6 m in front of it: a single ray misses it.
+  it("a trunk BESIDE the line to the lens (missed by the centre ray) moves the lens off it: it never sits against the bark, and the camera is not hauled in", () => {
+    // hip camera, yaw 0: the lens sits ~5.6 m behind (+Z) and 0.55 m right (+X). A trunk whose bark is a hand (0.18 m) to the right of the line to the lens, 0.6 m in front of it.
     const { r, camera } = rig();
     run(r, 1, false);
     const free = camera.position.clone();
     const trunk: Obstacle = { kind: "circle", x: free.x + 0.18 + 0.2, z: free.z - 0.6, r: 0.2, y0: 0, y1: 8 };
-    const world = flat([trunk]);
-    const { r: r2, camera: c2 } = rig(world);
+    const { r: r2, camera: c2 } = rig(flat([trunk]));
     run(r2, 1, false);
-    expect(r2.wallPull).toBeGreaterThan(0);
-    // the lens ends up nearer the head than the trunk is
-    const head = new Vector3(feet.x, 1.55, feet.z);
-    expect(c2.position.distanceTo(head)).toBeLessThan(Math.hypot(trunk.x - head.x, trunk.z - head.z));
+    // the lens keeps clear of the bark (it slid toward the middle or came in a little), and nowhere near the back of the head
+    expect(Math.hypot(c2.position.x - trunk.x, c2.position.z - trunk.z) - trunk.r).toBeGreaterThan(0.2);
+    expect(c2.position.distanceTo(new Vector3(feet.x, 1.55, feet.z))).toBeGreaterThan(3.5);
+  });
+
+  it("a parapet along the path beside the player (a long wall just right of the line) slides the lens in, it does not haul the camera to the back of the head", () => {
+    // the player hugs a wall running along Z, its face 0.3 m to their right: the lens (0.55 m right of the line) would sit in it; the camera
+    // slides the lens in toward the middle and stays back, where a pull-in along the line would bring it to two metres from the head
+    const parapet: Obstacle = { kind: "box", x: feet.x + 0.3 + 0.2, z: feet.z + 4, hx: 0.2, hz: 8, yaw: 0, y0: 0, y1: 3 };
+    const { r, camera } = rig(flat([parapet]));
+    run(r, 1, false);
+    expect(camera.position.x).toBeLessThan(feet.x + 0.3); // outside the wall
+    expect(camera.position.distanceTo(new Vector3(feet.x, 1.55, feet.z))).toBeGreaterThan(4); // still well back
   });
 
   it("D-077: the follow camera tells the scenery where its subject is (the chest), and turns the fade off in first person", () => {

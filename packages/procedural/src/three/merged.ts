@@ -24,7 +24,7 @@ const v3 = new Vector3();
 
 /**
  * Concatenates `parts` into one indexed geometry with `position`, `normal`, `color`, `skinIndex` (Uint16 x4, the bone) and `skinWeight` (1,0,0,0). Parts that arrive without normals get
- * them computed; a part whose matrix mirrors (a negative determinant) has its winding flipped so it stays front-facing. Morph targets and every other attribute are dropped: a crowd
+ * them computed; a part whose matrix mirrors (a negative determinant) has its winding flipped so it stays front-facing. `fab` (D-078, cloth) is carried. Morph targets and every other attribute are dropped: a crowd
  * level does not use them. The inputs are never modified or disposed (some come from shared caches).
  */
 export function mergeRigid(parts: readonly RigidPart[]): BufferGeometry {
@@ -38,6 +38,7 @@ export function mergeRigid(parts: readonly RigidPart[]): BufferGeometry {
   const position = new Float32Array(vertices * 3);
   const normal = new Float32Array(vertices * 3);
   const color = new Float32Array(vertices * 3);
+  const fab = new Float32Array(vertices);
   const skinIndex = new Uint16Array(vertices * 4);
   const skinWeight = new Float32Array(vertices * 4);
   const index = vertices > 65535 ? new Uint32Array(indices) : new Uint16Array(indices);
@@ -53,6 +54,7 @@ export function mergeRigid(parts: readonly RigidPart[]): BufferGeometry {
       return c.attributes.normal!;
     })();
     const col = g.attributes.color;
+    const fb = g.attributes.fab;
     m3.getNormalMatrix(p.matrix);
     for (let i = 0; i < n; i++) {
       v3.fromBufferAttribute(pos, i).applyMatrix4(p.matrix);
@@ -68,6 +70,7 @@ export function mergeRigid(parts: readonly RigidPart[]): BufferGeometry {
         color[(vo + i) * 3 + 1] = col.getY(i);
         color[(vo + i) * 3 + 2] = col.getZ(i);
       } else color.fill(1, (vo + i) * 3, (vo + i) * 3 + 3);
+      if (fb) fab[vo + i] = fb.getX(i);
       skinIndex[(vo + i) * 4] = p.bone;
       skinWeight[(vo + i) * 4] = 1;
     }
@@ -87,6 +90,7 @@ export function mergeRigid(parts: readonly RigidPart[]): BufferGeometry {
   out.setAttribute("position", new BufferAttribute(position, 3));
   out.setAttribute("normal", new BufferAttribute(normal, 3));
   out.setAttribute("color", new BufferAttribute(color, 3));
+  out.setAttribute("fab", new BufferAttribute(fab, 1)); // D-078: which vertices are cloth (the material weaves them)
   out.setAttribute("skinIndex", new BufferAttribute(skinIndex, 4));
   out.setAttribute("skinWeight", new BufferAttribute(skinWeight, 4));
   out.setIndex(new BufferAttribute(index, 1));

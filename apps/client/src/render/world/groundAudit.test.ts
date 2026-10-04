@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Box3, Group, Mesh, MeshBasicMaterial, Scene, Vector3, type Object3D } from "three";
-import { createRegionWorld, PROP_DEFS, REGION_IDS, type OutpostStage, type RegionId } from "@cb/shared";
+import { Box3, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, Scene, Vector3, type Object3D } from "three";
+import { createRegionWorld, PROP_DEFS, REGION_IDS, type Obstacle, type OutpostStage, type RegionId } from "@cb/shared";
 import { horseFromSeed } from "@cb/procedural";
 import { buildHorse, buildWagon } from "@cb/procedural/three";
 import { PRESETS } from "../Stage.ts";
@@ -101,4 +101,41 @@ describe("D-076: nothing on a prop, a mount, a wagon or the cannon floats", () =
     const fl = audit(new CannonView(new Scene(), fx, false).root);
     expect(fl.length, describeFloaters(fl)).toBe(0);
   });
+});
+
+describe("D-076: nothing grows through a building", () => {
+  // the solids a tree, a bush, a tuft or a stone must never stand inside
+  const SOLID = new Set(["house", "wall", "hq", "stall", "marquee", "tent", "jetty", "bridge", "cliff", "ruin", "weir", "table"]);
+  // by design: a cliff's own rock is the cliff; Vesper's outcrops are bedded in the cliffs and in the rock mass the cloister is cut into
+  const ALLOWED: Record<string, readonly string[]> = { cliff: ["cliff"], outcrops: ["cliff", "house"] };
+  const inside = (o: Obstacle, x: number, z: number): boolean => {
+    if (o.kind === "circle") return (x - o.x) ** 2 + (z - o.z) ** 2 < (o.r - 0.05) ** 2;
+    const c = Math.cos(o.yaw), s = Math.sin(o.yaw);
+    const dx = x - o.x, dz = z - o.z;
+    return Math.abs(dx * c + dz * s) < o.hx - 0.05 && Math.abs(-dx * s + dz * c) < o.hz - 0.05;
+  };
+  for (const id of REGION_IDS) {
+    it(`${id}: no instanced scenery stands inside a wall, a house, a stall or a deck`, () => {
+      const world = createRegionWorld(id, 7);
+      const view = createRegionView(id, new Scene(), world, PRESETS.medium, sun, 7);
+      view.root.updateMatrixWorld(true);
+      const m = new Matrix4(), p = new Vector3();
+      const bad: string[] = [];
+      view.root.traverse((obj) => {
+        const im = obj as InstancedMesh;
+        if (!im.isInstancedMesh || obj.name.endsWith("_outline")) return;
+        for (let i = 0; i < im.count; i++) {
+          im.getMatrixAt(i, m);
+          p.setFromMatrixPosition(m).applyMatrix4(im.matrixWorld);
+          world.forEachNear(p.x, p.z, (o: Obstacle) => {
+            if (!o.tag || !SOLID.has(o.tag) || ALLOWED[obj.name]?.includes(o.tag)) return;
+            if (p.y < o.y0 - 0.5 || p.y > o.y1 + 0.5 || !inside(o, p.x, p.z)) return;
+            if (bad.length < 8) bad.push(`${obj.name}#${i} at ${p.x.toFixed(1)},${p.z.toFixed(1)} inside a ${o.tag}`);
+          });
+        }
+      });
+      view.dispose();
+      expect(bad, bad.join("\n")).toEqual([]);
+    }, 120_000);
+  }
 });

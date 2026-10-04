@@ -35,14 +35,17 @@ describe("tagState: where a plate may sit", () => {
     expect(show(5, NPC.NONE, { top: -40 })).toBe(false);
   });
 
-  it("range tiers: party and hired hands 40 m, the Warden / hostage / driver 30 m, soldiers and enemies 12 m (26 m in sight)", () => {
+  it("range tiers: party and hired hands 40 m, the Warden / hostage / driver 30 m in sight (10 m hidden), soldiers and enemies 12 m (26 m in sight)", () => {
     for (const r of [NPC.NONE, NPC.PORTER, NPC.HIRED_RIFLE, NPC.SURGEON]) {
       expect(show(TAG_RANGE.party - 0.5, r), `role ${r}`).toBe(true);
       expect(show(TAG_RANGE.party + 0.5, r), `role ${r}`).toBe(false);
     }
-    for (const r of [NPC.WARDEN, NPC.HOSTAGE, NPC.DRIVER]) {
-      expect(show(29.5, r), `role ${r}`).toBe(true);
-      expect(show(30.5, r), `role ${r}`).toBe(false);
+    for (const r of [NPC.WARDEN, NPC.HOSTAGE, NPC.DRIVER, NPC.MINER]) {
+      expect(show(29.5, r, { sight: true }), `role ${r}`).toBe(true);
+      expect(show(30.5, r, { sight: true }), `role ${r}`).toBe(false);
+      // D-077: out of sight (behind a wall, a rock fall) a notable's plate shows only close by
+      expect(show(9.5, r), `role ${r} hidden, close`).toBe(true);
+      expect(show(11, r), `role ${r} hidden`).toBe(false);
     }
     for (const r of [NPC.SENTRY, NPC.RIVAL_GUARD, NPC.RIVAL_SURVEYOR, NPC.DESERTER]) {
       expect(show(11.5, r), `role ${r}`).toBe(true);

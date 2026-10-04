@@ -145,6 +145,11 @@ export class PartBuilder {
   static auditKind = "add";
   /** Test hook (see PrimitiveAudit.anchored): true while a builder adds pieces that are buried in their base by design. */
   static anchored = false;
+  /**
+   * D-078: set by the rig around the bones that are clothes (torso, pelvis, arms, legs) and around a hat: every vertex added is marked as FABRIC
+   * (attribute `fab` = 1, the character material weaves it) unless its colour is one of `except` (skin, leather, the metal fittings). Unset: nothing is.
+   */
+  static fabric: { except: readonly number[] } | undefined = undefined;
 
   private readonly parts: BufferGeometry[] = [];
   private seq = 0;
@@ -185,6 +190,8 @@ export class PartBuilder {
     const normals = geo.attributes.normal!;
     const own = geo.attributes.color; // lofts carry per-section colours; everything else is one flat colour
     const colors = new Float32Array(n * 3);
+    const fab = new Float32Array(n);
+    const cloth = PartBuilder.fabric;
     // Clay feel: a barely-there per-primitive tint (a few percent: enough to break up big flat areas, small enough that
     // skin never looks camouflaged) and every vertex is shaded by which way it faces: undersides darken (contact/occlusion
     // cue under brims, chins, bellies), tops lift a touch.
@@ -193,11 +200,16 @@ export class PartBuilder {
       const ny = normals.getY(i);
       const shade = tint * (ny < 0 ? 1 + ny * 0.22 : 1 + ny * 0.03); // toon lighting does the modelling; this only adds contact darkening underneath
       if (own) c.setRGB(own.getX(i), own.getY(i), own.getZ(i));
+      if (cloth) {
+        const hex = c.getHex();
+        fab[i] = cloth.except.includes(hex) ? 0 : 1;
+      }
       colors[i * 3] = Math.min(1, c.r * shade);
       colors[i * 3 + 1] = Math.min(1, c.g * shade);
       colors[i * 3 + 2] = Math.min(1, c.b * shade);
     }
     geo.setAttribute("color", new BufferAttribute(colors, 3));
+    geo.setAttribute("fab", new BufferAttribute(fab, 1)); // (on every part, so any two parts still merge)
     // outline hulls only: every part carries `hthin` (0 = the full ink line; a nose's bridge sets its own, see SweepOptions.hullThin) so the parts merge
     if (PartBuilder.hullMode && !geo.attributes.hthin) geo.setAttribute("hthin", new BufferAttribute(new Float32Array(n), 1));
     if (this.trackMorph) geo.setAttribute("mw", new BufferAttribute(new Float32Array(n).fill(this.morphable ? 1 : 0), 1));
@@ -311,6 +323,7 @@ export class PartBuilder {
     if (!merged) return undefined;
     if (PartBuilder.hullMode) {
       merged.deleteAttribute("color"); // hulls are drawn in one flat colour
+      merged.deleteAttribute("fab");
       addOutlineNormals(merged); // only the hull reads the smoothed normal
     }
     merged.computeBoundingSphere();

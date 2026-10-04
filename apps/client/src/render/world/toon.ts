@@ -320,6 +320,23 @@ const FADE_BODY = /* glsl */ `
   }
 `;
 
+/**
+ * D-079: PLANTED, NOT SET DOWN. A wall, a post, a rock or a trunk met the ground with no darkening at all: the eye reads that as resting on top.
+ * Every scenery fragment now looks up the ground's height under it (a baked texture, `bakeGroundHeights`) and darkens in a contact band over the
+ * last half metre, and upright faces carry a little rising damp up to about a metre. The ground itself never does (it opts out with `fade: false`).
+ */
+const CONTACT_BODY = /* glsl */ `
+  if (uGroundRect.w > 0.5) {
+    vec2 guv = (vWPos.xz - uGroundRect.xy) / uGroundRect.z;
+    if (guv.x > 0.0 && guv.y > 0.0 && guv.x < 1.0 && guv.y < 1.0) {
+      float above = vWPos.y - texture2D(uGround, guv).r;
+      float touch = 1.0 - smoothstep(0.0, 0.5, above);
+      float damp = (1.0 - smoothstep(0.3, 1.1, above)) * (1.0 - smoothstep(0.55, 0.85, abs(gWN.y)));
+      diffuseColor.rgb *= 1.0 - 0.32 * touch - 0.08 * damp;
+    }
+  }
+`;
+
 export const autumnUniforms = {
   uAutumn0: { value: new Color(PALETTE.world.autumnRed) },
   uAutumn1: { value: new Color(PALETTE.world.autumnOrange) },
@@ -388,6 +405,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   const grain = (opts.grain ?? true) && !lite && toonGrain > 0;
   const grainFull = toonGrain === 2;
   const fade = (opts.fade ?? true) && !lite;
+  const contact = grain && fade; // D-079: the scenery (never the ground itself) darkens where it meets the ground
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = worldTime;
     shader.uniforms.uPush = pushers;
@@ -428,11 +446,11 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}${contact ? "\nuniform sampler2D uGround; uniform vec4 uGroundRect;" : ""}`,
     );
     if (fade) fs = fs.replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>\n${FADE_BODY}`);
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
-    fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}${grain ? "\nvec3 gWN = gNormal(); vec3 gAlbedo = diffuseColor.rgb; diffuseColor.rgb *= grainFactor(gWN, gAlbedo);" : ""}`);
+    fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}${grain ? "\nvec3 gWN = gNormal(); vec3 gAlbedo = diffuseColor.rgb; diffuseColor.rgb *= grainFactor(gWN, gAlbedo);" : ""}${contact ? CONTACT_BODY : ""}`);
     if (grain) {
       // the hatch, after the light: where the lit colour has fallen well below the albedo, the shade is drawn in ink
       fs = fs.replace(
@@ -462,7 +480,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     if (!lite) fs = fs.replace("#include <fog_fragment>", MIST_FOG);
     shader.fragmentShader = fs;
   };
-  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}|${grain ? `g${toonGrain}` : ""}|${fade ? "f" : ""}`;
+  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}|${grain ? `g${toonGrain}` : ""}|${fade ? "f" : ""}|${contact ? "c" : ""}`;
   return m;
 }
 

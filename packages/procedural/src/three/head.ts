@@ -203,6 +203,14 @@ export function buildHead(spec: CharacterSpec, P: Proportions, c: HeadColors): B
   // ---- hats: fitted to the skull (see hatsGeo.ts). Each hat has a crown half-width at its band; it sits where the head is exactly that wide (plus a
   // margin for hair), so the crown wraps the head instead of floating over it.
   mark("hat");
-  if (hatOn) buildHat({ b, spec, hf, R, cy, hatC, accent, burnt, seatY, hairT: hairBandThickness(fc, hf, seatY) });
+  if (hatOn) {
+    // D-078: a hat is felt, straw or cloth: woven, all but its metal (badges, bands in the accent)
+    PartBuilder.fabric = { except: [accent, skin] };
+    try {
+      buildHat({ b, spec, hf, R, cy, hatC, accent, burnt, seatY, hairT: hairBandThickness(fc, hf, seatY) });
+    } finally {
+      PartBuilder.fabric = undefined;
+    }
+  }
   return b.build((geo, mw) => addFaceMorphs(geo, mw, P, cy), (geo, sw) => addHairSway(geo, sw, hf));
 }

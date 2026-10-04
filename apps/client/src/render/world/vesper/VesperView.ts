@@ -1,6 +1,6 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
 import { PALETTE, smoothstep, vesperLevel, type CollisionWorld, type DayState, type ScenarioView } from "@cb/shared";
-import { atmoUniforms, motion } from "../atmosphere.ts";
+import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, snagGeometry, type Lod } from "../flora.ts";
 import { disposeTree } from "../kit.ts";
@@ -79,6 +79,7 @@ export class VesperView implements RegionView {
     this.root.name = "world";
     this.fill = new InteriorFill(this.root, PALETTE.vesper.companyCream, PALETTE.vesper.timberLight, INTERIOR_FILL);
     setToonLite(detail.liteShading);
+    if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
     const terrain = world.terrain as VesperTerrain;
     this.addGround(terrain);
