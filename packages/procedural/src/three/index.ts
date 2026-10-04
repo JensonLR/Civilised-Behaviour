@@ -12,3 +12,4 @@ export * from "./horse.ts";
 export * from "./horseAnimator.ts";
 export * from "./ridePose.ts";
 export * from "./wagon.ts";
+export * from "./bearing.ts";

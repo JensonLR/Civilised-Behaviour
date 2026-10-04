@@ -6,6 +6,7 @@ import { HAIR_SWAY_MAX } from "./hairSway.ts";
 import type { ExpressionId } from "./expressions.ts";
 import type { CharacterRig } from "./rig.ts";
 import { armRestAbduction, crouchObstruction, kneeFlexLimit } from "./armClearance.ts";
+import { BEARINGS, bearingOf, type Bearing } from "./bearing.ts";
 import { applyRidePose, newRideInput, type RideInput } from "./ridePose.ts";
 import { HAND_CENTRE, applyMatrix, forearmMatrix, computeHold, newHoldOut, rotateByQuat, solveArm, solveWrist, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
 
@@ -76,6 +77,8 @@ export class CharacterAnimator {
   private breath = 0;
   /** Ambient life (idle blinking, weight shift, glances, idle actions). Disable for stills (photo mode) and deterministic tests. */
   autoBlink = true;
+  /** False: the idle acts never play, but the bearing's stance and the breathing still do (the lineup's `acts=0`, for reviewing stances). */
+  idleActs = true;
   /**
    * Motion scale for ambient flourishes that are not gameplay (today: the hair's sway): 1 normally, 0.3 under the game's "reduce motion" setting (the client sets it; the animator does
    * not know the setting). 0 stills them.
@@ -119,6 +122,10 @@ export class CharacterAnimator {
   private readonly bellyCrouch: number;
   private readonly skirtCrouch: number;
   private idleAct = 0;
+  /** D-066: how this body stands about (from its dress): stance, habits, the roll of its walk. */
+  private readonly bearing: Bearing;
+  /** Indices into IDLE_ACTS this body may pick from (its bearing's habits). */
+  private readonly acts: readonly number[];
   private idleAmt = 0;
   private idleSlot = -1;
   private walkBlend = 0;
@@ -172,6 +179,8 @@ export class CharacterAnimator {
     this.bellyCrouch = ob.belly;
     this.skirtCrouch = ob.skirt;
     this.faceAnim = new FaceAnimator(this.seed);
+    this.bearing = BEARINGS[bearingOf(s)];
+    this.acts = this.bearing.acts.map((a) => IDLE_ACTS.indexOf(a)).filter((i) => i > 0);
   }
 
   /** Shows an expression at an intensity 0..1 (0 is the neutral face, 1 the full expression; a flinch and a scream are one expression at two strengths). */
@@ -398,7 +407,7 @@ export class CharacterAnimator {
     const twist = Math.min(1, g * 1.4) * (1 + 0.4 * runW) * move;
     const pelvisYaw = -0.11 * s * twist;
     j.pelvis.rotation.y = pelvisYaw;
-    const roll = 0.045 * c * move + this.limpSide * this.limp * 0.1 * onBad + (pegSide * this.pegBlend * 0.09 * onPeg) + m.drunk * 0.1 * Math.sin(this.time * 1.9);
+    const roll = 0.045 * this.bearing.roll * c * move + this.limpSide * this.limp * 0.1 * onBad + (pegSide * this.pegBlend * 0.09 * onPeg) + m.drunk * 0.1 * Math.sin(this.time * 1.9);
     j.pelvis.rotation.z = roll;
     j.pelvis.position.x = 0.022 * c * move * (1 + runW * 0.4) + m.drunk * 0.05 * Math.sin(this.time * 1.9) * (0.4 + move);
 
@@ -492,6 +501,8 @@ export class CharacterAnimator {
     const idle = (1 - Math.min(1, move * 2)) * (1 - this.air) * (1 - this.crouch) * (1 - busy) * (1 - this.down) * (1 - Math.max(m.pain, m.fear, m.triumph, m.angry, m.smug, m.disgust, m.surprise, m.laugh, m.sleep));
     let headYaw = 0;
     let headPitch = 0;
+    let twL = 0; // (the upper arm's twist about its own length: turns a bent elbow's forearm in across the body)
+    let twR = 0;
     if (idle > 0.01 && this.autoBlink) {
       const shift = Math.sin(this.time * 0.45);
       j.pelvis.rotation.z += shift * 0.035 * idle;
@@ -507,12 +518,57 @@ export class CharacterAnimator {
       if (slot !== this.idleSlot) {
         this.idleSlot = slot;
         const r = h01(slot * 7919 + this.seed);
-        this.idleAct = r < 0.32 ? 0 : 1 + Math.floor(h01(slot * 104729 + this.seed) * (IDLE_ACTS.length - 1));
+        this.idleAct = r < 0.32 || !this.idleActs || this.acts.length === 0 ? 0 : this.acts[Math.floor(h01(slot * 104729 + this.seed) * this.acts.length)]!;
       }
       const t = (this.time / period + h01(this.seed) * 3) % 1;
       const env = smooth(0.05, 0.22, t) * (1 - smooth(0.62, 0.8, t));
       this.idleAmt = damp(this.idleAmt, env, 30, dt);
       const w = this.idleAmt * idle * (this.idleAct === 0 ? 0 : 1);
+      // D-066: the resting stance (an act, when one plays, takes the arms from it and gives them back)
+      const st = idle * (1 - w);
+      headPitch += this.bearing.bow * idle;
+      switch (this.bearing.stance) {
+        case "clasp": // hands together in front at the waist
+          shL = lerp(shL, 0.25, st);
+          shR = lerp(shR, 0.25, st);
+          elL = lerp(elL, 1.45, st);
+          elR = lerp(elR, 1.45, st);
+          szL = lerp(szL, 0.08 - this.armExtraSide[0], st);
+          szR = lerp(szR, -0.08 + this.armExtraSide[1], st);
+          twL = -0.8 * st;
+          twR = 0.8 * st;
+          break;
+        case "fold": // arms folded across the chest
+          shL = lerp(shL, 0.3, st);
+          shR = lerp(shR, 0.3, st);
+          elL = lerp(elL, 1.95, st);
+          elR = lerp(elR, 1.95, st);
+          szL = lerp(szL, 0.12 - this.armExtraSide[0], st);
+          szR = lerp(szR, -0.12 + this.armExtraSide[1], st);
+          twL = -1.1 * st;
+          twR = 1.1 * st;
+          break;
+        case "akimbo": // hands on the hips, elbows out
+          shL = lerp(shL, -0.15, st);
+          shR = lerp(shR, -0.15, st);
+          elL = lerp(elL, 1.55, st);
+          elR = lerp(elR, 1.55, st);
+          szL = lerp(szL, -0.85 - this.armExtraSide[0], st);
+          szR = lerp(szR, 0.85 + this.armExtraSide[1], st);
+          twL = -0.45 * st;
+          twR = 0.45 * st;
+          break;
+        case "behind": // hands clasped at the small of the back
+          shL = lerp(shL, -0.55, st);
+          shR = lerp(shR, -0.55, st);
+          elL = lerp(elL, 0.35, st);
+          elR = lerp(elR, 0.35, st);
+          szL = lerp(szL, 0.28, st);
+          szR = lerp(szR, -0.28, st);
+          break;
+        default:
+          break;
+      }
       switch (IDLE_ACTS[this.idleAct]) {
         case "look":
           headYaw += Math.sin(t * Math.PI * 4) * 0.7 * w;
@@ -598,6 +654,8 @@ export class CharacterAnimator {
     j.shoulderR.rotation.x = shR;
     j.shoulderL.rotation.z = szL;
     j.shoulderR.rotation.z = szR;
+    j.shoulderL.rotation.y = twL;
+    j.shoulderR.rotation.y = twR;
     // (an elbow folds no further than the ragdoll's hinge lets it: a sprint's swing with a pained arm used to reach 2.56)
     j.elbowL.rotation.x = clamp(elL, 0, 2.42);
     j.elbowR.rotation.x = clamp(elR, 0, 2.42);
