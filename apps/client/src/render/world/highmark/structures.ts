@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
+import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, RingGeometry, Shape, SphereGeometry } from "three";
 import { PALETTE, hash3, highmarkLevel, type CollisionWorld } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
@@ -481,10 +481,24 @@ function palace(k: Kit, world: CollisionWorld, lod: Lod, out: HighmarkOut): void
   const c = HIGHMARK_ANCHORS.capital.court;
   const cy = world.terrainHeight(c.x, c.z);
   k.setBase(c.x, cy + 0.03, c.z, 0);
+  // an INLAY, flush with the paving: a gilt ring at the painted disc's rim, and flat rays running out of it (they were loose three-sided cones
+  // half a metre high, a metre clear of the disc: from the gate they read as scattered shards)
   const rays = lod ? 16 : 8;
+  const ringR = 4.8;
+  const ringGeo = new RingGeometry(ringR - 0.16, ringR + 0.06, lod ? 64 : 24);
+  ringGeo.rotateX(-Math.PI / 2);
+  k.add(ringGeo, { at: [0, -0.022, 0], colour: P.sunGold, flat: true }); // (8 mm proud of the paving)
+  const ray = new Shape();
+  ray.moveTo(0, -0.3);
+  ray.lineTo(1.7, 0);
+  ray.lineTo(0, 0.3);
+  ray.closePath();
   for (let i = 0; i < rays; i++) {
     const a = (i / rays) * Math.PI * 2;
-    k.add(new ConeGeometry(0.34, 1.7, 3, 1), { at: [Math.cos(a) * 5.7, 0.02, Math.sin(a) * 5.7], rot: [0, -a, -Math.PI / 2], colour: P.sunGold, flat: true });
+    const g = new ExtrudeGeometry(ray, { depth: 0.035, bevelEnabled: false });
+    g.rotateX(Math.PI / 2); // lie flat: the shape's +y becomes -z, its extrusion runs down
+    g.translate(0, 0.035, 0);
+    k.add(g, { at: [Math.cos(a) * (ringR - 0.02), -0.035, Math.sin(a) * (ringR - 0.02)], rot: [0, -a, 0], colour: P.sunGold, flat: true });
   }
   k.add(new CylinderGeometry(1.1, 1.1, 0.05, lod ? 18 : 8), { at: [0, 0.02, 0], colour: P.sunGold, flat: true });
   k.clearBase();

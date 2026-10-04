@@ -230,10 +230,19 @@ export function trailOverlayPatch(mask: DataTexture, detail?: DataTexture): { ke
           vec2 lc = floor(lp);
           vec2 lo = gh22(lc);
           float lh = gh21(lc + 3.7);
-          float leafD = length(fract(lp) - (0.2 + 0.6 * lo));
-          float fleck = step(leafD, 0.13 + 0.14 * lh) * step(0.55 - dm.r * 0.45, gh21(lc + 9.1));
-          vec3 leaf = mix(uLeaf0, uLeaf1, fract(lh * 9.7));
-          diffuseColor.rgb = mix(diffuseColor.rgb, leaf * (0.8 + lum * 0.5), fleck * smoothstep(0.04, 0.35, dm.r) * 0.8);
+          // a LEAF, not a dot: a pointed lens at its own angle, with a darker midrib (round flecks read as polka dots on the grass)
+          vec2 ld = fract(lp) - (0.2 + 0.6 * lo);
+          float la = lh * 6.2832 + lo.x * 3.0;
+          vec2 lq = vec2(cos(la) * ld.x + sin(la) * ld.y, -sin(la) * ld.x + cos(la) * ld.y);
+          float llen = 0.16 + 0.13 * lh;
+          float lw = llen * (0.46 + 0.14 * fract(lh * 5.3));
+          float lt = clamp(lq.x / llen, -1.0, 1.0);
+          float edge = lw * (1.0 - lt * lt) * (1.0 - 0.25 * lt);
+          float aa = fwidth(lq.y) + 0.004;
+          float fleck = (1.0 - smoothstep(edge - aa, edge + aa, abs(lq.y))) * step(abs(lq.x), llen) * step(0.55 - dm.r * 0.45, gh21(lc + 9.1));
+          vec3 leaf = mix(uLeaf0, uLeaf1, fract(lh * 9.7)) * (0.86 + 0.28 * fract(lh * 13.1));
+          leaf *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.012 + aa, abs(lq.y))) * step(abs(lt), 0.85);
+          diffuseColor.rgb = mix(diffuseColor.rgb, leaf * (0.8 + lum * 0.5), fleck * smoothstep(0.04, 0.35, dm.r) * 0.85);
         }
         // sun-baked clay: a network of cracks (the ridges between voronoi cells), darker in the seams, paler on the plates
         if (dm.g > 0.06) {

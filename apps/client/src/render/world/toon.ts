@@ -291,6 +291,35 @@ const GRAIN_HEAD = /* glsl */ `
   }
 `;
 
+/**
+ * D-077: THE CAMERA SEES ITS SUBJECT. A bush, a reed bed or a branch with no collider (the follow camera only dodges colliders) could sit against
+ * the lens and fill half the picture, or stand between the lens and the player and hide them. Scenery now dithers away (screen-door: an ordered
+ * 4x4 pattern, no transparency sorting, shadows untouched) within about a metre of the lens, and thins to a quarter inside a narrow tunnel round
+ * the line from the lens to the player (the last 0.6 m before the player stays solid: what they stand in is theirs). Off for the ground.
+ */
+const FADE_HEAD = /* glsl */ `
+  uniform vec4 uFocus;
+  float fadeBayer(vec2 p) {
+    int i = int(mod(p.x, 4.0)) + int(mod(p.y, 4.0)) * 4;
+    float b[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    return (b[i] + 0.5) / 16.0;
+  }
+`;
+const FADE_BODY = /* glsl */ `
+  {
+    vec3 toFrag = vWPos - cameraPosition;
+    float keep = mix(1.0, smoothstep(0.35, 1.3, length(toFrag)), uFocus.w); // (never in first person: a wall you walk up to stays a wall)
+    if (uFocus.w > 0.5) {
+      vec3 ab = uFocus.xyz - cameraPosition;
+      float L = length(ab);
+      vec3 dir = ab / max(L, 1e-3);
+      float t = dot(toFrag, dir);
+      if (t > 0.0 && t < L - 0.6) keep = min(keep, mix(0.25, 1.0, smoothstep(0.45, 0.95, length(toFrag - dir * t))));
+    }
+    if (keep < 0.999 && keep < fadeBayer(gl_FragCoord.xy)) discard;
+  }
+`;
+
 export const autumnUniforms = {
   uAutumn0: { value: new Color(PALETTE.world.autumnRed) },
   uAutumn1: { value: new Color(PALETTE.world.autumnOrange) },
@@ -335,6 +364,8 @@ export interface ToonOptions {
   wetDark?: number;
   /** D-075: surface grain and the shade's ink hatch (default true; off for what must stay clean: lamps, glass, painted signs). */
   grain?: boolean;
+  /** D-077: dither away near the lens and thin out on the line from the lens to the player (default true; the ground, the skirt and the water never fade). */
+  fade?: boolean;
   /** Extra fragment work on the diffuse colour, run after vertex colours are applied (terrain trail overlay). */
   colourPatch?: { key: string; uniforms: Record<string, { value: unknown }>; head: string; body: string };
 }
@@ -356,6 +387,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   const wetDark = (opts.wetDark ?? 0.6).toFixed(2);
   const grain = (opts.grain ?? true) && !lite && toonGrain > 0;
   const grainFull = toonGrain === 2;
+  const fade = (opts.fade ?? true) && !lite;
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = worldTime;
     shader.uniforms.uPush = pushers;
@@ -396,8 +428,9 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}`,
     );
+    if (fade) fs = fs.replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>\n${FADE_BODY}`);
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
     fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}${grain ? "\nvec3 gWN = gNormal(); vec3 gAlbedo = diffuseColor.rgb; diffuseColor.rgb *= grainFactor(gWN, gAlbedo);" : ""}`);
     if (grain) {
@@ -429,7 +462,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     if (!lite) fs = fs.replace("#include <fog_fragment>", MIST_FOG);
     shader.fragmentShader = fs;
   };
-  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}|${grain ? `g${toonGrain}` : ""}`;
+  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}|${grain ? `g${toonGrain}` : ""}|${fade ? "f" : ""}`;
   return m;
 }
 

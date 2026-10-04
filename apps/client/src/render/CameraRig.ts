@@ -16,6 +16,7 @@ import {
   type EyeSample,
 } from "./firstPerson.ts";
 import { easeMountedCamera, newMountedCamera } from "./mounts/mountCamera.ts";
+import { atmoUniforms } from "./world/atmosphere.ts";
 
 export interface CameraSettings {
   fov: number;
@@ -38,6 +39,11 @@ const HIP_SHOULDER = 0.55;
 const HEAD_Y = 1.55;
 /** The follow camera never comes closer to the head than this when a wall squeezes it (the head is about 0.2 m across; this keeps the lens clear of it and of the neck). */
 const MIN_FOLLOW = 0.85;
+/**
+ * The lens has a body: besides the ray from the head to the lens, two more go to the lens's left and right edges this far out. A trunk or a post just
+ * BESIDE the line (missed by a single ray) would otherwise sit a hand's breadth from the lens and fill half the picture.
+ */
+export const LENS_RADIUS = 0.32;
 
 /**
  * The player's camera. Two views share one yaw/pitch (the input stream reports yaw so the shared movement step stays camera-relative):
@@ -204,6 +210,8 @@ export class CameraRig {
     if (useFirst) this.updateFirst(target, dt, aiming, eye);
     else this.primed = false;
 
+    // D-077: the scenery's camera fade follows the subject (the chest), only while the follow camera is the one in use
+    atmoUniforms.uFocus.value.set(this.focus.x, this.focus.y + 1.2, this.focus.z, useFirst ? 1 - e : 1);
     if (useFirst) {
       this.camera.position.lerpVectors(this.thirdPos, this.fpPos, e);
       this.lookBlend.lerpVectors(this.thirdLook, this.fpLook, e);
@@ -281,11 +289,21 @@ export class CameraRig {
     const wy = this.desired.y - hy;
     const wz = this.desired.z - hz;
     const wl = Math.hypot(wx, wy, wz);
-    if (wl > MIN_FOLLOW && rayWorld(this.world, hx, hy, hz, wx / wl, wy / wl, wz / wl, wl, _wall)) {
-      const keep = clamp(_wall.t - AIM.camera.wallClearance, MIN_FOLLOW, wl);
-      this.wallPull = wl - keep;
-      const k = keep / wl;
-      this.desired.set(hx + wx * k, hy + wy * k, hz + wz * k);
+    if (wl > MIN_FOLLOW) {
+      // the nearest hit, as a fraction of the way out, over the centre ray and the rays to the lens's two edges (right = the camera's own right)
+      let frac = 1;
+      for (let side = -1; side <= 1; side++) {
+        const ex = wx + cosY * LENS_RADIUS * side;
+        const ez = wz - sinY * LENS_RADIUS * side;
+        const el = Math.hypot(ex, wy, ez);
+        if (rayWorld(this.world, hx, hy, hz, ex / el, wy / el, ez / el, el, _wall)) frac = Math.min(frac, (_wall.t - AIM.camera.wallClearance) / el);
+      }
+      if (frac < 1) {
+        const keep = clamp(frac * wl, MIN_FOLLOW, wl);
+        this.wallPull = wl - keep;
+        const k = keep / wl;
+        this.desired.set(hx + wx * k, hy + wy * k, hz + wz * k);
+      }
     }
 
     // follow quickly; a wall pull-in is taken at once (a camera lerping through a wall for a few frames is the ugly part)

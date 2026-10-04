@@ -110,11 +110,11 @@ export class KessarView implements RegionView {
 
   private addGround(terrain: KessarTerrain): void {
     const segments = Math.round(this.detail.terrainSegments * 1.2); // (the gorge's walls are two metres wide: a finer grid than the open meadow's)
-    const ground = new Mesh(this.track(buildKessarGround(terrain, segments)), this.track(toonMaterial({ puddles: this.detail.rain > 0, wetDark: 1 })));
+    const ground = new Mesh(this.track(buildKessarGround(terrain, segments)), this.track(toonMaterial({ puddles: this.detail.rain > 0, wetDark: 1, fade: false })));
     ground.name = "terrain";
     ground.receiveShadow = true;
     this.root.add(ground);
-    const skirt = new Mesh(this.track(buildKessarSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1 })));
+    const skirt = new Mesh(this.track(buildKessarSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1, fade: false })));
     skirt.name = "skirt";
     this.root.add(skirt);
   }

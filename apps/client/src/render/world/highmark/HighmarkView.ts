@@ -125,11 +125,11 @@ export class HighmarkView implements RegionView {
 
   private addGround(terrain: HighmarkTerrain): void {
     const segments = Math.round(this.detail.terrainSegments * 1.5); // (the terraces' risers are walls a metre and a half thick: a finer grid than the open plain's)
-    const ground = new Mesh(this.track(buildHighmarkGround(terrain, segments)), this.track(toonMaterial({ puddles: this.detail.rain > 0, wetDark: 1 })));
+    const ground = new Mesh(this.track(buildHighmarkGround(terrain, segments)), this.track(toonMaterial({ puddles: this.detail.rain > 0, wetDark: 1, fade: false })));
     ground.name = "terrain";
     ground.receiveShadow = true;
     this.root.add(ground);
-    const skirt = new Mesh(this.track(buildHighmarkSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1 })));
+    const skirt = new Mesh(this.track(buildHighmarkSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1, fade: false })));
     skirt.name = "skirt";
     this.root.add(skirt);
   }

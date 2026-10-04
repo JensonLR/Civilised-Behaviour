@@ -120,11 +120,11 @@ export class VesperView implements RegionView {
 
   private addGround(terrain: VesperTerrain): void {
     const segments = Math.round(this.detail.terrainSegments * 1.5);   // (the cliffs are steep: a finer grid than the open plain's)
-    const ground = new Mesh(this.track(buildVesperGround(terrain, segments)), this.track(toonMaterial({ colourPatch: vesperStrataPatch(), puddles: this.detail.rain > 0, wetDark: 1 })));
+    const ground = new Mesh(this.track(buildVesperGround(terrain, segments)), this.track(toonMaterial({ colourPatch: vesperStrataPatch(), puddles: this.detail.rain > 0, wetDark: 1, fade: false })));
     ground.name = "terrain";
     ground.receiveShadow = true;
     this.root.add(ground);
-    const skirt = new Mesh(this.track(buildVesperSkirt(terrain)), this.track(toonMaterial({ fire: false, wetDark: 1, colourPatch: vesperStrataPatch() })));
+    const skirt = new Mesh(this.track(buildVesperSkirt(terrain)), this.track(toonMaterial({ fire: false, wetDark: 1, fade: false, colourPatch: vesperStrataPatch() })));
     skirt.name = "skirt";
     this.root.add(skirt);
   }

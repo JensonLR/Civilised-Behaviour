@@ -67,3 +67,20 @@ describe("D-075: the scenery's surface grain", () => {
     expect(fs).toContain("puddle");
   });
 });
+
+describe("D-077: the camera fade", () => {
+  it("scenery dithers near the lens and on the line to the player; the ground opts out; lite shading has none; each is its own program", () => {
+    setToonLite(false, 2);
+    const on = compile(toonMaterial());
+    expect(on.fs).toContain("uniform vec4 uFocus");
+    expect(on.fs).toContain("discard");
+    // the fade runs first in main (a discarded fragment costs nothing more)
+    expect(on.fs.indexOf("fadeBayer(gl_FragCoord.xy)")).toBeLessThan(on.fs.indexOf("#include <color_fragment>"));
+    const ground = compile(toonMaterial({ fade: false, wetDark: 1 }));
+    expect(ground.fs).not.toContain("uFocus");
+    setToonLite(true, 2);
+    expect(compile(toonMaterial()).fs).not.toContain("uFocus");
+    setToonLite(false, 2);
+    expect(on.key).not.toBe(compile(toonMaterial({ fade: false })).key);
+  });
+});

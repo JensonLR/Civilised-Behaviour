@@ -1,4 +1,4 @@
-import { Color, Vector3 } from "three";
+import { Color, Vector3, Vector4 } from "three";
 import type { WeatherKind } from "@cb/shared";
 
 /**
@@ -87,6 +87,8 @@ export const atmoUniforms = {
   uHour: { value: 13 },
   /** 0..1 valley mist (dawn, and after rain): ground fog that pools in the hollows (see `toon.ts`). */
   uMist: { value: 0 },
+  /** D-077: the third-person camera's subject (xyz: the player's chest; w: 1 in third person, 0 in first): scenery on the line between the lens and the player thins out. Set by `CameraRig`. */
+  uFocus: { value: new Vector4(0, 0, 0, 0) },
 };
 
 /** Wind strength (0..1) and the motion preference (0..1) -> the sway multiplier (0 = perfectly still). */
