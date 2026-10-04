@@ -442,7 +442,7 @@ describe("CharacterAnimator", () => {
 });
 
 describe("D-078: the clothes are woven, the skin is not", () => {
-  it("cloth bones mark their vertices as fabric; the head and the hands never do; the material weaves only fabric", () => {
+  it("cloth bones and hats mark their vertices as fabric; the hands never do; the material weaves only fabric", () => {
     const rig = buildCharacter(generateCharacter(11), { outline: false });
     const byBone = new Map<string, { fab: number; all: number }>();
     rig.root.traverse((o) => {
@@ -459,7 +459,7 @@ describe("D-078: the clothes are woven, the skin is not", () => {
     });
     let woven = 0;
     for (const [bone, e] of byBone) {
-      if (/hand|head|wrist|neck/i.test(bone)) expect(e.fab, bone).toBe(0);
+      if (/hand|wrist|neck/i.test(bone)) expect(e.fab, bone).toBe(0); // (a head is woven only where it wears a hat)
       woven += e.fab;
     }
     expect(woven).toBeGreaterThan(200);

@@ -146,10 +146,10 @@ export class PartBuilder {
   /** Test hook (see PrimitiveAudit.anchored): true while a builder adds pieces that are buried in their base by design. */
   static anchored = false;
   /**
-   * D-078: set by the rig around the bones that are clothes (torso, pelvis, arms, legs): every vertex added is marked as FABRIC (attribute `fab` = 1,
-   * the character material weaves it) unless its colour is the wearer's skin or leather (bare arms and legs, boots and belts). Unset: nothing is fabric.
+   * D-078: set by the rig around the bones that are clothes (torso, pelvis, arms, legs) and around a hat: every vertex added is marked as FABRIC
+   * (attribute `fab` = 1, the character material weaves it) unless its colour is one of `except` (skin, leather, the metal fittings). Unset: nothing is.
    */
-  static fabric: { skin: number; leather: number } | undefined = undefined;
+  static fabric: { except: readonly number[] } | undefined = undefined;
 
   private readonly parts: BufferGeometry[] = [];
   private seq = 0;
@@ -202,7 +202,7 @@ export class PartBuilder {
       if (own) c.setRGB(own.getX(i), own.getY(i), own.getZ(i));
       if (cloth) {
         const hex = c.getHex();
-        fab[i] = hex === cloth.skin || hex === cloth.leather ? 0 : 1;
+        fab[i] = cloth.except.includes(hex) ? 0 : 1;
       }
       colors[i * 3] = Math.min(1, c.r * shade);
       colors[i * 3 + 1] = Math.min(1, c.g * shade);

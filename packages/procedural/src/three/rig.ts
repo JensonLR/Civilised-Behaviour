@@ -368,7 +368,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     if (CLOTH_BONES.test(bone)) {
       const inner = make;
       make = () => {
-        PartBuilder.fabric = { skin, leather: leatherC };
+        PartBuilder.fabric = { except: [skin, leatherC] };
         try {
           return inner();
         } finally {
