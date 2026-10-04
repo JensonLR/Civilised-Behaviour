@@ -74,6 +74,8 @@ export interface ServerMessages {
   impact: ImpactEvent;
   /** An explosion (cosmetic: fireball, smoke column, shake). Damage and impulses were already applied by the server. */
   boom: BoomEvent;
+  /** D-073: somebody cried out in panic (a civilian bolting, a soldier whose nerve has gone). Cosmetic: a voice at their row. */
+  cry: CryEvent;
   /** Sent only to the shooter: their shot found somebody. Drives the hit marker. */
   hitmark: HitMarkEvent;
   /** Open a station UI for this player (the map room, or the paper at the notice board). */
@@ -129,6 +131,11 @@ export interface ImpactEvent {
   s: number;
   /** Weapon id that made it (sizes the puff). */
   w: number;
+}
+
+export interface CryEvent {
+  /** The row (an NPC key) that cried out. */
+  id: string;
 }
 
 export interface BoomEvent {

@@ -4,6 +4,8 @@ Last updated: 2026-10-03 (D-050 to D-060 are under "Now". Earlier, D-049: touch 
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-073 (2026-10-04): voices of chaos.** A severing's victim screams; a civilian who bolts and a soldier whose nerve breaks cry out in panic (server-decided, one cry per person per six seconds). Synthesised, tested offline; at Gore Off the scream is the ordinary cry.
+- **D-072 (2026-10-04): the ragdolls' hinges hold.** Hard stops after each physics step; no knee drawn bent backwards (one seeded fall in forty had been).
 - **D-071 (2026-10-04): the overturned powder wagon.** A fifth incident: a Syndicate wagon on its side, five kegs spilled, one fizzing. Throw it clear and the rest are the party's powder; dawdle and the chain goes up (the accident hurts everybody and declares no war). Both endings tested through a real room.
 - **D-069/D-070 (2026-10-04): the slung rifle and the first frame.** The rifle on the back now leans across it (a rotation-order slip had stood it straight up through the hat); abroad, the party arrives 4 m up the shore so the first frame is the land, not the jetty.
 - **D-068 (2026-10-04): the touch overlay.** Only the buttons that mean something now (aim with a firearm, melee with a weapon, throw with something carried, grab with a fallen comrade in reach, orders with hands hired), each an ink pictogram over a small caption; the top bar is three small marks. Five rings and three marks at rest on a phone, from fourteen.

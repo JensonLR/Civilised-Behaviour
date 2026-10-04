@@ -6,7 +6,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { TouchContext } from "../input/touchLogic.ts";
@@ -293,6 +293,10 @@ export class Game {
     session.room.onMessage("parley", (m: { view?: ParleyView; line?: string; closed?: boolean }) => this.onParley(m));
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
+    session.room.onMessage("cry", (e: CryEvent) => {
+      const p = typeof e?.id === "string" ? this.session.room.state.players.get(e.id) : undefined;
+      if (p) this.audio.panic(this.session.value(p, "x"), this.session.value(p, "y") + 1.5, this.session.value(p, "z"), p.look);
+    });
 
     if (isDemo()) {
       this.demoBanner = new DemoBanner(document.body);
@@ -1365,7 +1369,7 @@ export class Game {
     const victim = this.session.room.state.players.get(e.id);
     if (victim) {
       this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
-      this.audio.hurt(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, 1, e.id === this.session.sessionId); // (and the victim has an opinion about it)
+      this.audio.scream(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, e.id === this.session.sessionId); // (D-073: and the victim has an opinion about it)
     }
     if (!a || !getShowLimbs()) return;
     const piece = a.body.detachLimb(e.limb as LimbId);

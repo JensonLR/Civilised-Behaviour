@@ -451,6 +451,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     });
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
     this.cast = new Cast({
+      cry: (key) => this.broadcast("cry", { id: key }), // (D-073: a voice of panic, cosmetic)
       players: this.party,
       spawnNpc: (spec) => this.spawnNpc(spec),
       removeNpc: (key) => this.removeNpc(key),
