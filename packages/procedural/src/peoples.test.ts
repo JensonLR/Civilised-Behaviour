@@ -24,23 +24,33 @@ describe("applyPeople", () => {
       }
     }
   });
-  it("never touches skin, eye colour, hair colour or history", () => {
+  it("never touches eye colour, hair colour or history", () => {
     for (const p of PEOPLE_IDS) {
       for (const s of seeds.slice(0, 30)) {
         const base = generateCharacter(s);
         const a = applyPeople(base, p, s);
-        expect(a.skin).toBe(base.skin);
         expect(a.eyeColor).toBe(base.eyeColor);
         expect(a.hairColor).toBe(base.hairColor);
         for (const k of HISTORY_KEYS) expect(a[k], k).toBe(base[k]);
       }
     }
   });
-  it("skin tone spans the whole palette within every people (a people is not a skin tone)", () => {
+  it("D-067: a native's skin comes from the darker end of the palette, several tones per people (never one colour); a player keeps the whole palette", () => {
+    const lum = (c: number): number => 0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255);
+    const lightest = Math.max(...PALETTE.skin.map(lum));
     for (const p of PEOPLE_IDS) {
       const tones = new Set(seeds.map((s) => applyPeople(generateCharacter(s), p, s).skin));
-      expect(tones.size, p).toBeGreaterThanOrEqual(6);
+      expect(tones.size, p).toBeGreaterThanOrEqual(3);
+      // every one of them in the darker half of the palette's light range
+      for (const t of tones) expect(lum(PALETTE.skin[t]!), `${p} tone ${t}`).toBeLessThan(lightest * 0.72);
     }
+    // the peoples' bands are not all one band
+    const bands = NATIVE.map((p) => [...new Set(seeds.map((s) => applyPeople(generateCharacter(s), p, s).skin))].sort().join(","));
+    expect(new Set(bands).size).toBeGreaterThan(1);
+    // and a player (the generator, and a native look handed to the creator) can be any tone, the deep ones included
+    const mine = new Set(Array.from({ length: 2000 }, (_, i) => generateCharacter(i + 1).skin));
+    expect(mine.size).toBe(PALETTE.skin.length);
+    expect(societyDress({ ...generateCharacter(5), skin: 11 }).skin).toBe(11);
   });
   it("strips the colonial uniform and borrowed dress from every native", () => {
     for (const p of PEOPLE_IDS) {

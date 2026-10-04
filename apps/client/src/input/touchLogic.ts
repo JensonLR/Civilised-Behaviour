@@ -27,6 +27,36 @@ export interface TouchSource {
   takePressed?(): number;
   /** Told each frame whether something is in reach to use (the USE button reads RELOAD when not). Optional: test fakes need not draw. */
   showUse?(usable: boolean): void;
+  /** D-068: told each frame what the player can do, so only the buttons that mean something are on the glass. Optional. */
+  showContext?(c: TouchContext): void;
+}
+
+/**
+ * D-068: what the player can do right now, told to the overlay each frame so it shows only the buttons that mean something (a phone held sideways had fourteen on the glass). FIRE,
+ * JUMP, CROUCH, USE, ARMS, VIEW and PAUSE are always there; the rest come and go.
+ */
+export interface TouchContext {
+  /** A weapon is in hand (not bare fists): MELEE. */
+  armed: boolean;
+  /** It shoots: AIM. */
+  ranged: boolean;
+  /** Something in the arms: THROW. */
+  carrying: boolean;
+  /** A fallen comrade in reach to drag, or one being dragged: GRAB. */
+  grab: boolean;
+  /** Hired hands to give orders to: ORDERS. */
+  command: boolean;
+}
+
+/** The buttons a context hides (pure: the overlay applies it, the tests read it). */
+export function hiddenFor(c: TouchContext): ReadonlySet<TouchButton> {
+  const out = new Set<TouchButton>();
+  if (!c.ranged) out.add("aim");
+  if (!c.armed) out.add("melee");
+  if (!c.carrying) out.add("throw");
+  if (!c.grab) out.add("grab");
+  if (!c.command) out.add("orders");
+  return out;
 }
 
 export const TOUCH = {

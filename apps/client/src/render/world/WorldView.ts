@@ -214,12 +214,12 @@ export class WorldView {
       const mask = this.track(trailMaskTexture());
       patch = trailOverlayPatch(mask, this.track(groundDetailTexture(this.world.terrain, canopy)));
     }
-    const terrain = new Mesh(ground, this.track(toonMaterial({ colourPatch: patch, puddles: this.detail.rain > 0, wetDark: 1 })));
+    const terrain = new Mesh(ground, this.track(toonMaterial({ colourPatch: patch, puddles: this.detail.rain > 0, wetDark: 1, fade: false })));
     terrain.name = "terrain";
     terrain.receiveShadow = true;
     this.root.add(terrain);
 
-    const skirt = new Mesh(this.track(buildSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1 })));
+    const skirt = new Mesh(this.track(buildSkirt()), this.track(toonMaterial({ fire: false, wetDark: 1, fade: false })));
     skirt.name = "skirt";
     skirt.receiveShadow = false;
     this.root.add(skirt);

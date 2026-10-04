@@ -35,7 +35,9 @@ export function mapTable(k: Kit, lod: Lod): void {
   // the cloth hangs over the two long edges
   for (const s of [-1, 1]) box(k, [hx * 2 + 0.1, 0.34, 0.02], [0, height - 0.18, s * (hz + 0.05)], C.tableCloth);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.1), 0, sz * (hz - 0.09)], [sx * (hx - 0.12), height - 0.06, sz * (hz - 0.11)], 0.035, 0.028, C.signWood, 5);
-  box(k, [hx * 2 - 0.3, 0.05, 0.05], [0, 0.32, 0], C.signWood); // stretcher
+  // an H-stretcher: a rail between each end's two legs, and the long bar between the rails (it was one bar down the middle, touching no leg)
+  for (const sx of [-1, 1]) box(k, [0.05, 0.05, (hz - 0.09) * 2 + 0.03], [sx * (hx - 0.105), 0.32, 0], C.signWood);
+  box(k, [(hx - 0.105) * 2, 0.05, 0.05], [0, 0.32, 0], C.signWood);
   if (!lod) return;
   // instruments: an inkwell, a brass compass, a roll of paper, a pipe
   k.add(new CylinderGeometry(0.045, 0.05, 0.08, 8), { at: [hx - 0.2, height + 0.05, hz - 0.15], colour: C.iron, flat: true });

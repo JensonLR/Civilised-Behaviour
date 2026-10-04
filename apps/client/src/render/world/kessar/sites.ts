@@ -97,7 +97,9 @@ function marker(k: Kit, x: number, z: number, gy: number, lod: Lod): void {
   box(k, [1.15, 0.28, 1.15], [0, 0.0, 0], K.stoneDark);
   k.add(new CylinderGeometry(0.34, 0.46, 1.5, 4, 1), { at: [0, 0.89, 0], rot: [0, Math.PI / 4, 0], colour: masonry, flat: true, perFace: true });
   k.add(new ConeGeometry(0.4, 0.28, 4, 1), { at: [0, 1.78, 0], rot: [0, Math.PI / 4, 0], colour: K.stoneCap, flat: true });
-  if (lod) for (let i = 0; i < 4; i++) box(k, [0.04, 0.34, 0.06], [-0.18 + i * 0.12, 1.1, 0.4], K.stoneDark, [0, 0, 0.1]);
+  // the tally cuts, set INTO the +z face (the post is a frustum: the face is r/sqrt2 out at height y, and leans in as it rises)
+  const face = (y: number): number => (0.46 - (0.12 * (y - 0.14)) / 1.5) / Math.SQRT2;
+  if (lod) for (let i = 0; i < 4; i++) box(k, [0.04, 0.34, 0.05], [-0.18 + i * 0.12, 1.1, face(1.1)], K.stoneDark, [-Math.atan(0.12 / 1.5 / Math.SQRT2), 0, 0.1]);
   k.clearBase();
 }
 

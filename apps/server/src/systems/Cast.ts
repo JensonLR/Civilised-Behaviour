@@ -9,6 +9,7 @@ import type {
 } from "@cb/shared";
 import { NavQuery, buildNavGrid, type NavOptions } from "@cb/shared";
 import { npcBrainNew, npcHeardShot, npcThink, type NpcBrainState } from "@cb/shared";
+import { moraleBand, type MoraleBand } from "@cb/shared";
 
 /**
  * The Cast (D-034): ONE server system that runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step and combat
@@ -24,6 +25,8 @@ export interface CastHost {
   /** Creates the NPC row keyed `npcKey(spec.id)`; false when at NPC_CAP or already there. */
   spawnNpc(spec: NpcSpec): boolean;
   removeNpc(key: string): void;
+  /** D-073: row `key` cried out in panic (cosmetic: the room broadcasts it). Optional. */
+  cry?(key: string): void;
   /** stepCharacter + Combat.onFrame for that row. The command object is reused by the caller of this: copy it if you keep it. */
   stepNpc(key: string, cmd: MoveCommand): void;
   world(): CollisionWorld;
@@ -59,6 +62,9 @@ interface Rec {
   fleeUntil: number;
   fleeX: number;
   fleeZ: number;
+  /** D-073: the morale band after the last think (a soldier whose nerve goes cries out once), and when this row last cried out. */
+  lastBand: MoraleBand;
+  lastCry: number;
   // per-tick scratch
   tx: string;
   td: number;
@@ -88,7 +94,7 @@ class BudgetedNav implements NavApi {
 }
 
 export const CAST = {
-  sightClear: 28, sightWet: 16, allyRange: 15, tokens: 2, witnessShock: 16, goreShock: 12, hurtShock: 0.35, noiseShock: 4, underFireSeconds: 4,
+  sightClear: 28, sightWet: 16, allyRange: 15, tokens: 2, witnessShock: 16, goreShock: 12, crySpacingS: 6, hurtShock: 0.35, noiseShock: 4, underFireSeconds: 4,
   civilFleeSeconds: 6, civilFleeRange: 22, followRange: 40,
 } as const;
 
@@ -151,7 +157,7 @@ export class Cast implements CastApi {
       const rec: Rec = {
         spec, key: npcKey(spec.id), side, group: spec.group, brain: npcBrainNew(spec), civil,
         fn: civil ? undefined : this.host.brains[spec.brain] ?? this.host.brains.garrison ?? npcThink,
-        gone: false, wasDown: false, lastHp: 100, lastWounds: 0, lastMissing: 0, token: false, tokenHeld: false, tokenTarget: "", follow: "", fleeUntil: -1, fleeX: 0, fleeZ: 0,
+        gone: false, wasDown: false, lastHp: 100, lastWounds: 0, lastMissing: 0, token: false, tokenHeld: false, tokenTarget: "", follow: "", fleeUntil: -1, fleeX: 0, fleeZ: 0, lastBand: "steady", lastCry: -Infinity,
         tx: "", td: Infinity, hasEnemy: false, ex: 0, ez: 0, ev: 0, earmed: false, allies: 0, alliesDown: 0,
       };
       if (civil) rec.brain.mode = "civil";
@@ -351,6 +357,7 @@ export class Cast implements CastApi {
       const d = Math.hypot(row.x - x, row.z - z);
       if (r.civil) {
         if (d <= Math.min(radius, CAST.civilFleeRange)) {
+          if (r.fleeUntil < now) this.cry(r, now); // (D-073: a civilian who starts to run cries out)
           r.fleeUntil = now + CAST.civilFleeSeconds;
           r.fleeX = x;
           r.fleeZ = z;
@@ -436,6 +443,11 @@ export class Cast implements CastApi {
       const row = this.host.players.get(r.key);
       if (!row) continue;
       this.think(r, row, step, now, fear);
+      if (!r.civil) {
+        const band = moraleBand(r.brain.morale.v);
+        if (band === "broken" && r.lastBand !== "broken") this.cry(r, now);
+        r.lastBand = band;
+      }
     }
     this.rr = (this.rr + 1) % n;
   }
@@ -570,12 +582,20 @@ export class Cast implements CastApi {
       const d = Math.hypot(orow.x - row.x, orow.z - row.z);
       if (o.civil) {
         if (d <= CAST.civilFleeRange) {
+          if (o.fleeUntil < now) this.cry(o, now);
           o.fleeUntil = now + CAST.civilFleeSeconds;
           o.fleeX = row.x;
           o.fleeZ = row.z;
         }
       } else if (o.side === victim.side && d <= CAST.allyRange) o.brain.morale.shock = Math.min(60, o.brain.morale.shock + CAST.goreShock);
     }
+  }
+
+  /** D-073: a cry of panic from `r` (at most one per `crySpacingS` per row: a crowd bolting is a few voices, not a choir). */
+  private cry(r: Rec, now: number): void {
+    if (now - r.lastCry < CAST.crySpacingS) return;
+    r.lastCry = now;
+    this.host.cry?.(r.key);
   }
 
   /** A row went down: its friends nearby are shaken. */

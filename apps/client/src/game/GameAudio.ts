@@ -2,7 +2,7 @@ import { FLAG, seedFromString } from "@cb/shared";
 import { footstep, playBlast, playSfx, setAmbienceMood, setAudioRegion, setMusicMix, stopSfx } from "../audio/index.ts";
 import { MUSIC_LAYERS, newMusicState, stepMusic, type MusicLayerId, type MusicMood, type MusicSignals } from "../audio/musicLayers.ts";
 import { ambienceMood } from "../audio/mixDuck.ts";
-import { getAdaptiveMusic } from "../settings.ts";
+import { getAdaptiveMusic, getGore } from "../settings.ts";
 import { Stride } from "../audio/stride.ts";
 import { regionSurfaceAt, type Surface } from "../audio/surface.ts";
 
@@ -126,6 +126,17 @@ export class GameAudio {
   /** A body was hit: the victim cries out, in a voice that belongs to their face. */
   hurt(x: number, y: number, z: number, look: string, power: number, isMe: boolean): void {
     playSfx("hurt", { x, y, z, seed: seedFromString(look), volume: (isMe ? 1 : 0.9) * Math.min(1, 0.55 + power) });
+  }
+
+  /** D-073: a scream (a limb gone, a ruinous blow) in the voice of that face; at Gore Off it is only the hurt cry (the scream is the gore, not the information). */
+  scream(x: number, y: number, z: number, look: string, isMe: boolean): void {
+    if (getGore() === "off") return this.hurt(x, y, z, look, 1, isMe);
+    playSfx("scream", { x, y, z, seed: seedFromString(look), volume: isMe ? 1 : 0.95 });
+  }
+
+  /** D-073: a cry of panic (a civilian bolting, a soldier breaking), in the voice of that face. */
+  panic(x: number, y: number, z: number, look: string): void {
+    playSfx("panic", { x, y, z, seed: seedFromString(look), volume: 0.85 });
   }
 
   sever(x: number, y: number, z: number): void {

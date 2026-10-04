@@ -97,8 +97,8 @@ function trestle(k: Kit, world: CollisionWorld, lod: Lod): void {
   // deck planks across the way, alternating tones
   const step = lod ? 0.62 : 2.4;
   for (let x = t.x0 + step / 2; x < t.x1; x += step) box(k, [step - (lod ? 0.04 : 0.05), 0.16, t.hz * 2 - 0.12], [x, y - 0.08, t.z], h01(320, Math.round(x * 4)) > 0.5 ? P.timber : P.timberLight);
-  // stringers under it
-  for (const s of [-1, 1]) box(k, [t.x1 - t.x0, 0.5, 0.3], [(t.x0 + t.x1) / 2, y - 0.5, t.z + s * (t.hz - 0.4)], P.timber);
+  // stringers under it: from the bents' cap beams up to the planks' undersides (y - 0.16), so every plank lies on them (they stopped 9 cm short, and the planks between the rail posts floated)
+  for (const s of [-1, 1]) box(k, [t.x1 - t.x0, 0.63, 0.3], [(t.x0 + t.x1) / 2, y - 0.47, t.z + s * (t.hz - 0.4)], P.timber);
   // rails and posts along both edges (the rails stop at the terrace's edge, as the collider's do)
   const rx0 = t.x0 + 0.2, rx1 = 15;
   for (const s of [-1, 1]) {
@@ -180,26 +180,83 @@ function rails(k: Kit, world: CollisionWorld, lod: Lod): void {
 function fall(k: Kit, world: CollisionWorld, lod: Lod): void {
   const f = vesperPlan().fall;
   const gy = world.terrainHeight(f.x, f.z);
+  const g = (x: number, z: number): number => world.terrainHeight(x, z);
+  /** The heap's crest above the floor: highest mid-gorge and on the plug's line, nothing at its ends and its toes. */
+  const crestAt = (x: number, z: number): number => {
+    const u = Math.min(1, Math.abs(x - f.x) / (f.hx - 1.0));
+    const zf = Math.min(1, Math.abs(z - f.z) / 3.4);
+    return (1 - u ** 1.5) * (1 - zf ** 1.4) * 6.8;
+  };
+  // THE BODY of the heap: a mound of crushed rock in the crest's shape, its rim buried in the floor. Every boulder below rests in it (they were stacked at random heights in the air, and the ones that
+  // missed their neighbours floated). One grid at every lod, so the ink hull's mound is the solid's.
+  const NX = 24, NZ = 8;
+  const X0 = f.x - f.hx - 0.6, X1 = f.x + f.hx + 0.6, Z0 = f.z - 4.2, Z1 = f.z + 4.2;
+  const dx = (X1 - X0) / NX, dz = (Z1 - Z0) / NZ;
+  const hs = new Float32Array((NX + 1) * (NZ + 1));
+  for (let j = 0; j <= NZ; j++) for (let i = 0; i <= NX; i++) {
+    const x = X0 + i * dx, z = Z0 + j * dz;
+    const floor = g(x, z) - 0.25;
+    const rim = i === 0 || j === 0 || i === NX || j === NZ;
+    hs[j * (NX + 1) + i] = rim ? floor : Math.max(floor, gy + 0.75 * crestAt(x, z) - 0.1 + (h01(354, i, j) - 0.5) * 0.3);
+  }
+  const H = (i: number, j: number): number => hs[j * (NX + 1) + i]!;
+  /** The mound's surface as drawn (the same two triangles per cell as the mesh). */
+  const moundAt = (x: number, z: number): number => {
+    const fx = Math.min(NX - 1e-6, Math.max(0, (x - X0) / dx)), fz = Math.min(NZ - 1e-6, Math.max(0, (z - Z0) / dz));
+    const i = Math.floor(fx), j = Math.floor(fz), s = fx - i, t = fz - j;
+    const a = H(i, j), b = H(i + 1, j), c = H(i + 1, j + 1), d = H(i, j + 1);
+    return t >= s ? a + t * (d - a) + s * (c - d) : a + s * (b - a) + t * (c - b);
+  };
+  const tri: number[] = [];
+  const v = (i: number, j: number): void => {
+    tri.push(X0 + i * dx, H(i, j), Z0 + j * dz);
+  };
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    v(i, j);
+    v(i, j + 1);
+    v(i + 1, j + 1);
+    v(i, j);
+    v(i + 1, j + 1);
+    v(i + 1, j);
+  }
+  const mound = new BufferGeometry();
+  mound.setAttribute("position", new BufferAttribute(new Float32Array(tri), 3));
+  const rubble: ColourFn = (p, nrm, out) => {
+    const c = h01(355, Math.floor(p.x * 1.3), Math.floor(p.y * 1.3), Math.floor(p.z * 1.3));
+    blend(out, c > 0.55 ? P.shale : P.scree, c > 0.85 ? P.strataRustDark : P.dust, Math.max(0, nrm.y) * 0.35 + c * 0.25);
+  };
+  k.add(mound, { colour: rubble, flat: true, perFace: true });
+  const rest = (x: number, z: number): number => Math.max(moundAt(x, z), g(x, z));
   const n = lod ? 110 : 56;
   for (let i = 0; i < n; i++) {
     const u = h01(340, i) * 2 - 1;
     const x = f.x + u * (f.hx - 1.0);
-    const along = 1 - Math.abs(u) ** 1.5;
     const zf = (h01(341, i) - 0.5) * 2;
     const z = f.z + zf * 3.4;
     const big = h01(342, i) > 0.8;
     const r = big ? 1.0 + h01(352, i) * 0.9 : 0.35 + h01(353, i) * 0.7;
-    const crest = along * (1 - Math.abs(zf) ** 1.4) * 6.8;
-    const y = gy + 0.1 + h01(343, i) * crest * 0.95 + r * 0.3;
+    // bedded in the mound where it lies: never more than a little of its height above the surface (its underside is in the rubble), never sunk out of sight
+    const want = gy + 0.1 + h01(343, i) * crestAt(x, z) * 0.95 + r * 0.3;
+    const at = rest(x, z);
+    const y = Math.min(at + 0.12 * r, Math.max(at - 0.45 * r, want));
     k.add(new IcosahedronGeometry(r, lod ? 1 : 0), { at: [x, y, z], rot: [h01(344, i) * 3, h01(345, i) * 3, h01(346, i) * 3], scale: [1.2, 0.75, 0.95], colour: rockColour, flat: true, perFace: true, jitter: 0.24, seed: 350 + i });
   }
-  // splintered props and a bent rail sticking out of the heap
+  // splintered props and a bent rail sticking out of the heap: each drawn back along its own line until its butt is buried in the mound
+  const buried = (a: V3, b: V3): V3 => {
+    for (let t = 0; t <= 3; t += 0.1) {
+      const p: V3 = [a[0] + (a[0] - b[0]) * t, a[1] + (a[1] - b[1]) * t, a[2] + (a[2] - b[2]) * t];
+      if (p[1] <= rest(p[0], p[2]) - 0.25) return p;
+    }
+    return [a[0], rest(a[0], a[2]) - 0.25, a[2]];
+  };
   for (let i = 0; i < 6; i++) {
     const x = f.x - 6 + i * 2.4 + (h01(347, i) - 0.5);
     const y0 = gy + 1.4 + h01(348, i) * 1.8;
-    k.limb([x, y0, f.z + 2.4], [x + (h01(349, i) - 0.5) * 1.6, y0 + 0.4 + h01(351, i) * 0.9, f.z + 4.3], 0.12, 0.09, P.timberLight, 5);
+    const tip: V3 = [x + (h01(349, i) - 0.5) * 1.6, y0 + 0.4 + h01(351, i) * 0.9, f.z + 4.3];
+    k.limb(buried([x, y0, f.z + 2.4], tip), tip, 0.12, 0.09, P.timberLight, 5);
   }
-  k.limb([f.x + 3.5, gy + 2.5, f.z + 2.6], [f.x + 4.6, gy + 3.7, f.z + 3.8], 0.05, 0.05, P.ironLight, 4);
+  const railTip: V3 = [f.x + 4.6, gy + 3.7, f.z + 3.8];
+  k.limb(buried([f.x + 3.5, gy + 2.5, f.z + 2.6], railTip), railTip, 0.05, 0.05, P.ironLight, 4);
 }
 
 /** The pegging ground: four stakes with rag tops, the Syndicate's line between them, a theodolite on a tripod, a survey table under a brochure board. */
@@ -237,8 +294,20 @@ function wharf(k: Kit, world: CollisionWorld, lod: Lod): void {
     const z = q.z0 + (i + 0.5) * (lod ? 0.55 : 1.65);
     box(k, [q.half * 2, 0.14, w], [q.x, q.y - 0.07, z], i % 3 === 0 ? P.timberLight : P.timber);
   }
-  for (const s of [-1, 1]) for (let z = q.z0 + 0.5; z < q.z1; z += 3.2) k.limb([q.x + s * (q.half + 0.05), -3.0, z], [q.x + s * (q.half + 0.05), q.y + 0.8, z], 0.1, 0.09, P.timber, 5);
-  for (const b of q.bollards) k.limb([b.x, q.y - 0.3, b.z], [b.x, q.y + 0.9, b.z], 0.2, 0.17, P.iron, 7);
+  // the frame the planks lie on: three stringers the deck's length under them, each pair of piles capped by a cross-beam the stringers rest on (the planks were laid on nothing but the piles they happened to touch)
+  const under = q.y - 0.14;
+  for (const s of [-1, 0, 1]) box(k, [0.22, 0.3, len], [q.x + s * (q.half - 0.35), under - 0.15, (q.z0 + q.z1) / 2], P.timber);
+  for (let z = q.z0 + 0.5; z < q.z1; z += 3.2) {
+    for (const s of [-1, 1]) k.limb([q.x + s * (q.half + 0.05), -3.0, z], [q.x + s * (q.half + 0.05), q.y + 0.8, z], 0.1, 0.09, P.timber, 5);
+    box(k, [q.half * 2 + 0.45, 0.26, 0.3], [q.x, under - 0.3 - 0.13, z], P.timber);
+  }
+  // the bollards stand off the deck's edge (where their colliders are): each on a stout mooring pile driven into the basin's floor, tied back to the deck by a waling beam
+  for (const b of q.bollards) {
+    const side = Math.sign(b.x - q.x) || 1;
+    k.limb([b.x, world.terrainHeight(b.x, b.z) - 0.6, b.z], [b.x, q.y - 0.28, b.z], 0.27, 0.25, P.timber, 7);
+    box(k, [Math.abs(b.x - q.x) - q.half + 0.4, 0.22, 0.3], [(b.x + q.x + side * (q.half - 0.2)) / 2, q.y - 0.36, b.z], P.timber);
+    k.limb([b.x, q.y - 0.3, b.z], [b.x, q.y + 0.9, b.z], 0.2, 0.17, P.iron, 7);
+  }
   // the pool: a flat disc of seep-water in the basin
   k.add(new CylinderGeometry(q.pool.r, q.pool.r, 0.08, lod ? 28 : 14), { at: [q.pool.x, q.pool.y, q.pool.z], colour: (_p, n, out) => blend(out, P.seepDark, P.seepGreen, 0.08 + 0.1 * (n.y > 0.5 ? 1 : 0)), flat: true });
   // the ore barge: a timber hull heaped with copper ore, a stubby mast, a lamp

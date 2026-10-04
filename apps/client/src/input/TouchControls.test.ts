@@ -88,4 +88,33 @@ describe("TouchControls (the DOM overlay)", () => {
     const { TOUCH_LABEL } = await import("./devices.ts");
     for (const id of ["fire", "aim", "jump", "crouch", "melee", "grab", "throw", "view", "pause", "interact"] as const) expect(words, id).toContain(TOUCH_LABEL[id]);
   });
+
+  it("D-068: only the buttons that mean something now; a pictogram over a caption on each; a held button that goes away is let go", async () => {
+    const { t } = await make();
+    t.inGame = true;
+    ptr(document.body, "pointerdown", 1, 10, 10);
+    const btn = (b: string) => document.querySelector<HTMLElement>(`.t-${b}`)!;
+    expect(btn("crouch").querySelector("svg.t-ico")).not.toBeNull();
+    expect(btn("crouch").querySelector(".cap")!.textContent).toBe("CROUCH");
+    // bare-handed, nothing in reach, no hands hired
+    t.showContext({ armed: false, ranged: false, carrying: false, grab: false, command: false });
+    for (const b of ["aim", "melee", "throw", "grab", "orders"]) expect(btn(b).hidden, b).toBe(true);
+    for (const b of ["fire", "jump", "crouch", "use", "weapon", "view", "pause"]) expect(btn(b).hidden, b).toBe(false);
+    // a rifle drawn, a keg in the arms
+    t.showContext({ armed: true, ranged: true, carrying: true, grab: false, command: false });
+    expect(btn("aim").hidden).toBe(false);
+    expect(btn("melee").hidden).toBe(false);
+    expect(btn("throw").hidden).toBe(false);
+    // THROW held when the keg leaves the arms: let go, not stuck down
+    ptr(btn("throw"), "pointerdown", 7, 0, 0);
+    expect(t.down.throw).toBe(true);
+    t.showContext({ armed: true, ranged: true, carrying: false, grab: false, command: false });
+    expect(btn("throw").hidden).toBe(true);
+    expect(t.down.throw).toBe(false);
+    // USE swaps its pictogram and caption with what a tap will do
+    t.showUse(false);
+    expect(btn("use").querySelector(".cap")!.textContent).toBe("RELOAD");
+    t.showUse(true);
+    expect(btn("use").querySelector(".cap")!.textContent).toBe("USE");
+  });
 });

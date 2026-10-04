@@ -284,6 +284,40 @@ const hurt = def({
   },
 });
 
+/**
+ * D-073: the voices of chaos, in the same tract as `hurt` (pitch and vowel from the variant). `scream`: a limb gone or a ruinous blow, a long cry that climbs, cracks and falls
+ * away into a ragged breath. `panic`: a civilian bolting or a soldier whose nerve has gone, a short high yelp in two pieces ("AY-ee!").
+ */
+const scream = def({
+  group: "body", peakDb: -5, ref: 14, max: 110, reverb: 0.28, prio: 3, cap: 2, gap: 0.6, variants: 12, jitter: 0.04,
+  layers: (p) => {
+    const v = p.variant;
+    const f0 = 92 + ((v * 37) % 12) * 9;
+    const k = 0.92 + (((v * 7) % 5) / 4) * 0.2;
+    const ah: (readonly [number, number, number])[] = [[760 * k, 8, 1], [1260 * k, 9, 0.6], [2700 * k, 11, 0.3]];
+    const oh: (readonly [number, number, number])[] = [[540 * k, 8, 1], [950 * k, 9, 0.6], [2500 * k, 11, 0.25]];
+    return [
+      V({ hz: f0 * 1.5, to: f0 * 2.45, over: 0.32, formants: ah, atk: 0.02, dec: 0.5, peak: 1, breath: 0.55 }),
+      V({ at: 0.34, hz: f0 * 2.4, to: f0 * 1.25, over: 0.7, formants: oh, atk: 0.03, dec: 0.75, peak: 0.85, breath: 0.9 }),
+      N({ kind: "pink", at: 1.0, atk: 0.06, dec: 0.45, peak: 0.25, f: [bp(900, 0.7)] }), // (the ragged in-breath after it)
+    ];
+  },
+});
+const panic = def({
+  group: "body", peakDb: -9, ref: 14, max: 110, reverb: 0.25, prio: 2, cap: 3, gap: 0.35, variants: 12, jitter: 0.06,
+  layers: (p) => {
+    const v = p.variant;
+    const f0 = 110 + ((v * 29) % 12) * 10;
+    const k = 0.94 + (((v * 5) % 5) / 4) * 0.18;
+    const ah: (readonly [number, number, number])[] = [[720 * k, 9, 1], [1240 * k, 10, 0.55], [2600 * k, 12, 0.25]];
+    const ee: (readonly [number, number, number])[] = [[320 * k, 9, 1], [2250 * k, 10, 0.6], [3000 * k, 12, 0.3]];
+    return [
+      V({ hz: f0 * 1.8, to: f0 * 2.15, over: 0.16, formants: ah, atk: 0.01, dec: 0.2, peak: 1, breath: 0.35 }),
+      V({ at: 0.15, hz: f0 * 2.2, to: f0 * 1.7, over: 0.28, formants: ee, atk: 0.015, dec: 0.3, peak: 0.85, breath: 0.4 }),
+    ];
+  },
+});
+
 const down = def({
   group: "body", peakDb: -7, ref: 12, max: 90, reverb: 0.22, prio: 3, cap: 3, gap: 0.3,
   layers: (p) => [
@@ -630,6 +664,8 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   fuse_hiss: fuseHiss,
   revive_done: reviveDone,
   hurt,
+  scream,
+  panic,
   down,
   limb_sever: sever,
   notice,

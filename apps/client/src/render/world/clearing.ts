@@ -62,8 +62,10 @@ function well(k: Kit, lod: Lod): void {
   k.limb([0, beamY, WELL.r + 0.16], [0, beamY - 0.3, WELL.r + 0.2], 0.018, 0.018, C.iron, 4);
   k.limb([0, beamY - 0.3, WELL.r + 0.2], [0.22, beamY - 0.3, WELL.r + 0.2], 0.02, 0.02, W.plank, 4);
   // rope and bucket
-  k.limb([0, beamY - 0.02, 0.05], [0, 1.15, 0.05], 0.012, 0.012, C.rope, 3);
+  k.limb([0, beamY - 0.02, 0.05], [0, 1.255, 0.05], 0.012, 0.012, C.rope, 3);
   k.add(new CylinderGeometry(0.16, 0.13, 0.26, 8, 1, true), { at: [0, 0.98, 0.05], colour: timber(434, W.plank, W.plankDark), flat: true });
+  // the bail: an iron hoop over the rim that the rope is knotted to (the bucket hangs from it, not from the air)
+  k.add(new TorusGeometry(0.155, 0.011, 3, 10, Math.PI), { at: [0, 1.1, 0.05], colour: C.iron, flat: true });
   k.add(new TorusGeometry(0.15, 0.012, 3, 10), { at: [0, 1.06, 0.05], rot: [Math.PI / 2, 0, 0], colour: C.iron, flat: true });
   k.add(new TorusGeometry(0.135, 0.012, 3, 10), { at: [0, 0.9, 0.05], rot: [Math.PI / 2, 0, 0], colour: C.iron, flat: true });
 }

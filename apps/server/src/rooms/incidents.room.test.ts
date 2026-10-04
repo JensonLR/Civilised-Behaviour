@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { INCIDENT_LEAVE_S } from "../systems/Incidents.ts";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { BUTTON, FLAG, INCIDENT_DONE, MoveInput, ROOM_WORLD, npcKey, parseCampaign, parseParty, yawToWire, type PlayerStateType } from "@cb/shared";
+import { ACCIDENT_OWNER, BUTTON, FLAG, INCIDENT, INCIDENT_DONE, MoveInput, PropKind, ROOM_WORLD, npcKey, parseCampaign, parseParty, yawToWire, type PlayerStateType } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
@@ -157,4 +157,52 @@ describe("incidents in a real room (D-052)", () => {
     await commit(room, me);
     expect(lastIncident(room)).toMatchObject({ id: "courier", result: "missed" });
   }, 30_000);
+
+  // D-071: the overturned powder wagon. (The fuse is shortened through the room's own table so the test does not wait out fourteen seconds.)
+  const wagon = async () => {
+    const { room, me, notices } = await setup();
+    const before = new Set<string>();
+    room.state.props.forEach((_p, id) => before.add(id));
+    me.send("debug", { cmd: "incident:powder_wagon" });
+    await until(() => notices.some((n) => n.includes("spilled its kegs")), 4000, "the wagon's telegram");
+    const kegs: string[] = [];
+    room.state.props.forEach((p, id) => {
+      if (!before.has(id) && p.kind === PropKind.BARREL) kegs.push(id);
+    });
+    const lit = (room as unknown as { lit: Map<string, { left: number; owner: string }> }).lit;
+    return { room, me, notices, kegs, lit };
+  };
+
+  it("D-071: a powder wagon left alone goes up as a chain, and the commit records the crater", async () => {
+    const { room, me, notices, kegs, lit } = await wagon();
+    expect(kegs.length).toBe(INCIDENT.wagonKegs);
+    const burning = kegs.filter((k) => lit.has(k));
+    expect(burning).toHaveLength(1);
+    expect(room.state.props.get(burning[0]!)!.fuse).toBeGreaterThan(0);
+    expect(lit.get(burning[0]!)!.owner).toBe(ACCIDENT_OWNER);
+    lit.get(burning[0]!)!.left = 0.3;
+    await until(() => notices.some((n) => n.includes("went up, kegs and all")), 8000, "the road rearranged");
+    expect(kegs.filter((k) => room.state.props.has(k)).length).toBeLessThan(INCIDENT.wagonSalvage);
+    await commit(room, me);
+    expect(lastIncident(room)).toMatchObject({ id: "powder_wagon", result: "went_up", region: "kessar" });
+  }, 30_000);
+
+  it("D-071: the fizzing keg got well clear (thrown, rolled, kicked) and the rest is the Society's powder", async () => {
+    const { room, me, notices, kegs, lit } = await wagon();
+    const first = kegs.find((k) => lit.has(k))!;
+    // what a throw does: the burning keg ends up far from its fellows (20 m off, on the ground)
+    const physics = (room as unknown as { physics: { props: Map<string, { body: { translation(): { x: number; y: number; z: number }; setTranslation(t: { x: number; y: number; z: number }, wake: boolean): void; setLinvel(v: { x: number; y: number; z: number }, wake: boolean): void } }> } }).physics;
+    const w = (room as unknown as { world: { terrainHeight(x: number, z: number): number } }).world;
+    const b = physics.props.get(first)!.body;
+    const t = b.translation();
+    b.setTranslation({ x: t.x + 20, y: w.terrainHeight(t.x + 20, t.z) + 0.6, z: t.z }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    await sleep(300);
+    lit.get(first)!.left = 0.3;
+    await until(() => notices.some((n) => n.includes("went off well clear")), 8000, "the salvage");
+    expect(kegs.filter((k) => room.state.props.has(k)).length).toBe(INCIDENT.wagonKegs - 1);
+    await commit(room, me);
+    expect(lastIncident(room)).toMatchObject({ id: "powder_wagon", result: "salvaged" });
+  }, 30_000);
 });
+

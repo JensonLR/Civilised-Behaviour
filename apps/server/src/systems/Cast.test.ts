@@ -512,6 +512,39 @@ describe("Cast: gore in plain view (D-064)", () => {
   });
 });
 
+describe("Cast: voices of panic (D-073)", () => {
+  it("a civilian who starts to run cries out once; a second report while still running does not set off a choir; a later bolt cries again", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.human("p1", 10, 10);
+    r.cast.spawn([spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: 0, z: 0 } })]);
+    r.tick(3);
+    r.cast.noise(10, 10, 60, "p1");
+    r.cast.noise(10, 10, 60, "p1");
+    r.tick(30);
+    r.cast.noise(10, 10, 60, "p1");
+    expect(cries).toEqual(["npc:h1"]);
+    r.tick(Math.ceil((CAST.civilFleeSeconds + CAST.crySpacingS + 1) / DT));
+    const h = r.rows.get("npc:h1")!;
+    r.cast.noise(h.x + 6, h.z + 6, 60, "p1"); // (a new report beside where she has got to)
+    expect(cries).toEqual(["npc:h1", "npc:h1"]);
+  });
+
+  it("a soldier cries out when his nerve goes (morale broken), once, not every tick he stays broken", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.cast.spawn([spec("s1")]);
+    r.tick(3);
+    const b = (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get("npc:s1")!.brain;
+    b.morale.v = 5;
+    b.morale.shock = 60;
+    r.tick(20);
+    expect(cries).toEqual(["npc:s1"]);
+  });
+});
+
 describe("Cast: budgets", () => {
   it("at most NAV.queriesPerTick paths per tick, and every brain gets a turn (round robin)", () => {
     const perTick: number[] = [];

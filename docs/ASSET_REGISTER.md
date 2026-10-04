@@ -42,3 +42,7 @@ The Society's seal (D-053, 2026-10-03): the game's logo and icon set. No externa
 rasterised by `scripts/icons.mts` (the pre-installed Chromium) into committed files: `apps/client/public/` (favicon.svg, favicon-32.png, apple-touch-icon.png,
 icon-192.png, icon-512.png, icon-maskable-512.png, manifest.webmanifest), `apps/website/brand/` (the same, plus seal.svg) and `apps/desktop/resources/icon.png`
 (1024 px, electron-builder's app icon). Original work; no attribution owed. The landing page sets its wordmark in the already-registered IM Fell English SC.
+
+Gore, peoples and the touch overlay (D-064 to D-073, 2026-10-04): no new image, texture, model, audio or font FILES; everything is code. The two new voices (`scream`, `panic` in `apps/client/src/audio/sounds.ts`) are formant syntheses in the same tract as the existing hurt cry; the touch pictograms are inline SVG strokes (`apps/client/src/input/TouchControls.ts`); the native wrap skirt, woven hem border and land-coloured hem wear are code (`packages/procedural/src/three/garments.ts`, `three/bearing.ts`). D-067 (the owner's decision, legal-approved) adds four deeper skin tones to `PALETTE.skin` and draws the native peoples' skin from the darker end of it (several tones per people; players keep the whole palette); this supersedes the "no skin-colour coding" note in the D-038 line above. Nothing to license.
+
+Surface grain (D-075, 2026-10-04): procedural noise and hatching in the scenery shader (`apps/client/src/render/world/toon.ts`); no image or texture files. Nothing to license.

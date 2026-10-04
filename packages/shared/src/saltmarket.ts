@@ -1,3 +1,4 @@
+import { ARRIVAL_INLAND } from "./campaignTypes.ts";
 import type { UseStation } from "./campaignTypes.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { distToPaths, inDoorApron, levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
@@ -374,7 +375,7 @@ export function saltmarketPlan(): SaltmarketPlan {
   const banners: SaltmarketBanner[] = [
     { x: -33.1, z: 60.2, yaw: Math.PI / 2, top: 7.3, w: 2.0, h: 3.0, kind: "customs" },
     { x: 21, z: -33.4, yaw: Math.PI / 2, top: 12.8, w: 2.2, h: 4, kind: "house" },
-    { x: 0, z: -33.2, yaw: Math.PI / 2, top: 5.0, w: 4.0, h: 1.8, kind: "house" },
+    { x: 0, z: -32.75, yaw: Math.PI / 2, top: 4.0, w: 4.0, h: 1.8, kind: "house" },   // (on the face of the colonnade's front beam, its top on the beam's: z -33 +- 0.25, top 3.6 + 0.15 + 0.25 over the hall floor)
     { x: 8, z: 104, yaw: Math.PI / 2, top: 5.4, w: 1.8, h: 2.8, kind: "society" },
     { x: 14, z: -50, yaw: Math.PI / 2, top: 4.4, w: 1.6, h: 2.6, kind: "syndicate" },
   ];
@@ -552,7 +553,7 @@ export function createSaltmarketWorld(seed: number): CollisionWorld {
 export function saltmarketSpawn(index: number, count = 4): { x: number; z: number } {
   const a = (index / Math.max(count, 1)) * Math.PI * 2 + Math.PI / 4;
   const L0 = SALTMARKET_ANCHORS.landing;
-  return { x: L0.x + Math.cos(a) * 2.6, z: L0.z - 1.4 + Math.sin(a) * 1.2 };
+  return { x: L0.x + Math.cos(a) * 2.6, z: L0.z - 1.4 - ARRIVAL_INLAND + Math.sin(a) * 1.2 } /* (D-070: up the shore, off the jetty's first planks) */;
 }
 
 /**

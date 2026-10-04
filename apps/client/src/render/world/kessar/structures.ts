@@ -129,6 +129,10 @@ function gatehouse(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, 
     const gb = kessarLevel().buildings.find((x) => x.id === "fort.gate")!;
     k.setBase(d.x, y, d.z, Math.PI / 2);   // (local +x is the gate's front, facing the road)
     sealedDoor(k, `${gb.id}.door`, d.hz + 0.55, 0, gb.door, gb.doorH, SEAL, lod, out.marks, { x: d.x, y, z: d.z, yaw: Math.PI / 2 }, d.hz);   // (the portcullis stands 0.55 m proud of the wall face the collision has)
+    // the sill the portcullis comes down on: the gate stands at the top of a steep approach (the ground falls ~1 m in the 1.2 m out to the portcullis), so a
+    // masonry step runs out from the gatehouse face under it and down into the slope (it ends 0.2 m past the portcullis: nothing to walk into)
+    const sillIn = d.hz + 0.15, sillOut = d.hz + 0.55 + 0.2;
+    slab(k, [sillOut - sillIn, 1.9, gb.door + 0.9], [(sillIn + sillOut) / 2, -0.95, 0], masonry(51), lod, undefined, true);
     k.clearBase();
   }
   // the forecourt: two flanking lamp posts, standing on the ground as it is there (the approach climbs)
@@ -174,6 +178,9 @@ function cannon(k: Kit, c: { x: number; z: number; yaw: number }, y: number, lod
   k.setBase(c.x, y, c.z, c.yaw);
   box(k, [2.3, 0.3, 1.2], [-0.2, 0.25, 0], K.timber);
   for (const s of [-1, 1]) k.add(new CylinderGeometry(0.5, 0.5, 0.14, lod ? 10 : 6), { at: [-0.1, 0.5, s * 0.66], rot: [Math.PI / 2, 0, 0], colour: K.timberLight, flat: true });
+  // the cheeks the barrel rides in, and the trunnion pin through barrel and cheeks (the barrel rests on the carriage, it does not hover over it)
+  for (const s of [-1, 1]) box(k, [1.5, 0.62, 0.1], [-0.2, 0.69, s * 0.36], K.timber);
+  k.add(new CylinderGeometry(0.09, 0.09, 0.9, 6), { at: [0.3, 1.03, 0], rot: [Math.PI / 2, 0, 0], colour: K.ironLight, flat: true });
   k.limb([-0.9, 0.95, 0], [1.9, 1.15, 0], 0.3, 0.22, K.iron, lod ? 10 : 6, true);
   k.add(new SphereGeometry(0.33, 8, 5), { at: [-0.95, 0.95, 0], colour: K.ironLight });
   if (lod) for (const x of [0.2, 1.1, 1.8]) k.add(new CylinderGeometry(0.32, 0.32, 0.12, 10), { at: [x, 1.05 + x * 0.08, 0], rot: [0, 0, Math.PI / 2 - 0.1], colour: K.ironLight, flat: true });
@@ -341,15 +348,86 @@ function signposts(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: num
   k.clearBase();
 }
 
+/** How far a ray from (x, z) along (dx, dz) (unit) travels before it meets a footprint: a box (yawed as `Kit.setBase` turns it) or a circle. 0 when it starts inside, Infinity on a miss. */
+function rayToBox(x: number, z: number, dx: number, dz: number, o: { x: number; z: number; yaw: number; hx: number; hz: number }): number {
+  const c = Math.cos(o.yaw), s = Math.sin(o.yaw);
+  const px = (x - o.x) * c + (z - o.z) * s, pz = -(x - o.x) * s + (z - o.z) * c;
+  const vx = dx * c + dz * s, vz = -dx * s + dz * c;
+  let t0 = 0, t1 = Infinity;
+  for (const [p, v, h] of [[px, vx, o.hx], [pz, vz, o.hz]] as const) {
+    if (Math.abs(v) < 1e-9) {
+      if (Math.abs(p) > h) return Infinity;
+      continue;
+    }
+    const a = (-h - p) / v, b = (h - p) / v;
+    t0 = Math.max(t0, Math.min(a, b));
+    t1 = Math.min(t1, Math.max(a, b));
+  }
+  return t0 <= t1 ? t0 : Infinity;
+}
+function rayToCircle(x: number, z: number, dx: number, dz: number, cx: number, cz: number, r: number): number {
+  const ox = x - cx, oz = z - cz;
+  const b = ox * dx + oz * dz;
+  const c = ox * ox + oz * oz - r * r;
+  if (c <= 0) return 0;
+  const disc = b * b - c;
+  if (b > 0 || disc < 0) return Infinity;
+  return -b - Math.sqrt(disc);
+}
+
+/**
+ * Every banner hangs from a rod, and every rod is HELD: the cloth's top edge is wrapped round the rod (the cloth mesh's top is at `top`, the rod's
+ * centre a hair above it), and the rod is either bracketed into the masonry behind it (iron arms from each end back into the keep, a bastion or a
+ * tower: whatever a ray straight back from the end meets), lashed to an existing pole beside it (the Syndicate's camp flag), or carried by a pole of
+ * its own planted in the ground behind the cloth, with two stays to the rod's ends (the toll yard's and the landing's standards).
+ */
 function banners(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number, z: number) => number): void {
+  const f = plan.fort;
+  const boxes = [f.keep, ...f.bastions]; // (the masonry the fort's banners hang on; each banner is below its top)
+  const BRACKET = 1.2; // metres: a rod end further than this from masonry is not wall-hung
+  const behind = (x: number, z: number, dx: number, dz: number): number => {
+    let d = Infinity;
+    for (const o of boxes) d = Math.min(d, rayToBox(x, z, dx, dz, o));
+    for (const t of f.towers) d = Math.min(d, rayToCircle(x, z, dx, dz, t.x, t.z, t.r));
+    return d;
+  };
+  const poles = [plan.camp.flag];
   for (const b of plan.banners) {
-    const y = terrain(b.x, b.z) + b.top;
-    // the rod the cloth hangs from, with finials, and the lines to the wall
+    const ground = terrain(b.x, b.z);
+    const y = ground + b.top + 0.03;
+    const nx = Math.cos(b.yaw), nz = Math.sin(b.yaw); // the cloth's face (as cloth.ts hangs it)
     const rx = Math.sin(b.yaw);
     const rz = -Math.cos(b.yaw);
     const half = b.w / 2 + 0.25;
-    k.limb([b.x - rx * half, y + 0.08, b.z - rz * half], [b.x + rx * half, y + 0.08, b.z + rz * half], 0.05, 0.05, K.timber, 5);
-    for (const s of [-1, 1]) k.add(new SphereGeometry(0.09, 5, 4), { at: [b.x + rx * half * s, y + 0.08, b.z + rz * half * s], colour: gold });
+    k.limb([b.x - rx * half, y, b.z - rz * half], [b.x + rx * half, y, b.z + rz * half], 0.05, 0.05, K.timber, 5);
+    for (const s of [-1, 1]) k.add(new SphereGeometry(0.09, 5, 4), { at: [b.x + rx * half * s, y, b.z + rz * half * s], colour: gold });
+    const ends = [-1, 1].map((s) => {
+      const ex = b.x + rx * (half - 0.15) * s, ez = b.z + rz * (half - 0.15) * s;
+      return { ex, ez, d: behind(ex, ez, -nx, -nz) };
+    });
+    if (ends.every((e) => e.d <= BRACKET)) {
+      // wall-hung: an iron arm from each end of the rod back into the stone (sunk 0.15 m), and a stay from its wall end up to the rod
+      for (const e of ends) {
+        if (e.d === 0) continue; // (the rod's end is already in the wall)
+        const wx = e.ex - nx * (e.d + 0.15), wz = e.ez - nz * (e.d + 0.15);
+        k.limb([e.ex, y, e.ez], [wx, y, wz], 0.035, 0.035, K.iron, 5);
+        k.limb([wx, y + 0.45, wz], [e.ex, y + 0.02, e.ez], 0.018, 0.018, K.iron, 4);
+      }
+      continue;
+    }
+    const pole = poles.find((p) => Math.hypot(p.x - b.x, p.z - b.z) < 1);
+    if (pole) {
+      // lashed to the pole beside it: an iron arm from the pole to the rod's middle, and a stay above it
+      k.limb([pole.x, y, pole.z], [b.x, y, b.z], 0.04, 0.04, K.iron, 5);
+      k.limb([pole.x, y + 0.3, pole.z], [b.x, y + 0.02, b.z], 0.018, 0.018, K.iron, 4);
+      continue;
+    }
+    // a standard of its own: a pole in the ground just behind the cloth (the rod crosses its face), a gold knob, and two stays to the rod's ends
+    const px = b.x - nx * 0.11, pz = b.z - nz * 0.11;
+    const py = terrain(px, pz);
+    k.limb([px, py - 0.3, pz], [px, y + 0.55, pz], 0.08, 0.06, K.timber, 6);
+    k.add(new SphereGeometry(0.11, 6, 4), { at: [px, y + 0.62, pz], colour: gold });
+    for (const s of [-1, 1]) k.limb([px, y + 0.5, pz], [b.x + rx * (half - 0.12) * s, y + 0.02, b.z + rz * (half - 0.12) * s], 0.015, 0.015, K.iron, 4);
   }
 }
 
@@ -416,7 +494,11 @@ export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: B
   f.towers.forEach((t, i) => roundTower(k, t.x, t.z, t.r, t.height, terrain(t.x, t.z), lod, 20 + i));
   gatehouse(k, plan, terrain, lod, out);
   keep(k, plan, terrain, lod);
-  for (const c of f.cannons) cannon(k, c, terrain(c.x, c.z) + KESSAR.wallHeight, lod);
+  for (const c of f.cannons) {
+    // on the wall walk of the segment it stands on (the walk is level at that segment's ground + wall height; the hill under the cannon is higher)
+    const seg = f.wall.reduce((a, s) => (Math.hypot(s.x - c.x, s.z - c.z) < Math.hypot(a.x - c.x, a.z - c.z) ? s : a));
+    cannon(k, c, terrain(seg.x, seg.z) + KESSAR.wallHeight, lod);
+  }
   bridge(k, plan, intact, lod);
   rim(k, plan, terrain, lod, !intact);
   tollStation(k, plan, terrain, lod, out);

@@ -146,7 +146,9 @@ function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb:
   const fy = lb.floor;
   // (a sealed hut's wall stands 2.6 m, tall enough for the door it shows; a solid hut keeps the low reed wall it always had)
   const wallH = lb.kind === "interior" || lb.kind === "sealed" ? (lb.kind === "sealed" ? 2.6 : lb.wallH) : Math.max(1.5, total - fy - (style === "hut" ? Math.min(1.3, total * 0.34) : Math.min(1.2, (total - fy) * 0.34)));
-  const rise = Math.max(0.5, total - fy - 0.08 - wallH);
+  // the eave sits ON the walls: a box-walled house stands its walls on its 0.16 floor slab (top at fy + 0.08); the interior shell's walls rise from the floor itself (fy .. fy + wallH)
+  const eaveY = fy + (lb.kind === "interior" ? 0 : 0.08) + wallH;
+  const rise = Math.max(0.5, total - fy - 0.08 - wallH) + (fy + 0.08 + wallH - eaveY);   // (the ridge stays where it was)
   k.setBase(b.x, gy, b.z, b.yaw);
   // stilts: two rows, braced (the front row stops short of the landing)
   const n = Math.max(2, Math.round((b.hx * 2) / 2.4) + 1);
@@ -160,9 +162,18 @@ function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb:
   }
   const roofKit = lb.kind === "interior" ? out.roofs.begin(lb.id) : k;
   if (roofKit !== k) roofKit.setBase(b.x, gy, b.z, b.yaw);
-  const eaveY = fy + 0.08 + wallH;
   if (lb.kind === "interior") {
     interiorShell(k, { id: lb.id, hx: b.hx, hz: b.hz, floor: fy, wallH, door: lb.door, doorH: lb.doorH, steps: lb.steps, t: lb.t ?? 0.3 }, { ...SHELL, outer: style === "customs" ? planks(seed, P.coralDark, P.tarPlankDark, P.coralCanvas) : planks(seed) }, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: b.yaw });
+    if (!lod && lb.steps > 0 && fy > 0.3) {
+      // the shell draws its steps' side stringers only at lod 1; the cheap shape still needs them, or the treads hang in the air (the same boxes, so the ink hull matches)
+      const w = Math.max(lb.door + 1.0, 2.2);
+      for (let i = 1; i <= lb.steps; i++) {
+        const top = (fy * (lb.steps - i + 1)) / lb.steps;
+        const depth = i === 1 ? 1.0 : 0.5;
+        const off = b.hx + (i === 1 ? 0.5 : 1.0 + (i - 2) * 0.5 + 0.25);
+        for (const sz of [-1, 1]) box(k, [depth, top + 0.3, 0.08], [off, (top - 0.3) / 2, sz * (w / 2 - 0.04)], SHELL.trim);
+      }
+    }
     const lw = k.worldPoint(-b.hx * 0.15, fy + Math.min(wallH - 0.5, 2.3), 0);
     out.lamps.push({ x: lw[0], y: lw[1], z: lw[2], lit: 0.7 });   // (a lamp in a room burns bright even at noon: it is seen through the door at any hour)
     furnish(k, lb, fy, lod);
@@ -189,7 +200,7 @@ function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb:
       box(k, [0.9, 0.08, 0.16], [sx * b.hx * 0.8, fy + 0.08 + wallH * 0.62 - 0.36, sz * (b.hz + 0.05)], P.pilingLight);
     }
     // an awning over the door (coral and salt) and the hoist beam of a warehouse
-    if (style === "warehouse" || style === "customs") k.add(new BoxGeometry(1.0, 0.06, Math.max(2.2, lb.door + 0.9)), { at: [b.hx + 0.65, fy + 0.08 + Math.min(wallH, lb.doorH + 0.35), 0], rot: [0, 0, -0.28], colour: stripes(P.coralCanvas, P.salt, 3.4), flat: true, perFace: true });
+    if (style === "warehouse" || style === "customs") k.add(new BoxGeometry(1.0, 0.06, Math.max(2.2, lb.door + 0.9)), { at: [b.hx + 0.47, fy + 0.08 + Math.min(wallH, lb.doorH + 0.35), 0], rot: [0, 0, -0.28], colour: stripes(P.coralCanvas, P.salt, 3.4), flat: true, perFace: true });
     if (style === "warehouse") {
       box(k, [1.9, 0.14, 0.14], [b.hx + 0.6, eaveY + 0.1, b.hz * 0.5], P.tarPlankDark);
       k.limb([b.hx + 1.5, eaveY + 0.1, b.hz * 0.5], [b.hx + 1.5, eaveY - 1.4, b.hz * 0.5], 0.012, 0.012, P.rope, 3);
@@ -256,7 +267,7 @@ function pier(k: Kit, x0: number, z0: number, x1: number, z1: number, half: numb
     box(k, [(len / n) * 0.88, 0.12, half * 2], [x, L - 0.06, 0], i % 3 === 0 ? P.tarPlankLight : i % 3 === 1 ? P.tarPlank : P.tarPlankDark);
   }
   for (const s of [-1, 1]) {
-    box(k, [len, 0.14, 0.14], [0, L - 0.24, s * (half - 0.05)], P.tarPlankDark);
+    box(k, [len, 0.14, 0.14], [0, L - 0.19, s * (half - 0.05)], P.tarPlankDark);   // (top at L - 0.12: the planks' underside)
     for (let x = -len / 2 + 0.4; x <= len / 2; x += 2.0) pile(k, x, s * (half + 0.12), -1.6, L + 0.55, 0.1, seed + Math.round(x), 5);
   }
   k.limb([len / 2 - 0.1, L, 0], [len / 2 - 0.1, L + 0.8, 0], 0.16, 0.14, P.iron, 6);
@@ -271,26 +282,27 @@ function bridges(kitAt: (x: number, z: number) => Kit, lod: Lod): void {
     const k = kitAt(b.x, b.z);
     const along = b.yaw === 0;
     k.setBase(b.x, 0, b.z, b.yaw === 0 ? 0 : -Math.PI / 2);
-    // local frame: the deck runs along local z (length 2*hl), 2*hd wide across local x
+    // local frame: the deck runs along local z (length 2*hl), 2*hd wide across local x; its planks run on under the rails (the parapet's collider) so the rail posts stand through their ends
     const n = Math.round((b.hl * 2) / 0.5);
     for (let i = 0; i < n; i++) {
       const z = -b.hl + (i + 0.5) * ((b.hl * 2) / n);
-      box(k, [hd * 2, 0.16, ((b.hl * 2) / n) * 0.9], [0, L - 0.08, z], i % 4 === 0 ? P.tarPlankLight : i % 4 === 2 ? P.tarPlankDark : P.tarPlank);
+      box(k, [hd * 2 + 0.6, 0.16, ((b.hl * 2) / n) * 0.9], [0, L - 0.08, z], i % 4 === 0 ? P.tarPlankLight : i % 4 === 2 ? P.tarPlankDark : P.tarPlank);
     }
     // under-deck beams and bents of piles into the water
-    for (const s of [-1, 1]) box(k, [0.22, 0.4, b.hl * 2], [s * (hd - 0.2), L - 0.4, 0], P.tarPlankDark);
+    for (const s of [-1, 1]) box(k, [0.22, 0.44, b.hl * 2], [s * (hd - 0.2), L - 0.38, 0], P.tarPlankDark);   // (top at L - 0.16: the planks' underside)
     for (let z = -b.hl + 1.2; z < b.hl; z += 3.4) for (const s of [-1, 1]) pile(k, s * (hd - 0.2), z, -2.2, L - 0.1, 0.14, 60 + Math.round(z), 5);
     // rails: posts and two rope-and-plank rails, 1.15 high like the parapet that blocks
     for (const s of [-1, 1]) {
       const x = s * (hd + 0.3);
-      for (let z = -b.hl; z <= b.hl + 0.01; z += 1.6) k.limb([x, L - 0.3, z], [x, L + SALTMARKET.parapet + 0.08, z], 0.07, 0.06, P.pilingLight, 5);
+      // (each post is driven into the bed and passes through the deck planks' ends)
+      for (let z = -b.hl; z <= b.hl + 0.01; z += 1.6) k.limb([x, -1.6, z], [x, L + SALTMARKET.parapet + 0.08, z], 0.07, 0.06, P.pilingLight, 5);
       box(k, [0.14, 0.1, b.hl * 2], [x, L + SALTMARKET.parapet + 0.05, 0], P.tarPlankLight);
       box(k, [0.08, 0.08, b.hl * 2], [x, L + SALTMARKET.parapet * 0.55, 0], P.tarPlank);
     }
     // the gate of the Customs Bridge: two tall posts, a lintel and the Constabulary's brass eye
     if (along && b.id === "customsBridge") {
       const gz = b.hl - 1.0;
-      for (const s of [-1, 1]) k.limb([s * (hd + 0.8), L - 0.3, gz], [s * (hd + 0.8), L + 3.4, gz], 0.2, 0.17, planks(77), 6);
+      for (const s of [-1, 1]) k.limb([s * (hd + 0.8), -2.2, gz], [s * (hd + 0.8), L + 3.4, gz], 0.2, 0.17, planks(77), 6);   // (driven into the bed beside the deck)
       box(k, [hd * 2 + 2.2, 0.34, 0.34], [0, L + 3.3, gz], planks(78));
       box(k, [hd * 2 + 2.4, 0.12, 0.5], [0, L + 3.55, gz], P.coralCanvas);
       k.add(new CylinderGeometry(0.4, 0.4, 0.1, lod ? 14 : 8), { at: [0, L + 3.3, gz + 0.22], rot: [Math.PI / 2, 0, 0], colour: P.brass, flat: true });
@@ -303,7 +315,7 @@ function bridges(kitAt: (x: number, z: number) => Kit, lod: Lod): void {
       // the lesser bridges: a pair of lantern posts at the south-or-east end
       const gz = b.hl - 0.6;
       for (const s of [-1, 1]) {
-        k.limb([s * (hd + 0.55), L - 0.3, gz], [s * (hd + 0.55), L + 2.4, gz], 0.09, 0.07, P.tarPlankDark, 5);
+        k.limb([s * (hd + 0.55), -1.6, gz], [s * (hd + 0.55), L + 2.4, gz], 0.09, 0.07, P.tarPlankDark, 5);   // (driven into the bed beside the deck)
         k.add(new SphereGeometry(0.14, 6, 5), { at: [s * (hd + 0.55), L + 2.5, gz], colour: P.glowLantern });
       }
     }
@@ -331,6 +343,10 @@ function revetment(kitAt: (x: number, z: number) => Kit, world: CollisionWorld, 
 }
 
 // ---- the Exchange --------------------------------------------------------------------------------------------------------------------------
+
+/** The Exchange's hanging lanterns: across the front between the pillars (at x = ±5, ±10, ±15), a little inside the front beam's face. */
+const EXCHANGE_LANTERN_X = [-7.5, -3, 3, 7.5] as const;
+const EXCHANGE_LANTERN_IN = 0.15;
 
 function exchange(k: Kit, world: CollisionWorld, lod: Lod): void {
   const ex = saltmarketPlan().exchange;
@@ -372,10 +388,10 @@ function exchange(k: Kit, world: CollisionWorld, lod: Lod): void {
   for (const s of [-1, 1]) box(k, [0.3, 0.14, hz * 2 + 1.5], [s * (hx * 0.55), ex.eave + 0.55, 0], P.coralCanvas);
   box(k, [2.2, 0.5, 2.2], [0, ex.eave + 0.38 + ridge, 0], P.tarPlankDark);
   k.add(new SphereGeometry(0.26, 6, 5), { at: [0, ex.eave + 0.38 + ridge + 0.36, 0], colour: P.brass });
-  // lanterns hanging between the pillars (the lit points come from the view)
-  if (lod) for (const x of [-10, -3, 3, 10]) {
-    k.limb([x, ex.eave, hz - 0.4], [x, ex.eave - 0.9, hz - 0.4], 0.012, 0.012, P.rope, 3);
-    k.add(new SphereGeometry(0.2, 6, 5), { at: [x, ex.eave - 1.0, hz - 0.4], colour: P.glowLantern });
+  // lanterns hanging between the pillars, each on a cord from the underside of the front beam (the lit points come from the view)
+  if (lod) for (const x of EXCHANGE_LANTERN_X) {
+    k.limb([x, beamY - 0.2, hz - EXCHANGE_LANTERN_IN], [x, ex.eave - 0.9, hz - EXCHANGE_LANTERN_IN], 0.012, 0.012, P.rope, 3);
+    k.add(new SphereGeometry(0.2, 6, 5), { at: [x, ex.eave - 1.0, hz - EXCHANGE_LANTERN_IN], colour: P.glowLantern });
   }
   // the rostrum: a dais, a lectern, the Auctioneer's hammer block and a gilt-edged board with the lot
   const r = ex.rostrum;
@@ -404,7 +420,7 @@ function campanile(k: Kit, h: SaltmarketHair, gy: number, lod: Lod): void {
   // a tarred timber stair-tower on four stout stilts: stages that step in, a bell loft, a coral cap and a brass heron vane
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) pile(k, sx * (r - 0.25), sz * (r - 0.25), -0.5, 1.2, 0.2, 100 + sx + sz, 6);
   box(k, [r * 2 + 0.2, 0.2, r * 2 + 0.2], [0, 1.2, 0], P.tarPlankDark);
-  const stages = [[1.4, 5.2, 1.0], [5.2, 8.6, 0.84], [8.6, 11.0, 0.7]] as const;
+  const stages = [[1.3, 5.2, 1.0], [5.2, 8.6, 0.84], [8.6, 11.0, 0.7]] as const;   // (the first stands on the platform's top, 1.3)
   stages.forEach(([a, b, s], i) => {
     box(k, [r * 2 * s, b - a, r * 2 * s], [0, (a + b) / 2, 0], planks(120 + i));
     box(k, [r * 2 * s + 0.35, 0.18, r * 2 * s + 0.35], [0, b, 0], i === 1 ? P.coralCanvas : P.tarPlankLight);
@@ -417,6 +433,9 @@ function campanile(k: Kit, h: SaltmarketHair, gy: number, lod: Lod): void {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * 0.62, 11.0, sz * 0.62], [sx * 0.62, 12.8, sz * 0.62], 0.12, 0.1, P.tarPlankLight, 5);
   k.add(new CylinderGeometry(0.26, 0.5, 0.8, lod ? 10 : 6), { at: [0, 11.9, 0], colour: P.brass, flat: true });
   box(k, [2.0, 0.16, 2.0], [0, 12.85, 0], P.tarPlankDark);
+  // the bell's headstock under the deck and its iron hanger
+  box(k, [1.36, 0.14, 0.18], [0, 12.7, 0], P.tarPlankDark);
+  k.limb([0, 12.22, 0], [0, 12.66, 0], 0.06, 0.06, P.iron, 4);
   const pg = new ConeGeometry(1.7, 1.6, 4, 1);
   k.add(pg, { at: [0, 13.7, 0], rot: [0, Math.PI / 4, 0], colour: canvas(P.indigoCanvas, P.indigoDark, 2), flat: true, perFace: true });
   k.limb([0, 14.4, 0], [0, 14.0, 0], 0.03, 0.03, P.iron, 3);
@@ -437,9 +456,10 @@ function hair(k: Kit, h: SaltmarketHair, gy: number, lod: Lod, i: number): void 
       k.limb([0, h.height - 1.2, 0], [-1.8, h.height - 2.2, 0], 0.14, 0.1, P.tarPlankDark, 5);
       box(k, [0.7, 0.7, 0.7], [-1.9, h.height - 2.4, 0], P.iron);
       k.limb([4.1, h.height - 3.8, 0], [4.1, h.height - 8.4, 0], 0.012, 0.012, P.rope, 3);
-      box(k, [0.18, 0.28, 0.18], [4.1, h.height - 8.6, 0], P.iron);
+      box(k, [0.18, 0.28, 0.18], [4.1, h.height - 8.52, 0], P.iron);   // (its top in the rope's end)
+      // a kingpost on the mast's head (to the plan's height) carries the stay to the jib's tip
+      k.limb([0, h.height - 0.7, 0], [0, h.height, 0], 0.09, 0.07, P.tarPlankDark, 4);
       k.limb([0, h.height - 0.2, 0], [4.1, h.height - 3.75, 0], 0.012, 0.012, P.rope, 3);
-      k.limb([0, h.height, 0], [0, h.height + 0.001, 0], 0.001, 0.001, P.iron, 3);
       k.clearBase();
       break;
     }
@@ -488,7 +508,7 @@ function hair(k: Kit, h: SaltmarketHair, gy: number, lod: Lod, i: number): void 
       k.limb([-1.5, h.height - 2.0, 0], [1.5, h.height - 2.0, 0], 0.07, 0.07, P.tarPlankDark, 4);
       for (let t = 1; t < h.height - 2; t += 0.9) box(k, [0.5, 0.05, 0.05], [0, t, 0], P.rope);
       for (const s of [-1, 1]) k.limb([0, 0.0, 0], [s * 0.7, -0.4, s * 0.5], 0.08, 0.08, P.pilingDark, 4);
-      k.add(new SphereGeometry(0.16, 6, 5), { at: [0, h.height + 0.2, 0], colour: P.glowLantern });
+      k.add(new SphereGeometry(0.16, 6, 5), { at: [0, h.height + 0.14, 0], colour: P.glowLantern });   // (seated on the masthead)
       k.clearBase();
       break;
     }
@@ -535,7 +555,7 @@ function boat(k: Kit, b: SaltmarketBoat, lod: Lod, i: number): void {
     k.limb([-1.5, 4.3, -2.6], [1.7, 4.3, -2.6], 0.07, 0.07, P.tarPlankLight, 5);
     k.add(new CylinderGeometry(0.22, 0.22, 3.0, 8), { at: [0.1, 4.3, -2.6], rot: [0, 0, Math.PI / 2], colour: P.salt, flat: true });
     box(k, [0.5, 0.5, 0.5], [0, 0.95, 4.2], P.tarPlankLight);
-    k.add(new SphereGeometry(0.14, 6, 5), { at: [0, 1.4, 4.2], colour: P.glowLantern });
+    k.add(new SphereGeometry(0.14, 6, 5), { at: [0, 1.32, 4.2], colour: P.glowLantern });   // (seated on the box, top 1.2)
     for (const s of [-1, 1]) k.limb([s * 1.4, 0.8, 3.4], [s * 2.0, 0.9, 5.6], 0.02, 0.02, P.rope, 3);
   } else if (b.kind === "cutter") {
     // the Constabulary's cutter: a trim hull in indigo with a coral wale, a short mast, a brass lantern and a tarred wheelhouse
@@ -551,7 +571,8 @@ function boat(k: Kit, b: SaltmarketBoat, lod: Lod, i: number): void {
   } else if (b.kind === "lighter") {
     k.add(hull(6.2, 2.4, 0.9, 0.2), { at: [0, 0.15, 0], colour: hullCol(P.tarPlank, P.tarPlankLight), flat: true });
     box(k, [2.0, 0.07, 5.4], [0, 0.55, 0], P.tarPlankLight);
-    for (let c = 0; c < 6; c++) box(k, [0.8, 0.6, 0.8], [(c % 2) * 0.95 - 0.5, 0.9 + (c > 3 ? 0.62 : 0), -1.6 + Math.floor(c / 2) * 1.0], c % 3 ? P.tarPlankLight : P.tarPlank);
+    // six crates: four on the deck (top 0.585), two stacked on them
+    for (let c = 0; c < 6; c++) box(k, [0.8, 0.6, 0.8], [(c % 2) * 0.95 - 0.5, 0.885 + (c > 3 ? 0.6 : 0), -1.6 + (c > 3 ? c - 4 : Math.floor(c / 2)) * 1.0], c % 3 ? P.tarPlankLight : P.tarPlank);
   } else {
     k.add(hull(3.8, 1.3, 0.6, 0.2), { at: [0, 0.1, 0], colour: hullCol(P.tarPlankDark, P.pilingLight), flat: true });
     box(k, [0.9, 0.05, 0.2], [0, 0.32, 0.6], P.tarPlankLight);
@@ -573,6 +594,7 @@ function rack(k: Kit, r: { x: number; z: number; yaw: number; len: number }, gy:
     const x = -r.len / 2 + 0.3 + j * 0.72;
     if (x > r.len / 2 - 0.2) break;
     k.add(new SphereGeometry(0.11, 5, 4), { at: [x, 1.6, 0.04], scale: [0.55, 1.5, 0.35], colour: (j + i) % 3 ? P.siltPale : P.salt, flat: true });
+    k.limb([x, 1.84, 0.01], [x, 1.7, 0.04], 0.008, 0.008, P.rope, 3);   // the twine it hangs by, from the top rail
   }
   k.clearBase();
 }
@@ -654,19 +676,44 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
     k.limb([sg.x - rx * 1.2, y + 2.15, sg.z - rz * 1.2], [sg.x + rx * 1.2, y + 2.15, sg.z + rz * 1.2], 0.05, 0.05, P.tarPlankLight, 4);
   }
   // free-standing banners hang from a pole (the Houses' and the Constabulary's hang on the Exchange's beam, the campanile and the flagpole)
+  // every cloth hangs from a rod along its top edge (the cloth's frame: `n` its face, `r` along it, as `buildSaltmarketCloth` lays it), and the rod is held by something standing
   for (const b of plan.banners) {
-    if (b.kind !== "society" && b.kind !== "syndicate") continue;
     const y = g(b.x, b.z);
     const k = kitAt(b.x, b.z);
-    k.limb([b.x - b.w / 2 - 0.1, y - 0.2, b.z], [b.x - b.w / 2 - 0.1, y + b.top + 0.4, b.z], 0.09, 0.06, P.tarPlankDark, 5);
-    k.add(new SphereGeometry(0.13, 5, 4), { at: [b.x - b.w / 2 - 0.1, y + b.top + 0.5, b.z], colour: P.brass });
+    const nx = Math.cos(b.yaw), nz = Math.sin(b.yaw), rx = nz, rz = -nx;
+    const top = y + b.top + 0.03;   // (the rod's underside on the cloth's top edge)
+    const along = (s: number, out = 0.02): V3 => [b.x + rx * s + nx * out, top, b.z + rz * s + nz * out];
+    if (b.kind === "society" || b.kind === "syndicate") {
+      // a free-standing pole at the near edge, the rod out from it
+      const px = b.x - rx * (b.w / 2 + 0.1), pz = b.z - rz * (b.w / 2 + 0.1);
+      k.limb([px, y - 0.2, pz], [px, y + b.top + 0.4, pz], 0.09, 0.06, P.tarPlankDark, 5);
+      k.add(new SphereGeometry(0.13, 5, 4), { at: [px, y + b.top + 0.5, pz], colour: P.brass });
+      k.limb([px, top, pz], along(b.w / 2 + 0.06), 0.03, 0.03, P.tarPlankDark, 4);
+      continue;
+    }
+    // on a hair (the Constabulary's on the flagpole, a House's on the campanile): a rod along the top edge and iron arms back to the hair
+    const hostHair = plan.hairs.find((h) => (h.kind === "flagpole" || h.kind === "campanile") && Math.hypot(h.x - b.x, h.z - b.z) < h.r + 3);
+    if (!hostHair) continue;   // (the Exchange's House banner hangs on the colonnade's front beam: the beam is its rod)
+    k.limb(along(-b.w / 2 - 0.06), along(b.w / 2 + 0.06), 0.03, 0.03, P.tarPlankDark, 4);
+    if (hostHair.kind === "flagpole") {
+      // a gaff arm from the pole to the rod's near end
+      const near = along(-b.w / 2 - 0.02);
+      k.limb([hostHair.x, top, hostHair.z], near, 0.035, 0.03, P.iron, 4);
+    } else {
+      // two arms straight back into the bell loft's deck (its edge is 1.0 from the tower's axis, its underside at 12.77)
+      const back = (b.x - hostHair.x) * nx + (b.z - hostHair.z) * nz - 0.9;   // from the cloth's plane to 0.1 inside the deck's edge
+      for (const s of [-0.75, 0.75]) {
+        const a = along(s, 0);
+        k.limb(a, [a[0] - nx * back, top, a[2] - nz * back], 0.03, 0.03, P.iron, 4);
+      }
+    }
   }
   // the lanterns on the hairs, the quay's lamp, the bridges' and the Exchange's: the points of light the view adds
   for (const h of plan.hairs) if (h.kind === "lantern") lamps.push({ x: h.x, y: g(h.x, h.z) + h.height + 0.1, z: h.z });
   lamps.push({ x: plan.quay.x - plan.quay.half + 0.15, y: L + 3.1, z: plan.quay.z1 - 0.3 });
   const customs = plan.bridges[0]!;
   for (const s of [-1, 1]) lamps.push({ x: customs.x + s * (SALTMARKET.deckHalf + 0.8), y: L + 2.5, z: customs.z + customs.hl - 1.0 });
-  for (const x of [-10, -3, 3, 10]) lamps.push({ x, y: g(0, -46) + plan.exchange.eave - 1.0, z: -33.5 });
+  for (const x of EXCHANGE_LANTERN_X) lamps.push({ x, y: g(plan.exchange.x, plan.exchange.z) + plan.exchange.eave - 1.0, z: SALTMARKET_ANCHORS.exchange.z + 11 - EXCHANGE_LANTERN_IN });
   plan.boats.filter((b) => b.kind === "barge" || b.kind === "cutter").forEach((b) => lamps.push({ x: b.x, y: SALTMARKET.waterY + 1.45, z: b.z + (b.kind === "barge" ? 4.2 : 3.4) }));
   return { geometries: kits.map((k) => k.build()), lamps, marks: houseOut.marks, roofs: houseOut.roofs.finish() };
 }

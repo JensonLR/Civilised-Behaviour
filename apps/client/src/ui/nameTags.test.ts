@@ -139,4 +139,22 @@ describe("NameTags never pile up (D-040)", () => {
     expect(tags.shown).toBe(0);
     expect(box(el()[0]!).x).toBe(Math.round(1.95 / 2 * 1280)); // where it points, never clamped
   });
+
+  it("D-074: a plate keeps off the goal's marker (it climbs above it), and the marker can tell a plate is up beneath it", () => {
+    // a plate whose anchor sits where the marker stands (x = 640, y = 300)
+    tags.update("w", "Lamp-Warden Yolde Hask", NPC_WARDEN, false, 9, { x: 0, y: 0, z: 0.5 }, 300);
+    tags.setObstacle(true, 640 - 16, 300 - 40, 640 + 16, 300 - 6);
+    tags.layout();
+    const t = visible()[0]!.style.transform;
+    const lifted = Number(/translate\(([-\d.]+)px, ([-\d.]+)px\)$/.exec(t)![2]);
+    expect(lifted).toBeLessThan(300 - 6 - 1); // its bottom is above the flag's top half: it climbed
+    expect(tags.plateNear(640, 300, 70)).toBe(true);
+    expect(tags.plateNear(200, 300, 70)).toBe(false);
+    // with no marker, it sits on its own anchor
+    tags.setObstacle(false);
+    tags.update("w", "Lamp-Warden Yolde Hask", NPC_WARDEN, false, 9, { x: 0, y: 0, z: 0.5 }, 300);
+    tags.layout();
+    expect(visible()[0]!.style.transform).toContain("640px, 300px");
+  });
 });
+

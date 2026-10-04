@@ -101,7 +101,11 @@ const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: numb
 
 type TreeKind = "broadleaf" | "acacia" | "birch" | "pine";
 
-export function planScatter(world: CollisionWorld, detail: ScatterDetail): ScatterPlan {
+/**
+ * `drawnY` is the region's ground AS DRAWN for a simulated height `h` at (x, z) (Hollowmere's terrain fades to its skirt; Kessar's eases to
+ * the shore): the distant trees stand on it, not on a height nobody sees. NaN means "no tree here" (the sea).
+ */
+export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY: (h: number, x: number, z: number) => number = visualHeight): ScatterPlan {
   const plan = emptyPlan();
   const h = (x: number, z: number): number => world.terrainHeight(x, z);
   const blocked = (x: number, z: number, margin: number): boolean => {
@@ -155,8 +159,8 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
       const z = cz + Math.sin(t) * d;
       const kind = treeSpecies(x, z);
       const s = 0.9 + far.next() * 0.55;
-      const it = item(x, visualHeight(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next());
-      if (treeDensity < 1 && h01(32, x, z) >= treeDensity) continue; // (after the draws above, so thinning never shifts the trees that stay)
+      const it = item(x, drawnY(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next());
+      if (Number.isNaN(it.y) || (treeDensity < 1 && h01(32, x, z) >= treeDensity)) continue; // (after the draws above, so thinning never shifts the trees that stay)
       plan[kind].push(it);
     }
   }
@@ -385,13 +389,18 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
   // ---- lily pads on the still water ---------------------------------------------------------------------------------------------------
   const lr = new Rng(0x1117);
   const lilyCap = Math.round(46 * detail.clutter);
-  const lt0 = world.terrain as { waterDepth?: (x: number, z: number) => number };
+  const lt0 = world.terrain as { waterDepth?: (x: number, z: number) => number; channelLevel?: (s: number) => number };
+  // the pond is drawn as one flat disc at the outflow's level (water.ts), a hair off the simulated level near the inflow: a pad sits on the disc
+  const pondY = lt0.channelLevel ? lt0.channelLevel(RIVER.length) - RIVER.freeboard + 0.004 : undefined;
   for (let tries = 0; plan.lilies.length < lilyCap && tries < lilyCap * 40; tries++) {
     // mostly in the pond, some in the slower stretch of the stream just above it
     const pond = lr.next() < 0.72;
     let x: number;
     let z: number;
+    let surface: number | undefined;
+    let ribbon: number | undefined;
     if (pond) {
+      surface = pondY;
       const a = lr.range(0, Math.PI * 2);
       const d = RIVER.pondRadius * Math.sqrt(lr.next()) * 0.93;
       x = RIVER.b.x + Math.cos(a) * d;
@@ -399,6 +408,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
     } else {
       const s = lr.range(RIVER.length * 0.55, RIVER.length);
       riverCentre(s, cpt);
+      ribbon = lt0.channelLevel ? lt0.channelLevel(s) - RIVER.freeboard : undefined; // the stream is drawn as a ribbon at this level across its width
       const a = lr.range(0, Math.PI * 2);
       const d = riverHalfWidth(s) * 0.6 * Math.sqrt(lr.next());
       x = cpt.x + Math.cos(a) * d;
@@ -406,12 +416,13 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail): Scatt
     }
     const depth = lt0.waterDepth?.(x, z) ?? 0;
     if (depth < 0.2 || waterEdgeDistance(x, z) > -0.6) continue;
+    if (ribbon !== undefined && Math.abs(h(x, z) + depth - ribbon) > 0.02) continue; // (only where the drawn stream lies at the pad's water: else it floats over it or drowns)
     // clumps: a pad gathers others near it
     const clump = h01(60, Math.floor(x / 2.4), Math.floor(z / 2.4));
     if (lr.next() > 0.25 + clump * 0.75) continue;
     if (plan.lilies.some((q) => (q.x - x) ** 2 + (q.z - z) ** 2 < 0.36)) continue;
     const r = 0.26 + lr.next() * 0.22;
-    plan.lilies.push(item(x, h(x, z) + depth + 0.035, z, lr.next() * 6.28, r, 1, r, 0, lr.next()));
+    plan.lilies.push(item(x, (surface ?? h(x, z) + depth) + 0.035, z, lr.next() * 6.28, r, 1, r, 0, lr.next()));
   }
 
   // ---- stepping stones ---------------------------------------------------------------------------------------------------------------

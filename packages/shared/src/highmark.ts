@@ -1,3 +1,4 @@
+import { ARRIVAL_INLAND } from "./campaignTypes.ts";
 import type { ResolutionId } from "./campaignTypes.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { segmentDistance } from "./landscape.ts";
@@ -601,7 +602,7 @@ export function createHighmarkWorld(seed: number, opts?: { outpost?: OutpostStag
 export function highmarkSpawn(index: number, count = 4): { x: number; z: number } {
   const a = (index / Math.max(count, 1)) * Math.PI * 2 + Math.PI / 4;
   const L = HIGHMARK_ANCHORS.landing;
-  return { x: L.x + Math.cos(a) * 2.6, z: L.z - 1.4 + Math.sin(a) * 1.2 };
+  return { x: L.x + Math.cos(a) * 2.6, z: L.z - 1.4 - ARRIVAL_INLAND + Math.sin(a) * 1.2 } /* (D-070: up the shore, off the jetty's first planks) */;
 }
 
 /** The props a visit starts with: stores at the landing and in the drovers' camp, a stool or two at the Waiting Stones. Deterministic, never in anything solid. */

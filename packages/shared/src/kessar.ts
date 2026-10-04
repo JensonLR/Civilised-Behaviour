@@ -1,3 +1,4 @@
+import { ARRIVAL_INLAND } from "./campaignTypes.ts";
 import { CollisionWorld, type Obstacle } from "./collision.ts";
 import { KESSAR_ANCHORS as A, KESSAR_SITES as SITES, type BridgeState } from "./campaignTypes.ts";
 import { segmentDistance } from "./landscape.ts";
@@ -264,8 +265,11 @@ export function kessarPlan(): KessarPlan {
   const z0 = A.bridge.z - A.bridge.length / 2;
   const z1 = A.bridge.z + A.bridge.length / 2;
   const banners: KessarBanner[] = [
-    { x: bastions[0]!.x, z: bastions[0]!.z + 3.0, yaw: Math.PI / 2, top: 9, w: 2.2, h: 4.4, kind: "ward" },
-    { x: bastions[1]!.x, z: bastions[1]!.z + 3.0, yaw: Math.PI / 2, top: 9, w: 2.2, h: 4.4, kind: "ward" },
+    // (flat on each bastion's outer face, which faces out from the fort's centre: a banner square to the road would cut into one corner of it and stand off the other)
+    ...bastions.map((b): KessarBanner => {
+      const th = Math.atan2(b.z - F.z, b.x - F.x);
+      return { x: b.x + Math.cos(th) * (b.hz + 0.06), z: b.z + Math.sin(th) * (b.hz + 0.06), yaw: th, top: 9, w: 2.2, h: 4.4, kind: "ward" };
+    }),
     { x: keep.x, z: keep.z + keep.hz + 0.08, yaw: Math.PI / 2, top: 15, w: 3.4, h: 6.5, kind: "ward" },
     ...towers.map((t): KessarBanner => {
       const th = Math.atan2(t.z - F.z, t.x - F.x);
@@ -543,7 +547,9 @@ export function createKessarWorld(seed: number, bridge: BridgeState = "intact", 
 /** The landing: a ring of up to four on the beach (never on the pier). */
 export function kessarSpawn(index: number, count = 4): { x: number; z: number } {
   const a = (index / Math.max(count, 1)) * Math.PI * 2 + Math.PI / 4;
-  return { x: A.landing.x + Math.cos(a) * 2.6, z: A.landing.z + Math.sin(a) * 2.6 };
+  // (D-070: the ring stands ARRIVAL_INLAND metres up the beach from the landing: on the landing itself the camera, behind the party, hung over the pier's first planks and the first
+  // frame of every expedition was a slab of timber. Still within the dock's proposal reach, so a party can sail straight back)
+  return { x: A.landing.x + Math.cos(a) * 2.6, z: A.landing.z - ARRIVAL_INLAND + Math.sin(a) * 2.6 };
 }
 
 /**

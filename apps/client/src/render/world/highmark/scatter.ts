@@ -1,6 +1,6 @@
 import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, Rng, hash3, highmarkRoadDistance, type CollisionWorld, type Obstacle } from "./shared.ts";
 import type { Item, ScatterDetail } from "../scatter.ts";
-import { highmarkCover, highmarkFieldMask } from "./ground.ts";
+import { highmarkCover, highmarkFieldMask, visualY } from "./ground.ts";
 
 /**
  * Where Highmark's plants and stones go, as plain data (no three.js: placement is unit-tested in Node): the acacia flats and the termite mounds are the world's own `tree` and `rock`
@@ -66,7 +66,7 @@ export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail
       const s = 1 + far.next() * 0.5;
       if (treeDensity < 1 && h01(32, x, z) >= treeDensity) continue;
       if (Math.hypot(x - C.x, z - C.z) < 90) continue;
-      out.acacia.push(item(x, HIGHMARK.level, z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next()));
+      out.acacia.push(item(x, visualY(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next()));
     }
   }
   // shrubs: thorn scrub in clumps on the flats

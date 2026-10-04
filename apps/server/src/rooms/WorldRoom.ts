@@ -56,6 +56,7 @@ import {
   applyIncident,
   INCIDENT,
   INCIDENT_IDS,
+  ACCIDENT_OWNER,
   HONOUR_TITLE,
   awardHonour,
   decorate,
@@ -435,7 +436,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.cast.noise(x, z, radius, src);
         this.scenario?.onNoise(x, z, radius, src);
       },
-      hostile: (shooter, target) => this.cast.hostileTo(shooter, target),
+      hostile: (shooter, target) => shooter === ACCIDENT_OWNER || this.cast.hostileTo(shooter, target), // (D-071: an accident's powder respects no side)
       // being shot at: the site hears a declaration, and a soldier who saw nobody goes and looks where it came from (D-041)
       shotAt: (shooter, target) => {
         this.lastShotT = this.simT;
@@ -450,6 +451,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     });
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
     this.cast = new Cast({
+      cry: (key) => this.broadcast("cry", { id: key }), // (D-073: a voice of panic, cosmetic)
       players: this.party,
       spawnNpc: (spec) => this.spawnNpc(spec),
       removeNpc: (key) => this.removeNpc(key),
@@ -558,6 +560,25 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       join: (name, lookSeed, at) => this.followers.join(name, lookSeed, at),
       looseHorse: (at) => this.mounts.spawnHorse({ x: at.x, z: at.z, yaw: 0 }, { coat: (this.state.seed ^ 0x40) >>> 0 }),
       riderOf: (id) => this.state.mounts.get(id)?.rider ?? "",
+      // D-071: the overturned powder wagon's kegs, in a ring round the wreck, the first one fizzing (the accident's: it respects no side)
+      spillKegs: (at, n, ring, fuseS) => {
+        const out: string[] = [];
+        const turn = ((this.state.seed >>> 3) % 628) / 100;
+        for (let k = 0; k < n; k++) {
+          const a = turn + (k / n) * Math.PI * 2;
+          const id = this.spawnPropAt(PropKind.BARREL, at.x + Math.cos(a) * ring, at.z + Math.sin(a) * ring);
+          if (id) out.push(id);
+        }
+        const first = out[0];
+        const ps = first ? this.state.props.get(first) : undefined;
+        if (first && ps) {
+          this.lit.set(first, { left: fuseS, owner: ACCIDENT_OWNER });
+          ps.fuse = fuseTenths(fuseS);
+        }
+        return out;
+      },
+      propLive: (id) => this.state.props.has(id),
+      propLit: (id) => this.lit.has(id),
       kind: (sid) => {
         const d = this.deedsOf(sid);
         if (d) d.kindness++;

@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from "three";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CollisionWorld, FLAG } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, clearCharacterCaches, type CharacterRig } from "@cb/procedural/three";
@@ -15,6 +15,15 @@ afterAll(() => {
   world.dispose();
   clearCharacterCaches();
 });
+
+/** Math.random replaced by a seeded generator (a falling body's spin is presentation randomness; a test wants the same fall every run). Restore with `.mockRestore()`. */
+const seededRandom = (seed: number) => {
+  let s = (seed * 2654435761) >>> 0;
+  return vi.spyOn(Math, "random").mockImplementation(() => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  });
+};
 
 const launch = (over: Partial<RagdollLaunch> = {}): RagdollLaunch => ({ vx: 0, vy: 0, vz: 0, dx: 0, dz: 1, power: 0.7, zone: 1, ...over });
 
@@ -119,6 +128,7 @@ describe("Ragdoll", () => {
   });
 
   it("joints respect their limits: knees never bend backwards, elbows never hyper-extend, and the pose stays finite", () => {
+    const random = seededRandom(7); // (the launch's spin is presentation randomness: seeded here, so the test is the same test every run)
     let kneeMin = Infinity;
     let kneeMax = -Infinity;
     let elbowMin = Infinity;
@@ -149,7 +159,37 @@ describe("Ragdoll", () => {
     expect(kneeMax).toBeLessThan(HINGE_LIMITS.kneeL![1] + 0.35);
     expect(elbowMin).toBeGreaterThan(HINGE_LIMITS.elbowL![0] - 0.35);
     expect(elbowMax).toBeLessThan(HINGE_LIMITS.elbowL![1] + 0.35);
+    random.mockRestore();
   });
+
+  it("the hinges' hard stops hold across forty seeded full-power falls: no knee, elbow, torso or head is ever drawn past its limit by more than the solver's give", () => {
+    let worst = 0;
+    let where = "";
+    for (let trial = 0; trial < 40; trial++) {
+      const random = seededRandom(trial + 1);
+      for (const seed of [1, 4, 9]) {
+        const { rig, anim } = standing(seed);
+        const rd = world.spawn(rig, launch({ power: 1, dx: Math.cos(seed), dz: Math.sin(seed), zone: seed % 6 }))!;
+        for (let i = 0; i < 60 && rd.phase === "sim"; i++) {
+          frame(anim, rd);
+          if (rd.phase !== "sim") break;
+          for (const k of ["kneeL", "kneeR", "elbowL", "elbowR", "torso", "head"] as const) {
+            const a = rd.hingeAngle(k);
+            const [lo, hi] = HINGE_LIMITS[k]!;
+            const past = Math.max(lo - a, a - hi);
+            if (past > worst) {
+              worst = past;
+              where = `trial ${trial} figure ${seed} ${k} ${a.toFixed(3)}`;
+            }
+          }
+        }
+        rd.dispose();
+        rig.dispose();
+      }
+      random.mockRestore();
+    }
+    expect(worst, where).toBeLessThanOrEqual(0.2 + 0.03); // (Ragdoll.ts HINGE_GIVE, and a step's worth of drift before the stop sees it; one fall in forty once went 0.39 rad past)
+  }, 30_000); // 120 full falls of physics: ~2.5 s alone, past vitest's 5 s default on a loaded CI runner
 
   it("the limits agree with the animator: knees bend the way the animator bends them, elbows too (a sign error once folded ragdoll knees forward)", () => {
     const rig = buildCharacter(generateCharacter(3), { outline: false });

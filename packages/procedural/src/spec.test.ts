@@ -52,7 +52,7 @@ describe("codec", () => {
     expect(generateCharacter(123)).toEqual(a);
   });
   it("adding batch 2 did not change who an old seed is: every original field matches the frozen generator unless a newer option was rolled", () => {
-    const frozenOptions: Record<string, number> = { noseStyle: 6, hair: 10, moustache: 10, beard: 8, sideburns: 4, hat: 11, jacket: 6, shirt: 4, trousers: 4, boots: 4, belt: 3, eyewear: 5, sash: 3, neckwear: 4, pack: 5, hipGear: 5, gloves: 3 };
+    const frozenOptions: Record<string, number> = { noseStyle: 6, hair: 10, moustache: 10, beard: 8, sideburns: 4, hat: 11, jacket: 6, shirt: 4, trousers: 4, boots: 4, belt: 3, eyewear: 5, sash: 3, neckwear: 4, pack: 5, hipGear: 5, gloves: 3, skin: 8 }; // (D-067: the deeper skin tones are appended options too)
     let checked = 0;
     let novel = 0;
     OLD_SEEDS.forEach((row, n) => {

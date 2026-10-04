@@ -17,6 +17,11 @@ export class Guide {
   private label = "";
   private dist = -1;
   private lineDistShown = -1;
+  private quietOn = false;
+  /** Where the marker stands on screen this frame (CSS px), and whether it is there as a flag over the place (not hidden, not held at the edge). */
+  markX = 0;
+  markY = 0;
+  markOver = false;
 
   constructor(parent: HTMLElement) {
     this.line = document.createElement("div");
@@ -57,6 +62,7 @@ export class Guide {
    */
   place(ndcX: number, ndcY: number, behind: boolean, dist: number, label: string, nearM = 4, topPx = 0): void {
     if (dist < 0 || dist < nearM) {
+      this.markOver = false;
       if (!this.mark.hidden) this.mark.hidden = true;
       this.setLineDist(dist < 0 ? -1 : 0);
       return;
@@ -92,6 +98,9 @@ export class Guide {
     // (never over the line under the heading strip: a goal on the horizon straight ahead projected onto the words; the flag stands just below them instead)
     const py = Math.max((-y * 0.5 + 0.5) * h, topPx);
     this.mark.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px)`;
+    this.markX = px;
+    this.markY = py;
+    this.markOver = !off;
     if (off) this.mark.style.setProperty("--turn", `${Math.atan2(-y, x).toFixed(3)}rad`);
   }
 
@@ -101,7 +110,15 @@ export class Guide {
     this.lineDist.textContent = m > 0 ? `${m} m` : "";
   }
 
+  /** D-074: the marker stands over somebody whose name plate is up: the flag alone (its name and distance were the plate's and the line's twice over). */
+  quiet(on: boolean): void {
+    if (on === this.quietOn) return;
+    this.quietOn = on;
+    this.mark.classList.toggle("quiet", on);
+  }
+
   hide(): void {
+    this.markOver = false;
     this.line.hidden = true;
     this.mark.hidden = true;
   }

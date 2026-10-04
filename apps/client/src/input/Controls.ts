@@ -4,7 +4,7 @@ import { AIM } from "./aim.ts";
 import { actionForCode, heldButtons, isHeld, tapButtonFor } from "./bindings.ts";
 import { deviceTracker, padFamily, PAD_INDEX, wireGlyphPreference, type PadControl } from "./devices.ts";
 import { Gesture, getPadBindings, rumble, shapeStick, type PadAction, type PadButton, type RumbleKind, type Stick2 } from "./padProfile.ts";
-import { TOUCH, TOUCH_BUTTONS, stickRuns, type TouchButton, type TouchSource } from "./touchLogic.ts";
+import { TOUCH, TOUCH_BUTTONS, stickRuns, type TouchButton, type TouchContext, type TouchSource } from "./touchLogic.ts";
 
 /** A sampled intent for one fixed simulation step. */
 export interface Intent {
@@ -69,6 +69,8 @@ export class Controls {
    * Use control reloads. Unwired it says yes, so a tap is Use and a hold is Reload: never the two at once (the old "X does both" fiddliness).
    */
   canInteract: () => boolean = () => true;
+  /** D-068: what the player can do this frame (the touch overlay shows only those buttons). Undefined: every button stays. */
+  touchContext: () => TouchContext | undefined = () => undefined;
   /** The thing in reach is a HOLD (revive, dress a wound): holding Use keeps Use down instead of reloading. */
   holdInteract: () => boolean = () => false;
   /** Multiplier on the pad's look speed from the aim assist (1 = none); the game writes it every frame from `assistLook().slow`. */
@@ -244,6 +246,8 @@ export class Controls {
     }
     this.touchSeen = true;
     t.showUse?.(this.canInteract());
+    const ctx = this.touchContext();
+    if (ctx) t.showContext?.(ctx);
     const g = this.tg;
     let any = t.move.x !== 0 || t.move.y !== 0;
     const tapped = t.takePressed?.() ?? 0; // (a press already let go still counts as down for this one read: the next read lets go, a tap)

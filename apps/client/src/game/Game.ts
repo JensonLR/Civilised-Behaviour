@@ -1,14 +1,15 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, npcKey, seedFromString } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, WEAPON, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
+import type { TouchContext } from "../input/touchLogic.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
 import { CharacterActor } from "../render/CharacterActor.ts";
@@ -135,6 +136,8 @@ export class Game {
   private assistElev = 0;
   /** Is there something in reach the Use control would act on, and is it a hold (revive, dress, load)? Set by `updatePrompt`, read by the pad's Use/Reload split (input/Controls.ts). */
   private usable = false;
+  /** D-068: what the player can do this frame, for the touch overlay (only those buttons are shown). Reused: no per-frame allocation. */
+  private readonly touchCtx: TouchContext = { armed: false, ranged: false, carrying: false, grab: false, command: false };
   private useHold = false;
   /** Weapons, shots, projectiles, impacts, the cannon and the gunnery interface (game/CombatView.ts). */
   private readonly combat: CombatView;
@@ -257,6 +260,7 @@ export class Game {
     this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
     this.groundTorches = new GroundTorches(stage.scene);
     controls.canInteract = () => this.usable;
+    controls.touchContext = () => this.touchCtx;
     controls.holdInteract = () => this.useHold;
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
@@ -289,6 +293,10 @@ export class Game {
     session.room.onMessage("parley", (m: { view?: ParleyView; line?: string; closed?: boolean }) => this.onParley(m));
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
+    session.room.onMessage("cry", (e: CryEvent) => {
+      const p = typeof e?.id === "string" ? this.session.room.state.players.get(e.id) : undefined;
+      if (p) this.audio.panic(this.session.value(p, "x"), this.session.value(p, "y") + 1.5, this.session.value(p, "z"), p.look);
+    });
 
     if (isDemo()) {
       this.demoBanner = new DemoBanner(document.body);
@@ -424,6 +432,17 @@ export class Game {
       close: () => {},
     });
   }
+
+  /** Any hired hand standing (the touch overlay's ORDERS button). A plain loop with an early-out flag: no per-frame object. */
+  private anyHands(): boolean {
+    this.handSeen = false;
+    this.session.room.state.players.forEach(this.noteHand);
+    return this.handSeen;
+  }
+  private handSeen = false;
+  private readonly noteHand = (p: PlayerStateType): void => {
+    if (!this.handSeen && HAND_ROLES.has(p.npc) && (p.flags & FLAG.DOWNED) === 0) this.handSeen = true;
+  };
 
   /** Hired hands on the ground now, and which orders they can take (a porter is the only hand that fetches). */
   private hands(): { count: number; porter: boolean } {
@@ -1085,6 +1104,16 @@ export class Game {
     }
     // what the pad's Use control will do this frame: a tap is Use only when there is something to use, otherwise it reloads (input/Controls.ts)
     this.usable = foundation || prompt.includes(use);
+    {
+      const tc = this.touchCtx;
+      const wid = mine.weapon > 0 ? ((mine.weapon - 1) as WeaponId) : undefined;
+      const def = wid !== undefined ? WEAPONS[wid] : undefined;
+      tc.armed = def !== undefined && wid !== WEAPON.FISTS && (flags & FLAG.DOWNED) === 0;
+      tc.ranged = tc.armed && def?.ranged !== undefined && wid !== WEAPON.CANNON;
+      tc.carrying = (flags & FLAG.CARRYING) !== 0;
+      tc.grab = prompt.includes(grab);
+      tc.command = this.anyHands(); // (allocation-free: this runs every frame)
+    }
     this.useHold = prompt.startsWith(`Hold ${use}`);
     const showLimbs = getShowLimbs();
     this.hud.update({
@@ -1155,6 +1184,7 @@ export class Game {
     const g = this.guidanceNow;
     if (!g || g.x === undefined || g.z === undefined || !me) {
       this.guide.place(0, 0, false, -1, "");
+      this.tags.setObstacle(false);
       this.tracker.setDistance(-1);
       return;
     }
@@ -1163,6 +1193,12 @@ export class Game {
     const dist = Math.hypot(g.x - mx, g.z - mz);
     tmp.set(g.x, this.session.world.terrainHeight(g.x, g.z) + 2.6, g.z).project(this.stage.camera);
     this.guide.place(tmp.x, tmp.y, tmp.z > 1, dist, g.label ?? "", 4, this.guideTop);
+    // D-074: the marker and the name plates keep off each other: over somebody whose plate is up it is the flag alone, and the plates climb above whatever it covers
+    const g2 = this.guide;
+    const quiet = g2.markOver && this.tags.plateNear(g2.markX, g2.markY, 70);
+    g2.quiet(quiet);
+    if (g2.markOver) this.tags.setObstacle(true, g2.markX - (quiet ? 16 : 56), g2.markY - 40, g2.markX + (quiet ? 16 : 56), g2.markY + (quiet ? -6 : 20));
+    else this.tags.setObstacle(false);
     this.tracker.setDistance(dist >= 4 ? Math.round(dist) : -1);
   }
 
@@ -1340,7 +1376,7 @@ export class Game {
     const victim = this.session.room.state.players.get(e.id);
     if (victim) {
       this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
-      this.audio.hurt(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, 1, e.id === this.session.sessionId); // (and the victim has an opinion about it)
+      this.audio.scream(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, e.id === this.session.sessionId); // (D-073: and the victim has an opinion about it)
     }
     if (!a || !getShowLimbs()) return;
     const piece = a.body.detachLimb(e.limb as LimbId);

@@ -82,10 +82,15 @@ export function holsterPose(id: number, P: BodyMeasures, out: MountPose = newMou
       break;
     case WEAPON.RIFLE:
     case WEAPON.BLUNDERBUSS:
-      out.x = P.shoulderHalfWidth * 0.25;
-      out.y = P.torsoHeight * 0.3;
+      // (a real sling's diagonal: butt at the left hip, muzzle out past the right shoulder. At 18 degrees off the spine the muzzle rose straight behind the head, through any
+      // hat with a brim and out of the crown of a shako; at ~38 degrees it clears a brim and stays inside the silhouette's shoulder line)
+      out.x = -P.shoulderHalfWidth * 0.2;
+      out.y = P.torsoHeight * 0.12;
       out.z = P.torsoDepth * 0.5 + 0.13;
+      // (the lean is `ry`: with Euler XYZ the model turns about Z first, which is its own barrel, so the old `rz` lean only rolled the gun about itself and it always hung
+      // straight up the spine. Ry before Rx tips the barrel across the back: negative leans the muzzle toward +X, the right shoulder)
       out.rx = Math.PI / 2 - 0.1;
+      out.ry = -0.66;
       out.rz = -0.32;
       break;
     default:

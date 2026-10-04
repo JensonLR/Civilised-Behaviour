@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { COMBAT, CollisionWorld, FLAG, aimDirection, newBodyHit, rayBody, wrapAngle, type BodyPose, type Obstacle } from "@cb/shared";
 import { AIM, aimSolve, crosshairDistance, type V3 } from "../input/aim.ts";
 import { CameraRig } from "./CameraRig.ts";
-import { FIRST_PERSON } from "./firstPerson.ts";
+import { FIRST_PERSON, newEyeSample } from "./firstPerson.ts";
+import { atmoUniforms } from "./world/atmosphere.ts";
 
 /**
  * Third-person aim (D-038, package I): the camera blends in and out without a snap, tightens the lens, puts the shoulder out, keeps off walls and never enters the head, and a shot SOLVED against
@@ -104,6 +105,38 @@ describe("wall clearance and the head", () => {
     run(r, 2, true);
     const head = new Vector3(feet.x, 1.55, feet.z);
     expect(camera.position.distanceTo(head)).toBeGreaterThan(0.8);
+  });
+
+  it("a trunk BESIDE the line to the lens (missed by the centre ray) still pulls the camera in: the lens never sits against it", () => {
+    // hip camera, yaw 0: the lens sits ~5.6 m behind (+Z) and 0.55 m right (+X). A trunk whose bark is a hand (0.18 m) to the right of the line to the lens, 0.6 m in front of it: a single ray misses it.
+    const { r, camera } = rig();
+    run(r, 1, false);
+    const free = camera.position.clone();
+    const trunk: Obstacle = { kind: "circle", x: free.x + 0.18 + 0.2, z: free.z - 0.6, r: 0.2, y0: 0, y1: 8 };
+    const world = flat([trunk]);
+    const { r: r2, camera: c2 } = rig(world);
+    run(r2, 1, false);
+    expect(r2.wallPull).toBeGreaterThan(0);
+    // the lens ends up nearer the head than the trunk is
+    const head = new Vector3(feet.x, 1.55, feet.z);
+    expect(c2.position.distanceTo(head)).toBeLessThan(Math.hypot(trunk.x - head.x, trunk.z - head.z));
+  });
+
+  it("D-077: the follow camera tells the scenery where its subject is (the chest), and turns the fade off in first person", () => {
+    const { r } = rig();
+    run(r, 0.5, false);
+    const f = atmoUniforms.uFocus.value;
+    expect(f.w).toBe(1);
+    expect(f.x).toBeCloseTo(feet.x, 1);
+    expect(f.y).toBeCloseTo(1.2, 1);
+    r.setView("first");
+    const eye = newEyeSample();
+    eye.neck = { x: feet.x, y: 1.3, z: feet.z };
+    eye.torso = { x: feet.x, y: 1.0, z: feet.z };
+    eye.eyeUp = 0.4;
+    eye.eyeReach = 0.3;
+    for (let i = 0; i < 60; i++) r.update(feet, 1 / 60, false, eye);
+    expect(atmoUniforms.uFocus.value.w).toBeLessThan(0.01);
   });
 
   it("an open field pulls nothing", () => {
