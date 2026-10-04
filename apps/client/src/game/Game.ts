@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, npcKey, seedFromString } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, WEAPON, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -9,6 +9,7 @@ import { Wishlist } from "../ui/Wishlist.ts";
 import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
+import type { TouchContext } from "../input/touchLogic.ts";
 import type { Session } from "../net/Session.ts";
 import { CameraRig } from "../render/CameraRig.ts";
 import { CharacterActor } from "../render/CharacterActor.ts";
@@ -135,6 +136,8 @@ export class Game {
   private assistElev = 0;
   /** Is there something in reach the Use control would act on, and is it a hold (revive, dress, load)? Set by `updatePrompt`, read by the pad's Use/Reload split (input/Controls.ts). */
   private usable = false;
+  /** D-068: what the player can do this frame, for the touch overlay (only those buttons are shown). Reused: no per-frame allocation. */
+  private readonly touchCtx: TouchContext = { armed: false, ranged: false, carrying: false, grab: false, command: false };
   private useHold = false;
   /** Weapons, shots, projectiles, impacts, the cannon and the gunnery interface (game/CombatView.ts). */
   private readonly combat: CombatView;
@@ -257,6 +260,7 @@ export class Game {
     this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
     this.groundTorches = new GroundTorches(stage.scene);
     controls.canInteract = () => this.usable;
+    controls.touchContext = () => this.touchCtx;
     controls.holdInteract = () => this.useHold;
     this.overlay = new DebugOverlay(debugEl, {
       renderer: stage.renderer,
@@ -424,6 +428,17 @@ export class Game {
       close: () => {},
     });
   }
+
+  /** Any hired hand standing (the touch overlay's ORDERS button). A plain loop with an early-out flag: no per-frame object. */
+  private anyHands(): boolean {
+    this.handSeen = false;
+    this.session.room.state.players.forEach(this.noteHand);
+    return this.handSeen;
+  }
+  private handSeen = false;
+  private readonly noteHand = (p: PlayerStateType): void => {
+    if (!this.handSeen && HAND_ROLES.has(p.npc) && (p.flags & FLAG.DOWNED) === 0) this.handSeen = true;
+  };
 
   /** Hired hands on the ground now, and which orders they can take (a porter is the only hand that fetches). */
   private hands(): { count: number; porter: boolean } {
@@ -1085,6 +1100,16 @@ export class Game {
     }
     // what the pad's Use control will do this frame: a tap is Use only when there is something to use, otherwise it reloads (input/Controls.ts)
     this.usable = foundation || prompt.includes(use);
+    {
+      const tc = this.touchCtx;
+      const wid = mine.weapon > 0 ? ((mine.weapon - 1) as WeaponId) : undefined;
+      const def = wid !== undefined ? WEAPONS[wid] : undefined;
+      tc.armed = def !== undefined && wid !== WEAPON.FISTS && (flags & FLAG.DOWNED) === 0;
+      tc.ranged = tc.armed && def?.ranged !== undefined && wid !== WEAPON.CANNON;
+      tc.carrying = (flags & FLAG.CARRYING) !== 0;
+      tc.grab = prompt.includes(grab);
+      tc.command = this.anyHands(); // (allocation-free: this runs every frame)
+    }
     this.useHold = prompt.startsWith(`Hold ${use}`);
     const showLimbs = getShowLimbs();
     this.hud.update({

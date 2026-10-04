@@ -1,6 +1,6 @@
 import { deviceTracker } from "./devices.ts";
 import type { Stick2 } from "./padProfile.ts";
-import { TOUCH, TOUCH_BUTTONS, anchorWithin, stickFrom, type TouchButton, type TouchSource } from "./touchLogic.ts";
+import { TOUCH, TOUCH_BUTTONS, anchorWithin, hiddenFor, stickFrom, type TouchButton, type TouchContext, type TouchSource } from "./touchLogic.ts";
 
 /**
  * The on-screen controls for a phone or a tablet (D-049). DOM only: it reports what the fingers do (`TouchSource`) and `Controls` applies the rules. Shown in the field while the
@@ -18,6 +18,28 @@ const LABEL: Readonly<Record<TouchButton, string>> = {
 const GROUP: Readonly<Record<TouchButton, "main" | "side" | "top">> = {
   fire: "main", aim: "main", jump: "main", use: "main", crouch: "side", melee: "side", grab: "side", throw: "side", weapon: "side", orders: "top", view: "top", pause: "top",
 };
+
+/**
+ * D-068: an ink pictogram over each button's word (the words alone did not fit a thumb-sized circle: "CROUCH" and "RELOAD" ran over the rim). Strokes only, in the button's ink, on
+ * a 24-unit grid; FIRE keeps its word alone, the bar at the top is pictograms alone. The prompts still print the words, which stay on the buttons as captions.
+ */
+const ICON: Readonly<Record<TouchButton | "reload" | "full", string>> = {
+  fire: "",
+  aim: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5"/>',
+  jump: '<path d="M12 18V5M6.5 10.5 12 5l5.5 5.5M5 21h14"/>',
+  use: '<path d="M8 13V6.5a1.6 1.6 0 0 1 3.2 0V11M11.2 10.5V5a1.6 1.6 0 0 1 3.2 0v6M14.4 11V7a1.6 1.6 0 0 1 3.2 0v7c0 4-2.6 7-6.2 7-2.8 0-4.4-1.6-5.4-3.6L4.4 15a1.5 1.5 0 0 1 2.5-1.6L8 15"/>',
+  reload: '<rect x="9" y="3" width="6" height="13" rx="2.5"/><path d="M9 8h6M12 16v5"/>',
+  crouch: '<path d="M12 3.5v10M7 9l5 5 5-5M5 20h14"/>',
+  melee: '<path d="M5 19 17.5 6.5M14.5 3.5l6 6M3.5 15.5l5 5M6 18l-2.5 2.5"/>',
+  grab: '<path d="M6 10.5 9 7.5M9 7.5c1.5-1.5 3.5-1.5 5 0l3 3c1.5 1.5 1.5 3.5 0 5l-3.5 3.5M9 7.5l3 3M12 10.5l-6 6M4 20l3-3"/>',
+  throw: '<path d="M4 19c2-8.5 8.5-12.5 15.5-11.5M15.5 4.5l4 3-3 4"/>',
+  weapon: '<path d="M4 8.5h13l-3-3M20 15.5H7l3 3"/>',
+  orders: '<path d="M6 21V3.5M6 4h11l-2.5 4L17 12H6"/>',
+  view: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+  pause: '<path d="M9 5v14M15 5v14"/>',
+  full: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+};
+const svg = (paths: string): string => `<svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
 
 const isFinger = (e: PointerEvent): boolean => e.pointerType === "touch" || e.pointerType === "pen";
 
@@ -43,6 +65,8 @@ export class TouchControls implements TouchSource {
   private playing = false;
   private isBlocked = false;
   private useUsable: boolean | undefined;
+  /** The context last applied (as a bit set of hidden buttons): the DOM is touched only when it changes. */
+  private hiddenBits = -1;
   private pressedBits = 0;
 
   constructor(private readonly doc: Document = document) {
@@ -63,7 +87,8 @@ export class TouchControls implements TouchSource {
     this.knob = el("div", "t-knob", this.ring);
     const groups = { main: el("div", "t-main", this.root), side: el("div", "t-side", this.root), top: el("div", "t-top", this.root) };
     for (const b of TOUCH_BUTTONS) {
-      const btn = el("button", `t-btn t-${b}`, groups[GROUP[b]], LABEL[b]);
+      const btn = el("button", `t-btn t-${b}`, groups[GROUP[b]]);
+      btn.innerHTML = `${ICON[b] ? svg(ICON[b]) : ""}<span class="cap">${LABEL[b]}</span>`;
       btn.setAttribute("type", "button");
       btn.dataset.b = b;
       btn.tabIndex = -1;
@@ -71,7 +96,8 @@ export class TouchControls implements TouchSource {
       this.wireButton(btn, b);
     }
     // full screen: the browser's own bars take a third of a phone held sideways (a tap is the gesture the request needs; hidden where it cannot be had, e.g. an iPhone)
-    this.fullBtn = el("button", "t-btn t-full", groups.top, "FULL");
+    this.fullBtn = el("button", "t-btn t-full", groups.top);
+    this.fullBtn.innerHTML = `${svg(ICON.full)}<span class="cap">FULL</span>`;
     this.fullBtn.setAttribute("type", "button");
     this.fullBtn.tabIndex = -1;
     this.fullBtn.hidden = !doc.fullscreenEnabled;
@@ -139,7 +165,10 @@ export class TouchControls implements TouchSource {
       if (isFinger(e)) deviceTracker.note("touch");
     }, { capture: true });
     deviceTracker.onChange(() => this.refresh());
-    doc.addEventListener("fullscreenchange", () => this.fullBtn.classList.toggle("on", !!doc.fullscreenElement));
+    doc.addEventListener("fullscreenchange", () => {
+      this.fullBtn.classList.toggle("on", !!doc.fullscreenElement);
+      this.fullBtn.hidden = !doc.fullscreenEnabled || !!doc.fullscreenElement; // (D-068: in full screen already, the browser's own gesture leaves it; the button only took room)
+    });
   }
 
   private wireButton(btn: HTMLElement, b: TouchButton): void {
@@ -195,7 +224,25 @@ export class TouchControls implements TouchSource {
   showUse(usable: boolean): void {
     if (usable === this.useUsable) return;
     this.useUsable = usable;
-    this.buttons.get("use")!.textContent = usable ? LABEL.use : "RELOAD";
+    const btn = this.buttons.get("use")!;
+    btn.innerHTML = `${svg(usable ? ICON.use : ICON.reload)}<span class="cap">${usable ? LABEL.use : "RELOAD"}</span>`;
+  }
+
+  /** D-068: only the buttons that mean something now (a hidden button that was held is let go). Cheap to call every frame. */
+  showContext(c: TouchContext): void {
+    const hide = hiddenFor(c);
+    let bits = 0;
+    for (let i = 0; i < TOUCH_BUTTONS.length; i++) if (hide.has(TOUCH_BUTTONS[i]!)) bits |= 1 << i;
+    if (bits === this.hiddenBits) return;
+    this.hiddenBits = bits;
+    for (const [b, el] of this.buttons) {
+      const h = hide.has(b);
+      el.hidden = h;
+      if (h && this.down[b]) {
+        this.down[b] = false;
+        el.classList.remove("down");
+      }
+    }
   }
 
   private refresh(): void {

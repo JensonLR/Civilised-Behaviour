@@ -26,3 +26,12 @@ describe("touch stick (D-049)", () => {
     expect(anchorWithin(300, 200, 56, 800, 400)).toEqual({ x: 300, y: 200 });
   });
 });
+
+describe("hiddenFor (D-068)", () => {
+  it("hides aim without a firearm, melee bare-handed, throw with empty arms, grab with nobody to drag, orders with no hands", async () => {
+    const { hiddenFor } = await import("./touchLogic.ts");
+    expect([...hiddenFor({ armed: false, ranged: false, carrying: false, grab: false, command: false })].sort()).toEqual(["aim", "grab", "melee", "orders", "throw"]);
+    expect([...hiddenFor({ armed: true, ranged: true, carrying: true, grab: true, command: true })]).toEqual([]);
+    expect([...hiddenFor({ armed: true, ranged: false, carrying: false, grab: false, command: false })].sort()).toEqual(["aim", "grab", "orders", "throw"]); // (a sabre: melee, no aim)
+  });
+});

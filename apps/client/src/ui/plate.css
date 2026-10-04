@@ -335,3 +335,14 @@ html .pause .orders li.optional { font-style: italic; }
 html .pause .dispatches { margin: 0.2rem 0 0.4rem; text-align: left; font-size: 0.85rem; }
 html .pause .dispatches summary { cursor: pointer; font-family: var(--display); letter-spacing: 0.1em; color: var(--stamp); }
 html .pause .dispatches ol { margin: 0.3rem 0 0; padding-left: 1.1rem; max-height: 9rem; overflow-y: auto; font-family: var(--type); font-size: 0.8rem; line-height: 1.3; }
+
+/* ---- D-068: the touch overlay. Ink pictograms over small captions (the words alone overran a thumb-sized ring), only the buttons that mean something now, and the bar at the top as small marks ---- */
+.t-btn { grid-template-rows: auto auto; align-content: center; justify-items: center; gap: 0.08em; }
+.t-btn .t-ico { width: 54%; height: 54%; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.t-btn .cap { font-size: calc(var(--tb) * 0.118); letter-spacing: 0.03em; line-height: 1; white-space: nowrap; }
+.t-side .t-btn .cap { font-size: calc(var(--tb) * 0.1); }
+.t-main .t-fire .cap { font-size: calc(var(--tf) * 0.2); letter-spacing: 0.06em; }
+.t-top { gap: calc(var(--tg) * 0.6); }
+.t-top .t-btn { min-width: 0; width: calc(var(--tb) * 0.6); height: calc(var(--tb) * 0.6); padding: 0; border-radius: 50%; }
+.t-top .t-btn .t-ico { width: 62%; height: 62%; }
+.t-top .t-btn .cap { display: none; }
