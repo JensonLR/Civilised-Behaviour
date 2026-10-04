@@ -44,8 +44,11 @@ describe("NameTags", () => {
     expect(tags.shown).toBe(0);
     tags.update("s", "Sentry", NPC_SENTRY, false, 20, ndc, 300, true);
     expect(tags.shown).toBe(1);
-    tags.update("w", "Warden", NPC_WARDEN, false, 28, ndc, 300);
+    tags.update("w", "Warden", NPC_WARDEN, false, 28, ndc, 300, true);
     expect(tags.shown).toBe(2);
+    // D-077: behind a wall the Warden's plate shows only close by
+    tags.update("w", "Warden", NPC_WARDEN, false, 28, ndc, 300, false);
+    expect(tags.shown).toBe(1);
   });
 
   it("fades over the last quarter of the range", () => {

@@ -5,13 +5,14 @@ import { NPC } from "./campaignTypes.ts";
  * once per actor per frame with the projected anchor (NDC x/y/z of the point above the head) and the anchor's screen y in CSS pixels.
  *
  * show: in front of the camera (ndc z < 1), inside the frame (|ndc| <= 0.96, so a plate never has to be pushed back on screen), BELOW the compass
- * band (screen y >= COMPASS_BAND_PX) and inside the range of its role: the party and its hired hands 40 m, the Warden, hostages and drivers 30 m,
- * soldiers and enemies 12 m (26 m while the camera's owner has a line of sight to them). alpha fades from 1 to 0 over the last quarter of the range.
+ * band (screen y >= COMPASS_BAND_PX) and inside the range of its role: the party and its hired hands 40 m, the Warden, hostages and drivers 30 m in sight
+ * (10 m behind a wall or a rock fall, D-077: five miners' names stacked over a heap of rubble were clutter, not news), soldiers and enemies 12 m (26 m while
+ * the camera's owner has a line of sight to them). alpha fades from 1 to 0 over the last quarter of the range.
  */
 
 export const COMPASS_BAND_PX = 72;
 export const TAG_FRAME = 0.96;
-export const TAG_RANGE = { party: 40, notable: 30, soldier: 12, soldierInSight: 26 } as const;
+export const TAG_RANGE = { party: 40, notable: 30, notableHidden: 10, soldier: 12, soldierInSight: 26 } as const;
 
 export interface TagState { show: boolean; alpha: number }
 
@@ -33,7 +34,7 @@ export function tagRange(role: number, inSight: boolean): number {
     case NPC.BARGEMAN:
     case NPC.HOSTAGE:
     case NPC.DRIVER:
-      return TAG_RANGE.notable;
+      return inSight ? TAG_RANGE.notable : TAG_RANGE.notableHidden;
     default:
       return inSight ? TAG_RANGE.soldierInSight : TAG_RANGE.soldier;
   }

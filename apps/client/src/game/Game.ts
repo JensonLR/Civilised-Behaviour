@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, WEAPON, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, TAG_RANGE, WEAPON, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -1330,9 +1330,9 @@ export class Game {
     const cam = this.stage.camera.position;
     const dist = Math.sqrt((x - cam.x) ** 2 + (y - cam.y) ** 2 + (z - cam.z) ** 2); // not Math.hypot: it allocates per call
     const topPx = ((1 - tmp.y) / 2) * window.innerHeight;
-    // a soldier's plate reaches farther while the camera can see him (a wall in between keeps it short); the ray is cached per NPC for 0.15 s and spread over frames
+    // a soldier's or a notable's plate reaches farther while the camera can see them (a wall or a rock fall in between keeps it short); the ray is cached per NPC for 0.15 s and spread over frames
     let inSight = false;
-    if (p.npc !== 0 && dist <= 26) {
+    if (p.npc !== 0 && dist <= TAG_RANGE.notable) {
       if (this.plates.due(id, this.plateClock)) this.plates.report(id, !rayWorld(this.session.world, cam.x, cam.y, cam.z, (x - cam.x) / dist, (y + 1.2 - cam.y) / dist, (z - cam.z) / dist, dist - 0.6, aimHit));
       inSight = this.plates.sight(id);
     }
