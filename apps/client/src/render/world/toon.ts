@@ -231,6 +231,66 @@ const MIST_FOG = /* glsl */ `
 `;
 
 /** Autumn's three shades (palette), shared by every seasonal material. */
+/**
+ * D-075: SURFACE GRAIN. The world was flat colour fills (a palace wall one beige, a market stall one brown, the ground one wash). Every scenery material now carries detail
+ * worked out in world space from the face's own direction, with no image file and no new colour (it only darkens and lightens what is there):
+ *  - blotching at the scale of a metre and grain at the scale of a few centimetres, on everything;
+ *  - on walls and other upright faces, weathering streaks that run down them (stretched noise);
+ *  - on the ground and other upward faces, flecks and pebbles;
+ *  - in the shade, a fine diagonal ink hatch fixed to the surface (not the screen): the engraving of the Survey Plate HUD carried onto the world.
+ * The face normal comes from the screen-space derivatives of the world position (flat-shaded scenery: one normal per face). Off in the lite (test) preset.
+ */
+const GRAIN_HEAD = /* glsl */ `
+  float gHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float gNoise(vec3 x) {
+    vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(gHash(i), gHash(i + vec3(1,0,0)), f.x), mix(gHash(i + vec3(0,1,0)), gHash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(gHash(i + vec3(0,0,1)), gHash(i + vec3(1,0,1)), f.x), mix(gHash(i + vec3(0,1,1)), gHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+  vec3 gNormal() { return normalize(cross(dFdx(vWPos), dFdy(vWPos))); }
+  // the grain's brightness factor for this fragment (multiplies the albedo)
+  float grainFactor(vec3 wn, vec3 albedo) {
+    float up = abs(wn.y);
+    // dark stuff (timber, tar, slate) takes a stronger grain: a tenth of a dark colour is nothing to the eye
+    float k = 1.0 + 0.9 * (1.0 - smoothstep(0.06, 0.32, dot(albedo, vec3(0.3, 0.55, 0.15))));
+    // how much ground one pixel covers: each octave fades out before its cells shrink under a pixel (no shimmer on the far hills)
+    float fp = max(length(dFdx(vWPos)), length(dFdy(vWPos)));
+  #ifdef G_FULL
+    float macro = gNoise(vWPos * 0.55) * 0.6 + 0.4 * mix(gNoise(vWPos * 1.7), 0.5, smoothstep(0.2, 0.6, fp)); // blotches, a metre or so
+  #else
+    float macro = gNoise(vWPos * 0.8);
+  #endif
+    float micro = mix(gNoise(vWPos * 9.0), 0.5, smoothstep(0.03, 0.1, fp));  // grain, a few centimetres
+    float g = 1.0 + ((macro - 0.5) * 0.3 + (micro - 0.5) * 0.17) * k;
+    // upright faces: streaks that run down (noise stretched along the height)
+    vec3 sp = vec3((vWPos.x + vWPos.z) * 4.5, vWPos.y * 0.3, 0.0);
+  #ifdef G_FULL
+    float streak = gNoise(sp) * 0.65 + gNoise(sp * vec3(2.1, 1.3, 1.0)) * 0.35;
+  #else
+    float streak = gNoise(sp);
+  #endif
+    streak = mix(streak, 0.5, smoothstep(0.08, 0.25, fp));
+    g *= mix(1.0 + (streak - 0.5) * 0.4 * k, 1.0, smoothstep(0.55, 0.85, up));
+    // upward faces: flecks and pebbles (a few cells of the fine noise pushed to dark or light)
+    float fleck = gNoise(vWPos * vec3(6.5, 1.0, 6.5));
+    float fl = 1.0 - smoothstep(0.78, 0.86, fleck) * 0.16 + smoothstep(0.1, 0.03, fleck) * 0.08;
+    g *= mix(1.0, fl, smoothstep(0.6, 0.9, up) * (1.0 - smoothstep(0.05, 0.15, fp)));
+    return g;
+  }
+  // the ink hatch's darkening in the shade (0 = none): diagonal lines fixed to the surface, anti-aliased by their own screen footprint
+  float hatchInk(vec3 wn, float shade) {
+    if (shade <= 0.0) return 0.0;
+    vec3 a = abs(wn);
+    vec2 uv = a.y > max(a.x, a.z) ? vWPos.xz : (a.x > a.z ? vWPos.zy : vWPos.xy);
+    float v = (uv.x + uv.y) * 7.0;                                            // lines about 10 cm apart, at 45 degrees
+    float w = fwidth(v);
+    float line = 1.0 - smoothstep(0.18 - w, 0.18 + w, abs(fract(v) - 0.5) * 2.0);
+    float fade = 1.0 - smoothstep(14.0, 34.0, length(vWPos - cameraPosition)); // close work: it thins out with distance before it can shimmer
+    fade *= 1.0 - smoothstep(0.25, 0.5, w);                                   // and wherever the lines would be finer than a pixel
+    return line * shade * fade * 0.22;
+  }
+`;
+
 export const autumnUniforms = {
   uAutumn0: { value: new Color(PALETTE.world.autumnRed) },
   uAutumn1: { value: new Color(PALETTE.world.autumnOrange) },
@@ -251,7 +311,12 @@ const SEASON_BODY = /* glsl */ `
  * campfire's warm term. Set by `WorldView` before it builds any material; part of the program cache key.
  */
 let toonLite = false;
-export const setToonLite = (on: boolean): void => void (toonLite = on);
+let toonGrain: 0 | 1 | 2 = 2;
+/** Lite shading on or off, and (D-075) the surface grain's level; the grain defaults to full and lite shading always drops it. */
+export const setToonLite = (on: boolean, grain?: 0 | 1 | 2): void => {
+  toonLite = on;
+  if (grain !== undefined) toonGrain = grain;
+};
 
 export interface ToonOptions {
   doubleSided?: boolean;
@@ -268,6 +333,8 @@ export interface ToonOptions {
   vertexPatch?: { key: string; head: string; body: string };
   /** How much of the ground wetness darkens this material (0 = none; foliage 0.35, ground and stone 1). Default 0.6. */
   wetDark?: number;
+  /** D-075: surface grain and the shade's ink hatch (default true; off for what must stay clean: lamps, glass, painted signs). */
+  grain?: boolean;
   /** Extra fragment work on the diffuse colour, run after vertex colours are applied (terrain trail overlay). */
   colourPatch?: { key: string; uniforms: Record<string, { value: unknown }>; head: string; body: string };
 }
@@ -287,6 +354,8 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   const vpatch = opts.vertexPatch;
   const season = opts.season ?? false;
   const wetDark = (opts.wetDark ?? 0.6).toFixed(2);
+  const grain = (opts.grain ?? true) && !lite && toonGrain > 0;
+  const grainFull = toonGrain === 2;
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = worldTime;
     shader.uniforms.uPush = pushers;
@@ -327,10 +396,22 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}`,
     );
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
-    fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}`);
+    fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}${grain ? "\nvec3 gWN = gNormal(); vec3 gAlbedo = diffuseColor.rgb; diffuseColor.rgb *= grainFactor(gWN, gAlbedo);" : ""}`);
+    if (grain) {
+      // the hatch, after the light: where the lit colour has fallen well below the albedo, the shade is drawn in ink
+      fs = fs.replace(
+        "#include <opaque_fragment>",
+        `{
+          float gLit = dot(outgoingLight, vec3(0.3, 0.55, 0.15)) / max(0.04, dot(gAlbedo, vec3(0.3, 0.55, 0.15)));
+          float gSun = clamp(dot(uSunColW, vec3(0.3, 0.55, 0.15)) * 1.6 - 0.25, 0.0, 1.0); // hard shade needs a hard sun: none at dusk or under cloud
+          outgoingLight *= 1.0 - hatchInk(gWN, clamp((0.72 - gLit) * 2.2, 0.0, 1.0) * gSun);
+        }
+        #include <opaque_fragment>`,
+      );
+    }
     if (puddles) fs = fs.replace("#include <opaque_fragment>", `${PUDDLE_SHEEN}\n#include <opaque_fragment>`);
     if (fire) {
       fs = fs.replace(
@@ -348,7 +429,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     if (!lite) fs = fs.replace("#include <fog_fragment>", MIST_FOG);
     shader.fragmentShader = fs;
   };
-  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}`;
+  m.customProgramCacheKey = (): string => `world|${lite ? "L" : ""}${wind}|${fire ? 1 : 0}|${opts.doubleSided ? 2 : 1}|${opts.tinted ? "t" : ""}|${patch?.key ?? ""}|${puddles ? "p" : ""}|${wetDark}|${vpatch?.key ?? ""}|${season ? "s" : ""}|${grain ? `g${toonGrain}` : ""}`;
   return m;
 }
 

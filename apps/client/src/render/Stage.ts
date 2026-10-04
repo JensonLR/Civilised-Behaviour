@@ -33,6 +33,8 @@ export interface GraphicsPreset {
   sky: SkyDetail;
   /** Toon materials without the valley-mist chunk (noise in every fragment) and the campfire's warm term. */
   liteShading: boolean;
+  /** D-075: the scenery's surface grain (2 full: blotches, grain, streaks, flecks and the shade's ink hatch; 1 plain: one octave of each; 0 none). */
+  surfaceGrain: 0 | 1 | 2;
   /** Hollowmere's ambient people (off builds none). */
   villagers: boolean;
   /** Level of detail of the trees (1 full, 0 coarse: about half the triangles, in the shadow pass too). */
@@ -78,16 +80,16 @@ export interface GraphicsPreset {
 }
 
 export const PRESETS: Record<"low" | "medium" | "high" | "test", GraphicsPreset> = {
-  low: { shadows: true, shaderChecks: true, shadowMapSize: 1024, antialias: false, sky: "full", liteShading: false, villagers: true, treeLod: 0, menuBackdrop: true, treeDensity: 1, pixelRatioCap: 1, renderScale: 1, terrainSegments: 96, outlines: false, grassTufts: 1800, flowers: 300, bushes: 60, clutter: 0.4, treeLine: 260, trailOverlay: false, waterFx: false, motes: 0, butterflies: 0, birds: 0, smoke: 0, rain: 0, flock: 0, species: false },
-  medium: { shadows: true, shaderChecks: true, shadowMapSize: 2048, antialias: true, sky: "full", liteShading: false, villagers: true, treeLod: 1, menuBackdrop: true, treeDensity: 1, pixelRatioCap: 1.5, renderScale: 1, terrainSegments: 160, outlines: true, grassTufts: 5000, flowers: 900, bushes: 130, clutter: 1, treeLine: 900, trailOverlay: true, waterFx: true, motes: 700, butterflies: 12, birds: 6, smoke: 22, rain: 2000, flock: 1, species: true },
-  high: { shadows: true, shaderChecks: true, shadowMapSize: 4096, antialias: true, sky: "full", liteShading: false, villagers: true, treeLod: 1, menuBackdrop: true, treeDensity: 1, pixelRatioCap: 2, renderScale: 1, terrainSegments: 200, outlines: true, grassTufts: 8000, flowers: 1500, bushes: 200, clutter: 1.5, treeLine: 1500, trailOverlay: true, waterFx: true, motes: 1400, butterflies: 16, birds: 9, smoke: 30, rain: 3600, flock: 1, species: true },
+  low: { shadows: true, shaderChecks: true, shadowMapSize: 1024, antialias: false, sky: "full", liteShading: false, surfaceGrain: 1, villagers: true, treeLod: 0, menuBackdrop: true, treeDensity: 1, pixelRatioCap: 1, renderScale: 1, terrainSegments: 96, outlines: false, grassTufts: 1800, flowers: 300, bushes: 60, clutter: 0.4, treeLine: 260, trailOverlay: false, waterFx: false, motes: 0, butterflies: 0, birds: 0, smoke: 0, rain: 0, flock: 0, species: false },
+  medium: { shadows: true, shaderChecks: true, shadowMapSize: 2048, antialias: true, sky: "full", liteShading: false, surfaceGrain: 2, villagers: true, treeLod: 1, menuBackdrop: true, treeDensity: 1, pixelRatioCap: 1.5, renderScale: 1, terrainSegments: 160, outlines: true, grassTufts: 5000, flowers: 900, bushes: 130, clutter: 1, treeLine: 900, trailOverlay: true, waterFx: true, motes: 700, butterflies: 12, birds: 6, smoke: 22, rain: 2000, flock: 1, species: true },
+  high: { shadows: true, shaderChecks: true, shadowMapSize: 4096, antialias: true, sky: "full", liteShading: false, surfaceGrain: 2, villagers: true, treeLod: 1, menuBackdrop: true, treeDensity: 1, pixelRatioCap: 2, renderScale: 1, terrainSegments: 200, outlines: true, grassTufts: 8000, flowers: 1500, bushes: 200, clutter: 1.5, treeLine: 1500, trailOverlay: true, waterFx: true, motes: 1400, butterflies: 16, birds: 9, smoke: 30, rain: 3600, flock: 1, species: true },
   /**
    * NOT a player preset (`?gfx=test`; the Settings screen never lists it): the e2e suite and headless tooling on a SOFTWARE rasteriser, where every
    * pixel and every vertex is CPU time. It keeps the world's shapes (terrain, trees and rocks at a thinner draw density, the village, the camp, the
    * ruin, the water) and drops everything that is only ornament: shadows, MSAA, clouds, ground cover, ambient life, weather visuals, ink, people.
    * Gameplay, collision and the server are untouched: the obstacles come from the shared arena, so a tree that is not drawn still blocks.
    */
-  test: { shadows: false, shaderChecks: false, shadowMapSize: 256, antialias: false, sky: "flat", liteShading: true, villagers: false, treeLod: 0, menuBackdrop: false, treeDensity: 0.4, pixelRatioCap: 1, renderScale: 0.5, terrainSegments: 64, outlines: false, grassTufts: 0, flowers: 0, bushes: 0, clutter: 0, treeLine: 0, trailOverlay: false, waterFx: false, motes: 0, butterflies: 0, birds: 0, smoke: 0, rain: 0, flock: 0, species: false },
+  test: { shadows: false, shaderChecks: false, shadowMapSize: 256, antialias: false, sky: "flat", liteShading: true, surfaceGrain: 0, villagers: false, treeLod: 0, menuBackdrop: false, treeDensity: 0.4, pixelRatioCap: 1, renderScale: 0.5, terrainSegments: 64, outlines: false, grassTufts: 0, flowers: 0, bushes: 0, clutter: 0, treeLine: 0, trailOverlay: false, waterFx: false, motes: 0, butterflies: 0, birds: 0, smoke: 0, rain: 0, flock: 0, species: false },
 };
 export type PresetName = keyof typeof PRESETS;
 
@@ -142,7 +144,7 @@ export class Stage {
 
   constructor(canvas: HTMLCanvasElement, presetName: PresetName = "medium") {
     this.preset = PRESETS[presetName];
-    setToonLite(this.preset.liteShading);
+    setToonLite(this.preset.liteShading, this.preset.surfaceGrain);
     this.renderer = new WebGLRenderer({ canvas, antialias: this.preset.antialias, powerPreference: "high-performance" });
     const q = new URLSearchParams(typeof location === "undefined" ? "" : location.search).get("shaderchecks");
     this.renderer.debug.checkShaderErrors = q === "1" ? true : q === "0" ? false : this.preset.shaderChecks;
@@ -315,7 +317,7 @@ export class Stage {
     const reshade = next.shadows !== this.preset.shadows;
     const prevSky = this.preset.sky;
     this.preset = next;
-    setToonLite(next.liteShading);
+    setToonLite(next.liteShading, next.surfaceGrain);
     this.renderer.shadowMap.enabled = next.shadows;
     this.sun.castShadow = next.shadows;
     this.sun.shadow.map?.dispose();
