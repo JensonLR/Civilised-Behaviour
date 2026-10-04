@@ -1,4 +1,4 @@
-import { Box3, Mesh, Vector3 } from "three";
+import { Box3, Euler, Mesh, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { FLAG, WEAPON } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
@@ -114,4 +114,17 @@ describe("dropped weapons", () => {
     }
     disposeWeaponModels();
   });
+
+  it("a slung long gun leans across the back (the muzzle out past the right shoulder), never straight up the spine behind the head", () => {
+    const rig = buildCharacter(generateCharacter(3), { outline: false });
+    for (const id of [WEAPON.RIFLE, WEAPON.BLUNDERBUSS]) {
+      const p = holsterPose(id, rig.proportions, newMountPose());
+      // the barrel's direction (the model's -Z) after the mount's Euler XYZ rotation
+      const d = new Vector3(0, 0, -1).applyEuler(new Euler(p.rx, p.ry, p.rz, "XYZ"));
+      expect(d.y, `${id} points up`).toBeGreaterThan(0.6);
+      expect(d.x, `${id} leans to the right shoulder`).toBeGreaterThan(0.45); // (about 35-40 degrees off the spine: clear of a hat's brim)
+    }
+    rig.dispose();
+  });
 });
+
