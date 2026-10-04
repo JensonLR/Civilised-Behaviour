@@ -4,6 +4,7 @@ Last updated: 2026-10-03 (D-050 to D-060 are under "Now". Earlier, D-049: touch 
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **Sheets polish (2026-10-04, no decision record: fixes).** A contract's debrief telegram shows whole, a row per result (it was clipped at two lines, so the reputation change and the purse were never read). The broadsheet opens at its masthead (focusing its foot button had scrolled it away), prints a count of nothing as "none" (IM Fell's old-style 0 read as "o"), and balances its headlines. The pointing hand no longer sits on a short button's first letter, and the pause sheet fits "Replay tutorial" on one line. Looked at in a real browser at 1280x720.
 - **D-081 (2026-10-04): the chart reads cleanly.** The map room's chart fills its frame, and the campaign layer's labels keep off the shore names and each other.
 - **D-080 (2026-10-04): no z-fighting.** Pieces laid flush on a differently coloured piece are lifted 4 mm off it when a kit is built (thousands of shimmering overlaps down to about a hundred, mostly near-black on near-black); the mill's hopper, found hanging, stands in its frame.
 - **D-079 (2026-10-04): planted, not set down.** Scenery darkens in a band where it meets the ground (and walls carry a little rising damp), from a baked ground-height texture per region.

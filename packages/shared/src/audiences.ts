@@ -87,14 +87,22 @@ function options(p: PowersState, lv: Leverage, a: Audience, round: number, toll:
   return out;
 }
 
+/** Who "seems" so in the asked line (an audience is held at the map table, not at a contract's toll bar, so it carries its own heading). */
+const WHO: Record<MinorPowerId, string> = { brine: "The Houses seem", reapers: "The Assembly seems", choir: "The Guild seems" };
+const frameOf = (a: Audience): NonNullable<ParleyView["frame"]> => ({
+  heading: "An audience at the map table",
+  asked: `${a.hook === "purchase" ? "Price asked: £{price} · " : ""}Round {round} · ${WHO[a.power]} {mood}.`,
+});
+
 const viewOf = (p: PowersState, lv: Leverage, a: Audience, round: number, toll: number, mood: FactionStance, line: string): ParleyView => ({
-  round, speaker: a.speaker, line, toll, options: options(p, lv, a, round, toll), mood,
+  round, speaker: a.speaker, line, toll, options: options(p, lv, a, round, toll), mood, frame: frameOf(a),
 });
 
 /** Round 1: the power's own opening, then what it is offering. */
 export function openAudience(_c: CampaignState, p: PowersState, lv: Leverage, a: Audience, _seed: number): ParleyView {
   const h = hookOf(a.power, a.hook);
-  return viewOf(p, lv, a, 1, hookPrice(p, a), powerStance(p.minor[a.power]), `${a.intro} ${h.title}: ${h.text}`);
+  // (the greeting, then what is on the table as its own paragraph: run together, the offer's title read as the end of the speaker's sentence)
+  return viewOf(p, lv, a, 1, hookPrice(p, a), powerStance(p.minor[a.power]), `${a.intro}\n\nOn the table: ${h.title}. ${h.text}`);
 }
 
 const say = (a: Audience, kind: keyof (typeof REPLY)["brine"], seed: number, round: number): string => {
