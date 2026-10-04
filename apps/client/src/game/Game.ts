@@ -1184,6 +1184,7 @@ export class Game {
     const g = this.guidanceNow;
     if (!g || g.x === undefined || g.z === undefined || !me) {
       this.guide.place(0, 0, false, -1, "");
+      this.tags.setObstacle(false);
       this.tracker.setDistance(-1);
       return;
     }
@@ -1192,6 +1193,12 @@ export class Game {
     const dist = Math.hypot(g.x - mx, g.z - mz);
     tmp.set(g.x, this.session.world.terrainHeight(g.x, g.z) + 2.6, g.z).project(this.stage.camera);
     this.guide.place(tmp.x, tmp.y, tmp.z > 1, dist, g.label ?? "", 4, this.guideTop);
+    // D-074: the marker and the name plates keep off each other: over somebody whose plate is up it is the flag alone, and the plates climb above whatever it covers
+    const g2 = this.guide;
+    const quiet = g2.markOver && this.tags.plateNear(g2.markX, g2.markY, 70);
+    g2.quiet(quiet);
+    if (g2.markOver) this.tags.setObstacle(true, g2.markX - (quiet ? 16 : 56), g2.markY - 40, g2.markX + (quiet ? 16 : 56), g2.markY + (quiet ? -6 : 20));
+    else this.tags.setObstacle(false);
     this.tracker.setDistance(dist >= 4 ? Math.round(dist) : -1);
   }
 

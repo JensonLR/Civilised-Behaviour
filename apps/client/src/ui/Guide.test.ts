@@ -50,4 +50,21 @@ describe("the guide's line and marker (D-063)", () => {
     g.place(0, 0.95, false, 50, "Gate", 4, 120);
     expect(at(mark)[1]).toBeGreaterThanOrEqual(120);
   });
+
+  it("D-074: the marker reports where it stands over the place, and goes quiet (the flag alone) over somebody whose name is up", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const g = new Guide(parent);
+    g.place(0, 0, false, 30, "Lamp-Warden");
+    expect(g.markOver).toBe(true);
+    expect(g.markX).toBeGreaterThan(0);
+    g.quiet(true);
+    expect(parent.querySelector(".goalmark")!.classList.contains("quiet")).toBe(true);
+    g.quiet(false);
+    expect(parent.querySelector(".goalmark")!.classList.contains("quiet")).toBe(false);
+    g.place(3, 0, false, 30, "Lamp-Warden"); // (off to the side: held at the edge with the arrow, not "over" anything)
+    expect(g.markOver).toBe(false);
+    g.dispose();
+  });
 });
+

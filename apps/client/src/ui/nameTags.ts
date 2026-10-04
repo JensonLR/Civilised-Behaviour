@@ -18,6 +18,8 @@ const MAX_LIFT = 2;
 
 export class NameTags {
   private readonly plates = new Map<string, Plate>();
+  /** D-074: a screen rectangle the plates must keep off (the goal's marker): left, top, right, bottom in CSS px; `on` false when there is none. */
+  private readonly obs = { on: false, l: 0, t: 0, r: 0, b: 0 };
   private readonly state: TagState = { show: false, alpha: 0 };
 
   constructor(private readonly layer: HTMLElement) {}
@@ -110,8 +112,9 @@ export class NameTags {
           off = lift * (p.h + 2);
           const bottom = p.y - off;
           const top = bottom - p.h;
-          let hit = false;
-          for (let j = 0; j < placed; j++) {
+          const ob = this.obs;
+          let hit = ob.on && right > ob.l && left < ob.r && bottom > ob.t && top < ob.b; // (the goal's marker was there first)
+          for (let j = 0; j < placed && !hit; j++) {
             const q = order[j]!;
             const qb = q.y - q.off;
             if (right > q.x - q.w / 2 && left < q.x + q.w / 2 && bottom > qb - q.h && top < qb) {
@@ -139,6 +142,22 @@ export class NameTags {
     }
   }
   private readonly order: Plate[] = [];
+
+  /** D-074: keep the plates off this rectangle (the goal's marker) at the next layout; `on` false clears it. */
+  setObstacle(on: boolean, l = 0, t = 0, r = 0, b = 0): void {
+    const o = this.obs;
+    o.on = on;
+    o.l = l;
+    o.t = t;
+    o.r = r;
+    o.b = b;
+  }
+
+  /** D-074: whether a plate on show stands within `r` px of (x, y) (its anchor, above the head): the goal's marker is over somebody whose name is already up. */
+  plateNear(x: number, y: number, r: number): boolean {
+    for (const p of this.plates.values()) if (p.shown && !p.hid && Math.abs(p.x - x) <= r && Math.abs(p.y - y) <= r) return true;
+    return false;
+  }
 
   /** Removes the plates of everyone who is no longer in `seen`, then lays out the rest (once a frame, after every `update`). */
   sweep(seen: ReadonlySet<string>): void {
