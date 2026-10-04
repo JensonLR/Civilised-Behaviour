@@ -4,6 +4,7 @@ Last updated: 2026-10-03 (D-050 to D-060 are under "Now". Earlier, D-049: touch 
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-080 (2026-10-04): no z-fighting.** Pieces laid flush on a differently coloured piece are lifted 4 mm off it when a kit is built (thousands of shimmering overlaps down to about a hundred, mostly near-black on near-black); the mill's hopper, found hanging, stands in its frame.
 - **D-079 (2026-10-04): planted, not set down.** Scenery darkens in a band where it meets the ground (and walls carry a little rising damp), from a baked ground-height texture per region.
 - **D-078 (2026-10-04): woven clothes.** The characters' coats, sleeves, trousers and skirts carry a fine weave (close up) and a mottle of wear and dye (at any distance), travelling with the body; skin, leather, heads and hands untouched.
 - **D-077 (2026-10-04): the camera sees its subject.** The follow camera's lens has a body (three rays, not one: a trunk beside the lens line pulls it in), and scenery dithers away near the lens and thins on the line to the player (never in first person, never the ground). The court's sun is a flat gilt inlay, and fallen leaves are leaves, not dots.

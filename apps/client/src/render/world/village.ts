@@ -674,6 +674,9 @@ function mill(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   cyl(k, 0.8, 0.8, 0.28, [0.2, fl + 0.14, 0.9], (p, _n, out) => blend(out, W.rock, W.rockPale, 0.3 + 0.3 * f01(seed, Math.floor(p.x * 7))), 12);
   cyl(k, 0.06, 0.06, 0.45, [0.2, fl + 0.5, 0.9], C.iron, 5);
   k.add(new ConeGeometry(0.55, 0.75, 4), { at: [0.2, fl + 2.4, 0.9], rot: [Math.PI, Math.PI / 4, 0], colour: timberC(W.vlTimber, seed + 9), flat: true });
+  // the hopper stands in its "horse": four legs from the floor to under its rim, and a spout down to the eye of the stone (it hung in the air)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([0.2 + sx * 0.5, fl, 0.9 + sz * 0.5], [0.2 + sx * 0.38, fl + 2.7, 0.9 + sz * 0.38], 0.04, 0.035, timberC(W.vlTimber, seed + 10), 4);
+  k.limb([0.2, fl + 2.06, 0.9], [0.2, fl + 0.7, 0.9], 0.07, 0.05, timberC(W.vlTimber, seed + 11), 4);
   // outside the door: sacks (props), and the sluice board beside the wheel
   // the wheel is built in world terms in `millWheel`
 }

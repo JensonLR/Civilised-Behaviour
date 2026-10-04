@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Euler, Matrix4, Quaternion, Vector3, type Material, type Object3D } from "three";
+import { separateCoplanar } from "./coplanar.ts";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { hash3 } from "@cb/shared";
 import { isSharedInk } from "@cb/procedural/three";
@@ -178,6 +179,7 @@ export class Kit {
   /** Merges everything: one geometry, `position` + `normal` + `color` + `onormal`. Undefined if nothing was added. */
   build(): BufferGeometry | undefined {
     if (this.parts.length === 0) return undefined;
+    separateCoplanar(this.parts); // D-080: a piece laid flush on another of a different colour is lifted off it, so the two never fight for the depth buffer
     const merged = mergeGeometries(this.parts, false);
     for (const g of this.parts) g.dispose();
     this.parts.length = 0;
