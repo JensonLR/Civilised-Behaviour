@@ -44,11 +44,24 @@ function house(k: Kit, p: OutpostPiece, gy: number, lod: Lod): void {
   k.clearBase();
 }
 
+/**
+ * A counter with a sloping awning carried on two poles at its back corners: the counter (`w` x 0.9 x `d`), the poles standing on it and running up INTO the
+ * awning's underside (the awning tilts down to the front, so the back poles are cut to where the board actually is), and the board itself.
+ */
+const AWNING_TILT = 0.18;
+function awnedCounter(k: Kit, w: number, d: number, top: number, awning: number, colour: number | ColourFn): void {
+  box(k, [w, 0.9, d], [0, 0.45, 0], colour);
+  const az = 0.15, depth = d + 0.6, thick = 0.06;
+  const pz = -d / 2 + 0.1;
+  // the underside of the tilted board above local z (rotation about x by AWNING_TILT: y' = y cos - z sin), plus 3 cm into it
+  const under = top - (pz - az) * Math.sin(AWNING_TILT) - (thick / 2) * Math.cos(AWNING_TILT) + 0.03;
+  for (const sx of [-1, 1]) k.limb([sx * (w / 2 - 0.1), 0.9, pz], [sx * (w / 2 - 0.1), under, pz], 0.05, 0.05, O.pole, 5);
+  box(k, [w + 0.4, thick, depth], [0, top, az], awning, [AWNING_TILT, 0, 0]);
+}
+
 function stall(k: Kit, p: OutpostPiece, gy: number): void {
   k.setBase(p.x, gy, p.z, p.yaw);
-  box(k, [p.hx * 2, 0.9, p.hz * 2], [0, 0.45, 0], planks);
-  for (const sx of [-1, 1]) k.limb([sx * (p.hx - 0.1), 0.9, -p.hz + 0.1], [sx * (p.hx - 0.1), 2.3, -p.hz + 0.1], 0.05, 0.05, O.pole, 5);
-  box(k, [p.hx * 2 + 0.4, 0.06, p.hz * 2 + 0.6], [0, 2.3, 0.15], K.awning, [0.18, 0, 0]);
+  awnedCounter(k, p.hx * 2, p.hz * 2, 2.3, K.awning, planks);
   k.clearBase();
 }
 
@@ -160,9 +173,9 @@ function rivalPost(k: Kit, world: CollisionWorld, stage: 1 | 2, lod: Lod): void 
     box(k, [3.4, 3, 2.8], [0, 1.5, 0], planks);
     k.add(new ConeGeometry(2.6, 1.3, 4, 1), { at: [0, 3.65, 0], rot: [0, Math.PI / 4, 0], colour: K.synGreen, flat: true });
     k.clearBase();
+    // the counter, its awning on two poles (the awning used to hang over it with nothing holding it up)
     k.setBase(at.x + 7, g(at.x + 7, at.z - 3), at.z - 3, 0);
-    box(k, [2.4, 0.9, 1.1], [0, 0.45, 0], planks);
-    box(k, [2.8, 0.06, 1.5], [0, 2.2, 0.2], K.synStripe, [0.18, 0, 0]);
+    awnedCounter(k, 2.4, 1.1, 2.2, K.synStripe, planks);
     k.clearBase();
   }
 }

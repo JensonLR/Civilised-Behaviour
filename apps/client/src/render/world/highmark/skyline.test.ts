@@ -8,7 +8,7 @@ import { PRESETS } from "../../Stage.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, BANNER_UV, buildHighmarkCloth } from "./cloth.ts";
 import { fragmentOf, LANDMARK_FOG, landmarkInk } from "./landmark.ts";
-import { BELL_GABLE, LANTERN_TOWER, capitalSpires, palaceHeights, skylineBanners, terraceMasts } from "./skyline.ts";
+import { BELL_GABLE, LANTERN_TOWER, POLE_FRONT, capitalSpires, palaceHeights, skylineBanners, terraceMasts } from "./skyline.ts";
 import { buildHighmarkSolid, lanternRoom } from "./structures.ts";
 
 /**
@@ -105,7 +105,7 @@ describe("Highmark skyline: height and vertical features", () => {
     const banners = skylineBanners(world);
     for (const m of masts) {
       expect(HIGHMARK.heights[m.riser + 1]! + HIGHMARK.parapet).toBeLessThan(m.base);
-      expect(banners.some((b) => b.x === m.x && b.z === m.z), `a banner on riser ${m.riser}`).toBe(true);
+      expect(banners.some((b) => Math.hypot(b.x - m.x, b.z - m.z) <= POLE_FRONT + 1e-9), `a banner on riser ${m.riser}`).toBe(true);
     }
   });
 });

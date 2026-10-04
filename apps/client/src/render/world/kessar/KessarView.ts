@@ -15,7 +15,7 @@ import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import { buildKessarCloth, createKessarAtlas, kessarClothMaterial } from "./cloth.ts";
-import { buildKessarGround, buildKessarSkirt, kessarCover } from "./ground.ts";
+import { buildKessarGround, buildKessarSkirt, kessarCover, visualY } from "./ground.ts";
 import { palmGeometry, palmHullGeometry } from "./palms.ts";
 import { buildKessarSites } from "./sites.ts";
 import { OutpostDress } from "../outpostDress.ts";
@@ -73,7 +73,7 @@ export class KessarView implements RegionView {
     const terrain = world.terrain as KessarTerrain;
     this.addGround(terrain);
     this.addHills();
-    const plan = planScatter(world, detail);
+    const plan = planScatter(world, detail, (h, x, z) => (z > 90 ? Number.NaN : visualY(h, x, z))); // (the far trees stand on Kessar's ground as drawn, and none in the sea)
     this.addScatter(plan);
     this.addPalms();
     this.addSolid();

@@ -46,6 +46,20 @@ export const TIER2_PINNACLE = { inset: 0.35, plinth: 0.8, spire: 2.4 } as const;
 export const GATE_MAST = { height: 6.2 } as const;
 /** The terrace masts: a pole standing on a riser's coping, and the cloth it flies. */
 export const TERRACE_MAST = { height: 6.6, banner: { w: 1.9, h: 3.6 } } as const;
+/**
+ * How far in front of its pole a free-standing banner hangs (the terrace masts' and the plan's Grange and Syndicate poles): the cloth hangs from a yard on a short arm, so the pole stands
+ * behind it and never runs through it. The yard is drawn in structures.ts at the cloth's plane.
+ */
+export const POLE_FRONT = 0.2;
+/** Where the yard a banner hangs from sits in front of its pole's axis: the cloth's own plane (the cloth is drawn 2 cm in front of the banner's point). */
+export const yardFront = (front: number): number => front + 0.02;
+
+/** A banner whose (x, z) is its pole's, moved to hang `POLE_FRONT` in front of the pole along its face; `top` stays the same height in the world. */
+export function offPole(b: HighmarkBanner, world: Ground): HighmarkBanner {
+  const x = b.x + Math.cos(b.yaw) * POLE_FRONT;
+  const z = b.z + Math.sin(b.yaw) * POLE_FRONT;
+  return { ...b, x, z, top: b.top + world.terrainHeight(b.x, b.z) - world.terrainHeight(x, z) };
+}
 
 export interface Spire {
   name: string;
@@ -107,9 +121,7 @@ export function skylineBanners(world: Ground): HighmarkBanner[] {
   const plan = highmarkPlan();
   const out: HighmarkBanner[] = [];
   const g = plan.gate;
-  const l = g.lintel;
-  // the lintel: two big Crown banners hung from its face, clear of the arch, so the gate has colour from the plain
-  for (const sx of [-1, 1]) out.push({ x: sx * (l.hx - 1.5), z: l.z + l.hz + 0.12, yaw: Math.PI / 2, top: g.y - world.terrainHeight(sx * (l.hx - 1.5), l.z + l.hz + 0.12) + 6.0, w: 2.6, h: 2.4, kind: "crown" });
+  out.push(...lintelBanners(world));
   // the gate towers' masts
   for (const t of g.towers) {
     const ty = world.terrainHeight(t.x, t.z);
@@ -124,6 +136,13 @@ export function skylineBanners(world: Ground): HighmarkBanner[] {
     const pz = b.z + b.hz - PALACE_MAST.inset;
     out.push({ x: px, z: pz + 0.1, yaw: Math.PI / 2, top: gy + palaceHeights().base + PALACE_MAST.height - 0.4 - world.terrainHeight(px, pz + 0.1), w: 2.8, h: 6.2, kind: "crown" });
   }
-  for (const m of terraceMasts()) out.push({ x: m.x, z: m.z, yaw: m.yaw, top: m.base + TERRACE_MAST.height - 0.4 - world.terrainHeight(m.x, m.z), w: TERRACE_MAST.banner.w, h: TERRACE_MAST.banner.h, kind: m.kind });
+  for (const m of terraceMasts()) out.push(offPole({ x: m.x, z: m.z, yaw: m.yaw, top: m.base + TERRACE_MAST.height - 0.4 - world.terrainHeight(m.x, m.z), w: TERRACE_MAST.banner.w, h: TERRACE_MAST.banner.h, kind: m.kind }, world));
   return out;
+}
+
+/** The lintel's two big Crown banners, hung from its face (on an iron rod, structures.ts) clear of the arch, so the gate has colour from the plain. */
+export function lintelBanners(world: Ground): HighmarkBanner[] {
+  const g = highmarkPlan().gate;
+  const l = g.lintel;
+  return [-1, 1].map((sx): HighmarkBanner => ({ x: sx * (l.hx - 1.5), z: l.z + l.hz + 0.12, yaw: Math.PI / 2, top: g.y - world.terrainHeight(sx * (l.hx - 1.5), l.z + l.hz + 0.12) + 6.0, w: 2.6, h: 2.4, kind: "crown" }));
 }
