@@ -174,6 +174,8 @@ export interface Sign {
   yaw: number;
   w: number;
   h: number;
+  /** Free-standing: painted on its own board on two posts (the rest are painted on a wall, a gable or a stall's fascia). */
+  posted?: boolean;
 }
 
 /** Lettering on the village's boards and awnings: what the Hollowmerers say to a visitor. Drawn at runtime in IM Fell (the atlas). */
@@ -323,8 +325,10 @@ export function villagePlan(terrain: Terrain): VillagePlan {
         break;
       }
       case "stilt": {
-        const lamp = L(b, b.hx + 1.3, k.door / 2 + 0.4);
-        lanterns.push({ x: lamp.x, z: lamp.z, y: k.floor + 2.0, kind: 0, ax: 0, az: 0, mount: 2 });
+        // on a bracket from the porch's right-hand post (the post stands at local x = hx + 1.1; the bracket reaches 0.34 m back into it), at
+        // a height from the HOUSE's ground: the lamp hangs over the water, and the river bed under it is metres lower than the deck
+        const lamp = L(b, b.hx + 1.1 + 0.3, b.hz - 0.2);
+        lanterns.push({ x: lamp.x, z: lamp.z, y: b.ground - terrain.height(lamp.x, lamp.z) + k.floor + 1.6, kind: 0, ax: -Math.cos(b.yaw), az: -Math.sin(b.yaw), mount: 0 });
         const r1 = L(b, 0.5, b.hz + 1.9);
         P("rack", r1.x, r1.z, b.yaw + Math.PI / 2, 1);
         const br = L(b, 0.5, -b.hz - 0.85);
@@ -469,8 +473,8 @@ export function villagePlan(terrain: Terrain): VillagePlan {
   const cat = { x: cp.x, z: cp.z, yaw: gran.yaw + 2.4 };
 
   // ---- signs ------------------------------------------------------------------------------------------------------------------------
-  const sg = (text: number, at: { x: number; z: number }, y: number, yaw: number, w: number, h = 0.32): void => {
-    signs.push({ text, x: at.x, z: at.z, y, yaw, w, h });
+  const sg = (text: number, at: { x: number; z: number }, y: number, yaw: number, w: number, h = 0.32, posted = false): void => {
+    signs.push({ text, x: at.x, z: at.z, y, yaw, w, h, ...(posted ? { posted } : {}) });
   };
   {
     const gate = buildings.find((b) => b.id === "gate")!;
@@ -492,8 +496,8 @@ export function villagePlan(terrain: Terrain): VillagePlan {
     const gb = buildings.find((b) => b.id === "gran-b")!;
     sg(8, toWorld(gb, gb.hx + 0.45, -0.3), 1.3, gb.yaw, 1.0, 0.24);
     const f = toWorld({ x: JETTY.x0, z: JETTY.z0, yaw: jyaw }, -0.6, JETTY.side * 1.0);
-    sg(6, f, 1.6, jyaw + Math.PI, 1.3, 0.28);
-    sg(1, { x: 11.0, z: -36.0 }, 1.5, Math.atan2(-1, 0.3), 1.2, 0.26); // by the fishing spot as you come in
+    sg(6, f, 1.6, jyaw + Math.PI, 1.3, 0.28, true);
+    sg(1, { x: 11.0, z: -36.0 }, 1.5, Math.atan2(-1, 0.3), 1.2, 0.26, true); // by the fishing spot as you come in
   }
 
   const plan: VillagePlan = { buildings, props, fences, gardens, lines, lanterns, signs, smoke, stones, jetty, punt, weir, wheel, cat };

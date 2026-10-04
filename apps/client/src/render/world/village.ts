@@ -1,10 +1,11 @@
 import { BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Euler, ExtrudeGeometry, LatheGeometry, PlaneGeometry, Shape, SphereGeometry, TorusGeometry, Vector2, Vector3 } from "three";
-import { GATE_CLOCK_Y, MILL, PALETTE, RIVER, hash3, villagePlan, type Building, type CollisionWorld, type Lantern, type LandscapeTerrain, type VProp, type VillagePlan } from "@cb/shared";
+import { GATE_CLOCK_Y, MILL, PALETTE, RIVER, hash3, villagePlan, type Building, type CollisionWorld, type Lantern, type LandscapeTerrain, type Sign, type VProp, type VillagePlan } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
 import { crateSlim } from "./objects.ts";
 import { RoofKits, type DoorMark, type RoofSource } from "./rooms.ts";
 import type { WindowPane } from "./camplife.ts";
 import type { Lod } from "./flora.ts";
+import { VSIGN_ASPECT } from "./atlas.ts";
 
 /**
  * HOLLOWMERE, drawn from `shared/village.ts` (the plan that also makes its collision): stilted river houses, round-roofed granaries on mushroom
@@ -777,7 +778,9 @@ function gateTower(k: Kit, lod: Lod, b: Building, plan: VillagePlan): void {
   for (const sg of [-1, 1]) bx(k, [b.hx * 2, 0.3, 0.36], [0, bellY + belfryH - 0.15, sg * (pier + 0.5)], W.vlStone);
   for (const sx of [-1, 1]) bx(k, [0.36, 0.3, (pier + 0.5) * 2], [sx * (b.hx - 0.2), bellY + belfryH - 0.15, 0], W.vlStone);
   k.add(new CylinderGeometry(0.1, 0.42, 0.7, 10, 1, true), { at: [0, bellY + 1.3, 0], colour: C.brass, flat: true });
-  k.limb([0, bellY + belfryH - 0.2, 0], [0, bellY + 1.66, 0], 0.03, 0.03, C.iron, 4);
+  // the bell hangs from a timber headstock across the belfry (beam to beam), by an iron stem that runs into its crown
+  bx(k, [0.2, 0.22, (pier + 0.5) * 2], [0, bellY + belfryH - 0.15, 0], W.vlTimber);
+  k.limb([0, bellY + belfryH - 0.2, 0], [0, bellY + 1.6, 0], 0.03, 0.03, C.iron, 4);
   hipRoof(k, lod, b.hx + 0.3, pier + 0.9, bellY + belfryH - 0.05, 2.5, 0, "shingle", seed + 50);
   k.limb([0, bellY + belfryH + 2.3, 0], [0, bellY + belfryH + 3.4, 0], 0.035, 0.02, C.iron, 4);
   bx(k, [0.5, 0.18, 0.04], [0.28, bellY + belfryH + 3.2, 0], C.iron); // the vane
@@ -1002,7 +1005,7 @@ function hipRoofSimple(k: Kit, lod: Lod, hx: number, hz: number, y: number, rise
 const LAMP_SWING = 0.5;
 
 function lamp(k: Kit, world: CollisionWorld, l: Lantern, lod: Lod): void {
-  if (l.kind !== 0 || !lod) return; // a forge's coals and a shrine's candles are their own light
+  if (l.kind !== 0) return; // a forge's coals and a shrine's candles are their own light (at every detail: the lit glass is drawn at every detail, so its lamp is too)
   const g = world.terrainHeight(l.x, l.z);
   const y = g + l.y;
   const armY = y + 0.5;
@@ -1018,6 +1021,20 @@ function lamp(k: Kit, world: CollisionWorld, l: Lantern, lod: Lod): void {
   if (lod) for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
     k.limb([l.x + Math.cos(a) * 0.09, y - 0.14, l.z + Math.sin(a) * 0.09], [l.x + Math.cos(a) * 0.085, y + 0.16, l.z + Math.sin(a) * 0.085], 0.006, 0.006, C.brass, 3, false, LAMP_SWING);
+  }
+}
+
+/** A free-standing sign's board on two posts (its lettering is the banners mesh's decal, 6 mm proud of the board's face). */
+function signBoard(k: Kit, world: CollisionWorld, sg: Sign): void {
+  const y = world.terrainHeight(sg.x, sg.z) + sg.y;
+  const nx = Math.cos(sg.yaw), nz = Math.sin(sg.yaw); // the face normal (as in banners.ts facing())
+  const rx = nz, rz = -nx; // along the board
+  const h = sg.w / VSIGN_ASPECT;
+  const bx0 = sg.x - nx * 0.031, bz0 = sg.z - nz * 0.031; // board centre: its face 6 mm behind the lettering
+  k.add(new BoxGeometry(sg.w + 0.14, h + 0.14, 0.05), { at: [bx0, y, bz0], rot: [0, -sg.yaw + Math.PI / 2, 0], colour: timberC(W.vlTimberLight, Math.floor(sg.x * 7)), flat: true });
+  for (const s of [-1, 1]) {
+    const px = bx0 - nx * 0.06 + rx * s * (sg.w / 2 - 0.12), pz = bz0 - nz * 0.06 + rz * s * (sg.w / 2 - 0.12);
+    k.limb([px, world.terrainHeight(px, pz) - 0.3, pz], [px, y + h / 2 + 0.12, pz], 0.05, 0.045, timberC(W.vlTimber, Math.floor(px * 9)), 5);
   }
 }
 
@@ -1276,6 +1293,8 @@ export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<str
   mark("washing");
   for (const l of plan.lanterns) lamp(k, world, l, lod);
   mark("lamps");
+  for (const sg of plan.signs) if (sg.posted) signBoard(k, world, sg);
+  mark("signs");
   paneSink = undefined;
   markSink = undefined;
   if (roofsOut) {

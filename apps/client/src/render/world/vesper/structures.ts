@@ -3,6 +3,7 @@ import { CLOISTER, PALETTE, hash3, vesperLevel, type CollisionWorld } from "./sh
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, tentFlap, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
+import { PLAQUE } from "../plaques.ts";
 import { vesperPlan, type VesperBox, type VesperPlan } from "./shared.ts";
 
 /**
@@ -94,6 +95,16 @@ export function frame(b: VesperBox, face: "n" | "e" | "s" | "w"): { yaw: number;
 const RECORDS: ShellStyle = { outer: P.strataBone, inner: P.companyCream, floor: P.timberLight, floorDark: P.timber, trim: P.timber, leaf: P.timber, strap: P.iron, lamp: P.glowLamp, ceiling: P.timber };
 const SEAL: SealedStyle = { frame: P.chalk, door: P.timber, board: P.timberLight, boardDark: P.timber, iron: P.iron, brass: P.copper, paper: P.companyCream, wax: P.companyRed };
 
+/**
+ * The block a sealed door's notice is nailed to (in the building's level frame, door face at `hx`): the cloth's plaque (`pushPlaques`) stands 0.3 m proud of the wall, clear of the door's boards, so without
+ * this it hung in front of them. A backing board just behind the plaque (a rim wider than it), held off the crossed boards by two blocks.
+ */
+function notice(k: Kit, hx: number, floor: number, doorH: number): void {
+  const y = floor + 0.08 + doorH * 0.62;
+  box(k, [0.04, PLAQUE.hh * 2 + 0.06, PLAQUE.hw * 2 + 0.08], [hx + 0.275, y, 0], P.timber);
+  for (const s of [-1, 1]) box(k, [0.16, 0.2, 0.12], [hx + 0.18, y, s * (PLAQUE.hw - 0.2)], P.timber);
+}
+
 /** What the buildings leave behind for the view: the doors drawn, the lamps burning inside, the roofs for the cutaway. */
 export interface VesperOut {
   marks: DoorMark[];
@@ -148,7 +159,9 @@ function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y
     // a lantern hung from the beam at every second bay: the corridor is lit
     if (i % 2 === 0) {
       const ly = g(px, zc) + 2.7;
-      k.limb([px, gy + H, zc], [px, ly + 0.2, zc], 0.012, 0.012, P.iron, 3);
+      // (the chain runs from the roof's beam into the lamp's iron cap, which sits on the glass: nothing hangs clear of what holds it)
+      k.limb([px, gy + H, zc], [px, ly + 0.16, zc], 0.012, 0.012, P.iron, 3);
+      k.add(new CylinderGeometry(0.05, 0.09, 0.07, 6), { at: [px, ly + 0.14, zc], colour: P.iron, flat: true });
       k.add(new SphereGeometry(0.13, 6, 4), { at: [px, ly, zc], colour: P.glowLamp });
       glows.push({ x: px, y: ly, z: zc, lit: 0.45 });   // (a lamp under a roof burns bright even at noon, so the gallery is seen to be lit from the forecourt)
     }
@@ -186,13 +199,14 @@ function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y
   box(rrk, [C.pierIn - C.backX + 0.5, 0.4, C.recordsZ1 - C.recordsZ0 + 0.3], [(C.backX + C.pierIn) / 2, rg + fl + lb.wallH + 0.05, (C.recordsZ0 + C.recordsZ1) / 2], (p, n, o2) => (n.y < -0.5 ? o2.set(P.timberLight) : o2.set(P.chalk)));
   k.clearBase();
   // the bell-gable: a slim tower on the roof of the cliff's mass with an open belfry and a bell of copper, a crepe-black roof
-  k.setBase(c.x, gy + H + 0.7, c.z, 0);
+  // (its foot stands ON the mass, whose top is gy + H: it was set 0.7 m above it, and the whole tower hung in the air)
+  k.setBase(c.x, gy + H - 0.05, c.z, 0);
   box(k, [2.6, 4.2, 2.6], [0, 2.1, 0], stone(215));
   box(k, [3.0, 0.3, 3.0], [0, 4.3, 0], P.chalk);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * 1.05, 4.4, sz * 1.05], [sx * 1.05, 7.0, sz * 1.05], 0.24, 0.2, P.chalk, 6);
   k.add(new CylinderGeometry(0.46, 0.8, 1.2, lod ? 10 : 6), { at: [0, 5.9, 0], colour: P.copper, flat: true });
   k.limb([0, 7.0, 0], [0, 6.5, 0], 0.06, 0.06, P.iron, 4);
-  pyramid(k, 1.75, 2.6, [0, 7.05, 0], P.crepe);
+  pyramid(k, 1.75, 2.6, [0, 6.97, 0], P.crepe);   // (the roof rests on the four piers' heads at 7.0, and the bell's hanger meets its underside)
   k.add(new SphereGeometry(0.2, 6, 4), { at: [0, 9.8, 0], colour: P.guildSilver });
   k.clearBase();
 }
@@ -237,8 +251,12 @@ function assay(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     const lb = vesperLevel().buildings.find((x) => x.id === "assay")!;
     k.setBase(b.x, gy, b.z, lb.yaw);
     sealedDoor(k, `${lb.id}.door`, lb.hx, 0, lb.door, lb.doorH, SEAL, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
-    // the iron grille over the door's hood and a brass plate: the counter window beside it is where a claim is presented
+    // the door's iron hood: a sheet sloping out from the wall over the frame, its drip-bar along the front, on two wall brackets (the counter window beside it is where a claim is presented)
+    // (the drip-bar alone hung 0.4 m off the wall with nothing holding it)
     box(k, [0.2, 0.16, lb.door + 1.0], [lb.hx + 0.4, lb.doorH + 0.4, 0], P.iron);
+    box(k, [0.5, 0.05, lb.door + 1.0], [lb.hx + 0.24, lb.doorH + 0.5, 0], P.iron, [0, 0, -0.18]);
+    for (const s of [-1, 1]) k.limb([lb.hx, lb.doorH + 0.02, s * (lb.door / 2 + 0.35)], [lb.hx + 0.42, lb.doorH + 0.36, s * (lb.door / 2 + 0.35)], 0.03, 0.03, P.iron, 4);
+    notice(k, lb.hx, lb.floor, lb.doorH);
     k.clearBase();
   }
   // the scales: a pole, a beam, two pans on chains (the Assay House weighs everything, including opinions)
@@ -278,18 +296,19 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     const hx = f.lx, hz = f.lz, H = b.height;
     box(k, [hx * 2, H, hz * 2], [0, H / 2 + 0.2, 0], planks(250));
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.2), -0.6, sz * (hz - 0.2)], [sx * (hx - 0.2), 0.3, sz * (hz - 0.2)], 0.12, 0.1, P.timber, 5);
-    gable(k, hx + 0.5, hz + 0.6, 1.5, [0, H + 0.25, 0]);
+    gable(k, hx + 0.5, hz + 0.6, 1.5, [0, H + 0.2, 0]);   // (on the walls' top, H + 0.2: it was 5 cm above them)
     box(k, [1.3, 0.9, 0.12], [-2.0, 2.1, hz + 0.02], P.crepe);
     box(k, [1.5, 0.1, 0.5], [-2.0, 1.6, hz + 0.3], P.timberLight);
     box(k, [3.4, 0.16, 1.5], [0.2, 0.15, hz + 0.9], P.timber);
     for (const sx of [-1, 1]) k.limb([sx * 1.55 + 0.2, 0.2, hz + 1.5], [sx * 1.55 + 0.2, 2.7, hz + 1.5], 0.07, 0.06, P.timber, 5);
     box(k, [3.6, 0.14, 1.8], [0.2, 2.75, hz + 0.9], P.iron, [0.1, 0, 0]);
-    k.limb([-hx + 0.8, H + 0.5, -0.5], [-hx + 0.8, H + 2.1, -0.5], 0.14, 0.12, P.iron, 6);
+    k.limb([-hx + 0.8, H + 0.15, -0.5], [-hx + 0.8, H + 2.1, -0.5], 0.14, 0.12, P.iron, 6);
     k.clearBase();
     // D-038: locked: the door (on the porch) is SEALED; the ledger window is the only way to talk to the Company
     const lb = vesperLevel().buildings.find((x) => x.id === "office")!;
     k.setBase(b.x, gy, b.z, lb.yaw);
     sealedDoor(k, `${lb.id}.door`, lb.hx, 0.2, lb.door, lb.doorH, SEAL, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
+    notice(k, lb.hx, lb.floor, lb.doorH);
     k.clearBase();
     // a sign-board on two posts: THE LOWER GALLERY COMPANY (the lettering is the cloth's)
   }
@@ -308,6 +327,7 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     const lb = vesperLevel().buildings.find((x) => x.id === "magazine")!;
     k.setBase(b.x, gy, b.z, lb.yaw);
     sealedDoor(k, `${lb.id}.door`, lb.hx, 0, lb.door, lb.doorH, { ...SEAL, door: P.iron, board: P.ironLight, boardDark: P.iron }, lod, out.marks, { x: b.x, y: gy, z: b.z, yaw: lb.yaw });
+    notice(k, lb.hx, lb.floor, lb.doorH);
     k.clearBase();
   }
   // the timber stack: pit-props and sleepers laid crosswise
@@ -334,7 +354,7 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     const hx = f.lx, hz = f.lz, H = b.height;
     slab(k, [hx * 2, 1.6, hz * 2], [0, 0.4, 0], stone(270), lod);
     box(k, [hx * 2, H - 1.2, hz * 2], [0, 1.2 + (H - 1.2) / 2, 0], planks(272));
-    gable(k, hx + 0.5, hz + 0.5, 1.8, [0, H + 0.05, 0]);
+    gable(k, hx + 0.5, hz + 0.5, 1.8, [0, H, 0]);   // (on the plank walls' top: it was 5 cm above them)
     box(k, [2.2, 1.7, 0.14], [0, 2.7, hz + 0.02], P.crepe);
     k.add(new CylinderGeometry(1.1, 1.1, 0.14, lod ? 14 : 8, 1, false, 0, Math.PI), { at: [0, 3.55, hz + 0.02], rot: [Math.PI / 2, 0, 0], colour: P.crepe, flat: true });
     k.limb([-hx + 0.7, H + 0.8, 0.5], [-hx + 0.7, H + 3.0, 0.5], 0.16, 0.13, P.iron, 6);
@@ -413,6 +433,7 @@ function lamp(k: Kit, x: number, z: number, gy: number, h: number): void {
   // the lantern is a cage round a lamp-amber flame (the glow the view adds must be seen through it)
   box(k, [0.34, 0.06, 0.34], [x, gy + h + 0.02, z], P.iron);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([x + sx * 0.14, gy + h + 0.03, z + sz * 0.14], [x + sx * 0.14, gy + h + 0.48, z + sz * 0.14], 0.024, 0.024, P.iron, 4);
+  k.add(new CylinderGeometry(0.035, 0.05, 0.14, 5), { at: [x, gy + h + 0.11, z], colour: P.iron, flat: true });   // (the burner the flame sits on: it stood in the air inside the cage)
   k.add(new SphereGeometry(0.1, 6, 4), { at: [x, gy + h + 0.26, z], colour: P.glowLamp });
   pyramid(k, 0.26, 0.28, [x, gy + h + 0.48, z], P.crepe);
 }

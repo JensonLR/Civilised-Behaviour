@@ -626,11 +626,11 @@ export function fernGeometry(): BufferGeometry {
     const sa = Math.sin(a);
     const len = 0.55 + 0.12 * ((f * 7) % 3);
     const rise = 0.42;
-    // rib points: outward and up, then drooping
-    const pt = (t: number): V3 => [ca * len * t, 0.03 + rise * Math.sin(t * 2.2) * (1 - t * 0.35), sa * len * t];
+    // rib points: outward and up, then drooping; every rib springs from the one crown at the root (t = 0), a little into the soil
+    const pt = (t: number): V3 => [ca * len * t, -0.015 + 0.045 * Math.min(1, t * 8) + rise * Math.sin(t * 2.2) * (1 - t * 0.35), sa * len * t];
     for (let k = 0; k < 4; k++) {
-      const t0 = k / 4 + 0.08;
-      const t1 = (k + 1) / 4 + 0.08;
+      const t0 = (k / 4) * 1.08;
+      const t1 = ((k + 1) / 4) * 1.08;
       const p0 = pt(t0);
       const p1 = pt(t1);
       const wd = 0.11 * (1 - t0 * 0.75);
@@ -641,8 +641,10 @@ export function fernGeometry(): BufferGeometry {
       s.tri(p0, [p1[0] + px, p1[1] - 0.02, p1[2] + pz], p1, c0, [0.1, 1, 0.1], 0, leaf, k === 3 ? light : leaf);
       s.tri(p0, p1, [p1[0] - px, p1[1] - 0.02, p1[2] - pz], c0, [0.1, 1, 0.1], 0, k === 3 ? light : leaf, leaf);
     }
-    const tipP = pt(1.05);
-    s.tri(pt(0.98), [tipP[0], tipP[1] - 0.06, tipP[2]], [pt(1)[0] + -sa * 0.02, pt(1)[1], pt(1)[2] + ca * 0.02], leaf, [0.1, 1, 0.1], 0, leaf, light);
+    // the curled tip hangs off the rib's last point (shared, so it is one piece with the frond)
+    const end = pt(1.08);
+    const tipP = pt(1.13);
+    s.tri(end, [tipP[0], tipP[1] - 0.06, tipP[2]], [tipP[0] - sa * 0.02, tipP[1], tipP[2] + ca * 0.02], leaf, [0.1, 1, 0.1], 0, leaf, light);
   }
   return s.build();
 }
