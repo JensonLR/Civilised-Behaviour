@@ -9,6 +9,7 @@ const LINES = [
   "Somebody has packed the theodolites under the bacon.",
   "The sea has been thanked for its cooperation.",
 ] as const;
+const BELLS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"] as const;
 
 /**
  * The Sailing card: the full-screen interlude while the boat crosses (the server discards inputs for the six seconds) and while this machine builds the
@@ -56,7 +57,8 @@ export class Sailing {
     this.root.classList.remove("arriving");
     this.where.textContent = `Bound for ${name}`;
     const s = Number.isFinite(left) && left > 0 ? Math.ceil(left) : 0;
-    this.clock.textContent = s > 0 ? `Landfall in ${s} ${s === 1 ? "second" : "seconds"}` : "Landfall";
+    // the crossing kept in ship's bells, one a second (it read "Landfall in 2 seconds", which is not how a day's sail is told; D-040 took the seconds off the chart)
+    this.clock.textContent = s > 0 ? `${BELLS[Math.min(s, BELLS.length) - 1]} ${s === 1 ? "bell" : "bells"} to landfall` : "Landfall";
     this.line.textContent = LINES[Math.abs(Math.floor(s / 3)) % LINES.length]!;
   }
 
