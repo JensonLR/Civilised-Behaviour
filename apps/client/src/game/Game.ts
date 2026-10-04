@@ -1285,6 +1285,13 @@ export class Game {
       this.audio.actor(id, isMe, dt, x, y, z, this.session.value(p, "vx"), this.session.value(p, "vy"), this.session.value(p, "vz"), flags);
       a.body.setLook(p.look);
       if (isMe) a.body.setFirstPerson(this.rig.headHidden, this.rig.yaw); // own head, never the others'
+      if (isMe) {
+        // D-077: a wall behind brings the follow camera hard against your back: you are drawn see-through (with a little hysteresis, so it does not flicker)
+        const cam = this.stage.camera.position;
+        const near = Math.sqrt((cam.x - x) ** 2 + (cam.y - y - 1.5) ** 2 + (cam.z - z) ** 2);
+        this.seeThrough = !this.rig.headHidden && (this.seeThrough ? near < 1.6 : near < 1.25);
+        a.body.setSeeThrough(this.seeThrough, this.seeThrough && near < 0.45);
+      }
       if (isMe) a.body.setAimYaw(this.combat.aimHeading); // third person: the body turns to the aim ray while the sight is up
       a.groundIn -= dt;
       if (a.groundIn <= 0) {
@@ -1321,6 +1328,9 @@ export class Game {
       }
     }
   }
+
+  /** D-077: the local body is drawn see-through (the follow camera is hard against it). */
+  private seeThrough = false;
 
   /** One name plate: the shared rule says whether it can sit where it points (never clamped); hired hands carry their order and their nerve. The text and the sight ray are cached (plates.ts). */
   private plate(id: string, p: PlayerStateType, a: Actor, x: number, y: number, z: number): void {

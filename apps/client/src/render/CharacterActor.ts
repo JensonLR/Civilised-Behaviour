@@ -5,7 +5,7 @@ import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/sh
 import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
-import { ghostTree } from "./ghost.ts";
+import { ghostTree, seeThroughTree } from "./ghost.ts";
 import { WeaponRig } from "./weapons/WeaponRig.ts";
 import { TorchHold } from "./torch.ts";
 
@@ -219,6 +219,21 @@ export class CharacterActor {
     this.aimYaw = yaw;
   }
 
+  /** D-077: the follow camera is hard against this (local) body: draw it see-through (ghost.ts `seeThroughTree`), and with the lens inside the head, without the head. Cheap to call every frame. */
+  setSeeThrough(on: boolean, lensInHead = false): void {
+    if (on !== this.seeThroughOn) {
+      this.seeThroughOn = on;
+      seeThroughTree(this.rig.root, on);
+    }
+    // the lens is inside the head: the head goes (its shadow stays), as in first person
+    if (lensInHead !== this.lensInHead) {
+      this.lensInHead = lensInHead;
+      this.applyHeadVisibility();
+    }
+  }
+  private seeThroughOn = false;
+  private lensInHead = false;
+
   /**
    * The viewmodel is drawing this (local) body's arms and weapon: stop drawing them here, but keep their shadow. Cheap to call every frame;
    * takes effect at once. Also re-applied after every `update()` (a dressing or stump that appears later must be ghosted too).
@@ -238,7 +253,7 @@ export class CharacterActor {
   }
 
   private applyHeadVisibility(): void {
-    const hide = this.firstPerson;
+    const hide = this.firstPerson || this.lensInHead;
     this.rig.joints.head.visible = !hide;
     if (hide && !this.headShadow) {
       const P = this.rig.proportions;
