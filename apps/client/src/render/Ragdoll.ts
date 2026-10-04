@@ -69,6 +69,10 @@ export const WRIST_DANGLE = 1.0;
 const WRIST_EASE = 9;
 const WRIST_BONES = ["elbowL", "elbowR"] as const;
 
+/** The hinged joints (their limits are HINGE_LIMITS) and how far past a limit the solver's soft give may carry one before the hard stop holds it (radians). */
+const HINGES = ["torso", "head", "elbowL", "elbowR", "kneeL", "kneeR"] as const;
+const HINGE_GIVE = 0.2;
+
 /** Which body takes the hardest shove for a hit zone. */
 const ZONE_BODY: Record<number, BoneName> = {
   [ZONE.HEAD]: "head",
@@ -363,6 +367,7 @@ export class Ragdoll {
     const dt = RAGDOLL.fixedDt;
     this.age += dt;
     if (this.hasAnchor) this.tether(dt);
+    this.hardStops();
     let fastest = 0;
     for (const b of this.bodies) {
       const v = b.linvel();
@@ -370,6 +375,34 @@ export class Ragdoll {
     }
     this.calm = fastest < RAGDOLL.settleSpeed ? this.calm + dt : 0;
     if (this.age >= RAGDOLL.maxSimSeconds || (this.age >= RAGDOLL.minSimSeconds && this.calm >= RAGDOLL.settleSeconds)) this.beginBlend();
+  }
+
+  /**
+   * The hinges' hard stops. Rapier's limits are soft: a full-power knockdown occasionally carried a knee 0.39 rad past its limit (1 fall in 40, measured) and drew a leg bent the
+   * wrong way. Past the limit by more than `HINGE_GIVE`, the part of the child's spin about the hinge axis (relative to its parent) that drives it further out is taken away; the
+   * solver's own give inside that margin is untouched. Allocation-free.
+   */
+  private hardStops(): void {
+    for (const name of HINGES) {
+      const lim = HINGE_LIMITS[name]!;
+      const a = this.hingeAngle(name);
+      const out = a < lim[0] - HINGE_GIVE ? -1 : a > lim[1] + HINGE_GIVE ? 1 : 0;
+      if (out === 0) continue;
+      const parent = this.bodies[PARENT[name]]!;
+      const child = this.bodies[INDEX[name]]!;
+      const pr = parent.rotation();
+      _v.set(1, 0, 0).applyQuaternion(_q.set(pr.x, pr.y, pr.z, pr.w)); // the hinge axis in the world
+      const wp = parent.angvel();
+      const wc = child.angvel();
+      const rel = (wc.x - wp.x) * _v.x + (wc.y - wp.y) * _v.y + (wc.z - wp.z) * _v.z;
+      if (rel * out > 0) child.setAngvel({ x: wc.x - rel * _v.x, y: wc.y - rel * _v.y, z: wc.z - rel * _v.z }, true);
+      // and held at the edge of the give: the child turned back about the hinge (a revolute joint has no other freedom, so nothing else of the pose moves); the ground pressing a shin
+      // into a knee would otherwise keep it bent the wrong way for as long as it lay there
+      const edge = out < 0 ? lim[0] - HINGE_GIVE : lim[1] + HINGE_GIVE;
+      _q2.setFromAxisAngle(_axisX, edge);
+      _q.multiply(_q2); // (parent's rotation, from above, times the hinge's legal turn)
+      child.setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w }, true);
+    }
   }
 
   /** A soft spring: past the tether radius, every body is pulled toward the anchor in proportion to how far out it is. */
