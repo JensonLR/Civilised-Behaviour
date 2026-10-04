@@ -150,7 +150,8 @@ describe("CampaignMap", () => {
 
 describe("D-081: the campaign layer's words keep off each other and off the shore names", () => {
   it("a busy chart (a post, the Syndicate seen, powers known and asking, every lane timed) places no label over another or over a mark", () => {
-    const d = data({ post: true, seen: true, intel: 2, asking: ["brine", "choir"] });
+    const d0 = data({ post: true, seen: true, intel: 2, asking: ["brine", "choir"] });
+    const d = { ...d0, pins: d0.pins.map((q) => ({ ...q, known: true })) }; // (every power heard of: the three seats are written too)
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     drawCampaignOverlay(g, d);
     const labels = overlayLabelBoxes(g);
@@ -161,5 +162,18 @@ describe("D-081: the campaign layer's words keep off each other and off the shor
       for (let j = i + 1; j < labels.length; j++) expect(hit(labels[i]!, labels[j]!), `labels ${i} and ${j}`).toBe(false);
       for (const m of marks) expect(hit(labels[i]!, m), `label ${i} over a mark`).toBe(false);
     }
+  });
+});
+
+describe("every stamp the chart draws is styled", () => {
+  it("each stamp class written into the campaign layer has a stroke rule in the stylesheet (the seats' colonnades were open paths with no stroke: never drawn)", () => {
+    const d0 = data({ post: true, seen: true, intel: 2, asking: ["brine", "choir"] });
+    const d = { ...d0, pins: d0.pins.map((q) => ({ ...q, known: true })) }; // (every power heard of: their seats are on the chart)
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    drawCampaignOverlay(g, d);
+    const css = readFileSync(join(__dirname, "campaignMap.css"), "utf8");
+    const kinds = new Set(Array.from(g.querySelectorAll("g.stamp")).map((s) => Array.from(s.classList).find((k) => k !== "stamp")!));
+    expect([...kinds]).toEqual(expect.arrayContaining(["granges", "cloister", "quay"]));
+    for (const k of kinds) expect(css, k).toMatch(new RegExp(`\\.stamp\\.${k}\\b[^{]*\\{[^}]*stroke:`));
   });
 });

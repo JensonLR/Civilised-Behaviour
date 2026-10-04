@@ -129,6 +129,13 @@ function lane(a: RegionId, b: RegionId): { d: string; mid: { x: number; y: numbe
 }
 export const chartRoute = (a: RegionId, b: RegionId): string => lane(a, b).d;
 export const chartRouteMid = (a: RegionId, b: RegionId): { x: number; y: number } => lane(a, b).mid;
+/** The point a fraction `u` of the way along the lane from `a` to `b` (0 at a, 1 at b). Pure. */
+export function chartRouteAt(a: RegionId, b: RegionId, u: number): { x: number; y: number } {
+  const [p, q] = REGION_IDS.indexOf(a) <= REGION_IDS.indexOf(b) ? [a, b] : [b, a];
+  const t = p === a ? u : 1 - u;
+  const A = CHART_AT[p], B = CHART_AT[q], C = bendOf(p, q), k = 1 - t;
+  return { x: k * k * A.x + 2 * k * t * C.x + t * t * B.x, y: k * k * A.y + 2 * k * t * C.y + t * t * B.y };
+}
 export const regionPair = (a: RegionId, b: RegionId): string => (REGION_IDS.indexOf(a) <= REGION_IDS.indexOf(b) ? `${a}|${b}` : `${b}|${a}`);
 
 /** The chart's campaign layer: an outpost stamp by Kessar, the Syndicate's marker with its age, the sailing time on the lane. Drawn into `g` (cleared first). */
@@ -186,10 +193,15 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
     if (!here) continue;
     const m = chartRouteMid(here, l.to);
     const word = sailShort(l.seconds);
-    // on its lane: above the line, below it, or a little along either way, wherever it is clear
+    // on its lane: above the line, below it, or a little along either way; then further along the lane itself (a busy middle, where three seats crowd a crossing, had no clear spot)
     let at = { x: m.x, y: m.y - 5 };
     let best = Infinity;
-    for (const c of [{ x: m.x, y: m.y - 5 }, { x: m.x, y: m.y + 10 }, { x: m.x - 16, y: m.y - 3 }, { x: m.x + 16, y: m.y - 3 }, { x: m.x - 16, y: m.y + 10 }, { x: m.x + 16, y: m.y + 10 }, { x: m.x - 28, y: m.y + 3 }, { x: m.x + 28, y: m.y + 3 }]) {
+    const near = [{ x: m.x, y: m.y - 5 }, { x: m.x, y: m.y + 10 }, { x: m.x - 16, y: m.y - 3 }, { x: m.x + 16, y: m.y - 3 }, { x: m.x - 16, y: m.y + 10 }, { x: m.x + 16, y: m.y + 10 }, { x: m.x - 28, y: m.y + 3 }, { x: m.x + 28, y: m.y + 3 }];
+    const along = [0.4, 0.6, 0.3, 0.7].flatMap((u) => {
+      const q = chartRouteAt(here, l.to, u);
+      return [{ x: q.x, y: q.y - 5 }, { x: q.x, y: q.y + 10 }];
+    });
+    for (const c of [...near, ...along]) {
       const b = textBox(c.x, c.y, word.length, STAMP_CHAR, "middle");
       if (!onSheet(b)) continue;
       const cr = crowding(b, taken);
