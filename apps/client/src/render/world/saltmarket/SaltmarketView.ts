@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, Matrix4, Mesh, MeshToonMaterial, SphereGeometry, Vector3, type Object3D, type Scene, type ShaderMaterial } from "three";
 import { PALETTE, SALTMARKET_ANCHORS, saltmarketLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type SaltmarketTerrain, type ScenarioView } from "./shared.ts";
-import { atmoUniforms, motion } from "../atmosphere.ts";
+import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { grassTuftGeometry, reedGeometry, type Lod } from "../flora.ts";
 import { Kit, disposeTree, topLit } from "../kit.ts";
@@ -85,6 +85,7 @@ export class SaltmarketView implements RegionView {
     this.root.name = "world";
     this.fill = new InteriorFill(this.root, PALETTE.saltmarket.salt, PALETTE.saltmarket.tarPlankLight, INTERIOR_FILL);
     setToonLite(detail.liteShading);
+    if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
     const terrain = world.terrain as SaltmarketTerrain;
     this.addGround(terrain);

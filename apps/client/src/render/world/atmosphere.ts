@@ -1,4 +1,4 @@
-import { Color, Vector3, Vector4 } from "three";
+import { Color, DataTexture, DataUtils, HalfFloatType, LinearFilter, RedFormat, Vector3, Vector4, type Texture } from "three";
 import type { WeatherKind } from "@cb/shared";
 
 /**
@@ -89,7 +89,31 @@ export const atmoUniforms = {
   uMist: { value: 0 },
   /** D-077: the third-person camera's subject (xyz: the player's chest; w: 1 in third person, 0 in first): scenery on the line between the lens and the player thins out. Set by `CameraRig`. */
   uFocus: { value: new Vector4(0, 0, 0, 0) },
+  /** D-079: the region's ground height, baked to a texture (`bakeGroundHeights`), and where it lies (x0, z0, size, 1 = present): scenery darkens where it meets the ground. */
+  uGround: { value: null as Texture | null },
+  uGroundRect: { value: new Vector4(0, 0, 1, 0) },
 };
+
+/**
+ * D-079: bakes the ground's height over a square `half` metres each way of the origin into a half-float texture the scenery shader samples (`res`
+ * texels a side, linear filtered: about 1.6 m a texel at the defaults, as fine as the drawn terrain's own grid). Replaces (and frees) the last one.
+ */
+export function bakeGroundHeights(world: { terrainHeight(x: number, z: number): number }, half = 200, res = 256): DataTexture {
+  const data = new Uint16Array(res * res);
+  const size = half * 2;
+  for (let j = 0; j < res; j++) {
+    const z = -half + ((j + 0.5) / res) * size;
+    for (let i = 0; i < res; i++) data[j * res + i] = DataUtils.toHalfFloat(world.terrainHeight(-half + ((i + 0.5) / res) * size, z));
+  }
+  const tex = new DataTexture(data, res, res, RedFormat, HalfFloatType);
+  tex.magFilter = LinearFilter;
+  tex.minFilter = LinearFilter;
+  tex.needsUpdate = true;
+  atmoUniforms.uGround.value?.dispose();
+  atmoUniforms.uGround.value = tex;
+  atmoUniforms.uGroundRect.value.set(-half, -half, size, 1);
+  return tex;
+}
 
 /** Wind strength (0..1) and the motion preference (0..1) -> the sway multiplier (0 = perfectly still). */
 export const windGain = (wind: number, motion: number): number => (0.55 + 1.9 * Math.min(1, Math.max(0, wind))) * Math.min(1, Math.max(0, motion));

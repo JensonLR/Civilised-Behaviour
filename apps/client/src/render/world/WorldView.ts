@@ -19,7 +19,7 @@ import {
 } from "three";
 import { CanopyIndex, GATE_CLOCK_Y, PALETTE, RIVER, autumnAt, buildFlock, classifyObstacle, riverCentre, smoothstep, villageLevel, villagePlan, type CollisionWorld, type DayState, type HqHistoryPiece, type LandscapeTerrain } from "@cb/shared";
 import { sharedToonRamp, type WorldInkClass } from "@cb/procedural/three";
-import { atmoUniforms, motion } from "./atmosphere.ts";
+import { atmoUniforms, bakeGroundHeights, motion } from "./atmosphere.ts";
 import { createAtlasTexture, createGlowTexture } from "./atlas.ts";
 import { createAmbientUniforms, buildBirds, buildButterflies, buildLanternGlow, buildMotes, buildSmoke, type AmbientUniforms, type SmokeSource } from "./ambient.ts";
 import {
@@ -156,6 +156,7 @@ export class WorldView {
   ) {
     this.root.name = "world";
     setToonLite(detail.liteShading);
+    if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
     this.hillU = createHillUniforms(sun);
     this.addTerrain();
