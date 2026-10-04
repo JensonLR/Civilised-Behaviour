@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { newCampaign, newPowers, newSettlements, campaignMapOf, mapPins, rivalSighting, deliverTo, PropKind, type CampaignMapData } from "@cb/shared";
-import { CampaignMap, drawCampaignOverlay } from "./CampaignMap.ts";
+import { CampaignMap, chartMarkBoxes, drawCampaignOverlay, overlayLabelBoxes } from "./CampaignMap.ts";
 import { MapRoom, type MapRoomView } from "./MapRoom.ts";
 
 const c = { ...newCampaign(2), day: 6, expeditions: 2 };
@@ -145,5 +145,21 @@ describe("CampaignMap", () => {
     expect(css).not.toMatch(/:\s*(white|black|red|green|blue|gold|silver|gray|grey|orange|yellow|purple|brown)\b/i);
     expect(css).toMatch(/var\(--/);
     expect(css).not.toMatch(/animation|transition|@keyframes/);
+  });
+});
+
+describe("D-081: the campaign layer's words keep off each other and off the shore names", () => {
+  it("a busy chart (a post, the Syndicate seen, powers known and asking, every lane timed) places no label over another or over a mark", () => {
+    const d = data({ post: true, seen: true, intel: 2, asking: ["brine", "choir"] });
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    drawCampaignOverlay(g, d);
+    const labels = overlayLabelBoxes(g);
+    expect(labels.length).toBeGreaterThan(2);
+    const marks = chartMarkBoxes(d.regions);
+    const hit = (a: { x0: number; y0: number; x1: number; y1: number }, b: typeof a): boolean => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+    for (let i = 0; i < labels.length; i++) {
+      for (let j = i + 1; j < labels.length; j++) expect(hit(labels[i]!, labels[j]!), `labels ${i} and ${j}`).toBe(false);
+      for (const m of marks) expect(hit(labels[i]!, m), `label ${i} over a mark`).toBe(false);
+    }
   });
 });

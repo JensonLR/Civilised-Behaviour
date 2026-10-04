@@ -32,7 +32,77 @@ export const CHART_AT: Readonly<Record<RegionId, { x: number; y: number }>> = {
   // D-037: the gorge on the north-west shore (inland, up its river), the delta on the south shore between home and the highlands
   vesper: { x: 88, y: 42 }, saltmarket: { x: 160, y: 170 },
 };
+/** The shore names written under each mark (MapRoom draws them; the campaign layer keeps its own words off them). */
+export const CHART_LABEL: Readonly<Record<string, string>> = { hollowmere: "Hollowmere", kessar: "Kessar", highmark: "Highmark", vesper: "Vesper", saltmarket: "Saltmarket" };
 const KESSAR_AT = CHART_AT.kessar;
+
+/**
+ * Where a label may go (D-081): a stamp's words were written at one fixed offset and ran over the shore names, the anchors and each other ("Saltmarket
+ * Quay" across "Hollowmere", the trading post through "Kessar"). Each label now tries a few spots round its own icon and takes the first that is on the
+ * sheet and clear of everything already placed (the marks and their names first). Sizes are estimated from the type sizes (no layout read), in chart units.
+ */
+interface Box { x0: number; y0: number; x1: number; y1: number }
+const STAMP_CHAR = 4.9; // the 8 px typewriter face, per character
+const NAME_CHAR = 8.6; // the 12 px display face with its letter-spacing
+const hits = (a: Box, b: Box): boolean => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+const onSheet = (b: Box): boolean => b.x0 >= 1 && b.y0 >= 1 && b.x1 <= 319 && b.y1 <= 199;
+type Spot = { dx: number; dy: number; anchor: "start" | "middle" | "end" };
+/** Right, left, above, below the icon (a label reads best to the right of its mark). */
+const SPOTS: readonly Spot[] = [
+  { dx: 9, dy: 4, anchor: "start" }, { dx: -9, dy: 4, anchor: "end" }, { dx: 0, dy: -9, anchor: "middle" }, { dx: 0, dy: 15, anchor: "middle" },
+  { dx: 9, dy: -6, anchor: "start" }, { dx: 9, dy: 14, anchor: "start" }, { dx: -9, dy: -6, anchor: "end" }, { dx: -9, dy: 14, anchor: "end" },
+  { dx: 0, dy: -18, anchor: "middle" }, { dx: 0, dy: 24, anchor: "middle" }, { dx: 9, dy: -16, anchor: "start" }, { dx: -9, dy: -16, anchor: "end" }, { dx: 9, dy: 24, anchor: "start" }, { dx: -9, dy: 24, anchor: "end" },
+];
+/** How much of `b` the boxes already placed cover (the fallback when no spot is clear: the least crowded one). */
+const crowding = (b: Box, taken: readonly Box[]): number => taken.reduce((sum, t) => sum + Math.max(0, Math.min(b.x1, t.x1) - Math.max(b.x0, t.x0)) * Math.max(0, Math.min(b.y1, t.y1) - Math.max(b.y0, t.y0)), 0);
+function textBox(x: number, y: number, chars: number, perChar: number, anchor: Spot["anchor"], h = 8): Box {
+  const w = chars * perChar;
+  const x0 = anchor === "start" ? x : anchor === "end" ? x - w : x - w / 2;
+  return { x0: x0 - 1, y0: y - h + 1, x1: x0 + w + 1, y1: y + 2 };
+}
+/** Places `text` beside an icon at (ax, ay) in a stamp group already translated there: the first free spot wins (the first spot if none is free). */
+function placeLabel(group: SVGElement, ax: number, ay: number, text: string, taken: Box[], spots: readonly Spot[] = SPOTS): void {
+  let pick = spots[0]!;
+  let best = Infinity;
+  for (const s of spots) {
+    const b = textBox(ax + s.dx, ay + s.dy, text.length, STAMP_CHAR, s.anchor);
+    if (!onSheet(b)) continue;
+    const c = crowding(b, taken);
+    if (c < best) {
+      best = c;
+      pick = s;
+      if (c === 0) break;
+    }
+  }
+  taken.push(textBox(ax + pick.dx, ay + pick.dy, text.length, STAMP_CHAR, pick.anchor));
+  const t = svg("text", { x: pick.dx, y: pick.dy, ...(pick.anchor === "start" ? {} : { "text-anchor": pick.anchor }) });
+  t.textContent = text;
+  group.append(t);
+}
+/** The boxes (chart units) of every label the campaign layer wrote into `g`, by the same estimate the placement used (for tests). */
+export function overlayLabelBoxes(g: SVGElement): Box[] {
+  const out: Box[] = [];
+  for (const t of Array.from(g.querySelectorAll("text"))) {
+    if (t.classList.contains("q")) continue; // (the S inside the Syndicate's ring)
+    const m = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(t.parentElement?.getAttribute("transform") ?? "");
+    const ox = m ? Number(m[1]) : 0, oy = m ? Number(m[2]) : 0;
+    const anchor = (t.getAttribute("text-anchor") ?? "start") as Spot["anchor"];
+    out.push(textBox(ox + Number(t.getAttribute("x")), oy + Number(t.getAttribute("y")), (t.textContent ?? "").length, STAMP_CHAR, anchor));
+  }
+  return out;
+}
+export { markBoxes as chartMarkBoxes };
+
+/** What the chart already shows before the campaign layer: each mark's anchor and its name underneath. */
+function markBoxes(regions: readonly { id: RegionId }[]): Box[] {
+  const out: Box[] = [];
+  for (const r of regions) {
+    const p = CHART_AT[r.id];
+    out.push({ x0: p.x - 11, y0: p.y - 11, x1: p.x + 11, y1: p.y + 11 });
+    out.push(textBox(p.x, p.y + 24, (CHART_LABEL[r.id] ?? r.id).length, NAME_CHAR, "middle", 11));
+  }
+  return out;
+}
 /** Where each home power sits on the chart (the class keeps the older "granges" stamp name for the CSS and tests). */
 const SEATS: readonly { power: PowerId; region: RegionId; label: string; cls: string }[] = [
   { power: "reapers", region: "highmark", label: "Thornfield Granges", cls: "granges" },
@@ -66,34 +136,35 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
   g.replaceChildren();
   if (!data) return;
   const kessar = data.regions.find((r) => r.id === "kessar");
+  const taken = markBoxes(data.regions);
   // the Society's posts (D-056: one per region with a site), each stamped beside its shore
   for (const r of data.regions) {
     if (!r.outpost) continue;
     const at = CHART_AT[r.id];
-    const s = svg("g", { class: "stamp outpost", transform: `translate(${at.x - 24} ${at.y + 28})` });
+    const ox = at.x - 24, oy = at.y + 28;
+    const s = svg("g", { class: "stamp outpost", transform: `translate(${ox} ${oy})` });
     s.append(svg("rect", { x: -5, y: -5, width: 10, height: 10 }), svg("path", { d: `M-5 -5 L0 -${6 + rank(r.outpost.stage)} L5 -5` }));
-    const t = svg("text", { x: 9, y: 4 });
-    t.textContent = `${r.outpost.name}: ${stageWord(r.outpost.stage).replace(/^an? /, "")}`;
-    s.append(t);
+    taken.push({ x0: ox - 6, y0: oy - 12, x1: ox + 6, y1: oy + 6 });
+    placeLabel(s, ox, oy, `${r.outpost.name}: ${stageWord(r.outpost.stage).replace(/^an? /, "")}`, taken);
     g.append(s);
   }
   if (kessar && kessar.rivalPost > 0) {
-    const s = svg("g", { class: "stamp rivalpost", transform: `translate(${KESSAR_AT.x + 30} ${KESSAR_AT.y + 38})` });
+    const px = KESSAR_AT.x + 30, py = KESSAR_AT.y + 38;
+    const s = svg("g", { class: "stamp rivalpost", transform: `translate(${px} ${py})` });
     s.append(svg("path", { d: "M-5 0 L0 -6 L5 0 L0 6 Z" }));
-    const t = svg("text", { x: 9, y: 4 });
-    t.textContent = kessar.rivalPost >= 2 ? "Syndicate trading post" : "Syndicate post";
-    s.append(t);
+    taken.push({ x0: px - 6, y0: py - 7, x1: px + 6, y1: py + 7 });
+    placeLabel(s, px, py, kessar.rivalPost >= 2 ? "Syndicate trading post" : "Syndicate post", taken);
     g.append(s);
   }
   if (data.rival) {
-    const s = svg("g", { class: "stamp rival", transform: `translate(${KESSAR_AT.x - 8} ${KESSAR_AT.y - 16})` });
+    const rx = KESSAR_AT.x - 8, ry = KESSAR_AT.y - 16;
+    const s = svg("g", { class: "stamp rival", transform: `translate(${rx} ${ry})` });
     s.append(svg("circle", { r: 6 }));
     const q = svg("text", { x: 0, y: 3, "text-anchor": "middle", class: "q" });
     q.textContent = "S";
     s.append(q);
-    const t = svg("text", { x: 10, y: 4 });
-    t.textContent = `Syndicate, ${ageWord(data.rival.age)}`;
-    s.append(t);
+    taken.push({ x0: rx - 7, y0: ry - 7, x1: rx + 7, y1: ry + 7 });
+    placeLabel(s, rx, ry, `Syndicate, ${ageWord(data.rival.age)}`, taken, SPOTS.map((sp) => (sp.anchor === "start" ? { ...sp, dx: sp.dx + 1 } : sp)));
     g.append(s);
   }
   // a home power has a SEAT in a region (the Reapers' Granges climb Highmark's lower terraces; D-037: the Guild's Cloister is cut into Vesper's cliff, the Houses keep Saltmarket Quay): once the Society has heard of the power, the chart says so
@@ -101,11 +172,12 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
     const known = data.pins.find((p) => p.id === seat.power && p.known);
     if (!known || !data.regions.some((r) => r.id === seat.region)) continue;
     const at = CHART_AT[seat.region];
-    const s = svg("g", { class: `stamp ${seat.cls}`, transform: `translate(${at.x - 18} ${at.y - 18})` });
+    const sx = at.x - 18, sy = at.y - 18;
+    const s = svg("g", { class: `stamp ${seat.cls}`, transform: `translate(${sx} ${sy})` });
     s.append(svg("path", { d: "M-4 4 L-4 -3 M0 4 L0 -5 M4 4 L4 -3 M-6 4 L6 4" }));
-    const t = svg("text", { x: -10, y: 4, "text-anchor": "end" });
-    t.textContent = seat.label;
-    s.append(t);
+    taken.push({ x0: sx - 7, y0: sy - 6, x1: sx + 7, y1: sy + 5 });
+    // a seat's name reads to the left of its little colonnade first (the mark is to its right)
+    placeLabel(s, sx, sy, seat.label, taken, [SPOTS[1]!, SPOTS[0]!, ...SPOTS.slice(2)]);
     g.append(s);
   }
   // each sailing time is written on its own lane, from where the party stands
@@ -113,8 +185,23 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
   for (const l of data.lanes) {
     if (!here) continue;
     const m = chartRouteMid(here, l.to);
-    const t = svg("text", { x: m.x, y: m.y - 5, "text-anchor": "middle", class: "lane" });
-    t.textContent = sailShort(l.seconds);
+    const word = sailShort(l.seconds);
+    // on its lane: above the line, below it, or a little along either way, wherever it is clear
+    let at = { x: m.x, y: m.y - 5 };
+    let best = Infinity;
+    for (const c of [{ x: m.x, y: m.y - 5 }, { x: m.x, y: m.y + 10 }, { x: m.x - 16, y: m.y - 3 }, { x: m.x + 16, y: m.y - 3 }, { x: m.x - 16, y: m.y + 10 }, { x: m.x + 16, y: m.y + 10 }, { x: m.x - 28, y: m.y + 3 }, { x: m.x + 28, y: m.y + 3 }]) {
+      const b = textBox(c.x, c.y, word.length, STAMP_CHAR, "middle");
+      if (!onSheet(b)) continue;
+      const cr = crowding(b, taken);
+      if (cr < best) {
+        best = cr;
+        at = c;
+        if (cr === 0) break;
+      }
+    }
+    taken.push(textBox(at.x, at.y, word.length, STAMP_CHAR, "middle"));
+    const t = svg("text", { x: at.x, y: at.y, "text-anchor": "middle", class: "lane" });
+    t.textContent = word;
     g.append(t);
   }
 }
