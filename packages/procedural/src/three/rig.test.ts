@@ -440,3 +440,39 @@ describe("CharacterAnimator", () => {
   });
 
 });
+
+describe("D-078: the clothes are woven, the skin is not", () => {
+  it("cloth bones mark their vertices as fabric; the head and the hands never do; the material weaves only fabric", () => {
+    const rig = buildCharacter(generateCharacter(11), { outline: false });
+    const byBone = new Map<string, { fab: number; all: number }>();
+    rig.root.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      const fab = o.geometry.getAttribute("fab");
+      if (!fab) return;
+      let n = 0;
+      for (let i = 0; i < fab.count; i++) if (fab.getX(i) > 0.5) n++;
+      const key = o.parent?.name ?? "";
+      const e = byBone.get(key) ?? { fab: 0, all: 0 };
+      e.fab += n;
+      e.all += fab.count;
+      byBone.set(key, e);
+    });
+    let woven = 0;
+    for (const [bone, e] of byBone) {
+      if (/hand|head|wrist|neck/i.test(bone)) expect(e.fab, bone).toBe(0);
+      woven += e.fab;
+    }
+    expect(woven).toBeGreaterThan(200);
+    type Mat = { onBeforeCompile: (s: unknown) => void; customProgramCacheKey?: () => string };
+    let mat: Mat | undefined;
+    rig.root.traverse((o) => {
+      const m = (o as Mesh).material as unknown as Mat | undefined;
+      if (!mat && o instanceof Mesh && m?.customProgramCacheKey?.() === "charWeave") mat = m;
+    });
+    if (!mat) throw new Error("no woven material on the rig");
+    const shader = { vertexShader: "#include <common>\n#include <begin_vertex>", fragmentShader: "#include <common>\n#include <color_fragment>", uniforms: {} };
+    mat.onBeforeCompile(shader);
+    expect(shader.vertexShader).toContain("attribute float fab");
+    expect(shader.fragmentShader).toContain("if (vFab > 0.5)");
+  });
+});
