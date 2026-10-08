@@ -5,6 +5,7 @@ import { NPC_CAP, RIVAL_ARRIVES_S, RIVAL_PARLEY_S, RESOLVED_LINGER_S } from "./c
 import { garrisonSize } from "./garrison.ts";
 import { clamp } from "./math.ts";
 import { hash3 } from "./rng.ts";
+import { ruleWhile } from "./scenarios/terms.ts";
 import type { RivalPresence } from "./worldTypes.ts";
 
 /**
@@ -200,13 +201,13 @@ export function scenarioView(s: ScenarioState, worldMsNow: number): ScenarioView
     { id: "reach", text: "Walk north to the Ward's toll bar", done: s.phase !== "approach" },
     {
       id: "secure",
-      text: res === "rival_secured" ? "Lost: the Syndicate bought the crossing" : res === "abandoned" ? "Lost: the expedition went down" : "Get the bar raised: talk to the Lamp-Warden, or don't",
+      text: res === "rival_secured" ? "Lost: the Syndicate bought the crossing" : res === "abandoned" ? "Lost: the expedition went down" : "Cross: pay the Warden, beat her garrison, or blow the bridge",
       done: won,
     },
   ];
   if (s.phase === "fighting" || (s.hostile && s.phase !== "resolved")) {
     const need = Math.ceil(s.total * SCENARIO.routFraction);
-    objectives.push({ id: "rout", text: `Down or rout the garrison (${Math.min(need, s.total - s.alive)} of ${need})`, done: res === "forced", optional: true });
+    objectives.push({ id: "rout", text: `Drop the garrison or send them running (${Math.min(need, s.total - s.alive)} of ${need})`, done: res === "forced", optional: true });
   }
   if (s.phase === "rigging" || res === "sabotaged") {
     objectives.push({ id: "clear", text: "Get off the bridge before the fuse burns", done: res === "sabotaged", optional: true });
@@ -233,7 +234,7 @@ export function scenarioView(s: ScenarioState, worldMsNow: number): ScenarioView
   }
   const v: ScenarioView = {
     phase: s.phase, objectives, hint, timerLabel: remain > 0 ? timerLabel : "", endsAtWorldMs: remain > 0 ? Math.round(worldMsNow + remain * 1000) : 0,
-    template: "secure_crossing", title: "Secure the River Crossing",
+    template: "secure_crossing", title: "Secure the River Crossing", ...ruleWhile("secure_crossing", res === undefined && !s.hostile),
   };
   if (s.complication !== "none") v.complication = s.complication;
   if (res !== undefined) v.resolution = res;

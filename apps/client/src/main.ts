@@ -2,12 +2,16 @@ import "@fontsource/im-fell-english/latin-400.css";
 import "@fontsource/im-fell-english/latin-400-italic.css";
 import "@fontsource/im-fell-english-sc/latin-400.css";
 import "@fontsource/special-elite/latin-400.css";
+import figuresUrl from "@fontsource/special-elite/files/special-elite-latin-400-normal.woff2?url";
 import { paletteCssVars } from "@cb/shared";
 
 /** Publishes the shared palette as CSS custom properties so the interface and the 3D world can never drift apart. */
 for (const [name, value] of Object.entries(paletteCssVars())) document.documentElement.style.setProperty(name, value);
 // the phone's own bars take the backdrop's colour (D-049; from the palette, like every colour)
 document.querySelector<HTMLMetaElement>("meta[name=theme-color]")?.setAttribute("content", paletteCssVars()["--backdrop"]!);
+
+// D-086: the HUD's figures come from the typewriter face (IM Fell's old-style zero reads as a letter: "(o of 3)", "N ooo"); plate.css puts this face first in the HUD's stacks
+document.fonts?.add(new FontFace("CB Figures", `url(${figuresUrl})`, { unicodeRange: "U+0030-0039" }));
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const params = new URLSearchParams(location.search);

@@ -49,6 +49,8 @@ describe("D-035 back-compat", () => {
     expect(RESOLUTIONS.length).toBe(52);   // 20 at Kessar + 5 at Highmark (D-036) + 16 at Vesper and Saltmarket (D-037) + the strike's 4 (D-042) + the engine's 4 (D-044) + the raid's 3 (D-045); the digest covers Kessar's only
     // re-recorded ONCE at D-040 for a deliberate copy fix in the paper's PROMISES lines ("1 undertakings are"); verified first that the old text still gave e36d8edd on the new code
     // re-recorded again for the ledger's "Fallen: none." (a zero count as the word: the paper's old-style 0 read as a letter o); verified first that the old wording still gave 82698a61 on the new code
-    expect(goldenDigest()).toBe("1ba0f973");
+    // re-recorded for D-085 (the Empire is London's): the four mastheads now boast of it ("The Imperial Gazette of London & Hollowmere"); verified first that the old
+    // mastheads still gave 1ba0f973 on the new code
+    expect(goldenDigest()).toBe("8ab34a6f");
   });
 });

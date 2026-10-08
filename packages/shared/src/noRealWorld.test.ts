@@ -19,23 +19,11 @@ import { HIGHMARK_SIGNS } from "./highmark.ts";
 import { REGIONS } from "./regions.ts";
 import { PEOPLE } from "./peoples.ts";
 import { REQUESTS } from "./mayhem.ts";
+import { EMPIRE_HOME, REAL_WORLD_BANNED, REAL_WORLD_RE } from "./realWorld.ts";
 
-/** The world is fictional. This scans the authored text of the campaign layer (and any other authored-text file that exists) for real-world names. */
-const BANNED = [
-  // nations, demonyms
-  "england", "english", "britain", "british", "briton", "scotland", "scottish", "scots", "welsh", "ireland", "irish", "france", "french", "germany", "german", "spain", "spanish",
-  "portugal", "portuguese", "italy", "italian", "dutch", "holland", "netherlands", "belgium", "belgian", "russia", "russian", "china", "chinese", "japan", "japanese", "india", "indian",
-  "persia", "persian", "ottoman", "turkey", "turkish", "arabia", "arab", "arabs", "egypt", "egyptian", "america", "american", "canada", "canadian", "australia", "australian", "zulu",
-  "ashanti", "sudan", "sudanese", "africa", "african", "europe", "european", "asia", "asian", "mexico", "mexican", "brazil", "brazilian", "korea", "korean", "vietnam", "afghan", "afghanistan",
-  "boer", "maori", "bedouin", "mughal", "sikh", "pashtun", "swedish", "sweden", "norway", "norwegian", "denmark", "danish", "greek", "greece", "polish", "poland", "israel", "israeli", "palestine",
-  // cities, landmarks, flags
-  "london", "paris", "berlin", "rome", "madrid", "lisbon", "cairo", "delhi", "mumbai", "bombay", "calcutta", "istanbul", "constantinople", "khartoum", "lagos", "nairobi", "washington",
-  "peking", "beijing", "tokyo", "kabul", "baghdad", "jerusalem", "mecca", "medina", "zanzibar", "suez", "gibraltar", "singapore", "hong kong", "new york", "cape town", "union jack", "stars and stripes",
-  // religions, scripture, clergy
-  "christian", "christians", "christianity", "muslim", "muslims", "islam", "islamic", "jewish", "jews", "judaism", "hindu", "hindus", "hinduism", "buddhist", "buddhists", "buddhism", "catholic",
-  "catholics", "protestant", "anglican", "methodist", "allah", "jesus", "christ", "muhammad", "mohammed", "buddha", "mosque", "synagogue", "temple of", "bible", "koran", "quran", "pope", "imam", "rabbi", "missionary", "missionaries",
-];
-const RE = new RegExp(`(?<![a-z])(?:${BANNED.map((t) => t.replace(/ /g, "\\s+")).join("|")})(?![a-z])`, "i");
+/** The world is fictional abroad, and the Empire is London's (D-085): this scans the authored text of the campaign layer (and any other authored-text file that exists) for real-world names. */
+const BANNED = REAL_WORLD_BANNED;
+const RE = REAL_WORLD_RE;
 
 const strings = (v: unknown, out: string[] = []): string[] => {
   if (typeof v === "string") out.push(v);
@@ -45,9 +33,10 @@ const strings = (v: unknown, out: string[] = []): string[] => {
 };
 
 describe("no real-world terms in authored text", () => {
-  it("the banned list itself catches what it should", () => {
-    for (const t of ["the British flag", "a Christian hymn", "Cairo nights", "new  york", "Union Jack"]) expect(RE.test(t), t).toBe(true);
-    for (const t of ["Hollowmere Parish Notes", "the Kessar parapet", "Dunmarrow-Vesk Syndicate", "Ossuary Bay"]) expect(RE.test(t), t).toBe(false);
+  it("the banned list itself catches what it should; the Empire's own home is allowed (D-085), its neighbours and the world abroad are not", () => {
+    for (const t of ["a Christian hymn", "Cairo nights", "new  york", "a Scottish laird", "an English rose", "the Indian Ocean"]) expect(RE.test(t), t).toBe(true);
+    for (const t of ["Hollowmere Parish Notes", "the Kessar parapet", "Dunmarrow-Vesk Syndicate", "Ossuary Bay", "the British flag", "Union Jack", "Pall Mall, London", "Rule, Britannia", "Whitehall regrets"]) expect(RE.test(t), t).toBe(false);
+    for (const w of EMPIRE_HOME) expect(REAL_WORLD_BANNED, w).not.toContain(w);
   });
 
   it("exported data tables are clean", () => {

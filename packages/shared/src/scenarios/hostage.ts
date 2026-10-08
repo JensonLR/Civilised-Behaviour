@@ -9,6 +9,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * HOSTAGE RESCUE, "The Cartwright's Cage". Mr. Percival Quim, junior surveyor, "insured", sits in a cage wagon at Hangman's Orchard (KESSAR_SITES.hostage)
@@ -223,10 +224,10 @@ function view(s: HostageState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { id: "find", text: "Find the deserters' camp at Hangman's Orchard", done: s.seen || s.near.camp > 0 || s.near.cage > 0 || s.phase !== "planning" },
     // (before the cage, so the compass points at the man you must answer)
-    ...(hailed ? [{ id: "explain", text: "Hailed: talk to the colour-sergeant, or walk away", done: false }] : []),
-    { id: "free", text: res === "hostage_lost" ? "Lost: Mr. Quim did not come home" : "Get Mr. Quim out of the cage: pay, sneak or shoot", done: s.cage || won },
+    ...(hailed ? [{ id: "explain", text: "Hailed: talk to the colour-sergeant, or walk well away", done: false }] : []),
+    { id: "free", text: res === "hostage_lost" ? "Lost: Mr. Quim did not come home" : "Free Mr. Quim from the cage: pay, sneak him out, or fight", done: s.cage || won },
   ];
-  if (s.alarm && !won && res === undefined) objectives.push({ id: "break", text: `Down or rout the deserters (${Math.min(need, broken(s))} of ${need})`, done: broken(s) >= need, optional: true });
+  if (s.alarm && !won && res === undefined) objectives.push({ id: "break", text: `Drop the deserters or send them running (${Math.min(need, broken(s))} of ${need})`, done: broken(s) >= need, optional: true });
   objectives.push({ id: "dock", text: "Walk Mr. Quim to the landing dock alive", done: won });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
 
@@ -249,7 +250,7 @@ function view(s: HostageState, now: number): ScenarioView {
   if (res === undefined && ch) hint += ` ${ch}`;
   const remain = s.phase === "resolved" || s.hostage === "arrived" ? 0 : s.deadline - s.t;
   const clock = hailed ? timer("Their patience", s.challenge, now) : timer("The Syndicate buys him", remain, now);
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...clock, template: "hostage_rescue", title: "The Cartwright's Cage" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...clock, template: "hostage_rescue", title: "The Cartwright's Cage", ...ruleWhile("hostage_rescue", res === undefined && !s.alarm) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;

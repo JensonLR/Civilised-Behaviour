@@ -7,11 +7,18 @@
    ====================================================================================================================================== */
 
 #hud, .captions {
+  /* D-086: figures in the typewriter face (main.ts registers "CB Figures" for the digits only), the letters in the Fell faces */
+  --serif: "CB Figures", "IM Fell English", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --display: "CB Figures", "IM Fell English SC", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-family: var(--serif);
   --halo: 0 0 1px var(--paper), 0 0 2px var(--paper), 0 0 6px color-mix(in srgb, var(--paper) 90%, transparent), 0 0 14px color-mix(in srgb, var(--paper) 55%, transparent);
   --halo-svg: drop-shadow(0 0 1px var(--paper)) drop-shadow(0 0 3px color-mix(in srgb, var(--paper) 85%, transparent));
   --mist: color-mix(in srgb, var(--paper) 52%, transparent);
   --mist-soft: color-mix(in srgb, var(--paper) 40%, transparent);
   --hair: 1.5px;
+  /* D-086: a slip of paper pinned on the picture: solid enough to read on a night sky or a sunlit wall, with a thin shadow and a faint ruled edge */
+  --slip: color-mix(in srgb, var(--field) 93%, transparent);
+  --slip-edge: 0 0.12rem 0.45rem color-mix(in srgb, var(--scrim) 34%, transparent), 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 /* a feathered pool of paper under a block of words: a translucent body with a wide blur round it, never a hard edge */
@@ -28,6 +35,7 @@
 #hud .compass .readout { top: -0.15rem; transform: translate(-50%, -100%); min-width: 0; padding: 0.05rem 0.7rem; font: 1.02rem/1.1 var(--display); letter-spacing: 0.14em; background: var(--mist); border: 0; border-radius: 1rem; box-shadow: 0 0 0.7rem 0.5rem var(--mist); text-shadow: var(--halo); }
 #hud .compass .readout::before { bottom: auto; top: 100%; margin-top: 0.12rem; margin-left: -0.3rem; border: 0.3rem solid transparent; border-top-color: var(--stamp); border-bottom: 0; filter: drop-shadow(0 0 1px var(--paper)); }
 #hud .compass .readout::after { display: none; }
+#hud .compass .readout .deg { font: 0.92rem var(--type); letter-spacing: 0.02em; } /* (D-086: the face's old-style figures read "N ooo") */
 #hud .compass { margin-top: 1.25rem; }
 #hud .compass .mark { top: 0.45rem; flex-direction: row; gap: 0.22rem; padding: 0.02rem 0.45rem; font: italic 0.92rem/1.15 var(--serif); letter-spacing: 0; background: var(--mist-soft); border: 0; border-radius: 1rem; box-shadow: 0 0 0.5rem 0.3rem var(--mist-soft); text-shadow: var(--halo); transform: translateX(-50%); }
 #hud .compass .mark::before { display: block; top: -0.45rem; height: 0.45rem; margin-left: -0.5px; border-left: 1px solid var(--ink); }
@@ -56,7 +64,7 @@
 #hud .codebar button:active { transform: none; }
 
 /* ---- key hints: faint ink along the foot, no band ----------------------------------------------------------------------------------- */
-#hud .help { padding: 0.1rem 0.8rem; font-size: 0.82rem; color: var(--ink); background: var(--mist-soft); box-shadow: 0 0 1rem 0.6rem var(--mist-soft); border: 0; border-radius: 1rem; text-shadow: var(--halo); }
+#hud .help { padding: 0.2rem 0.75rem; font-size: 0.86rem; line-height: 1.85; color: var(--ink); border: 0; white-space: normal; text-align: right; max-width: min(48rem, calc(100vw - var(--edge-l) - var(--edge-r))); }
 #hud .help .glyph { font-size: 0.86em; }
 
 /* ---- the contract and the orientation: annotations hung from a hairline ------------------------------------------------------------ */
@@ -94,7 +102,7 @@
 #hud .health .gauge { filter: var(--halo-svg); }
 #hud .health .gauge .ring { fill: none; stroke: var(--ink); stroke-width: 1.4; }
 #hud .health .gauge .bezel { fill: none; stroke: color-mix(in srgb, var(--ink) 35%, transparent); stroke-width: 0.7; }
-#hud .health .gauge .face { fill: color-mix(in srgb, var(--field) 55%, transparent); stroke: none; }
+#hud .health .gauge .face { fill: color-mix(in srgb, var(--field) 88%, transparent); stroke: none; }
 #hud .health .gauge .tick { stroke: var(--ink); }
 #hud .health .gauge .zone { stroke: var(--stamp); stroke-dasharray: none; stroke-width: 3.6; }
 #hud .health .gauge .needle { stroke: var(--ink); stroke-width: 2; }
@@ -244,6 +252,7 @@ html .maproom .dest:has(input:focus-visible) { outline: 0; box-shadow: inset 3px
 /* on glass, and on a short screen, the contract keeps to its steps and its clock (the paragraph is the parley's and the manual's), small, and clear of the dial that moves up out of the thumbs' way */
 body.touch-ui #hud .objectives { font-size: 0.74rem; width: min(16rem, 32vw); top: calc(var(--edge-t) + 0.3rem); }
 body.touch-ui #hud .objectives .hint { display: none; }
+body.touch-ui #hud .objectives .rule { font-size: 0.72rem; }
 @media (max-height: 520px) { #hud .objectives .hint { display: none; } }
 body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
 
@@ -255,22 +264,29 @@ body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
    (The !important flags below beat the older placement rules in style.css, whose :has() selectors outweigh these.)
    ====================================================================================================================================== */
 #hud, .captions { --halo: 0 0 1px var(--paper), 0 0 1px var(--paper), 0 0 3px color-mix(in srgb, var(--paper) 85%, transparent); }
-#hud .objectives, #hud .arms, #hud .cannoncard, #hud .health, #hud .wounds, #hud .prompt, #hud .progress, #hud .codebar, #hud .help, #hud .compass .mark, #hud .compass .readout { background: none; box-shadow: none; }
+#hud .health, #hud .compass .mark { background: none; box-shadow: none; }
+/* D-086 ("the HUD is unpleasant to read"): ink straight on the picture with a paper halo smeared at night and over busy walls, and its small italic was hard work. Every block of
+   words is now a slip: ink on paper, no halo (the variables are cleared so every rule that uses them inside a slip draws a plain letter), the type upright and larger. */
+#hud .objectives, #hud .guide, #hud .arms, #hud .cannoncard, #hud .wounds, #hud .prompt, #hud .progress, #hud .codebar, #hud .help, #hud .compass .readout {
+  background: var(--slip); box-shadow: var(--slip-edge); border-radius: 2px; --halo: none; --halo-svg: none; text-shadow: none;
+}
 
 /* ---- the line: what to do next, centred under the heading strip ---- */
-#hud .objectives, #hud .guide { position: absolute; left: 50% !important; right: auto !important; top: calc(var(--edge-t) + 3.9rem) !important; transform: translateX(-50%) !important; width: max-content !important; max-width: min(34rem, 76vw); padding: 0; margin: 0; border: 0; border-radius: 0; text-align: center; color: var(--ink); text-shadow: var(--halo); pointer-events: none; font-size: 1rem; }
+#hud .objectives, #hud .guide { position: absolute; left: 50% !important; right: auto !important; top: calc(var(--edge-t) + 3.9rem) !important; transform: translateX(-50%) !important; width: max-content !important; max-width: min(34rem, 76vw); padding: 0.3rem 1.05rem 0.38rem; margin: 0; border: 0; text-align: center; color: var(--ink); pointer-events: none; font-size: 1rem; }
 #hud .guide[hidden], #hud.settled .objectives { display: none; }
 #hud .objectives::before { display: none; }
-#hud .objectives h2, #hud .guide .kicker { display: block; margin: 0 0 0.05rem; padding: 0; border: 0; font: 0.66rem var(--display); letter-spacing: 0.24em; text-transform: uppercase; color: var(--stamp); }
+#hud .objectives h2, #hud .guide .kicker { display: block; margin: 0 0 0.08rem; padding: 0; border: 0; font: 0.74rem var(--display); letter-spacing: 0.2em; text-transform: uppercase; color: var(--stamp); }
 #hud .objectives ul { display: inline; }
 #hud .objectives li { display: none; }
-#hud .objectives li.current { display: inline; font: italic 1.08rem/1.25 var(--serif); }
+#hud .objectives li.current { display: inline; font: 1.14rem/1.3 var(--serif); }
 #hud .objectives li .mark, #hud .objectives .hint { display: none; }
-#hud .objectives .dist, #hud .guide .dist { margin-left: 0.5em; font: 0.86rem var(--type); color: var(--stamp); }
-#hud .guide .text { font: italic 1.08rem/1.25 var(--serif); }
-#hud .objectives .timer { display: flex; justify-content: center; gap: 0.5em; margin: 0.1rem 0 0; padding: 0; border: 0; font: 0.74rem var(--display); letter-spacing: 0.14em; }
+#hud .objectives .rule { display: block; max-width: 30rem; margin: 0.12rem auto 0; font: 0.88rem/1.25 var(--serif); color: var(--stamp-dark); }
+#hud .objectives .rule[hidden] { display: none; }
+#hud .objectives .dist, #hud .guide .dist { margin-left: 0.5em; font: 0.94rem var(--type); color: var(--stamp); white-space: nowrap; }
+#hud .guide .text { font: 1.14rem/1.3 var(--serif); }
+#hud .objectives .timer { display: flex; justify-content: center; align-items: baseline; gap: 0.5em; margin: 0.2rem 0 0; padding: 0.15rem 0 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); font: 0.82rem var(--display); letter-spacing: 0.12em; }
 #hud .objectives .timer[hidden] { display: none; }
-#hud .objectives .timer .clock { font: 0.86rem var(--type); }
+#hud .objectives .timer .clock { font: 1rem var(--type); }
 
 /* ---- the marker over the place ---- */
 #hud .goalmark { position: absolute; left: 0; top: 0; width: 8rem; margin: -2.3rem 0 0 -4rem; display: flex; flex-direction: column; align-items: center; pointer-events: none; color: var(--ink); text-shadow: var(--halo); will-change: transform; }
@@ -281,8 +297,9 @@ body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
 #hud .goalmark .arrow { display: none; width: 1.7rem; height: 1.7rem; fill: var(--stamp); filter: var(--halo-svg); transform: rotate(var(--turn, 0rad)); }
 #hud .goalmark.off .arrow { display: block; }
 #hud .goalmark.off .flag { display: none; }
-#hud .goalmark .label { font: 0.7rem var(--display); letter-spacing: 0.14em; }
-#hud .goalmark .mdist { font: italic 0.8rem var(--serif); }
+#hud .goalmark .label, #hud .goalmark .mdist { padding: 0 0.4rem; background: var(--slip); box-shadow: var(--slip-edge); text-shadow: none; }
+#hud .goalmark .label { margin-top: 0.1rem; font: 0.76rem/1.3 var(--display); letter-spacing: 0.12em; border-radius: 2px 2px 0 0; }
+#hud .goalmark .mdist { font: 0.84rem/1.3 var(--type); border-radius: 0 0 2px 2px; }
 
 /* ---- the heading strip: the reading and the ticks; the places are small marks on the line, only the goal in red (its name and distance are the line's) ---- */
 #hud .compass .mark { top: 0.15rem !important; padding: 0; transform: translateX(-50%); opacity: 0.6; }
@@ -352,16 +369,63 @@ html .pause .dispatches ol { margin: 0.3rem 0 0; padding-left: 1.1rem; max-heigh
 #hud .goalmark.quiet .label, #hud .goalmark.quiet .mdist { display: none; } /* D-074: over a person whose plate is up: the flag alone */
 
 /* ---- D-084: the casualty column (the gazette), down the left in print, and the Society's request under the line ---- */
-#hud .gazette { position: absolute; left: calc(var(--edge-l) + 0.3rem); top: 36%; width: min(23rem, 40vw); display: flex; flex-direction: column; gap: 0.32rem; pointer-events: none; color: var(--ink); text-shadow: var(--halo); }
+#hud .gazette { position: absolute; left: calc(var(--edge-l) + 0.3rem); top: 36%; width: min(23rem, 40vw); display: flex; flex-direction: column; align-items: flex-start; gap: 0.32rem; pointer-events: none; color: var(--ink); }
 #hud .gazette[hidden] { display: none; }
-#hud .gazette .line { margin: 0; font: italic 0.9rem/1.25 var(--serif); animation: gazetteIn 0.35s ease-out; transition: opacity 0.5s; }
+#hud .gazette .line { margin: 0; padding: 0.16rem 0.6rem 0.2rem; font: 0.92rem/1.28 var(--serif); background: var(--slip); box-shadow: var(--slip-edge); border-radius: 2px; animation: gazetteIn 0.35s ease-out; transition: opacity 0.5s; } /* (D-086: a cutting, not ink on the picture) */
 #hud .gazette .line::before { content: "\2020\00a0"; color: var(--stamp); font-style: normal; }
 #hud .gazette .line.leaving { opacity: 0; }
 @keyframes gazetteIn { from { opacity: 0; transform: translateX(-0.6rem); } }
 @media (prefers-reduced-motion: reduce) { #hud .gazette .line { animation: none; transition: none; } }
 :root[data-motion="reduced"] #hud .gazette .line { animation: none; transition: none; }
 body.touch-ui #hud .gazette { top: 24%; width: min(18rem, 46vw); }
-body.touch-ui #hud .gazette .line { font-size: 0.8rem; }
-#hud .objectives li.request { display: block; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(36rem, 86vw); margin-top: 0.15rem; font: italic 0.8rem/1.2 var(--serif); color: var(--stamp); } /* (under the whole card: the line, its distance and the clock stay together) */
+body.touch-ui #hud .gazette .line { font-size: 0.82rem; }
+#hud .objectives li.request { display: block; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(36rem, 86vw); margin-top: 0.3rem; padding: 0.16rem 0.75rem 0.2rem; font: 0.9rem/1.25 var(--serif); color: var(--ink); background: var(--slip); box-shadow: var(--slip-edge); border-radius: 2px; } /* (its own slip under the card: the line, its distance and the clock stay together) */
+#hud .objectives li.request .text { font-style: normal; }
 #hud .objectives li.request.done .text { text-decoration: none; opacity: 1; }
 #hud .objectives li.request.done .text::after { content: " \2014\00a0met"; font-style: normal; } /* (a hex escape eats the space after it) */
+
+/* ---- D-085: the Illustrated Imperial News: the game's own photograph of a spectacular moment, printed as an engraving at the right ---- */
+#hud .plate { position: absolute; right: calc(var(--edge-r) + 0.4rem); top: 40%; width: min(19rem, 34vw); margin: 0; padding: 0.45rem 0.45rem 0.5rem; background: var(--paper); border: 1px solid var(--ink); box-shadow: 0 0.3rem 0.9rem color-mix(in srgb, var(--ink) 35%, transparent); transform: rotate(1.2deg); pointer-events: none; animation: plateIn 0.45s ease-out; transition: opacity 0.6s, transform 0.6s; }
+#hud .plate[hidden] { display: none; }
+#hud .plate header { margin: 0 0 0.3rem; padding: 0 0 0.15rem; border-bottom: 1px solid var(--ink); font: 0.62rem var(--display); letter-spacing: 0.2em; text-transform: uppercase; text-align: center; color: var(--stamp); }
+#hud .plate img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--ink); filter: sepia(0.85) contrast(1.15) brightness(1.02); }
+#hud .plate figcaption { margin-top: 0.3rem; font: italic 0.78rem/1.25 var(--serif); color: var(--ink); text-align: center; }
+#hud .plate.leaving { opacity: 0; transform: rotate(1.2deg) translateX(1.5rem); }
+@keyframes plateIn { from { opacity: 0; transform: rotate(6deg) translateX(3rem) scale(0.9); } }
+@media (prefers-reduced-motion: reduce) { #hud .plate { animation: none; transition: none; } }
+:root[data-motion="reduced"] #hud .plate { animation: none; transition: none; }
+body.touch-ui #hud .plate { top: 20%; width: min(13rem, 40vw); }
+html .pause .plates[hidden] { display: none; }
+html .pause .plates { margin: 0.2rem 0 0.4rem; text-align: left; font-size: 0.85rem; }
+html .pause .plates summary { cursor: pointer; font-family: var(--display); letter-spacing: 0.1em; color: var(--stamp); }
+html .pause .plate-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.5rem; margin: 0.4rem 0 0; padding: 0; list-style: none; max-height: 16rem; overflow-y: auto; }
+html .pause .plate-list li { display: flex; flex-direction: column; gap: 0.2rem; }
+html .pause .plate-list img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--ink); filter: sepia(0.85) contrast(1.15); }
+html .pause .plate-list .cap { font: italic 0.72rem/1.2 var(--serif); }
+html .pause .plate-list .save { font: 0.7rem var(--display); letter-spacing: 0.08em; color: var(--stamp); }
+
+/* ---- D-086: the pause sheet's rule and the contract's terms in full (how it is won, settled and lost; what fighting does; the how-to paragraph) ---- */
+html .pause .orders .rule { margin: 0.35rem 0 0.1rem; font-size: 0.88rem; line-height: 1.3; color: var(--stamp-dark); }
+html .pause .orders .terms { margin: 0.35rem 0 0; font-size: 0.85rem; }
+html .pause .orders .terms summary { cursor: pointer; font-family: var(--display); letter-spacing: 0.1em; color: var(--stamp); }
+html .pause .orders .terms .howto { margin: 0.35rem 0; line-height: 1.32; }
+html .pause .orders .terms dl { margin: 0.3rem 0 0; }
+html .pause .orders .terms dt { margin-top: 0.3rem; font-family: var(--display); font-size: 0.8rem; letter-spacing: 0.08em; color: var(--ink); }
+html .pause .orders .terms dd { margin: 0.1rem 0 0; }
+html .pause .orders .terms dd ul { margin: 0; padding-left: 1.1rem; line-height: 1.3; }
+/* (the counts in the orders and the prices in a parley: typewriter figures here too, as on the HUD: "(o of 2)" read as letters) */
+html .pause .orders, html .sheet.parley { --serif: "CB Figures", "IM Fell English", "Iowan Old Style", "Palatino Linotype", Georgia, serif; --display: "CB Figures", "IM Fell English SC", "Iowan Old Style", "Palatino Linotype", Georgia, serif; }
+html .pause .orders, html .sheet.parley { font-family: var(--serif); } /* (a font inherits as computed: the variable must be re-read where it is redefined) */
+
+/* ---- D-086: a short screen (a phone on its side): the orders slip keeps every line, at a size that leaves the picture its middle ---- */
+@media (max-height: 520px) {
+  #hud .objectives, #hud .guide { padding: 0.16rem 0.7rem 0.2rem; max-width: min(30rem, 66vw); }
+  #hud .objectives h2, #hud .guide .kicker { font-size: 0.58rem; margin-bottom: 0; }
+  #hud .objectives li.current, #hud .guide .text { font-size: 0.9rem; line-height: 1.22; }
+  #hud .objectives .dist, #hud .guide .dist { font-size: 0.76rem; }
+  #hud .objectives .rule { font-size: 0.72rem; line-height: 1.2; margin-top: 0.05rem; }
+  #hud .objectives .timer { font-size: 0.62rem; margin-top: 0.1rem; padding-top: 0.08rem; }
+  #hud .objectives .timer .clock { font-size: 0.78rem; }
+  #hud .objectives li.request { font-size: 0.72rem; padding: 0.08rem 0.55rem 0.1rem; margin-top: 0.2rem; max-width: min(30rem, 72vw); }
+  #hud .gazette .line { font-size: 0.76rem; padding: 0.1rem 0.45rem; }
+}

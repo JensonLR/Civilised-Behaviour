@@ -79,6 +79,13 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect(burned.s.resolution).toBe("post_burned");
     expect(burned.commits).toBe(1);
     expect(said(burned.fx)).toMatch(/stores go up/);
+    // D-086: a raider who ran back out of the yard is no longer in it (he was, for good, and his torch kept the clock running with nobody in the yard)
+    const fled = drive([arrive(0), arrive(1), ...ticks(RAID.torchS - 3), { t: "actor", id: "raider-1", state: "left" }, ...ticks(10)], at);
+    expect(fled.s.phase, "the clock stops when one of the pair runs out").not.toBe("resolved");
+    expect(fled.s.inYard).toEqual(["raider-0"]);
+    const back = drive([arrive(1), ...ticks(RAID.torchS + 1)], fled.s);
+    expect(back.s.resolution, "and starts again when he comes back").toBe("post_burned");
+    expect(def.observe.actors.filter((a) => a.id.startsWith("raider-")).every((a) => a.leaves === true)).toBe(true);
   });
 
   it("post_held: the raiders broken (70% down or routed) ends it, whatever the yard", () => {
@@ -124,7 +131,7 @@ describe("the Raid on the Post (D-045): the reducer", () => {
     expect(R.s.crew.total).toBe(RAID.raiders + RAID.extraRaiders);
     // the tracker names how many it takes AND how many came (the browser look read "Break the raiders (0 of 5)" with seven ashore)
     const fighting = drive([...ticks(R.s.raidAt + 1), { t: "hostile", at: "late:raiders" }], R.s).s;
-    expect(def.view(fighting, 0).objectives.find((o) => o.id === "break")?.text).toBe("Drop or rout 5 of the 7 raiders (0 so far)");
+    expect(def.view(fighting, 0).objectives.find((o) => o.id === "break")?.text).toBe("Drop 5 of the 7 raiders, or send them running (0 so far)");
     expect(def.roster(R.c, R.seed, R.s).filter((p) => p.group === "late:raiders").length).toBe(RAID.raiders + RAID.extraRaiders);
     expect(by.get("fog")!.s.raidAt).toBeGreaterThanOrEqual(RAID.raidMin + RAID.fogRaid);
     const wet = drive([...ticks(by.get("rain")!.s.raidAt + 1), { t: "hostile", at: "late:raiders" }, arrive(0), arrive(1), ...ticks(RAID.torchS + 2)], by.get("rain")!.s);

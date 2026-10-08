@@ -89,6 +89,9 @@ recruitment. Decorated by campaign history. Newspaper = satirical imperial propa
 ### Tone
 Comedy from physics, mistakes, institutional absurdity, propaganda, competing incentives, ridiculous people, unexpected consequences.
 "A disastrous retreat becomes a decisive strategic repositioning." Quiet moments so chaos has contrast. No constant quips.
+The Empire is London's and glories in itself (D-085): Britannia, Pall Mall, the Union Jack, "By Appointment to Her Majesty". The glory is always the
+joke (pompous, broke, bureaucratic, proud of all three); the peoples abroad are invented and never the punchline. Made to be clipped: spectacle the
+game itself notices and celebrates (the casualty column, the Society's requests, the Butcher's Bill), so a streamer's best moment is announced.
 
 ## 6. Presentation
 Stylised high-contrast miniature world: strong silhouettes, dramatic sun, atmospheric fog, rich sky, tactile clay-like

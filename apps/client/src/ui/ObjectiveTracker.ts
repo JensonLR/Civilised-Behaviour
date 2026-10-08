@@ -1,4 +1,5 @@
 import type { ScenarioView } from "@cb/shared";
+import { fillPrompt } from "../input/glyphDom.ts";
 import { typeset } from "./typeset.ts";
 import "./objectiveTracker.css";
 
@@ -14,6 +15,9 @@ export function currentObjective(view: ScenarioView | undefined): { id: string; 
   const any = main ?? view.objectives.find((o) => !o.done);
   return any ? { id: String(any.id), text: String(any.text) } : undefined;
 }
+
+/** D-086: the server writes the control as "(Use)"; the card shows the key of the device in hand (the prompt token), redrawn when the device changes. */
+export const withKeys = (text: string): string => text.replace(/\(Use\)/g, "({interact})");
 
 /** The card's heading before a contract names itself (and for an old server that sends no title). */
 export const DEFAULT_TITLE = "Orders of the Day";
@@ -35,6 +39,7 @@ export class ObjectiveTracker {
   private readonly clock: HTMLElement;
   private readonly rows = new Map<string, HTMLLIElement>();
   private readonly dist: HTMLElement;
+  private readonly rule: HTMLElement;
   private endsAt = 0;
 
   constructor(parent: HTMLElement) {
@@ -60,7 +65,11 @@ export class ObjectiveTracker {
     this.timer.append(this.label, this.clock);
     this.dist = document.createElement("span");
     this.dist.className = "dist";
-    this.root.append(h, this.list, this.dist, this.hint, this.timer);
+    // D-086: the contract's one rule that matters ("Hold your fire: ..."), while it still applies
+    this.rule = document.createElement("p");
+    this.rule.className = "rule";
+    this.rule.hidden = true;
+    this.root.append(h, this.list, this.dist, this.rule, this.hint, this.timer);
     parent.appendChild(this.root);
   }
 
@@ -106,8 +115,7 @@ export class ObjectiveTracker {
       const text = li.children[2] as HTMLElement;
       const srText = `${o.done ? "Done. " : ""}${o.optional ? "Optional. " : ""}`;
       if (sr.textContent !== srText) sr.textContent = srText;
-      const t = String(o.text);
-      if (text.textContent !== t) text.textContent = t;
+      fillPrompt(text, withKeys(String(o.text))); // (text from the wire, set as text nodes; only "(Use)" becomes a key glyph)
       // keep the list in the server's order without rebuilding rows that did not move
       const want = prev ? prev.nextElementSibling : this.list.firstElementChild;
       if (want !== li) this.list.insertBefore(li, want);
@@ -119,6 +127,9 @@ export class ObjectiveTracker {
         this.rows.delete(id);
       }
     }
+    const rule = typeset(String(view.rule ?? "")).slice(0, 200);
+    if (this.rule.textContent !== rule) this.rule.textContent = rule;
+    this.rule.hidden = rule === "";
     const hint = typeset(String(view.hint ?? ""));
     if (this.hint.textContent !== hint) this.hint.textContent = hint;
     this.hint.hidden = hint === "";

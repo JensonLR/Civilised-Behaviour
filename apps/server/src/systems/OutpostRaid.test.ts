@@ -59,6 +59,26 @@ describe("the runner: The Raid on the Post", () => {
     expect(f.commits[0]).toMatchObject({ resolution: "post_burned" });
   });
 
+  it("D-086: a raider who reached the yard and then ran back out of it is no longer in it: the torch clock stops, and starts again if he comes back", () => {
+    const { f, s } = newRun();
+    land(f, s);
+    run(f, s, RAID.demandS + 1);
+    const rs = raiders(f);
+    walkIn(f, rs.slice(0, 2));
+    run(f, s, RAID.torchS - 5);
+    expect(lastView(f).timerLabel).toBe("The stores catch");
+    // one of the pair runs (routed, fleeing): well out of the yard, past the margin
+    const fled = f.players.get(rs[1]!)!;
+    fled.x = S.x + RAID.yardR + 6;
+    run(f, s, 12);
+    expect(f.commits, "the stores stand while only one raider is in the yard").toHaveLength(0);
+    expect(lastView(f).objectives.find((o) => o.id === "yard")?.text).toMatch(/\(1 inside\)/);
+    walkIn(f, [rs[1]!]);
+    run(f, s, RAID.torchS + 2);
+    expect(f.commits).toHaveLength(1);
+    expect(f.commits[0]).toMatchObject({ resolution: "post_burned" });
+  });
+
   it("post_held: the party drops one of the pair before the torches catch, then breaks the rest; the stores stand", () => {
     const { f, s } = newRun();
     land(f, s);

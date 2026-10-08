@@ -83,6 +83,8 @@ export interface ObjectiveView { id: string; text: string; done: boolean; option
 export interface ScenarioView {
   phase: ScenarioPhase; objectives: ObjectiveView[]; hint: string; timerLabel: string; endsAtWorldMs: number; resolution?: ResolutionId;   // endsAtWorldMs 0 = no timer
   template: ScenarioTemplateId; title: string; complication?: ComplicationId;
+  /** D-086: the contract's one rule that matters, while it still applies ("Hold your fire: ..."); absent once it no longer can be broken, or where there is none. */
+  rule?: string;
 }
 export type ScenarioEvent =
   | { t: "tick"; dt: number } | { t: "arrive"; party: number } | { t: "parley_open" } | { t: "parley_close" }
@@ -92,7 +94,7 @@ export type ScenarioEvent =
   // ---- D-034 templates: everything below is something the SERVER observed (clients send none of it) ----
   | { t: "near"; at: string; party: number } | { t: "use"; target: string; slot: number }
   | { t: "count"; group: string; alive: number; routed: number; down: number; total: number } | { t: "seen"; group: string } | { t: "noise"; level: number }
-  | { t: "prop"; what: "delivered" | "destroyed" | "seized"; at: string; n: number } | { t: "actor"; id: string; state: "down" | "free" | "arrived" } | { t: "leave" }
+  | { t: "prop"; what: "delivered" | "destroyed" | "seized"; at: string; n: number } | { t: "actor"; id: string; state: "down" | "free" | "arrived" | "left" /* (D-086: only for an actor whose spec `leaves`) */ } | { t: "leave" }
   | { t: "talk"; kind: ParleyKind; result: TalkResult; paid: number };
 /** Who a site parley is with. "warden" is the crossing's (negotiation.ts); the rest are authored in scenarios/parleys.ts. */
 export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_post" | "chamberlain" | "claimant_elder" | "claimant_younger"   // D-036: Highmark's

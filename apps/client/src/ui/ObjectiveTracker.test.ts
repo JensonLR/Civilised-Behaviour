@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ScenarioView } from "@cb/shared";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ObjectiveTracker, URGENT_SECONDS, formatTimer, DEFAULT_TITLE } from "./ObjectiveTracker.ts";
+import { ObjectiveTracker, URGENT_SECONDS, formatTimer, DEFAULT_TITLE, withKeys } from "./ObjectiveTracker.ts";
+import { promptPlain } from "../input/glyphDom.ts";
 import { newCampaign } from "@cb/shared";
 import { TEMPLATES, TEMPLATE_IDS } from "@cb/shared";
 
@@ -162,8 +163,12 @@ describe("stylesheet", () => {
         expect(host.querySelector("h2")!.textContent, id).toBe(def.title);
         const rows = [...host.querySelectorAll("li")];
         expect(rows.length, id).toBe(v.objectives.length);
-        expect(rows.map((r) => r.querySelector(".text")!.textContent)).toEqual(v.objectives.map((o) => o.text));
+        // (D-086: the server's "(Use)" is the key of the device in hand)
+        expect(rows.map((r) => r.querySelector(".text")!.textContent)).toEqual(v.objectives.map((o) => promptPlain(withKeys(o.text))));
         expect(host.querySelector(".hint")!.textContent, id).toBe(typeset(v.hint)); // (printer's quotes, D-040)
+        const rule = host.querySelector<HTMLElement>(".rule")!;
+        expect(rule.hidden, `${id}: the rule shows while it applies`).toBe(v.rule === undefined);
+        if (v.rule) expect(rule.textContent, id).toBe(typeset(v.rule));
         expect(t.visibleOrders).toBe(v.phase);
         t.tick(6_000);
       }

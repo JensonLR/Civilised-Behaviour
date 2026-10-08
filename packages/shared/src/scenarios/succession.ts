@@ -10,6 +10,7 @@ import { COMPLICATION_HINT, dealComplication } from "../chaos.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * SUCCESSION DISPUTE, "The Vacant Chair" (D-036, Highmark; docs/_notes/ship.md section 2). The King has been "pending" for six years. Two heirs (Princess Orla "by Seniority", Prince
@@ -357,7 +358,7 @@ function leave(s: SuccessionState): ReturnType<TemplateDef<SuccessionState>["lea
 
 const HINT: Record<string, string> = {
   approach: "Highmark's court sits at the top of five terraces, up a switchback road that exists to give petitioners time to reconsider. The King has been pending for six years; the chair is vacant in a procedural sense. Walk up to the Chamberlain's Window.",
-  waiting: "The court is open and the chair is not. Four things move it: the Chamberlain's Form 11, each heir's price (or a regency), a barrel of grain for each of the Reapers' three delegates, and the Syndicate envoy's cheque. The Assembly votes at the harvest bell.",
+  waiting: "The court is open and the chair is not. Four things move it: the Chamberlain's Form 11, each heir's price (or a regency), a barrel of grain (any barrel from the quay or the drovers' camp) for two of the Reapers' three delegates, and the Syndicate envoy's cheque. The Assembly votes at the harvest bell; the Syndicate buys the chair a little after it.",
   parley: "They are listening. Mind what you promise; the court minutes everything, and the minutes outlive both heirs.",
   fighting: "The guard has been drawn. Break it, and then there is only the chair, and a great deal of explaining.",
   tension: "The harvest bell has rung. The Assembly will ratify whatever it has been persuaded of; if it has been persuaded of nothing, the Syndicate's cheque will be cashed by default.",
@@ -378,17 +379,18 @@ const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
 
 function view(s: SuccessionState, now: number): ScenarioView {
   const res = s.resolution;
-  const won = res !== undefined && res !== "abandoned";
+  const sold = res === "crown_sold" && s.cheque === "taken";
+  const won = res !== undefined && res !== "abandoned" && (res !== "crown_sold" || sold);
   const v3 = votes(s);
   const objectives: ObjectiveView[] = [
     { id: "court", text: "Climb the Processional Road to the court", done: s.near.court > 0 || s.phase !== "approach" },
     { id: "form", text: s.form === "pending" ? "Form 11 is with the Stamp" : "Get the Chamberlain's Form 11 filed (or expedited)", done: formOk(s), optional: true },
     { id: "heir", text: s.heir.elder === "regency" && s.heir.younger === "regency" ? "A regency: three signatures" : s.heir.elder === "pledged" ? "Princess Orla is pledged the chair" : s.heir.younger === "pledged" ? "Prince Dunstan is pledged the chair" : "Back an heir, or talk both heirs into a regency", done: s.heir.elder === "pledged" || s.heir.younger === "pledged" || (s.heir.elder === "regency" && s.heir.younger === "regency"), optional: true },
-    { id: "grange", text: `Carry a barrel of grain to each delegate (${Math.min(v3, 3)} of ${Math.max(SUCCESSION.votesToRatify, present(s))})`, done: v3 >= SUCCESSION.votesToRatify, optional: true },
-    { id: "chair", text: res === "abandoned" ? "Lost: the expedition went down" : res === "crown_sold" ? "Settled: the Crown was sold" : "Settle who sits the Vacant Chair before the bell", done: won },
+    { id: "grange", text: `Feed the delegates a barrel of grain each (${Math.min(v3, SUCCESSION.votesToRatify)} of ${SUCCESSION.votesToRatify} needed)`, done: v3 >= SUCCESSION.votesToRatify, optional: true },
+    { id: "chair", text: res === "abandoned" ? "Lost: the expedition went down" : res === "crown_sold" ? (sold ? "Settled: you sold the chair to the Syndicate" : "Lost: nothing was settled, so the Syndicate bought the chair") : "Have the court seat a ruler when the harvest bell rings", done: won },
   ];
-  if (s.cheque !== "none") objectives.push({ id: "cheque", text: s.cheque === "taken" ? "The Syndicate's cheque is in your pocket" : "Take the envoy's cheque, or leave it on the table", done: s.cheque === "taken", optional: true });
-  if (s.hostile && res === undefined) objectives.push({ id: "break", text: `Down or rout the court guard (${Math.min(Math.ceil(s.guards.total * SUCCESSION.brokenFraction), broken(s))} of ${Math.ceil(s.guards.total * SUCCESSION.brokenFraction)})`, done: guardBroken(s), optional: true });
+  if (s.cheque !== "none") objectives.push({ id: "cheque", text: s.cheque === "taken" ? "The Syndicate's cheque is in your pocket" : "Take the envoy's cheque (with Form 11 filed, it sells the chair), or leave it", done: s.cheque === "taken", optional: true });
+  if (s.hostile && res === undefined) objectives.push({ id: "break", text: `Drop the court guard or send them running (${Math.min(Math.ceil(s.guards.total * SUCCESSION.brokenFraction), broken(s))} of ${Math.ceil(s.guards.total * SUCCESSION.brokenFraction)})`, done: guardBroken(s), optional: true });
   if (s.hostile && guardBroken(s) && res === undefined) objectives.push({ id: "sit", text: "Sit somebody in the Vacant Chair (Use)", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the Reed Landing", done: false });
 
@@ -397,7 +399,7 @@ function view(s: SuccessionState, now: number): ScenarioView {
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const remain = res !== undefined ? 0 : !s.bellRung ? s.bell - s.t : s.bell + s.grace - s.t;
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(!s.bellRung ? "The harvest bell" : "The Syndicate buys the chair", remain, now), template: "succession_dispute", title: "The Vacant Chair" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(!s.bellRung ? "The harvest bell" : "The Syndicate buys the chair", remain, now), template: "succession_dispute", title: "The Vacant Chair", ...ruleWhile("succession_dispute", res === undefined && !s.hostile) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;

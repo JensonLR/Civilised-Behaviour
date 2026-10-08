@@ -11,6 +11,7 @@ import { WEAPON } from "../weapons.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * VESPER GORGE "The Lower Gallery" (D-037, package C3; docs/_notes/regions34.md section 3, docs/_notes/vesper.md). The mine rescue: eleven miners behind a rock fall, a foreman with a schedule, the Low
@@ -280,7 +281,7 @@ function leave(s: MineState): ReturnType<TemplateDef<MineState>["leave"]> {
 
 const HINT: Record<string, string> = {
   approach: "The Lower Gallery is at the head of the gorge, behind a fall of rock the Company calls a schedule variance. Eleven men are on the other side. Walk up the ore road.",
-  waiting: "The fall is shored with pit-props from the Company's yard (carry a crate to it) and dug by hand (Use at the fall with empty hands, over and over). The foreman has a schedule and the Guild has a bill. A barrel of powder by the magazine is faster, and rather louder.",
+  waiting: "The fall is shored with pit-props from the Company's yard (carry a crate to it) and dug by hand (Use at the fall with empty hands, over and over). The foreman has a schedule and the Guild has a bill. A barrel of powder by the magazine, carried to the fall, is faster, rather louder, and not kind to the men behind it.",
   parley: "They are listening. Mind what you promise; the Company minutes everything and the Guild minutes the minutes.",
   rigging: "The fuse is lit. Whatever else you meant to do at the fall, you now mean to do it somewhere else.",
   fighting: "The yard has taken sides. The foreman and the choir have run for it, and the fall is still a fall.",
@@ -304,12 +305,12 @@ function view(s: MineState, now: number): ScenarioView {
     { id: "approach", text: "Walk up the ore road to the Lower Gallery", done: s.near.fall > 0 || s.phase !== "approach" },
     { id: "timber", text: `Shore the fall: carry timber crates to it (${Math.min(s.timber, MINE.timberNeed)} of ${MINE.timberNeed})`, done: s.timber >= MINE.timberNeed, optional: true },
     { id: "dig", text: `Dig at the fall by hand, empty-handed (${Math.floor(s.dig)}%)`, done: s.dig >= 100, optional: true },
-    { id: "foreman", text: s.bought ? "The foreman's schedule has been revised" : s.form === "filed" ? "The Variance Form is stamped" : s.form === "pending" ? "The Variance Form is with the Stamp" : "Stop the foreman's clock: pay, or file a Variance Form", done: s.bought || s.form === "filed", optional: true },
-    { id: "guild", text: s.vigil ? "The choir keeps its vigil at the fall" : `Hear the Dirge-Master's bill (£${s.price.bill}), if you must`, done: s.vigil || res === "consecrated", optional: true },
-    { id: "miners", text: `Eleven miners behind the fall: get them out (${Math.max(0, s.miners.total - dead(s))} alive)`, done: freed },
+    { id: "foreman", text: s.bought ? "The foreman's schedule has been revised" : s.form === "filed" ? "The Variance Form is stamped" : s.form === "pending" ? "The Variance Form is with the Stamp" : "Stop the seal clock: pay the foreman or file a Variance Form", done: s.bought || s.form === "filed", optional: true },
+    { id: "guild", text: s.vigil ? "The choir keeps its vigil at the fall" : `Ask the Guild for a vigil. Its £${s.price.bill} bill buries the miners`, done: s.vigil, optional: true },
+    { id: "miners", text: res === "sealed" ? "Lost: the Company sealed the gallery" : res === "consecrated" ? "Lost: the Guild consecrated the gallery" : res === "abandoned" ? "Lost: the expedition went down" : `Eleven miners behind the fall: get them out (${Math.max(0, s.miners.total - dead(s))} alive)`, done: freed },
   ];
   if (s.keg !== "none" && res === undefined) objectives.push({ id: "keg", text: s.keg === "set" ? "The keg is lit. Get clear." : "The powder has gone off", done: s.keg === "fired", optional: true });
-  if (s.hostile && res === undefined) objectives.push({ id: "peace", text: "The yard has scattered; the fall is still there", done: false, optional: true });
+  if (s.hostile && res === undefined) objectives.push({ id: "peace", text: "The foreman and Guild have fled; keep shoring and digging", done: false, optional: true });
   if (res !== undefined) objectives.push({ id: "home", text: "Take the ore barge home from Staithe Landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked.foreman) hint += ` (The foreman's schedule seals at ${Math.round(s.sealAt)} seconds unless somebody pays for it.)`;
@@ -320,7 +321,7 @@ function view(s: MineState, now: number): ScenarioView {
   const remainAir = s.airOut - s.t;
   const remain = res !== undefined ? 0 : Math.min(remainSeal, remainAir);
   const label = remainSeal <= remainAir ? "The Company seals the gallery" : "Air in the gallery";
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(label, remain, now), template: "mine_rescue", title: "The Lower Gallery" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(label, remain, now), template: "mine_rescue", title: "The Lower Gallery", ...ruleWhile("mine_rescue", res === undefined && !s.hostile) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -376,7 +377,7 @@ const observe: ObserveSpec = {
 
 export const mineRescueTemplate: TemplateDef<MineState> = {
   id: "mine_rescue", title: "The Lower Gallery",
-  brief: "Eleven miners are behind a fall in the Lower Gallery, entered in the Company's books as a schedule variance. The foreman means to seal it on time; the Lamentation Guild has a choir standing by and an invoice for every outcome. Shore the fall and dig them out by hand, blast through with the Company's powder, buy off the foreman's schedule, or let the Company and the Guild divide the afternoon.",
+  brief: "Eleven miners are behind a fall in the Lower Gallery, entered in the Company's books as a schedule variance. The foreman means to seal it on time; the Lamentation Guild has a choir standing by and an invoice for every outcome. Shore the fall and dig them out by hand, blast through with the Company's powder, and keep the foreman's schedule and the Guild's invoice off the miners for long enough to do it.",
   init, reduce, view, outcome, roster, leave, observe,
   props: [...VESPER_STOCK.timber.map((p, i) => ({ id: `timber${i}`, kind: PropKind.CRATE as number, x: p.x, z: p.z })), { id: "keg", kind: PropKind.BARREL as number, x: VESPER_STOCK.keg.x, z: VESPER_STOCK.keg.z }],
   sites: { blast: VESPER_STOCK.blast, fall: VESPER_STOCK.dig, adit: VESPER_ANCHORS.adit },

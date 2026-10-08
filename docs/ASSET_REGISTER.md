@@ -35,7 +35,7 @@ Colyseus (MIT), @colyseus/schema (MIT).
 |---------|------|-----|--------|
 | `@fontsource/im-fell-english` 5.x | IM Fell English (regular + italic) | body text, inputs | Igino Marini's IM Fell types (digitisation of the Fell Types), via Fontsource |
 | `@fontsource/im-fell-english-sc` 5.x | IM Fell English SC | labels, buttons, headings | same |
-| `@fontsource/special-elite` 5.x | Special Elite | expedition codes, telegrams | Astigmatic, via Fontsource |
+| `@fontsource/special-elite` 5.x | Special Elite | expedition codes, telegrams; the HUD's figures (D-086: the same latin woff2 registered at runtime as "CB Figures" for the digits only) | Astigmatic, via Fontsource |
 Only the Latin subsets are imported (`apps/client/src/main.ts`). The earlier "system serif stack, no web fonts" note no longer applies.
 
 The Society's seal (D-053, 2026-10-03): the game's logo and icon set. No external asset: drawn as SVG by code (`packages/shared/src/emblem.ts`) in palette colours only, and

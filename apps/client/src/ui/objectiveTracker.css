@@ -12,6 +12,10 @@
 .objectives .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .objectives .hint { margin: 0.45rem 0 0; font-size: 0.82rem; opacity: 0.85; border-top: 1px dotted var(--ink); padding-top: 0.35rem; }
 .objectives .hint[hidden] { display: none; }
+/* D-086: the contract's one rule (what fighting does here), in the stamp's red */
+.objectives .rule { margin: 0.35rem 0 0; font-size: 0.84rem; line-height: 1.25; color: var(--stamp-dark); }
+.objectives .rule[hidden] { display: none; }
+.objectives li .text .glyph { font-size: 0.82em; vertical-align: 0.05em; }
 .objectives .timer { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-top: 0.45rem; padding: 0.15rem 0.45rem; font-family: var(--type); font-size: 0.85rem; color: var(--text); background: var(--leather); }
 .objectives .timer[hidden] { display: none; }
 .objectives .timer .label { letter-spacing: 0.06em; }

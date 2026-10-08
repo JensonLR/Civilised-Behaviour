@@ -1216,7 +1216,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const template = this.forcedTemplate ?? pickTemplate(this.campaign, id, this.state.seed, rivalPresence(this.campaign, this.powers));
     if (template === undefined) return;
     this.scenario = new Scenario(this.scenarioHost(), template);
-    this.mayhem.begin(this.state.seed, this.campaign.day, template, this.campaign.sites.lastBill?.request);
+    this.mayhem.begin(this.state.seed, this.campaign.day, template, this.campaign.sites.lastBill?.request, this.scenario.kegsInReach);
     this.scenario.start();
     this.incidents.begin(template);
     this.deeds.clear(); // (honours count from a contract's start: D-055)
@@ -1291,7 +1291,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const pay = remit(c, o);
     c = pay.c;
     // D-084: the spectacle, and the learned body's commission: paid into the same purse, kept for the paper
-    const m = this.mayhem.settle({ resolution: o.resolution, seconds: o.seconds });
+    const m = this.mayhem.settle({ resolution: o.resolution, seconds: o.seconds, loot: o.loot });
     const bonus = m.reward + m.spectacle;
     c = { ...c, purse: Math.round(Math.min(99999, Math.max(0, c.purse + bonus))), sites: { ...c.sites, lastBill: { day: c.day, region: this.state.region as RegionId, bill: m.bill, request: m.request, met: m.met, spectacle: m.spectacle } } };
     // D-045: a Raid on the Post was the Syndicate's raid, played: it is spent before the rival's days run (so it never lands twice), and the post takes what the ending says

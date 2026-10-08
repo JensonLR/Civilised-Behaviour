@@ -10,6 +10,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * CONVOY AMBUSH, "The Syndicate Wagon". After CONVOY_DEPART_S a Dunmarrow-Vesk wagon (a driver, two guards, three crates) walks KESSAR_SITES.convoy.route
@@ -173,17 +174,17 @@ function view(s: ConvoyState, now: number): ScenarioView {
     { id: "pick", text: "Get to the Dry Cut before the wagon does", done: s.near.cut > 0 || s.departed },
     { id: "stop", text: res === "passed" ? "Lost: the wagon reached the ford" : "Stop the Syndicate wagon before it reaches the ford", done: won },
   ];
-  if (res === undefined && s.hostile) objectives.push({ id: "guards", text: `Down or rout the guards (${s.guards.total - s.guards.alive} of ${s.guards.total})`, done: defeated(s), optional: true });
-  if (res === undefined && defeated(s)) objectives.push({ id: "take", text: "Take the wagon (Use) or put it to the torch", done: false, optional: true });
+  if (res === undefined && s.hostile) objectives.push({ id: "guards", text: `Drop the guards or send them running (${s.guards.total - s.guards.alive} of ${s.guards.total})`, done: defeated(s), optional: true });
+  if (res === undefined && defeated(s)) objectives.push({ id: "take", text: "Search the wagon (Use), or blow a powder keg beside it", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   const HINT: Record<string, string> = {
     planning: "A Dunmarrow-Vesk wagon will leave its camp shortly and walk the south-bank track to the ford. The Society's powder cart is on the way. So is the Dry Cut, which is a very good place for an accident.",
-    waiting: "The wagon is under way. Stop it at the Cut: shoot the guards, light the powder, or tell the Ward's ford post and let them do the paperwork.",
-    fighting: "The ambush is on. Break the guards, then take the wagon, or put it to the torch.",
+    waiting: "The wagon is under way. Stop it at the Cut: shoot the guards, blow a powder keg beside the wagon, or tell the Ward's ford post and let them do the paperwork.",
+    fighting: "The ambush is on. Beat the guards, then search the wagon, or blow a powder keg beside it.",
   };
   const DONE: Record<string, string> = {
     seized: "Wagon seized. The crates are yours until somebody reads the manifest, which in the Society's experience is never. Take the boat home.",
-    tipped_off: "The Ward's pickets cleared the Cut and will take the credit; you will take their gratitude, privately. Nobody on your side fired a shot. Take the boat home.",
+    tipped_off: "The Ward's pickets cleared the Cut and will take the credit; you will take their gratitude, privately. Officially, nobody on your side fired a shot. Take the boat home.",
     burned: "The wagon has been reclassified as a bonfire. Take the boat home before anybody asks who struck the match.",
     passed: "The wagon reached the ford landing. The Syndicate is better armed, and has written to thank you for your restraint. Take the boat home.",
     abandoned: "The expedition is down. The wagon rolls on, at a walking pace, past you. Take the boat home and explain.",
@@ -192,7 +193,7 @@ function view(s: ConvoyState, now: number): ScenarioView {
   const ch = COMPLICATION_HINT[s.complication];
   if (res === undefined && ch) hint += ` ${ch}`;
   const remain = res !== undefined ? 0 : s.departed ? 0 : CONVOY.departS - s.t;
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer("The wagon leaves camp", remain, now), template: "convoy_ambush", title: "The Syndicate Wagon" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer("The wagon leaves camp", remain, now), template: "convoy_ambush", title: "The Syndicate Wagon", ...ruleWhile("convoy_ambush", res === undefined) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -245,7 +246,7 @@ const observe: ObserveSpec = {
 
 export const convoyTemplate: TemplateDef<ConvoyState> = {
   id: "convoy_ambush", title: "The Syndicate Wagon",
-  brief: "A Syndicate wagon is walking three crates down the south bank to the ford, with two enforcers and a flag for escort. The Society would like the crates not to arrive, and would like even more not to be seen liking it. Ambush it in the Dry Cut, burn it with the Society's own powder, tip off the Ward's ford post and let them do the paperwork, or wave it through.",
+  brief: "A Syndicate wagon is walking three crates down the south bank to the ford, with two enforcers and a flag for escort. The Society would like the crates not to arrive, and would like even more not to be seen liking it. Ambush it in the Dry Cut, blow it up with the Society's own powder, or tip off the Ward's ford post and let them do the paperwork. If it reaches the ford, the Syndicate will write to thank you.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { convoy: route, patrol: PATROL_ROUTE },
   wagon: { at: { x: route[0]!.x + 2, z: route[0]!.z, yaw: 0 }, crates: 3, route: "convoy" },

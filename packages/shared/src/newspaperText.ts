@@ -15,10 +15,10 @@ import { VESPER_COPY, VESPER_STORY_HEADS } from "./vesperText.ts";
 export type HeadKey = ResolutionId | "none";
 
 export const MASTHEADS: readonly string[] = [
-  "The Hollowmere Expeditionary Gazette",
-  "The Society Sentinel & Evening Reassurance",
-  "The Hollowmere Bugle of Progress (Revised Daily)",
-  "The Depot Dispatch, Approved for Circulation",
+  "The Imperial Gazette of London & Hollowmere",
+  "The Britannia Sentinel & Evening Reassurance",
+  "The Hollowmere Bugle of Empire (Revised Daily)",
+  "The Depot Dispatch, By Appointment to Her Majesty",
 ];
 
 export const DATELINE_TAIL: readonly string[] = [
