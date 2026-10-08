@@ -3,7 +3,7 @@ import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState,
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, type Lod } from "../flora.ts";
-import { buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
+import { HORIZON, buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
 import { disposeTree } from "../kit.ts";
 import { buildRain } from "../rain.ts";
 import type { Item } from "../scatter.ts";
@@ -136,7 +136,7 @@ export class HighmarkView implements RegionView {
   }
 
   private addHills(): void {
-    const hillGeo = buildHills();
+    const hillGeo = buildHills(HORIZON.highmark); // (its own country: no windmill, no fir woods; see HorizonStyle)
     if (hillGeo.summit) {
       const sm = hillGeo.summit;
       const yaw = Math.atan2(sm.axisZ, sm.axisX);
@@ -153,7 +153,7 @@ export class HighmarkView implements RegionView {
     hills.name = "hills";
     hills.frustumCulled = false;
     range.add(hills);
-    const line = buildTreeLine(hillGeo, this.track(treeLineMaterial(this.hillU)), this.detail.treeLine);
+    const line = buildTreeLine(hillGeo, this.track(treeLineMaterial(this.hillU)), this.detail.treeLine, HORIZON.highmark);
     if (line) {
       for (const m of [line.conifers, line.rounds]) {
         if (m.count === 0) continue;

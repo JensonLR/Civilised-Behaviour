@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ShaderLib } from "three";
-import { setToonLite, toonMaterial } from "./toon.ts";
+import { BoxGeometry, Group, ShaderLib, type ShaderMaterial } from "three";
+import { atmoUniforms } from "./atmosphere.ts";
+import { makeSolid, setToonLite, toonMaterial } from "./toon.ts";
 
 /** Runs a material's shader patch on three's real toon shader source and returns the result. */
 const TOON = ShaderLib.toon!;
@@ -82,6 +83,21 @@ describe("D-077: the camera fade", () => {
     expect(compile(toonMaterial()).fs).not.toContain("uFocus");
     setToonLite(false, 2);
     expect(on.key).not.toBe(compile(toonMaterial({ fade: false })).key);
+  });
+
+  it("an ink hull dissolves with its body: a dithered bush or wall near the lens showed its hull's black inside as a slab across the picture", () => {
+    setToonLite(false, 2);
+    const hullOf = (m: ReturnType<typeof toonMaterial>): ShaderMaterial => makeSolid(new Group(), new BoxGeometry(1, 1, 1), m, { name: "w", outline: true })[1]!.material as ShaderMaterial;
+    const wall = hullOf(toonMaterial());
+    expect(wall.fragmentShader).toContain("uniform vec4 uFocus");
+    expect(wall.fragmentShader).toContain("discard");
+    expect(wall.uniforms.uFocus!.value).toBe(atmoUniforms.uFocus.value); // (one vector: the camera rig sets it once for body and hull)
+    // the hull sits up to an object's depth behind the body face that hides it, so it dissolves that much sooner than the body
+    expect(wall.fragmentShader).toContain("smoothstep(0.35, 1.3, length(toFrag) - 1.5)");
+    // what never fades keeps its ink: the ground, and lite shading
+    expect(hullOf(toonMaterial({ fade: false, wetDark: 1 })).fragmentShader).not.toContain("uFocus");
+    setToonLite(true, 2);
+    expect(hullOf(toonMaterial()).fragmentShader).not.toContain("uFocus");
   });
 });
 

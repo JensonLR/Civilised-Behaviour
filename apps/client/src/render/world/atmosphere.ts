@@ -1,5 +1,6 @@
 import { Color, DataTexture, DataUtils, HalfFloatType, LinearFilter, RedFormat, Vector3, Vector4, type Texture } from "three";
 import type { WeatherKind } from "@cb/shared";
+import { outlineSettings } from "@cb/procedural/three";
 
 /**
  * The state of the air, in one tiny module. `Stage` writes it every frame from the world clock and the weather schedule; other systems
@@ -88,7 +89,7 @@ export const atmoUniforms = {
   /** 0..1 valley mist (dawn, and after rain): ground fog that pools in the hollows (see `toon.ts`). */
   uMist: { value: 0 },
   /** D-077: the third-person camera's subject (xyz: the player's chest; w: 1 in third person, 0 in first): scenery on the line between the lens and the player thins out. Set by `CameraRig`. */
-  uFocus: { value: new Vector4(0, 0, 0, 0) },
+  uFocus: { value: outlineSettings.focus }, // (the same vector the scenery ink reads: a hull dissolves with its body)
   /** D-079: the region's ground height, baked to a texture (`bakeGroundHeights`), and where it lies (x0, z0, size, 1 = present): scenery darkens where it meets the ground. */
   uGround: { value: null as Texture | null },
   uGroundRect: { value: new Vector4(0, 0, 1, 0) },

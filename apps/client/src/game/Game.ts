@@ -238,6 +238,7 @@ export class Game {
     this.props = new PropViews(stage.scene, stage.outlines);
     this.tags = new NameTags(this.tagLayer);
     this.mountView = new MountView(stage.scene, { outline: stage.outlines });
+    this.rig.occluders = this.mountView; // (a wagon or a horse between the lens and the wearer pulls the follow camera in front of it, as a wall does)
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
     this.hud.setCompass(regionMarks(this.builtRegion));
@@ -798,6 +799,7 @@ export class Game {
     }
 
     this.ragdolls?.step(dt);
+    this.mountView.cameraRider = this.session.sessionId; // (your own horse is the one the camera rides over)
     this.mountView.update(dt, this.session.room.state.mounts, this.riderPose);
     this.syncActors(dt);
     this.hitFx.update(dt);

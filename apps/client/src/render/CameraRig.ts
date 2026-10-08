@@ -31,6 +31,26 @@ export interface CameraSettings {
 
 export type ViewMode = "third" | "first";
 
+/** A ray the follow camera casts (from the head toward the lens; `d` unit length, `len` metres) and the nearest hit along it so far (`t`, metres; `len` when clear). */
+export interface CameraRay {
+  ox: number;
+  oy: number;
+  oz: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  len: number;
+  t: number;
+}
+
+/**
+ * Solids that are not the world's colliders but must not come between the lens and the wearer either: the mounts (a wagon parked behind you, a horse at your shoulder).
+ * `cast` lowers `ray.t` to the first one the ray enters. Only the ray object crosses the call, so a frame casts without allocating.
+ */
+export interface CameraOccluders {
+  cast(ray: CameraRay): void;
+}
+
 const UP = { x: 0, y: 1, z: 0 };
 const _bob = { y: 0, side: 0 };
 const _wall = newWorldHit();
@@ -58,6 +78,9 @@ const LENS_FLOOR = 0.12;
 export class CameraRig {
   yaw = 0;
   pitch = 0.32;
+  /** Solids besides the world that the follow camera keeps in front of it (the game sets the mounts' view). */
+  occluders: CameraOccluders | undefined = undefined;
+  private readonly camRay: CameraRay = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 1, len: 0, t: 0 };
   distance = 5.6;
   /** Set by the game each frame: a firearm is in hand (the "ready" view: the follow camera looks down the line with the body to the left of the crosshair, D-040). */
   ready = false;
@@ -256,7 +279,26 @@ export class CameraRig {
     const ex = wx + cosY * LENS_RADIUS * side;
     const ez = wz - sinY * LENS_RADIUS * side;
     const el = Math.hypot(ex, wy, ez);
-    return rayWorld(this.world, hx, hy, hz, ex / el, wy / el, ez / el, el, _wall) ? (_wall.t - AIM.camera.wallClearance) / el : 1;
+    const t = this.firstSolid(hx, hy, hz, ex / el, wy / el, ez / el, el);
+    return t < el ? (t - AIM.camera.wallClearance) / el : 1;
+  }
+
+  /** Metres along the ray to the first solid, the world's or an occluder's (`len` when the way is clear). */
+  private firstSolid(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, len: number): number {
+    const t = rayWorld(this.world, ox, oy, oz, dx, dy, dz, len, _wall) ? _wall.t : len;
+    const occ = this.occluders;
+    if (!occ) return t;
+    const r = this.camRay;
+    r.ox = ox;
+    r.oy = oy;
+    r.oz = oz;
+    r.dx = dx;
+    r.dy = dy;
+    r.dz = dz;
+    r.len = t;
+    r.t = t;
+    occ.cast(r);
+    return r.t;
   }
 
   /**
@@ -315,7 +357,8 @@ export class CameraRig {
         const sx = wx - cosY * slide * side;
         const sz = wz + sinY * slide * side;
         const sl = Math.hypot(sx, wy, sz);
-        if (rayWorld(this.world, hx, hy, hz, sx / sl, wy / sl, sz / sl, sl, _wall)) frac = (_wall.t - AIM.camera.wallClearance) / sl;
+        const st = this.firstSolid(hx, hy, hz, sx / sl, wy / sl, sz / sl, sl);
+        if (st < sl) frac = (st - AIM.camera.wallClearance) / sl;
         this.desired.set(hx + sx, hy + wy, hz + sz);
       }
       if (frac < 1) {

@@ -1,5 +1,5 @@
 import { PALETTE } from "@cb/shared";
-import { BackSide, Color, DataTexture, InstancedMesh, NearestFilter, RedFormat, ShaderLib, ShaderMaterial, UniformsUtils, Vector2 } from "three";
+import { BackSide, Color, DataTexture, InstancedMesh, NearestFilter, RedFormat, ShaderLib, ShaderMaterial, UniformsUtils, Vector2, Vector4 } from "three";
 
 /**
  * Silhouette outline: an inverted hull pushed outward along each vertex's smoothed `onormal` in clip space, so the line
@@ -15,6 +15,8 @@ export const outlineSettings = {
   thickness: 2.2,
   viewport: new Vector2(1280, 720),
   color: new Color(PALETTE.ink),
+  /** The third-person lens's subject (xyz: the player's chest; w: 1 in third person, 0 in first), shared by reference with the scenery's own fade (the client's `uFocus`). */
+  focus: new Vector4(0, 0, 0, 0),
 };
 
 let material: ShaderMaterial | undefined;
@@ -132,7 +134,36 @@ export interface WorldOutlineOptions {
   near?: number;
   far?: number;
   displace?: OutlineDisplace;
+  /**
+   * The body this hull outlines dissolves near the lens and on the line to the player (the client's D-077 scenery fade): the hull must go with it. A hull is drawn from
+   * its back faces, and only the body in front hides them; dither the body away and the hull's far inside shows through as a black slab. So the hull dissolves too, and
+   * sooner: what decides is the body face in FRONT of it, which can be up to an object's depth nearer the lens (see `HULL_FADE`).
+   */
+  fade?: boolean;
 }
+
+/**
+ * The hull's dissolve, matched to the body's (`FADE_BODY` in the client's toon.ts: keep = smoothstep(0.35, 1.3, distance) near the lens, a quarter inside the tunnel
+ * to the player). A hull fragment lies on the far side of its object, `depth` behind the body face that hides it, so its distance is taken that much nearer before the
+ * same ramp; and in the tunnel it goes entirely (a quarter of its pixels would show as black dots through the body's holes). The ink of things in the last metres
+ * before the lens is the price: they are dissolving anyway.
+ */
+const HULL_FADE = /* glsl */ `
+  {
+    vec3 toFrag = vWPos - cameraPosition;
+    float keep = mix(1.0, smoothstep(0.35, 1.3, length(toFrag) - 1.5), uFocus.w);
+    if (uFocus.w > 0.5) {
+      vec3 ab = uFocus.xyz - cameraPosition;
+      float L = length(ab);
+      vec3 dir = ab / max(L, 1e-3);
+      float t = dot(toFrag, dir);
+      if (t > 0.0 && t < L - 0.2) keep = min(keep, smoothstep(0.6, 1.3, length(toFrag - dir * t)));
+    }
+    int bi = int(mod(gl_FragCoord.x, 4.0)) + int(mod(gl_FragCoord.y, 4.0)) * 4;
+    float bayer[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    if (keep < 0.999 && keep < (bayer[bi] + 0.5) / 16.0) discard;
+  }
+`;
 
 /** Ink weight classes for scenery: bigger things carry a slightly heavier line, small things a hairline; all are thinner than a character's. */
 export const WORLD_INK = { small: 1.05, medium: 1.45, large: 1.8 } as const;
@@ -148,7 +179,8 @@ const worldMaterials = new Map<string, ShaderMaterial>();
 export function worldOutlineMaterial(o: WorldOutlineOptions): ShaderMaterial {
   const near = o.near ?? 12;
   const far = o.far ?? 0.42;
-  const key = `${o.thickness}|${near}|${far}|${o.displace?.key ?? ""}`;
+  const fade = o.fade === true;
+  const key = `${o.thickness}|${near}|${far}|${o.displace?.key ?? ""}${fade ? "|f" : ""}`;
   const cached = worldMaterials.get(key);
   if (cached) return cached;
   const d = o.displace;
@@ -172,6 +204,7 @@ export function worldOutlineMaterial(o: WorldOutlineOptions): ShaderMaterial {
       uniform float near;
       uniform float far;
       uniform vec2 viewport;
+      ${fade ? "varying vec3 vWPos;" : ""}
       ${d?.header ?? ""}
       void main() {
         vec4 local = vec4(position, 1.0);
@@ -185,6 +218,7 @@ export function worldOutlineMaterial(o: WorldOutlineOptions): ShaderMaterial {
         #endif
         ${d?.apply ?? ""}
         vec4 mvPosition = modelViewMatrix * local;
+        ${fade ? "vWPos = (modelMatrix * local).xyz;" : ""}
         vec4 clip = projectionMatrix * mvPosition;
         vec3 n = normalize(normalMatrix * on);
         vec2 dir = normalize((projectionMatrix * vec4(n, 0.0)).xy + vec2(1e-6));
@@ -195,14 +229,17 @@ export function worldOutlineMaterial(o: WorldOutlineOptions): ShaderMaterial {
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 outlineColor;
+      ${fade ? "uniform vec4 uFocus;\n      varying vec3 vWPos;" : ""}
       #include <fog_pars_fragment>
       void main() {
+        ${fade ? HULL_FADE : ""}
         gl_FragColor = vec4(outlineColor, 1.0);
         #include <fog_fragment>
       }`,
   });
   // Shared by reference (UniformsUtils.merge clones values, which would freeze the wind at t = 0).
   if (d) Object.assign(m.uniforms, d.uniforms);
+  if (fade) m.uniforms.uFocus = { value: outlineSettings.focus };
   m.customProgramCacheKey = (): string => `worldInk${key}`;
   worldMaterials.set(key, m);
   return m;

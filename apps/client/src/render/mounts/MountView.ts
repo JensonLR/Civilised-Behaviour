@@ -2,6 +2,7 @@ import type { Object3D, Scene } from "three";
 import { horseFromSeed } from "@cb/procedural";
 import { HorseAnimator, buildHorse, buildWagon, newRideInput, type HorseRig, type RideInput, type WagonRig } from "@cb/procedural/three";
 import { MOUNT, MOUNT_KIND, MOUNT_PHASE, WAGON } from "@cb/shared";
+import type { CameraOccluders, CameraRay } from "../CameraRig.ts";
 
 /**
  * Draws the room's mounts (`WorldState.mounts`) and gives the rider's figure what it needs to sit one. Horses are drawn from `MountState` when nobody rides them and from the RIDER'S
@@ -46,6 +47,85 @@ export interface MountRows {
 const G_BIT = 1; // FLAG.GROUNDED
 
 const damp = (a: number, b: number, k: number, dt: number): number => a + (b - a) * (1 - Math.exp(-k * dt));
+
+/** A mount's bulk for the follow camera, in its own frame (x right, y up from the ground, z negative forward; a horse's is scaled with the animal). */
+interface Bulk {
+  x: number;
+  y0: number;
+  y1: number;
+  z0: number;
+  z1: number;
+}
+/** The wagon: the bed, the rack and the furled tilt on it, the cask on the near side (the tongue is thin enough to see past). */
+export const WAGON_BULK: Bulk = { x: 1.08, y0: 0, y1: 1.92, z0: -1.22, z1: 1.62 };
+/** A horse: the barrel and the quarters, from the knees up to the withers (the neck and head are left out: a lens may look past them). */
+export const HORSE_BULK: Bulk = { x: 0.42, y0: 0.3, y1: 1.3, z0: -1.0, z1: 1.05 };
+
+/**
+ * Lowers `ray.t` to where the ray enters `b` placed at `root` (its position, yaw and scale). A box the ray STARTS inside is not a wall to it (the head of someone standing in the
+ * wagon's bed). Slab test in the box's own frame; only pointers cross the call.
+ */
+export function castBulk(ray: CameraRay, root: Object3D, b: Bulk): void {
+  const k = root.scale.x;
+  const f = root.rotation.y;
+  const c = Math.cos(f);
+  const s = Math.sin(f);
+  const px = ray.ox - root.position.x;
+  const py = ray.oy - root.position.y;
+  const pz = ray.oz - root.position.z;
+  const ox = (c * px - s * pz) / k;
+  const oz = (s * px + c * pz) / k;
+  const oy = py / k;
+  const dx = c * ray.dx - s * ray.dz;
+  const dz = s * ray.dx + c * ray.dz;
+  const dy = ray.dy;
+  if (ox > -b.x && ox < b.x && oy > b.y0 && oy < b.y1 && oz > b.z0 && oz < b.z1) return;
+  let enter = 0;
+  let exit = ray.t / k;
+  // x
+  if (Math.abs(dx) < 1e-9) {
+    if (ox < -b.x || ox > b.x) return;
+  } else {
+    let a = (-b.x - ox) / dx;
+    let e = (b.x - ox) / dx;
+    if (a > e) {
+      const tmp = a;
+      a = e;
+      e = tmp;
+    }
+    if (a > enter) enter = a;
+    if (e < exit) exit = e;
+  }
+  // y
+  if (Math.abs(dy) < 1e-9) {
+    if (oy < b.y0 || oy > b.y1) return;
+  } else {
+    let a = (b.y0 - oy) / dy;
+    let e = (b.y1 - oy) / dy;
+    if (a > e) {
+      const tmp = a;
+      a = e;
+      e = tmp;
+    }
+    if (a > enter) enter = a;
+    if (e < exit) exit = e;
+  }
+  // z
+  if (Math.abs(dz) < 1e-9) {
+    if (oz < b.z0 || oz > b.z1) return;
+  } else {
+    let a = (b.z0 - oz) / dz;
+    let e = (b.z1 - oz) / dz;
+    if (a > e) {
+      const tmp = a;
+      a = e;
+      e = tmp;
+    }
+    if (a > enter) enter = a;
+    if (e < exit) exit = e;
+  }
+  if (enter <= exit && enter * k < ray.t) ray.t = enter * k;
+}
 const wrap = (a: number): number => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 
 interface HorseView {
@@ -82,7 +162,10 @@ export interface MountViewOptions {
   outline?: boolean;
 }
 
-export class MountView {
+export class MountView implements CameraOccluders {
+  /** The local player: the horse they ride is the one solid the follow camera never stops at (it sits over its rump). */
+  cameraRider = "";
+  private castRay: CameraRay | undefined;
   private readonly horses = new Map<string, HorseView>();
   private readonly wagons = new Map<string, WagonView>();
   private readonly byRider = new Map<string, HorseView>();
@@ -94,6 +177,22 @@ export class MountView {
   constructor(private readonly scene: Scene, options: MountViewOptions = {}) {
     this.outline = options.outline ?? true;
   }
+
+  /** CameraOccluders: the wagons and the horses (all but the local rider's own) as boxes the follow camera stops in front of. Allocation-free. */
+  cast(ray: CameraRay): void {
+    this.castRay = ray;
+    this.wagons.forEach(this.castWagon);
+    this.horses.forEach(this.castHorse);
+    this.castRay = undefined;
+  }
+
+  private readonly castWagon = (v: WagonView): void => {
+    if (v.seen && this.castRay) castBulk(this.castRay, v.rig.root, WAGON_BULK);
+  };
+
+  private readonly castHorse = (v: HorseView): void => {
+    if (v.seen && this.castRay && (this.cameraRider === "" || v.rider !== this.cameraRider)) castBulk(this.castRay, v.rig.root, HORSE_BULK);
+  };
 
   get horseCount(): number {
     return this.horses.size;
