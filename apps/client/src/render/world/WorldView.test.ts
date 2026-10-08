@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Scene, Vector3 } from "three";
 import { CollisionWorld, applyOutcome, createArena, createDayState, dayState, historyPieces, newCampaign, newSettlements } from "@cb/shared";
-import { MAX_PUSHERS, pushers, worldTime } from "./toon.ts";
+import { MAX_PUSHERS, fireLight, pushers, worldTime } from "./toon.ts";
 import { PRESETS } from "../Stage.ts";
 import { WorldView } from "./WorldView.ts";
+import { atmoUniforms } from "./atmosphere.ts";
 
 // The camp's signboard atlas is drawn on a canvas; the unit-test environment has no DOM, so give it a recording stub.
 const g = globalThis as unknown as Record<string, unknown>;
@@ -110,6 +111,30 @@ describe("WorldView budget", () => {
     for (let h = 0; h < 24; h += 0.5) expect(Number.isFinite(glow(h))).toBe(true);
     expect(glow(19.5)).toBeGreaterThan(glow(13) + 0.2);
     expect(worldTime.value).toBe(1);
+    view.dispose();
+  });
+});
+
+describe("the campfire in the rain", () => {
+  it("a downpour beats it down: the flame lower, the glow and the light on the camp dimmer, and it never goes out", () => {
+    const view = new WorldView(new Scene(), createArena(7), PRESETS.medium, sun);
+    const d = createDayState();
+    const look = (rain: number): { h: number; glow: number; light: number } => {
+      view.applyDay({ ...dayState(20, d), rain });
+      atmoUniforms.uRain.value = rain; // (the Stage sets it from the weather each frame)
+      view.update(3.3);
+      const flame = view.root.getObjectByName("flame")!;
+      const glow = view.root.getObjectByName("fire-glow") as unknown as { material: { opacity: number } };
+      return { h: flame.scale.y, glow: glow.material.opacity, light: fireLight.uFireI.value };
+    };
+    const dry = look(0);
+    const wet = look(1);
+    expect(wet.h).toBeLessThan(dry.h * 0.8);
+    expect(wet.glow).toBeLessThan(dry.glow * 0.8);
+    expect(wet.light).toBeLessThan(dry.light * 0.8);
+    expect(wet.h).toBeGreaterThan(0.4);
+    expect(wet.glow).toBeGreaterThan(0.1);
+    atmoUniforms.uRain.value = 0;
     view.dispose();
   });
 });
