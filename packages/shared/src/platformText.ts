@@ -67,6 +67,19 @@ export const ACHIEVEMENT_TEXT: Readonly<Record<AchievementId, { title: string; b
   all_powers_met: { title: "Calling Cards", blurb: "Be received by every local power at least once, and refused by most." },
   chair_settled: { title: "The Vacant Chair", blurb: "Settle who sits at Highmark, or who profits from nobody doing so." },
   four_at_once: { title: "Four at Once", blurb: "Have the Ward and all three local powers warm toward you on the same day." },
+  honest_measure: { title: "An Honest Bushel", blurb: "End the Reapers' Strike with a measure both sides will sign. Neither will thank you." },
+  miners_out: { title: "Eleven Out of the Ground", blurb: "Get the Lower Gallery's miners out, by shovel or by powder." },
+  engine_blown: { title: "Unscheduled Maintenance", blurb: "Stop the Winding Engine with the Company's own keg." },
+  claim_staked: { title: "Four Pegs and a Fee", blurb: "File a claim at the Assay House before the Syndicate does, by fair means or by pulling theirs." },
+  cargo_landed: { title: "Nothing to Declare", blurb: "Land the Quiet Barge's cargo at the drop-house door." },
+  lot_won: { title: "Hammer Price", blurb: "Hold the winning paddle at the Auction at High Water." },
+  post_held: { title: "The Post Holds", blurb: "Keep the raiders' torches out of the Society's yard." },
+  good_samaritan: { title: "Stopped for a Stranger", blurb: "Revive a wounded traveller by the road. The Society is investigating." },
+  powder_salvaged: { title: "Salvage, Not Theft", blurb: "Throw the fizzing keg clear of an overturned powder wagon and keep the rest." },
+  learned_society: { title: "By Appointment", blurb: "Meet a commission from one of the Society's learned bodies." },
+  unscheduled_flight: { title: "Unscheduled Flight", blurb: "Send somebody twenty yards by powder, as measured by the Society's surveyor." },
+  museum_piece: { title: "For the Museum", blurb: "Five limbs in one contract. The Museum of Comparative Anatomy will want a word." },
+  umbrella_man: { title: "Closed, In Action", blurb: "Fell an enemy with an umbrella." },
 };
 
 // ---- the demo's notices (server -> party, over the existing `notice` message; the client banner recognises the warning) ----
