@@ -44,6 +44,13 @@ export interface HorseRig {
   spec: HorseSpec;
   /** Uniform scale of the whole animal (spec.height); the seat scales with it. */
   scale: number;
+  /** The barrel's width factor (spec.bulk), for `barrelOutside`: a rider's legs go round a stout cob wider than round a lean one. */
+  girth: number;
+  /**
+   * Hangs the irons (riding saddle only) where a rider's feet are: `RideInput.iron` as the ride pose wrote it, or undefined for the irons at rest. Rebuilds the stirrups' small mesh only
+   * when the place moves (a new rider), so it may be called every frame.
+   */
+  setStirrups(at: { x: number; y: number; z: number; half: number; yaw: number } | undefined): void;
   /** Where the rider's pelvis goes, in the root's frame (already scaled). */
   seat: { x: number; y: number; z: number };
   /** Number of draw-call-producing meshes right now (outlines included). */
@@ -88,18 +95,19 @@ interface BarrelRing {
   cz: number;
 }
 /** Sections along the length: y is distance FORWARD from the centre (the loft is turned so +y points to -Z). */
-const barrelRings = (bulk: number): BarrelRing[] =>
-  [
-    { y: -0.88, rx: 0.08, rz: 0.1, cz: 0.05 },
-    { y: -0.8, rx: 0.2, rz: 0.23, cz: 0.07 },
-    { y: -0.62, rx: 0.31, rz: 0.29, cz: 0.01 },
-    { y: -0.3, rx: 0.34, rz: 0.27, cz: 0.03 },
-    { y: 0.1, rx: 0.36, rz: 0.3, cz: 0.0 },
-    { y: 0.45, rx: 0.36, rz: 0.33, cz: -0.03 },
-    { y: 0.7, rx: 0.31, rz: 0.34, cz: -0.04 },
-    { y: 0.86, rx: 0.22, rz: 0.29, cz: -0.01 },
-    { y: 0.95, rx: 0.11, rz: 0.18, cz: -0.02 },
-  ].map((r) => ({ ...r, rx: r.rx * bulk }));
+const BARREL: readonly BarrelRing[] = [
+  { y: -0.88, rx: 0.08, rz: 0.1, cz: 0.05 },
+  { y: -0.8, rx: 0.2, rz: 0.23, cz: 0.07 },
+  { y: -0.62, rx: 0.31, rz: 0.29, cz: 0.01 },
+  { y: -0.3, rx: 0.34, rz: 0.27, cz: 0.03 },
+  { y: 0.1, rx: 0.36, rz: 0.3, cz: 0.0 },
+  { y: 0.45, rx: 0.36, rz: 0.33, cz: -0.03 },
+  { y: 0.7, rx: 0.31, rz: 0.34, cz: -0.04 },
+  { y: 0.86, rx: 0.22, rz: 0.29, cz: -0.01 },
+  { y: 0.95, rx: 0.11, rz: 0.18, cz: -0.02 },
+];
+const BARREL_POW = 2.2;
+const barrelRings = (bulk: number): BarrelRing[] => BARREL.map((r) => ({ ...r, rx: r.rx * bulk }));
 
 /** A point on the barrel's surface (body frame): `along` is z (negative forward), `theta` is the angle from the top, clockwise seen from the front (so +theta is the right side). */
 function barrelPoint(rings: BarrelRing[], z: number, theta: number, lift = 0, out: { x: number; y: number; z: number; nx: number; ny: number } = { x: 0, y: 0, z: 0, nx: 0, ny: 0 }) {
@@ -123,6 +131,26 @@ function barrelPoint(rings: BarrelRing[], z: number, theta: number, lift = 0, ou
   out.nx = Math.sin(theta);
   out.ny = Math.cos(theta);
   return out;
+}
+
+/**
+ * Where a point stands against the barrel, in the body frame (x right, y up from the barrel's pivot, z negative forward), with the barrel's section grown by `pad` m all round: the
+ * superellipse's radial measure minus 1, so > 0 is outside and < 0 inside (about metres over the section's half-size). `girth` is the horse's barrel factor (`HorseRig.girth`). The same
+ * rings and power the barrel is lofted from, so a rider's leg can be kept off the mesh that is drawn. Allocation-free.
+ */
+export function barrelOutside(girth: number, x: number, y: number, z: number, pad = 0): number {
+  const rings = BARREL;
+  const v = -z;
+  let i = 0;
+  while (i < rings.length - 2 && v > rings[i + 1]!.y) i++;
+  const a = rings[i]!;
+  const b = rings[i + 1]!;
+  if (v < rings[0]!.y - pad || v > rings[rings.length - 1]!.y + pad) return 1; // beyond the nose of the chest or the tail
+  const t = Math.min(1, Math.max(0, (v - a.y) / (b.y - a.y)));
+  const rx = (a.rx + (b.rx - a.rx) * t) * girth + pad;
+  const rz = a.rz + (b.rz - a.rz) * t + pad;
+  const cz = a.cz + (b.cz - a.cz) * t;
+  return (Math.abs(x / rx) ** BARREL_POW + Math.abs((y - cz) / rz) ** BARREL_POW) ** (1 / BARREL_POW) - 1;
 }
 
 // ---- bone builders --------------------------------------------------------------------------------------------------------------------------------------------------
@@ -173,7 +201,7 @@ const ROT_Z_FORWARD: V3 = [-Math.PI / 2, 0, 0]; // a loft stacks along +Y: this 
 function buildBody(c: Ctx): BufferGeometry | undefined {
   const b = new PartBuilder();
   const rings = barrelRings(c.bulk);
-  const lofts: Ring[] = rings.map((r) => ({ y: r.y, rx: r.rx, rz: r.rz, cz: r.cz, pow: 2.2 }));
+  const lofts: Ring[] = rings.map((r) => ({ y: r.y, rx: r.rx, rz: r.rz, cz: r.cz, pow: BARREL_POW }));
   b.loft(lofts, c.coat, [0, 0, 0], ROT_Z_FORWARD);
   // withers and haunches: the muscle the barrel alone lacks
   blob(b, 0.14, c.coat, [0, 0.265, -0.52], [1, 0.75, 1.5]);
@@ -260,8 +288,7 @@ function tack(b: PartBuilder, c: Ctx, rings: BarrelRing[]): void {
     blob(b, 0.08, c.leather, [0, topY + 0.07, 0.31], [1.3, 0.8, 0.8], [0, 0, 0], 6, 4); // cantle
     for (const side of [-1, 1]) {
       b.box(0.03, 0.2, 0.3, c.leather, [side * 0.35 * c.bulk, 0.2, -0.02], [0, 0, side * 0.2]); // flaps
-      b.box(0.015, 0.34, 0.03, c.leatherDark, [side * (HORSE_SEAT.stirrup.x - 0.02), -0.03, -0.02]); // stirrup leather
-      b.torus(0.05, 0.011, c.brass, [side * HORSE_SEAT.stirrup.x, HORSE_SEAT.stirrup.y - 0.62 - 0.03, HORSE_SEAT.stirrup.z], [0, Math.PI / 2, 0], [1, 1.2, 1]); // stirrup
+      // (the leathers and irons are their own mesh, `buildStirrups`: they are let down or taken up to the rider's leg)
     }
   } else if (s.saddle === 2) {
     const wood = PALETTE.material.wood;
@@ -537,6 +564,33 @@ function buildHindLower(c: Ctx): BufferGeometry | undefined {
   return b.build();
 }
 
+/** Where the irons hang with nobody in the saddle (the right one; `StirrupPlace` in ridePose.ts): straight down from the bar, facing forward. */
+export const STIRRUP_REST = { x: HORSE_SEAT.stirrup.x, y: HORSE_SEAT.stirrup.y - 0.62 - 0.03 + 0.05 * 1.2, z: HORSE_SEAT.stirrup.z, half: 0.05, yaw: 0 } as const;
+/** The stirrup bar under the saddle's skirt, where each leather hangs from (right side, body frame). */
+const STIRRUP_BAR = { x: HORSE_SEAT.stirrup.x - 0.02, y: 0.14, z: -0.02 } as const;
+
+/**
+ * The two stirrups for an iron at `at` (the right one; the left mirrors): a leather from the bar to the top of the iron, and the iron, an upright brass loop (taller than wide, as
+ * irons are) whose opening faces the way the toes point, with its tread across the bottom. Rebuilt when a rider of another leg length mounts (`HorseRig.setStirrups`).
+ */
+function buildStirrups(c: Ctx, at: { x: number; y: number; z: number; half: number; yaw: number }): BufferGeometry | undefined {
+  const b = new PartBuilder();
+  const ry = at.half * 1.2;
+  for (const side of [-1, 1]) {
+    const ix = side * at.x;
+    const topY = at.y + ry;
+    const dx = side * STIRRUP_BAR.x - ix;
+    const dy = STIRRUP_BAR.y - topY;
+    const dz = STIRRUP_BAR.z - at.z;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-3;
+    // the leather: a strap from the iron's top up to the bar (Euler XYZ that turns +Y onto the strap: Rz first, then Rx)
+    b.box(0.015, len, 0.03, c.leatherDark, [ix + dx / 2, topY + dy / 2, at.z + dz / 2], [Math.atan2(dz / len, dy / len), 0, -Math.asin(Math.max(-1, Math.min(1, dx / len)))]);
+    b.torus(at.half, 0.011, c.brass, [ix, at.y, at.z], [0, side * at.yaw, 0], [1, 1.2, 1]); // the iron
+    b.box(at.half * 1.6, 0.012, 0.045, c.brass, [ix, at.y - ry + 0.006, at.z], [0, side * at.yaw, 0]); // its tread
+  }
+  return b.build();
+}
+
 function withHull<T>(hull: boolean, make: () => T): T {
   const prev = PartBuilder.hullMode;
   const prevLod = PartBuilder.lod;
@@ -629,6 +683,31 @@ export function buildHorse(spec: HorseSpec, options: HorseBuildOptions = {}): Ho
   attach("hindLowerL", hindL.knee, () => buildHindLower(c));
   attach("hindLowerR", hindR.knee, () => buildHindLower(c));
 
+  // ---- stirrups: their own small mesh, rebuilt when a rider's legs want the irons elsewhere ------------------------------------------------------------------------
+  const stirrups = mk("stirrups", body);
+  const hung = { x: NaN, y: NaN, z: NaN, half: NaN, yaw: NaN };
+  const setStirrups = (at: { x: number; y: number; z: number; half: number; yaw: number } | undefined): void => {
+    if (spec.saddle !== 1) return;
+    const p = at && Number.isFinite(at.x + at.y + at.z + at.half + at.yaw) && at.half > 0 ? at : STIRRUP_REST;
+    if (Math.abs(p.x - hung.x) < 0.004 && Math.abs(p.y - hung.y) < 0.004 && Math.abs(p.z - hung.z) < 0.004 && Math.abs(p.half - hung.half) < 0.002 && Math.abs(p.yaw - hung.yaw) < 0.02) return;
+    Object.assign(hung, { x: p.x, y: p.y, z: p.z, half: p.half, yaw: p.yaw });
+    for (const m of [...stirrups.children] as Mesh[]) {
+      m.removeFromParent();
+      m.geometry.dispose();
+      const gi = geometries.indexOf(m.geometry);
+      if (gi >= 0) geometries.splice(gi, 1);
+      const mi = meshes.indexOf(m);
+      if (mi >= 0) {
+        meshes.splice(mi, 1);
+        triangles -= (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position!.count) / 3;
+      }
+      const hi = hulls.indexOf(m);
+      if (hi >= 0) hulls.splice(hi, 1);
+    }
+    attach("stirrups", stirrups, () => buildStirrups(c, hung));
+  };
+  setStirrups(undefined);
+
   // ---- reins: hand -> neck side -> bit, re-aimed every frame -----------------------------------------------------------------------------------------------------
   const reinGeo = withHull(false, () => {
     const g = new PartBuilder().box(0.012, 0.012, 1, c.leather, [0, 0, -0.5]).build()!;
@@ -689,6 +768,7 @@ export function buildHorse(spec: HorseSpec, options: HorseBuildOptions = {}): Ho
     joints: { root, body, neck, head, earL, earR, tail, foreL, foreR, hindL, hindR },
     spec,
     scale,
+    girth: c.bulk,
     seat: { x: 0, y: HORSE_SEAT.y * scale, z: HORSE_SEAT.z * scale },
     get meshCount() {
       return meshes.length + reins.length + (outlineOn ? hulls.length : 0);
@@ -698,6 +778,7 @@ export function buildHorse(spec: HorseSpec, options: HorseBuildOptions = {}): Ho
     },
     setOutline,
     syncReins,
+    setStirrups,
     dispose() {
       root.removeFromParent();
       for (const g of geometries) g.dispose();

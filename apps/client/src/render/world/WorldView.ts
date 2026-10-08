@@ -687,10 +687,10 @@ export class WorldView {
     // butterflies, birds and pollen stay in when it rains
     const fine = 1 - Math.min(1, d.rain * 1.6 + Math.max(0, d.cover - 0.7));
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
-    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
+    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
-    fireLight.uFireI.value = d.fire;
+    fireLight.uFireI.value = d.fire * (1 - 0.3 * d.rain); // (a fire in a downpour burns low: less light on the camp)
     // canopy shafts: a low-to-middling sun in clear, ideally misty air
     const el = d.lightDir.y;
     this.shaftU.uSunDirS.value.set(d.lightDir.x, d.lightDir.y, d.lightDir.z);
@@ -727,12 +727,16 @@ export class WorldView {
     this.ambientU.uMotion.value = motion.value;
     if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;
     const lit = 0.3 + 0.7 * this.fireLevel;
+    // rain beats the fire down: lower, narrower and more fitful flames, and less glow (it never goes out: the camp keeps it fed)
+    const rain = atmoUniforms.uRain.value;
+    const low = 1 - 0.32 * rain;
     if (this.flame) {
-      this.flame.scale.set(1 + 0.06 * Math.sin(t * 11.3), 0.95 + 0.14 * Math.sin(t * 7.1) + 0.07 * Math.sin(t * 17.9), 1 + 0.06 * Math.cos(t * 9.2));
+      const gutter = rain * (0.09 * Math.sin(t * 23.7) + 0.06 * Math.sin(t * 41.3));
+      this.flame.scale.set((1 + 0.06 * Math.sin(t * 11.3)) * (1 - 0.15 * rain), (0.95 + 0.14 * Math.sin(t * 7.1) + 0.07 * Math.sin(t * 17.9) + gutter) * low, (1 + 0.06 * Math.cos(t * 9.2)) * (1 - 0.15 * rain));
       this.flame.rotation.y = t * 0.7;
     }
-    if (this.glow) this.glow.opacity = (0.5 + 0.08 * Math.sin(t * 9.7) + 0.04 * Math.sin(t * 23.1)) * lit * (0.55 + 0.45 * this.fireLevel) + 0.08 * this.fireLevel;
-    if (this.pool) this.pool.opacity = 0.34 * lit * this.fireLevel + 0.1;
+    if (this.glow) this.glow.opacity = ((0.5 + 0.08 * Math.sin(t * 9.7) + 0.04 * Math.sin(t * 23.1)) * lit * (0.55 + 0.45 * this.fireLevel) + 0.08 * this.fireLevel) * low;
+    if (this.pool) this.pool.opacity = (0.34 * lit * this.fireLevel + 0.1) * low;
     if (this.folk && camera) {
       const f = this.folkFrame;
       f.hours = this.hours;

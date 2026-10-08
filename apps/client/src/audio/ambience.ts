@@ -2,6 +2,7 @@ import { CAMP, Rng, type RegionId } from "@cb/shared";
 import { engine } from "./engine.ts";
 import { ambienceTargets, daylight, newTargets, type AmbienceTargets } from "./ambienceMix.ts";
 import { RegionSchedule, stepRegionAmbience } from "./ambienceRegion.ts";
+import { newFireVoices, stepFireVoices, type FireEmit } from "./fireVoices.ts";
 import { readAtmosphere } from "./atmosphereSource.ts";
 import { noiseBuffers, type NoiseKind } from "./dsp.ts";
 import type { Listener } from "./spatial.ts";
@@ -203,8 +204,11 @@ class AmbiencePlayer {
   private wanted = false;
   private timer: ReturnType<typeof setInterval> | undefined;
   private birdIn = 2;
-  private popIn = 0.3;
-  private snapIn = 3;
+  private readonly fire = newFireVoices();
+  private readonly emitFire: FireEmit = (sound, dx, dz, volume, seed) => {
+    const f = CAMP.fire;
+    engine.play(sound, { x: f.x + dx, y: engine.listener.y, z: f.z + dz, volume, seed });
+  };
   private lastThunder: number | null = null;
   private last = 0;
   private region: RegionId = "hollowmere";
@@ -282,20 +286,8 @@ class AmbiencePlayer {
     // The region's own voices: surf, lamp chains, herd bells, drips, a wind-pump, frogs...
     this.schedule ??= new RegionSchedule(this.region, rng);
     stepRegionAmbience(this.schedule, dt, daylight(a.hour), a.rain, rng, this.emit);
-    // The fire: pops and the odd snap, only when close enough to matter.
-    if (targets.fire.gain > 0.02) {
-      const f = CAMP.fire;
-      this.popIn -= dt;
-      if (this.popIn <= 0) {
-        this.popIn = 0.06 + rng.next() * rng.next() * 0.5;
-        engine.play("fire_pop", { x: f.x + (rng.next() - 0.5) * 0.4, y: l.y, z: f.z + (rng.next() - 0.5) * 0.4, volume: 0.6 + rng.next() * 0.4, seed: Math.floor(rng.next() * 8) });
-      }
-      this.snapIn -= dt;
-      if (this.snapIn <= 0) {
-        this.snapIn = 1.5 + rng.next() * 4;
-        engine.play("fire_snap", { x: f.x, y: l.y, z: f.z, seed: Math.floor(rng.next() * 4) });
-      }
-    }
+    // The fire: pops and the odd snap (and in rain, embers sizzling), only when close enough to matter.
+    if (targets.fire.gain > 0.02) stepFireVoices(this.fire, dt, a.rain, rng, this.emitFire);
     // Thunder: each new arrival time is one clap; wait until the moment the environment says it arrives.
     if (a.thunderAt !== null && a.thunderAt !== this.lastThunder) {
       const wait = Math.min(12, Math.max(0, a.thunderAt - performance.now() / 1000));

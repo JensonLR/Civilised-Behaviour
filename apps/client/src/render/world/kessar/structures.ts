@@ -122,6 +122,9 @@ function gatehouse(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, 
     const lx = -Math.cos(a) * (d.hx - 0.1);
     const ly = d.height + 0.5 + Math.sin(a) * 1.5;
     k.add(new SphereGeometry(lod ? 0.2 : 0.16, 6, 4), { at: [lx, ly, d.hz + 0.35], colour: gold });
+    // (the Ward's nine lamps are lit at night: they were gold balls in the dark, over a gate whose notice says it opens when the lamps agree)
+    const w = k.worldPoint(lx, ly, d.hz + 0.35);
+    out.lamps.push({ x: w[0], y: w[1], z: w[2] });
   }
   // D-038: the gate is SEALED. The portcullis is down, chained and padlocked, and the Ward's paper seal is across it (the notice is the cloth mesh's plaque: "THE GATE OPENS WHEN THE LAMPS AGREE")
   k.clearBase();
@@ -143,6 +146,7 @@ function gatehouse(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, 
     const ly = gy(lx, lz);
     k.limb([lx, ly - 0.3, lz], [lx, ly + 2.5, lz], 0.1, 0.08, K.iron, 5);
     k.add(new SphereGeometry(0.3, 7, 5), { at: [lx, ly + 2.75, lz], colour: gold });
+    out.lamps.push({ x: lx, y: ly + 2.75, z: lz });
   }
 }
 
@@ -282,7 +286,8 @@ const SEAL: SealedStyle = { frame: K.stoneShade, door: K.timber, board: K.timber
 
 interface KessarOut {
   marks: DoorMark[];
-  lamps: { x: number; y: number; z: number }[];
+  /** Lanterns: their flames' world positions, and a floor level for a lamp in a room (it burns by day); outdoor lamps (no `lit`) follow the night. */
+  lamps: { x: number; y: number; z: number; lit?: number }[];
   roofs: RoofKits;
 }
 
@@ -295,7 +300,7 @@ function tollStation(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: n
   // the one reward interior: stone walls (masonry outside, cream within), a doorway facing the customs yard, a desk and a ledger, a lamp; the pyramid roof is its own (lifted when the viewer is inside)
   interiorShell(k, { id: lb.id, hx: bo.hx, hz: bo.hz, floor: lb.floor, wallH: lb.wallH, door: lb.door, doorH: lb.doorH, steps: 0, t: lb.t ?? 0.3 }, { ...BOOTH, outer: masonry(300, K.stoneCap, K.stone) }, lod, out.marks, { x: bo.x, y: gy, z: bo.z, yaw: bo.yaw });
   const lw = k.worldPoint(-bo.hx * 0.15, lb.floor + 2.3, 0);
-  out.lamps.push({ x: lw[0], y: lw[1], z: lw[2] });
+  out.lamps.push({ x: lw[0], y: lw[1], z: lw[2], lit: 0.7 });
   const fl = lb.floor;
   // the Warden's counter along the back wall, a stool, the ledger and a stack of seals; a striped awning over the door
   box(k, [0.7, 0.9, bo.hz * 2 - 1.2], [-bo.hx + 0.6, fl + 0.45, 0], K.timberLight);
@@ -485,7 +490,7 @@ function camps(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number,
 }
 
 /** Everything solid, merged. `collapsed` swaps the bridge for its stumps; `lod` 0 is the cheap shape the ink hull and the low preset use. */
-export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; collapsed: boolean; marks: DoorMark[]; lamps: { x: number; y: number; z: number }[]; roofs: RoofSource | undefined } {
+export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; collapsed: boolean; marks: DoorMark[]; lamps: { x: number; y: number; z: number; lit?: number }[]; roofs: RoofSource | undefined } {
   const plan = kessarPlan();
   const terrain = (x: number, z: number): number => world.terrainHeight(x, z);
   const intact = world.obstacles.some((o) => o.tag === "bridge" && o.kind === "box");

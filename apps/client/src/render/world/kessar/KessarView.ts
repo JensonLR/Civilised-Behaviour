@@ -57,7 +57,7 @@ export class KessarView implements RegionView {
   /** D-038: the toll booth's roof (the cutaway), the doors drawn, and the lamps hung inside the rooms. */
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
-  private roomLamps: { x: number; y: number; z: number }[] = [];
+  private roomLamps: { x: number; y: number; z: number; lit?: number }[] = [];
 
   constructor(
     private readonly scene: Scene,
@@ -257,8 +257,8 @@ export class KessarView implements RegionView {
       }
     }
     add(buildBirds(d.birds, this.ambientU, gulls));
-    // the lamp hung in the toll booth: a candle's glow by day, a flame at dusk (a lamp in a room burns bright even at noon)
-    add(buildLanternGlow(this.roomLamps.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.roomLamps.map(() => 0.7)));
+    // the lamp hung in the toll booth (a candle's glow by day, a flame at dusk: a lamp in a room burns bright even at noon), and the Ward's lamps at the gate, lit at night
+    add(buildLanternGlow(this.roomLamps.map((l) => new Vector3(l.x, l.y, l.z)), this.ambientU, this.roomLamps.map((l) => l.lit ?? 0)));
     const rain = buildRain(d.rain, this.ambientU.uBaseY);
     if (rain) {
       this.track(rain.geometry);
@@ -296,7 +296,7 @@ export class KessarView implements RegionView {
     this.tint.lerp(WHITE, 0.4).multiplyScalar(0.42 + 0.58 * d.ambient);
     const fine = 1 - Math.min(1, d.rain * 1.6 + Math.max(0, d.cover - 0.7));
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
-    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
+    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;

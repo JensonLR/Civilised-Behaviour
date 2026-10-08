@@ -73,7 +73,7 @@ export function ambienceTargets(l: Listener, a: Atmosphere, out: AmbienceTargets
   }
   const f = CAMP.fire;
   spatialise(l, f.x, l.y, f.z, 3, 42, sp);
-  out.fire.gain = sp.gain * 0.9;
+  out.fire.gain = sp.gain * 0.9 * (1 - 0.35 * clamp01(a.rain)); // (a fire in a downpour burns low: its roar too)
   out.fire.pan = sp.pan;
   out.fire.cutoff = Math.max(1200, sp.cutoff);
 

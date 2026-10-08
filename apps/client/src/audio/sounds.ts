@@ -481,6 +481,15 @@ const fireSnap = def({
   ],
 });
 
+/** Rain on the camp's embers: a drop flashing to steam, a short bright sizzle with a breath under it (fireVoices.ts: the crackle thins out in a downpour and this takes its place). */
+const fireSizzle = def({
+  group: "ambient", peakDb: -25, ref: 4, max: 36, reverb: 0.05, prio: 0, cap: 3, gap: 0.05, variants: 6, jitter: 0.1,
+  layers: (p) => [
+    N({ atk: 0.004, dec: 0.12 + p.rng.next() * 0.2, peak: 1, f: [hp(3200 + p.rng.next() * 1500), bp(6200 + p.rng.next() * 2400, 0.9)] }),
+    N({ at: 0.01, atk: 0.02, dec: 0.08, peak: 0.25, f: [bp(1800, 1.2)] }),
+  ],
+});
+
 // ---- the expedition's world (D-035, R): hooves, tack, the sailing, paper, bells, the parley stamp, the gun crew ----------------------------------------
 
 /**
@@ -500,6 +509,28 @@ const hoof = def({
       ...(heavy > 0.8 ? [N({ kind: "brown", at: 0.03, atk: 0.04, dec: 0.28, peak: 0.45, f: [lp(210)] })] : []),
     ];
   },
+});
+
+/**
+ * The wagon on the move (`wagons.ts` times it to the distance its wheels roll). `rattle`: an iron tyre comes off a stone, a dull wooden knock with the load and the chains
+ * shaken in the bed after it; `creak`: the axle and the bed's joints working, a short wooden groan. Normalised alike; how fast it rolls is in the play-time volume.
+ */
+const wagonRoll = def({
+  group: "foot", peakDb: -13, ref: 9, max: 60, reverb: 0.12, prio: 1, cap: 2, gap: 0.06, variants: 4, jitter: 0.08, keys: ["rattle", "creak"],
+  layers: (p) =>
+    p.key === "creak"
+      ? [
+          T({ type: "sawtooth", hz: 150 * jit(p, 0.15), to: 112 * jit(p, 0.1), over: 0.32, atk: 0.05, dec: 0.28, peak: 0.55, f: [bp(520 * jit(p, 0.1), 5)], vib: [9, 0.05] }),
+          N({ kind: "pink", at: 0.03, atk: 0.06, dec: 0.22, peak: 0.3, f: [bp(1150 * jit(p, 0.12), 3, 850, 0.3)] }),
+          N({ kind: "brown", atk: 0.04, dec: 0.25, peak: 0.45, f: [lp(320)] }),
+        ]
+      : [
+          T({ hz: 92 * jit(p, 0.12), to: 58, over: 0.05, atk: 0.002, dec: 0.12, peak: 0.95 }),
+          N({ kind: "brown", atk: 0.003, dec: 0.16, peak: 1, f: [lp(520, 260, 0.14)] }),
+          N({ kind: "pink", atk: 0.002, dec: 0.04, peak: 0.32, f: [bp(700 * jit(p, 0.15), 1.4)] }),
+          ...[0, 1, 2, 3].map((i) => N({ at: 0.03 + i * 0.028 + p.rng.next() * 0.02, dec: 0.012, peak: 0.2 - i * 0.035, f: [bp(950 + p.rng.next() * 900, 2.5)] })),
+          R({ at: 0.04 + p.rng.next() * 0.03, hz: 1700 + p.rng.next() * 500, ratios: [1, 2.4], amps: [1, 0.3], decs: [0.08, 0.05], peak: 0.08 }),
+        ],
 });
 
 /** Bridle bits, buckles and a creak of saddle leather: a few small rings and a rustle. */
@@ -674,6 +705,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   bird,
   fire_pop: firePop,
   fire_snap: fireSnap,
+  fire_sizzle: fireSizzle,
   // the expedition's world (D-035, R)
   hoof,
   tack_jingle: tackJingle,
@@ -683,12 +715,13 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   bell,
   parley_stamp: parleyStamp,
   crew_shout: crewShout,
+  wagon_roll: wagonRoll,
   // the grit pass (D-038, A): gore, impacts, foley, tails, the regions' own ambience
   ...GRIT_SOUNDS,
 };
 
-/** The sounds the expedition's world adds (hooves.ts and game/ContentAudio.ts play them): a test renders and measures every one. */
-export const CONTENT_SOUNDS = ["hoof", "tack_jingle", "sail_creak", "gull", "paper_rustle", "bell", "parley_stamp", "crew_shout"] as const;
+/** The sounds the expedition's world adds (hooves.ts, wagons.ts and game/ContentAudio.ts play them): a test renders and measures every one. */
+export const CONTENT_SOUNDS = ["hoof", "tack_jingle", "sail_creak", "gull", "paper_rustle", "bell", "parley_stamp", "crew_shout", "wagon_roll"] as const;
 
 export const SOUND_NAMES: readonly string[] = Object.keys(SOUNDS);
 

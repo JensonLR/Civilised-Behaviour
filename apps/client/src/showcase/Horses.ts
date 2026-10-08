@@ -85,7 +85,9 @@ export function runHorses(canvas: HTMLCanvasElement, params: URLSearchParams): v
         u.ride.roll = m.roll;
         u.ride.speed01 = Math.min(1, speed / 10.5);
         u.ride.scale = u.horse.scale;
+        u.ride.girth = u.horse.girth;
         u.rider.anim.update(dt, { speed: 0, flags: FLAG.GROUNDED, vy: 0, ride: u.ride });
+        u.horse.setStirrups(u.ride.iron);
         u.rider.hands.update(dt, FLAG.GROUNDED | 4096, 0, "neutral");
       }
     }

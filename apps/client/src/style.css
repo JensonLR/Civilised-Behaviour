@@ -346,15 +346,27 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
   .pause .menu { gap: 0.4rem; margin-top: 0.5rem; }
   .pause .menu button { min-height: 2.3rem; padding-top: 0.3rem; padding-bottom: 0.3rem; }
 }
-@media (max-height: 48rem) {
-  .panel.main { padding-top: 1.2rem; padding-bottom: 0.9rem; }
-  .panel.main h1 { font-size: 2.1rem; }
-  .panel.main .tag { margin-bottom: 0.7rem; }
-  .panel.main .or { margin-top: 0.8rem; }
-  .panel.main .row { margin-top: 0.65rem; }
-  .panel .row.aux { margin-top: 0.65rem; }
-  .panel .opt { margin-top: 0.6rem; }
+@media (max-height: 57rem) {
+  /* Up to 912 px tall (a media query's rem is the browser's 16 px, not the game's root size: this said 48rem and stopped at 768 px): 1280 x 720, 1280 x 800 (a laptop, the Steam
+     Deck), 1600 x 900. The door's charter fits without a scroll bar. It cut its last lines off (the gore note, the Mature content notice) behind its own edge: 799 px of charter in
+     a 698 px panel on the Deck, 738 in 618 at 720. The rule and header close up, the status line takes no room until it has something to say, gore sits on one line */
+  .panel.main { padding-top: 1.1rem; padding-bottom: 0.8rem; }
+  .panel.main .rule { margin: 0.15rem 0 0.05rem; }
+  .panel.main .rule svg { width: 1.7rem; height: 1.7rem; }
+  .panel.main h1 { font-size: 2rem; }
+  .panel.main .tag { margin-bottom: 0.45rem; }
+  .panel.main .or { margin-top: 0.6rem; }
+  .panel.main .row { margin-top: 0.5rem; }
+  .panel .row.aux { margin-top: 0.5rem; }
+  .panel .opt { margin-top: 0.5rem; }
+  .panel.main label.opt { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .panel.main label.opt select { width: auto; min-width: 8rem; margin-top: 0; }
+  .panel.main p.fine { margin-top: 0.3rem; margin-bottom: 0; line-height: 1.3; }
   #status { min-height: 1rem; margin-top: 0.4rem; }
+  #status:empty { min-height: 0; margin-top: 0; }
+}
+@media (max-height: 46rem) {
+  .panel.main .tag { display: none; } /* (720 px: the charter's tagline is the one line that can go; the phone layout drops it too) */
 }
 @media (max-height: 34rem) {
   .panel.main { padding: 0.9rem 1.4rem 0.8rem; }
