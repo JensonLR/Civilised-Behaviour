@@ -104,8 +104,8 @@ export class Parley {
     const toll = Number.isFinite(v.toll) ? Math.max(0, Math.round(v.toll)) : 0;
     const round = Math.max(1, v.round | 0);
     const mood = String(v.mood ?? "neutral");
-    // D-037: the later regions author their own heading and asked line (shared/vesperText.ts, saltmarketText.ts); the court asks a price, not a toll; Kessar's follow the contract
-    const own = REGION_COPY[this.region]?.parley ?? (this.region === "highmark" ? (this.template === "reapers_strike" ? PICKET : COURT) : KESSAR_PARLEY[this.template ?? "secure_crossing"] ?? KESSAR_PARLEY.secure_crossing!);
+    // an audience at the map table brings its own frame; D-037: the later regions author their own heading and asked line (shared/vesperText.ts, saltmarketText.ts); the court asks a price, not a toll; Kessar's follow the contract
+    const own = v.frame ?? REGION_COPY[this.region]?.parley ?? (this.region === "highmark" ? (this.template === "reapers_strike" ? PICKET : COURT) : KESSAR_PARLEY[this.template ?? "secure_crossing"] ?? KESSAR_PARLEY.secure_crossing!);
     this.society.textContent = own.heading;
     this.meta.textContent = own.asked.replace(/\{price\}/g, String(toll)).replace(/\{round\}/g, String(round)).replace(/\{mood\}/g, mood);
     const focused = this.options.querySelector<HTMLElement>("button:focus")?.dataset.i;

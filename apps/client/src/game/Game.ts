@@ -1290,7 +1290,7 @@ export class Game {
         const cam = this.stage.camera.position;
         const near = Math.sqrt((cam.x - x) ** 2 + (cam.y - y - 1.5) ** 2 + (cam.z - z) ** 2);
         this.seeThrough = !this.rig.headHidden && (this.seeThrough ? near < 1.6 : near < 1.25);
-        a.body.setSeeThrough(this.seeThrough, this.seeThrough && near < 0.45);
+        a.body.setSeeThrough(this.seeThrough, this.seeThrough && near < 0.8); // (within a hat's breadth of the head, the head and hat go: a dithered top hat over the whole picture is worse than none)
       }
       if (isMe) a.body.setAimYaw(this.combat.aimHeading); // third person: the body turns to the aim ray while the sight is up
       a.groundIn -= dt;

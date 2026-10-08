@@ -71,7 +71,8 @@ export interface ScenarioOutcome {                                       // what
 // ---- negotiation (types here so C never imports A's code) ----
 export interface Leverage { purse: number; armed: number; garrisonAlive: number; garrisonTotal: number; partyWounded: number; rivalInfluence: number; lies: number }
 export interface ParleyOption { id: "pay" | "haggle_flatter" | "haggle_threaten" | "bribe" | "plead" | "walk_away"; label: string; cost: number; hint: string }
-export interface ParleyView { round: number; speaker: string; line: string; toll: number; options: ParleyOption[]; mood: FactionStance }
+/** `frame`: talks that are not a contract's own (an audience at the map table) name their place and their asked line; `{price}` `{round}` `{mood}` are filled by the sheet. */
+export interface ParleyView { round: number; speaker: string; line: string; toll: number; options: ParleyOption[]; mood: FactionStance; frame?: { heading: string; asked: string } }
 export type ParleyStep = { view: ParleyView; done?: undefined } | { done: { resolution: ResolutionId | "walked_away" | "hostile"; toll: number; paid: number }; view?: undefined; line: string };
 // ---- scenario public view (HUD) and machine I/O ----
 export type ScenarioPhase = "approach" | "standoff" | "parley" | "fighting" | "rigging" | "resolved" | "planning" | "extract" | "waiting" | "tension" | "escalated";

@@ -101,6 +101,9 @@ const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: numb
 
 type TreeKind = "broadleaf" | "acacia" | "birch" | "pine";
 
+/** Where the front door's figure stands (CreatorPreview `BACKDROP`, tested to agree) and the radius of trodden ground round it. */
+export const MENU_STAND = { x: 1.2, z: 1.6, r: 1.6 } as const;
+
 /**
  * `drawnY` is the region's ground AS DRAWN for a simulated height `h` at (x, z) (Hollowmere's terrain fades to its skirt; Kessar's eases to
  * the shore): the distant trees stand on it, not on a height nobody sees. NaN means "no tree here" (the sea).
@@ -247,6 +250,8 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
   }
 
   // ---- grass and flower meadows ------------------------------------------------------------------------------------------------
+  // the front door's figure stands at MENU_STAND (CreatorPreview's BACKDROP): the ground there is trodden bare, so no tuft stands in front of their boots
+  const trodden = (x: number, z: number): boolean => (x - MENU_STAND.x) ** 2 + (z - MENU_STAND.z) ** 2 < MENU_STAND.r * MENU_STAND.r;
   const gr = new Rng(0x9a55);
   const e = 0.6;
   const slopeAt = (x: number, z: number, hh: number): number => Math.hypot(h(x + e, z) - hh, h(x, z + e) - hh) / e;
@@ -257,7 +262,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
     const z = Math.sin(a) * d;
     const hh = h(x, z);
     if (gr.next() > coverDensity(x, z, slopeAt(x, z, hh))) continue;
-    if (blocked(x, z, 0.35) || nearTrail(x, z, -0.05)) continue; // (a faded far path still has no grass on its bare middle)
+    if (blocked(x, z, 0.35) || nearTrail(x, z, -0.05) || trodden(x, z)) continue; // (a faded far path still has no grass on its bare middle)
     const s = 0.6 + gr.next() * 0.6;
     const cls = inMeadow(x, z) ? GRASS_MEADOW : hh > 1.4 && gr.chance(0.7) ? GRASS_DRY : gr.chance(0.12) ? GRASS_DRY : autumnAt(x, z).amount > 0.5 && h01(50, x, z) < 0.65 ? GRASS_DRY : GRASS_NORMAL; // (a turned hillside dries its grass too)
     plan.grass.push(item(x, hh - 0.03, z, gr.next() * 6.28, s * (0.9 + gr.next() * 0.3), s * (0.8 + gr.next() * 0.6), s * (0.9 + gr.next() * 0.3), cls, gr.next()));
@@ -280,7 +285,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
       const x = cx + Math.cos(t) * rad;
       const z = cz + Math.sin(t) * rad;
       const hh = h(x, z);
-      if (coverDensity(x, z, slopeAt(x, z, hh)) < 0.55 || blocked(x, z, 0.3)) continue;
+      if (coverDensity(x, z, slopeAt(x, z, hh)) < 0.55 || blocked(x, z, 0.3) || trodden(x, z)) continue;
       const hue = fr.next() < 0.78 ? dominant : Math.floor(fr.next() * BLOOM_HUES);
       const s = 0.8 + fr.next() * 0.8;
       const it = item(x, hh - 0.02, z, fr.next() * 6.28, s, s, s, hue, fr.next());

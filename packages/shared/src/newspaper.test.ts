@@ -86,7 +86,7 @@ describe("generatePaper", () => {
       const dead = c.tally.garrisonKilled + c.tally.rivalKilled;
       expect(text, r).toContain(`\u00a3${c.crossing.toll}`);
       expect(text, r).toContain(c.crossing.bridge);
-      expect(text, r).toContain(`Fallen: ${dead}`);
+      expect(text, r).toContain(`Fallen: ${dead === 0 ? "none" : dead}`); // (nothing is the word: the paper's old-style 0 reads as a letter o)
       expect(generatePaper(c, 5).standfirst, r).toContain(c.crossing.bridge);
     }
     // the facts follow the state, not the wording

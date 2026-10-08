@@ -63,6 +63,8 @@ export class Telegrams {
       if (this.els.has(s.id)) continue;
       const el = document.createElement("div");
       el.className = "telegram";
+      // a debrief (an ending's results, a line each: D-040) is the payoff of a contract, so it shows whole, a row per line, where a passing slip is cut at two lines
+      if (s.text.includes("\n")) el.classList.add("debrief");
       const body = document.createElement("div");
       body.className = "body";
       body.textContent = typeset(s.text);

@@ -1,6 +1,6 @@
 import { REGION_IDS, type CampaignMapData, type PowerId, type RegionId } from "@cb/shared";
 import { Modal, h } from "./modal.ts";
-import { CHART_AT, CampaignMap, chartRoute, drawCampaignOverlay, regionPair } from "./CampaignMap.ts";
+import { CHART_AT, CHART_LABEL, CampaignMap, chartRoute, drawCampaignOverlay, regionPair } from "./CampaignMap.ts";
 import { sheetHints } from "./sheetHints.ts";
 import "./mapRoom.css";
 
@@ -40,7 +40,6 @@ export interface MapRoomCallbacks {
 }
 
 /** The names written under the marks (a region the chart does not know is written as its id). */
-const CHART_LABEL: Record<string, string> = { hollowmere: "Hollowmere", kessar: "Kessar", highmark: "Highmark", vesper: "Vesper", saltmarket: "Saltmarket" };
 /** Every pair of regions has a lane (every ordered pair sails); a lane and a mark are SHOWN only while the regions are on the chart (reachable), so a region that is not built yet is not on it. */
 const LANES: readonly [RegionId, RegionId][] = REGION_IDS.flatMap((a, i) => REGION_IDS.slice(i + 1).map((b): [RegionId, RegionId] => [a, b]));
 const NUMBER_WORD: Record<number, string> = { 2: "two", 3: "three", 4: "four", 5: "five" };

@@ -49,4 +49,13 @@ describe("the parley sheet says where the talks are and what is asked (D-041)", 
       expect(meta, r).toMatch(/ · Round 1 · /);
     }
   });
+  it("an audience at the map table carries its own frame, wherever the party stands (it was headed 'An audience at the toll bar', 'She seems ...')", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const p = new Parley(host);
+    p.open({ ...view(45), frame: { heading: "An audience at the map table", asked: "Price asked: £{price} · Round {round} · The Houses seem {mood}." } }, () => undefined, () => undefined, "kessar", "secure_crossing");
+    expect(host.querySelector(".society")!.textContent).toBe("An audience at the map table");
+    expect(host.querySelector(".meta")!.textContent).toBe("Price asked: £45 · Round 1 · The Houses seem neutral.");
+    p.dispose();
+  });
 });

@@ -68,16 +68,18 @@ export function generatePaper(c: CampaignState, worldSeed: number, extras?: Pape
     cands.push({ slug, head: cap(pick(heads, tag), PAPER_LIMITS.head), body: cap(f(body), PAPER_LIMITS.body) });
   };
 
+  // a count of nothing is printed as the word (the paper's old-style figures set 0 like a letter o: "Fallen: o." read as a misprint)
+  const n = (k: number): string => (k === 0 ? "none" : String(k));
   const lastTemplate = c.history.length ? c.history[c.history.length - 1]!.template : "secure_crossing";
   if (last && lastTemplate !== "secure_crossing") {
     // the other contracts: a ledger story named for the place ("The Cartwright's Cage", "Marker Stone No. 4") and the Society's own euphemism for what was done
     const heads = lastTemplate === "hostage_rescue" ? STORY_HEADS.cage : lastTemplate === "convoy_ambush" ? STORY_HEADS.convoy : lastTemplate === "succession_dispute" ? STORY_HEADS.chair
       : isNewTemplate(lastTemplate) ? STORY_HEADS[lastTemplate] : STORY_HEADS.marker;   // D-037: the four newer contracts carry their own headings, keyed by template id
     const site = SITE_LINES[last];
-    story("ledger", heads, `${site ? pick(site, 20) : ""} Fallen: ${dead}. Wounded: ${t.wounded}. Limbs: ${t.limbsLost}. Purse: £${c.purse}. ${pick(LEDGER_TAIL, 21)}`, 22);
+    story("ledger", heads, `${site ? pick(site, 20) : ""} Fallen: ${n(dead)}. Wounded: ${n(t.wounded)}. Limbs: ${n(t.limbsLost)}. Purse: £${c.purse}. ${pick(LEDGER_TAIL, 21)}`, 22);
   } else if (last) {
     story("ledger", STORY_HEADS.ledger,
-      `Toll: £${toll}${toll === 0 ? " (waived)" : ""}. Bridge: ${c.crossing.bridge}. Fallen: ${dead}. Routed: ${t.garrisonRouted}. Purse: £${c.purse}. ${pick(BRIDGE_CASUAL[c.crossing.bridge], 20)} ${pick(LEDGER_TAIL, 21)}`, 22);
+      `Toll: £${toll}${toll === 0 ? " (waived)" : ""}. Bridge: ${c.crossing.bridge}. Fallen: ${n(dead)}. Routed: ${n(t.garrisonRouted)}. Purse: £${c.purse}. ${pick(BRIDGE_CASUAL[c.crossing.bridge], 20)} ${pick(LEDGER_TAIL, 21)}`, 22);
   } else {
     const p = POWERS[0]!;
     story("prospectus", STORY_HEADS.prospectus,

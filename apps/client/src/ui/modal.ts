@@ -88,7 +88,9 @@ export class Modal {
     this.release = holdInput();
     document.exitPointerLock?.();
     const target = this.panel.querySelector<HTMLElement>("[data-autofocus]") ?? this.panel.querySelector<HTMLElement>(FOCUSABLE);
-    target?.focus();
+    // a sheet opens at its top (the broadsheet's button is at the foot, and focusing it scrolled the masthead away): the focus goes there without scrolling
+    this.panel.scrollTop = 0;
+    target?.focus({ preventScroll: true });
   }
 
   close(): void {

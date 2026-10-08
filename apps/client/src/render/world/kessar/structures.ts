@@ -339,7 +339,9 @@ function signposts(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: num
   for (const s of plan.signs) {
     const y = terrain(s.x, s.z);
     k.setBase(s.x, y, s.z, s.yaw);
-    k.limb([0, -0.3, 0], [0, 2.3, 0], 0.09, 0.07, K.timber, 5);
+    // the post stops under the board, with two braces out to it (it ran up through the board and crossed the middle of the lettering on both faces)
+    k.limb([0, -0.3, 0], [0, 1.53, 0], 0.09, 0.075, K.timber, 5);
+    for (const sz of [-1, 1]) k.limb([0, 0.95, 0], [0, 1.53, sz * 0.75], 0.03, 0.03, K.timber, 3);
     // (local +x is the board's FACE direction, so the board runs along local z)
     box(k, [0.09, 0.52, 2.5], [0, 1.85, 0], K.wardCream);
     box(k, [0.12, 0.06, 2.6], [0, 2.14, 0], K.timberLight);

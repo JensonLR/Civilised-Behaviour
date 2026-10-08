@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Euler, Matrix4, Quaternion, Vector3, type Material, type Object3D } from "three";
+import { separateCoplanar } from "./coplanar.ts";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { hash3 } from "@cb/shared";
 import { isSharedInk } from "@cb/procedural/three";
@@ -36,6 +37,9 @@ const tmpP = new Vector3();
 const tmpC = new Color();
 const up = new Vector3(0, 1, 0);
 const dir = new Vector3();
+/** Two limbs in a chain bent by more than this (about 4 degrees) get their joint closed, if they are thick enough for the gap to be seen. */
+const KNUCKLE_COS = Math.cos(0.07);
+const KNUCKLE_MIN_R = 0.035;
 
 /**
  * Accumulates coloured primitives into ONE non-indexed geometry with per-vertex colour, face or smooth normals and the smoothed
@@ -47,6 +51,8 @@ export class Kit {
   private readonly parts: BufferGeometry[] = [];
   private readonly baseMatrix = new Matrix4();
   private baseYaw = 0;
+  /** The last limb's end, direction and end radius (a limb that starts there at an angle gets a knuckle: see `limb`). */
+  private chain: { x: number; y: number; z: number; dx: number; dy: number; dz: number; r: number } | undefined;
 
   /** `sway: true` gives every piece an `aSway` attribute (0 unless the piece says otherwise): the geometry of things that move in the wind. */
   constructor(private readonly opts: { sway?: boolean } = {}) {}
@@ -56,6 +62,7 @@ export class Kit {
     q.setFromAxisAngle(up, -yaw);
     this.baseMatrix.compose(pos.set(x, y, z), q, scl.set(1, 1, 1));
     this.baseYaw = yaw;
+    this.chain = undefined;
     return this;
   }
 
@@ -76,6 +83,7 @@ export class Kit {
   clearBase(): this {
     this.baseMatrix.identity();
     this.baseYaw = 0;
+    this.chain = undefined;
     return this;
   }
 
@@ -157,30 +165,49 @@ export class Kit {
     return this;
   }
 
-  /** A tapered tube between two points (trunks, branches, poles, ropes). Open-ended: joints are hidden by the next segment or a blob. */
+  /** A tapered tube between two points (trunks, branches, poles, ropes). Open-ended: a limb that carries on from the last one closes its joint (below). */
   limb(a: V3, b: V3, rA: number, rB: number, colour: number | ColourFn, radial = 7, capped = false, sway?: number | ((t: number) => number)): this {
     dir.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     const len = dir.length();
     if (len < 1e-6) return this;
     dir.divideScalar(len);
+    // A limb that carries on from the last one's end at an angle (a kinked trunk, a bent branch, a rail round a corner): two open-ended cylinders meeting
+    // at an angle leave a wedge-shaped hole on the outside of the bend, and you saw through the trunk. Up to 45 degrees the new limb simply starts
+    // r tan(angle) back along its own axis: its side then spans the outside of the bend and both open rims lie inside the other cylinder (no extra
+    // triangles, so nothing in the budgets). A sharper bend is a knee or an elbow inside a body, left as it was. (Not for swaying limbs, whose joint
+    // would have to sway as both do.)
+    let from: V3 = a;
+    const c = this.chain;
+    const kr = c ? Math.max(rA, c.r) : 0;
+    if (c && sway === undefined && kr >= KNUCKLE_MIN_R && Math.abs(a[0] - c.x) + Math.abs(a[1] - c.y) + Math.abs(a[2] - c.z) < 1e-4) {
+      const cos = dir.x * c.dx + dir.y * c.dy + dir.z * c.dz;
+      if (cos < KNUCKLE_COS && cos >= Math.SQRT1_2) {
+        const e = (kr * Math.sqrt(1 - cos * cos)) / cos;
+        from = [a[0] - dir.x * e, a[1] - dir.y * e, a[2] - dir.z * e];
+      }
+    }
+    this.chain = sway === undefined ? { x: b[0], y: b[1], z: b[2], dx: dir.x, dy: dir.y, dz: dir.z, r: rB } : undefined;
+    const span = Math.hypot(b[0] - from[0], b[1] - from[1], b[2] - from[2]);
     q.setFromUnitVectors(up, dir);
     eul.setFromQuaternion(q);
     // CylinderGeometry: top radius first, then bottom. A limb runs a -> b, so the top is at b.
-    return this.add(new CylinderGeometry(rB, rA, len, radial, 1, !capped), {
-      at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2],
+    return this.add(new CylinderGeometry(rB, rA, span, radial, 1, !capped), {
+      at: [(from[0] + b[0]) / 2, (from[1] + b[1]) / 2, (from[2] + b[2]) / 2],
       rot: [eul.x, eul.y, eul.z],
       colour,
       // `sway` as a function of how far along the limb (0 at a, 1 at b)
-      sway: typeof sway === "function" ? (p: Vector3): number => sway(p.y / len + 0.5) : sway,
+      sway: typeof sway === "function" ? (p: Vector3): number => sway(p.y / span + 0.5) : sway,
     });
   }
 
   /** Merges everything: one geometry, `position` + `normal` + `color` + `onormal`. Undefined if nothing was added. */
   build(): BufferGeometry | undefined {
     if (this.parts.length === 0) return undefined;
+    separateCoplanar(this.parts); // D-080: a piece laid flush on another of a different colour is lifted off it, so the two never fight for the depth buffer
     const merged = mergeGeometries(this.parts, false);
     for (const g of this.parts) g.dispose();
     this.parts.length = 0;
+    this.chain = undefined;
     if (!merged) return undefined;
     weldedOutlineNormals(merged);
     merged.computeBoundingSphere();

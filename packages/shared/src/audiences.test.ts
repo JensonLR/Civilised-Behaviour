@@ -75,6 +75,16 @@ describe("audiences", () => {
     }
   });
 
+  it("an audience opens with the greeting, then what is on the table as its own paragraph, framed at the map table", () => {
+    const { c, p } = setup(3, 30);
+    for (const power of ["brine", "reapers", "choir"] as const) {
+      const v = openAudience(c, p, lv(c), offerFor(c, p, power, "purchase"), 1);
+      expect(v.line).toMatch(/\S\n\nOn the table: [^\n]+\. [A-Z]/);
+      expect(v.frame?.heading).toBe("An audience at the map table");
+      expect(v.frame?.asked).toMatch(/^Price asked: £\{price\} · Round \{round\} · The \w+ seems? \{mood\}\.$/);
+    }
+  });
+
   it("forged and stale answers re-issue the round instead of advancing", () => {
     const { c, p } = setup(3, 30);
     const a = offerFor(c, p, "brine", "purchase");

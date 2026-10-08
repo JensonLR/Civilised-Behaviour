@@ -197,11 +197,11 @@ describe("Sailing", () => {
     s.show("highmark", 3);
     expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Highmark");
     s.show("kessar", 5.2);
-    expect(document.querySelector(".sailing .clock")?.textContent).toBe("Landfall in 6 seconds");
+    expect(document.querySelector(".sailing .clock")?.textContent).toBe("Six bells to landfall");
     s.show("Somewhere <b>else</b>", 1);
     expect(document.querySelector(".sailing .where")?.textContent).toBe("Bound for Somewhere <b>else</b>");
     expect(document.querySelector(".sailing b")).toBeNull();
-    expect(document.querySelector(".sailing .clock")?.textContent).toBe("Landfall in 1 second");
+    expect(document.querySelector(".sailing .clock")?.textContent).toBe("One bell to landfall");
     s.arriving();
     expect(document.querySelector(".sailing")?.classList.contains("arriving")).toBe(true);
     expect(document.querySelector(".sailing .clock")?.textContent).toMatch(/Unloading/);
