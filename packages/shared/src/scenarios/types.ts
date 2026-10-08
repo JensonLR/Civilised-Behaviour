@@ -88,6 +88,11 @@ export interface TemplateDef<S extends BaseState> {
   wagon?: { at: { x: number; z: number; yaw: number }; crates: number; route: string };
   /** Props to place at the start, by name (the runner watches them for `destroyed`). */
   props?: { id: string; kind: number; x: number; z: number }[];
+  /**
+   * D-084: no powder by the post. The runner leaves a small keg store beside the largest armed party against you; a contract whose own story is about powder (the
+   * Winding Engine: the keg is fetched from the Company's magazine) or whose barrels mean something else (the Vacant Chair: a barrel is grain for a delegate) opts out.
+   */
+  noPowderStore?: true;
   /** Effects at the start (after the roster is spawned). */
   opening?(s: S): ScenarioFx[];
   /** Where an `explode` / `say` site name is: a point or the wagon. */

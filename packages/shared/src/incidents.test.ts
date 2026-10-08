@@ -14,7 +14,7 @@ import { zeroTally } from "./scenario.ts";
 const TEMPLATES: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "outpost_raid", "succession_dispute", "reapers_strike", "mine_rescue", "claim_race", "winding_engine", "smuggling_run", "flooded_market"];
 
 describe("incidents: chaos during play (D-052)", () => {
-  it("are dealt deterministically, about half the runs are quiet, every incident turns up, and the last one is never dealt twice running; the hub has none", () => {
+  it("are dealt deterministically, about one run in five is quiet (D-084), every incident turns up, and the last one is never dealt twice running; the hub has none", () => {
     const counts: Record<string, number> = {};
     let n = 0;
     for (let seed = 1; seed <= 400; seed++) {
@@ -31,9 +31,9 @@ describe("incidents: chaos during play (D-052)", () => {
       }
       expect(dealIncident(c, "secure_crossing", "hollowmere", seed)).toBe("none");
     }
-    expect((counts.none ?? 0) / n).toBeGreaterThan(0.4);
-    expect((counts.none ?? 0) / n).toBeLessThan(0.65);
-    for (const id of INCIDENT_IDS) expect(counts[id] ?? 0, id).toBeGreaterThan(((n * 0.5) / INCIDENT_IDS.length) * 0.6); // (each a fair share of the non-quiet half: at least 0.6 of an even split)
+    expect((counts.none ?? 0) / n).toBeGreaterThan(0.12);
+    expect((counts.none ?? 0) / n).toBeLessThan(0.3);
+    for (const id of INCIDENT_IDS) expect(counts[id] ?? 0, id).toBeGreaterThan(((n * 0.8) / INCIDENT_IDS.length) * 0.6); // (each a fair share of the busy four-fifths: at least 0.6 of an even split)
     for (const t of TEMPLATES) {
       const d = incidentDelayS(newCampaign(3), t, 3);
       expect(d).toBeGreaterThanOrEqual(INCIDENT.delayMinS);

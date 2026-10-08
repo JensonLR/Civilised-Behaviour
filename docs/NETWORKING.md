@@ -173,3 +173,10 @@ event is cosmetic (debris, spray, camera shake); a client that misses it still r
 
 ## Regions three and four (D-037): NO wire change
 **Schema and protocol: unchanged again.** Vesper Gorge and the Saltmarket Delta are `RegionId`s; their contracts, sixteen endings and the new `SiteLedger.ends` value ride the existing `WorldState.region`, `scenario`, `campaign` (JSON) and `powers` fields. `travelPropose {to}` accepts any REACHABLE region (all five now; a forged value is still ignored). The six new parley kinds and the `post` station kind are plain values on the existing `station`/`parley`/`parleyPick` messages, re-derived by the server from (kind, round). A world is a pure function of (region, seed); a scenario never changes collision (the scenery only SHOWS it through `RegionView.applyScenario`), so client prediction needs nothing new.
+
+## The Society's appetites (D-084)
+**Server -> client.** `gazette {text, k}` (`k`: the kind of moment, `MayhemFact.k`; the client stamps `request`): one line of the casualty column (a limb, a flight, a keg chain, a colleague shot, a bystander, an umbrella, a streak, a commission met), broadcast to the room, at most one every 2.2 s (`Mayhem.GAP`); the client shows it as text, never markup (`ui/Gazette.ts`). Cosmetic: the bill and the request are the server's (`systems/Mayhem.ts`), counted from the room's own damage, toss, keg and shot paths; nothing a client sends feeds them.
+**State.** The contract's `ScenarioView` carries the Society's request as its LAST objective (`id: "society"`, `optional: true`, the progress in its text); the commit writes `CampaignState.sites.lastBill` (optional, validated field by field on load: `parseBillRecord`).
+
+## Self-service erasure (HTTP)
+`POST /privacy/erase {identity}` (JSON): the anonymous device token (`cb.identity`, a UUID v4; anything else is 400 `invalid_identity`). Origin-checked like the code lookup (403), rate-limited per IP (3, then 1 a minute: 429). The server derives the identity key with the pepper and calls `store.deleteByIdentity`; the answer is `{ok: true, campaigns: n}`. The log records `privacy.erase {campaigns}` only.

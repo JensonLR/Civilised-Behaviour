@@ -87,7 +87,7 @@ export interface CombatHost {
   /** A free prop was struck by a ranged round (the room blows a powder keg up). */
   propShot?(propId: string, shooter: string): void;
   /** D-064: a blast caught a body already down (Casualties.toss: thrown, and a fallen NPC may come apart). */
-  toss?(id: string, dirX: number, dirZ: number, power: number, lift: number, severDamage: number, severBias: number): void;
+  toss?(id: string, dirX: number, dirZ: number, power: number, lift: number, severDamage: number, severBias: number, by?: string): void;
   /** D-064: a blast went off, credited to `owner` (the room lights the powder kegs it reaches). */
   blastAt?(owner: string, x: number, y: number, z: number, radius: number): void;
   /**
@@ -754,7 +754,7 @@ export class Combat {
       // ffScale softens a comrade's hit; the garrison is an enemy and takes the whole blow.
       const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : this.partySide(t) && this.partySide(this.host.players.get(h.shooter)) ? def.ffScale : 1);
       const before = t.missing;
-      this.host.damage(h.target, damage, h.lift > 0 ? { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, lift: h.lift } : { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter });
+      this.host.damage(h.target, damage, h.lift > 0 ? { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, lift: h.lift, weapon: h.weapon } : { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, weapon: h.weapon });
       this.knock(t, dirX, dirZ, h.knock, h.stumble, 0);
       this.stats.hits++;
       metrics.hitsLanded++;
@@ -945,7 +945,7 @@ export class Combat {
         const f = blastFalloff(d, b.radius);
         if (f <= 0.1) return;
         const h = Math.hypot(t.x - x, t.z - z) || 1;
-        this.host.toss(id, (t.x - x) / h, (t.z - z) / h, Math.min(1, (b.damage * f) / 60), f, b.damage * f, WEAPONS[weapon].severBias);
+        this.host.toss(id, (t.x - x) / h, (t.z - z) / h, Math.min(1, (b.damage * f) / 60), f, b.damage * f, WEAPONS[weapon].severBias, owner);
         return;
       }
       const pose = this.poseOf(t, undefined);

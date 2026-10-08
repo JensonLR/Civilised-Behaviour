@@ -71,6 +71,7 @@ import {
   KEG_FUSE,
   fuseTenths,
   remit,
+  billLine,
   askingToll,
   answerParley,
   DAYS_IDLE_CAP,
@@ -156,6 +157,7 @@ import { Cast } from "../systems/Cast.ts";
 import { Combat } from "../systems/Combat.ts";
 import { Followers } from "../systems/Followers.ts";
 import { Incidents } from "../systems/Incidents.ts";
+import { Mayhem } from "../systems/Mayhem.ts";
 import { Mounts } from "../systems/Mounts.ts";
 import { Scenario } from "../systems/Scenario.ts";
 import { Audience } from "../systems/Audience.ts";
@@ -286,6 +288,15 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private mounts!: Mounts;
   private followers!: Followers;
   private incidents!: Incidents;
+  /** D-084: the run's spectacle (the gazette, the Butcher's Bill, the Society's request). */
+  private readonly mayhem = new Mayhem({
+    row: (id) => {
+      const p = this.state.players.get(id);
+      return p ? { name: p.name, npc: p.npc } : undefined;
+    },
+    print: (text, k) => this.broadcast("gazette", { text, k }),
+    changed: () => this.scenario?.touch(),
+  });
   /** D-055: each member's honours (saved), each session's member key, and what each player has done in the contract under way. */
   private honours: HonoursState = newHonours();
   private readonly memberKey = new Map<string, string>();
@@ -430,7 +441,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       worldSeed: seed,
       rng: new Rng(seed ^ 0xc0ffee42),
       cannons: this.state.cannons,
-      emitShot: (e) => this.broadcast("shot", e),
+      emitShot: (e) => {
+        this.broadcast("shot", e);
+        if (this.scenario?.live) this.mayhem.onShot(e.id);
+      },
       emitImpact: (e) => this.broadcast("impact", e),
       emitBoom: (e) => this.broadcast("boom", e),
       sendTo: (sid, e) => this.clients.getById(sid)?.send("hitmark", e),
@@ -449,7 +463,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
       propShot: (id, shooter) => this.propShot(id, shooter),
-      toss: (id, dx, dz, power, lift, dmg, bias) => this.casualties.toss(id, dx, dz, power, lift, dmg, bias),
+      toss: (id, dx, dz, power, lift, dmg, bias, by) => {
+        const before = this.state.players.get(id)?.missing ?? 0;
+        this.casualties.toss(id, dx, dz, power, lift, dmg, bias);
+        const off = (this.state.players.get(id)?.missing ?? 0) & ~before;
+        if (this.scenario?.live) this.mayhem.onToss(id, by ?? "", power, lift, off ? (off as LimbId) : undefined, dx, dz);
+      },
       blastAt: (owner, x, y, z, radius) => this.powderCatches(owner, x, y, z, radius),
     });
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
@@ -688,6 +707,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (!sailing) {
         this.scenario?.tick(ctx.dt);
         this.incidents.tick(ctx.dt);
+        this.mayhem.tick(ctx.dt);
         this.audience.tick();
         tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
@@ -1196,6 +1216,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const template = this.forcedTemplate ?? pickTemplate(this.campaign, id, this.state.seed, rivalPresence(this.campaign, this.powers));
     if (template === undefined) return;
     this.scenario = new Scenario(this.scenarioHost(), template);
+    this.mayhem.begin(this.state.seed, this.campaign.day, template, this.campaign.sites.lastBill?.request);
     this.scenario.start();
     this.incidents.begin(template);
     this.deeds.clear(); // (honours count from a contract's start: D-055)
@@ -1268,6 +1289,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // D-040: the Society pays for the story (by the column-inch), so an honest campaign is never stranded at HQ with an empty purse
     const pay = remit(c, o);
     c = pay.c;
+    // D-084: the spectacle, and the learned body's commission: paid into the same purse, kept for the paper
+    const m = this.mayhem.settle({ resolution: o.resolution, seconds: o.seconds });
+    const bonus = m.reward + m.spectacle;
+    c = { ...c, purse: Math.round(Math.min(99999, Math.max(0, c.purse + bonus))), sites: { ...c.sites, lastBill: { day: c.day, region: this.state.region as RegionId, bill: m.bill, request: m.request, met: m.met, spectacle: m.spectacle } } };
     // D-045: a Raid on the Post was the Syndicate's raid, played: it is spent before the rival's days run (so it never lands twice), and the post takes what the ending says
     const raided = raidAftermath(p, o);
     p = raided.p;
@@ -1286,7 +1311,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.publishCampaign();
     this.publishPowers();
     // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
-    const debrief = [pay.line, ...consequenceLines(before, this.campaign).slice(0, 3)];
+    const debrief = [pay.line, ...[billLine(m.bill), m.spectacleLine, m.requestLine].filter((l) => l !== ""), ...consequenceLines(before, this.campaign).slice(0, 3)];
     for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") debrief.push(this.settlementLine(e));
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
     debrief.push(...this.followers.settle(o).slice(0, 4));
@@ -1392,7 +1417,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       spawnProp: (kind, x, z) => this.spawnPropAt(kind, x, z),
       rebuildBridge: (b) => this.rebuildWorld(b),
-      publish: (v: ScenarioView) => this.publishScenario(JSON.stringify(v)),
+      publish: (v: ScenarioView) => this.publishScenario(JSON.stringify({ ...v, objectives: [...v.objectives, this.mayhem.objective()] })), // (D-084: the Society's request rides last, optional)
       send: (sid, type, msg) => this.clients.getById(sid)?.send(type, msg),
       // the Ward's price carries what the Guild says about you at funerals (powers' flags); the Syndicate's presence shapes who is met
       negotiation: {
@@ -1494,6 +1519,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (!ps) return;
     const at = { x: ps.x, y: ps.y, z: ps.z };
     this.scenario?.onProp("destroyed", id);
+    if (this.scenario?.live) this.mayhem.onKeg(owner);
     this.consumeProp(id);
     const b = WEAPONS[WEAPON.CANNON].ranged!.blast!;
     this.combat.explode(owner, WEAPON.CANNON, { ...b, radius: KEG_FUSE.radius, damage: Math.round(b.damage * KEG_FUSE.damageMul) }, at.x, at.y, at.z, "");
@@ -1783,9 +1809,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   damagePlayer(sessionId: string, amount: number, hit?: HitInfo): void {
     const p = this.state.players.get(sessionId);
     const wasDown = p !== undefined && (p.flags & FLAG.DOWNED) !== 0;
+    const limbsBefore = p?.missing ?? 0;
     this.casualties.damage(sessionId, amount, hit);
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
+      if (this.scenario?.live) {
+        const off = p.missing & ~limbsBefore;
+        this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
+      }
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
       if (hit?.by) this.incidents?.onHurt(sessionId);
       if (down) this.noteDown(sessionId, p, hit?.by ?? "");

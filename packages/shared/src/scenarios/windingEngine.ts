@@ -326,6 +326,7 @@ const observe: ObserveSpec = {
 
 export const windingEngineTemplate: TemplateDef<EngineState> = {
   id: "winding_engine", title: "The Winding Engine",
+  noPowderStore: true, // (D-084: see the template type)
   brief: "The Company has leased its winding engine to the Syndicate, which it calls diversification, and the Syndicate is driving a cross-cut at the vein with it. When it breaks through, the gorge's best ore is theirs. Foul the boiler with grit while the guards look away, blow it up with the Company's own powder, pay the engineer to discover a fault, or watch it strike.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { beatOut: [E0.beat[0]!, E0.beat[1]!], beatBack: [E0.beat[1]!, E0.beat[0]!] },

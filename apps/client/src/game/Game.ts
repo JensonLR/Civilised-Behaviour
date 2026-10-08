@@ -40,6 +40,7 @@ import type { Stage } from "../render/Stage.ts";
 import { noteFolk } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { CommandWheel, WHEEL_STAMPS } from "../ui/CommandWheel.ts";
+import { Gazette } from "../ui/Gazette.ts";
 import { Hud } from "../ui/Hud.ts";
 import { LoadoutSheet } from "../ui/Loadout.ts";
 import { MapRoom } from "../ui/MapRoom.ts";
@@ -115,6 +116,8 @@ export class Game {
   private party: PartyState = newParty();
   private readonly props: PropViews;
   private readonly hud: Hud;
+  /** D-084: the casualty column (the server's gazette lines). */
+  private readonly gazette: Gazette;
   private readonly hitFx: HitFx;
   /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
   private readonly ledger = new BattleLedger();
@@ -241,6 +244,7 @@ export class Game {
     this.rig.occluders = this.mountView; // (a wagon or a horse between the lens and the wearer pulls the follow camera in front of it, as a wall does)
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
+    this.gazette = new Gazette(hud);
     this.hud.setCompass(regionMarks(this.builtRegion));
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
@@ -297,6 +301,7 @@ export class Game {
     session.room.onMessage("cry", (e: CryEvent) => {
       const p = typeof e?.id === "string" ? this.session.room.state.players.get(e.id) : undefined;
       if (p) this.audio.panic(this.session.value(p, "x"), this.session.value(p, "y") + 1.5, this.session.value(p, "z"), p.look);
+      this.actors.get(e.id)?.body.cue("fear", 3.5); // (D-084: the face says it too)
     });
 
     if (isDemo()) {
@@ -305,6 +310,15 @@ export class Game {
         if (code === DEMO.closeCode) this.endDemo();
       });
     }
+    session.room.onMessage("gazette", (m: { text?: unknown; k?: unknown }) => {
+      this.gazette.push(m?.text);
+      if (m?.k === "request") {
+        playSfx("parley_stamp"); // (D-084: a commission met is stamped, like a deal, and the party laughs)
+        this.session.room.state.players.forEach((p, id) => {
+          if (p.npc === 0) this.actors.get(id)?.body.cue("laugh", 2.5);
+        });
+      }
+    });
     session.room.onMessage("notice", (m: { text: string }) => {
       this.demoBanner?.notice(m.text); // (a demo warning re-synchronises the countdown to the server's; it is still shown as the telegram it is)
       // The hands' answer to an order ("Obeyed." / "Refused. ...") is the wheel's own plain line, not a notice.
@@ -733,6 +747,7 @@ export class Game {
     this.audio.dispose();
     this.content.dispose();
     this.hud.dispose();
+    this.gazette.dispose();
     this.combat.dispose();
     this.viewmodel.dispose();
     this.hitFx.dispose();
@@ -1384,6 +1399,18 @@ export class Game {
    */
   private onSever(e: SeverEvent): void {
     const a = this.actors.get(e.id);
+    // D-084: whoever saw it pulls a face, and looks
+    if (a) {
+      const at = a.body.root.position;
+      for (const [id, o] of this.actors) {
+        if (id === e.id) continue;
+        const q = o.body.root.position;
+        if (Math.hypot(q.x - at.x, q.z - at.z) < 10) {
+          o.body.cue("disgust", 2);
+          o.body.lookAt(at.x, at.z, 2);
+        }
+      }
+    }
     if (e.id === this.session.sessionId) this.rig.addShake(0.6 + e.power * 0.4);
     const victim = this.session.room.state.players.get(e.id);
     if (victim) {

@@ -1,3 +1,4 @@
+import type { BillRecord } from "./mayhem.ts";
 import type { CastOrder, NpcSide } from "./expeditionTypes.ts";
 /** Campaign contract (docs/_notes/slice.md section 1). Types and constants only; frozen. */
 export const REGION_IDS = ["hollowmere", "kessar", "highmark", "vesper", "saltmarket"] as const;   // append-only (D-036: highmark, region two; D-037: vesper = the gorge, saltmarket = the delta)
@@ -48,6 +49,8 @@ export interface SiteLedger {
   ends: Partial<Record<ScenarioTemplateId, ResolutionId>>;
   /** D-052: the last incident (incidents.ts): never dealt twice running, and printed in the next paper. Absent until the first one (and in every campaign saved before D-052). */
   lastIncident?: IncidentRecord;
+  /** D-084: the last run's Butcher's Bill, its Society request and the spectacle paid (mayhem.ts): printed in the next paper. Absent until the first run after D-084. */
+  lastBill?: BillRecord;
 }
 /** D-052: chaos during play (incidents.ts, docs/_notes/incidents.md). Append-only. */
 export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter" | "runaway_horse" | "powder_wagon";

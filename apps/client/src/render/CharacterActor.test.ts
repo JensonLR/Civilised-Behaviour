@@ -182,3 +182,52 @@ describe("CharacterActor torch (the raid's raiders)", () => {
     a.dispose();
   });
 });
+
+describe("D-084: faces in play", () => {
+  const anim = (a: CharacterActor) => (a as unknown as { anim: { currentExpression: string; look: number } }).anim;
+
+  it("pain wins; then a passing mood for its time; a raised sight narrows the eyes; then the neutral face again", () => {
+    const a = new CharacterActor(new Scene(), look(5), 1, false);
+    settle(a, pose());
+    expect(anim(a).currentExpression).toBe("neutral");
+    a.cue("triumph", 1);
+    settle(a, pose(), 10);
+    expect(anim(a).currentExpression).toBe("triumph");
+    settle(a, pose(FLAG.GROUNDED | FLAG.AIMING), 60); // (the grin has passed; the sight is up)
+    expect(anim(a).currentExpression).toBe("angry");
+    a.cue("fear", 2);
+    settle(a, pose(FLAG.GROUNDED | FLAG.DOWNED), 5);
+    expect(anim(a).currentExpression).toBe("pain");
+    settle(a, pose(), 200);
+    expect(anim(a).currentExpression).toBe("neutral");
+  });
+
+  it("a weaker mood never cuts a stronger short (a panicked soldier does not grin at the next shot), and the same mood is extended, not restarted", () => {
+    const a = new CharacterActor(new Scene(), look(6), 1, false);
+    a.cue("fear", 3);
+    a.cue("angry", 1);
+    a.cue("triumph", 1);
+    expect(a.currentMood).toBe("fear");
+    settle(a, pose(), 200); // (past three seconds)
+    expect(a.currentMood).toBeUndefined();
+    a.cue("surprise", 1);
+    a.cue("fear", 0.5);
+    expect(a.currentMood).toBe("fear");
+  });
+
+  it("the head turns toward a blast to one side, eases back after, and never twists to look behind", () => {
+    const a = new CharacterActor(new Scene(), look(7), 1, false);
+    const p = pose(FLAG.GROUNDED, { x: 0, z: 0, facing: 0 }); // facing north (-z)
+    settle(a, p);
+    a.lookAt(-6, -6, 1); // ahead and to one side
+    settle(a, p, 30);
+    const side = anim(a).look;
+    expect(Math.abs(side)).toBeGreaterThan(0.4);
+    expect(Math.abs(side)).toBeLessThanOrEqual(1.05);
+    settle(a, p, 200);
+    expect(Math.abs(anim(a).look)).toBeLessThan(0.05);
+    a.lookAt(0, 8, 2); // directly behind
+    settle(a, p, 30);
+    expect(Math.abs(anim(a).look)).toBeLessThan(0.05);
+  });
+});

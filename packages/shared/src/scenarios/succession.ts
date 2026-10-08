@@ -461,6 +461,7 @@ void SD;
 
 export const successionTemplate: TemplateDef<SuccessionState> = {
   id: "succession_dispute", title: "The Vacant Chair",
+  noPowderStore: true, // (D-084: see the template type)
   brief: "The King of Highmark has been pending for six years, and the Vacant Chair has three bidders: Princess Orla by Seniority, Prince Dunstan by Acclamation, the Syndicate by cheque. The Reapers' Assembly ratifies at the harvest bell, and the Lord Chamberlain ratifies nothing without Form 11. Back an heir, broker a regency, buy the vote in grain, take the cheque, or seat somebody by force.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { throne: THRONE(), court: HIGHMARK_ANCHORS.capital.court },
