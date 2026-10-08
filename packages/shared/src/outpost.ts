@@ -30,7 +30,7 @@ export const OUTPOST_REGIONS = Object.keys(OUTPOST_SITES) as RegionId[];
 export const KESSAR_OUTPOST = OUTPOST_SITES.kessar!;
 
 export type OutpostPieceKind =
-  | "tent" | "fire" | "hut" | "stall" | "rail" | "well" | "palisade" | "post" | "tower" | "house" | "mill" | "hall" | "bell" | "clock" | "wall" | "stakes";
+  | "tent" | "fire" | "hut" | "stall" | "rail" | "well" | "palisade" | "post" | "tower" | "house" | "mill" | "hall" | "bell" | "clock" | "wall" | "stakes" | "sign";
 
 export interface OutpostPiece {
   kind: OutpostPieceKind;
@@ -68,6 +68,8 @@ function localPieces(): OutpostPiece[] {
   const out: OutpostPiece[] = [];
   // the foundation: stakes and string round the yard (dressing only, so the yard stays free)
   out.push(BOX("stakes", "none", "fence", 0, 0, 0, 3.2, 3.2, 0.7, false));
+  // the name board on its pole at the north of the yard, from the foundation to the town (dressing: the client letters it with the post's name and stage)
+  out.push(BOX("sign", "none", "fence", 0, -3.6, 0, 0.7, 0.03, 1.75, false));
   // camp
   out.push(BOX("tent", "camp", "tent", -10, -6, 0.3, 2, 1.6, 2.4), BOX("tent", "camp", "tent", -11, 5, -0.2, 2, 1.6, 2.4), CIRCLE("fire", "camp", "fire", -7, -0.5, 0.55, 0.5));
   // trading post: a plank hut, a counter, a hitching rail, a well

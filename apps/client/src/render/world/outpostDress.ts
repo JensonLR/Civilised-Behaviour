@@ -2,10 +2,11 @@ import { Group, Mesh, type Object3D } from "three";
 import type { CollisionWorld, RegionDress, RegionId } from "@cb/shared";
 import { makeSolid, toonMaterial } from "./toon.ts";
 import { buildOutpostGeometry, buildRoadRibbon } from "./kessar/outpost.ts";
+import { boardLetteringGeometry, boardLetteringMaterial, boardLetteringTexture, outpostBoards } from "./outpostSigns.ts";
 
 /**
  * What the Society (and, at Kessar, the Syndicate) has built in a region, swapped in place under the view's root when the dress changes (D-035; D-056 for every region with a
- * site): the stage's solids and the foundation's stakes as ONE merged solid with its ink hull, plus (Kessar only) the wire, the launch, the rival's post and the road ribbon.
+ * site): the stage's solids and the foundation's stakes as ONE merged solid with its ink hull, the boards' lettering, plus (Kessar only) the wire, the launch, the rival's post and the road ribbon.
  * The collision world is the integrator's business (`worldKey`); this only changes what is drawn.
  */
 export class OutpostDress {
@@ -17,7 +18,7 @@ export class OutpostDress {
 
   /** True when something was rebuilt (the caller recounts its stats). */
   apply(d: RegionDress): boolean {
-    const key = `${d.outpost}|${d.rivalPost}|${d.road}|${d.telegraph}|${d.launch}`;
+    const key = `${d.outpost}|${d.rivalPost}|${d.road}|${d.telegraph}|${d.launch}|${d.name}`;
     if (key === this.key) return false;
     this.key = key;
     this.clear();
@@ -31,6 +32,19 @@ export class OutpostDress {
       const mat = toonMaterial({ wetDark: 0.8 });
       this.owned.push(mat);
       makeSolid(group, geo, mat, { name: "outpost", outline: this.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    }
+    // the boards, lettered: the post's name and what it has become; the Syndicate's own at Kessar
+    const boards = outpostBoards(this.world, d, this.region);
+    const letters = boardLetteringGeometry(boards);
+    if (letters) {
+      const tex = boardLetteringTexture(boards);
+      const mat = boardLetteringMaterial(tex);
+      this.owned.push(letters, mat);
+      if (tex) this.owned.push(tex);
+      const mesh = new Mesh(letters, mat);
+      mesh.name = "outpost-boards";
+      mesh.receiveShadow = true;
+      group.add(mesh);
     }
     const road = this.region === "kessar" ? buildRoadRibbon(this.world, d.road) : undefined;
     if (road) {

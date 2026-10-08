@@ -122,7 +122,7 @@ function wallSeg(k: Kit, p: OutpostPiece, gy: number): void {
   k.clearBase();
 }
 
-/** The foundation: stakes at the corners of a square round the yard, string between them, a plain painted board. */
+/** The foundation: stakes at the corners of a square round the yard, string between them (the name board is its own piece: it stays when the stakes go). */
 function stakes(k: Kit, p: OutpostPiece, world: CollisionWorld): void {
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
   const corners: [number, number][] = [[-p.hx, -p.hz], [p.hx, -p.hz], [p.hx, p.hz], [-p.hx, p.hz]];
@@ -131,9 +131,13 @@ function stakes(k: Kit, p: OutpostPiece, world: CollisionWorld): void {
     const a = corners[i]!, b = corners[(i + 1) % 4]!;
     k.limb([p.x + a[0], g(p.x + a[0], p.z + a[1]) + 0.55, p.z + a[1]], [p.x + b[0], g(p.x + b[0], p.z + b[1]) + 0.55, p.z + b[1]], 0.012, 0.012, O.string, 3);
   }
-  const sy = g(p.x, p.z - p.hz - 0.4);
-  k.limb([p.x, sy - 0.1, p.z - p.hz - 0.4], [p.x, sy + 1.5, p.z - p.hz - 0.4], 0.05, 0.05, O.pole, 5);
-  box(k, [1.4, 0.7, 0.06], [p.x, sy + 1.4, p.z - p.hz - 0.4], O.sign);
+}
+
+/** The name board: a pole and a painted plank (1.4 x 0.7) at every stage; `outpostSigns.ts` letters it with the post's name and what it has become. */
+function signBoard(k: Kit, p: OutpostPiece, world: CollisionWorld): void {
+  const sy = world.terrainHeight(p.x, p.z);
+  k.limb([p.x, sy - 0.1, p.z], [p.x, sy + 1.5, p.z], 0.05, 0.05, O.pole, 5);
+  box(k, [1.4, 0.7, 0.06], [p.x, sy + 1.4, p.z], O.sign);
 }
 
 /** The telegraph: a pole every 16 m with a crossarm and two insulators, wire hung between them (a slack line of three segments each). */
@@ -201,6 +205,7 @@ export function buildOutpostGeometry(world: CollisionWorld, dress: RegionDress, 
     const gy = world.terrainHeight(p.x, p.z);
     switch (p.kind) {
       case "stakes": stakes(k, p, world); break;
+      case "sign": signBoard(k, p, world); break;
       case "tent": k.setBase(p.x, gy, p.z, p.yaw); tent(k, lod); k.clearBase(); break;
       case "fire":
         k.add(new CylinderGeometry(p.hx, p.hx + 0.05, 0.12, 8), { at: [p.x, gy + 0.06, p.z], colour: C.ash, flat: true });

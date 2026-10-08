@@ -22,6 +22,12 @@ export const OUTPOST_NAMES: readonly string[] = [
 export const STAGE_LABEL: Record<OutpostStage, string> = {
   none: "a foundation", camp: "a camp", trading_post: "a trading post", fortified_outpost: "a fortified outpost", settlement: "a settlement", town: "a town",
 };
+/** The foundation's board, lettered: the post's name, then what it is now (the board stands at every stage; `{name}` is the post's). Set on two lines at the full stop. */
+export const BOARD_LINE: Record<OutpostStage, string> = {
+  none: "{name}. A Foundation, Pending", camp: "{name}. A Society Camp", trading_post: "{name}. Trading Post", fortified_outpost: "{name}. Fortified Outpost", settlement: "{name}. A Settlement", town: "{name}. Town & Borough",
+};
+/** The Syndicate's board at its own post (Kessar). */
+export const RIVAL_BOARD = "Dunmarrow-Vesk Syndicate. Concessions Bought Here";
 export const PRIORITY_LABEL: Record<OutpostPriority, string> = {
   trade: "Trade", military: "Defence", growth: "Growth", extraction: "Extraction", transport: "Transport",
 };
