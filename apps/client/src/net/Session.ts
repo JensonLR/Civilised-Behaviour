@@ -140,13 +140,23 @@ export class Session {
   }
 
   /** What the collision world depends on, read from the two replicated JSON strings (the server calls the same function): bridge, outpost stage, telegraph (D-035), for the region the room stands in (D-056). */
-  static worldOptsOf(st: { campaign?: string; settlements?: string; region?: string }): RegionWorldOpts {
-    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "", isRegionId(st.region) ? st.region : "hollowmere");
+  static worldOptsOf(st: { campaign?: string; settlements?: string; region?: string; powers?: string }): RegionWorldOpts {
+    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "", isRegionId(st.region) ? st.region : "hollowmere", st.powers ?? "");
   }
 
   /** The world's identity: the Game rebuilds the collision world and the scenery only when it changes. */
-  static worldKeyOf(st: { campaign?: string; settlements?: string; region?: string }): string {
-    return worldKey(Session.worldOptsOf(st));
+  private static readonly keyMemo: { c?: string; s?: string; r?: string; p?: string; key: string } = { key: "" };
+
+  static worldKeyOf(st: { campaign?: string; settlements?: string; region?: string; powers?: string }): string {
+    // asked every frame: the sections are parsed again only when one of them changes
+    const m = Session.keyMemo;
+    if (m.c === st.campaign && m.s === st.settlements && m.r === st.region && m.p === st.powers && m.key !== "") return m.key;
+    m.c = st.campaign;
+    m.s = st.settlements;
+    m.r = st.region;
+    m.p = st.powers;
+    m.key = worldKey(Session.worldOptsOf(st));
+    return m.key;
   }
 
   static worldFor(region: string | undefined, seed: number, opts: RegionWorldOpts | BridgeState): CollisionWorld {

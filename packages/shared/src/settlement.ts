@@ -5,6 +5,7 @@ import { CRATE_LINES, DELIVER_LINES, FOUNDATION_ONLY_CRATES, FOUNDED_LINES, OUTP
 import { PropKind, type PropKindId } from "./props.ts";
 import { hash3 } from "./rng.ts";
 import { OUTPOST_SITES } from "./outpost.ts";
+import { parsePowers } from "./powers.ts";
 import {
   FOUNDATION_CRATES, OUTPOST_STAGES, SETTLEMENTS_JSON_MAX, type OutpostPriority, type OutpostStage, type OutpostState, type PaperItem, type RegionClimate, type RegionDress, type RegionWorldOpts,
   type RivalAgent, type SettlementEvent, type SettlementsState, type TechState,
@@ -331,18 +332,24 @@ export function regionDressOf(s: SettlementsState, rival: Pick<RivalAgent, "post
   return { outpost: p?.stage ?? "none", rivalPost: region === "kessar" ? rival.posts : 0, road: region === "kessar" ? s.tech.road : 0, telegraph: region === "kessar" && s.tech.telegraph, launch: region === "kessar" && s.tech.launch, name: p?.name ?? "" };
 }
 
-/** What the COLLISION world depends on, from the two replicated JSON strings (both sides call this, so they build the same world). Garbage in = the plain world. */
-export function regionWorldOpts(campaignJson: string, settlementsJson: string, region: RegionId = "kessar"): RegionWorldOpts {
+/**
+ * What the COLLISION world depends on, from the replicated JSON strings (both sides call this, so they build the same world). Garbage in = the plain world. `powersJson` carries
+ * the Syndicate's posts: its own post at Kessar is solid (absent or unreadable: no post, the old world).
+ */
+export function regionWorldOpts(campaignJson: string, settlementsJson: string, region: RegionId = "kessar", powersJson = ""): RegionWorldOpts {
   const c = parseCampaign(campaignJson);
   const s = parseSettlements(settlementsJson);
   // (D-056: the post of the region asked about; the wire only ever runs where the region has a line, which telegraphPoles decides)
   const stage = OUTPOST_SITES[region] ? s?.posts[region]?.stage ?? "none" : "none";
-  return { bridge: c?.crossing.bridge ?? "intact", outpost: stage, telegraph: stage !== "none" && s?.tech.telegraph === true && OUTPOST_SITES[region]?.telegraph !== undefined };
+  const out: RegionWorldOpts = { bridge: c?.crossing.bridge ?? "intact", outpost: stage, telegraph: stage !== "none" && s?.tech.telegraph === true && OUTPOST_SITES[region]?.telegraph !== undefined };
+  const posts = region === "kessar" && powersJson !== "" ? parsePowers(powersJson)?.rival.posts ?? 0 : 0;
+  if (posts >= 1) out.rivalPost = posts >= 2 ? 2 : 1;
+  return out;
 }
 
 /** The world's identity: rebuild the collision world only when this changes. A rigged bridge and an intact one are the same world. */
 export function worldKey(o: RegionWorldOpts): string {
-  return `${o.bridge === "collapsed" ? "collapsed" : "standing"}|${o.outpost ?? "none"}|${o.telegraph === true ? "wire" : "-"}`;
+  return `${o.bridge === "collapsed" ? "collapsed" : "standing"}|${o.outpost ?? "none"}|${o.telegraph === true ? "wire" : "-"}${o.rivalPost ? `|syn${o.rivalPost}` : ""}`;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------

@@ -1279,6 +1279,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   /** A scenario resolved: the campaign changes (one rules table in shared/factions.ts), everyone is told what the Ward made of it. */
   private commitOutcome(o: ScenarioOutcome): void {
     const before = this.campaign;
+    const synBefore = this.worldOpts().rivalPost; // (the Syndicate's post is solid: when its days build it here, the ground changes under the party)
     // The pipeline (D-035): ledger -> the powers' relations -> the rival's days (absence gives it whole idle days, once) -> the outposts' day -> what the outposts mean to the
     // powers -> publish everything -> save. Each step is a pure function in shared/; this method only orders them and publishes.
     let c = applyOutcome(before, o);
@@ -1310,6 +1311,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     events.push(...this.outposts.evolve(c.day, (r) => regionClimate(c, p, r)));   // (each post in its own region's weather, D-056; the outposts publish themselves and tell the powers: commitSettlements)
     this.publishCampaign();
     this.publishPowers();
+    if (this.worldOpts().rivalPost !== synBefore) this.rebuildWorld();
     // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
     const debrief = [pay.line, ...[billLine(m.bill), m.spectacleLine, m.requestLine].filter((l) => l !== ""), ...consequenceLines(before, this.campaign).slice(0, 3)];
     for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") debrief.push(this.settlementLine(e));
@@ -1472,7 +1474,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
    * Once published the two are the same text, which is what the clients build from.
    */
   private worldOpts(): RegionWorldOpts {
-    return regionWorldOpts(serializeCampaign(this.campaign), serializeSettlements(this.settlements), this.state.region as RegionId);
+    return regionWorldOpts(serializeCampaign(this.campaign), serializeSettlements(this.settlements), this.state.region as RegionId, serializePowers(this.powers));
   }
 
   private consumeProp(id: string): void {

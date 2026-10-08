@@ -2,6 +2,7 @@ import type { Obstacle, ObstacleTag } from "./collision.ts";
 import type { RegionId } from "./campaignTypes.ts";
 import type { Terrain } from "./terrain.ts";
 import { OUTPOST_STAGES, type OutpostStage } from "./worldTypes.ts";
+import { CAMP } from "./camp.ts";
 
 /**
  * The Society's outpost as ONE pure description (D-035, like `kessarPlan`): the collision world and the view both read `outpostPlan(stage)`, so the hut you see
@@ -138,6 +139,28 @@ export function outpostObstacles(stage: OutpostStage, telegraph: boolean, terrai
     else out.push({ kind: "box", tag: p.tag, x: p.x, z: p.z, hx: p.hx, hz: p.hz, yaw: p.yaw, y0: y - 0.6, y1: y + p.height });
   }
   if (telegraph) for (const q of telegraphPoles(region)) out.push({ kind: "circle", tag: "pole", x: q.x, z: q.z, r: 0.16, y0: g(q.x, q.z) - 1, y1: g(q.x, q.z) + 7 });
+  return out;
+}
+
+/**
+ * The Syndicate's own post (Kessar), as colliders: its flagpole, its board's pole and its tent; at two posts the plank hut and the counter. The view (`outpost.ts` in the client)
+ * draws exactly these, at these places and turns; it stood drawn and walk-through (a player could stand inside the Syndicate's hut). Appended after everything else, so a world
+ * without the post is the old world, byte for byte. Pure: no randomness.
+ */
+export function rivalPostObstacles(stage: number, terrain: Terrain, region: RegionId = "kessar"): Obstacle[] {
+  const at = OUTPOST_SITES[region]?.rivalSite;
+  if (!at || !(stage >= 1)) return [];
+  const g = (x: number, z: number): number => terrain.height(x, z);
+  const th = CAMP.tentHalf;
+  const out: Obstacle[] = [
+    { kind: "circle", tag: "pole", x: at.x, z: at.z, r: 0.12, y0: g(at.x, at.z) - 1, y1: g(at.x, at.z) + 5 },
+    { kind: "circle", tag: "pole", x: at.x + 2, z: at.z - 3, r: 0.08, y0: g(at.x + 2, at.z - 3) - 1, y1: g(at.x + 2, at.z - 3) + 1.6 },
+    { kind: "box", tag: "tent", x: at.x - 5, z: at.z + 2, hx: th.hx, hz: th.hz, yaw: 0.3, y0: g(at.x - 5, at.z + 2) - 0.6, y1: g(at.x - 5, at.z + 2) + th.height },
+  ];
+  if (stage >= 2) {
+    out.push({ kind: "box", tag: "house", x: at.x + 7, z: at.z + 3, hx: 1.7, hz: 1.4, yaw: -0.2, y0: g(at.x + 7, at.z + 3) - 0.6, y1: g(at.x + 7, at.z + 3) + 3 });
+    out.push({ kind: "box", tag: "stall", x: at.x + 7, z: at.z - 3, hx: 1.2, hz: 0.55, yaw: 0, y0: g(at.x + 7, at.z - 3) - 0.6, y1: g(at.x + 7, at.z - 3) + 1.1 });
+  }
   return out;
 }
 
