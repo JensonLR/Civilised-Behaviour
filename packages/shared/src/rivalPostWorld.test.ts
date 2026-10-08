@@ -9,9 +9,10 @@ import { newCampaign, serializeCampaign } from "./factions.ts";
 /** The Syndicate's own post at Kessar was drawn and walk-through: a player could stand inside its hut. It is solid now, on both sides of the wire, from the same strings. */
 describe("the Syndicate's post is solid", () => {
   const at = OUTPOST_SITES.kessar!.rivalSite;
+  // (`posts` is 0..2 by type; a hand-edited or hostile save may carry more, which the world options clamp: hence the cast)
   const powersWith = (posts: number): string => {
     const p = newPowers(3);
-    return serializePowers({ ...p, rival: { ...p.rival, posts } });
+    return serializePowers({ ...p, rival: { ...p.rival, posts: posts as 0 | 1 | 2 } });
   };
 
   it("one post is a flagpole, a board and a tent; two add the hut and the counter; none is nothing", () => {
