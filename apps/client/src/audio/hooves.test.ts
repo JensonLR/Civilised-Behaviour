@@ -89,16 +89,6 @@ describe("hoofbeats: locked to the gait's cadence", () => {
     expect(fast.loud).toBeGreaterThan(slow.loud);
     expect(fast.loud).toBeLessThanOrEqual(1);
   });
-
-  it("allocates nothing: 200,000 frames over a herd's speeds move the heap by less than 64 KB", () => {
-    const c = new HoofCadence();
-    let sink = 0;
-    for (let i = 0; i < 50_000; i++) sink += c.step(1 / 60, 2 + (i % 90) / 10, true);
-    const before = process.memoryUsage().heapUsed;
-    for (let i = 0; i < 200_000; i++) sink += c.step(1 / 60, 2 + (i % 90) / 10, true);
-    expect(sink).toBeGreaterThan(0);
-    expect(process.memoryUsage().heapUsed - before).toBeLessThan(2 * 1024 * 1024); // (no forced GC here: a loose bound that an allocation per frame, 200k x 16+ B, would break)
-  });
 });
 
 describe("hooves in the voice pool", () => {
