@@ -56,6 +56,19 @@ describe("the expedition's new sounds, rendered offline (every variant of every 
     expect(new Set(["walk", "trot", "canter", "gallop"].map(sig)).size).toBeGreaterThanOrEqual(3);
   });
 
+  it("the wagon is wooden and low: the rattle is a knock with the load shaken after it (most of it under 2 kHz), the creak a groan, and the two keys are different sounds", () => {
+    for (const r of of("wagon_roll", "rattle")) {
+      expect(r.centroid, `rattle/${r.variant}`).toBeGreaterThan(400);
+      expect(r.centroid, `rattle/${r.variant}`).toBeLessThan(1500);
+      expect(r.bands[0] + r.bands[1], `rattle/${r.variant} low+mid`).toBeGreaterThan(0.55);
+    }
+    for (const r of of("wagon_roll", "creak")) {
+      expect(r.centroid, `creak/${r.variant}`).toBeGreaterThan(250);
+      expect(r.centroid, `creak/${r.variant}`).toBeLessThan(900);
+    }
+    expect(Math.abs(mean(of("wagon_roll", "rattle").map((r) => r.centroid)) - mean(of("wagon_roll", "creak").map((r) => r.centroid)))).toBeGreaterThan(60);
+  });
+
   it("tack, paper and gulls are bright (centroid above 1 kHz); the sailing and the stamp are low", () => {
     for (const r of of("tack_jingle")) expect(r.centroid, "jingle").toBeGreaterThan(1500);
     for (const r of of("paper_rustle")) expect(r.centroid, "paper").toBeGreaterThan(1800);

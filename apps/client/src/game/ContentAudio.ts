@@ -2,6 +2,7 @@ import { GAIT, MOUNT_KIND, MOUNT_PHASE, hash3, hqPlan, parseCampaign } from "@cb
 import { playSfx, stopSfx } from "../audio/index.ts";
 import type { PlayOpts } from "../audio/engine.ts";
 import { GAIT_KEYS, HoofCadence } from "../audio/hooves.ts";
+import { WagonRoll, wagonSeed } from "../audio/wagons.ts";
 
 /**
  * The sounds of the expedition's world (D-035, R), derived ONLY from state every client already has, so a remote rider is heard from where he is and nothing travels the
@@ -64,6 +65,10 @@ interface HoofTrack {
   /** The side the last hoof print fell (D-058): they alternate. */
   side: 1 | -1;
 }
+interface WagonTrack {
+  roll: WagonRoll;
+  seen: number;
+}
 interface GunTrack {
   phase: number;
   seen: number;
@@ -77,6 +82,7 @@ const HQ = hqPlan();
 export class ContentAudio {
   private readonly hoofs = new Map<string, HoofTrack>();
   private readonly guns = new Map<string, GunTrack>();
+  private readonly wagons = new Map<string, WagonTrack>();
   /**
    * Two scratch option objects, never one: a field that is sometimes `undefined` and sometimes a double is stored as a pointer, and every double written to it would be boxed
    * (a heap number per store). `at` always has a position, `flat` never does, so each keeps plain double fields and the frame allocates nothing.
@@ -85,6 +91,8 @@ export class ContentAudio {
   private readonly flat: PlayOpts = { x: undefined, y: undefined, z: undefined, volume: 1, key: undefined, seed: undefined };
   private frame = 0;
   private dt = 0;
+  /** The frame's seconds again, in a typed array: what `WagonRoll.roll` reads (no double crosses the call). */
+  private readonly clock = new Float64Array(1);
   private primed = false;
   private sailing = false;
   private gullN = 0;
@@ -121,6 +129,7 @@ export class ContentAudio {
   // ---- horses -------------------------------------------------------------------------------------------------------------------------------
 
   private readonly onMount = (row: MountRowView, id: string): void => {
+    if (row.kind === MOUNT_KIND.wagon) return this.onWagon(row, id);
     if (row.kind !== MOUNT_KIND.horse) return;
     let t = this.hoofs.get(id);
     if (!t) {
@@ -159,6 +168,26 @@ export class ContentAudio {
     if (t.seen !== this.frame) this.hoofs.delete(id);
   };
 
+  // ---- the wagon: iron tyres over the stones, the axle working (wagons.ts) ------------------------------------------------------------------
+
+  private onWagon(row: MountRowView, id: string): void {
+    let t = this.wagons.get(id);
+    if (!t) {
+      t = { roll: new WagonRoll(wagonSeed(id)), seen: this.frame };
+      this.wagons.set(id, t);
+    }
+    t.seen = this.frame;
+    if (row.phase === MOUNT_PHASE.wrecked) return;
+    const knocks = t.roll.roll(this.clock, row);
+    if (!this.primed || (knocks === 0 && !t.roll.creak)) return; // (most frames: nothing lands, and nothing is read that would box a number)
+    for (let k = 0; k < knocks; k++) this.putAt("wagon_roll", row.x, row.y + 0.4, row.z, t.roll.loud, "rattle");
+    if (t.roll.creak) this.putAt("wagon_roll", row.x, row.y + 0.8, row.z, t.roll.loud * 0.8, "creak");
+  }
+
+  private readonly pruneWagon = (t: WagonTrack, id: string): void => {
+    if (t.seen !== this.frame) this.wagons.delete(id);
+  };
+
   // ---- the gun crew ------------------------------------------------------------------------------------------------------------------------
 
   private readonly onGun = (row: CannonRowView, id: string): void => {
@@ -188,11 +217,13 @@ export class ContentAudio {
     if (!(dt >= 0) || !Number.isFinite(dt)) return;
     this.frame++;
     this.dt = dt;
+    this.clock[0] = dt;
     this.view = v;
     const hollowmere = v.region === "hollowmere";
 
     v.mounts.forEach(this.onMount);
     this.hoofs.forEach(this.pruneHoof);
+    this.wagons.forEach(this.pruneWagon);
     if (v.cannons) {
       v.cannons.forEach(this.onGun);
       this.guns.forEach(this.pruneGun);

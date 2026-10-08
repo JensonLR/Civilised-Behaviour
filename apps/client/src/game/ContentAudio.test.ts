@@ -47,7 +47,32 @@ describe("ContentAudio: hooves and tack from the mount rows", () => {
       expect(h.volume!).toBeLessThanOrEqual(1);
     }
     expect(r.plays.filter((p) => p.x === 50)).toEqual([]); // the standing horse
-    expect(r.plays.filter((p) => p.x === 0)).toEqual([]); // the wagon
+    expect(named(r.plays, "hoof").filter((p) => p.x === 0)).toEqual([]); // the wagon: its wheels rattle (below), but it has no hooves
+  });
+
+  it("a rolling wagon rattles about once a metre at its bed, keyed `rattle`, and creaks every few metres; standing or wrecked it is silent; the first sight is silent", () => {
+    const r = recorder();
+    const c = new ContentAudio({ sfx: r.sfx });
+    const wagon = (over: Partial<MountRowView>): MountRowView => ({ ...horse({ x: 0, y: 2 }), kind: MOUNT_KIND.wagon, ...over });
+    const w = world({ mounts: { w1: wagon({ speed: 4 }), w2: wagon({ x: 40, speed: 0 }), w3: wagon({ x: 80, speed: 4, phase: MOUNT_PHASE.wrecked }) } });
+    c.update(1 / 60, view(w));
+    expect(r.plays).toEqual([]);
+    frames(c, w, 600); // 10 s at 4 m/s: 40 m
+    const rolls = named(r.plays, "wagon_roll");
+    const rattles = rolls.filter((p) => p.key === "rattle");
+    const creaks = rolls.filter((p) => p.key === "creak");
+    expect(rattles.length).toBeGreaterThan(36);
+    expect(rattles.length).toBeLessThan(48);
+    expect(creaks.length).toBeGreaterThanOrEqual(5);
+    expect(creaks.length).toBeLessThanOrEqual(12);
+    for (const p of rolls) {
+      expect(p.x).toBe(0);
+      expect(p.y!).toBeGreaterThan(2);
+      expect(p.volume!).toBeGreaterThan(0.3);
+      expect(p.volume!).toBeLessThanOrEqual(1);
+    }
+    expect(r.plays.filter((p) => p.x === 40 || p.x === 80)).toEqual([]);
+    expect(SOUNDS.wagon_roll!.keys).toEqual(["rattle", "creak"]);
   });
 
   it("D-058: every hoofbeat lays a hoof print along the horse's heading, the sides alternating; a standing horse and a wagon lay none", () => {
