@@ -33,8 +33,41 @@ export function serverUrl(): string {
   return `${proto}://${location.hostname}:2567`;
 }
 
-function httpUrl(): string {
+export function httpUrl(): string {
   return serverUrl().replace(/^ws/, "http");
+}
+
+/**
+ * Self-service erasure (PRIVACY_DATA_MAP): the server forgets this browser's memberships (every campaign it was in; a campaign left with nobody goes), then this browser forgets
+ * its identity and its list of expeditions (the settings stay: they are preferences, not records). Offered only at the front door: a room in play would save the membership
+ * straight back. Never throws.
+ */
+export async function eraseMyRecords(): Promise<{ ok: true; campaigns: number } | { ok: false; reason: "offline" | "busy" | "refused" }> {
+  let token: string | null = null;
+  try {
+    token = localStorage.getItem("cb.identity");
+  } catch {
+    // storage blocked: nothing of ours was kept here either
+  }
+  let campaigns = 0;
+  if (token) {
+    try {
+      const res = await fetch(`${httpUrl()}/privacy/erase`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identity: token }) });
+      if (res.status === 429) return { ok: false, reason: "busy" };
+      if (!res.ok) return { ok: false, reason: "refused" };
+      const body = (await res.json()) as { campaigns?: unknown };
+      campaigns = typeof body.campaigns === "number" && Number.isFinite(body.campaigns) ? Math.max(0, Math.round(body.campaigns)) : 0;
+    } catch {
+      return { ok: false, reason: "offline" };
+    }
+  }
+  try {
+    localStorage.removeItem("cb.identity");
+    localStorage.removeItem("cb.expeditions");
+  } catch {
+    // (blocked storage holds nothing to clear)
+  }
+  return { ok: true, campaigns };
 }
 
 /** Stable per-browser identity until the Steam adapter supplies a real one (PlatformIdentity). */

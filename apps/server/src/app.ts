@@ -10,10 +10,14 @@ import { createOriginPolicy, installMatchmakingOriginPolicy, originUpgradeGuard 
 import { RateLimiter } from "./ratelimit.ts";
 import { setRoomConfig } from "./roomConfig.ts";
 import { createPersistence } from "./persistence/runtime.ts";
+import { identityKey, parseIdentity } from "./persistence/identity.ts";
 import { WorldRoom } from "./rooms/WorldRoom.ts";
 
 /** Code lookups are the only unauthenticated enumeration surface: 10 burst, then 1 per 6 s per IP. */
 const codeLookupLimiter = new RateLimiter(10, 1 / 6);
+
+/** Self-service erasure (D-084 follow-up, PRIVACY_DATA_MAP): a device asks for its own records to be forgotten. 3 burst, then 1 a minute per IP: cheap to answer, not to repeat. */
+const eraseLimiter = new RateLimiter(3, 1 / 60);
 
 /** Matchmaking methods that start a room (a new campaign, a resume): the expensive ones (a world, a cast, a 30 Hz tick, a save record). */
 const CREATES = new Set(["create", "joinOrCreate"]);
@@ -51,12 +55,40 @@ export function createGameServer(config: ServerConfig, load: LoadGauge = new Loa
     return ctx.json({ roomId: hit.roomId, clients: hit.clients, maxClients: hit.maxClients });
   });
 
+  // A device erases its own records: the body carries its anonymous identity token (the same `cb.identity` that resumes a campaign, so whoever holds it already holds the
+  // memberships), turned into the identity key exactly as a save does, then `deleteByIdentity`: the key leaves every campaign, a campaign left with nobody goes. The log
+  // records the count, never the token or the key. A live room still holding the key would write it back on its next save: the client offers this only outside a room.
+  const erase = createEndpoint("/privacy/erase", { method: "POST" }, async (ctx) => {
+    if (!origins.allows(ctx.request?.headers.get("origin"))) {
+      ctx.setStatus(403);
+      return ctx.json({ error: "origin_not_allowed" });
+    }
+    if (!eraseLimiter.take(clientIp(ctx.request?.headers, undefined, config.clientIp))) {
+      ctx.setStatus(429);
+      return ctx.json({ error: "rate_limited" });
+    }
+    const id = parseIdentity((ctx.body as { identity?: unknown } | undefined)?.identity);
+    if (!id) {
+      ctx.setStatus(400);
+      return ctx.json({ error: "invalid_identity" });
+    }
+    try {
+      const campaigns = await (await persistence.store()).deleteByIdentity(identityKey(id, persistence.cfg.pepper));
+      log.info("privacy.erase", { campaigns });
+      return ctx.json({ ok: true, campaigns });
+    } catch (e) {
+      log.error("privacy.erase_failed", { error: e instanceof Error ? e.name : "error" });
+      ctx.setStatus(500);
+      return ctx.json({ error: "erase_failed" });
+    }
+  });
+
   const server = new Server({
     transport: new WebSocketTransport({ beforeUpgrade: originUpgradeGuard(origins) }),
     gracefullyShutdown: true,
     greet: false,
   });
-  server.router = createRouter({ health, metrics: metricsEndpoint, lookup }) as never;
+  server.router = createRouter({ health, metrics: metricsEndpoint, lookup, erase }) as never;
   server.define(ROOM_WORLD, WorldRoom);
   // Room creation was unlimited (security review, D-048): one script could start rooms (and save records) faster than the one game thread can tick them.
   const createLimiter = config.roomCreate ? new RateLimiter(config.roomCreate.burst, 1 / config.roomCreate.everyS) : undefined;
