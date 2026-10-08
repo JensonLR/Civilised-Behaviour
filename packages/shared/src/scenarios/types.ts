@@ -60,9 +60,10 @@ export interface ObserveSpec {
   noise?: { x: number; z: number };
   /**
    * People to watch: `down` once, and `arrived` inside `goal`. "wagon" is the scenario's wagon. `boards`: an escort whose goal is the party's boat; when the party sails
-   * with it standing near one of them, it has arrived (D-041: a rescuer who ran to the boat with the hostage ten metres behind had brought him home).
+   * with it standing near one of them, it has arrived (D-041: a rescuer who ran to the boat with the hostage ten metres behind had brought him home). `leaves` (D-086): it can
+   * walk back out: `left` once it is a few metres outside `goal`, and `arrived` again if it comes back (a raider who reached the yard and then fled is no longer in it).
    */
-  actors: { id: string; goal?: { x: number; z: number; r: number }; boards?: boolean }[];
+  actors: { id: string; goal?: { x: number; z: number; r: number }; boards?: boolean; leaves?: boolean }[];
   /** Groups whose members the runner may name in `hostile`/tally (everything else is the party's side). */
   hostileGroups: string[];
 }

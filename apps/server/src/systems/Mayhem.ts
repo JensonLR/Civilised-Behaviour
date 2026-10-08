@@ -1,5 +1,5 @@
 import {
-  FACT_RANK, FLING_YARDS, NPC_SIDE, REQUESTS, WEAPON, ZONE, compassPoint, dealRequest, flightYards, gazetteLine, newBill, spectacle,
+  FACT_RANK, FLING_YARDS, NPC_SIDE, REQUESTS, WEAPON, ZONE, compassPoint, dealRequest, requestLine, flightYards, gazetteLine, newBill, spectacle,
   type Bill, type Cause, type LimbId, type MayhemFact, type NpcSide, type ObjectiveView, type RequestId, type RunEnd, type ScenarioTemplateId, type WeaponId,
 } from "@cb/shared";
 
@@ -64,10 +64,10 @@ export class Mayhem {
 
   constructor(private readonly host: MayhemHost) {}
 
-  /** A contract begins: a clean bill and its commission. */
-  begin(seed: number, day: number, template: ScenarioTemplateId, last?: RequestId): void {
+  /** A contract begins: a clean bill and its commission (`kegs`: the powder in reach there, so it asks for nothing the contract cannot give). */
+  begin(seed: number, day: number, template: ScenarioTemplateId, last?: RequestId, kegs?: number): void {
     this.bill = newBill();
-    this.request = dealRequest(seed, day, template, last);
+    this.request = dealRequest(seed, day, template, last, kegs);
     this.met = false;
     this.settled = false;
     this.queue = [];
@@ -82,7 +82,7 @@ export class Mayhem {
   objective(): ObjectiveView {
     const r = REQUESTS[this.request];
     const p = this.met ? "" : r.progress(this.bill);
-    return { id: "society", text: p ? `${r.ask} (${p})` : r.ask, done: this.met, optional: true };
+    return { id: "society", text: requestLine(this.request, p), done: this.met, optional: true };
   }
 
   private side(id: string): NpcSide | "party" | undefined {

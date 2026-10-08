@@ -7,6 +7,9 @@ import { sheetHints } from "./sheetHints.ts";
 import { replayOrientation } from "./Orientation.ts";
 import { ORIENT_REPLAY } from "./orientationCopy.ts";
 import { SAVE_NOTE, saveLabel, type SaveStatus } from "../net/saveStatus.ts";
+import { TERMS, type Fighting, type ScenarioTemplateId } from "@cb/shared";
+import { promptPlain } from "../input/glyphDom.ts";
+import { withKeys } from "./ObjectiveTracker.ts";
 
 export interface PauseDeps {
   canvas: HTMLCanvasElement;
@@ -17,7 +20,7 @@ export interface PauseDeps {
   /** Leave the expedition (the page returns to the front door). */
   leave(): void;
   /** D-063: the contract in full (the HUD shows only its next step) and the telegrams lately received (a slip is only a glance). Both optional. */
-  orders?(): { title: string; items: { text: string; done: boolean; optional: boolean }[] } | undefined;
+  orders?(): { title: string; items: { text: string; done: boolean; optional: boolean }[]; hint?: string; rule?: string; template?: ScenarioTemplateId } | undefined;
   dispatches?(): readonly string[];
   /** D-085: the Illustrated Imperial News plates of this session, newest last (each offered to save). */
   plates?(): readonly { url: string; caption: string }[];
@@ -40,6 +43,7 @@ export class Pause {
   private readonly ordersBox = h("section", { class: "orders" });
   private readonly dispatchBox = h("details", { class: "dispatches" });
   private readonly platesBox = h("details", { class: "plates" });
+  private termsOpen = false;
   private readonly saveBtn = h("button", { type: "button", "data-act": "save-now" }, "Save now");
   private readonly quitBtn = h("button", { type: "button", "data-act": "save-quit" }, "Save and quit");
   private quitting = false;
@@ -187,12 +191,18 @@ export class Pause {
       const list = h("ul", {});
       for (const it of o.items) {
         const li = h("li", { class: `${it.done ? "done" : ""}${it.optional ? " optional" : ""}`.trim() });
-        li.textContent = `${it.optional ? "(If you like) " : ""}${it.text}`;
+        li.textContent = `${it.optional ? "(If you like) " : ""}${promptPlain(withKeys(it.text))}`;
         list.append(li);
       }
       const head = h("h3", {});
       head.textContent = o.title;
       this.ordersBox.append(head, list);
+      if (o.rule) this.ordersBox.append(h("p", { class: "rule" }, o.rule));
+      const terms = o.template ? termsDetails(o.template, o.hint ?? "", this.termsOpen) : undefined;
+      if (terms) {
+        terms.addEventListener("toggle", () => (this.termsOpen = terms.open));
+        this.ordersBox.append(terms);
+      }
     }
     this.drawPlates();
     const d = this.deps.dispatches?.() ?? [];
@@ -263,3 +273,34 @@ export class Pause {
 }
 
 const isTyping = (t: EventTarget | null): boolean => t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+
+/** D-086: what fighting does, in a word, before the rule itself. */
+export const FIGHTING_LABEL: Readonly<Record<Fighting, string>> = {
+  expected: "Fighting: expected. The job is a fight.",
+  costly: "Fighting: allowed, but it shuts some ways to win.",
+  forbidden: "Fighting: forbidden. It loses the contract.",
+};
+
+/** D-086: the contract's terms in full (how it is won, settled, lost, and what fighting does), with the how-to paragraph the HUD keeps off the picture. Text only (textContent). */
+export function termsDetails(template: ScenarioTemplateId, hint: string, open: boolean): HTMLDetailsElement | undefined {
+  const t = TERMS[template];
+  if (!t) return undefined;
+  const d = h("details", { class: "terms" });
+  d.open = open;
+  d.append(h("summary", {}, "How this contract is won, and lost"));
+  const how = hint.trim() === "" ? "" : hint.replace(/\bUse\b/g, `Use (${promptPlain("{interact}")})`);
+  if (how) d.append(h("p", { class: "howto" }, how));
+  const dl = h("dl", {});
+  const row = (label: string, lines: readonly string[]): void => {
+    if (lines.length === 0) return;
+    const ul = h("ul", {});
+    for (const l of lines) ul.append(h("li", {}, l));
+    dl.append(h("dt", {}, label), h("dd", {}, ul));
+  };
+  row("Won by", t.win);
+  row("Settled, short of a win", t.partial);
+  row("Lost if", t.lose);
+  row(FIGHTING_LABEL[t.fighting], [t.rule]);
+  d.append(dl);
+  return d;
+}

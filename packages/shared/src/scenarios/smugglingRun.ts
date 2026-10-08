@@ -11,6 +11,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * SMUGGLING RUN, "The Quiet Barge" (D-037, the Saltmarket Delta; docs/_notes/regions34.md section 4). Four unmarked crates lie at the reed cove, on a barge that is not, on paper, anywhere. The drop-house stands in
@@ -110,9 +111,10 @@ const permitted = (s: SmugglingState): boolean => s.permit > s.t;
 const lured = (s: SmugglingState): boolean => s.lureUntil > s.t;
 const broken = (c: Count): number => c.routed + c.down;
 const guardTotal = (s: SmugglingState): number => s.guards.customs.total + s.guards.patrol.total + s.guards.extra.total;
+const brokenAll = (s: SmugglingState): number => broken(s.guards.customs) + broken(s.guards.patrol) + broken(s.guards.extra);
 const guardBroken = (s: SmugglingState): boolean => {
   const total = guardTotal(s);
-  return total === 0 || broken(s.guards.customs) + broken(s.guards.patrol) + broken(s.guards.extra) >= Math.ceil(total * 0.6);
+  return total === 0 || brokenAll(s) >= Math.ceil(total * 0.6);
 };
 const affordable = (s: SmugglingState, n: number): boolean => Number.isFinite(n) && n >= 0 && n <= s.purse - s.spent;
 const noiseLimit = (s: SmugglingState): number => SMUGGLE.alarmNoise + (s.rain >= 0.45 || s.complication === "rain" ? SMUGGLE.rainNoiseBonus : 0);
@@ -283,11 +285,12 @@ function talk(s: SmugglingState, kind: string, result: string, paid: number): Re
     case "learn": return stay(fin({ ...s, asked: true }));
     case "survey": {
       // a declaration: free, stamped, and the cargo's profit is the Houses'
-      return { s: fin({ ...s, parley: undefined, declared: true, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say("The barge is declared. A stamped slip is yours for four minutes; the patrol has been told that it has been told. The Houses will want the duty, and, in due course, the cargo.")] };
+      // (D-086: a stamped slip answers a patrolman who is waiting for one: the challenge ends, as the orders always said it would)
+      return { s: fin({ ...s, parley: undefined, declared: true, challenge: 0, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say("The barge is declared. A stamped slip is yours for four minutes; the patrol has been told that it has been told. The Houses will want the duty, and, in due course, the cargo.")] };
     }
     case "paid": {
       if (!paidOk(s, paid)) return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say(`A courtesy of £${paid} goes under the ledger. The stamped passage is yours for four minutes, and so is the cargo.`)] };
+      return { s: fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid, challenge: 0, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say(`A courtesy of £${paid} goes under the ledger. The stamped passage is yours for four minutes, and so is the cargo.`)] };
     }
     case "tell": {
       return resolveWith({ ...s, parley: undefined, told: true }, "informed", { loot: s.price.tip }, [...stand(), say(`You inform on your own barge. The Tide-Reeve writes it down with every sign of pleasure, the finder's fee of £${s.price.tip} is counted out, and a Constabulary launch leaves the berth for the cove with the air of a vessel that has been told where to go.`)]);
@@ -310,9 +313,9 @@ function leave(s: SmugglingState): ReturnType<TemplateDef<SmugglingState>["leave
 const HINT: Record<string, string> = {
   approach: "A barge lies at the reed cove with four unmarked crates under a tarpaulin. The drop-house is in the west reeds: the boardwalk crosses the Customs Bridge, the Long Cut's bridge and the Reed Bridge, and the Constabulary patrols between them. Start at the cove.",
   extract: "The cargo is yours to move. Carry the crates one at a time to the drop-house door (Use there with a crate in hand). The patrol walks the boardwalk: crouch, and it has to come a good deal closer to see you; the reed flats north of the cuts are slower and quieter. The Tide-Reeve at the Customs House can square a patrol; the lantern at the cove can draw it off.",
-  standoff: "A patrolman has seen you. Answer him before the cargo is impounded: a declaration or a courtesy at the Customs House, a shot, or the barge's plug.",
+  standoff: "A patrolman has seen you and is counting. Answer him before the cargo is impounded: a stamped permit from the Tide-Reeve (declare, or pay a courtesy; while you talk to the Reeve the count stops), a shot (which wakes the whole Customs House), or the barge's plug.",
   parley: "The Tide-Reeve is listening. Mind what you declare; he keeps carbon copies.",
-  fighting: "The Customs House is awake. Break the patrol, and then there is only the cargo and the explanation.",
+  fighting: "The Customs House is awake. Drop most of its men or send them running, and then there is only the cargo and the explanation.",
 };
 const DONE: Record<string, string> = {
   landed: "The cargo is landed. The Houses will notice in the morning; the Constabulary will notice in the afternoon; nobody will notice in the evening. Take the boat home from the quay.",
@@ -337,15 +340,15 @@ function view(s: SmugglingState, now: number): ScenarioView {
     { id: "lamp", text: s.lit ? "The lantern is lit: the patrol is at the berth" : "Light the lantern at the cove to draw the patrol off", done: s.lit, optional: true },
     { id: "land", text: res === "abandoned" ? "Lost: the expedition went down" : res === "impounded" ? "Lost: the cargo was impounded" : res === "scuttled" ? "Settled: the barge was scuttled" : res === "informed" ? "Settled: you informed on yourselves" : "Land the cargo before slack water ends", done: won },
   ];
-  if (s.challenge > 0 && res === undefined) objectives.push({ id: "answer", text: `Answer the patrolman (${Math.ceil(s.challenge)} s)`, done: false, optional: true });
-  if (s.alarm && res === undefined) objectives.push({ id: "break", text: "Down or rout the Customs House's men", done: guardBroken(s), optional: true });
+  if (s.challenge > 0 && res === undefined) objectives.push({ id: "answer", text: `Answer the patrolman (${Math.ceil(s.challenge)} s): a Reeve's permit, or the plug`, done: false, optional: true });
+  if (s.alarm && res === undefined) objectives.push({ id: "break", text: `Drop the Customs men or send them running (${Math.min(brokenAll(s), Math.ceil(guardTotal(s) * 0.6))} of ${Math.ceil(guardTotal(s) * 0.6)})`, done: guardBroken(s), optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the quay", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   if (res === undefined && s.asked) hint += " (The Reeve's hint: lit at the cove, the lantern draws the patrol off for a minute; a stamped passage keeps it civil for four.)";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const remain = res !== undefined ? 0 : s.hot > 0 ? s.hot : SMUGGLE.slackS - s.t;
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(s.hot > 0 ? "The Constabulary arrives" : "Slack water ends", remain, now), template: "smuggling_run", title: "The Quiet Barge" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(s.hot > 0 ? "The Constabulary arrives" : "Slack water ends", remain, now), template: "smuggling_run", title: "The Quiet Barge", ...ruleWhile("smuggling_run", res === undefined && !s.alarm) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -406,7 +409,7 @@ const LINE: readonly { x: number; z: number }[] = [{ x: -14, z: 70 }, { x: -12, 
 
 export const smugglingRunTemplate: TemplateDef<SmugglingState> = {
   id: "smuggling_run", title: "The Quiet Barge",
-  brief: "A barge of unmarked crates waits in a reed cove. The Society wants them landed at a drop-house in the west reeds, and has declined to say what is in them, on the grounds that it would then have to declare it. Slip them past the Tide Constabulary at slack water, square the Tide-Reeve, scuttle the barge if it comes to that, or inform on yourselves and collect the reward.",
+  brief: "A barge of unmarked crates waits in a reed cove. The Society wants them landed at a drop-house in the west reeds, and has declined to say what is in them, on the grounds that it would then have to declare it. Slip them past the Tide Constabulary at slack water, or square the Tide-Reeve first. If it goes wrong, scuttle the barge, or inform on yourselves and collect the reward.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { line: LINE, back: [...LINE].reverse(), lure: [{ x: -34, z: 70 }, { x: -44, z: 76 }] },
   props: Array.from({ length: SMUGGLE.crates }, (_, i) => ({ id: `cargo-${i}`, kind: PropKind.CRATE, x: SALTMARKET_SITES.cargo.x + [-1.2, 0.2, 1.4, -0.2][i]!, z: SALTMARKET_SITES.cargo.z + [-0.8, 0.9, -0.5, -1.8][i]! })),

@@ -9,6 +9,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * BORDER INCIDENT, "Marker Stone No. 4". The Stone stands in the ford. Two Ward patrol on the north bank, three Syndicate surveyors on the south, each side
@@ -200,14 +201,14 @@ function view(s: BorderState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { id: "reach", text: "Reach Marker Stone No. 4 in the ford", done: s.phase !== "approach" },
     { id: "talk", text: `Talk both banks into a joint survey (${(s.survey.ward ? 1 : 0) + (s.survey.rival ? 1 : 0)} of 2)`, done: s.survey.ward && s.survey.rival },
-    ...(s.witness >= 0 && res === undefined ? [{ id: "witness", text: `Stand at the Stone while the chains go out (${Math.ceil(s.witness)} s)`, done: s.witness === 0 } satisfies ObjectiveView] : []),
-    { id: "settle", text: res === "provoked" ? "Lost: somebody fired first" : res === "escalated" ? "Lost: the border went to war" : "Settle the border before somebody fires", done: won },
+    ...(s.witness >= 0 && res === undefined ? [{ id: "witness", text: `Stand at the Stone while the chains go out (${Math.ceil(s.witness)} s more; the clock still runs)`, done: s.witness === 0 } satisfies ObjectiveView] : []),
+    { id: "settle", text: res === "provoked" ? "Lost: the party fired first" : res === "escalated" ? "Lost: the border went to war" : "Settle the border before it comes to shooting", done: won },
   ];
   if (s.envelope && res === undefined) objectives.push({ id: "stone", text: "Pull Marker Stone No. 4 out of the ford (Use)", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   const HINT: Record<string, string> = {
     approach: "Marker Stone No. 4 stands in the ford. A Ward patrol is on the north bank and Syndicate surveyors on the south, armed with rifles, rulers and grievances. Wade out to the Stone and Use to talk to either side; both will try to recruit you.",
-    tension: `Both sides are shouting across the water. The tension is ${Math.round(s.tension)} of 100. Talk lowers it. Shooting does not.`,
+    tension: `Both sides are shouting across the water. The tension is ${Math.round(s.tension)} of 100. Talk lowers it. Every shot nearby raises it, and a shot at anyone loses the contract.`,
     parley: "Somebody is listening. Choose your words with a ruler.",
     escalated: "The two sides are shooting at each other. You are not the target. For now.",
   };
@@ -223,7 +224,7 @@ function view(s: BorderState, now: number): ScenarioView {
   const ch = COMPLICATION_HINT[s.complication];
   if (res === undefined && ch) hint += ` ${ch}`;
   const remain = res !== undefined ? 0 : s.escalatedAt >= 0 ? BORDER.clashS - (s.t - s.escalatedAt) : BORDER.escalateS - s.t;
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(s.escalatedAt >= 0 ? "The shooting stops" : "The border loses patience", remain, now), template: "border_incident", title: "Marker Stone No. 4" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(s.escalatedAt >= 0 ? "The shooting stops" : "The border loses patience", remain, now), template: "border_incident", title: "Marker Stone No. 4", ...ruleWhile("border_incident", res === undefined) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -274,7 +275,7 @@ const observe: ObserveSpec = {
 
 export const borderTemplate: TemplateDef<BorderState> = {
   id: "border_incident", title: "Marker Stone No. 4",
-  brief: "Marker Stone No. 4 stands in a ford that two maps disagree about. A Ward patrol holds the north bank and Syndicate surveyors the south, and each has brought a lawyer with a rifle. Talk both into a joint survey, learn the Syndicate's plan and sell it to the Ward, take the Syndicate's envelope and move the Stone, or wait for somebody's nerve to go.",
+  brief: "Marker Stone No. 4 stands in a ford that two maps disagree about. A Ward patrol holds the north bank and Syndicate surveyors the south, and each has brought a lawyer with a rifle. Talk both into a joint survey, learn the Syndicate's plan and sell it to the Ward, or take the Syndicate's envelope and move the Stone. Fire one shot, or wait too long, and both banks go to war.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { marker: KESSAR_SITES.border.marker },
 };

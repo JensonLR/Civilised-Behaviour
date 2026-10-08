@@ -10,6 +10,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * VESPER GORGE "The Claim Race" (D-037, package C3; docs/_notes/regions34.md section 3, docs/_notes/vesper.md). A seam of something expensive has been found on the pegging ground, and the Syndicate's
@@ -229,9 +230,9 @@ function leave(s: ClaimState): ReturnType<TemplateDef<ClaimState>["leave"]> {
 
 const HINT: Record<string, string> = {
   approach: "The pegging ground is on the west bench, a long walk up the gorge. The Syndicate's surveyors are already there with a theodolite and a brochure.",
-  waiting: "Four pegs make a claim; three and the clerk's form file it. Stake the open corners (Use at a peg), then the Assay House on the east bench (the clerk, a fee, a stamp). The Syndicate pegs a corner every minute or so. The clerk has views on joint claims and on surveys.",
+  waiting: "Three of your own pegs and the clerk's form make a claim. Stake the open corners (Use at a peg), then file at the Assay House on the east bench (the clerk, a fee, a stamp). The Syndicate pegs a corner every minute or so and files once it holds three. The clerk has views on joint claims and on surveys.",
   parley: "The clerk is listening. He has been listening for eleven years and has not once been surprised.",
-  fighting: "A shot has been fired. The surveyors have run and the guards are coming down the road. The pegs, for the moment, are nobody's.",
+  fighting: "A shot has been fired. The surveyors have run and the guards are coming down the road. Beat both surveyors and their pegs can be pulled; the joint claim is off.",
 };
 const DONE: Record<string, string> = {
   staked: "Claim registered: three pegs and the form, first at the counter. The clerk was very nearly surprised. Take the ore barge home from Staithe Landing.",
@@ -267,7 +268,7 @@ function view(s: ClaimState, now: number): ScenarioView {
   const remainFile = s.rivalFilesAt > 0 ? s.rivalFilesAt - s.t : Infinity;
   const remainClose = s.closeAt - s.t;
   const remain = res !== undefined ? 0 : Math.min(remainFile, remainClose);
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(remainFile <= remainClose ? "The Syndicate files" : "The Assay House closes", remain, now), template: "claim_race", title: "The Claim Race" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(remainFile <= remainClose ? "The Syndicate files" : "The Assay House closes", remain, now), template: "claim_race", title: "The Claim Race", ...ruleWhile("claim_race", res === undefined && !s.clerkDown) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -315,7 +316,7 @@ const observe: ObserveSpec = {
 
 export const claimRaceTemplate: TemplateDef<ClaimState> = {
   id: "claim_race", title: "The Claim Race",
-  brief: "Something expensive has been found in the rock of the west bench, and the Assay House will register whoever brings three pegs and a form to its counter first. The Syndicate's surveyors are already there with a theodolite and a brochure. Out-peg them, pull their pegs by force or by doubting their survey, offer to share, or come second and write a very good report.",
+  brief: "Something expensive has been found in the rock of the west bench, and the Assay House will register whoever brings three pegs and a form to its counter first. The Syndicate's surveyors are already there with a theodolite and a brochure. Out-peg them, pull their pegs (beat both surveyors, or get their survey doubted), or offer to share. Second place gets a very good report and nothing else.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { pegging: VESPER_ANCHORS.pegging, assay: VESPER_ANCHORS.assay },
 };

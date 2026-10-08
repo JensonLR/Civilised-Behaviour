@@ -98,6 +98,10 @@ describe("The Quiet Barge: the rules", () => {
       expect(r.s.challenge, "waved through").toBe(0);
       expect(r.s.permit).toBeGreaterThan(0);
       expect(drive([...LOAD, ...how, ...ticks(SMUGGLE.permitS + 2), seen("patrol")]).s.challenge, "the passage has lapsed").toBe(SMUGGLE.challengeS);
+      // D-086: and it ANSWERS a challenge already running (the orders said so; the slip used to arrive and the patrolman kept counting)
+      const answered = drive([...LOAD, seen("patrol"), ...ticks(3), ...how, ...ticks(SMUGGLE.challengeS + 2)]);
+      expect(answered.s.challenge, "answered").toBe(0);
+      expect(answered.s.resolution, "not impounded").toBeUndefined();
     }
     // a declaration puts the duty (and the profit) with the Houses; a courtesy does not
     const declared = drive([...LOAD, talk("open"), talk("survey"), ...LAND]);

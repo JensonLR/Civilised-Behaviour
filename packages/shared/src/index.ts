@@ -80,6 +80,7 @@ export * from "./honours.ts";
 
 export * from "./scenarios/registry.ts";
 export * from "./scenarios/parleys.ts";
+export * from "./scenarios/terms.ts";
 // ---- D-035 campaign slice ----
 export * from "./worldTypes.ts";
 export * from "./hqRoute.ts";

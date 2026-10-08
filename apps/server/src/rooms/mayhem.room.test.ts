@@ -41,7 +41,7 @@ describe("the Society's appetites (D-084)", () => {
     const view = JSON.parse(room.state.scenario) as ScenarioView;
     const req = view.objectives.find((o) => o.id === "society");
     expect(req?.optional).toBe(true);
-    expect(req?.text).toMatch(/^For the /);
+    expect(req?.text).toMatch(/^£\d+ bonus · /); // (D-086: the money first, then who asks and for what)
 
     // the Ward's sentries, and three kegs at the feet of the first (the column needs a chain of at least two)
     const sentries: string[] = [];

@@ -52,6 +52,8 @@ export interface ScenarioHost {
 
 const TICK_WATCH = 0.25, TICK_WEATHER = 1;
 const PARLEY_LEASH = 6;
+/** Metres past an actor's goal before a `leaves` actor counts as having left it (D-086). */
+const LEAVE_MARGIN = 2.5;
 export const WET_SIGHT = 0.6, FOG_SIGHT = 0.5;
 /** D-041: a crouching person is seen from this fraction of a watcher's range (the playtest crept up to the Orchard's cage bent double and was spotted at 5 m, as if strolling). */
 export const CROUCH_SIGHT = 0.55;
@@ -146,18 +148,8 @@ export class Scenario {
    * (the mine, the market) gets none. The kegs are ordinary props: anybody's stray round can set them off.
    */
   powderStore(day: number): { x: number; z: number }[] {
-    if (this.def.noPowderStore) return [];
-    const groups = new Map<string, NpcSpec[]>();
-    for (const sp of this.specs) {
-      if (sp.group.startsWith("late:") || sp.weapon === WEAPON.FISTS || (sp.side !== "ward" && sp.side !== "rival" && sp.side !== "outlaw")) continue;
-      if (!this.def.observe.hostileGroups.includes(sp.group)) continue;
-      const g = groups.get(sp.group);
-      if (g) g.push(sp);
-      else groups.set(sp.group, [sp]);
-    }
-    let best: NpcSpec[] | undefined;
-    for (const g of groups.values()) if (!best || g.length > best.length) best = g;
-    if (!best || best.length < 2) return [];
+    const best = this.storeGroup();
+    if (!best) return [];
     const cx = best.reduce((a, sp) => a + sp.post.x, 0) / best.length;
     const cz = best.reduce((a, sp) => a + sp.post.z, 0) / best.length;
     const n = best.length >= 4 ? 3 : 2;
@@ -175,6 +167,29 @@ export class Scenario {
       return placed;
     }
     return [];
+  }
+
+  /** The armed party that keeps the powder store (the largest hostile group of two or more, present from the start), if any. */
+  private storeGroup(): NpcSpec[] | undefined {
+    if (this.def.noPowderStore) return undefined;
+    const groups = new Map<string, NpcSpec[]>();
+    for (const sp of this.specs) {
+      if (sp.group.startsWith("late:") || sp.weapon === WEAPON.FISTS || (sp.side !== "ward" && sp.side !== "rival" && sp.side !== "outlaw")) continue;
+      if (!this.def.observe.hostileGroups.includes(sp.group)) continue;
+      const g = groups.get(sp.group);
+      if (g) g.push(sp);
+      else groups.set(sp.group, [sp]);
+    }
+    let best: NpcSpec[] | undefined;
+    for (const g of groups.values()) if (!best || g.length > best.length) best = g;
+    return best && best.length >= 2 ? best : undefined;
+  }
+
+  /** D-086: the powder this contract puts in reach before anything is spawned (the store, and the template's own barrels): the Society asks for no chain of three where there are two kegs. */
+  get kegsInReach(): number {
+    const best = this.storeGroup();
+    const store = best ? (best.length >= 4 ? 3 : 2) : 0;
+    return store + (this.def.props ?? []).filter((p) => p.kind === PropKind.BARREL).length;
   }
 
   // ---- entry points from the room (all validated here) -----------------------------------------------------------------------------------------
@@ -569,9 +584,15 @@ export class Scenario {
         }
         continue;
       }
-      if (a.goal && !this.actorDone.has(`${a.id}:arrived`) && Math.hypot(pos.x - a.goal.x, pos.z - a.goal.z) <= a.goal.r) {
+      if (!a.goal) continue;
+      const d = Math.hypot(pos.x - a.goal.x, pos.z - a.goal.z);
+      if (!this.actorDone.has(`${a.id}:arrived`) && d <= a.goal.r) {
         this.actorDone.add(`${a.id}:arrived`);
         this.apply({ t: "actor", id: a.id, state: "arrived" });
+      } else if (a.leaves && this.actorDone.has(`${a.id}:arrived`) && d > a.goal.r + LEAVE_MARGIN) {
+        // (D-086: out past a margin, so a man on the line does not flicker in and out)
+        this.actorDone.delete(`${a.id}:arrived`);
+        this.apply({ t: "actor", id: a.id, state: "left" });
       }
     }
   }

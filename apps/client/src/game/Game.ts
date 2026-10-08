@@ -6,7 +6,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { TouchContext } from "../input/touchLogic.ts";
@@ -1170,10 +1170,14 @@ export class Game {
 
   /** The heading strip follows the shore you stand on and the contract's next goal (D-040: it showed the hub's places everywhere). */
   /** D-063: the contract in full, for the pause sheet (the HUD shows only the next step). */
-  orders(): { title: string; items: { text: string; done: boolean; optional: boolean }[] } | undefined {
+  orders(): { title: string; items: { text: string; done: boolean; optional: boolean }[]; hint?: string; rule?: string; template?: ScenarioTemplateId } | undefined {
     const v = this.scenarioView;
     if (!v || !Array.isArray(v.objectives) || v.objectives.length === 0) return undefined;
-    return { title: typeof v.title === "string" && v.title ? v.title : "Orders of the Day", items: v.objectives.map((o) => ({ text: String(o.text), done: !!o.done, optional: !!o.optional })) };
+    return {
+      title: typeof v.title === "string" && v.title ? v.title : "Orders of the Day", items: v.objectives.map((o) => ({ text: String(o.text), done: !!o.done, optional: !!o.optional })),
+      // D-086: the how-to paragraph the HUD keeps off the picture, the rule, and the contract (its terms are printed from the shared table)
+      hint: typeof v.hint === "string" ? v.hint : undefined, rule: typeof v.rule === "string" ? v.rule : undefined, template: isTemplateId(v.template) ? v.template : undefined,
+    };
   }
 
   /** D-063: the telegrams lately received, newest last (the pause sheet lists them). */

@@ -10,6 +10,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * THE WINDING ENGINE (D-044, Vesper Gorge's third contract: the GDD's sabotage). The Syndicate has leased the Lower Gallery Company's winding engine, on the headframe terrace, and is
@@ -242,7 +243,7 @@ const HINT: Record<string, string> = {
   standoff: "A guard has challenged you. Clear off the terrace before he blows his whistle, and come back another way.",
   parley: "The engineer is listening, and calculating.",
   rigging: "The fuse is lit. Whatever else you meant to do on the terrace, you now mean to do it somewhere else.",
-  fighting: "The terrace is awake. Break the guards and the engine's feed is yours, or bring the Company's powder.",
+  fighting: "The terrace is awake. Beat every guard and the engine's feed is yours, or carry the Company's powder to the boiler.",
 };
 const DONE: Record<string, string> = {
   engine_fouled: "The Syndicate's engine is full of the gorge and will not turn again this season. Take the ore barge home from Staithe Landing.",
@@ -265,12 +266,12 @@ function view(s: EngineState, now: number): ScenarioView {
     { id: "stop", text: res === "vein_struck" ? "Lost: the cross-cut struck the vein" : res === "abandoned" ? "Lost: the expedition went down" : "Stop the cross-cut before it reaches the vein", done: won },
   ];
   if (res === undefined && (s.asked || s.near.yard > 0) && s.keg === "none") {
-    objectives.push({ id: "feed", text: s.alarm && !broken(s) ? "The boiler's feed is watched now: break the guards first" : "Carry grit from the tailings heap to the boiler, unseen", done: false, optional: true });
+    objectives.push({ id: "feed", text: s.alarm && !broken(s) ? "The feed is guarded now: beat every terrace guard first" : "Carry a crate of grit to the boiler's feed, before the alarm", done: false, optional: true });
   }
-  if (res === undefined && s.asked && s.keg === "none") objectives.push({ id: "keg", text: "Or fetch the Company's powder keg from its magazine", done: false, optional: true });
+  if (res === undefined && s.asked && s.keg === "none") objectives.push({ id: "keg", text: "Or carry the Company's powder keg from its magazine to the boiler", done: false, optional: true });
   if (res === undefined && s.keg !== "none") objectives.push({ id: "fuse", text: s.keg === "set" ? "The fuse is lit. Get clear." : "The powder has gone off", done: s.keg === "fired", optional: true });
   if (res === undefined && s.challengeUntil > 0) objectives.push({ id: "challenge", text: "A guard has challenged you: clear off the terrace", done: false, optional: true });
-  if (res === undefined && s.alarm && s.keg === "none") objectives.push({ id: "guards", text: `Down or rout the terrace guards (${total(s) - standing(s)} of ${total(s)})`, done: broken(s), optional: true });
+  if (res === undefined && s.alarm && s.keg === "none") objectives.push({ id: "guards", text: `Drop the terrace guards or send them running (${total(s) - standing(s)} of ${total(s)})`, done: broken(s), optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the ore barge home from Staithe Landing", done: false });
 
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
@@ -278,7 +279,7 @@ function view(s: EngineState, now: number): ScenarioView {
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const clock: [string, number] = s.challengeUntil > 0 && !s.alarm ? ["The guard's whistle", s.challengeUntil - s.t] : s.keg === "set" ? ["The fuse", s.blastAt - s.t] : ["The cross-cut reaches the vein", s.cutAt - s.t];
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(clock[0], res !== undefined ? 0 : clock[1], now), template: "winding_engine", title: "The Winding Engine" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(clock[0], res !== undefined ? 0 : clock[1], now), template: "winding_engine", title: "The Winding Engine", ...ruleWhile("winding_engine", res === undefined && !s.alarm) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -327,7 +328,7 @@ const observe: ObserveSpec = {
 export const windingEngineTemplate: TemplateDef<EngineState> = {
   id: "winding_engine", title: "The Winding Engine",
   noPowderStore: true, // (D-084: see the template type)
-  brief: "The Company has leased its winding engine to the Syndicate, which it calls diversification, and the Syndicate is driving a cross-cut at the vein with it. When it breaks through, the gorge's best ore is theirs. Foul the boiler with grit while the guards look away, blow it up with the Company's own powder, pay the engineer to discover a fault, or watch it strike.",
+  brief: "The Company has leased its winding engine to the Syndicate, which it calls diversification, and the Syndicate is driving a cross-cut at the vein with it. When it breaks through, the gorge's best ore is theirs. Foul the boiler with grit while the guards look away, blow it up with the Company's own powder, or pay the engineer to discover a fault.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { beatOut: [E0.beat[0]!, E0.beat[1]!], beatBack: [E0.beat[1]!, E0.beat[0]!] },
   props: [

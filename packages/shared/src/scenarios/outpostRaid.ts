@@ -10,6 +10,7 @@ import { WEAPON, type WeaponId } from "../weapons.ts";
 import type { OutpostStage, RivalPresence } from "../worldTypes.ts";
 import { addTally, dtOf, frozen, int, resolveWith, say, stay, tallyEmpty, timer, zeroTally } from "./common.ts";
 import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts";
+import { ruleWhile } from "./terms.ts";
 
 /**
  * THE RAID ON THE POST (D-045, Kessar's fifth contract: the GDD's outpost defence). Offered at Kessar only while the Syndicate's agent means to raid the party's outpost (`presence.raidDue`):
@@ -188,7 +189,8 @@ function reduce(s: RaidState, e: ScenarioInput): Reduction<RaidState> {
         const n = fin({ ...s, inYard: [...s.inYard, e.id] });
         return { s: n, fx: n.inYard.length === RAID.torchersNeeded ? [say(`Two raiders are in the yard with torches. Drop one of them: ${torchS(n)} seconds and the stores go up.`)] : [] };
       }
-      if (m && e.state === "down") return stay(fin({ ...s, inYard: s.inYard.filter((id) => id !== e.id) }));
+      // (down, or run back out of the yard: D-086, a raider who fled was still "in the yard" and his torch kept the clock running)
+      if (m && (e.state === "down" || e.state === "left")) return s.inYard.includes(e.id) ? stay(fin({ ...s, inYard: s.inYard.filter((id) => id !== e.id) })) : stay(s);
       if (e.id === "captain" && e.state === "down" && !s.captainGone) return stay(fin({ ...s, captainGone: true, parley: s.parley === "raid_captain" ? undefined : s.parley }));
       return stay(s);
     }
@@ -242,9 +244,9 @@ function leave(s: RaidState): ReturnType<TemplateDef<RaidState>["leave"]> {
 const HINT: Record<string, string> = {
   planning: "The Syndicate means to raid the Society's post on the south bank, and the party is here first. Get to the post and pick your ground: the raiders will come down the bank from upstream.",
   tension: "The raiders are coming down the bank toward the post. Their captain will stop at the edge of it and offer a \"security consultation\".",
-  standoff: "The captain has made his offer. Pay him, refuse him, or open fire; when his watch says so, the raiders come in with torches.",
+  standoff: "The captain has made his offer. Pay him, or refuse: walk away and he waits out his watch; tell him to come and try and they come at once; or open fire. When his watch runs out, the raiders come in with torches.",
   parley: "The captain is consulting. His men are holding their torches up so you can see them.",
-  fighting: "The raiders are going for the yard. Two of them in it together, long enough, and the stores go up. Break them before that.",
+  fighting: "The raiders are going for the yard. Two of them in it together, long enough, and the stores go up. Drop them before that, or send them running.",
 };
 const DONE: Record<string, string> = {
   post_held: "The raid broke in the post's yard. The stores stand, and the watch has a story it will tell until it dies of old age. Take the boat home.",
@@ -265,9 +267,9 @@ function view(s: RaidState, now: number): ScenarioView {
     { id: "post", text: "Get to the Society's post before the raiders do", done: s.near.post > 0 || s.landed },
     { id: "defend", text: res === "post_burned" ? "Lost: the stores were burned" : res === "abandoned" ? "Lost: the expedition went down" : "Keep the raiders' torches out of the post's yard", done: won },
   ];
-  if (res === undefined && s.landed && !s.attacking && !s.captainGone) objectives.push({ id: "captain", text: `Hear the captain out (£${s.price} for "protection"), or refuse`, done: false, optional: true });
-  if (res === undefined && s.attacking) objectives.push({ id: "break", text: `Drop or rout ${needed(s)} of the ${s.crew.total} raiders (${Math.min(brokenCount(s), needed(s))} so far)`, done: isBroken(s), optional: true });
-  if (res === undefined && s.attacking && s.inYard.length > 0) objectives.push({ id: "yard", text: `Drive the raiders out of the yard (${s.inYard.length} inside)`, done: false, optional: true });
+  if (res === undefined && s.landed && !s.attacking && !s.captainGone) objectives.push({ id: "captain", text: `Pay the captain £${s.price} for "protection", or refuse and fight`, done: false, optional: true });
+  if (res === undefined && s.attacking) objectives.push({ id: "break", text: `Drop ${needed(s)} of the ${s.crew.total} raiders, or send them running (${Math.min(brokenCount(s), needed(s))} so far)`, done: isBroken(s), optional: true });
+  if (res === undefined && s.attacking && s.inYard.length > 0) objectives.push({ id: "yard", text: `Drop the raiders in the yard (${s.inYard.length} inside): two together set the stores alight`, done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
@@ -277,7 +279,7 @@ function view(s: RaidState, now: number): ScenarioView {
   }
   const clock: [string, number] = !s.landed ? ["The raiders land", s.raidAt - s.t] : s.demandUntil > 0 && !s.attacking ? ["The captain's watch", s.demandUntil - s.t]
     : s.torchSince > 0 ? ["The stores catch", s.torchSince + torchS(s) - s.t] : ["", 0];
-  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(clock[0], res !== undefined ? 0 : clock[1], now), template: "outpost_raid", title: "The Raid on the Post" };
+  const v: ScenarioView = { phase: s.phase, objectives, hint, ...timer(clock[0], res !== undefined ? 0 : clock[1], now), template: "outpost_raid", title: "The Raid on the Post", ...ruleWhile("outpost_raid", res === undefined) };
   if (res !== undefined) v.resolution = res;
   if (s.complication !== "none") v.complication = s.complication;
   return v;
@@ -335,7 +337,7 @@ const observe: ObserveSpec = {
   count: [{ group: "late:raiders" }],
   seen: [],
   actors: [
-    ...Array.from({ length: RAID.raiders + RAID.extraRaiders }, (_, i) => ({ id: `raider-${i}`, goal: { x: SITE.x, z: SITE.z, r: RAID.yardR } })),
+    ...Array.from({ length: RAID.raiders + RAID.extraRaiders }, (_, i) => ({ id: `raider-${i}`, goal: { x: SITE.x, z: SITE.z, r: RAID.yardR }, leaves: true })),
     { id: "captain" },
   ],
   hostileGroups: ["late:raiders", "late:captain"],
@@ -343,7 +345,7 @@ const observe: ObserveSpec = {
 
 export const outpostRaidTemplate: TemplateDef<RaidState> = {
   id: "outpost_raid", title: "The Raid on the Post",
-  brief: "The Syndicate means to raid the Society's post on Kessar's south bank, and for once the party is there when it lands. Its captain will stop at the gate and offer a season's \"protection\" at a reasonable price; the Society's insurers have already declined the post as a fire risk. Hold the yard, pay him, or watch the stores burn.",
+  brief: "The Syndicate means to raid the Society's post on Kessar's south bank, and for once the party is there when it lands. Its captain will stop at the gate and offer a season's \"protection\" at a reasonable price; the Society's insurers have already declined the post as a fire risk. Hold the yard, or pay him.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { assault: RAID_SITES.assault },
   sites: { yard: SITE, muster: RAID_SITES.muster },
