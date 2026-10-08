@@ -772,7 +772,8 @@ function gateTower(k: Kit, lod: Lod, b: Building, plan: VillagePlan): void {
   const bodyH = towerTop - 3.0 - bodyY; // (3.0 m are left for the belfry and the spire's foot)
   k.add(new BoxGeometry(b.hx * 2, bodyH, (pier + 0.7) * 2, 1, lod ? 4 : 1, 1), { at: [0, bodyY + bodyH / 2, 0], colour: plaster(W.vlPlaster, seed + 30, bodyY + bodyH / 2), flat: true });
   for (const sx of [-1, 1]) for (const sg of [-1, 1]) for (let i = 0; i < (lod ? 7 : 3); i++) bx(k, [0.4, 0.34, 0.4], [sx * (b.hx - 0.16), bodyY + 0.3 + i * (bodyH / 7), sg * (pier + 0.5)], stoneC(seed + i, 5, 0));
-  bx(k, [b.hx * 2 + 0.3, 0.24, (pier + 0.7) * 2 + 0.3], [0, bodyY + bodyH * 0.55, 0], W.vlStone);
+  // the band of stone at mid-height runs round the two plain faces only: on the clock faces it crossed the dial (it ran in front of VII to V)
+  for (const sg of [-1, 1]) bx(k, [b.hx * 2 + 0.3, 0.24, 0.3], [0, bodyY + bodyH * 0.55, sg * (pier + 0.7)], W.vlStone);
   bx(k, [b.hx * 2 + 0.3, 0.24, (pier + 0.7) * 2 + 0.3], [0, bodyY + bodyH, 0], W.vlStone);
   // clock faces on the ±x faces (the dial itself is in the banners mesh); brass surround, hands are the moving parts
   const clockY = GATE_CLOCK_Y;
@@ -1057,6 +1058,18 @@ function signBoard(k: Kit, world: CollisionWorld, sg: Sign): void {
   }
 }
 
+/** A wall sign's board: from the wall (`back` behind the lettering, and 2 cm into it) to 6 mm behind the lettering, a hand larger than it all round. */
+function wallBoard(k: Kit, world: CollisionWorld, sg: Sign): void {
+  const back = sg.back ?? 0;
+  if (back <= 0) return;
+  const y = world.terrainHeight(sg.x, sg.z) + sg.y;
+  const nx = Math.cos(sg.yaw), nz = Math.sin(sg.yaw); // the face normal (as in banners.ts facing())
+  const h = sg.w / VSIGN_ASPECT;
+  const t = back + 0.02 - 0.006;
+  const off = 0.006 + t / 2;
+  k.add(new BoxGeometry(sg.w + 0.1, h + 0.08, t), { at: [sg.x - nx * off, y, sg.z - nz * off], rot: [0, -sg.yaw + Math.PI / 2, 0], colour: timberC(W.vlTimberLight, Math.floor(sg.x * 7)), flat: true });
+}
+
 /** Post-and-rail fences and their posts (matching the collision boxes). */
 function fences(k: Kit, world: CollisionWorld, plan: VillagePlan, lod: Lod): void {
   const placed = new Set<string>();
@@ -1313,6 +1326,7 @@ export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<str
   for (const l of plan.lanterns) lamp(k, world, l, lod);
   mark("lamps");
   for (const sg of plan.signs) if (sg.posted) signBoard(k, world, sg);
+  else wallBoard(k, world, sg);
   mark("signs");
   paneSink = undefined;
   markSink = undefined;

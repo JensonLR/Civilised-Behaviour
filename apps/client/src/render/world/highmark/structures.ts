@@ -510,13 +510,16 @@ function palace(k: Kit, world: CollisionWorld, lod: Lod, out: HighmarkOut): void
 
 // ---- lamps, stones, quay, camp ----------------------------------------------------------------------------------------------------
 
+/** The street lamp's globe centre above the post's top: on the cage's floor (top at + 0.05), its radius 0.11 less 5 mm. The view's point of light burns there. */
+const LAMP_GLOBE_Y = 0.155;
 function lamp(k: Kit, x: number, z: number, gy: number, h: number): void {
   k.limb([x, gy - 0.3, z], [x, gy + h, z], 0.12, 0.09, P.iron, 6);
   k.limb([x, gy + h * 0.55, z], [x + 0.45, gy + h * 0.78, z], 0.03, 0.03, P.iron, 4);
   // the lantern is a cage (four corner posts, a floor and a verdigris cap) round a gilt flame, not a solid box: the point of light the view adds must be seen through it
   box(k, [0.36, 0.06, 0.36], [x, gy + h + 0.02, z], P.iron);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([x + sx * 0.15, gy + h + 0.03, z + sz * 0.15], [x + sx * 0.15, gy + h + 0.5, z + sz * 0.15], 0.025, 0.025, P.iron, 4);
-  k.add(new SphereGeometry(0.11, 6, 4), { at: [x, gy + h + 0.26, z], colour: P.lampGlow });
+  // the lamp's glowing globe stands on the cage's floor (it hung in the middle of the cage, touching nothing)
+  k.add(new SphereGeometry(0.11, 6, 4), { at: [x, gy + h + LAMP_GLOBE_Y, z], colour: P.lampGlow });
   pyramid(k, 0.28, 0.3, [x, gy + h + 0.5, z], P.verdigrisDark);
 }
 
@@ -684,7 +687,7 @@ export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry:
   for (const l of plan.lamps) {
     const y = g(l.x, l.z);
     lamp(k, l.x, l.z, y, l.h);
-    lamps.push({ x: l.x, y: y + l.h + 0.2, z: l.z });
+    lamps.push({ x: l.x, y: y + l.h + LAMP_GLOBE_Y, z: l.z });
   }
   plan.milestones.forEach((m) => milestone(k, m.x, m.z, g(m.x, m.z), m.n, lod));
   plan.waitingStones.forEach((s, i) => waitingStone(k, s.x, s.z, g(s.x, s.z), i));

@@ -618,12 +618,15 @@ function saltPan(k: Kit, p: { x: number; z: number; hx: number; hz: number }, gy
   k.clearBase();
 }
 
+/** The street lamp's globe centre above the post's top: on the cage's floor (top at + 0.045), its radius 0.1 less 5 mm. The view's point of light burns there. */
+const LAMP_GLOBE_Y = 0.14;
 function lamp(k: Kit, x: number, z: number, gy: number, h: number): void {
   k.limb([x, gy - 0.3, z], [x, gy + h, z], 0.1, 0.07, P.tarPlankDark, 5);
   k.limb([x, gy + h * 0.6, z], [x + 0.4, gy + h * 0.86, z], 0.03, 0.03, P.iron, 4);
   box(k, [0.3, 0.05, 0.3], [x, gy + h + 0.02, z], P.iron);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([x + sx * 0.12, gy + h + 0.03, z + sz * 0.12], [x + sx * 0.12, gy + h + 0.42, z + sz * 0.12], 0.02, 0.02, P.iron, 3);
-  k.add(new SphereGeometry(0.1, 6, 4), { at: [x, gy + h + 0.22, z], colour: P.glowLantern });
+  // the lamp's glowing globe stands on the cage's floor (it hung in the middle of the cage, touching nothing)
+  k.add(new SphereGeometry(0.1, 6, 4), { at: [x, gy + h + LAMP_GLOBE_Y, z], colour: P.glowLantern });
   const cap = new ConeGeometry(0.24, 0.26, 6, 1);
   k.add(cap, { at: [x, gy + h + 0.55, z], colour: P.coralDark, flat: true });
 }
@@ -672,7 +675,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   for (const l of plan.lamps) {
     const y = g(l.x, l.z);
     lamp(kitAt(l.x, l.z), l.x, l.z, y, l.h);
-    lamps.push({ x: l.x, y: y + l.h + 0.22, z: l.z });
+    lamps.push({ x: l.x, y: y + l.h + LAMP_GLOBE_Y, z: l.z });
   }
   // the signboards: a board between two posts (the lettering is the cloth mesh's decal on each face). There was no board: the two lettered sheets hung
   // 11 cm apart in the air, and from above you looked down between them onto the far one's mirrored back.
