@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
 import { CLOISTER, PALETTE, hash3, vesperLevel, type CollisionWorld } from "./shared.ts";
+import { pane, type LitPane } from "../litWindows.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, tentFlap, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
@@ -109,6 +110,8 @@ function notice(k: Kit, hx: number, floor: number, doorH: number): void {
 export interface VesperOut {
   marks: DoorMark[];
   roofs: RoofKits;
+  /** D-089: the buildings' windows (the Assay House, the foreman's ledger window, the winding house, which works nights). */
+  panes: LitPane[];
 }
 
 /**
@@ -236,6 +239,7 @@ function assay(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     const x = -hx + ((i + 0.5) * hx * 2) / n;
     if (i === Math.floor(n / 2)) continue;
     box(k, [0.8, 1.2, 0.14], [x, 4.8, hz + 0.02], P.crepe);
+    pane(out.panes, k, x, 4.8, hz + 0.1, 1, 0.6, 0.98, 240 + i);   // (in front of the crepe, behind the bars)
     box(k, [1.0, 0.12, 0.24], [x, 4.15, hz + 0.08], P.chalk);
     if (lod) for (let s = -1; s <= 1; s++) k.limb([x + s * 0.24, 4.3, hz + 0.14], [x + s * 0.24, 5.4, hz + 0.14], 0.02, 0.02, P.iron, 4);
   }
@@ -298,6 +302,7 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.2), -0.6, sz * (hz - 0.2)], [sx * (hx - 0.2), 0.3, sz * (hz - 0.2)], 0.12, 0.1, P.timber, 5);
     gable(k, hx + 0.5, hz + 0.6, 1.5, [0, H + 0.2, 0]);   // (on the walls' top, H + 0.2: it was 5 cm above them)
     box(k, [1.3, 0.9, 0.12], [-2.0, 2.1, hz + 0.02], P.crepe);
+    pane(out.panes, k, -2.0, 2.1, hz + 0.09, 1, 1.08, 0.7, 250);   // the ledger window: the Company keeps the lamp lit behind it
     box(k, [1.5, 0.1, 0.5], [-2.0, 1.6, hz + 0.3], P.timberLight);
     box(k, [3.4, 0.16, 1.5], [0.2, 0.15, hz + 0.9], P.timber);
     for (const sx of [-1, 1]) k.limb([sx * 1.55 + 0.2, 0.2, hz + 1.5], [sx * 1.55 + 0.2, 2.7, hz + 1.5], 0.07, 0.06, P.timber, 5);
@@ -356,6 +361,7 @@ function yard(k: Kit, world: CollisionWorld, lod: Lod, out: VesperOut): void {
     box(k, [hx * 2, H - 1.2, hz * 2], [0, 1.2 + (H - 1.2) / 2, 0], planks(272));
     gable(k, hx + 0.5, hz + 0.5, 1.8, [0, H, 0]);   // (on the plank walls' top: it was 5 cm above them)
     box(k, [2.2, 1.7, 0.14], [0, 2.7, hz + 0.02], P.crepe);
+    pane(out.panes, k, 0, 2.7, hz + 0.1, 1, 1.9, 1.45, 270);   // the arched window's glass (the engine works nights)
     k.add(new CylinderGeometry(1.1, 1.1, 0.14, lod ? 14 : 8, 1, false, 0, Math.PI), { at: [0, 3.55, hz + 0.02], rot: [Math.PI / 2, 0, 0], colour: P.crepe, flat: true });
     k.limb([-hx + 0.7, H + 0.8, 0.5], [-hx + 0.7, H + 3.0, 0.5], 0.16, 0.13, P.iron, 6);
     k.clearBase();
@@ -459,6 +465,7 @@ function needle(k: Kit, x: number, y: number, z: number, r: number, h: number, s
 
 export interface VesperSolidParts {
   glows: { x: number; y: number; z: number; lit?: number }[];
+  panes: LitPane[];
   /** D-038: the doors drawn, and the roofs of the interiors (collected here, handed to the view by `buildVesperSolid`). */
   marks: DoorMark[];
   roofs: RoofKits;
@@ -468,7 +475,7 @@ export interface VesperSolidParts {
 export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, parts: VesperSolidParts): void {
   const plan: VesperPlan = vesperPlan();
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
-  const out: VesperOut = { marks: parts.marks, roofs: parts.roofs };
+  const out: VesperOut = { marks: parts.marks, roofs: parts.roofs, panes: parts.panes };
   cloister(k, world, lod, parts.glows, out);
   assay(k, world, lod, out);
   yard(k, world, lod, out);

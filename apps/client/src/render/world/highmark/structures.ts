@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, RingGeometry, Shape, SphereGeometry } from "three";
 import { PALETTE, hash3, highmarkLevel, type CollisionWorld } from "@cb/shared";
+import { pane, type LitPane } from "../litWindows.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, type DoorMark, type LevelBuilding, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
@@ -252,6 +253,8 @@ interface HighmarkOut {
   marks: DoorMark[];
   lamps: { x: number; y: number; z: number }[];
   roofs: RoofKits;
+  /** D-089: windows with somebody behind them (the Assembly Hall's, at the harvest bell hour). */
+  panes: LitPane[];
 }
 
 /**
@@ -282,6 +285,7 @@ function hall(k: Kit, b: HighmarkBox, gy: number, lod: Lod, seed: number, index:
     for (let i = 0; i < n; i++) for (const sz of [-1, 1]) {
       const x = -b.hx + ((i + 0.5) * b.hx * 2) / n;
       box(k, [0.7, 1.1, 0.12], [x, lb.floor + lb.wallH * 0.55, sz * (b.hz + 0.02)], P.iron);
+      pane(out.panes, k, x, lb.floor + lb.wallH * 0.55, sz * (b.hz + 0.08), sz as 1 | -1, 0.54, 0.92, seed + i);
       box(k, [0.9, 0.12, 0.2], [x, lb.floor + lb.wallH * 0.55 - 0.62, sz * (b.hz + 0.06)], P.chalkCap);
     }
     // the double door's gilt sun and posts at the gable end
@@ -663,11 +667,11 @@ export function lanternRoom(world: CollisionWorld): LanternRoom {
 }
 
 /** Everything solid in Highmark, merged. `lod` 0 is the cheap shape the ink hull and the low preset use. */
-export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; lamps: { x: number; y: number; z: number }[]; lantern: LanternRoom; marks: DoorMark[]; roofs: RoofSource | undefined } {
+export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; lamps: { x: number; y: number; z: number }[]; lantern: LanternRoom; marks: DoorMark[]; roofs: RoofSource | undefined; panes: LitPane[] } {
   const plan = highmarkPlan();
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
   const k = new Kit();
-  const out: HighmarkOut = { marks: [], lamps: [], roofs: new RoofKits() };
+  const out: HighmarkOut = { marks: [], lamps: [], roofs: new RoofKits(), panes: [] };
   plan.walls.forEach((w, i) => wall(k, w, lod, 10 + (i % 17)));
   plan.granaries.forEach((s, i) => granary(k, s, g(s.x, s.z), lod, 30 + i));
   plan.stalls.forEach((s, i) => stall(k, s, g(s.x, s.z), lod, i));
@@ -690,5 +694,5 @@ export function buildHighmarkSolid(world: CollisionWorld, lod: Lod): { geometry:
   signposts(k, world, lod);
   void HIGHMARK_SITES;
   k.clearBase();
-  return { geometry: k.build(), lamps, lantern: lanternRoom(world), marks: out.marks, roofs: out.roofs.finish() };
+  return { geometry: k.build(), lamps, lantern: lanternRoom(world), marks: out.marks, roofs: out.roofs.finish(), panes: out.panes };
 }

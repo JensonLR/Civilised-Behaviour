@@ -21,6 +21,7 @@ import { planHighmarkScatter, type HighmarkScatter } from "./scatter.ts";
 import type { HighmarkTerrain } from "./shared.ts";
 import { landmarkFog, landmarkInk } from "./landmark.ts";
 import { buildHighmarkSolid, type LanternRoom } from "./structures.ts";
+import { addWindows, setWindowNight } from "../litWindows.ts";
 import { buildHighmarkWater } from "./water.ts";
 import { buildGranaryScale, buildScythes } from "./strikeProps.ts";
 import { OutpostDress } from "../outpostDress.ts";
@@ -214,6 +215,7 @@ export class HighmarkView implements RegionView {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildHighmarkSolid(this.world, lod);
     this.lamps = [...solid.lamps, { x: solid.lantern.x, y: solid.lantern.y, z: solid.lantern.z }]; // (the lit tower's lantern burns with the lamps)
+    addWindows(this.root, solid.panes, (x) => this.track(x));
     this.addLantern(solid.lantern);
     if (!solid.geometry) return;
     const hullSolid = this.detail.outlines ? buildHighmarkSolid(this.world, 0) : undefined;
@@ -352,6 +354,7 @@ export class HighmarkView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the lamps are lit at the harvest bell hour
+    setWindowNight(this.ambientU.uLamp.value); // (D-089: and so are the Assembly Hall's windows)
     this.lantern?.color.copy(this.lanternDark).lerp(this.lanternLit, this.ambientU.uLamp.value); // ... and so is the tower's glass
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;

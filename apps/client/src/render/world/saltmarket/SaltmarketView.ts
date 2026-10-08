@@ -8,6 +8,7 @@ import { buildRain } from "../rain.ts";
 import type { Item } from "../scatter.ts";
 import { setRgb } from "../sky.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
+import { addWindows, setWindowNight } from "../litWindows.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
@@ -206,6 +207,8 @@ export class SaltmarketView implements RegionView {
     const solid = buildSaltmarketSolid(this.world, lod);
     this.lamps = solid.lamps;
     this.doors = solid.marks;
+    // D-089: the houses' windows: dark glass by day, most of them lit by whoever is home at night
+    addWindows(this.root, solid.panes, (x) => this.track(x));
     doorGroups(this.root, solid.marks);
     const hullSolid = this.detail.outlines ? buildSaltmarketSolid(this.world, 0) : undefined;
     const hulls = hullSolid?.geometries;
@@ -350,6 +353,7 @@ export class SaltmarketView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the lanterns are lit at dusk
+    setWindowNight(this.ambientU.uLamp.value); // (D-089: and so are the windows)
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
   }

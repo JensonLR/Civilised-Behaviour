@@ -21,6 +21,7 @@ import { buildKessarSites } from "./sites.ts";
 import { OutpostDress } from "../outpostDress.ts";
 import { kessarPlan, type KessarTerrain } from "./shared.ts";
 import { buildKessarSolid } from "./structures.ts";
+import { addWindows, setWindowNight } from "../litWindows.ts";
 import { buildKessarWater } from "./water.ts";
 import type { WaterUniforms } from "../water.ts";
 
@@ -199,6 +200,7 @@ export class KessarView implements RegionView {
     // D-038: the doors drawn, the lamps hung in the rooms, and the roofs of the rooms (one mesh; the one over the viewer is dropped)
     this.doors = solid.marks;
     this.roomLamps = solid.lamps;
+    addWindows(this.root, solid.panes, (x) => this.track(x)); // (D-089: the keep's and the halls' windows burn at night)
     doorGroups(this.root, solid.marks);
     if (solid.roofs) {
       this.roofSet = new RoofSet(this.root, solid.roofs, hullSolid?.roofs, mat, { name: "roofs", outline: this.detail.outlines, ink: "medium" });
@@ -298,6 +300,7 @@ export class KessarView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = d.fire;
+    setWindowNight(d.fire);
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
   }

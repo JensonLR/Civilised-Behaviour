@@ -1,4 +1,5 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry, TorusGeometry } from "three";
+import { pane, type LitPane } from "../litWindows.ts";
 import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, hash3, saltmarketLevel, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import { SIGN_BOARD } from "./cloth.ts";
@@ -92,6 +93,8 @@ export interface HouseOut {
   marks: DoorMark[];
   lamps: { x: number; y: number; z: number; lit?: number }[];
   roofs: RoofKits;
+  /** D-089: the window panes (lit at night by whoever is home). */
+  panes: LitPane[];
 }
 
 /** The furniture of an enterable house, in its frame, floor at `fl`: kept to 1.2 m, with the 1.0 m strip from the door to the middle clear (LEVEL_PLAN section 4). */
@@ -198,6 +201,7 @@ function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb:
     // windows: shuttered openings in the long walls, glowing at dusk with the room's lantern
     if (lod) for (const sz of [-1, 1]) for (const sx of [-0.5, 0.35]) {
       box(k, [0.7, 0.6, 0.08], [sx * b.hx * 0.8, fy + 0.08 + wallH * 0.62, sz * (b.hz + 0.02)], P.iron);
+      pane(out.panes, k, sx * b.hx * 0.8, fy + 0.08 + wallH * 0.62, sz * (b.hz + 0.06), sz as 1 | -1, 0.54, 0.44, seed);
       box(k, [0.9, 0.08, 0.16], [sx * b.hx * 0.8, fy + 0.08 + wallH * 0.62 - 0.36, sz * (b.hz + 0.05)], P.pilingLight);
     }
     // an awning over the door (coral and salt) and the hoist beam of a warehouse
@@ -634,6 +638,8 @@ export interface SaltmarketSolid {
   /** D-038: the doors drawn (one per declared door), and the roofs of the interiors (the cutaway's). */
   marks: DoorMark[];
   roofs: RoofSource | undefined;
+  /** D-089: the houses' window panes. */
+  panes: LitPane[];
 }
 
 /** Everything solid in the delta, merged four ways. `lod` 0 is the cheap shape the ink hull and the low preset use. */
@@ -654,7 +660,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   revetment(kitAt, world, lod);
   const level = saltmarketLevel();
   const lbOf = (id: string): LevelBuilding => level.buildings.find((x) => x.id === id)!;
-  const houseOut: HouseOut = { marks: [], lamps, roofs: new RoofKits() };
+  const houseOut: HouseOut = { marks: [], lamps, roofs: new RoofKits(), panes: [] };
   plan.houses.forEach((b, i) => stiltHouse(kitAt(b.x, b.z), b, g(b.x, b.z), i < 2 ? "warehouse" : "hut", lbOf(`warehouse${i}`), lod, 200 + i * 7, houseOut));
   stiltHouse(kitAt(plan.customsHouse.x, plan.customsHouse.z), plan.customsHouse, g(plan.customsHouse.x, plan.customsHouse.z), "customs", lbOf("customs"), lod, 300, houseOut);
   stiltHouse(kitAt(plan.dropHouse.x, plan.dropHouse.z), plan.dropHouse, g(plan.dropHouse.x, plan.dropHouse.z), "dropHouse", lbOf("dropHouse"), lod, 310, houseOut);
@@ -719,7 +725,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   for (const s of [-1, 1]) lamps.push({ x: customs.x + s * (SALTMARKET.deckHalf + 0.8), y: L + 2.5, z: customs.z + customs.hl - 1.0 });
   for (const x of EXCHANGE_LANTERN_X) lamps.push({ x, y: g(plan.exchange.x, plan.exchange.z) + plan.exchange.eave - 1.0, z: SALTMARKET_ANCHORS.exchange.z + 11 - EXCHANGE_LANTERN_IN });
   plan.boats.filter((b) => b.kind === "barge" || b.kind === "cutter").forEach((b) => lamps.push({ x: b.x, y: SALTMARKET.waterY + 1.45, z: b.z + (b.kind === "barge" ? 4.2 : 3.4) }));
-  return { geometries: kits.map((k) => k.build()), lamps, marks: houseOut.marks, roofs: houseOut.roofs.finish() };
+  return { geometries: kits.map((k) => k.build()), lamps, marks: houseOut.marks, roofs: houseOut.roofs.finish(), panes: houseOut.panes };
 }
 
 /** The boardwalk's planks, as their own merged geometries: a plank is only 3 vertices of cost per 0.46 m, but a path across a quarter of the map is never culled whole. */

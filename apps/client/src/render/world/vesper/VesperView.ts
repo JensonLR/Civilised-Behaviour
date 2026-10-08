@@ -17,6 +17,7 @@ import { vesperBoulderGeometry, vesperSlabGeometry } from "./rocks.ts";
 import { planVesperScatter, type VesperScatter } from "./scatter.ts";
 import type { VesperTerrain } from "./shared.ts";
 import { buildVesperSolid } from "./solid.ts";
+import { addWindows, setWindowNight } from "../litWindows.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import { sheaveAt, sheaveGeometry } from "./works.ts";
 
@@ -176,6 +177,7 @@ export class VesperView implements RegionView {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildVesperSolid(this.world, lod);
     this.glows = solid.glows;
+    addWindows(this.root, solid.panes, (x) => this.track(x)); // (D-089)
     if (!solid.geometry) return;
     const hullSolid = this.detail.outlines ? buildVesperSolid(this.world, 0) : undefined;
     const hull = hullSolid?.geometry;
@@ -271,6 +273,7 @@ export class VesperView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = 0;
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the Guild's lamps and the headframe's work-light burn at dusk
+    setWindowNight(this.ambientU.uLamp.value);
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
   }
