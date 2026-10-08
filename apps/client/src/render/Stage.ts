@@ -22,6 +22,7 @@ import { setToonLite } from "./world/toon.ts";
 import { atmoUniforms, atmosphereForWriting, motion, motionScale, windGain } from "./world/atmosphere.ts";
 import { applyDaySky, buildSky, fogColour, setRgb, type SkyDetail, type SkyUniforms } from "./world/sky.ts";
 import { SkyClock } from "./world/skyclock.ts";
+import { updateLamps } from "./world/lampLight.ts";
 
 export interface GraphicsPreset {
   /** Sun shadows at all (off: no shadow pass, no shadow sampling in any material). */
@@ -456,6 +457,7 @@ export class Stage {
     this.updateSky(performance.now(), dt);
     this.applyDay();
     this.worldView?.update(now, this.camera.position, this.worldSec);
+    updateLamps(this.camera); // (the lanterns nearest the lens light their pools: lampLight.ts)
     this.decals.update(dt);
     this.renderer.render(this.scene, this.camera);
   }
