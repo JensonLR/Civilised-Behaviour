@@ -4,6 +4,12 @@ on:
     branches: ["**"]
   pull_request:
 
+# One run per branch (push) and per pull request at a time: a newer push cancels the run it supersedes. Without this, three pushes in ten minutes kept six full runs
+# (check and e2e each) on the runners at once and every one of them crawled. A push run and a pull-request run of the same commit are separate groups and both finish.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
