@@ -186,8 +186,10 @@ export class MountView {
       v.ride.roll = m.roll;
       v.ride.speed01 = Math.min(1, speed / MOUNT.gallop);
       v.ride.scale = v.rig.scale;
+      v.ride.girth = v.rig.girth;
       this.byRider.set(row.rider, v);
-    }
+    } else if (v.ride.iron) v.ride.iron.half = 0; // (nobody's feet: the irons hang at rest, and the next rider's pose places them afresh)
+    v.rig.setStirrups(v.ride.iron); // (the rider's pose wrote where their feet are last frame; the leathers are let down or taken up to them)
   }
 
   private updateWagon(id: string, row: MountRowLike, dt: number): void {

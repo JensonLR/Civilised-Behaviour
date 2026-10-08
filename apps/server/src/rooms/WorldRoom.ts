@@ -6,6 +6,8 @@ import {
   CollisionWorld,
   FLAG,
   INTERACT,
+  MOUNT_KIND,
+  MOUNT_PHASE,
   PROP_DEFS,
   PropState,
   canCarry,
@@ -1852,6 +1854,22 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.scenario = undefined;
         this.startScenario("kessar");
       }
+    }
+    else if (cmd === "ride") {
+      // Step up to the nearest free horse and get in the saddle (for looking at a rider: the same `mount` a player's USE runs).
+      let best: { x: number; z: number; d: number } | undefined;
+      this.state.mounts.forEach((m) => {
+        if (m.kind !== MOUNT_KIND.horse || m.rider || m.phase === MOUNT_PHASE.wrecked) return;
+        const d = Math.hypot(m.x - player.x, m.z - player.z);
+        if (!best || d < best.d) best = { x: m.x, z: m.z, d };
+      });
+      if (!best) return;
+      const b: { x: number; z: number } = best;
+      player.x = b.x + 0.6;
+      player.z = b.z;
+      player.y = this.world.terrainHeight(player.x, player.z);
+      player.vx = player.vz = 0;
+      this.mounts.onInteract(client.sessionId, player, undefined);
     }
     else if (cmd === "nearCannon") {
       // Stand at the breech of the first cannon, looking down the barrel.

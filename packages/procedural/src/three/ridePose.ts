@@ -1,12 +1,14 @@
 import { HORSE_SEAT } from "../horse.ts";
+import { barrelOutside } from "./horse.ts";
 import type { CharacterRig } from "./rig.ts";
 import { solveArm, type ArmAngles } from "./weaponPose.ts";
 
 /**
  * The rider's pose: seated on the horse, thighs along the barrel, feet in the stirrups, hands on the reins. A POST-PASS over the animator's own pose: the animator resets and
  * writes every joint each frame, then (when `PoseInput.ride` is set) calls `applyRidePose`, which blends the sitting pose over whatever the animator produced by `weight` (the
- * animator eases it, so mounting and dismounting never snap). The legs are solved, not keyed: closed-form two-bone IK puts each ankle on its stirrup whatever the rider's
- * proportions, and the arms use the weapon code's `solveArm` to put each hand on the reins. Allocation-free.
+ * animator eases it, so mounting and dismounting never snap). The legs are solved, not keyed, and go ROUND the barrel (`fitRideLegs`): each ankle as near its stirrup as a leg
+ * of the rider's length can reach without passing through the horse (a long-legged rider's foot is in the iron; a short-legged one straddles the cob with the legs splayed), and
+ * the arms use the weapon code's `solveArm` to put each hand on the reins. Allocation-free per frame (the legs' fit is worked out once per rider and horse, then cached).
  */
 
 export interface RideInput {
@@ -23,9 +25,25 @@ export interface RideInput {
   scale?: number;
   /** Hands on the reins (default true); false leaves the arms to the animator (a drawn weapon, a raised fist). */
   reins?: boolean;
+  /** The horse's barrel width factor (HorseRig.girth): the legs go round it. Default `RIDE_GIRTH`. */
+  girth?: number;
+  /** OUT: where the rider's right stirrup iron hangs (the pose writes it; the horse hangs its irons there with `HorseRig.setStirrups`): the leathers are let down or taken up to the rider's leg. */
+  iron?: StirrupPlace;
 }
 
-export const newRideInput = (): RideInput => ({ weight: 1, bob: 0, bodyZ: 0, pitch: 0, roll: 0, speed01: 0, scale: 1, reins: true });
+/** A stirrup iron's place in the horse's body frame (horse units; the right one, the left mirrors in x): its centre, its half-width (it fits the boot) and its turn about the vertical (it faces the way the toes point). */
+export interface StirrupPlace {
+  x: number;
+  y: number;
+  z: number;
+  half: number;
+  yaw: number;
+}
+
+/** A middling cob's barrel factor, for a ride input that does not say. */
+export const RIDE_GIRTH = 0.85;
+
+export const newRideInput = (): RideInput => ({ weight: 1, bob: 0, bodyZ: 0, pitch: 0, roll: 0, speed01: 0, scale: 1, reins: true, girth: RIDE_GIRTH, iron: { x: 0, y: 0, z: 0, half: 0, yaw: 0 } });
 
 /** The barrel's origin at rest (the horse builder's body pivot): seat, stirrups and hands are body-attached, so they are expressed relative to it. */
 const BODY_Y = 0.62;
@@ -87,8 +105,6 @@ export function legFk(upper: number, lower: number, a: LegAngles, out: { x: numb
 }
 
 const fk = { x: 0, y: 0, z: 0 };
-const legL: LegAngles = { hx: 0, hz: 0, kx: 0 };
-const legR: LegAngles = { hx: 0, hz: 0, kx: 0 };
 const arm: ArmAngles = { a: 0.9, b: 0.1, e: 0.9 };
 const armSeed: [ArmAngles, ArmAngles] = [{ a: 0.9, b: -0.1, e: 0.9 }, { a: 0.9, b: 0.1, e: 0.9 }];
 
@@ -108,6 +124,188 @@ function unrotate(v: { x: number; y: number; z: number }, rx: number, rz: number
 }
 
 const tgt = { x: 0, y: 0, z: 0 };
+
+/** The right leg's riding angles (the hip's full Euler XYZ, the knee's hinge), the left mirrors them; and how near the ankle came to its stirrup (m). */
+export interface RideLegs {
+  hx: number;
+  hy: number;
+  hz: number;
+  kx: number;
+  /** Ankle to stirrup (m): 0 when the leg reaches round the barrel to the iron. */
+  miss: number;
+  /** The deepest a sampled point of the leg lies inside the barrel (grown by the leg's half-thickness), as `barrelOutside` measures it: >= 0 is clear. */
+  depth: number;
+  /** Where the right iron goes so the boot stands in it (see `StirrupPlace`). */
+  iron: StirrupPlace;
+}
+
+/** The boot, for placing the iron under it (metres): the sole's drop below the ankle, the foot's length and width. */
+export interface RideFoot {
+  h: number;
+  len: number;
+  w: number;
+}
+
+/**
+ * Fits a rider's right leg to the horse: the hip at the seat, the thigh and shin of the rider's lengths, the ankle as near the stirrup as it can get while the leg (from a little
+ * out of the saddle down to the ankle, thickened by `pad`) stays outside the barrel. A long leg wraps the barrel and puts the foot in the iron; a short one cannot, and straddles
+ * the cob with the knee out over the flank (a child on a carthorse). A search over the thigh's swing and spread and the shin's splay, then two finer passes round the best;
+ * deterministic. Everything is in the seat's frame in metres (the barrel moves with the seat, so the answer holds for any pitch and roll).
+ */
+export function fitRideLegs(upper: number, lower: number, hipWidth: number, pad: number, scale: number, girth: number, foot: RideFoot = { h: 0.05, len: 0.4, w: 0.18 }): RideLegs {
+  const s = scale;
+  const ly = HORSE_SEAT.y - BODY_Y;
+  const lz = HORSE_SEAT.z;
+  const ax = HORSE_SEAT.stirrup.x * s - hipWidth;
+  const ay = (HORSE_SEAT.stirrup.y - 0.03 - BODY_Y - ly) * s;
+  const az = (HORSE_SEAT.stirrup.z - lz) * s;
+  // how deep a point (relative to the hip, metres) is in the padded barrel: < 0 inside
+  const outside = (x: number, y: number, z: number): number => barrelOutside(girth, (x + hipWidth) / s, y / s + ly, z / s + lz, pad / s);
+  // the thigh is checked from where it leaves the saddle (a short thigh is all saddle but its knee), the shin all the way
+  const t0 = Math.min(0.85, Math.max(0.45, 0.13 / Math.max(upper, 1e-3)));
+  const evaluate = (a: number, b: number, g: number, out: RideLegs | undefined, bound = Infinity): number => {
+    const tx = Math.sin(b);
+    const ty = -Math.cos(b) * Math.cos(a);
+    const tz = -Math.cos(b) * Math.sin(a);
+    const kx0 = tx * upper;
+    const ky0 = ty * upper;
+    const kz0 = tz * upper;
+    let sx = ax - kx0 + g;
+    let sy = ay - ky0;
+    let sz = az - kz0;
+    const sl = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1;
+    sx /= sl;
+    sy /= sl;
+    sz /= sl;
+    const ex = kx0 + sx * lower - ax;
+    const ey = ky0 + sy * lower - ay;
+    const ez = kz0 + sz * lower - az;
+    const miss = Math.sqrt(ex * ex + ey * ey + ez * ez);
+    const cosF = clamp(tx * sx + ty * sy + tz * sz, -1, 1);
+    const fold = Math.acos(cosF);
+    // the hip frame: its -Y down the thigh, its +Z the way the shin folds (the knee hinges about X and folds the shin back, toward +Z)
+    let zx = sx - cosF * tx;
+    let zy = sy - cosF * ty;
+    let zz = sz - cosF * tz;
+    let zl = Math.sqrt(zx * zx + zy * zy + zz * zz);
+    if (zl < 1e-4) {
+      // a straight leg: fold toward the horse's tail
+      zx = -tz * tx;
+      zy = -tz * ty;
+      zz = 1 - tz * tz;
+      zl = Math.sqrt(zx * zx + zy * zy + zz * zz) || 1;
+    }
+    zx /= zl;
+    zy /= zl;
+    zz /= zl;
+    // The foot has no joint of its own: it points along the shin frame's -Z, which is sin(fold) T - cos(fold) Z of the hip frame. A knee that folds DOWN over a thigh laid out
+    // sideways turns the toes out like a wing; a seat folds the knee fore and aft (thigh forward, shin back), so the toes point where the horse goes (-Z).
+    const footZ = Math.sin(fold) * tz - cosF * zz;
+    // clear of the horse first, then the stirrup; toes forward; a little spread and a thigh that goes forward, as a seat does; a shin that hangs, not one that climbs; no knee folded flat
+    const cheap = 0.75 * miss + 0.5 * (1 + footZ) + 0.03 * b + 0.05 * Math.max(0, -a) + Math.max(0, sy + 0.25) + Math.max(0, fold - 2.3);
+    if (!out && cheap >= bound) return cheap; // (the barrel can only add: no need to probe it)
+    let depth = 0;
+    for (let k = 0; k <= 9; k++) {
+      // the knee first (k = 0), then down the shin, then back up the thigh: the probes most likely inside come first, so a hopeless pose stops early
+      const o =
+        k < 5
+          ? outside(kx0 + sx * ((lower * k) / 4), ky0 + sy * ((lower * k) / 4), kz0 + sz * ((lower * k) / 4))
+          : outside(tx * upper * (t0 + ((1 - t0) * (k - 5)) / 4), ty * upper * (t0 + ((1 - t0) * (k - 5)) / 4), tz * upper * (t0 + ((1 - t0) * (k - 5)) / 4));
+      if (-o > depth) {
+        depth = -o;
+        if (!out && cheap + 4 * depth >= bound) return cheap + 4 * depth;
+      }
+    }
+    const cost = cheap + 4 * depth;
+    if (out) {
+      const yx = -tx;
+      const yy = -ty;
+      const yz = -tz;
+      // X = Y x Z (only its x is needed)
+      const xx = yy * zz - yz * zy;
+      // Euler XYZ from the matrix with columns X, Y, Z (three's convention: m13 = Z.x, m23 = Z.y, m33 = Z.z, m12 = Y.x, m11 = X.x, m32 = Y.z, m22 = Y.y)
+      out.hy = Math.asin(clamp(zx, -1, 1));
+      if (Math.abs(zx) < 0.9999999) {
+        out.hx = Math.atan2(-zy, zz);
+        out.hz = Math.atan2(-yx, xx);
+      } else {
+        out.hx = Math.atan2(yz, yy);
+        out.hz = 0;
+      }
+      out.kx = -fold;
+      out.miss = miss;
+      out.depth = depth;
+      // the iron: its tread under the ball of the foot (the sole is `foot.h` down the shin from the ankle, the ball a fifth of the foot ahead of it along the toes), in the barrel's frame
+      const fx = Math.sin(fold) * tx - cosF * zx;
+      const fy = Math.sin(fold) * ty - cosF * zy;
+      const fz = footZ;
+      const half = Math.max(0.05, foot.w / 2 + 0.015) / s;
+      const px = kx0 + sx * (lower + foot.h) + fx * foot.len * 0.22 + hipWidth;
+      const py = ky0 + sy * (lower + foot.h) + fy * foot.len * 0.22;
+      const pz = kz0 + sz * (lower + foot.h) + fz * foot.len * 0.22;
+      out.iron.x = px / s;
+      out.iron.y = py / s + ly + half * 1.2;
+      out.iron.z = pz / s + lz;
+      out.iron.half = half;
+      out.iron.yaw = Math.atan2(fx, fz);
+    }
+    return cost;
+  };
+  let bestA = 0.6;
+  let bestB = 0.3;
+  let bestG = 0;
+  let best = Infinity;
+  for (let ia = 0; ia <= 18; ia++)
+    for (let ib = 0; ib <= 15; ib++)
+      for (let ig = 0; ig <= 6; ig++) {
+        const a = -0.3 + ia * 0.1;
+        const b = ib * 0.1;
+        const g = ig * 0.2;
+        const c = evaluate(a, b, g, undefined, best);
+        if (c < best - 1e-9) {
+          best = c;
+          bestA = a;
+          bestB = b;
+          bestG = g;
+        }
+      }
+  for (const step of [0.04, 0.015]) {
+    const ca = bestA;
+    const cb = bestB;
+    const cg = bestG;
+    for (let ia = -2; ia <= 2; ia++)
+      for (let ib = -2; ib <= 2; ib++)
+        for (let ig = -2; ig <= 2; ig++) {
+          const a = ca + ia * step;
+          const b = Math.max(0, cb + ib * step);
+          const g = Math.max(0, cg + ig * step * 2);
+          const c = evaluate(a, b, g, undefined, best);
+          if (c < best - 1e-9) {
+            best = c;
+            bestA = a;
+            bestB = b;
+            bestG = g;
+          }
+        }
+  }
+  const out: RideLegs = { hx: 0, hy: 0, hz: 0, kx: 0, miss: 0, depth: 0, iron: { x: 0, y: 0, z: 0, half: 0, yaw: 0 } };
+  evaluate(bestA, bestB, bestG, out);
+  return out;
+}
+
+/** The fit for a rider on a horse of this scale and girth, worked out the first time and kept on the rig (a rider changes horse rarely; the fit is a few thousand probes). */
+const fitCache = new WeakMap<CharacterRig, { scale: number; girth: number; legs: RideLegs }>();
+function rideLegsFor(rig: CharacterRig, scale: number, girth: number): RideLegs {
+  const hit = fitCache.get(rig);
+  if (hit && hit.scale === scale && hit.girth === girth) return hit.legs;
+  const P = rig.proportions;
+  const legs = fitRideLegs(P.legUpper, P.legLower, P.hipWidth, rideLegPad(P.scale), scale, girth, { h: 0.05 * P.scale, len: P.footLength, w: P.footWidth });
+  fitCache.set(rig, { scale, girth, legs });
+  return legs;
+}
+
+/** How far the leg's axis keeps off the barrel: most of a trouser leg's half-thickness (`legRadius`: 0.1 x scale + 2 cm of cloth) and the blanket under it; the last few centimetres of cloth press into the saddle flap, as a real leg does. */
+export const rideLegPad = (riderScale: number): number => 0.5 * (0.1 * riderScale + 0.02) + 0.015;
 
 /**
  * Blends the riding pose over the pose the animator just wrote. Joints touched: pelvis (height, pitch, roll), torso (lean), both hips, knees, shoulders and elbows. Call after the
@@ -149,19 +347,24 @@ export function applyRidePose(rig: CharacterRig, ride: RideInput, w: number): vo
   j.torso.rotation.z = tz;
   j.torso.rotation.y = lerp(j.torso.rotation.y, 0, w);
 
-  // ---- legs: ankles on the stirrups (barrel-attached, so relative to the seat they do not move with the tilt) ---------------------------------------------------------------
+  // ---- legs: round the barrel toward the stirrups (barrel-attached, so in the seat's frame the fit does not move with the tilt: worked out once, then cached) --------------------
+  const fit = rideLegsFor(rig, s, ride.girth ?? RIDE_GIRTH);
+  const iron = ride.iron;
+  if (iron) {
+    iron.x = fit.iron.x;
+    iron.y = fit.iron.y;
+    iron.z = fit.iron.z;
+    iron.half = fit.iron.half;
+    iron.yaw = fit.iron.yaw;
+  }
   for (const side of [-1, 1] as const) {
-    tgt.x = (side * HORSE_SEAT.stirrup.x - lx) * s - side * P.hipWidth;
-    tgt.y = (HORSE_SEAT.stirrup.y - 0.03 - BODY_Y - ly) * s;
-    tgt.z = (HORSE_SEAT.stirrup.z - lz) * s;
-    const out = side < 0 ? legL : legR;
-    legIk(P.legUpper, P.legLower, tgt.x, tgt.y, tgt.z, out);
     const hip = side < 0 ? j.hipL : j.hipR;
     const knee = side < 0 ? j.kneeL : j.kneeR;
-    hip.rotation.x = lerp(hip.rotation.x, out.hx, w);
-    hip.rotation.y = lerp(hip.rotation.y, 0, w);
-    hip.rotation.z = lerp(hip.rotation.z, out.hz, w);
-    knee.rotation.x = lerp(knee.rotation.x, out.kx, w);
+    // (the right leg is solved; the left is its mirror across the horse's centre plane: x swings the same, y and z turn the other way)
+    hip.rotation.x = lerp(hip.rotation.x, fit.hx, w);
+    hip.rotation.y = lerp(hip.rotation.y, side * fit.hy, w);
+    hip.rotation.z = lerp(hip.rotation.z, side * fit.hz, w);
+    knee.rotation.x = lerp(knee.rotation.x, fit.kx, w);
   }
 
   // ---- arms: hands on the reins (or left to the animator when a weapon is up) ---------------------------------------------------------------------------------------
