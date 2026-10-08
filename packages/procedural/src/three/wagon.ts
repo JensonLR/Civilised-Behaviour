@@ -75,6 +75,20 @@ function buildBed(trim: number): BufferGeometry | undefined {
   b.box(0.06, 0.34, 0.06, wood, [0, 0.58, 1.55], [0.3, 0, 0]);
   // a lantern, because the Society does not travel in the dark: it is only inconvenienced by it
   b.box(0.12, 0.16, 0.12, PALETTE.weapons.brass, [-0.9, 1.5, -1.12]);
+  // the tilt, furled: the canvas cover rolled tight and lashed along each side of the rack, lying ON the side rail (top 1.72), clear of the two body bays (x = +-0.42).
+  // It comes down over the rack in a downpour; the Society has never yet been seen to unroll it.
+  const canvas = PALETTE.camp.canvas;
+  for (const s of [-1, 1]) {
+    b.cylinder(0.085, 0.085, 2.62, canvas, [s * 0.86, 1.805, 0.2], [Math.PI / 2, 0, 0]);
+    b.box(0.012, 0.02, 2.62, PALETTE.camp.canvasShade, [s * (0.86 + 0.08), 1.79, 0.2]); // the roll's outer edge, a fold of shade along it
+    for (let i = 0; i < 4; i++) b.torus(0.093, 0.012, dark, [s * 0.86, 1.805, -0.85 + i * 0.68]); // lashings (a torus lies round Z: round the roll)
+  }
+  // a water cask in an iron cradle on the near side, ahead of the wheel, hung from the side board's top rail
+  b.cylinder(0.14, 0.14, 0.38, wood, [-1.05, 0.98, -0.85], [Math.PI / 2, 0, 0]);
+  for (const dz of [-0.13, 0.13]) {
+    b.torus(0.145, 0.012, dark, [-1.05, 0.98, -0.85 + dz]); // hoops
+    b.box(0.2, 0.03, 0.03, dark, [-0.97, 1.14, -0.85 + dz]); // the cradle's straps over the rail
+  }
   return b.build();
 }
 
