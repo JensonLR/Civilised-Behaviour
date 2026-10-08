@@ -3,7 +3,7 @@ import { PALETTE, animalPose, createAnimalPose, type Animal, type AnimalKind, ty
 import { WORLD_INK, instancedWorldOutline, type OutlineDisplace } from "@cb/procedural/three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Kit, blend, weldedOutlineNormals, type ColourFn, type V3 } from "./kit.ts";
-import { composeInstance, toonMaterial } from "./toon.ts";
+import { composeInstance, hullFades, toonMaterial } from "./toon.ts";
 
 /**
  * The flock: sheep and goats as instanced toon animals. Their positions come from the shared pure `animalPose` (a function of the world
@@ -315,7 +315,7 @@ export function buildAnimals(animals: readonly Animal[], outlines: boolean): Flo
     });
     let hull: InstancedMesh | undefined;
     if (outlines) {
-      hull = instancedWorldOutline(mesh, { thickness: WORLD_INK.small, displace: ANIM_HULL });
+      hull = instancedWorldOutline(mesh, { thickness: WORLD_INK.small, displace: ANIM_HULL, fade: hullFades(material) });
       hull.frustumCulled = false;
       hull.castShadow = false;
       hull.receiveShadow = false;

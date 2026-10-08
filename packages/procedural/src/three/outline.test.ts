@@ -139,3 +139,19 @@ describe("nose-bridge ink", () => {
     expect((outlineMaterial().defaultAttributeValues as Record<string, number[]>).hthin).toEqual([0]);
   });
 });
+
+describe("scenery ink that dissolves with its body", () => {
+  it("a fading hull is its own shared variant, reads the one focus vector, and discards; the plain hull does neither", () => {
+    const plain = worldOutlineMaterial({ thickness: WORLD_INK.small });
+    const fading = worldOutlineMaterial({ thickness: WORLD_INK.small, fade: true });
+    expect(fading).not.toBe(plain);
+    expect(worldOutlineMaterial({ thickness: WORLD_INK.small, fade: true })).toBe(fading);
+    expect(isSharedInk(fading)).toBe(true);
+    expect(fading.uniforms.uFocus!.value).toBe(outlineSettings.focus);
+    expect(fading.fragmentShader).toContain("discard");
+    expect(fading.vertexShader).toContain("vWPos = (modelMatrix * local).xyz");
+    expect(plain.fragmentShader).not.toContain("discard");
+    expect(plain.uniforms.uFocus).toBeUndefined();
+    expect(fading.customProgramCacheKey()).not.toBe(plain.customProgramCacheKey());
+  });
+});

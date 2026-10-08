@@ -2,7 +2,7 @@ import { AdditiveBlending, IcosahedronGeometry, InstancedMesh, Matrix4, MeshBasi
 import { INTERACT, PALETTE, PROP_DEFS, PropKind, type PropKindId, type PropStateType } from "@cb/shared";
 import { WORLD_INK, instancedWorldOutline, syncInstancedOutline } from "@cb/procedural/three";
 import { propGeometry } from "./world/objects.ts";
-import { toonMaterial } from "./world/toon.ts";
+import { hullFades, toonMaterial } from "./world/toon.ts";
 
 interface KindSet {
   mesh: InstancedMesh;
@@ -54,7 +54,7 @@ export class PropViews {
       scene.add(mesh);
       const set: KindSet = { mesh };
       if (outlines) {
-        const hull = instancedWorldOutline(mesh, { thickness: WORLD_INK.medium });
+        const hull = instancedWorldOutline(mesh, { thickness: WORLD_INK.medium, fade: hullFades(this.material) });
         hull.geometry = propGeometry(kind, 0);
         hull.frustumCulled = false;
         scene.add(hull);

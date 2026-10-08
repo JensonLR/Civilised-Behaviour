@@ -406,6 +406,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
   const grain = (opts.grain ?? true) && !lite && toonGrain > 0;
   const grainFull = toonGrain === 2;
   const fade = (opts.fade ?? true) && !lite;
+  m.userData.fade = fade; // (its ink hull dissolves with it: `hullFades`)
   const contact = grain && fade; // D-079: the scenery (never the ground itself) darkens where it meets the ground
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uTime = worldTime;
@@ -583,7 +584,7 @@ export function makeInstances(
   scene.add(mesh);
   const set: InstanceSet = { mesh };
   if (o.outline) {
-    const hull = instancedWorldOutline(mesh, { thickness: WORLD_INK[o.ink ?? "medium"], displace: outlineDisplace(o.wind ?? "none") });
+    const hull = instancedWorldOutline(mesh, { thickness: WORLD_INK[o.ink ?? "medium"], displace: outlineDisplace(o.wind ?? "none"), fade: hullFades(material) });
     if (o.hullGeometry) hull.geometry = o.hullGeometry;
     hull.castShadow = false;
     hull.receiveShadow = false;
@@ -595,6 +596,11 @@ export function makeInstances(
 }
 
 /** A single (non-instanced) mesh with its ink hull as a sibling. `wind: "cloth"` (geometry with `aSway`) sways the mesh, its shadow and its ink together. */
+/** True when the material dissolves near the lens (D-077), so the ink hull drawn round it must too: a dissolved body shows its hull's black inside. */
+export function hullFades(material: unknown): boolean {
+  return (material as { userData?: { fade?: unknown } }).userData?.fade === true;
+}
+
 export function makeSolid(scene: Scene | Object3D, geometry: BufferGeometry, material: MeshToonMaterial, o: { name: string; outline?: boolean; ink?: WorldInkClass; hullGeometry?: BufferGeometry; castShadow?: boolean; wind?: WindKind }): Mesh[] {
   const mesh = new Mesh(geometry, material);
   mesh.name = o.name;
@@ -608,7 +614,7 @@ export function makeSolid(scene: Scene | Object3D, geometry: BufferGeometry, mat
   scene.add(mesh);
   const out: Mesh[] = [mesh];
   if (o.outline) {
-    const hull = new Mesh(o.hullGeometry ?? geometry, worldOutlineMaterial({ thickness: WORLD_INK[o.ink ?? "large"], displace: outlineDisplace(o.wind ?? "none") }));
+    const hull = new Mesh(o.hullGeometry ?? geometry, worldOutlineMaterial({ thickness: WORLD_INK[o.ink ?? "large"], displace: outlineDisplace(o.wind ?? "none"), fade: hullFades(material) }));
     hull.name = `${o.name}_outline`;
     if (o.wind === "cloth") hull.frustumCulled = false;
     scene.add(hull);

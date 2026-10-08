@@ -4,7 +4,7 @@ import type { WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, type Lod } from "../flora.ts";
-import { buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
+import { HORIZON, buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
 import { disposeTree } from "../kit.ts";
 import { buildRain } from "../rain.ts";
 import { planScatter, type Item, type ScatterPlan } from "../scatter.ts";
@@ -121,7 +121,7 @@ export class KessarView implements RegionView {
   }
 
   private addHills(): void {
-    const hillGeo = buildHills();
+    const hillGeo = buildHills(HORIZON.kessar); // (its own country: no windmill, no fir woods; see HorizonStyle)
     if (hillGeo.summit) {
       const sm = hillGeo.summit;
       // (the distant windmill's sails turn about a hub on the second summit, as in Hollowmere)
@@ -133,7 +133,7 @@ export class KessarView implements RegionView {
     hills.name = "hills";
     hills.frustumCulled = false;
     this.root.add(hills);
-    const line = buildTreeLine(hillGeo, this.track(treeLineMaterial(this.hillU)), this.detail.treeLine);
+    const line = buildTreeLine(hillGeo, this.track(treeLineMaterial(this.hillU)), this.detail.treeLine, HORIZON.kessar);
     if (line) {
       for (const m of [line.conifers, line.rounds]) {
         if (m.count === 0) continue;

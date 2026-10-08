@@ -39,6 +39,49 @@ export interface RingSpec {
 /** The far range: snowcapped peaks beyond the last ring, far enough that haze layers them. Drawn inside the hills mesh (no extra draw). */
 export const RANGE = { radius: 520, width: 150, height: 215, haze: 0.5, segments: 96, seed: 11 } as const;
 
+/**
+ * A region's skyline. The rings, the far range and the tree line are one builder; a region says what its country looks like from the arena: Hollowmere's green, wooded
+ * downs with the windmill on the second summit and snow on the far range; Kessar's ochre and sandstone, the crests worn flat into mesas, bare rock beyond and only scrub
+ * on the shoulders; Highmark's golden savannah under acacias, its far peaks still white. Each has its own ridges (a seed offset), so no two skylines are the same hills.
+ * (Kessar and Highmark were built with Hollowmere's, windmill, fir woods and autumn colours included, behind palms and sandstone.)
+ */
+export interface HorizonStyle {
+  /** Added to every ring's seed and the range's: the region's own ridgelines. */
+  seed: number;
+  /** The near, middle and far ring's colour. */
+  rings: readonly [number, number, number];
+  /** What the foothill shoulders are tinted toward (their woods or scrub), and how strongly (1 = Hollowmere's). */
+  wood: number;
+  woodK: number;
+  /** The inner ring's foot, where it rises out of the arena's ground. */
+  meadow: number;
+  /** The far range: its rock, its lower slopes, and how much snow lies above the snowline (0 none). */
+  rock: number;
+  lower: number;
+  snow: number;
+  /** Crests above this fraction of a ring's height are worn flat (1: none; a mesa country is ~0.7, and its far range is table-land, not peaks). */
+  flatTop: number;
+  /** Hollowmere's windmill on the second summit. */
+  windmill: boolean;
+  /** What grows on the shoulders: firs and broadleaves that turn by region, dry scrub, or flat-topped savannah trees. */
+  flora: "temperate" | "arid" | "savannah";
+}
+
+export const HORIZON: Readonly<Record<"hollowmere" | "kessar" | "highmark", HorizonStyle>> = {
+  hollowmere: {
+    seed: 0, rings: [PALETTE.world.hillNear, PALETTE.world.hillMid, PALETTE.world.hillFar], wood: PALETTE.world.crownDeep, woodK: 1, meadow: PALETTE.world.grass,
+    rock: PALETTE.world.peakRock, lower: PALETTE.world.hillFar, snow: 1, flatTop: 1, windmill: true, flora: "temperate",
+  },
+  kessar: {
+    seed: 20, rings: [PALETTE.kessar.ochre, PALETTE.kessar.strata, PALETTE.kessar.stoneShade], wood: PALETTE.kessar.scrubDeep, woodK: 0.45, meadow: PALETTE.kessar.sand,
+    rock: PALETTE.kessar.stoneDark, lower: PALETTE.kessar.strataDark, snow: 0, flatTop: 0.72, windmill: false, flora: "arid",
+  },
+  highmark: {
+    seed: 40, rings: [PALETTE.highmark.grassGoldDeep, PALETTE.highmark.grassGreenDeep, PALETTE.world.hillFar], wood: PALETTE.highmark.acaciaCrown, woodK: 0.7, meadow: PALETTE.highmark.grassGold,
+    rock: PALETTE.world.peakRock, lower: PALETTE.highmark.grassGreenDeep, snow: 1, flatTop: 1, windmill: false, flora: "savannah",
+  },
+};
+
 export const HILL_RINGS: readonly RingSpec[] = [
   { radius: 150, width: 38, height: 24, haze: 0.2, segments: 56, colour: PALETTE.world.hillNear, seed: 3, tree: [9, 15] },
   { radius: 236, width: 64, height: 54, haze: 0.42, segments: 64, colour: PALETTE.world.hillMid, seed: 5, tree: [13, 22] },
@@ -128,7 +171,7 @@ interface RingCell {
 }
 
 /** All rings merged into one flat-faceted geometry: position, face normal, unhazed colour and haze. */
-export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[]; summit?: { x: number; y: number; z: number; axisX: number; axisZ: number } } {
+export function buildHills(style: HorizonStyle = HORIZON.hollowmere): { geometry: BufferGeometry; slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[]; summit?: { x: number; y: number; z: number; axisX: number; axisZ: number } } {
   const pos: number[] = [];
   const nor: number[] = [];
   const col: number[] = [];
@@ -141,11 +184,12 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
   const n = new Vector3();
   const base = new Color();
   const tmp = new Color();
-  const forest = new Color(PALETTE.world.crownDeep);
-  const meadow = new Color(PALETTE.world.grass);
+  const forest = new Color(style.wood);
+  const meadow = new Color(style.meadow);
   HILL_RINGS.forEach((ring, ringIndex) => {
-    const rng = new Rng(ring.seed * 977);
-    base.set(ring.colour);
+    const seed = ring.seed + style.seed;
+    const rng = new Rng(seed * 977);
+    base.set(style.rings[ringIndex] ?? ring.colour);
     // The innermost ring rises out of the meadow itself: its inner foot is at ground level and painted meadow green, so the arena's edge
     // melts into the hills instead of meeting a wall of grey (the other rings start far below the ground, hidden behind it).
     const meadowK = ringIndex === 0 ? [0.9, 0.35, 0, 0] : [0, 0, 0, 0];
@@ -153,7 +197,8 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
     const cols: { rows: [number, number, number][]; tint: number[] }[] = [];
     for (let k = 0; k < ring.segments; k++) {
       const theta = ((k + rng.range(-0.3, 0.3)) / ring.segments) * Math.PI * 2;
-      const H = ring.height * ridge(ring.seed, theta) * rng.range(0.85, 1.12);
+      const H0 = ring.height * ridge(seed, theta) * rng.range(0.85, 1.12);
+      const H = style.flatTop < 1 ? Math.min(H0, ring.height * style.flatTop) : H0;
       const foothill = H * rng.range(0.28, 0.5);
       const cx = Math.cos(theta);
       const cz = Math.sin(theta);
@@ -165,7 +210,7 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
         [ring.radius + ring.width * 0.8, FOOT],
       ];
       // the foothill shoulder is wooded: tinted toward the trees' deep green, less so on the far rings
-      cols.push({ rows: prof.map(([r, y]) => [cx * r, y, cz * r] as [number, number, number]), tint: [0, 0.4 * (1 - ring.haze), 0.1, 0] });
+      cols.push({ rows: prof.map(([r, y]) => [cx * r, y, cz * r] as [number, number, number]), tint: [0, 0.4 * (1 - ring.haze) * style.woodK, 0.1 * style.woodK, 0] });
     }
     for (let k = 0; k < ring.segments; k++) {
       const p = cols[k]!.rows;
@@ -202,9 +247,11 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
   });
   // ---- the far range: jagged peaks with snowfields above a snowline, hazed in layers ----
   {
-    const rng = new Rng(RANGE.seed * 313);
-    const rock = new Color(PALETTE.world.peakRock);
-    const forestC = new Color(PALETTE.world.hillFar);
+    const rangeSeed = RANGE.seed + style.seed;
+    const mesa = style.flatTop < 1;
+    const rng = new Rng(rangeSeed * 313);
+    const rock = new Color(style.rock);
+    const forestC = new Color(style.lower);
     const snow = new Color(PALETTE.world.snow);
     const shade = new Color(PALETTE.world.snowShade);
     const cols: [number, number, number][][] = [];
@@ -214,18 +261,31 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
       const cx = Math.cos(theta);
       const cz = Math.sin(theta);
       // ridged noise: sharp peaks and saddles
-      const r1 = 1 - Math.abs(2 * valueNoise(RANGE.seed, cx * 3.4 + 9, cz * 3.4 + 9) - 1);
-      const r2 = 1 - Math.abs(2 * valueNoise(RANGE.seed + 1, cx * 9 + 3, cz * 9 + 3) - 1);
-      const H = RANGE.height * (0.28 + 0.5 * r1 * r1 + 0.3 * r2 * r2) * rng.range(0.85, 1.12);
-      const snowline = H * rng.range(0.5, 0.62);
+      const r1 = 1 - Math.abs(2 * valueNoise(rangeSeed, cx * 3.4 + 9, cz * 3.4 + 9) - 1);
+      const r2 = 1 - Math.abs(2 * valueNoise(rangeSeed + 1, cx * 9 + 3, cz * 9 + 3) - 1);
+      const jit = rng.range(0.85, 1.12);
+      const snowline = rng.range(0.5, 0.62);
       const rad = RANGE.radius + rng.range(-10, 10);
-      cols.push([
-        [cx * (RANGE.radius - RANGE.width), FOOT, cz * (RANGE.radius - RANGE.width)],
-        [cx * (rad - RANGE.width * 0.42), H * 0.34, cz * (rad - RANGE.width * 0.42)],
-        [cx * (rad - RANGE.width * 0.16), snowline, cz * (rad - RANGE.width * 0.16)],
-        [cx * rad, H, cz * rad],
-        [cx * (RANGE.radius + RANGE.width * 0.7), FOOT, cz * (RANGE.radius + RANGE.width * 0.7)],
-      ]);
+      if (mesa) {
+        // table-land: three levels of plateau (a butte, a mesa, the low bench), a talus apron, a cliff, and a flat top running back from its edge
+        const H = RANGE.height * (r1 > 0.6 ? 0.6 : r1 > 0.38 ? 0.4 : 0.22) * (0.97 + (jit - 0.85) * 0.2);
+        cols.push([
+          [cx * (RANGE.radius - RANGE.width), FOOT, cz * (RANGE.radius - RANGE.width)],
+          [cx * (rad - RANGE.width * 0.4), H * 0.3, cz * (rad - RANGE.width * 0.4)],
+          [cx * (rad - RANGE.width * 0.3), H * 0.97, cz * (rad - RANGE.width * 0.3)],
+          [cx * (rad + RANGE.width * 0.12), H, cz * (rad + RANGE.width * 0.12)],
+          [cx * (RANGE.radius + RANGE.width * 0.7), FOOT, cz * (RANGE.radius + RANGE.width * 0.7)],
+        ]);
+      } else {
+        const H = RANGE.height * (0.28 + 0.5 * r1 * r1 + 0.3 * r2 * r2) * jit;
+        cols.push([
+          [cx * (RANGE.radius - RANGE.width), FOOT, cz * (RANGE.radius - RANGE.width)],
+          [cx * (rad - RANGE.width * 0.42), H * 0.34, cz * (rad - RANGE.width * 0.42)],
+          [cx * (rad - RANGE.width * 0.16), H * snowline, cz * (rad - RANGE.width * 0.16)],
+          [cx * rad, H, cz * rad],
+          [cx * (RANGE.radius + RANGE.width * 0.7), FOOT, cz * (RANGE.radius + RANGE.width * 0.7)],
+        ]);
+      }
       tints.push([0, 0.5, 0.15, 1, 0]);
     }
     for (let k = 0; k < RANGE.segments; k++) {
@@ -243,7 +303,7 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
           n.copy(b).sub(a).cross(c.clone().sub(a)).normalize();
           if (n.y < 0) n.negate();
           // a face is snow if most of it lies above the snowline; steeper faces shed it
-          const snowy = j >= 2 ? (j === 3 ? 1 : 0.5) * (n.y > 0.35 ? 1 : 0.55) : 0;
+          const snowy = (j >= 2 ? (j === 3 ? 1 : 0.5) * (n.y > 0.35 ? 1 : 0.55) : 0) * style.snow;
           for (const v of [a, b, c]) {
             const frac = Math.min(1, Math.max(0, (v.y - FOOT) / (RANGE.height * 0.55 - FOOT)));
             tmp.copy(rock).lerp(forestC, (1 - frac) * 0.55);
@@ -261,15 +321,16 @@ export function buildHills(): { geometry: BufferGeometry; slopes: { ring: RingSp
   }
   // ---- the second summit: a windmill on the near ring's highest crest in the south-west ----
   let summit: { x: number; y: number; z: number; axisX: number; axisZ: number } | undefined;
-  {
+  if (style.windmill) {
     const ring = HILL_RINGS[0]!;
-    const rng = new Rng(ring.seed * 977);
+    const rng = new Rng((ring.seed + style.seed) * 977);
     let bestH = -1;
     let bx = 0;
     let bz = 0;
     for (let k = 0; k < ring.segments; k++) {
       const theta = ((k + rng.range(-0.3, 0.3)) / ring.segments) * Math.PI * 2;
-      const H = ring.height * ridge(ring.seed, theta) * rng.range(0.85, 1.12);
+      const H0 = ring.height * ridge(ring.seed + style.seed, theta) * rng.range(0.85, 1.12);
+      const H = style.flatTop < 1 ? Math.min(H0, ring.height * style.flatTop) : H0;
       rng.range(0.28, 0.5); // (the foothill and shoulder draws of the ring loop above: keep the stream in step)
       rng.range(0.35, 0.6);
       const rr = ring.radius + rng.range(-4, 4);
@@ -388,8 +449,9 @@ export interface TreeLine {
  * Scatters small tree silhouettes on the hill rings' wooded shoulders (denser low, thinning toward the crest, in clumps), coloured
  * from the hill palette and hazed like the hill under them. `count` is the total across all rings; 0 builds nothing.
  */
-export function buildTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[] }, material: ShaderMaterial, count: number): TreeLine | undefined {
+export function buildTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[] }, material: ShaderMaterial, count: number, style: HorizonStyle = HORIZON.hollowmere): TreeLine | undefined {
   if (count <= 0) return undefined;
+  if (style.flora !== "temperate") return buildDryTreeLine(hills, material, count, style);
   const rng = new Rng(0x7ee1);
   const shoulder = hills.slopes.filter((s) => s.j === 0 || s.j === 1);
   const cM: Matrix4[] = [];
@@ -452,6 +514,61 @@ export function buildTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, 
     return mesh;
   };
   return { conifers: make(coniferGeometry(), cM, cC, cH, "hill-conifers"), rounds: make(roundCrownGeometry(), rM, rC, rH, "hill-rounds") };
+}
+
+/**
+ * The tree line of a dry country: no firs and no autumn. Scrub (Kessar) is low, broad and sparse, a dusty olive; savannah trees (Highmark) stand apart with flat, spreading
+ * crowns, acacia-green to gold. Both are the round crown flattened (one draw, the same shader); a fir's mesh stays empty.
+ */
+function buildDryTreeLine(hills: { slopes: { ring: RingSpec; tri: [Vector3, Vector3, Vector3]; j: number }[] }, material: ShaderMaterial, count: number, style: HorizonStyle): TreeLine {
+  const rng = new Rng(0x7ee1 + style.seed);
+  const shoulder = hills.slopes.filter((s) => s.j === 0 || s.j === 1);
+  const savannah = style.flora === "savannah";
+  const want = Math.round(count * (savannah ? 0.5 : 0.35));
+  const mats: Matrix4[] = [];
+  const cols: Color[] = [];
+  const hz: number[] = [];
+  const shades = savannah
+    ? [new Color(PALETTE.highmark.acaciaCrown), new Color(PALETTE.highmark.grassGreenDeep), new Color(PALETTE.highmark.grassGoldDeep)]
+    : [new Color(PALETTE.kessar.scrubDeep), new Color(PALETTE.kessar.scrub), new Color(PALETTE.kessar.scrubDry)];
+  const p = new Vector3();
+  for (let tries = 0; mats.length < want && tries < want * 8; tries++) {
+    const s = shoulder[Math.floor(rng.next() * shoulder.length)]!;
+    let u = rng.next();
+    let v = rng.next();
+    if (u + v > 1) {
+      u = 1 - u;
+      v = 1 - v;
+    }
+    p.copy(s.tri[0]).multiplyScalar(1 - u - v).addScaledVector(s.tri[1], u).addScaledVector(s.tri[2], v);
+    const ring = s.ring;
+    if (p.y < 2) continue;
+    const frac = (p.y - FOOT) / (ring.height * 0.9 - FOOT);
+    // scattered, thinning up the slope: a dry country grows in the folds, not in woods
+    const fold = valueNoise(0x52 + style.seed, p.x / 30, p.z / 30);
+    if (rng.next() > (0.25 + fold * 0.6) * (1 - frac * 0.85)) continue;
+    const t = rng.next();
+    const h = (ring.tree[0] + (ring.tree[1] - ring.tree[0]) * t * t) * (savannah ? 0.62 : 0.42);
+    const w = h * (savannah ? 1.9 : 1.5) * rng.range(0.85, 1.2);
+    const colour = shades[Math.floor(rng.next() * shades.length)]!.clone().lerp(shades[2]!, rng.next() * 0.35);
+    const haze = Math.min(0.95, ring.haze + (1 - Math.min(1, Math.max(0, (p.y - FOOT) / (ring.height * 0.6 - FOOT)))) * 0.3 + 0.06);
+    mats.push(composeInstance(new Matrix4(), p.x, p.y - h * 0.04, p.z, rng.range(0, Math.PI * 2), w, h, w));
+    cols.push(colour);
+    hz.push(haze);
+  }
+  const make = (geo: BufferGeometry, m: Matrix4[], c: Color[], h: number[], name: string): InstancedMesh => {
+    const mesh = new InstancedMesh(geo, material, Math.max(1, m.length));
+    mesh.count = m.length;
+    mesh.name = name;
+    m.forEach((x, i) => mesh.setMatrixAt(i, x));
+    c.forEach((x, i) => mesh.setColorAt(i, x));
+    geo.setAttribute("aHazeI", new InstancedBufferAttribute(new Float32Array(h.length ? h : [0]), 1));
+    mesh.frustumCulled = false;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    return mesh;
+  };
+  return { conifers: make(coniferGeometry(), [], [], [], "hill-conifers"), rounds: make(roundCrownGeometry(), mats, cols, hz, "hill-rounds") };
 }
 
 const TREE_VERT = /* glsl */ `
