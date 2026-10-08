@@ -53,6 +53,10 @@ describe("ambience targets", () => {
     expect(far.fire.gain).toBe(0);
     expect(beside.fire.pan).toBeGreaterThan(0.5); // standing west of the fire facing north: it is on the right
     expect(across.fire.cutoff).toBeLessThan(beside.fire.cutoff);
+    // a downpour beats the fire down: its roar too (the embers' sizzle is fireVoices.ts)
+    const wet = ambienceTargets(stand(f.x - 1.5, f.z), atm({ rain: 1 }));
+    expect(wet.fire.gain).toBeLessThan(beside.fire.gain * 0.7);
+    expect(wet.fire.gain).toBeGreaterThan(beside.fire.gain * 0.5);
   });
 
   it("the stream and the waterfall are heard near their water and not in the middle of the camp's far side", () => {

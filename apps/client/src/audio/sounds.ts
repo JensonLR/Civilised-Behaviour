@@ -481,6 +481,15 @@ const fireSnap = def({
   ],
 });
 
+/** Rain on the camp's embers: a drop flashing to steam, a short bright sizzle with a breath under it (fireVoices.ts: the crackle thins out in a downpour and this takes its place). */
+const fireSizzle = def({
+  group: "ambient", peakDb: -25, ref: 4, max: 36, reverb: 0.05, prio: 0, cap: 3, gap: 0.05, variants: 6, jitter: 0.1,
+  layers: (p) => [
+    N({ atk: 0.004, dec: 0.12 + p.rng.next() * 0.2, peak: 1, f: [hp(3200 + p.rng.next() * 1500), bp(6200 + p.rng.next() * 2400, 0.9)] }),
+    N({ at: 0.01, atk: 0.02, dec: 0.08, peak: 0.25, f: [bp(1800, 1.2)] }),
+  ],
+});
+
 // ---- the expedition's world (D-035, R): hooves, tack, the sailing, paper, bells, the parley stamp, the gun crew ----------------------------------------
 
 /**
@@ -696,6 +705,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   bird,
   fire_pop: firePop,
   fire_snap: fireSnap,
+  fire_sizzle: fireSizzle,
   // the expedition's world (D-035, R)
   hoof,
   tack_jingle: tackJingle,
