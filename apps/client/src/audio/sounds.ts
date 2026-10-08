@@ -1,6 +1,7 @@
 import { N, R, T, V, bp, hp, lp, type Layer } from "./dsp.ts";
 import { def, jit, type SoundDef, type SoundParams } from "./soundKit.ts";
 import { GRIT_SOUNDS } from "./soundsGrit.ts";
+import { babble } from "./babble.ts";
 
 /**
  * Every sound effect in the game, as arithmetic. Nothing here is a sample: each entry is a recipe (`layers`) that the engine renders ONCE
@@ -745,6 +746,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   fanfare,
   crew_shout: crewShout,
   wagon_roll: wagonRoll,
+  babble, // D-087: the Society's voice, as pompous gibberish (audio/babble.ts)
   // the grit pass (D-038, A): gore, impacts, foley, tails, the regions' own ambience
   ...GRIT_SOUNDS,
 };

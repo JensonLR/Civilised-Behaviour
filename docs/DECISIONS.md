@@ -339,3 +339,27 @@ The hired hands are the expedition: their shots count for the Hatters and agains
   - A chain of three is dealt only where three kegs are in reach, and a flight only where there is powder. `Scenario.kegsInReach` counts the store and the template's own barrels before anything spawns.
   - The commission reads money first, then who asks and what counts: "£20 bonus · Hatters' Guild: drop three armed men with head shots (0 of 3)".
 - **The HUD reads.** D-063 had taken every backing off the words, leaving ink with a paper halo straight on the picture. That smeared at night and over busy walls, and the small italic was hard work. Every block of words is now a slip of paper: field colour at 93%, a thin shadow and a faint rule, ink with no halo, upright and larger. This covers the orders, the commission (its own slip under them), the casualty column's cuttings, the key strip (now wrapping, not cut off at "V..."), the prompt, the arms card, the goal's label and the compass reading. On a short screen the slip compacts to about a quarter of the height. IM Fell's old-style zero read as a letter ("(o of 3)", "N ooo°"), so the HUD, the pause orders and the parley sheet take their figures from the typewriter face. "CB Figures" is registered for the digits only.
+
+**D-087 The Society speaks, in pompous gibberish (2026-10-08).** The owner asked for "free sources ... for engaging & funny voice lines". Recorded or model-made voices bring licences, disclosure and cost. So the party speaks in synthesised gibberish (the Animal Crossing / Banjo-Kazooie idea, played as Pall Mall bluster), and the words are printed.
+- **The voice** (`apps/client/src/audio/babble.ts`). Built in the same formant tract as the gun crew's shouts and the D-073 cries. A line is a run of syllables: a consonant breath (a plosive tick, a hiss or a hum), then a vowel that leans round and back ("aw", "oh", "ah").
+  - It is sung on the intonation of what is said. A BOAST rises to its stressed word and swoops down to a drawl. An EXCLAMATION is short, high and falling. A QUESTION rises. A MUTTER stays low and breathy. A HARRUMPH is a throat cleared through the nose.
+  - There are four voices, from a low baritone to a high voice. The character's look picks the voice and nudges its pitch, so each person always sounds like themselves.
+  - It is rendered lazily on first use. There are no files and no model.
+- **The words** (`packages/shared/src/barks.ts`). Each occasion has authored lines in the Empire's own idiom, never at a people's expense:
+  - triumph: "Down he goes, what!"
+  - a hat removed: "The Hatters will be thrilled!"
+  - the umbrella: "And it isn't even raining!"
+  - a limb: "For the Museum!"
+  - a keg chain: "Rule, Britannia!"
+  - their own fall: "Not the waistcoat!"
+  - thrown by a blast: "I can see London from here!"
+  - a colleague shot by mistake: "Terribly sorry, old chap!"
+  - a commission met: "Pall Mall will be in raptures!"
+
+  They are printed on a slip over the speaker's head, headed with their name, so a clip reads with the sound off and a deaf player misses nothing.
+- **Who speaks.** The server knows who did what. Mayhem now sends a cosmetic `bark` event (the speaker, the occasion, a salt) when a party member drops a foe, takes a limb, sets off a chain of three, shoots a colleague (the apology wins over the victim's yelp), goes down or is thrown.
+  - A speaker waits five seconds between barks, and the party as a whole a second and a half, so a fight is a few voices, not a choir.
+  - Every client picks the same words from the salt.
+  - A commission met is answered by one party member, the same on every client.
+  - A parley's speaker says each line aloud in the gibberish; the words are on the sheet.
+- **Tests.** The babble is rendered offline in every voice and shape: clean, in the speech band, an exclamation shorter than a boast, a high voice above a low one, syllables rather than one vowel, a question that rises. The lines fit a slip and pass the real-world guard; the pick is deterministic. Mayhem tests cover who speaks and the spacing. The slips show, replace and expire.

@@ -4,6 +4,12 @@ Last updated: 2026-10-03 (D-050 to D-060 are under "Now". Earlier, D-049: touch 
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-087 (2026-10-08): the Society speaks, in pompous gibberish.** The party exclaims at the moments a player would, in synthesised gibberish voices (no recordings, no model, no licence). Each speaker has their own voice, chosen by their look. The words appear on a slip over their head ("Right through the hat!", "Terribly sorry, old chap!", "I can see London from here!").
+  - The server decides who speaks and spaces the barks out: five seconds per speaker, one and a half for the party.
+  - Parley speakers say their lines aloud in the same gibberish.
+  - Rendered offline in tests. Seen in a browser after a keg chain ("ADA: Whitehall will hear that!").
+  - A sample reel of every voice and shape was sent to the owner to judge.
+  - Unplayed by a person.
 - **D-086 (2026-10-08): plain orders, and a HUD you can read.** The owner: "the wording can be confusing in the objectives & what's actually allowed" and "readability of the HUD looks quite unpleasant".
   - **Terms.** Every contract now has one written statement of its terms (`scenarios/terms.ts`), held to the reducers by tests: how it is won, settled and lost, and what fighting does there.
   - **The orders card.** It carries the one rule that matters while it still applies ("Hold your fire: one shot here, even a miss, starts the war and loses the contract"). The pause sheet prints the terms in full, with the how-to paragraph the HUD hides.

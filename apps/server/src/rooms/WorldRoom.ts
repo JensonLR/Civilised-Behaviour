@@ -296,6 +296,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     },
     print: (text, k) => this.broadcast("gazette", { text, k }),
     changed: () => this.scenario?.touch(),
+    bark: (id, k, salt) => this.broadcast("bark", { id, k, salt }), // (D-087: cosmetic; the client picks the words and the voice)
   });
   /** D-055: each member's honours (saved), each session's member key, and what each player has done in the contract under way. */
   private honours: HonoursState = newHonours();

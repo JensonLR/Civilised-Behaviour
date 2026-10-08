@@ -1,4 +1,5 @@
 import {
+  BARK_GAP_S, PARTY_GAP_S, type BarkKind,
   FACT_RANK, FLING_YARDS, NPC_SIDE, REQUESTS, WEAPON, ZONE, compassPoint, dealRequest, requestLine, flightYards, gazetteLine, newBill, spectacle,
   type Bill, type Cause, type LimbId, type MayhemFact, type NpcSide, type ObjectiveView, type RequestId, type RunEnd, type ScenarioTemplateId, type WeaponId,
 } from "@cb/shared";
@@ -17,6 +18,8 @@ export interface MayhemHost {
   print(text: string, kind: MayhemFact["k"]): void;
   /** The request's objective changed (progress, or met): the tracker should republish. */
   changed(): void;
+  /** D-087: a member of the party exclaims (cosmetic: the client picks the words from `salt` and the babble). */
+  bark?(id: string, kind: BarkKind, salt: number): void;
 }
 
 /** Seconds between two lines of the column (the HUD stays calm, D-063). */
@@ -56,6 +59,9 @@ export class Mayhem {
   private t = 0;
   private queue: { f: MayhemFact; at: number; salt: number }[] = [];
   private nextPrint = 0;
+  /** D-087: when each speaker last barked, and the party as a whole (sim seconds). */
+  private readonly barked = new Map<string, number>();
+  private partyBarked = -Infinity;
   private lastKegAt = -Infinity;
   private runChain = 0;
   private readonly streak = new Map<string, { at: number; n: number }>();
@@ -74,6 +80,8 @@ export class Mayhem {
     this.lastKegAt = -Infinity;
     this.runChain = 0;
     this.streak.clear();
+    this.barked.clear();
+    this.partyBarked = -Infinity;
     this.salt = (seed ^ (day * 7919)) >>> 0;
     this.progress = REQUESTS[this.request].progress(this.bill);
   }
@@ -110,6 +118,12 @@ export class Mayhem {
       if (h.down) this.say({ k: "friendly", victim, by });
     }
     if (h.severed !== undefined) this.severed(h.victim, h.severed, by, cause, h.dirX, h.dirZ);
+    // D-087: who exclaims, and why (one voice a moment: the first that applies)
+    // (a colleague dropped by mistake: the apology is the moment, not the yelp)
+    if (byParty && victimParty && h.by !== h.victim && h.down) this.bark(h.by, "friendly");
+    else if (h.down && victimParty) this.bark(h.victim, h.lift > 0 && flightYards(h.power, h.lift) >= FLING_YARDS ? "flung" : "down");
+    else if (byParty && !victimParty && h.severed !== undefined) this.bark(h.by, "limb");
+    else if (byParty && !victimParty && h.down && vs !== "neutral") this.bark(h.by, cause === "brolly" ? "brolly" : h.zone === ZONE.HEAD && cause === "shot" ? "headshot" : "triumph");
     if (h.down) {
       if (victimParty) b.partyDowns++;
       if (byParty && !victimParty) {
@@ -140,6 +154,7 @@ export class Mayhem {
     const byName = by !== "" && this.side(by) === "party" ? this.name(by) : "";
     if (severed !== undefined) this.severed(victim, severed, byName, "blast", dirX, dirZ);
     this.flung(victim, this.name(victim), byName, vs === "party", power, lift);
+    if (vs === "party" && flightYards(power, lift) >= FLING_YARDS) this.bark(victim, "flung");
     this.touch();
   }
 
@@ -183,6 +198,7 @@ export class Mayhem {
     this.runChain = this.t - this.lastKegAt <= CHAIN_S ? this.runChain + 1 : 1;
     this.lastKegAt = this.t;
     if (this.runChain > b.chain) b.chain = this.runChain;
+    if (this.runChain === 3 && this.side(owner) === "party") this.bark(owner, "chain");
     if (this.runChain >= 2) {
       const by = this.side(owner) === "party" ? this.name(owner) : "";
       // (one line per chain: a later, longer one replaces the queued shorter one)
@@ -197,6 +213,15 @@ export class Mayhem {
     if (this.side(shooter) !== "party") return;
     this.bill.shots++;
     if (this.bill.shots === 1) this.touch();
+  }
+
+  /** D-087: a party member exclaims, unless they spoke a moment ago or somebody else just did (a fight is a few voices, not a choir). */
+  private bark(id: string, kind: BarkKind): void {
+    if (!this.host.bark || this.side(id) !== "party") return;
+    if (this.t - (this.barked.get(id) ?? -Infinity) < BARK_GAP_S || this.t - this.partyBarked < PARTY_GAP_S) return;
+    this.barked.set(id, this.t);
+    this.partyBarked = this.t;
+    this.host.bark(id, kind, (this.salt + Math.round(this.t * 10) * 31 + this.barked.size) >>> 0);
   }
 
   private say(f: MayhemFact): void {
