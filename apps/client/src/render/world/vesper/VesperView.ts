@@ -17,6 +17,7 @@ import { vesperBoulderGeometry, vesperSlabGeometry } from "./rocks.ts";
 import { planVesperScatter, type VesperScatter } from "./scatter.ts";
 import type { VesperTerrain } from "./shared.ts";
 import { buildVesperSolid } from "./solid.ts";
+import { addWindows, setWindowNight } from "../litWindows.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import { sheaveAt, sheaveGeometry } from "./works.ts";
 
@@ -59,7 +60,8 @@ export class VesperView implements RegionView {
 
   /** Once a frame for the local player: the roof of the room (or the gallery) the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
   setViewer(x: number, z: number): void {
-    this.fill.setInside(this.roofSet?.setViewer(vesperLevel().rooms, x, z) !== undefined);
+    const level = vesperLevel();
+    this.fill.enter(this.roofSet?.setViewer(level.rooms, x, z), level, this.world);
   }
   /** The doors the view drew, and the roof set (for tests and tools). */
   get doorMarks(): readonly DoorMark[] {
@@ -77,7 +79,7 @@ export class VesperView implements RegionView {
     _seed = 7,
   ) {
     this.root.name = "world";
-    this.fill = new InteriorFill(this.root, PALETTE.vesper.companyCream, PALETTE.vesper.timberLight, INTERIOR_FILL);
+    this.fill = this.track(new InteriorFill(PALETTE.vesper.companyCream, PALETTE.vesper.timberLight, INTERIOR_FILL));
     setToonLite(detail.liteShading);
     if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
@@ -176,6 +178,7 @@ export class VesperView implements RegionView {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildVesperSolid(this.world, lod);
     this.glows = solid.glows;
+    addWindows(this.root, solid.panes, (x) => this.track(x)); // (D-089)
     if (!solid.geometry) return;
     const hullSolid = this.detail.outlines ? buildVesperSolid(this.world, 0) : undefined;
     const hull = hullSolid?.geometry;
@@ -271,6 +274,7 @@ export class VesperView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = 0;
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the Guild's lamps and the headframe's work-light burn at dusk
+    setWindowNight(this.ambientU.uLamp.value);
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
   }

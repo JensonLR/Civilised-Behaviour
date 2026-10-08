@@ -339,3 +339,49 @@ The hired hands are the expedition: their shots count for the Hatters and agains
   - A chain of three is dealt only where three kegs are in reach, and a flight only where there is powder. `Scenario.kegsInReach` counts the store and the template's own barrels before anything spawns.
   - The commission reads money first, then who asks and what counts: "£20 bonus · Hatters' Guild: drop three armed men with head shots (0 of 3)".
 - **The HUD reads.** D-063 had taken every backing off the words, leaving ink with a paper halo straight on the picture. That smeared at night and over busy walls, and the small italic was hard work. Every block of words is now a slip of paper: field colour at 93%, a thin shadow and a faint rule, ink with no halo, upright and larger. This covers the orders, the commission (its own slip under them), the casualty column's cuttings, the key strip (now wrapping, not cut off at "V..."), the prompt, the arms card, the goal's label and the compass reading. On a short screen the slip compacts to about a quarter of the height. IM Fell's old-style zero read as a letter ("(o of 3)", "N ooo°"), so the HUD, the pause orders and the parley sheet take their figures from the typewriter face. "CB Figures" is registered for the digits only.
+
+**D-087 The Society speaks, in pompous gibberish (2026-10-08).** The owner asked for "free sources ... for engaging & funny voice lines". Recorded or model-made voices bring licences, disclosure and cost. So the party speaks in synthesised gibberish (the Animal Crossing / Banjo-Kazooie idea, played as Pall Mall bluster), and the words are printed.
+- **The voice** (`apps/client/src/audio/babble.ts`). Built in the same formant tract as the gun crew's shouts and the D-073 cries. A line is a run of syllables: a consonant breath (a plosive tick, a hiss or a hum), then a vowel that leans round and back ("aw", "oh", "ah").
+  - It is sung on the intonation of what is said. A BOAST rises to its stressed word and swoops down to a drawl. An EXCLAMATION is short, high and falling. A QUESTION rises. A MUTTER stays low and breathy. A HARRUMPH is a throat cleared through the nose.
+  - There are four voices, from a low baritone to a high voice. The character's look picks the voice and nudges its pitch, so each person always sounds like themselves.
+  - It is rendered lazily on first use. There are no files and no model.
+- **The words** (`packages/shared/src/barks.ts`). Each occasion has authored lines in the Empire's own idiom, never at a people's expense:
+  - triumph: "Down he goes, what!"
+  - a hat removed: "The Hatters will be thrilled!"
+  - the umbrella: "And it isn't even raining!"
+  - a limb: "For the Museum!"
+  - a keg chain: "Rule, Britannia!"
+  - their own fall: "Not the waistcoat!"
+  - thrown by a blast: "I can see London from here!"
+  - a colleague shot by mistake: "Terribly sorry, old chap!"
+  - a commission met: "Pall Mall will be in raptures!"
+
+  They are printed on a slip over the speaker's head, headed with their name, so a clip reads with the sound off and a deaf player misses nothing.
+- **Who speaks.** The server knows who did what. Mayhem now sends a cosmetic `bark` event (the speaker, the occasion, a salt) when a party member drops a foe, takes a limb, sets off a chain of three, shoots a colleague (the apology wins over the victim's yelp), goes down or is thrown.
+  - A speaker waits five seconds between barks, and the party as a whole a second and a half, so a fight is a few voices, not a choir.
+  - Every client picks the same words from the salt.
+  - A commission met is answered by one party member, the same on every client.
+  - A parley's speaker says each line aloud in the gibberish; the words are on the sheet.
+- **Tests.** The babble is rendered offline in every voice and shape: clean, in the speech band, an exclamation shorter than a boast, a high voice above a low one, syllables rather than one vowel, a question that rises. The lines fit a slip and pass the real-world guard; the pick is deterministic. Mayhem tests cover who speaks and the spacing. The slips show, replace and expire.
+
+**D-088 The Syndicate arrives armed: its debt collectors (2026-10-08).** D-084 left one item open, "the Syndicate arriving armed rather than with a cheque". It is now a sixth incident (D-052): `syndicate_collectors`.
+- **What happens.** Partway through a contract, in a lull, three of the Syndicate's collectors walk up to the party 22 to 32 m out, with a rifle, a pistol and a blunderbuss, and their powder cart behind them (three kegs, unlit). The opening telegram: "rifles first, invoice after".
+  - They are a garrison group on the Syndicate's side, ordered to attack the party's side, so the Ward and the locals are left alone unless already at war.
+  - The kegs make the obvious answer the loud one: a chain of three is the Ordnance Board's commission.
+- **How it settles.** If every collector is down or running before the contract ends, their collection bag (£20) is the Society's and the Syndicate's grudge grows (+4). If the contract ends with them still standing, they leave with £15 of the purse.
+  - The paper prints either story: "SYNDICATE COLLECTORS REPULSED", or "SOCIETY SETTLES DISPUTED ACCOUNT", the collectors being "armed and therefore, in the accounting sense, correct".
+  - A new achievement, "Not Today, Gentlemen", is appended to the list.
+- **Where they call, and where they don't.** They are never dealt where their gunfire would break a rule the orders state (D-086):
+  - not where fighting loses the contract (the border, the saleroom);
+  - not where a site listens for shots (the cage, the barge, the border), where the noise check would count their shots and raise an alarm the party did not raise;
+  - not at the mine, which is a rescue.
+
+  A test holds the barred list to the templates' own `observe.noise` and terms.
+- **Reuse.** Nothing new in the Cast, Combat or the client: the incident system spawns them, the Cast's `attack` order points them, the existing keg props make the cart, Mayhem counts them as foes (the gazette, the barks, the Hatters), and the room's commit records them. One small change: `spillKegs` lights nothing when given no fuse.
+
+**D-089 Lit windows at night in every town (2026-10-08).** Hollowmere's windows burned at dusk (the village's lantern glass); the other four regions' windows were dark boxes all night, so a town after sunset read as empty. Now the Saltmarket's stilt houses, Kessar's keep slits and courtyard halls, Highmark's Assembly Hall and Vesper's Assay House, ledger window and winding house light up as their lamps do.
+- **How.** A structure that draws a window frame also drops a pane into a list (`world/litWindows.ts`, `pane()`), placed through the kit that drew the frame, so it sits 12 mm proud of the frame wherever the building stands and turns. The panes go into one mesh per region on the lantern-glass material Hollowmere already uses (`aLit`, the `windowLight` level), so it costs one draw and no new shader.
+- **Who is home.** About seven in ten windows burn (`LIT_SHARE`); the rest are dark glass (`windowDark`). Which ones is a hash of where the pane is, so the same windows burn every night and on every client.
+- **When.** Each region view (Hollowmere's too) sets the window level from its own lamp level (`setWindowNight`), so the windows come on with the lanterns. By day a lit pane fades to the same dark glass as an empty one (the lantern-glass shader mixes towards `windowDark` rather than dimming towards black), so nothing gives away which windows will burn.
+- **Tests** (`litWindows.test.ts`). In each of the four regions, every pane stands upright, has its frame or wall right behind all four corners and its middle (it never hangs in the air, overhangs its frame or faces into the building), and is mostly in sight from outside (bars in front are allowed, a wall is not). Some burn and some are dark, near the intended share, and a second build lights the same ones.
+- **Looked at** (software-rendered stills at 21:30): the Saltmarket (one window lit, one dark, both dark glass by day), Kessar's courtyard (framed hall windows and keep slits), Highmark's capital, and Vesper's Assay House.

@@ -6,7 +6,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { TouchContext } from "../input/touchLogic.ts";
@@ -41,6 +41,7 @@ import { noteFolk } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { CommandWheel, WHEEL_STAMPS } from "../ui/CommandWheel.ts";
 import { GloryPlates, type Plate } from "../ui/GloryPlates.ts";
+import { Barks } from "./Barks.ts";
 import { Gazette } from "../ui/Gazette.ts";
 import { Hud } from "../ui/Hud.ts";
 import { LoadoutSheet } from "../ui/Loadout.ts";
@@ -121,6 +122,10 @@ export class Game {
   private readonly gazette: Gazette;
   /** D-085: the Illustrated Imperial News (the game's own photographs of its best moments). */
   private readonly newsPlates: GloryPlates;
+  /** D-087: what the party says, on slips over their heads. */
+  private readonly barks: Barks;
+  /** The parley line last spoken aloud (each line is said once). */
+  private spokenLine = "";
   private readonly hitFx: HitFx;
   /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
   private readonly ledger = new BattleLedger();
@@ -249,6 +254,7 @@ export class Game {
     this.hud = new Hud(hud);
     this.gazette = new Gazette(hud);
     this.newsPlates = new GloryPlates(hud);
+    this.barks = new Barks(this.tagLayer, stage.camera);
     this.hud.setCompass(regionMarks(this.builtRegion));
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
@@ -304,6 +310,7 @@ export class Game {
     session.room.onMessage("parley", (m: { view?: ParleyView; line?: string; closed?: boolean }) => this.onParley(m));
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
+    session.room.onMessage("bark", (e: BarkEvent) => this.onBark(e?.id, e?.k, e?.salt));
     session.room.onMessage("cry", (e: CryEvent) => {
       const p = typeof e?.id === "string" ? this.session.room.state.players.get(e.id) : undefined;
       if (p) this.audio.panic(this.session.value(p, "x"), this.session.value(p, "y") + 1.5, this.session.value(p, "z"), p.look);
@@ -322,9 +329,17 @@ export class Game {
       if (m?.k === "request") {
         playSfx("parley_stamp"); // (D-084: a commission met is stamped, like a deal, and the party laughs; D-085: to a fanfare)
         playSfx("fanfare");
+        const party: string[] = [];
         this.session.room.state.players.forEach((p, id) => {
-          if (p.npc === 0) this.actors.get(id)?.body.cue("laugh", 2.5);
+          if (p.npc === 0) {
+            this.actors.get(id)?.body.cue("laugh", 2.5);
+            party.push(id);
+          }
         });
+        // D-087: and one of them says so (the same one, and the same words, on every client: picked from the column's own line)
+        const salt = seedFromString(String(m.text ?? ""));
+        party.sort();
+        if (party.length > 0) setTimeout(() => this.onBark(party[salt % party.length], "commission", salt), 900);
       }
     });
     session.room.onMessage("notice", (m: { text: string }) => {
@@ -587,6 +602,24 @@ export class Game {
     this.paper.show(generatePaper(c, seed, { dispatches }), () => {});
   }
 
+  /** D-087: a member of the party exclaims: the words on a slip over their head, the gibberish in their own voice, and the face to match. */
+  private onBark(id: unknown, kind: unknown, salt: unknown): void {
+    if (typeof id !== "string" || !isBarkKind(kind)) return;
+    const p = this.session.room.state.players.get(id);
+    if (!p) return;
+    const { text, key } = barkLine(kind, Number(salt) >>> 0);
+    const at = this.feetOf(id);
+    this.audio.babble(p.look, key, at ? { x: at.x, y: at.y + 1.6, z: at.z } : undefined, id === this.session.sessionId);
+    this.barks.say(id, text, p.name, performance.now());
+    this.actors.get(id)?.body.cue(kind === "down" || kind === "flung" ? "fear" : kind === "friendly" ? "surprise" : kind === "commission" ? "laugh" : "triumph", 2.2);
+  }
+
+  /** Where a row stands now (interpolated for a remote one), for the slips over heads. */
+  private readonly feetOf = (id: string): { x: number; y: number; z: number } | undefined => {
+    const p = this.session.room.state.players.get(id);
+    return p ? { x: this.session.value(p, "x"), y: this.session.value(p, "y"), z: this.session.value(p, "z") } : undefined;
+  };
+
   private onParley(m: { view?: ParleyView; line?: string; closed?: boolean }): void {
     const room = this.session.room;
     if (m?.closed) {
@@ -595,6 +628,11 @@ export class Game {
       return;
     }
     if (!m?.view) return;
+    // D-087: the speaker says the line aloud, in the Society's gibberish (once a line; the words are on the sheet)
+    if (typeof m.view.line === "string" && m.view.line !== this.spokenLine) {
+      this.spokenLine = m.view.line;
+      this.audio.babble(String(m.view.speaker ?? ""), babbleKeyFor(m.view.line));
+    }
     if (this.parley.isOpen) this.parley.update(m.view);
     else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion, this.scenarioView?.template);
   }
@@ -781,6 +819,7 @@ export class Game {
     this.loadout.dispose();
     this.wheel.dispose();
     this.tags.dispose();
+    this.barks.dispose();
     this.tagLayer.remove();
     this.mountView.dispose();
     this.demoBanner?.dispose();
@@ -876,6 +915,7 @@ export class Game {
     this.stage.render();
     this.viewmodel.render();
     this.newsPlates.frame(this.stage.renderer.domElement, performance.now()); // (right after the frame: the drawing buffer is whole)
+    this.barks.frame(performance.now(), this.feetOf);
     this.overlay.frame(rawDt);
   }
 

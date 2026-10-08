@@ -204,5 +204,51 @@ describe("incidents in a real room (D-052)", () => {
     await commit(room, me);
     expect(lastIncident(room)).toMatchObject({ id: "powder_wagon", result: "salvaged" });
   }, 30_000);
-});
 
+  // D-088: the Syndicate arrives armed, not with a cheque
+  const collectors = async () => {
+    const { room, me, notices } = await setup();
+    const before = new Set<string>();
+    room.state.props.forEach((_p, id) => before.add(id));
+    me.send("debug", { cmd: "incident:syndicate_collectors" });
+    await until(() => notices.some((n) => n.includes("an invoice read by their powder cart, then rifles")), 4000, "the collectors' telegram");
+    // (a lone player meets two of them; a party, three)
+    const keys = [0, 1].map((i) => npcKey(`incident-collector-${i}`));
+    await until(() => keys.every((k) => room.state.players.has(k)), 4000, "the collectors");
+    expect(room.state.players.has(npcKey("incident-collector-2")), "two for a lone player").toBe(false);
+    const kegs: string[] = [];
+    room.state.props.forEach((p, id) => {
+      if (!before.has(id) && p.kind === PropKind.BARREL) kegs.push(id);
+    });
+    return { room, me, notices, keys, kegs };
+  };
+
+  it("D-088: armed collectors and their powder cart (unlit) come for the party, read their invoice, then open fire (at once if one is hurt); seen off, their bag is the Society's", async () => {
+    const { room, me, notices, keys, kegs } = await collectors();
+    expect(kegs.length).toBe(INCIDENT.collectorKegs);
+    const lit = (room as unknown as { lit: Map<string, unknown> }).lit;
+    expect(kegs.some((k) => lit.has(k)), "the cart is not lit").toBe(false);
+    const rows = keys.map((k) => room.state.players.get(k)!);
+    expect(new Set(rows.map((r) => r.weapon)).size, "different arms").toBe(rows.length);
+    // they read the invoice first (the party's moment), and open fire the moment one of them is hurt
+    const cast = (room as unknown as { cast: { hostileTo(a: string, b: string): boolean } }).cast;
+    expect(cast.hostileTo(keys[0]!, me.id), "not yet: the invoice is being read").toBe(false);
+    (room as unknown as { incidents: { onHurt(v: string): void } }).incidents.onHurt(keys[1]!);
+    expect(cast.hostileTo(keys[0]!, me.id), "a collector hurt: they all come for the party").toBe(true);
+    const purse0 = parseCampaign(room.state.campaign)!.purse;
+    for (const r of rows) r.flags |= FLAG.DOWNED;
+    await until(() => notices.some((n) => n.includes("are seen off")), 4000, "the collectors seen off");
+    await commit(room, me);
+    const c = parseCampaign(room.state.campaign)!;
+    expect(c.sites.lastIncident).toMatchObject({ id: "syndicate_collectors", result: "repelled" });
+    expect(c.purse - purse0, "the bag (and the contract's own pay)").toBeGreaterThanOrEqual(INCIDENT.collectorBag);
+  }, 30_000);
+
+  it("D-088: unprovoked, they open fire when the invoice is read; a contract that ends with them still standing pays them", async () => {
+    const { room, me, keys } = await collectors();
+    const cast = (room as unknown as { cast: { hostileTo(a: string, b: string): boolean } }).cast;
+    await until(() => cast.hostileTo(keys[0]!, me.id), (INCIDENT.collectorDemandS + 3) * 1000, "the invoice read");
+    await commit(room, me);
+    expect(lastIncident(room)).toMatchObject({ id: "syndicate_collectors", result: "collected" });
+  }, 30_000);
+});

@@ -176,6 +176,8 @@ export interface Sign {
   h: number;
   /** Free-standing: painted on its own board on two posts (the rest are painted on a wall, a gable or a stall's fascia). */
   posted?: boolean;
+  /** Painted on a board fixed to the wall this far behind the lettering (the board fills the gap: lettering 4 to 6 cm off a wall hung in the air). */
+  back?: number;
 }
 
 /** Lettering on the village's boards and awnings: what the Hollowmerers say to a visitor. Drawn at runtime in IM Fell (the atlas). */
@@ -340,7 +342,9 @@ export function villagePlan(terrain: Terrain): VillagePlan {
         break;
       }
       case "granary": {
-        const lamp = L(b, b.hx + 0.2, 1.1);
+        // on a bracket into the drum's wall: the bracket reaches 0.34 m back along -x, so the lamp stands where that ends 3 cm inside the drum (it was set as if the wall
+        // were flat at hx, and the bracket stopped 16 cm short of the curve)
+        const lamp = L(b, Math.sqrt(b.hx * b.hx - 1.1 * 1.1) + 0.34 - 0.03, 1.1);
         lanterns.push({ x: lamp.x, z: lamp.z, y: 1.9, kind: 0, ax: -Math.cos(b.yaw), az: -Math.sin(b.yaw), mount: 0 });
         const b1 = L(b, b.hx + 1.0, -1.7);
         P("bale", b1.x, b1.z, 0, 1);
@@ -473,16 +477,17 @@ export function villagePlan(terrain: Terrain): VillagePlan {
   const cat = { x: cp.x, z: cp.z, yaw: gran.yaw + 2.4 };
 
   // ---- signs ------------------------------------------------------------------------------------------------------------------------
-  const sg = (text: number, at: { x: number; z: number }, y: number, yaw: number, w: number, h = 0.32, posted = false): void => {
-    signs.push({ text, x: at.x, z: at.z, y, yaw, w, h, ...(posted ? { posted } : {}) });
+  const sg = (text: number, at: { x: number; z: number }, y: number, yaw: number, w: number, h = 0.32, posted = false, back = 0): void => {
+    signs.push({ text, x: at.x, z: at.z, y, yaw, w, h, ...(posted ? { posted } : {}), ...(back > 0 ? { back } : {}) });
   };
   {
     const gate = buildings.find((b) => b.id === "gate")!;
-    for (const s of [1, -1]) sg(0, toWorld(gate, s * (gate.hx + 0.04), 0), 4.7, gate.yaw + (s > 0 ? 0 : Math.PI), 2.6, 0.5);
-    for (const s of [1, -1]) sg(7, toWorld(gate, s * (gate.hx + 0.04), 0), GATE_CLOCK_Y + 1.0, gate.yaw + (s > 0 ? 0 : Math.PI), 1.7, 0.3);
+    for (const s of [1, -1]) sg(0, toWorld(gate, s * (gate.hx + 0.04), 0), 4.7, gate.yaw + (s > 0 ? 0 : Math.PI), 2.6, 0.5, false, 0.04);
+    // (over the dial, clear of its brass ring: at + 1.0 the ring hid the plate's second line)
+    for (const s of [1, -1]) sg(7, toWorld(gate, s * (gate.hx + 0.04), 0), GATE_CLOCK_Y + 1.1, gate.yaw + (s > 0 ? 0 : Math.PI), 1.7, 0.3, false, 0.04);
     const sh = buildings.find((b) => b.id === "shop")!;
     sg(5, toWorld(sh, sh.hx + 0.05, 0), sh.spec.floor + 2.65, sh.yaw, 2.3);
-    sg(2, toWorld(mill, mill.hx + 0.06, -mill.spec.door / 2 - 0.9), 2.5, mill.yaw, 1.5);
+    sg(2, toWorld(mill, mill.hx + 0.06, -mill.spec.door / 2 - 0.9), 2.5, mill.yaw, 1.5, 0.32, false, 0.06);
     const hall = buildings.find((b) => b.id === "hall")!;
     sg(4, toWorld(hall, hall.hx + 0.06, 0), hall.spec.floor + 3.25, hall.yaw, 3.5, 0.36);
     const st1 = buildings.find((b) => b.id === "stall-1")!;

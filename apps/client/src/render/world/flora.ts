@@ -319,7 +319,8 @@ export function cliffGeometry(lod: Lod): BufferGeometry {
     k.add(new BoxGeometry(0.03, 0.5, 0.05), { at: [-0.55, 0.62, 0.62], rot: [0, 0, -0.05], colour: W.rockDark, flat: true });
     for (let i = 0; i < 6; i++) {
       const r = 0.08 + ((i * 53) % 7) * 0.012;
-      k.add(new IcosahedronGeometry(r, 0), { at: [-1.05 + i * 0.4 + ((i * 17) % 5) * 0.03, r * 0.5, 1.1 + ((i * 29) % 4) * 0.08], scale: [0.7, 0.7, 1.3], colour: rockColour, flat: true, jitter: 0.02, seed: 930 + i });
+      // (against the face's foot and sunk into the scree: in front of it, an instance on a slope left them in the air)
+      k.add(new IcosahedronGeometry(r, 0), { at: [-1.05 + i * 0.4 + ((i * 17) % 5) * 0.03, r * 0.15, 1.0 + r * 0.7], scale: [0.7, 0.7, 1.3], colour: rockColour, flat: true, jitter: 0.02, seed: 930 + i });
     }
   }
   return k.build()!;
@@ -613,7 +614,8 @@ export function reedGeometry(): BufferGeometry {
       s.tri(a, b, [x, y1, z], brown, [(a[0] + b[0]) / 2 - x, 0.6, (a[2] + b[2]) / 2 - z]);
     }
   }
-  return s.build();
+  // (the clump is sunk 8 cm: its blades spread up to 17 cm from the instance's foot, and on a slope the outer ones stood off the ground)
+  return s.build().translate(0, -0.08, 0);
 }
 
 /** A fern: five fronds arching outward, each a rib with three pairs of leaflets (about 30 triangles). Height ~0.6. */

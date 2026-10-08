@@ -385,7 +385,7 @@ body.touch-ui #hud .gazette .line { font-size: 0.82rem; }
 #hud .objectives li.request.done .text::after { content: " \2014\00a0met"; font-style: normal; } /* (a hex escape eats the space after it) */
 
 /* ---- D-085: the Illustrated Imperial News: the game's own photograph of a spectacular moment, printed as an engraving at the right ---- */
-#hud .plate { position: absolute; right: calc(var(--edge-r) + 0.4rem); top: 40%; width: min(19rem, 34vw); margin: 0; padding: 0.45rem 0.45rem 0.5rem; background: var(--paper); border: 1px solid var(--ink); box-shadow: 0 0.3rem 0.9rem color-mix(in srgb, var(--ink) 35%, transparent); transform: rotate(1.2deg); pointer-events: none; animation: plateIn 0.45s ease-out; transition: opacity 0.6s, transform 0.6s; }
+#hud .plate { position: absolute; z-index: 2; right: calc(var(--edge-r) + 0.4rem); top: 40%; width: min(19rem, 34vw); margin: 0; padding: 0.45rem 0.45rem 0.5rem; background: var(--paper); border: 1px solid var(--ink); box-shadow: 0 0.3rem 0.9rem color-mix(in srgb, var(--ink) 35%, transparent); transform: rotate(1.2deg); pointer-events: none; animation: plateIn 0.45s ease-out; transition: opacity 0.6s, transform 0.6s; }
 #hud .plate[hidden] { display: none; }
 #hud .plate header { margin: 0 0 0.3rem; padding: 0 0 0.15rem; border-bottom: 1px solid var(--ink); font: 0.62rem var(--display); letter-spacing: 0.2em; text-transform: uppercase; text-align: center; color: var(--stamp); }
 #hud .plate img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--ink); filter: sepia(0.85) contrast(1.15) brightness(1.02); }

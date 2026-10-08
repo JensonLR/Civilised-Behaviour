@@ -23,6 +23,8 @@ const C = PALETTE.camp;
 const M = PALETTE.material;
 const f01 = (seed: number, a: number, b = 0, c = 0): number => hash3(seed, a, b, c) / 4294967296;
 const WALL_T = 0.28;
+/** How far below the floor the stone footing stops (its top is jittered by up to 1.8 cm: it must never show through the planks). */
+const FOOTING_DROP = 0.03;
 // D-038: the inside of a room is warm timber, never black (LEVEL_PLAN section 4, rule 6): the village's rooms are lit by their windows and a lamp
 const INTERIOR = new Color(W.vlTimber);
 const cStoneDark = new Color(W.vlStoneDark);
@@ -308,24 +310,32 @@ function windowOn(k: Kit, lod: Lod, fx: number, fz: number, lx: number, lz: numb
   }
 }
 
-/** A rectangular footing: courses of river stone from below ground up to the floor, and plank floor inside. */
+/**
+ * A rectangular footing: courses of river stone from below ground up to the floor, and plank floor inside. The planks are their own board, inside the walls with its edge tucked
+ * 6 cm under them, top at the floor; the stone stops 3 cm below it. (One box coloured per triangle left stone teeth inside the room: its top's triangles straddled the wall line.)
+ */
 function footing(k: Kit, lod: Lod, hx: number, hz: number, floor: number, seed: number, cx = 0, depth = 0.7, floorCol: number = W.vlTimberLight, floorInset = WALL_T): void {
-  const g = new BoxGeometry(hx * 2 + 0.16, floor + depth, hz * 2 + 0.16, lod ? Math.max(2, Math.round(hx * 2.4)) : 1, lod ? 2 : 1, lod ? Math.max(2, Math.round(hz * 2.4)) : 1);
+  const top = floor - FOOTING_DROP;
+  const g = new BoxGeometry(hx * 2 + 0.16, top + depth, hz * 2 + 0.16, lod ? Math.max(2, Math.round(hx * 2.4)) : 1, lod ? 2 : 1, lod ? Math.max(2, Math.round(hz * 2.4)) : 1);
   k.add(g, {
-    at: [cx, (floor - depth) / 2, 0],
-    colour: (p, n, out) => {
-      if (n.y > 0.7) {
-        const inner = Math.abs(p.x) < hx - floorInset + 0.02 && Math.abs(p.z) < hz - floorInset + 0.02;
-        if (inner) blend(out, floorCol, W.vlTimber, 0.15 + 0.5 * f01(seed, Math.floor(p.z * 5), Math.floor(p.x * 0.7)));
-        else stoneC(seed, 0)(p, n, out);
-        return;
-      }
-      stoneC(seed, 0)(p, n, out);
-    },
+    at: [cx, (top - depth) / 2, 0],
+    colour: stoneC(seed, 0),
     perFace: lod === 1,
     flat: lod === 0,
     jitter: lod ? 0.018 : 0,
     seed,
+  });
+  plankFloor(k, lod, hx - floorInset, hz - floorInset, floor, seed, floorCol, cx);
+}
+
+/** A plank floor between walls whose inner faces are `ix`, `iz` from the middle: a board 6 cm thick, top at `floor`, its edge tucked 6 cm under the walls. Never jittered (it is what is walked on). */
+function plankFloor(k: Kit, lod: Lod, ix: number, iz: number, floor: number, seed: number, floorCol: number = W.vlTimberLight, cx = 0, rows = 5): void {
+  const fx = ix + 0.06, fz = iz + 0.06;
+  k.add(new BoxGeometry(fx * 2, 0.06, fz * 2, lod ? Math.max(1, Math.round(fx * 2.4)) : 1, 1, lod ? Math.max(1, Math.round(fz * 2.4)) : 1), {
+    at: [cx, floor - 0.03, 0],
+    colour: (p, _n, out) => blend(out, floorCol, W.vlTimber, 0.15 + 0.5 * f01(seed, Math.floor(p.z * rows), Math.floor(p.x * 0.7))),
+    perFace: lod === 1,
+    flat: lod === 0,
   });
 }
 
@@ -359,7 +369,7 @@ function cottage(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   windowOn(k, lod, 0, 1, -0.3, b.hz, y0 + 1.35, 0.55, 0.62, st.shutter, seed + 5, true);
   windowOn(k, lod, 0, -1, 0.4, -b.hz, y0 + 1.35, 0.55, 0.62, st.shutter, seed + 6, false);
   gableRoof(kr, lod, b, y1, 1.55, 0.5, st.roof, seed + 10, st.wall);   // (the roof is its own piece: the cutaway lifts it)
-  chimney(k, lod, -b.hx * 0.4, 0.6, y1 - 0.3, y1 + 2.0, seed + 11);
+  chimney(kr, lod, -b.hx * 0.4, 0.6, y1 - 0.3, y1 + 2.0, seed + 11);   // (the stack rises from the roof: it goes with it when the cutaway lifts it)
   // the room: a table, a stool and a bed on the floor (dark; you see them from the door)
   if (lod) {
     bx(k, [0.9, 0.06, 0.7], [-0.4, y0 + 0.74, -0.8], timberC(W.vlTimberLight, seed), undefined);
@@ -507,23 +517,28 @@ function hall(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   const s = b.spec;
   const seed = 900;
   const fl = s.floor;
-  // the terrace: a stone plinth under floor and porch, a wide low step, then the porch
-  k.add(new BoxGeometry(b.hx * 2 + 1.2, fl + 0.7, b.hz * 2 + 0.3, lod ? 8 : 1, lod ? 2 : 1, lod ? 10 : 1), {
-    at: [0.6, (fl - 0.7) / 2, 0],
-    colour: (p, n, out) => {
-      if (n.y > 0.7) {
-        const inner = p.x < b.hx - 0.6 - WALL_T + 0.02 && p.x > -b.hx - 0.6 + WALL_T - 0.02 && Math.abs(p.z) < b.hz - WALL_T;
-        if (inner) blend(out, W.vlTimberLight, W.vlTimber, 0.15 + 0.5 * f01(seed, Math.floor(p.z * 4), Math.floor(p.x * 0.7)));
-        else blend(out, W.vlCobble, W.vlCobbleDark, 0.15 + 0.5 * f01(seed, Math.floor(p.x * 2), Math.floor(p.z * 2)));
-        return;
-      }
-      stoneC(seed, 0)(p, n, out);
-    },
+  // the terrace: a stone plinth under the hall (3 cm below the floor, as a footing's), the porch's cobbles at the floor out to 1.2 m before the doors and on into the doorway,
+  // and the plank floor inside the walls as its own board (one box coloured per triangle left cobble teeth inside the hall: its top's triangles straddled the wall line)
+  const cobble = (sd: number): ColourFn => (p, n, out) => (n.y > 0.7 ? blend(out, W.vlCobble, W.vlCobbleDark, 0.15 + 0.5 * f01(sd, Math.floor(p.x * 2), Math.floor(p.z * 2))) : stoneC(sd, 0)(p, n, out));
+  const plinthTop = fl - FOOTING_DROP;
+  k.add(new BoxGeometry(b.hx * 2, plinthTop + 0.7, b.hz * 2 + 0.3, lod ? 7 : 1, lod ? 2 : 1, lod ? 10 : 1), {
+    at: [0, (plinthTop - 0.7) / 2, 0],
+    colour: cobble(seed),
     perFace: lod === 1,
     flat: lod === 0,
     jitter: lod ? 0.02 : 0,
     seed,
   });
+  const px0 = b.hx - WALL_T + 0.06, px1 = b.hx + 1.2;
+  k.add(new BoxGeometry(px1 - px0, fl + 0.7, b.hz * 2 + 0.3, lod ? 2 : 1, lod ? 2 : 1, lod ? 10 : 1), {
+    at: [(px0 + px1) / 2, (fl - 0.7) / 2, 0],
+    colour: cobble(seed + 3),
+    perFace: lod === 1,
+    flat: lod === 0,
+    jitter: lod ? 0.02 : 0,
+    seed: seed + 3,
+  });
+  plankFloor(k, lod, b.hx - WALL_T, b.hz - WALL_T, fl, seed, W.vlTimberLight, 0, 4);
   k.add(new BoxGeometry(1.1, fl - 0.45 + 0.7, 7.2, 2, 2, 8), {
     at: [b.hx + 1.3 + 0.55, (fl - 0.45 - 0.7) / 2, 0],
     colour: (p, n, out) => (n.y > 0.7 ? blend(out, W.vlCobble, W.vlCobbleDark, 0.2 + 0.4 * f01(seed + 2, Math.floor(p.z * 2))) : stoneC(seed + 1, 0)(p, n, out)),
@@ -665,11 +680,12 @@ function mill(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   windowOn(k, lod, 0, 1, 0.4, b.hz, y0 + 2.9, 0.5, 0.6, st.shutter, seed + 6, false);
   // the hoist door in the gable, with a beam and pulley
   gableRoof(kr, lod, b, y1, 1.9, 0.5, st.roof, seed + 10, st.wall);
-  bx(k, [0.06, 0.9, 0.7], [b.hx + 0.02, y1 + 0.6, 0], W.vlDoor);
-  k.limb([b.hx - 0.2, y1 + 1.2, 0], [b.hx + 1.0, y1 + 1.25, 0], 0.05, 0.05, W.vlTimber, 5);
-  k.limb([b.hx + 0.95, y1 + 1.2, 0], [b.hx + 0.95, y1 + 0.2, 0], 0.01, 0.01, C.rope, 3);
-  bx(k, [0.16, 0.14, 0.14], [b.hx + 0.95, y1 + 0.1, 0], W.vlHay);
-  chimney(k, lod, -b.hx * 0.5, -b.hz * 0.4, y1 - 0.4, y1 + 2.1, seed + 12);
+  // (the hoist and the chimney hang off the gable and rise from the roof: they are drawn with it, so the cutaway lifts them together)
+  bx(kr, [0.06, 0.9, 0.7], [b.hx + 0.02, y1 + 0.6, 0], W.vlDoor);
+  kr.limb([b.hx - 0.2, y1 + 1.2, 0], [b.hx + 1.0, y1 + 1.25, 0], 0.05, 0.05, W.vlTimber, 5);
+  kr.limb([b.hx + 0.95, y1 + 1.2, 0], [b.hx + 0.95, y1 + 0.2, 0], 0.01, 0.01, C.rope, 3);
+  bx(kr, [0.16, 0.14, 0.14], [b.hx + 0.95, y1 + 0.1, 0], W.vlHay);
+  chimney(kr, lod, -b.hx * 0.5, -b.hz * 0.4, y1 - 0.4, y1 + 2.1, seed + 12);
   // inside: the runner stone on its bed, a hopper above it, sacks
   cyl(k, 0.8, 0.8, 0.28, [0.2, fl + 0.14, 0.9], (p, _n, out) => blend(out, W.rock, W.rockPale, 0.3 + 0.3 * f01(seed, Math.floor(p.x * 7))), 12);
   cyl(k, 0.06, 0.06, 0.45, [0.2, fl + 0.5, 0.9], C.iron, 5);
@@ -756,7 +772,8 @@ function gateTower(k: Kit, lod: Lod, b: Building, plan: VillagePlan): void {
   const bodyH = towerTop - 3.0 - bodyY; // (3.0 m are left for the belfry and the spire's foot)
   k.add(new BoxGeometry(b.hx * 2, bodyH, (pier + 0.7) * 2, 1, lod ? 4 : 1, 1), { at: [0, bodyY + bodyH / 2, 0], colour: plaster(W.vlPlaster, seed + 30, bodyY + bodyH / 2), flat: true });
   for (const sx of [-1, 1]) for (const sg of [-1, 1]) for (let i = 0; i < (lod ? 7 : 3); i++) bx(k, [0.4, 0.34, 0.4], [sx * (b.hx - 0.16), bodyY + 0.3 + i * (bodyH / 7), sg * (pier + 0.5)], stoneC(seed + i, 5, 0));
-  bx(k, [b.hx * 2 + 0.3, 0.24, (pier + 0.7) * 2 + 0.3], [0, bodyY + bodyH * 0.55, 0], W.vlStone);
+  // the band of stone at mid-height runs round the two plain faces only: on the clock faces it crossed the dial (it ran in front of VII to V)
+  for (const sg of [-1, 1]) bx(k, [b.hx * 2 + 0.3, 0.24, 0.3], [0, bodyY + bodyH * 0.55, sg * (pier + 0.7)], W.vlStone);
   bx(k, [b.hx * 2 + 0.3, 0.24, (pier + 0.7) * 2 + 0.3], [0, bodyY + bodyH, 0], W.vlStone);
   // clock faces on the ±x faces (the dial itself is in the banners mesh); brass surround, hands are the moving parts
   const clockY = GATE_CLOCK_Y;
@@ -1041,6 +1058,18 @@ function signBoard(k: Kit, world: CollisionWorld, sg: Sign): void {
   }
 }
 
+/** A wall sign's board: from the wall (`back` behind the lettering, and 2 cm into it) to 6 mm behind the lettering, a hand larger than it all round. */
+function wallBoard(k: Kit, world: CollisionWorld, sg: Sign): void {
+  const back = sg.back ?? 0;
+  if (back <= 0) return;
+  const y = world.terrainHeight(sg.x, sg.z) + sg.y;
+  const nx = Math.cos(sg.yaw), nz = Math.sin(sg.yaw); // the face normal (as in banners.ts facing())
+  const h = sg.w / VSIGN_ASPECT;
+  const t = back + 0.02 - 0.006;
+  const off = 0.006 + t / 2;
+  k.add(new BoxGeometry(sg.w + 0.1, h + 0.08, t), { at: [sg.x - nx * off, y, sg.z - nz * off], rot: [0, -sg.yaw + Math.PI / 2, 0], colour: timberC(W.vlTimberLight, Math.floor(sg.x * 7)), flat: true });
+}
+
 /** Post-and-rail fences and their posts (matching the collision boxes). */
 function fences(k: Kit, world: CollisionWorld, plan: VillagePlan, lod: Lod): void {
   const placed = new Set<string>();
@@ -1297,6 +1326,7 @@ export function buildVillage(world: CollisionWorld, lod: Lod, stats?: Record<str
   for (const l of plan.lanterns) lamp(k, world, l, lod);
   mark("lamps");
   for (const sg of plan.signs) if (sg.posted) signBoard(k, world, sg);
+  else wallBoard(k, world, sg);
   mark("signs");
   paneSink = undefined;
   markSink = undefined;

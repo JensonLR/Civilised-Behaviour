@@ -414,6 +414,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     Object.assign(shader.uniforms, atmoUniforms);
     if (wind === "village") Object.assign(shader.uniforms, villageUniforms);
     if (fire) Object.assign(shader.uniforms, fireLight, lampLight);
+    Object.assign(shader.uniforms, roomFill);
     if (patch) Object.assign(shader.uniforms, patch.uniforms);
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nvarying vec3 vWPos;${opts.tinted ? "\nattribute float aTint;" : ""}${wind === "cloth" || wind === "village" ? "\nattribute float aSway;" : ""}${wind === "village" ? `\n${VILLAGE_HEAD}` : ""}${vpatch ? `\n${vpatch.head}` : ""}${season ? "\nattribute vec2 aSeason; varying vec2 vSeason;" : ""}`)
@@ -448,9 +449,10 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? `uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol; uniform vec4 uLamps[${LAMP_SLOTS}]; uniform vec3 uLampCol;` : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}${contact ? "\nuniform sampler2D uGround; uniform vec4 uGroundRect;" : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? `uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol; uniform vec4 uLamps[${LAMP_SLOTS}]; uniform vec3 uLampCol;` : ""}\n${ROOM_HEAD}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}${contact ? "\nuniform sampler2D uGround; uniform vec4 uGroundRect;" : ""}`,
     );
     if (fade) fs = fs.replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>\n${FADE_BODY}`);
+    fs = fs.replace("#include <opaque_fragment>", `${ROOM_BODY}\n#include <opaque_fragment>`);
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
     fs = fs.replace("#include <color_fragment>", `#include <color_fragment>${season ? SEASON_BODY : ""}\n${patch ? patch.body : ""}\ndiffuseColor.rgb *= 1.0 - ${wetDark} * 0.34 * uWet;${puddles ? PUDDLE_BODY : ""}${grain ? "\nvec3 gWN = gNormal(); vec3 gAlbedo = diffuseColor.rgb; diffuseColor.rgb *= grainFactor(gWN, gAlbedo);" : ""}${contact ? CONTACT_BODY : ""}`);
     if (grain) {
@@ -623,8 +625,34 @@ export function makeSolid(scene: Scene | Object3D, geometry: BufferGeometry, mat
   return out;
 }
 
-/** How brightly the village's lit windows burn (near 0 by day, 1 at night): the lantern glass mesh carries them as panes with `aLit = 1`. */
+/**
+ * The fill of the room the viewer stands in (`InteriorFill`, rooms.ts): the room's box in world space (centre x, z and the cos / sin of its yaw, as `roomAt`
+ * reads a rect; half extents and the heights it reaches) and the fill's sky and ground colours and strength. Every world toon material adds it to what lies
+ * inside the box, and nothing else: a hemisphere light lit the whole region, so at night stepping into a room lit the gorge like day.
+ */
+export const roomFill = {
+  uRoomA: { value: new Vector4(0, 0, 1, 0) },
+  uRoomB: { value: new Vector4(0, 0, 0, 0) },
+  uRoomSky: { value: new Color() },
+  uRoomGround: { value: new Color() },
+  uRoomK: { value: 0 },
+};
+const ROOM_HEAD = "uniform vec4 uRoomA; uniform vec4 uRoomB; uniform vec3 uRoomSky; uniform vec3 uRoomGround; uniform float uRoomK;";
+// (the fragment's world position from its view position, exact for any mesh's transform: the view matrix is rigid. Added as a hemisphere light would be, before the hatch reads the light)
+const ROOM_BODY = `if (uRoomK > 0.0) {
+          vec3 rw = (vec4(-vViewPosition - viewMatrix[3].xyz, 0.0) * viewMatrix).xyz;
+          vec2 rd = rw.xz - uRoomA.xy;
+          vec2 rl = vec2(rd.x * uRoomA.z + rd.y * uRoomA.w, -rd.x * uRoomA.w + rd.y * uRoomA.z);
+          if (abs(rl.x) < uRoomB.x && abs(rl.y) < uRoomB.y && rw.y > uRoomB.z && rw.y < uRoomB.w) {
+            float rUp = (vec4(normal, 0.0) * viewMatrix).y;
+            outgoingLight += mix(uRoomGround, uRoomSky, 0.5 + 0.5 * rUp) * (uRoomK * RECIPROCAL_PI) * diffuseColor.rgb;
+          }
+        }`;
+
+/** How brightly the lit windows burn (near 0 by day, 1 at night): the lantern glass mesh carries them as panes with `aLit = 1`. */
 export const windowLight = { value: 0.05 };
+/** What a lit pane fades to by day: the same dark glass as a pane with nobody home (D-089), so by day the two cannot be told apart. */
+const windowDark = { value: new Color(PALETTE.camp.windowDark) };
 
 /** An unlit vertex-coloured material (lantern glass and lit window panes) whose vertices sway like the cloth around it. Geometry needs `aSway` and `aLit`. */
 export function clothBasicMaterial(): MeshBasicMaterial {
@@ -634,9 +662,10 @@ export function clothBasicMaterial(): MeshBasicMaterial {
     shader.uniforms.uPush = pushers;
     shader.uniforms.uWindK = atmoUniforms.uWindK;
     shader.uniforms.uWinK = windowLight;
+    shader.uniforms.uWinDark = windowDark;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nattribute float aSway; attribute float aLit; uniform float uWinK;`)
-      .replace("#include <color_vertex>", "#include <color_vertex>\nvColor.rgb *= mix(1.0, uWinK, aLit);")
+      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nattribute float aSway; attribute float aLit; uniform float uWinK; uniform vec3 uWinDark;`)
+      .replace("#include <color_vertex>", "#include <color_vertex>\nvColor.rgb = mix(vColor.rgb, mix(uWinDark, vColor.rgb, uWinK), aLit);")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed += windCloth(transformed, aSway);");
   };
   m.customProgramCacheKey = (): string => "clothBasic";

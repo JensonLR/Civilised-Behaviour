@@ -167,3 +167,64 @@ describe("D-084: the commission", () => {
     expect(m.objective().optional).toBe(true);
   });
 });
+
+describe("D-087: the party speaks", () => {
+  function talking() {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Dunstan", npc: NPC.SENTRY }, "npc:s2": { name: "Picket Mabel", npc: NPC.SENTRY },
+      "npc:carter": { name: "Carter Plume", npc: NPC.DRIVER },
+    };
+    const barks: { id: string; k: string; salt: number }[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: () => {}, changed: () => {}, bark: (id, k, salt) => barks.push({ id, k, salt }) });
+    m.begin(99, 2, "secure_crossing");
+    const hit = (over: Partial<HitFact>): void => m.onHit({ victim: "npc:s1", by: "ada", weapon: WEAPON.RIFLE, zone: ZONE.TORSO, down: false, power: 0.5, lift: 0, dirX: 0, dirZ: 1, ...over });
+    const run = (s: number): void => { for (let i = 0; i < s * 10; i++) m.tick(0.1); };
+    return { m, barks, hit, run };
+  }
+
+  it("the one who did it speaks, and says the right kind of thing: a hat off, a foe down, a limb, an umbrella, a colleague shot, their own fall", () => {
+    const { barks, hit, run } = talking();
+    hit({ down: true, zone: ZONE.HEAD });
+    run(6);
+    hit({ victim: "npc:s2", weapon: WEAPON.UMBRELLA, down: true });
+    run(6);
+    hit({ victim: "bram", by: "ada", down: true });
+    run(6);
+    hit({ victim: "ada", by: "npc:s2", weapon: WEAPON.PISTOL, down: true });
+    expect(barks.map((b) => `${b.id}:${b.k}`)).toEqual(["ada:headshot", "ada:brolly", "ada:friendly", "ada:down"]);
+  });
+
+  it("a bystander dropped earns no cheer; a wound that does not drop is no occasion; an NPC never barks", () => {
+    const { barks, hit, run } = talking();
+    hit({ victim: "npc:carter", down: true });
+    hit({ down: false });
+    hit({ victim: "npc:s2", by: "npc:s1", down: true });
+    run(1);
+    expect(barks).toEqual([]);
+  });
+
+  it("a fight is a few voices, not a choir: a speaker waits five seconds, the party a second and a half", () => {
+    const { barks, hit, run } = talking();
+    hit({ down: true });
+    hit({ victim: "npc:s2", down: true });
+    expect(barks.length, "the same speaker, at once").toBe(1);
+    hit({ victim: "npc:s2", by: "bram", down: true });
+    expect(barks.length, "another, too soon after").toBe(1);
+    run(2);
+    hit({ victim: "npc:s2", by: "bram", down: true });
+    expect(barks.map((b) => b.id)).toEqual(["ada", "bram"]);
+    run(4);
+    hit({ victim: "npc:s1", by: "ada", down: true });
+    expect(barks.map((b) => b.id)).toEqual(["ada", "bram", "ada"]);
+  });
+
+  it("a chain of three is the party's cheer; a body thrown far is its owner's yelp", () => {
+    const { m, barks, run } = talking();
+    m.onKeg("ada");
+    m.onKeg("ada");
+    m.onKeg("ada");
+    run(2);
+    m.onToss("bram", "", 1, 1, undefined, 0, 1);
+    expect(barks.map((b) => `${b.id}:${b.k}`)).toEqual(["ada:chain", "bram:flung"]);
+  });
+});

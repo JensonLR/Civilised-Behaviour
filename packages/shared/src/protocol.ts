@@ -138,6 +138,14 @@ export interface CryEvent {
   id: string;
 }
 
+/** D-087: a party member exclaims (cosmetic): who (a session id or row key) and the occasion; the client picks the words (`barkLine`) and the babble. */
+export interface BarkEvent {
+  id: string;
+  k: string;
+  /** Picks the line, the same on every client. */
+  salt: number;
+}
+
 export interface BoomEvent {
   x: number;
   y: number;

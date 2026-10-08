@@ -5,8 +5,9 @@ import type { Terrain } from "@cb/shared";
  * The grounding audit (test tooling, not shipped code): nothing in a built region may hang in the air unless it is meant to.
  *
  * Every scenery mesh (each instance of an instanced one) is split into its CONNECTED PIECES (triangles that share a vertex position). A piece is
- * GROUNDED when one of its vertices is at or under the terrain; it is SUPPORTED when it touches (bounding boxes within a few millimetres) a
- * piece that is grounded or supported. Whatever is left is floating: a lantern with no post, a roof with no walls, a plank in the air.
+ * GROUNDED when one of its vertices is at or under the terrain; it is SUPPORTED when it touches (boxes within a few millimetres) a
+ * piece that is grounded or supported. A piece's box turns with it (its yaw is its edges' dominant direction): a turned building's walls in axis-aligned
+ * bounds swell to cover the whole room, and a chimney hanging over the room "touched" them. Whatever is left is floating: a lantern with no post, a roof with no walls, a plank in the air.
  * The ground meshes (`GROUND_MESHES`: the terrain, its skirt, the hills, the horizon, the water) are the ground and are not audited.
  */
 export interface Floater {
@@ -26,6 +27,13 @@ export interface Floater {
 interface Piece {
   min: Vector3;
   max: Vector3;
+  /** The piece's footprint as a box at its own yaw: the cos and sin of the yaw, the centre (x, z) and the half extents along its axes. */
+  c: number;
+  s: number;
+  cx: number;
+  cz: number;
+  hu: number;
+  hv: number;
   grounded: boolean;
   supported: boolean;
   label: string;
@@ -182,15 +190,41 @@ export function floatingPieces(root: Object3D, terrain: Terrain, skip: (label: s
         const max = new Vector3(-Infinity, -Infinity, -Infinity);
         let grounded = false;
         let gap = Infinity;
-        for (const i of part.verts) {
+        const w = new Float64Array(part.verts.length * 3);
+        part.verts.forEach((i, j) => {
           v.fromBufferAttribute(pos, i).applyMatrix4(wm);
+          w[j * 3] = v.x;
+          w[j * 3 + 1] = v.y;
+          w[j * 3 + 2] = v.z;
           min.min(v);
           max.max(v);
           const above = v.y - terrain.height(v.x, v.z);
           if (above < gap) gap = above;
           if (above <= ON_GROUND || ground(v.x, v.z, v.y)) grounded = true;
+        });
+        // the yaw: the length-weighted mean of its edges' directions in plan, modulo a right angle (as 4 x the angle); a round piece has none and keeps 0
+        let sc = 0, ss = 0;
+        for (let t = 0; t < part.verts.length; t += 3) for (let e = 0; e < 3; e++) {
+          const a = (t + e) * 3, b = (t + ((e + 1) % 3)) * 3;
+          const dx = w[b]! - w[a]!, dz = w[b + 2]! - w[a + 2]!;
+          const len = Math.hypot(dx, dz);
+          if (len < 0.01) continue;
+          const ang = 4 * Math.atan2(dz, dx);
+          sc += len * Math.cos(ang);
+          ss += len * Math.sin(ang);
         }
-        pieces.push({ min, max, grounded, supported: grounded, label, instance: inst ? k : -1, triangles: part.triangles, gap });
+        const yaw = Math.hypot(sc, ss) > 1e-6 ? Math.atan2(ss, sc) / 4 : 0;
+        const c = Math.cos(yaw), s = Math.sin(yaw);
+        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+        for (let j = 0; j < w.length; j += 3) {
+          const u = w[j]! * c + w[j + 2]! * s, vv = -w[j]! * s + w[j + 2]! * c;
+          if (u < u0) u0 = u;
+          if (u > u1) u1 = u;
+          if (vv < v0) v0 = vv;
+          if (vv > v1) v1 = vv;
+        }
+        const uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+        pieces.push({ min, max, c, s, cx: uc * c - vc * s, cz: uc * s + vc * c, hu: (u1 - u0) / 2, hv: (v1 - v0) / 2, grounded, supported: grounded, label, instance: inst ? k : -1, triangles: part.triangles, gap });
       }
     }
   });
@@ -206,8 +240,18 @@ export function floatingPieces(root: Object3D, terrain: Terrain, skip: (label: s
     if (!l) grid.set(key, (l = []));
     l.push(i);
   }));
+  // (the half width of a piece's footprint along the plan direction (nx, nz))
+  const reach = (p: Piece, nx: number, nz: number): number => p.hu * Math.abs(p.c * nx + p.s * nz) + p.hv * Math.abs(-p.s * nx + p.c * nz);
+  // the two footprints overlap (or come within TOUCH) on every axis of either box: the separating axis test, in plan
+  const footprintsTouch = (a: Piece, b: Piece): boolean => {
+    for (const p of [a, b]) for (const [nx, nz] of [[p.c, p.s], [-p.s, p.c]] as const) {
+      const d = Math.abs((b.cx - a.cx) * nx + (b.cz - a.cz) * nz);
+      if (d > reach(a, nx, nz) + reach(b, nx, nz) + TOUCH) return false;
+    }
+    return true;
+  };
   const touch = (a: Piece, b: Piece): boolean =>
-    a.min.x <= b.max.x + TOUCH && b.min.x <= a.max.x + TOUCH && a.min.y <= b.max.y + TOUCH && b.min.y <= a.max.y + TOUCH && a.min.z <= b.max.z + TOUCH && b.min.z <= a.max.z + TOUCH;
+    a.min.x <= b.max.x + TOUCH && b.min.x <= a.max.x + TOUCH && a.min.y <= b.max.y + TOUCH && b.min.y <= a.max.y + TOUCH && a.min.z <= b.max.z + TOUCH && b.min.z <= a.max.z + TOUCH && footprintsTouch(a, b);
   const queue: number[] = [];
   pieces.forEach((p, i) => p.supported && queue.push(i));
   while (queue.length > 0) {

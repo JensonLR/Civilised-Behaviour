@@ -11,7 +11,7 @@ const CSS = `
 .folk-say{position:absolute;left:0;top:0;max-width:14.5rem;padding:.42rem .75rem .38rem;font-family:var(--type);font-size:.8rem;line-height:1.28;color:var(--ink);
 background:linear-gradient(var(--field),var(--paper));border-top:3px double var(--ink);border-bottom:3px double var(--ink);box-shadow:0 6px 16px color-mix(in srgb,var(--scrim) 42%,transparent);
 pointer-events:none;will-change:transform;white-space:normal;text-align:left;transition:opacity .25s;opacity:0}
-.folk-say::before{content:"HOLLOWMERE";display:block;font-family:var(--display);font-size:.56rem;letter-spacing:.34em;color:var(--stamp);margin-bottom:.12rem}
+.folk-say::before{content:attr(data-kicker);display:block;font-family:var(--display);font-size:.56rem;letter-spacing:.34em;color:var(--stamp);margin-bottom:.12rem}
 .folk-say::after{content:"";position:absolute;left:50%;bottom:-.5rem;width:.7rem;height:.7rem;margin-left:-.35rem;background:var(--paper);transform:rotate(45deg);
 border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);clip-path:polygon(100% 0,100% 100%,0 100%)}
 .folk-say[data-on="1"]{opacity:1}
@@ -83,8 +83,8 @@ export class FolkOverlay {
     return true;
   }
 
-  /** A speech slip over a head; `u` (0..1) is how far through its time it is (it fades in and out at the ends). */
-  bubble(key: number, text: string, x: number, y: number, z: number, u: number): void {
+  /** A speech slip over a head; `u` (0..1) is how far through its time it is (it fades in and out at the ends). `kicker` heads it (the village's name; D-087: a speaker's). */
+  bubble(key: number, text: string, x: number, y: number, z: number, u: number, kicker = "HOLLOWMERE"): void {
     if (!this.active) return;
     // (a slip that is already up keeps its element, so the text is not rewritten every frame)
     let s = this.bubbles.find((b) => b.key === key && !b.used);
@@ -97,6 +97,7 @@ export class FolkOverlay {
       s.text = text;
       s.el.textContent = text;
     }
+    if (s.el.dataset.kicker !== kicker) s.el.dataset.kicker = kicker;
     s.el.style.display = "block";
     s.el.dataset.on = u > 0.04 && u < 0.92 ? "1" : "0";
   }

@@ -134,6 +134,14 @@ export class GameAudio {
     playSfx("scream", { x, y, z, seed: seedFromString(look), volume: isMe ? 1 : 0.95 });
   }
 
+  /** D-087: a line of the Society's gibberish in the voice of that face (`key`: the shape of what is said). Positional, or in the centre when no place is given (a parley). */
+  babble(look: string, key: string, at?: { x: number; y: number; z: number }, isMe = false): void {
+    const seed = seedFromString(look);
+    // (the look picks one of the four voices and nudges its pitch, so a character always sounds like themselves)
+    const pitch = 0.94 + ((seed >>> 4) % 13) / 100;
+    playSfx("babble", at ? { ...at, key, seed, pitch, volume: isMe ? 0.9 : 1 } : { key, seed, pitch, volume: 0.75 });
+  }
+
   /** D-073: a cry of panic (a civilian bolting, a soldier breaking), in the voice of that face. */
   panic(x: number, y: number, z: number, look: string): void {
     playSfx("panic", { x, y, z, seed: seedFromString(look), volume: 0.85 });

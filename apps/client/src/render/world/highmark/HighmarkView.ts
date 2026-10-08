@@ -12,7 +12,7 @@ import { WINDMILL } from "../windmill.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
-import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
 import type { WaterUniforms } from "../water.ts";
 import { buildHighmarkCloth, createHighmarkAtlas, highmarkClothMaterial } from "./cloth.ts";
 import { buildHighmarkGround, buildHighmarkSkirt } from "./ground.ts";
@@ -21,11 +21,14 @@ import { planHighmarkScatter, type HighmarkScatter } from "./scatter.ts";
 import type { HighmarkTerrain } from "./shared.ts";
 import { landmarkFog, landmarkInk } from "./landmark.ts";
 import { buildHighmarkSolid, type LanternRoom } from "./structures.ts";
+import { addWindows, setWindowNight } from "../litWindows.ts";
 import { buildHighmarkWater } from "./water.ts";
 import { buildGranaryScale, buildScythes } from "./strikeProps.ts";
 import { OutpostDress } from "../outpostDress.ts";
 
 const WHITE = new Color(1, 1, 1);
+/** Peak intensity of the room's fill light (see `InteriorFill`): the Assembly Hall's ends and benches read at night; the chalk walls do not wash out at noon. */
+const INTERIOR_FILL = 0.9;
 /** The hill rings start 112 m out (HILL_RINGS[0]: 150 - 38); this scale puts that foot just past the ground mesh's half-side (bounds + 30). */
 export const HILL_SCALE = 1.66;
 const fract = (x: number): number => x - Math.floor(x);
@@ -64,6 +67,7 @@ export class HighmarkView implements RegionView {
     seed = 7,
   ) {
     this.root.name = "world";
+    this.fill = this.track(new InteriorFill(PALETTE.highmark.chalk, PALETTE.highmark.timberLight, INTERIOR_FILL));
     this.dress = new OutpostDress(this.root, world, detail.outlines, "highmark");
     setToonLite(detail.liteShading);
     if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
@@ -214,6 +218,7 @@ export class HighmarkView implements RegionView {
     const lod: Lod = this.detail.outlines ? 1 : 0;
     const solid = buildHighmarkSolid(this.world, lod);
     this.lamps = [...solid.lamps, { x: solid.lantern.x, y: solid.lantern.y, z: solid.lantern.z }]; // (the lit tower's lantern burns with the lamps)
+    addWindows(this.root, solid.panes, (x) => this.track(x));
     this.addLantern(solid.lantern);
     if (!solid.geometry) return;
     const hullSolid = this.detail.outlines ? buildHighmarkSolid(this.world, 0) : undefined;
@@ -239,10 +244,12 @@ export class HighmarkView implements RegionView {
   private lamps: { x: number; y: number; z: number }[] = [];
   private roofSet?: RoofSet;
   private doors: DoorMark[] = [];
+  private readonly fill: InteriorFill;
 
-  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7), and the room's fill comes up. */
   setViewer(x: number, z: number): void {
-    this.roofSet?.setViewer(highmarkLevel().rooms, x, z);
+    const level = highmarkLevel();
+    this.fill.enter(this.roofSet?.setViewer(level.rooms, x, z), level, this.world);
   }
   /** The doors the view drew, and the roof set (for tests and tools). */
   get doorMarks(): readonly DoorMark[] {
@@ -352,6 +359,7 @@ export class HighmarkView implements RegionView {
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
     this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the lamps are lit at the harvest bell hour
+    setWindowNight(this.ambientU.uLamp.value); // (D-089: and so are the Assembly Hall's windows)
     this.lantern?.color.copy(this.lanternDark).lerp(this.lanternLit, this.ambientU.uLamp.value); // ... and so is the tower's glass
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
@@ -373,6 +381,7 @@ export class HighmarkView implements RegionView {
     this.ambientU.uMotion.value = motion.value;
     if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;
     this.herds?.update(worldSec ?? t);
+    this.fill.update(t);
   }
 
   dispose(): void {

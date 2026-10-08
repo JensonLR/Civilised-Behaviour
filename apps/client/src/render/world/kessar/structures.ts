@@ -5,6 +5,7 @@ import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
 import { cart, tent } from "../landmarks.ts";
 import { crateParts } from "../objects.ts";
+import { pane, type LitPane } from "../litWindows.ts";
 import { KESSAR, KESSAR_ANCHORS as A, kessarPlan, type WallSeg } from "./shared.ts";
 
 /**
@@ -150,7 +151,7 @@ function gatehouse(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, 
   }
 }
 
-function keep(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, z: number) => number, lod: Lod): void {
+function keep(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, z: number) => number, lod: Lod, panes: LitPane[]): void {
   const f = plan.fort;
   const kp = f.keep;
   const base = gy(kp.x, kp.z);
@@ -163,7 +164,10 @@ function keep(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, z: nu
   if (lod) {
     merlons(k, kp.hx * 2 - 3.6, kp.height, kp.hz - 0.3, 5, 1.0, 1.1, 0.55, 100);
     merlons(k, kp.hx * 2 - 3.6, kp.height, -kp.hz + 0.3, 5, 1.0, 1.1, 0.55, 110);
-    for (let i = 0; i < 5; i++) box(k, [0.4, 1.2, 0.3], [-4 + i * 2, 5 + (i % 2) * 4, kp.hz + 0.05], K.timber);
+    for (let i = 0; i < 5; i++) {
+      box(k, [0.4, 1.2, 0.3], [-4 + i * 2, 5 + (i % 2) * 4, kp.hz + 0.05], K.timber);
+      pane(panes, k, -4 + i * 2, 5 + (i % 2) * 4, kp.hz + 0.2, 1, 0.26, 0.96, 80 + i);   // (the slit's glass, set in its timber frame)
+    }
   }
   // the pole on the roof
   k.limb([0, kp.height, 0], [0, kp.height + 6.5, 0], 0.12, 0.08, K.timber, 5);
@@ -175,6 +179,11 @@ function keep(k: Kit, plan: ReturnType<typeof kessarPlan>, gy: (x: number, z: nu
     slab(k, [hall.hx * 2, hall.height + 1, hall.hz * 2], [0, hall.height / 2 - 0.5, 0], masonry(120 + i, K.stoneCap, K.stone), lod);
     roofCone(k, Math.hypot(hall.hx, hall.hz) + 0.5, 3.2, [0, hall.height, 0], 4, Math.PI / 4);
     if (lod) box(k, [0.7, 1.6, 0.7], [hall.hx * 0.5, hall.height + 1.6, 0], K.stoneShade);
+    // a window in each long face, a timber frame round its glass
+    if (lod) for (const s of [-1, 1] as const) {
+      box(k, [0.9, 1.2, 0.14], [0, hall.height * 0.55, s * (hall.hz + 0.05)], K.timber);
+      pane(panes, k, 0, hall.height * 0.55, s * (hall.hz + 0.12), s, 0.66, 0.96, 120 + i);
+    }
   }
 }
 
@@ -289,6 +298,8 @@ interface KessarOut {
   /** Lanterns: their flames' world positions, and a floor level for a lamp in a room (it burns by day); outdoor lamps (no `lit`) follow the night. */
   lamps: { x: number; y: number; z: number; lit?: number }[];
   roofs: RoofKits;
+  /** D-089: the keep's and the halls' windows (the Ward keeps late hours). */
+  panes: LitPane[];
 }
 
 function tollStation(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut): void {
@@ -490,17 +501,17 @@ function camps(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number,
 }
 
 /** Everything solid, merged. `collapsed` swaps the bridge for its stumps; `lod` 0 is the cheap shape the ink hull and the low preset use. */
-export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; collapsed: boolean; marks: DoorMark[]; lamps: { x: number; y: number; z: number; lit?: number }[]; roofs: RoofSource | undefined } {
+export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; collapsed: boolean; marks: DoorMark[]; lamps: { x: number; y: number; z: number; lit?: number }[]; roofs: RoofSource | undefined; panes: LitPane[] } {
   const plan = kessarPlan();
   const terrain = (x: number, z: number): number => world.terrainHeight(x, z);
   const intact = world.obstacles.some((o) => o.tag === "bridge" && o.kind === "box");
   const k = new Kit();
-  const out: KessarOut = { marks: [], lamps: [], roofs: new RoofKits() };
+  const out: KessarOut = { marks: [], lamps: [], roofs: new RoofKits(), panes: [] };
   const f = plan.fort;
   f.wall.forEach((s, i) => wallSegment(k, s, terrain(s.x, s.z), lod, 10 + (i % 7)));
   f.towers.forEach((t, i) => roundTower(k, t.x, t.z, t.r, t.height, terrain(t.x, t.z), lod, 20 + i));
   gatehouse(k, plan, terrain, lod, out);
-  keep(k, plan, terrain, lod);
+  keep(k, plan, terrain, lod, out.panes);
   for (const c of f.cannons) {
     // on the wall walk of the segment it stands on (the walk is level at that segment's ground + wall height; the hill under the cannon is higher)
     const seg = f.wall.reduce((a, s) => (Math.hypot(s.x - c.x, s.z - c.z) < Math.hypot(a.x - c.x, a.z - c.z) ? s : a));
@@ -514,5 +525,5 @@ export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: B
   pier(k, plan, lod);
   camps(k, plan, terrain, lod);
   k.clearBase();
-  return { geometry: k.build(), collapsed: !intact, marks: out.marks, lamps: out.lamps, roofs: out.roofs.finish() };
+  return { geometry: k.build(), collapsed: !intact, marks: out.marks, lamps: out.lamps, roofs: out.roofs.finish(), panes: out.panes };
 }

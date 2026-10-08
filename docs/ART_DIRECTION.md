@@ -144,6 +144,7 @@ Nothing in the world is a plain PBR material or a texture, except the runtime ca
   granaries on mushroom stones, a terraced meeting hall, a smithy with chimney smoke, a water mill whose wheel turns, market awning stalls), streets as late trails, fences, gardens, washing lines, drying racks, a well, carts,
   crates and lanterns that light at dusk. Doors are real openings with dark interiors; walls are solid; the ground under each building is levelled by a pad (`withLandscape`). Palette: the `vl*` set in `PALETTE.world` (plaster, tile,
   shingle, thatch, awnings, cobble, herald blue and gold). Lit windows sit in the lantern-glass mesh (`aLit`, `windowLight`). Lod 0 (the hull, and the low preset) drops windows, framing, lamps, washing and small clutter.
+  The other towns light theirs the same way (D-089, `world/litWindows.ts`): a pane set 12 mm proud of each window frame, about seven in ten warm (the same ones every night), the rest dark glass (`camp.windowDark`), coming on with the region's lamps.
 - **The expedition HQ** (`CAMP.hq`, `hqPlan()`, `world/hq.ts`): a striped pavilion, open at the front, with flags, a map table, crates with stencilled text, a supply pyramid, a notice board (runtime canvas text) and the
   Society's heraldry (fictional). Its cloth flutters with the camp cloth.
 - **Waterside**: a plank jetty with a moored punt that bobs, reeds, stepping stones, a timber weir with a walkway and a foaming chute, lapping wavelets and wheel/punt splashes in the water shader, a mill wheel. `landscape.ts`

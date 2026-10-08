@@ -80,6 +80,7 @@ export const ACHIEVEMENT_TEXT: Readonly<Record<AchievementId, { title: string; b
   unscheduled_flight: { title: "Unscheduled Flight", blurb: "Send somebody twenty yards by powder, as measured by the Society's surveyor." },
   museum_piece: { title: "For the Museum", blurb: "Five limbs in one contract. The Museum of Comparative Anatomy will want a word." },
   umbrella_man: { title: "Closed, In Action", blurb: "Fell an enemy with an umbrella." },
+  not_today_gentlemen: { title: "Not Today, Gentlemen", blurb: "See off the Syndicate's armed debt collectors and keep their collection bag." },
 };
 
 // ---- the demo's notices (server -> party, over the existing `notice` message; the client banner recognises the warning) ----
