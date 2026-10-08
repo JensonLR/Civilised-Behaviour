@@ -3,6 +3,7 @@ import { NPC } from "./campaignTypes.ts";
 import type { NpcSpec } from "./expeditionTypes.ts";
 import { hash3 } from "./rng.ts";
 import { WEAPON } from "./weapons.ts";
+import { TERMS } from "./scenarios/terms.ts";
 import type { MinorPowerId, PowersState } from "./worldTypes.ts";
 
 /**
@@ -12,8 +13,8 @@ import type { MinorPowerId, PowersState } from "./worldTypes.ts";
  * presses); its result rides on the contract's outcome and is committed with it.
  */
 export type { IncidentId, IncidentRecord, IncidentResult };
-export const INCIDENT_IDS: readonly Exclude<IncidentId, "none">[] = ["wounded_traveller", "courier", "deserter", "runaway_horse", "powder_wagon"];
-export const INCIDENT_RESULTS: readonly IncidentResult[] = ["helped", "passed_by", "delivered", "missed", "enlisted", "turned_away", "caught", "strayed", "salvaged", "went_up"];
+export const INCIDENT_IDS: readonly Exclude<IncidentId, "none">[] = ["wounded_traveller", "courier", "deserter", "runaway_horse", "powder_wagon", "syndicate_collectors"];
+export const INCIDENT_RESULTS: readonly IncidentResult[] = ["helped", "passed_by", "delivered", "missed", "enlisted", "turned_away", "caught", "strayed", "salvaged", "went_up", "repelled", "collected"];
 
 export const INCIDENT = {
   /** Seconds of the run before it may happen, and how long the party must have gone without hostilities. */
@@ -31,6 +32,16 @@ export const INCIDENT = {
    * in, pick it up and throw it clear); the powder is "salvaged" when at least this many kegs are still on the road when the fuse is out, else the road "went up".
    */
   wagonKegs: 5, wagonRing: 1.7, wagonFuseS: 14, wagonSalvage: 3,
+  /**
+   * D-088: the Syndicate's collectors, armed (the Syndicate arrives with rifles rather than a cheque). Three of them, and their powder cart (kegs, unlit) behind them;
+   * their collection bag (pounds) is the Society's when they are seen off, what they take from the purse when the contract ends first, and the grudge it costs.
+   */
+  collectors: 3, collectorKegs: 3, collectorBag: 20, collectorTake: 15, collectorGrudge: 4,
+  /**
+   * They halt this far from the party (metres), beside their cart, and read out the invoice for this long (seconds) before they open fire, unless somebody hurts one of
+   * them first: the first browser run had three of them walk straight in and drop a lone player in five seconds, which ended the contract before it was a decision.
+   */
+  collectorStandM: 11, collectorDemandS: 10,
   /** About one run in five is quiet: the weight of "none" against each incident (D-084: 1, from 4; half the runs had nothing happen on the road, and the owner found the contracts stale). */
   noneWeight: 1, entryWeight: 1,
 } as const;
@@ -52,13 +63,20 @@ const TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_re
 export function dealIncident(c: CampaignState, template: ScenarioTemplateId, region: RegionId, seed: number): IncidentId {
   if (region === "hollowmere" || HOME_POWER[region] === undefined) return "none";
   const last = c.sites.lastIncident?.id;
-  const pool = INCIDENT_IDS.filter((id) => id !== last);
+  const pool = INCIDENT_IDS.filter((id) => id !== last && (id !== "syndicate_collectors" || collectorsWelcome(template)));
   const total = INCIDENT.noneWeight + pool.length * INCIDENT.entryWeight;
   let roll = hash3(seed >>> 0, Math.max(0, Math.round(c.day)), 0x1ac1d, TAG[template]) % total;
   if (roll < INCIDENT.noneWeight) return "none";
   roll -= INCIDENT.noneWeight;
   return pool[Math.floor(roll / INCIDENT.entryWeight)]!;
 }
+
+/**
+ * D-088: where the armed collectors may call. Not where fighting loses the contract (the rule says one shot loses, D-086), not where a site listens for shots (the cage,
+ * the barge, the border: their gunfire would raise an alarm the party did not raise, against the stated rule), and not at the mine (a rescue).
+ */
+export const COLLECTORS_BARRED: ReadonlySet<ScenarioTemplateId> = new Set<ScenarioTemplateId>(["hostage_rescue", "smuggling_run", "border_incident", "mine_rescue"]);
+export const collectorsWelcome = (template: ScenarioTemplateId): boolean => TERMS[template].fighting !== "forbidden" && !COLLECTORS_BARRED.has(template);
 
 /** Seconds into the run it may fire (it then also waits for calm). */
 export const incidentDelayS = (c: CampaignState, template: ScenarioTemplateId, seed: number): number =>
@@ -92,7 +110,7 @@ export function placeIncident(party: { x: number; z: number }, hostiles: readonl
 }
 
 /** The people of an incident (group "incident"). The wounded traveller is spawned standing and the server lays them down. */
-export function incidentRoster(id: IncidentId, at: { x: number; z: number }, region: RegionId, seed: number): NpcSpec[] {
+export function incidentRoster(id: IncidentId, at: { x: number; z: number }, region: RegionId, seed: number, party = 4): NpcSpec[] {
   const look = (k: number): number => hash3(seed >>> 0, k, 0x1c1d) >>> 0;
   const base = { faction: "ward" as const, side: "neutral" as const, group: "incident", post: { x: at.x, z: at.z }, weapon: WEAPON.FISTS, skill: 10, bravery: 20, brain: "civil" as const };
   const pick = (names: readonly string[], k: number): string => names[hash3(seed >>> 0, k, 0xa11e) % names.length]!;
@@ -107,6 +125,15 @@ export function incidentRoster(id: IncidentId, at: { x: number; z: number }, reg
       return []; // (no person: the incident is a horse, spawned by the server's mounts; see `horseName`)
     case "powder_wagon":
       return []; // (no person: the incident is the Syndicate's kegs, spilled by the server; see `wagonName`)
+    case "syndicate_collectors": {
+      // three armed men on the Syndicate's side, in a loose line abreast; the server orders them at the party
+      const arms = [WEAPON.RIFLE, WEAPON.PISTOL, WEAPON.BLUNDERBUSS] as const;
+      // (one more than the party standing, two to three: a lone player meets two)
+      return Array.from({ length: Math.max(2, Math.min(INCIDENT.collectors, party + 1)) }, (_, i) => ({
+        ...base, id: `incident-collector-${i}`, faction: "rival" as const, side: "rival" as const, role: NPC.RIVAL_GUARD, brain: "garrison" as const, weapon: arms[i % arms.length]!,
+        skill: 28, bravery: 35, lookSeed: look(10 + i), name: pick(COLLECTOR_NAMES, 10 + i * 7), post: { x: at.x + (i - 1) * 1.6, z: at.z },
+      }));
+    }
     default:
       return [];
   }
@@ -116,7 +143,7 @@ export function incidentRoster(id: IncidentId, at: { x: number; z: number }, reg
 export const INCIDENT_USE_IDS: Readonly<Record<string, Exclude<IncidentId, "none">>> = { "incident-courier": "courier", "incident-deserter": "deserter" };
 
 /** What happened to it. `revived`, `use` and `shot` come from the server; `end` is the contract ending (or the party sailing) before the party acted. */
-export type IncidentEvent = { t: "revived" } | { t: "use"; room: boolean } | { t: "shot" } | { t: "end" } | { t: "mounted" } | { t: "kegs"; left: number };
+export type IncidentEvent = { t: "revived" } | { t: "use"; room: boolean } | { t: "shot" } | { t: "end" } | { t: "mounted" } | { t: "kegs"; left: number } | { t: "broken" };
 
 /** The result an event settles, or undefined (it goes on). `room` on `use`: whether the roster has room for the deserter. */
 export function incidentStep(id: Exclude<IncidentId, "none">, e: IncidentEvent): IncidentResult | undefined {
@@ -132,6 +159,9 @@ export function incidentStep(id: Exclude<IncidentId, "none">, e: IncidentEvent):
     case "powder_wagon":
       // (`kegs` is told once no fuse burns among them: how many are still on the road. A contract ending with the fuse still lit leaves the road to its fate)
       return e.t === "kegs" ? (e.left >= INCIDENT.wagonSalvage ? "salvaged" : "went_up") : e.t === "end" ? "went_up" : undefined;
+    case "syndicate_collectors":
+      // seen off (every collector down or running) before the contract ends, or still collecting when it does
+      return e.t === "broken" ? "repelled" : e.t === "end" ? "collected" : undefined;
   }
 }
 
@@ -141,6 +171,11 @@ export function applyIncident(c: CampaignState, p: PowersState, r: IncidentRecor
   let np = p;
   if (r.result === "delivered") nc = { ...nc, purse: Math.min(99999, nc.purse + INCIDENT.courierPay) };
   if (r.result === "caught") nc = { ...nc, purse: Math.min(99999, nc.purse + INCIDENT.horseReward) };
+  if (r.result === "repelled") {
+    nc = { ...nc, purse: Math.min(99999, nc.purse + INCIDENT.collectorBag) };
+    np = { ...np, rival: { ...np.rival, grudge: Math.min(100, np.rival.grudge + INCIDENT.collectorGrudge) } };
+  }
+  if (r.result === "collected") nc = { ...nc, purse: Math.max(0, nc.purse - INCIDENT.collectorTake) };
   if (r.result === "helped") {
     const home = HOME_POWER[r.region];
     if (home === "ward") nc = { ...nc, factions: { ...nc.factions, ward: { ...nc.factions.ward, trust: Math.min(100, nc.factions.ward.trust + INCIDENT.helpedTrust) } } };
@@ -160,6 +195,10 @@ export const wagonName = (seed: number): string => WAGON_NAMES[hash3(seed >>> 0,
 /** The runaway horse's name for the notices (it has no row of its own: it is a mount). */
 export const horseName = (seed: number): string => HORSE_NAMES[hash3(seed >>> 0, 4, 0xa11e) % HORSE_NAMES.length]!;
 const DESERTER_NAMES = ["Private Ambrose Teal", "Corporal Silas Venn", "Drummer Kit Marlow"] as const;   // (a roster name is at most 32 characters: partyState.ts)
+const COLLECTOR_NAMES = ["Collector Mordaunt Vesk", "Assessor Prue Dunmarrow", "Bailiff Jem Hartigan", "Improver Silas Crane", "Recoverer Abel Thwaite", "Collector Lettice Mow"] as const;
+const BAND_NAMES = ["Three Syndicate debt collectors", "The Syndicate's Recovery Department", "A Syndicate assessment party", "Three Syndicate bailiffs"] as const;
+/** The collectors' name for the notices (the band, not a man). */
+export const bandName = (seed: number): string => BAND_NAMES[hash3(seed >>> 0, 6, 0xa11e) % BAND_NAMES.length]!;
 
 /** The notice when it begins (`%n` = the person's name). */
 export const INCIDENT_OPEN: Record<Exclude<IncidentId, "none">, string> = {
@@ -168,9 +207,10 @@ export const INCIDENT_OPEN: Record<Exclude<IncidentId, "none">, string> = {
   deserter: "%n, late of the colours, is walking towards you with his hands up and his rifle left somewhere sensible. He wants a word.",
   runaway_horse: "A saddled horse, %n, is loose and grazing where it should not. Somebody, somewhere, is offering a reward, loudly. Catch it: get in the saddle.",
   powder_wagon: "%n has gone over on the road and spilled its kegs. One of them is fizzing. Throw it clear and the rest are yours; dawdle and the road gets rearranged.",
+  syndicate_collectors: "%n want the arrears: an invoice read by their powder cart, then rifles.",
 };
 /** What the USE prompt reads at their side (the traveller is revived the ordinary way). */
-export const INCIDENT_PROMPT: Record<Exclude<IncidentId, "none">, string> = { wounded_traveller: "Revive %n", courier: "Take the dispatch from %n", deserter: "Hear %n out", runaway_horse: "Mount", powder_wagon: "Pick up keg" };
+export const INCIDENT_PROMPT: Record<Exclude<IncidentId, "none">, string> = { wounded_traveller: "Revive %n", courier: "Take the dispatch from %n", deserter: "Hear %n out", runaway_horse: "Mount", powder_wagon: "Pick up keg", syndicate_collectors: "Pick up keg" };
 /** The notice when it settles. */
 export const INCIDENT_DONE: Record<IncidentResult, string> = {
   helped: "%n is on their feet, thanks you twice, and will tell everyone on this road. Word of it reaches the right ears.",
@@ -183,6 +223,8 @@ export const INCIDENT_DONE: Record<IncidentResult, string> = {
   strayed: "%n wanders off to be somebody else's good deed.",
   salvaged: "The fizzing keg went off well clear of %n. The rest of its powder now belongs to the Society, by right of not having exploded.",
   went_up: "%n went up, kegs and all. The road has a new pond in it, and the Syndicate has your name on an invoice.",
+  repelled: `%n are seen off. Their collection bag, £${INCIDENT.collectorBag} of other people's arrears, is the Society's now, by right of being the ones still standing.`,
+  collected: `%n leave with £${INCIDENT.collectorTake} of the Society's money and a receipt nobody remembers signing.`,
 };
 /** The regions' names as the paper prints them (the same as `REGIONS[r].name`; a test holds them together: regions.ts pulls in every world builder, the paper should not). */
 export const REGION_NAME: Readonly<Record<RegionId, string>> = { hollowmere: "Hollowmere Depot", kessar: "Kessar Reach", highmark: "Highmark", vesper: "Vesper Gorge", saltmarket: "Saltmarket Delta" };
@@ -208,4 +250,6 @@ export const INCIDENT_PAPER: Record<IncidentResult, { head: string; body: string
   strayed: { head: "HORSE AT LARGE", body: "A horse seen grazing near a Society party in %r remains at large. The party is understood to have been busy." },
   salvaged: { head: "SOCIETY RESCUES SYNDICATE POWDER", body: "A Syndicate powder wagon overturned in %r was relieved of its cargo by a Society party, who describe the transaction as salvage and the Syndicate as theft." },
   went_up: { head: "POWDER WAGON REARRANGES THE ROAD", body: "An overturned powder wagon in %r exploded in the presence of a Society party. The crater is being surveyed; the Society has offered to name it." },
+  repelled: { head: "SYNDICATE COLLECTORS REPULSED", body: "In %r the Syndicate's debt collectors called on a Society party with rifles drawn, and left without the money, and in some cases without the use of their legs." },
+  collected: { head: "SOCIETY SETTLES DISPUTED ACCOUNT", body: "In %r a Society party paid the Syndicate's collectors, who were armed and therefore, in the accounting sense, correct." },
 };

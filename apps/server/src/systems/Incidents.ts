@@ -1,7 +1,7 @@
 import { FLAG, type PlayerStateType } from "@cb/shared";
 import { npcKey, type CampaignState, type CastApi, type NpcSpec, type PlayersView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import {
-  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident, wagonName,
+  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, bandName, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident, wagonName,
   type IncidentEvent, type IncidentId, type IncidentRecord, type IncidentResult,
 } from "@cb/shared";
 
@@ -32,7 +32,7 @@ export interface IncidentsHost {
   looseHorse(at: { x: number; z: number }): string;
   /** Who rides mount `id` ("" nobody, or the mount is gone). */
   riderOf(id: string): string;
-  /** D-071: spill `n` powder kegs in a ring round `at`, the first one lit on a `fuseS` fuse (credited to ACCIDENT_OWNER); the ids of those that could be placed. Optional. */
+  /** D-071: spill `n` powder kegs in a ring round `at`, the first one lit on a `fuseS` fuse (credited to ACCIDENT_OWNER; none lit when `fuseS` is 0); the ids of those that could be placed. Optional. */
   spillKegs?(at: { x: number; z: number }, n: number, ring: number, fuseS: number): string[];
   /** Whether prop `id` is still in the world (a keg that went off is gone), and whether a fuse burns on it. */
   propLive?(id: string): boolean;
@@ -65,6 +65,8 @@ export class Incidents {
   private kegs: string[] = [];
   /** Seconds until a settled courier or deserter leaves the ground (0 = nobody leaving). */
   private leaving = 0;
+  /** D-088: seconds of the collectors' invoice still to read (they open fire when it is done, or when one of them is hurt); -1 once they have. */
+  private invoice = -1;
 
   constructor(private readonly host: IncidentsHost) {}
 
@@ -115,6 +117,16 @@ export class Incidents {
       this.settle({ t: "kegs", left: this.kegs.filter((k) => live(k)).length });
       return;
     }
+    if (this.id === "syndicate_collectors") {
+      if (this.invoice > 0) {
+        this.invoice -= dt;
+        if (this.invoice <= 0) this.openFire();
+      }
+      // D-088: seen off once every collector is down or running (the Cast's count of the group)
+      const c = this.host.cast.count("incident");
+      if (c.total > 0 && c.alive === 0) this.settle({ t: "broken" });
+      return;
+    }
     if (this.id === "runaway_horse") {
       const rider = this.host.riderOf(this.horse);
       if (rider && this.host.party.get(rider) && !this.host.party.get(rider)!.npc) {
@@ -159,7 +171,18 @@ export class Incidents {
 
   /** Somebody shot or hit `victim` (a session id or an NPC row key). */
   onHurt(victim: string): void {
+    // (the collectors are there to be shot at: their incident settles on the count, not on a wound; hurt one mid-invoice and they all open fire)
+    if (this.live && this.result === undefined && this.id === "syndicate_collectors") {
+      if (this.invoice > 0 && victim.includes("incident-collector-")) this.openFire();
+      return;
+    }
     if (this.live && this.result === undefined && this.owns(victim)) this.settle({ t: "shot" });
+  }
+
+  /** D-088: the invoice is read (or somebody interrupted it): the collectors come for the party. */
+  private openFire(): void {
+    this.invoice = -1;
+    this.host.cast.order("incident", { o: "attack", side: "party" });
   }
 
   /**
@@ -189,6 +212,7 @@ export class Incidents {
     this.horseLabel = "";
     this.kegs = [];
     this.leaving = 0;
+    this.invoice = -1;
   }
 
   private fire(): void {
@@ -218,6 +242,26 @@ export class Incidents {
       this.horseLabel = wagonName(seed);
       this.live = true;
       this.host.notice(INCIDENT_OPEN.powder_wagon.replace("%n", this.horseLabel[0]!.toUpperCase() + this.horseLabel.slice(1)));
+      return;
+    }
+    if (this.id === "syndicate_collectors") {
+      // D-088: the Syndicate arrives armed, not with a cheque: three collectors and their powder cart (unlit), ordered at the party
+      const specs = incidentRoster(this.id, at, this.host.region(), seed, n);
+      if (this.host.cast.spawn(specs) === 0) {
+        this.id = "none";
+        return;
+      }
+      // they halt short of the party, their cart just behind them, and read the invoice (the party's moment: the kegs are right there)
+      const cx = sx / n, cz = sz / n;
+      const d = Math.max(1, Math.hypot(at.x - cx, at.z - cz));
+      const stand = { x: cx + ((at.x - cx) / d) * INCIDENT.collectorStandM, z: cz + ((at.z - cz) / d) * INCIDENT.collectorStandM };
+      const back = { x: stand.x + ((at.x - cx) / d) * 2.6, z: stand.z + ((at.z - cz) / d) * 2.6 };
+      this.host.spillKegs?.(this.host.land(back.x, back.z) ? back : at, INCIDENT.collectorKegs, 0.8, 0);
+      this.host.cast.order("incident", { o: "guard", x: stand.x, z: stand.z, r: 3 });
+      this.invoice = INCIDENT.collectorDemandS;
+      this.horseLabel = bandName(seed);
+      this.live = true;
+      this.host.notice(INCIDENT_OPEN.syndicate_collectors.replace("%n", this.horseLabel));
       return;
     }
     if (this.id === "runaway_horse") {
@@ -253,7 +297,7 @@ export class Incidents {
     const r = incidentStep(this.id, e);
     if (r === undefined) return;
     this.result = r;
-    const who = this.spec?.name ?? (this.id === "runaway_horse" || this.id === "powder_wagon" ? this.horseLabel : "");
+    const who = this.spec?.name ?? (this.id === "runaway_horse" || this.id === "powder_wagon" || this.id === "syndicate_collectors" ? this.horseLabel : "");
     if (who) {
       const t = INCIDENT_DONE[r].replace("%n", who);
       this.host.notice(t[0]!.toUpperCase() + t.slice(1)); // (a wagon's name opens "the Syndicate's ...")

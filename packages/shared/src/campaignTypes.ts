@@ -53,8 +53,8 @@ export interface SiteLedger {
   lastBill?: BillRecord;
 }
 /** D-052: chaos during play (incidents.ts, docs/_notes/incidents.md). Append-only. */
-export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter" | "runaway_horse" | "powder_wagon";
-export type IncidentResult = "helped" | "passed_by" | "delivered" | "missed" | "enlisted" | "turned_away" | "caught" | "strayed" | "salvaged" | "went_up";
+export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter" | "runaway_horse" | "powder_wagon" | "syndicate_collectors";
+export type IncidentResult = "helped" | "passed_by" | "delivered" | "missed" | "enlisted" | "turned_away" | "caught" | "strayed" | "salvaged" | "went_up" | "repelled" | "collected";
 export interface IncidentRecord { id: Exclude<IncidentId, "none">; result: IncidentResult; day: number; region: RegionId }
 export interface CampaignState {
   v: 1; seed: number; day: number; expeditions: number; purse: number; lies: number;   // purse in pounds; lies = promises broken (negotiation leverage)

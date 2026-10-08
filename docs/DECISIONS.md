@@ -363,3 +363,18 @@ The hired hands are the expedition: their shots count for the Hatters and agains
   - A commission met is answered by one party member, the same on every client.
   - A parley's speaker says each line aloud in the gibberish; the words are on the sheet.
 - **Tests.** The babble is rendered offline in every voice and shape: clean, in the speech band, an exclamation shorter than a boast, a high voice above a low one, syllables rather than one vowel, a question that rises. The lines fit a slip and pass the real-world guard; the pick is deterministic. Mayhem tests cover who speaks and the spacing. The slips show, replace and expire.
+
+**D-088 The Syndicate arrives armed: its debt collectors (2026-10-08).** D-084 left one item open, "the Syndicate arriving armed rather than with a cheque". It is now a sixth incident (D-052): `syndicate_collectors`.
+- **What happens.** Partway through a contract, in a lull, three of the Syndicate's collectors walk up to the party 22 to 32 m out, with a rifle, a pistol and a blunderbuss, and their powder cart behind them (three kegs, unlit). The opening telegram: "rifles first, invoice after".
+  - They are a garrison group on the Syndicate's side, ordered to attack the party's side, so the Ward and the locals are left alone unless already at war.
+  - The kegs make the obvious answer the loud one: a chain of three is the Ordnance Board's commission.
+- **How it settles.** If every collector is down or running before the contract ends, their collection bag (£20) is the Society's and the Syndicate's grudge grows (+4). If the contract ends with them still standing, they leave with £15 of the purse.
+  - The paper prints either story: "SYNDICATE COLLECTORS REPULSED", or "SOCIETY SETTLES DISPUTED ACCOUNT", the collectors being "armed and therefore, in the accounting sense, correct".
+  - A new achievement, "Not Today, Gentlemen", is appended to the list.
+- **Where they call, and where they don't.** They are never dealt where their gunfire would break a rule the orders state (D-086):
+  - not where fighting loses the contract (the border, the saleroom);
+  - not where a site listens for shots (the cage, the barge, the border), where the noise check would count their shots and raise an alarm the party did not raise;
+  - not at the mine, which is a rescue.
+
+  A test holds the barred list to the templates' own `observe.noise` and terms.
+- **Reuse.** Nothing new in the Cast, Combat or the client: the incident system spawns them, the Cast's `attack` order points them, the existing keg props make the cart, Mayhem counts them as foes (the gazette, the barks, the Hatters), and the room's commit records them. One small change: `spillKegs` lights nothing when given no fuse.

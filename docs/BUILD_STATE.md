@@ -4,6 +4,7 @@ Last updated: 2026-10-03 (D-050 to D-060 are under "Now". Earlier, D-049: touch 
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-088 (2026-10-08): the Syndicate arrives armed.** A new mid-contract incident: three armed debt collectors and their powder cart come for the party. See them off for their £20 collection bag (and a grudge); let the contract end first and they take £15. They never call where their shots would break a stated rule (the border, the saleroom, the cage, the barge, the mine). There is an achievement, "Not Today, Gentlemen". Tested in shared (dealing, settling, money) and through a real room (they spawn armed with an unlit cart, are hostile to the party, and settle both ways). Unplayed by a person.
 - **D-087 (2026-10-08): the Society speaks, in pompous gibberish.** The party exclaims at the moments a player would, in synthesised gibberish voices (no recordings, no model, no licence). Each speaker has their own voice, chosen by their look. The words appear on a slip over their head ("Right through the hat!", "Terribly sorry, old chap!", "I can see London from here!").
   - The server decides who speaks and spaces the barks out: five seconds per speaker, one and a half for the party.
   - Parley speakers say their lines aloud in the same gibberish.

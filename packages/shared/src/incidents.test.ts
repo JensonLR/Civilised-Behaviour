@@ -10,6 +10,9 @@ import { REGIONS } from "./regions.ts";
 import { REGION_NAME, incidentStory } from "./incidents.ts";
 import { applyOutcome } from "./factions.ts";
 import { zeroTally } from "./scenario.ts";
+import { TEMPLATES as TEMPLATE_DEFS, TEMPLATE_IDS } from "./scenarios/registry.ts";
+import { TERMS } from "./scenarios/terms.ts";
+import { collectorsWelcome } from "./incidents.ts";
 
 const TEMPLATES: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "outpost_raid", "succession_dispute", "reapers_strike", "mine_rescue", "claim_race", "winding_engine", "smuggling_run", "flooded_market"];
 
@@ -67,10 +70,44 @@ describe("incidents: chaos during play (D-052)", () => {
         expect(r, "the horse is a mount and the wagon is kegs, not a person").toEqual([]);
         continue;
       }
+      if (id === "syndicate_collectors") {
+        // D-088: the exception, on purpose: three armed men on the Syndicate's side, garrison brains, three different arms, in a line abreast round the spot
+        expect(r.length).toBe(INCIDENT.collectors);
+        for (const c of r) expect(c).toMatchObject({ group: "incident", side: "rival", faction: "rival", brain: "garrison" });
+        expect(new Set(r.map((c) => c.weapon)).size).toBe(3);
+        expect(Math.max(...r.map((c) => Math.hypot(c.post.x - 3, c.post.z - 4)))).toBeLessThan(2);
+        continue;
+      }
       expect(r.length).toBe(1);
       expect(r[0]).toMatchObject({ group: "incident", side: "neutral", brain: "civil", post: { x: 3, z: 4 } });
     }
     expect(incidentRoster("none", { x: 0, z: 0 }, "kessar", 1)).toEqual([]);
+  });
+
+  it("D-088: the collectors are seen off (broken) or paid (the contract ended first), and are dealt only where their gunfire breaks no stated rule", () => {
+    expect(incidentStep("syndicate_collectors", { t: "broken" })).toBe("repelled");
+    expect(incidentStep("syndicate_collectors", { t: "end" })).toBe("collected");
+    expect(incidentStep("syndicate_collectors", { t: "shot" })).toBeUndefined();
+    for (const id of TEMPLATE_IDS) {
+      const listens = TEMPLATE_DEFS[id].observe.noise !== undefined;
+      expect(collectorsWelcome(id), id).toBe(!listens && TERMS[id].fighting !== "forbidden" && id !== "mine_rescue");
+    }
+    // never dealt where barred, whatever the seed and day
+    for (const t of TEMPLATE_IDS.filter((x) => !collectorsWelcome(x))) {
+      for (let seed = 1; seed < 80; seed++) expect(dealIncident({ ...newCampaign(seed), day: (seed % 9) + 1 }, t, "kessar", seed), `${t} ${seed}`).not.toBe("syndicate_collectors");
+    }
+    // and dealt somewhere
+    let seen = 0;
+    for (let seed = 1; seed < 200; seed++) if (dealIncident({ ...newCampaign(seed), day: (seed % 9) + 1 }, "convoy_ambush", "kessar", seed) === "syndicate_collectors") seen++;
+    expect(seen).toBeGreaterThan(0);
+    // their bag and the grudge when seen off; their take when paid
+    const c = { ...newCampaign(3), purse: 100 };
+    const p = newPowers(3);
+    const won = applyIncident(c, p, { id: "syndicate_collectors", result: "repelled", day: 2, region: "kessar" });
+    expect(won.c.purse).toBe(100 + INCIDENT.collectorBag);
+    expect(won.p.rival.grudge).toBe(Math.min(100, p.rival.grudge + INCIDENT.collectorGrudge));
+    expect(applyIncident(c, p, { id: "syndicate_collectors", result: "collected", day: 2, region: "kessar" }).c.purse).toBe(100 - INCIDENT.collectorTake);
+    expect(applyIncident({ ...c, purse: 5 }, p, { id: "syndicate_collectors", result: "collected", day: 2, region: "kessar" }).c.purse, "never below nothing").toBe(0);
   });
 
   it("every incident reaches every one of its results, and nothing else settles it", () => {

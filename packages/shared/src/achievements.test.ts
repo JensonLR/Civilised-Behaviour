@@ -70,6 +70,10 @@ const SCRIPT: Record<AchievementId, () => { c: CampaignState; p: PowersState; s:
     const f = fresh();
     return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastIncident: { id: "powder_wagon", result: "salvaged", day: 1, region: "kessar" } } } };
   },
+  not_today_gentlemen: () => {
+    const f = fresh();
+    return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastIncident: { id: "syndicate_collectors", result: "repelled", day: 1, region: "kessar" } } } };
+  },
   learned_society: () => withBill({}, true),
   unscheduled_flight: () => withBill({ flings: 1, longest: 21, longestWho: "Carter Obadiah Plume" }),
   museum_piece: () => withBill({ limbs: 5 }),
@@ -87,8 +91,8 @@ describe("achievements", () => {
     expect(evaluateAchievements(c, p, s, [])).toEqual([]);
   });
 
-  it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084)", () => {
-    expect(ACHIEVEMENTS).toHaveLength(25);
+  it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084; one for D-088's collectors)", () => {
+    expect(ACHIEVEMENTS).toHaveLength(26);
     expect(ACHIEVEMENTS.slice(0, 12)).toEqual(["first_crossing", "paid_in_full", "bridge_down", "rescued_quim", "wagon_taken", "border_mediated", "outpost_founded", "town_by_neglect", "steam_launch", "all_powers_met", "chair_settled", "four_at_once"]); // (append-only: a stored id never moves)
     for (const id of ACHIEVEMENTS) {
       const { c, p, s } = SCRIPT[id]();

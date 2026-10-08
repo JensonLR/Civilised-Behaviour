@@ -594,7 +594,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         }
         const first = out[0];
         const ps = first ? this.state.props.get(first) : undefined;
-        if (first && ps) {
+        if (first && ps && fuseS > 0) {
           this.lit.set(first, { left: fuseS, owner: ACCIDENT_OWNER });
           ps.fuse = fuseTenths(fuseS);
         }

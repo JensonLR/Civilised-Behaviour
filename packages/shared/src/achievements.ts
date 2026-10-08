@@ -48,6 +48,8 @@ export const ACHIEVEMENT_RULES: Readonly<Record<AchievementId, Rule>> = {
   /** D-052/D-071: the last incident (it is printed in the next paper, and the client evaluates when it is written). */
   good_samaritan: (c) => c.sites.lastIncident?.result === "helped",
   powder_salvaged: (c) => c.sites.lastIncident?.result === "salvaged",
+  /** D-088: the Syndicate's armed collectors seen off. */
+  not_today_gentlemen: (c) => c.sites.lastIncident?.result === "repelled",
   /** D-084: the last run's bill. */
   learned_society: (c) => c.sites.lastBill?.met === true,
   unscheduled_flight: (c) => (c.sites.lastBill?.bill.longest ?? 0) >= 20,
