@@ -313,7 +313,8 @@ export class Game {
     session.room.onMessage("gazette", (m: { text?: unknown; k?: unknown }) => {
       this.gazette.push(m?.text);
       if (m?.k === "request") {
-        playSfx("parley_stamp"); // (D-084: a commission met is stamped, like a deal, and the party laughs)
+        playSfx("parley_stamp"); // (D-084: a commission met is stamped, like a deal, and the party laughs; D-085: to a fanfare)
+        playSfx("fanfare");
         this.session.room.state.players.forEach((p, id) => {
           if (p.npc === 0) this.actors.get(id)?.body.cue("laugh", 2.5);
         });
@@ -324,7 +325,7 @@ export class Game {
       // The hands' answer to an order ("Obeyed." / "Refused. ...") is the wheel's own plain line, not a notice.
       if (/^(Obeyed|Refused)\b/.test(m.text)) this.wheel.setResult(m.text);
       else this.hud.showNotice(m.text);
-      playSfx("notice");
+      playSfx(/for a triumph/.test(m.text) ? "fanfare" : "notice"); // (D-085: a triumph's debrief arrives to brass)
     });
     session.room.onMessage("pong", (m: { t: number }) => {
       session.rttMs = smoothRtt(session.rttMs, performance.now() - m.t);

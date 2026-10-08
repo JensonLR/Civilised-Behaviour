@@ -172,3 +172,18 @@ describe("the sound definitions", () => {
     expect(SOUNDS.bell!.prio).toBeGreaterThan(SOUNDS.hoof!.prio);
   });
 });
+
+describe("D-085: the Empire's fanfare", () => {
+  it("is brass, not noise: two seconds of it, its weight in the brass band; heard in the centre, one at a time, and captioned", () => {
+    const r = of("fanfare");
+    expect(r.length).toBeGreaterThan(0);
+    for (const x of r) {
+      expect(x.audible, `fanfare/${x.variant}`).toBeGreaterThan(1.5);
+      expect(x.centroid, `fanfare/${x.variant}`).toBeGreaterThan(300);
+      expect(x.centroid, `fanfare/${x.variant}`).toBeLessThan(3000);
+    }
+    expect(SOUNDS.fanfare!.ui).toBe(true);
+    expect(SOUNDS.fanfare!.cap).toBe(1);
+    expect(captionFor("fanfare", null)).toBe("[a brass fanfare for the Empire]");
+  });
+});

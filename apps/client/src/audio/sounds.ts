@@ -613,6 +613,34 @@ const bell = def({
   },
 });
 
+/**
+ * D-085: the Empire's fanfare, for a commission met and a triumph: an original brass call (a rising B-flat arpeggio, three quick and one held, into the full chord), a
+ * timpani roll under it and a cymbal on the arrival. Two seconds of pomp, heard in the centre: the moment a streamer's chat will clip. Brass is sawtooth through a filter
+ * that opens on the attack (the "blat"), two players a few cents apart per note for a section's width.
+ */
+const fanfare = ui({
+  peakDb: -9, cap: 1, gap: 2.5, variants: 2, jitter: 0.004, // (one at a time: two fanfares are a brass band falling downstairs)
+  layers: (p) => {
+    const out: Layer[] = [];
+    const brass = (at: number, hz: number, dec: number, peak: number): void => {
+      for (const det of [1, 1.0045]) out.push(T({ type: "sawtooth", at, hz: hz * det * jit(p, 0.002), atk: 0.025, dec, peak: peak * 0.5, f: [lp(900, 3200, 0.07, 1.1)], vib: [5.2, 0.005] }));
+    };
+    // the call: Bb4 D5 F5, then the high Bb held
+    const call: [number, number][] = [[0, 466.16], [0.15, 587.33], [0.3, 698.46]];
+    for (const [at, hz] of call) brass(at, hz, 0.22, 0.75);
+    brass(0.45, 932.33, 1.7, 0.9);
+    // the band arrives under it: the chord (Bb3 D4 F4 Bb4)
+    for (const hz of [233.08, 293.66, 349.23, 466.16]) brass(0.45, hz, 1.9, 0.55);
+    // timpani: a roll on F into the arrival, then the big stroke on Bb
+    for (let i = 0; i < 5; i++) out.push(T({ at: 0.18 + i * 0.05, hz: 87.31, to: 84, over: 0.1, atk: 0.003, dec: 0.25, peak: 0.25 + i * 0.05 }));
+    out.push(T({ at: 0.45, hz: 116.54, to: 112, over: 0.3, atk: 0.003, dec: 1.4, peak: 0.85 }));
+    out.push(N({ kind: "brown", at: 0.45, atk: 0.002, dec: 0.5, peak: 0.5, f: [lp(320)] }));
+    // the cymbal on the arrival
+    out.push(N({ kind: "white", at: 0.45, atk: 0.002, dec: 1.8, peak: 0.28, f: [hp(4200)] }));
+    return out;
+  },
+});
+
 /** The stamp on a signed deal: a wooden thump, a pad of ink, a slap of paper. Heard in the centre (it is on the table in front of you). */
 const parleyStamp = ui({
   peakDb: -11, reverb: 0.05, gap: 0.1,
@@ -714,6 +742,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   paper_rustle: paperRustle,
   bell,
   parley_stamp: parleyStamp,
+  fanfare,
   crew_shout: crewShout,
   wagon_roll: wagonRoll,
   // the grit pass (D-038, A): gore, impacts, foley, tails, the regions' own ambience
@@ -721,7 +750,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
 };
 
 /** The sounds the expedition's world adds (hooves.ts, wagons.ts and game/ContentAudio.ts play them): a test renders and measures every one. */
-export const CONTENT_SOUNDS = ["hoof", "tack_jingle", "sail_creak", "gull", "paper_rustle", "bell", "parley_stamp", "crew_shout", "wagon_roll"] as const;
+export const CONTENT_SOUNDS = ["hoof", "tack_jingle", "sail_creak", "gull", "paper_rustle", "bell", "parley_stamp", "crew_shout", "wagon_roll", "fanfare"] as const;
 
 export const SOUND_NAMES: readonly string[] = Object.keys(SOUNDS);
 

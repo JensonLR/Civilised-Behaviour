@@ -42,6 +42,7 @@ export const CAPTIONS: Readonly<Record<string, CaptionDef>> = {
   "bell:hq": D("the day bell tolls at camp", 450, 3),
   "bell:outpost": D("an outpost bell rings", 300, 3),
   parley_stamp: D("a rubber stamp falls", 1e9, 1, false),
+  fanfare: D("a brass fanfare for the Empire", 1e9, 2.5, false),
   crew_shout: D("the gun crew shouts", 70, 1.5),
   wagon_roll: D("a wagon rattles along", 40, 3),
   "wagon_roll:creak": D("a wagon creaks", 25, 3),
