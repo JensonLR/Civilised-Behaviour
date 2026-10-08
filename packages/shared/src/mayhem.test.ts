@@ -60,6 +60,15 @@ describe("D-084: the casualty column", () => {
     }
   });
 
+  it("counts are set in words (a line never opens with a figure)", () => {
+    for (let salt = 0; salt < 12; salt++) {
+      const line = gazetteLine({ k: "chain", kegs: 5, by: "Ada" }, salt);
+      expect(line).toMatch(/\b[Ff]ive kegs\b/);
+      expect(line).not.toMatch(/^\d/);
+    }
+    expect(gazetteLine({ k: "chain", kegs: 14, by: "" }, 1)).toMatch(/14 kegs/);
+  });
+
   it("the phrasing varies by moment, and is the same for the same moment", () => {
     const f = facts[0]!;
     expect(new Set(Array.from({ length: 40 }, (_, i) => gazetteLine(f, i))).size).toBeGreaterThan(1);

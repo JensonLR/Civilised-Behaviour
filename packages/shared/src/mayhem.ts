@@ -123,9 +123,9 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{by} parts {victim}'s hair, permanently.",
   ],
   chain: [
-    "{kegs} kegs went up in a ripple. The Ordnance Board will want it in writing.",
+    "{Kegs} kegs went up in a ripple. The Ordnance Board will want it in writing.",
     "A chain of {kegs} kegs: {by} calls it an experiment in sequence.",
-    "{kegs} kegs in succession. The road has been rearranged and the birds have left the district.",
+    "{Kegs} kegs in succession. The road has been rearranged and the birds have left the district.",
   ],
   friendly: [
     "{by} has shot {victim}. The Society notes the enthusiasm.",
@@ -146,6 +146,10 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
   ],
 };
 
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+/** A count as the column sets it: in words to twelve, figures beyond. */
+const numberWord = (n: number): string => (Number.isInteger(n) && n >= 0 && n < WORDS.length ? WORDS[n]! : String(n));
+const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
 /** A display name as the column prints it (a blank one is a person all the same). */
 const who = (s: string): string => (s.trim() === "" ? "a stranger" : s.trim().slice(0, 40));
@@ -162,9 +166,9 @@ export function gazetteLine(f: MayhemFact, salt: number): string {
     case "fling":
       return fill(pick(f.party || f.by === "" ? GAZ.flingOwn : GAZ.fling), { victim: who(f.victim), by: who(f.by), yards: f.yards });
     case "chain":
-      return fill(pick(GAZ.chain), { kegs: f.kegs, by: f.by === "" ? "the powder" : who(f.by) });
+      return fill(pick(GAZ.chain), { kegs: numberWord(f.kegs), Kegs: capital(numberWord(f.kegs)), by: f.by === "" ? "the powder" : who(f.by) });
     case "double":
-      return fill(pick(GAZ.double), { by: who(f.by), n: f.n === 2 ? "two" : f.n === 3 ? "three" : String(f.n) });
+      return fill(pick(GAZ.double), { by: who(f.by), n: numberWord(f.n) });
     default:
       return fill(pick(GAZ[f.k]), { victim: who(f.victim), by: who(f.by) });
   }

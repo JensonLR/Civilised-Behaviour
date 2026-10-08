@@ -362,6 +362,6 @@ html .pause .dispatches ol { margin: 0.3rem 0 0; padding-left: 1.1rem; max-heigh
 :root[data-motion="reduced"] #hud .gazette .line { animation: none; transition: none; }
 body.touch-ui #hud .gazette { top: 24%; width: min(18rem, 46vw); }
 body.touch-ui #hud .gazette .line { font-size: 0.8rem; }
-#hud .objectives li.request { display: block; margin-top: 0.1rem; font: italic 0.8rem/1.2 var(--serif); color: var(--stamp); }
+#hud .objectives li.request { display: block; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(36rem, 86vw); margin-top: 0.15rem; font: italic 0.8rem/1.2 var(--serif); color: var(--stamp); } /* (under the whole card: the line, its distance and the clock stay together) */
 #hud .objectives li.request.done .text { text-decoration: none; opacity: 1; }
-#hud .objectives li.request.done .text::after { content: " \2014 met"; font-style: normal; }
+#hud .objectives li.request.done .text::after { content: " \2014\00a0met"; font-style: normal; } /* (a hex escape eats the space after it) */
