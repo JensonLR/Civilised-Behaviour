@@ -278,7 +278,7 @@ export const PALETTE = {
     glass: 0x8fb0b0,
     glowLantern: 0xf2c46a,
     /** D-089: a window pane with nobody home (and every pane by day): dark glass in its frame. */
-    windowDark: 0x2c3238,
+    windowDark: 0x38414a,
     flameOuter: 0xd9782f,
     flameMid: 0xeaa23c,
     flameCore: 0xf6d685,
