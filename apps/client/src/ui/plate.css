@@ -365,3 +365,23 @@ body.touch-ui #hud .gazette .line { font-size: 0.8rem; }
 #hud .objectives li.request { display: block; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(36rem, 86vw); margin-top: 0.15rem; font: italic 0.8rem/1.2 var(--serif); color: var(--stamp); } /* (under the whole card: the line, its distance and the clock stay together) */
 #hud .objectives li.request.done .text { text-decoration: none; opacity: 1; }
 #hud .objectives li.request.done .text::after { content: " \2014\00a0met"; font-style: normal; } /* (a hex escape eats the space after it) */
+
+/* ---- D-085: the Illustrated Imperial News: the game's own photograph of a spectacular moment, printed as an engraving at the right ---- */
+#hud .plate { position: absolute; right: calc(var(--edge-r) + 0.4rem); top: 40%; width: min(19rem, 34vw); margin: 0; padding: 0.45rem 0.45rem 0.5rem; background: var(--paper); border: 1px solid var(--ink); box-shadow: 0 0.3rem 0.9rem color-mix(in srgb, var(--ink) 35%, transparent); transform: rotate(1.2deg); pointer-events: none; animation: plateIn 0.45s ease-out; transition: opacity 0.6s, transform 0.6s; }
+#hud .plate[hidden] { display: none; }
+#hud .plate header { margin: 0 0 0.3rem; padding: 0 0 0.15rem; border-bottom: 1px solid var(--ink); font: 0.62rem var(--display); letter-spacing: 0.2em; text-transform: uppercase; text-align: center; color: var(--stamp); }
+#hud .plate img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--ink); filter: sepia(0.85) contrast(1.15) brightness(1.02); }
+#hud .plate figcaption { margin-top: 0.3rem; font: italic 0.78rem/1.25 var(--serif); color: var(--ink); text-align: center; }
+#hud .plate.leaving { opacity: 0; transform: rotate(1.2deg) translateX(1.5rem); }
+@keyframes plateIn { from { opacity: 0; transform: rotate(6deg) translateX(3rem) scale(0.9); } }
+@media (prefers-reduced-motion: reduce) { #hud .plate { animation: none; transition: none; } }
+:root[data-motion="reduced"] #hud .plate { animation: none; transition: none; }
+body.touch-ui #hud .plate { top: 20%; width: min(13rem, 40vw); }
+html .pause .plates[hidden] { display: none; }
+html .pause .plates { margin: 0.2rem 0 0.4rem; text-align: left; font-size: 0.85rem; }
+html .pause .plates summary { cursor: pointer; font-family: var(--display); letter-spacing: 0.1em; color: var(--stamp); }
+html .pause .plate-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.5rem; margin: 0.4rem 0 0; padding: 0; list-style: none; max-height: 16rem; overflow-y: auto; }
+html .pause .plate-list li { display: flex; flex-direction: column; gap: 0.2rem; }
+html .pause .plate-list img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--ink); filter: sepia(0.85) contrast(1.15); }
+html .pause .plate-list .cap { font: italic 0.72rem/1.2 var(--serif); }
+html .pause .plate-list .save { font: 0.7rem var(--display); letter-spacing: 0.08em; color: var(--stamp); }

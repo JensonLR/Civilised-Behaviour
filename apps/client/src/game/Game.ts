@@ -40,6 +40,7 @@ import type { Stage } from "../render/Stage.ts";
 import { noteFolk } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { CommandWheel, WHEEL_STAMPS } from "../ui/CommandWheel.ts";
+import { GloryPlates, type Plate } from "../ui/GloryPlates.ts";
 import { Gazette } from "../ui/Gazette.ts";
 import { Hud } from "../ui/Hud.ts";
 import { LoadoutSheet } from "../ui/Loadout.ts";
@@ -118,6 +119,8 @@ export class Game {
   private readonly hud: Hud;
   /** D-084: the casualty column (the server's gazette lines). */
   private readonly gazette: Gazette;
+  /** D-085: the Illustrated Imperial News (the game's own photographs of its best moments). */
+  private readonly newsPlates: GloryPlates;
   private readonly hitFx: HitFx;
   /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
   private readonly ledger = new BattleLedger();
@@ -245,6 +248,7 @@ export class Game {
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
     this.gazette = new Gazette(hud);
+    this.newsPlates = new GloryPlates(hud);
     this.hud.setCompass(regionMarks(this.builtRegion));
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
@@ -261,6 +265,8 @@ export class Game {
     this.combat.onBlast = (x, z, radius) => {
       this.ledger.noteBlast(x, z);
       this.debris.blast(x, z, radius * 0.9); // (limbs on the ground go up again: D-064)
+      const cam = this.stage.camera.position;
+      if (Math.hypot(cam.x - x, cam.z - z) < 45) this.newsPlates.armCapture(performance.now()); // (D-085: a blast in view, photographed a moment later: the fireball up, the bodies in the air)
     };
     this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
     this.groundTorches = new GroundTorches(stage.scene);
@@ -312,6 +318,7 @@ export class Game {
     }
     session.room.onMessage("gazette", (m: { text?: unknown; k?: unknown }) => {
       this.gazette.push(m?.text);
+      this.newsPlates.onGazette(m?.text, m?.k, performance.now());
       if (m?.k === "request") {
         playSfx("parley_stamp"); // (D-084: a commission met is stamped, like a deal, and the party laughs; D-085: to a fanfare)
         playSfx("fanfare");
@@ -749,6 +756,7 @@ export class Game {
     this.content.dispose();
     this.hud.dispose();
     this.gazette.dispose();
+    this.newsPlates.dispose();
     this.combat.dispose();
     this.viewmodel.dispose();
     this.hitFx.dispose();
@@ -867,6 +875,7 @@ export class Game {
     this.stage.renderer.info.reset(); // (two passes a frame: the overlay's counters cover both)
     this.stage.render();
     this.viewmodel.render();
+    this.newsPlates.frame(this.stage.renderer.domElement, performance.now()); // (right after the frame: the drawing buffer is whole)
     this.overlay.frame(rawDt);
   }
 
@@ -1170,6 +1179,11 @@ export class Game {
   /** D-063: the telegrams lately received, newest last (the pause sheet lists them). */
   dispatches(): readonly string[] {
     return this.hud.telegrams.log;
+  }
+
+  /** D-085: the session's plates, newest last (the pause sheet offers each to save). */
+  plateAlbum(): readonly Plate[] {
+    return this.newsPlates.album;
   }
 
   /** D-063: what to do next, and where. The line under the heading strip (unless the contract's orders card is that line) and the marker over the place. */
