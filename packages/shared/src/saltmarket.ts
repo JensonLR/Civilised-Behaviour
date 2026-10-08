@@ -375,9 +375,11 @@ export function saltmarketPlan(): SaltmarketPlan {
   const banners: SaltmarketBanner[] = [
     { x: -33.1, z: 60.2, yaw: Math.PI / 2, top: 7.3, w: 2.0, h: 3.0, kind: "customs" },
     { x: 21, z: -33.4, yaw: Math.PI / 2, top: 12.8, w: 2.2, h: 4, kind: "house" },
-    { x: 0, z: -32.75, yaw: Math.PI / 2, top: 4.0, w: 4.0, h: 1.8, kind: "house" },   // (on the face of the colonnade's front beam, its top on the beam's: z -33 +- 0.25, top 3.6 + 0.15 + 0.25 over the hall floor)
+    // (from a rod under the ceiling's overhang, in front of the ceiling joists' tails: the joists run 0.8 past the front beam's middle (z -33), to -32.2, under
+    // boards that reach -32.0 with their underside at 3.6 + 0.28. It hung on the beam's face, and the middle joist's tail ran 0.55 m out through the cloth)
+    { x: 0, z: -32.17, yaw: Math.PI / 2, top: 3.82, w: 4.0, h: 1.8, kind: "house" },
     { x: 8, z: 104, yaw: Math.PI / 2, top: 5.4, w: 1.8, h: 2.8, kind: "society" },
-    { x: 14, z: -50, yaw: Math.PI / 2, top: 4.4, w: 1.6, h: 2.6, kind: "syndicate" },
+    { x: 18.2, z: -50, yaw: Math.PI / 2, top: 4.4, w: 1.6, h: 2.6, kind: "syndicate" },   // (on the sand off the Exchange's east side, its pole 0.9 m clear of the roof's eave: it stood inside the hall at x 14 and its pole came up through the roof)
   ];
   const racks = [
     { x: 54, z: 20, yaw: 0.2, len: 7 }, { x: 62, z: 16, yaw: 0.35, len: 6 }, { x: -76, z: 6, yaw: -0.2, len: 7 }, { x: 12, z: -64, yaw: 0.1, len: 8 }, { x: -30, z: -36, yaw: 0.4, len: 6 },

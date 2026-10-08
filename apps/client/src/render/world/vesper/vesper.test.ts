@@ -185,9 +185,11 @@ describe("Vesper view: geometry", () => {
       expect(uv[i]!).toBeGreaterThanOrEqual(0);
       expect(uv[i]!).toBeLessThanOrEqual(1);
     }
-    const wave = cloth.attributes.wave!.array as ArrayLike<number>;
-    expect(Math.max(...Array.from(wave))).toBeLessThanOrEqual(1);
-    expect(Math.min(...Array.from(wave))).toBe(0);
+    // (the weight grows down the cloth; negative on a banner hung against a wall, which billows out from it only: both kinds hang here)
+    const wave = Array.from(cloth.attributes.wave!.array as ArrayLike<number>);
+    expect(Math.max(...wave.map(Math.abs))).toBeLessThanOrEqual(1);
+    expect(Math.min(...wave.map(Math.abs))).toBe(0);
+    expect(wave.some((w) => w < 0) && wave.some((w) => w > 0)).toBe(true);
     expect(ATLAS_W).toBe(512);
     expect(ATLAS_H).toBeGreaterThan(900);
     for (const s of VESPER_SIGNS) expect(drawn).toContain(s);

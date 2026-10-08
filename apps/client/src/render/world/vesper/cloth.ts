@@ -233,7 +233,7 @@ export function buildVesperCloth(terrain: Terrain): BufferGeometry | undefined {
       pos.push(b.x + rx * s * b.w + nx * 0.02, top - t * b.h, b.z + rz * s * b.w + nz * 0.02);
       nor.push(nx, 0, nz);
       uv.push(u0 + (u1 - u0) * (i / COLS), v1 - (v1 - v0) * t);
-      wave.push(t * t);
+      wave.push(b.wall !== undefined ? -t * t : t * t);   // (negative: hung against a wall, so it billows out from it and never into it)
     };
     for (let j = 0; j < ROWS; j++) {
       for (let i = 0; i < COLS; i++) {
@@ -290,7 +290,7 @@ export function buildVesperCloth(terrain: Terrain): BufferGeometry | undefined {
   return g;
 }
 
-/** Toon-lit, alpha-tested, two-sided; the ripple runs along each vertex's normal, weighted by `wave` and the wind (and the motion preference). */
+/** Toon-lit, alpha-tested, two-sided; the ripple runs along each vertex's normal, weighted by `wave` and the wind (and the motion preference). A negative `wave` is cloth hung against a wall: it only billows outward. */
 export function vesperClothMaterial(map: CanvasTexture | undefined): MeshToonMaterial {
   const mat = new MeshToonMaterial({ map: map ?? null, alphaTest: 0.5, side: DoubleSide, gradientMap: sharedToonRamp(), color: map ? 0xffffff : P.strataBone });
   mat.onBeforeCompile = (shader): void => {
@@ -301,8 +301,10 @@ export function vesperClothMaterial(map: CanvasTexture | undefined): MeshToonMat
       .replace(
         "#include <begin_vertex>",
         `#include <begin_vertex>
-        float w = wave * uWindK;
-        transformed += normal * (sin(uTime * 2.6 + position.x * 1.7 + position.z * 1.7 + position.y * 0.9) * 0.11 + sin(uTime * 4.3 + position.y * 2.3 + position.x * 2.0 - position.z * 2.0) * 0.045) * w;
+        float w = abs(wave) * uWindK;
+        float ripple = sin(uTime * 2.6 + position.x * 1.7 + position.z * 1.7 + position.y * 0.9) * 0.11 + sin(uTime * 4.3 + position.y * 2.3 + position.x * 2.0 - position.z * 2.0) * 0.045;
+        if (wave < 0.0) ripple = abs(ripple);
+        transformed += normal * ripple * w;
         transformed.y -= 0.05 * w;`,
       );
   };

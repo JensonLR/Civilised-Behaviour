@@ -59,6 +59,7 @@ import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
 import { buildVillage } from "./village.ts";
+import { cullPlants } from "./plantCull.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark, type RoofSource } from "./rooms.ts";
 import { Villagers, folkBudget } from "./villagers.ts";
 import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
@@ -183,6 +184,7 @@ export class WorldView {
       this.addFlock();
       this.addFolk();
     }
+    cullPlants(this.root); // (no plant grows through anything built)
     this.count();
   }
 

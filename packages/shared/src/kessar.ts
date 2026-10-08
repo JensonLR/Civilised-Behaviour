@@ -290,7 +290,7 @@ export function kessarPlan(): KessarPlan {
   // palms: a fringe on the shore, a few at the river's edge and round the Syndicate's camp (authored; no seed)
   const palms: KessarPlan["palms"] = [];
   const spots: [number, number][] = [
-    [-9, 92], [-13, 86], [9.5, 90.5], [14, 84], [-22, 94], [24, 93], [-31, 91], [33, 88],
+    [-9, 92], [-13, 86], [9.5, 90.5], [11.5, 86.5], [-22, 94], [24, 93], [-31, 91], [33, 88],   // (the fourth stood at 14, 84: a founded town's tower went up through its fronds)
     [-44, 47], [-24, 44], [-33, 60], [-42, 57],
     [-16, 36.5], [18, 36], [26, 38.5], [56, 35], [62, 37],
     [14, 6], [-16, 4],

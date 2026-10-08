@@ -12,6 +12,7 @@ import { addWindows, setWindowNight } from "../litWindows.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { cullPlants } from "../plantCull.ts";
 import type { WaterUniforms } from "../water.ts";
 import { buildSaltmarketCloth, createSaltmarketAtlas, saltmarketClothMaterial } from "./cloth.ts";
 import { FLOOD, buildFloodMesh, floodTarget } from "./flood.ts";
@@ -96,6 +97,7 @@ export class SaltmarketView implements RegionView {
     this.addCloth(terrain);
     this.addWater(terrain);
     this.addAmbient();
+    cullPlants(this.root); // (no plant grows through anything built)
     this.count();
   }
 

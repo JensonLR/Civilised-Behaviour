@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createArena } from "./arena.ts";
 import { insideObstacle } from "./camp.ts";
 import { PEN } from "./clearing.ts";
-import { FLOCKS, animalPose, buildFlock, createAnimalPose, sleepWeight } from "./fauna.ts";
+import { BODY_R, FLOCKS, animalPose, buildFlock, createAnimalPose, separateBodies, separateCapsules, sleepWeight } from "./fauna.ts";
+import { herdAt, herdCount, herdPlan } from "./highmark.ts";
 import { RIVER, waterEdgeDistance } from "./landscape.ts";
 import { villagePlan } from "./village.ts";
 
@@ -161,4 +162,87 @@ describe("the flock", () => {
     expect(sleepWeight(12)).toBe(0);
     expect(sleepWeight(27)).toBe(1); // hours wrap
   }, 60_000);
+});
+
+describe("animals never stand in each other", () => {
+  it("separateBodies parts overlapping bodies to the sum of their radii, leaves apart ones be, and does the same on every call", () => {
+    const x = new Float64Array([0, 0.3, 5, 5]), z = new Float64Array([0, 0, 0, 0]), r = new Float64Array([0.6, 0.6, 0.5, 0.5]);
+    separateBodies(x, z, r, 4);
+    expect(Math.hypot(x[1]! - x[0]!, z[1]! - z[0]!)).toBeCloseTo(1.2, 6);
+    expect(Math.hypot(x[3]! - x[2]!, z[3]! - z[2]!)).toBeCloseTo(1.0, 6); // (exactly on top of each other: parted all the same)
+    const x2 = new Float64Array([0, 0.3, 5, 5]), z2 = new Float64Array([0, 0, 0, 0]);
+    separateBodies(x2, z2, r, 4);
+    expect([...x2, ...z2]).toEqual([...x, ...z]);
+    const far = new Float64Array([0, 3]), fz = new Float64Array([0, 0]);
+    separateBodies(far, fz, new Float64Array([0.6, 0.6]), 2);
+    expect([...far]).toEqual([0, 3]);
+  });
+
+  it("separateCapsules parts a head standing in a neighbour's flank, and side-by-side beasts to a body's width", () => {
+    // B stands across A's head: A faces +x with its muzzle 1.4 ahead; B's middle 1.5 ahead of A, side on
+    const x = new Float64Array([0, 1.5]), z = new Float64Array([0, 0]), yaw = new Float64Array([0, Math.PI / 2]);
+    separateCapsules(x, z, yaw, 1.0, 1.4, 0.48, 2);
+    const gapAt = (): number => {
+      // the nearest points of the two spines, sampled
+      let best = Infinity;
+      for (let s = 0; s <= 20; s++) for (let t = 0; t <= 20; t++) {
+        const a = -1.0 + (2.4 * s) / 20, b = -1.0 + (2.4 * t) / 20;
+        best = Math.min(best, Math.hypot(x[0]! + Math.cos(yaw[0]!) * a - (x[1]! + Math.cos(yaw[1]!) * b), z[0]! + Math.sin(yaw[0]!) * a - (z[1]! + Math.sin(yaw[1]!) * b)));
+      }
+      return best;
+    };
+    expect(gapAt()).toBeGreaterThan(0.96 - 0.02);
+    const sx = new Float64Array([0, 0]), sz = new Float64Array([0, 0.4]), sy = new Float64Array([0, 0]);
+    separateCapsules(sx, sz, sy, 1.0, 1.4, 0.48, 2);
+    expect(Math.abs(sz[1]! - sz[0]!)).toBeCloseTo(0.96, 6);
+  });
+
+  it("through an hour of world time, Hollowmere's sheep and goats never stand in each other once parted", () => {
+    const flock = buildFlock(createArena(7)).filter((a) => a.kind === "sheep" || a.kind === "goat");
+    const n = flock.length;
+    const x = new Float64Array(n), z = new Float64Array(n), r = new Float64Array(n);
+    const pose = createAnimalPose();
+    let worst = 0;
+    for (let t = 0; t < 3600; t += 7.3) {
+      flock.forEach((a, i) => {
+        animalPose(a, t, pose);
+        x[i] = pose.x;
+        z[i] = pose.z;
+        r[i] = BODY_R[a.kind] * a.size;
+      });
+      separateBodies(x, z, r, n);
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) worst = Math.max(worst, r[i]! + r[j]! - Math.hypot(x[j]! - x[i]!, z[j]! - z[i]!));
+    }
+    expect(worst).toBeLessThan(0.05);
+  });
+
+  it("through an hour of world time, Highmark's herds never stand in each other once parted (as capsules: a 2.8 m beast)", () => {
+    for (const seed of [7, 4242]) {
+      const plan = herdPlan(seed);
+      const n = herdCount(plan);
+      const x = new Float64Array(n), z = new Float64Array(n), yaw = new Float64Array(n);
+      const p = { x: 0, z: 0, yaw: 0 };
+      let worst = 0;
+      for (let t = 0; t < 3600; t += 11.7) {
+        for (let i = 0; i < n; i++) {
+          herdAt(plan, i, t, p);
+          x[i] = p.x;
+          z[i] = p.z;
+          yaw[i] = p.yaw;
+        }
+        separateCapsules(x, z, yaw, 1.0, 1.4, 0.48, n);
+        for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+          if (Math.hypot(x[j]! - x[i]!, z[j]! - z[i]!) > 4) continue;
+          // the spines' nearest approach, sampled at 12 cm
+          let best = Infinity;
+          for (let s = 0; s <= 20; s++) for (let u = 0; u <= 20; u++) {
+            const a = -1.0 + (2.4 * s) / 20, b = -1.0 + (2.4 * u) / 20;
+            best = Math.min(best, Math.hypot(x[i]! + Math.cos(yaw[i]!) * a - x[j]! - Math.cos(yaw[j]!) * b, z[i]! + Math.sin(yaw[i]!) * a - z[j]! - Math.sin(yaw[j]!) * b));
+          }
+          worst = Math.max(worst, 0.96 - best);
+        }
+      }
+      expect(worst, `seed ${seed}`).toBeLessThan(0.08);
+    }
+  });
 });

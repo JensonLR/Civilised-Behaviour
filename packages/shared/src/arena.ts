@@ -3,8 +3,8 @@ import { campObstacles } from "./camp.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain } from "./terrain.ts";
 import { HILL, nearTrail, waterEdgeDistance, withLandscape } from "./landscape.ts";
-import { VILLAGE_PADS, villageKeepOut, villageObstacles } from "./village.ts";
-import { ruinObstacles } from "./ruins.ts";
+import { VILLAGE_PADS, villageKeepOut, villageObstacles, villagePlan } from "./village.ts";
+import { ruinObstacles, ruinPlan } from "./ruins.ts";
 import { clearingObstacles } from "./clearing.ts";
 import { cannonObstacles } from "./weapons.ts";
 import type { Pt } from "./hqRoute.ts";
@@ -216,8 +216,38 @@ export function createArena(seed: number): CollisionWorld {
   // A tree or a boulder is drawn BEFORE the authored things it must not stand in: the camp's props and the cannon (the dressing tests their centres, not a boulder's radius) and the finger-posts
   // (placed after everything). Whatever actually overlaps one is simply not there (found by the level audit on hub seeds 22320 and 29646: a rock in the cannon's carriage, a tree in a finger-post).
   const solids = [...fixed, ...furniture, ...posts];
-  const kept = obstacles.filter((o) => !(["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && (clashes(o) || (o.kind === "circle" && solids.some((f) => circleTouches(o, f))))));
+  // A tree's crown spreads metres past its trunk: one 4.1 m from a cottage reached 0.7 m into its roof. A tree stands a crown's reach from every building, or is not there.
+  const buildings = villagePlan(terrain).buildings;
+  const crownClash = (o: Obstacle): boolean => o.tag === "tree" && buildings.some((b) => rectDistance(b, o.x, o.z) < TREE_CROWN_REACH);
+  // A crag is drawn wider than its footprint (its capstone overhangs, its fallen blocks spill past the ends): one's capstone ran into the aqueduct's span overhead.
+  // A crag whose drawn extent comes near a pier, or the span between two, is not there (its boulder field stays: stones on a slope).
+  const piers = ruinPlan(terrain).piers;
+  const cragClash = (o: Obstacle): boolean => {
+    if (o.tag !== "cliff" || o.kind !== "box") return false;
+    const drawn = { x: o.x, z: o.z, yaw: o.yaw, hx: o.hx * 1.15 + 0.25, hz: o.hz * 1.4 + 0.25 };
+    for (let i = 0; i < piers.length; i++) {
+      const p = piers[i]!;
+      if (rectDistance(drawn, p.x, p.z) < p.r) return true;
+      const q = piers[i + 1];
+      if (q) for (let t = 0; t <= 1; t += 0.1) if (rectDistance(drawn, p.x + (q.x - p.x) * t, p.z + (q.z - p.z) * t) < AQUEDUCT_HALF) return true;
+    }
+    return false;
+  };
+  const kept = obstacles.filter((o) => !((["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && (clashes(o) || crownClash(o) || (o.kind === "circle" && solids.some((f) => circleTouches(o, f))))) || cragClash(o)));
   return new CollisionWorld(terrain, [...kept, ...furniture, ...posts], ARENA_RADIUS);
+}
+
+/** How far a tree's crown reaches from its trunk, with a roof's overhang: no tree stands nearer a building's walls than this. */
+const TREE_CROWN_REACH = 4.8;
+/** Half the width of the aqueduct's channel between its piers (m), with a hand to spare. */
+const AQUEDUCT_HALF = 1.1;
+
+/** Plan distance from (x, z) to a building's footprint (0 inside it), its yaw as `toWorld` reads it. */
+function rectDistance(b: { x: number; z: number; yaw: number; hx: number; hz: number }, x: number, z: number): number {
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+  const lx = Math.abs((x - b.x) * c + (z - b.z) * s) - b.hx;
+  const lz = Math.abs(-(x - b.x) * s + (z - b.z) * c) - b.hz;
+  return Math.hypot(Math.max(0, lx), Math.max(0, lz));
 }
 
 /** True if the round obstacle `c` intersects the solid `f` (a standing thing of the camp, the village or the route) by any amount. */

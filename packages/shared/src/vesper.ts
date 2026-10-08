@@ -277,7 +277,8 @@ let cachedRoad: { x: number; z: number }[] | undefined;
 export interface VesperBox { x: number; z: number; yaw: number; hx: number; hz: number; height: number }
 export interface VesperRound { x: number; z: number; r: number; height: number }
 /** A hanging cloth: `top` is its top edge above the ground where it hangs; yaw is the direction its face looks (collision yaw: +x at 0). */
-export interface VesperBanner { x: number; z: number; yaw: number; top: number; w: number; h: number; kind: "guild" | "syndicate" | "company" }
+/** A banner: free-standing on its own post, or hung from an iron rod on arms `wall` metres out from a wall (billowing away from it, never into it). */
+export interface VesperBanner { x: number; z: number; yaw: number; top: number; w: number; h: number; kind: "guild" | "syndicate" | "company"; wall?: number }
 export interface VesperSign { x: number; z: number; yaw: number; text: number }
 
 export interface VesperPlan {
@@ -354,12 +355,15 @@ export function vesperPlan(): VesperPlan {
     { x: -13, z: -22, yaw: 0, text: 4 },
     { x: -8.6, z: -86.6, yaw: 0, text: 5 },
   ];
+  // the Guild's two great banners hang on the faces of the cloister's second and seventh piers, in front of their pilasters (they hung at z 33 and 55, across
+  // a pilaster each: the column ran down through the cloth). A pier is 2.4 m across; its pilaster is a 0.3 m column on its face, so the rod stands 0.5 m out.
+  const pierZ = (i: number): number => cloister.z - cloister.hz + CLOISTER.pierW / 2 + i * (CLOISTER.pierW + CLOISTER.archClear);
   const banners: VesperBanner[] = [
-    { x: cloister.x + cloister.hx + 0.08, z: 33, yaw: 0, top: 6.6, w: 2.2, h: 4.8, kind: "guild" },
-    { x: cloister.x + cloister.hx + 0.08, z: 55, yaw: 0, top: 6.6, w: 2.2, h: 4.8, kind: "guild" },
+    { x: CLOISTER.frontX + 0.5, z: pierZ(1), yaw: 0, top: 6.6, w: 2.2, h: 4.8, kind: "guild", wall: 0.5 },
+    { x: CLOISTER.frontX + 0.5, z: pierZ(6), yaw: 0, top: 6.6, w: 2.2, h: 4.8, kind: "guild", wall: 0.5 },
     { x: S.dirgeMaster.x + 3.6, z: S.dirgeMaster.z - 2.6, yaw: Math.PI / 2, top: 4.6, w: 1.6, h: 3.1, kind: "guild" },
     // (D-038: hung beside the office's door, no longer across it)
-    { x: office.x + office.hx + 0.08, z: office.z + 2.1, yaw: 0, top: 3.4, w: 1.5, h: 2.4, kind: "company" },
+    { x: office.x + office.hx + 0.08, z: office.z + 2.1, yaw: 0, top: 3.4, w: 1.5, h: 2.4, kind: "company", wall: 0.08 },
     { x: S.rivalSurveyors[0]!.x - 3.4, z: S.rivalSurveyors[0]!.z - 3.2, yaw: Math.PI / 2, top: 4.8, w: 1.9, h: 3.2, kind: "syndicate" },
     { x: S.guards[1]!.x + 3.5, z: S.guards[1]!.z + 1, yaw: Math.PI / 2, top: 5.2, w: 1.9, h: 3.2, kind: "syndicate" },
   ];

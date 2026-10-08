@@ -1,5 +1,5 @@
 import { Color, CylinderGeometry, Matrix4, Sphere, SphereGeometry, Vector3, type BufferGeometry, type Object3D } from "three";
-import { PALETTE, HERD_CAP, herdAt, herdCount, herdPlan, herdVariety, type CollisionWorld, type HerdPlan } from "./shared.ts";
+import { PALETTE, HERD_CAP, herdAt, herdCount, herdPlan, herdVariety, separateCapsules, type CollisionWorld, type HerdPlan } from "./shared.ts";
 import { Kit, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { composeInstance, makeInstances, toonMaterial, type InstanceSet } from "../toon.ts";
@@ -34,6 +34,10 @@ export function herdBeastGeometry(lod: Lod): BufferGeometry {
 }
 
 const m4 = new Matrix4();
+/** A beast as a capsule along its heading (m): the tail 1.0 behind its middle, the head and muzzle 1.4 ahead (to 1.75 with this radius), the body and horns this wide either side. */
+const BEAST_BACK = 1.0;
+const BEAST_FRONT = 1.4;
+const BEAST_R = 0.48;
 const pos = { x: 0, z: 0, yaw: 0 };
 
 export class Herds {
@@ -41,11 +45,18 @@ export class Herds {
   readonly count: number;
   private set: InstanceSet | undefined;
   private readonly bob: Float32Array;
+  /** This frame's positions and headings, parted before they are drawn (`separateCapsules`: grazing beasts never stand in each other). */
+  private readonly px: Float64Array;
+  private readonly pz: Float64Array;
+  private readonly yaw: Float64Array;
 
   constructor(root: Object3D, private readonly world: CollisionWorld, seed: number, outlines: boolean, lod: Lod, private readonly track: (x: { dispose(): void }) => void, enabled = true) {
     this.plan = herdPlan(seed);
     this.count = Math.min(HERD_CAP, herdCount(this.plan));
     this.bob = new Float32Array(this.count);
+    this.px = new Float64Array(this.count);
+    this.pz = new Float64Array(this.count);
+    this.yaw = new Float64Array(this.count);
     if (!enabled || this.count === 0) return;
     const mats: Matrix4[] = [];
     const cols: Color[] = [];
@@ -68,6 +79,7 @@ export class Herds {
       m.frustumCulled = false;   // the herds drift; one draw either way
       m.boundingSphere = new Sphere(new Vector3(0, 40, 0), 140);
     }
+    this.update(0); // (the first frame is parted like every other: the matrices above are the bare formula)
   }
 
   /** Writes every animal's matrix for `worldSec` (allocation-free). */
@@ -76,8 +88,15 @@ export class Herds {
     if (!set) return;
     for (let i = 0; i < this.count; i++) {
       herdAt(this.plan, i, worldSec, pos);
+      this.px[i] = pos.x;
+      this.pz[i] = pos.z;
+      this.yaw[i] = pos.yaw;
+    }
+    separateCapsules(this.px, this.pz, this.yaw, BEAST_BACK, BEAST_FRONT, BEAST_R, this.count);
+    for (let i = 0; i < this.count; i++) {
+      const x = this.px[i]!, z = this.pz[i]!;
       const sway = 0.05 * Math.sin(worldSec * 1.3 + this.bob[i]!);
-      composeInstance(m4, pos.x, this.world.terrainHeight(pos.x, pos.z), pos.z, -pos.yaw, 1, 1, 1, 0, sway);
+      composeInstance(m4, x, this.world.terrainHeight(x, z), z, -this.yaw[i]!, 1, 1, 1, 0, sway);
       set.mesh.setMatrixAt(i, m4);
     }
     set.mesh.instanceMatrix.needsUpdate = true;

@@ -6,7 +6,7 @@ import { buildNavGrid } from "./nav.ts";
 import { createRegionWorld, regionLanding } from "./regions.ts";
 import { skylineFrom, skylineStats } from "./skyline.ts";
 import {
-  VESPER_ANCHORS as A, VESPER_MOUNT_SPOTS, VESPER_SITES as S, VESPER_STOCK, VESPER_TERRACE_Y, VESPER_VIEW_BUDGET, VESPER_WALL_SLOPE, createVesperTerrain, createVesperWorld, vesperCliffHeight,
+  CLOISTER, VESPER_ANCHORS as A, VESPER_MOUNT_SPOTS, VESPER_SITES as S, VESPER_STOCK, VESPER_TERRACE_Y, VESPER_VIEW_BUDGET, VESPER_WALL_SLOPE, createVesperTerrain, createVesperWorld, vesperCliffHeight,
   vesperEastFoot, vesperFloorY, vesperNavOptions, vesperObstacles, vesperPlan, vesperProps, vesperRoad, vesperRoadDistance, vesperRoadX, vesperSitePoints, vesperSpawn, vesperWestFoot,
 } from "./vesper.ts";
 
@@ -143,6 +143,22 @@ describe("Vesper Gorge: the world", () => {
     const boulders = world.obstacles.filter((o) => o.tag === "rock" && o.kind === "circle" && Math.abs(o.x) < 60 && o.z > -108 && o.z < 108);
     expect(boulders.length).toBeGreaterThan(30);
     for (const b of boulders) for (const s of vesperSitePoints()) expect(Math.hypot(b.x - s.x, b.z - s.z), `boulder near ${s.id}`).toBeGreaterThan(4);
+  });
+
+  it("the Guild's banners hang on the cloister's piers, in front of their pilasters: never across a pilaster or over an arch", () => {
+    const p = vesperPlan();
+    const pitch = CLOISTER.pierW + CLOISTER.archClear;
+    const z0 = p.cloister.z - p.cloister.hz;
+    const onCloister = p.banners.filter((b) => b.wall !== undefined && Math.abs(b.x - CLOISTER.frontX) < 1);
+    expect(onCloister.length).toBe(2);
+    for (const b of onCloister) {
+      // the whole cloth across one pier's face
+      const zc = z0 + CLOISTER.pierW / 2 + Math.round((b.z - z0 - CLOISTER.pierW / 2) / pitch) * pitch;
+      expect(Math.abs(b.z - zc) + b.w / 2).toBeLessThanOrEqual(CLOISTER.pierW / 2);
+      // its rod's arms reach back to the pier, and it hangs clear of the pilaster (a 0.3 m column 0.12 m out from the face)
+      expect(b.x - (b.wall ?? 0)).toBeCloseTo(CLOISTER.frontX, 5);
+      expect(b.x).toBeGreaterThan(CLOISTER.frontX + 0.12 + 0.3 + 0.05);
+    }
   });
 });
 

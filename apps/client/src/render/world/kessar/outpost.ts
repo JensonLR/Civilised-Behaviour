@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferGeometry, BufferAttribute, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
-import { KESSAR_ANCHORS as A, KESSAR_OUTPOST, PALETTE, outpostPlan, telegraphPoles, type CollisionWorld, type OutpostPiece, type RegionDress, type RegionId } from "@cb/shared";
+import { KESSAR, KESSAR_ANCHORS as A, KESSAR_OUTPOST, PALETTE, kessarPlan, outpostPlan, telegraphPoles, type CollisionWorld, type OutpostPiece, type RegionDress, type RegionId } from "@cb/shared";
 import { Kit, blend, type ColourFn } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { tent } from "../landmarks.ts";
@@ -184,11 +184,13 @@ function rivalPost(k: Kit, world: CollisionWorld, stage: 1 | 2, lod: Lod): void 
   }
 }
 
-/** The steam launch: a hull, a cabin, a funnel and a puff, moored off the landing pier beside the rowing boat. */
-function launch(k: Kit, world: CollisionWorld): void {
-  const x = A.pier.x - 7;
-  const z = A.landing.z + 3;
-  k.setBase(x, world.terrainHeight(x, z) + 0.2, z, 0.25);
+/**
+ * The steam launch: a hull, a cabin, a funnel and a puff, moored alongside the landing pier opposite the rowing boat, bow to the sea, riding the water line
+ * as the boat does. (It was placed off `KESSAR_ANCHORS.pier`, which is the bridge's parapet, not the landing's pier, and sat beached on the sand among the palms.)
+ */
+function launch(k: Kit): void {
+  const { pier, boat } = kessarPlan();
+  k.setBase(pier.x - (boat.x - pier.x), KESSAR.seaLevel, boat.z, Math.PI / 2);
   k.add(new BoxGeometry(5.2, 0.9, 1.7), { at: [0, 0.35, 0], colour: O.launchHull, flat: true });
   k.add(new ConeGeometry(0.85, 1.4, 4, 1), { at: [3.2, 0.35, 0], rot: [0, 0, -Math.PI / 2], scale: [1, 1, 1], colour: O.launchHull, flat: true });
   box(k, [2.1, 0.9, 1.3], [-0.5, 1.2, 0], O.launchTrim);
@@ -228,7 +230,7 @@ export function buildOutpostGeometry(world: CollisionWorld, dress: RegionDress, 
   if (region === "kessar") {
     if (dress.telegraph) telegraph(k, world);
     if (dress.rivalPost > 0) rivalPost(k, world, dress.rivalPost as 1 | 2, lod);
-    if (dress.launch) launch(k, world);
+    if (dress.launch) launch(k);
   }
   k.clearBase();
   return k.build();

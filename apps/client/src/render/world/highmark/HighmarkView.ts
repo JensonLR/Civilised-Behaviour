@@ -13,6 +13,7 @@ import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToo
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { cullPlants } from "../plantCull.ts";
 import type { WaterUniforms } from "../water.ts";
 import { buildHighmarkCloth, createHighmarkAtlas, highmarkClothMaterial } from "./cloth.ts";
 import { buildHighmarkGround, buildHighmarkSkirt } from "./ground.ts";
@@ -83,6 +84,7 @@ export class HighmarkView implements RegionView {
     this.addWater(terrain);
     this.addAmbient();
     this.addStrikeProps();
+    cullPlants(this.root); // (no plant grows through anything built)
     this.count();
   }
 
@@ -332,7 +334,9 @@ export class HighmarkView implements RegionView {
   // ---- the dress: the Society's post on the grass west of the landing (D-056; swapped in place: outpostDress.ts) ------------------------------
 
   applyDress(d: RegionDress): void {
-    if (this.dress.apply(d)) this.count();
+    if (!this.dress.apply(d)) return;
+    cullPlants(this.root); // (the founded post displaces the grass it stands on, and gives it back if it goes)
+    this.count();
   }
 
   // ---- the day ---------------------------------------------------------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import {
   autumnAt,
   WELL,
   getFordStones,
+  ruinPlan,
   classifyObstacle,
   coverDensity,
   flowerPatch,
@@ -108,6 +109,9 @@ export const MENU_STAND = { x: 1.2, z: 1.6, r: 1.6 } as const;
  * `drawnY` is the region's ground AS DRAWN for a simulated height `h` at (x, z) (Hollowmere's terrain fades to its skirt; Kessar's eases to
  * the shore): the distant trees stand on it, not on a height nobody sees. NaN means "no tree here" (the sea).
  */
+/** How far a far tree's crown spreads from its trunk, per unit of its scale (the acacia's flat crown is the widest: 6.3 m across at 1.2). */
+const FAR_CROWN = 2.6;
+
 export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY: (h: number, x: number, z: number) => number = visualHeight): ScatterPlan {
   const plan = emptyPlan();
   const h = (x: number, z: number): number => world.terrainHeight(x, z);
@@ -163,7 +167,8 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
       const kind = treeSpecies(x, z);
       const s = 0.9 + far.next() * 0.55;
       const it = item(x, drawnY(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next());
-      if (Number.isNaN(it.y) || blocked(x, z, 1.2) || (treeDensity < 1 && h01(32, x, z) >= treeDensity)) continue; // (never through a wall out there: Kessar's runs past the playable edge) // (after the draws above, so thinning never shifts the trees that stay)
+      // (never through a wall out there: Kessar's rim runs past the playable edge, and a crown spreads about 2.6 m a unit of scale, so the margin is the crown's, not the trunk's)
+      if (Number.isNaN(it.y) || blocked(x, z, 1.2 + FAR_CROWN * s) || (treeDensity < 1 && h01(32, x, z) >= treeDensity)) continue; // (after the draws above, so thinning never shifts the trees that stay)
       plan[kind].push(it);
     }
   }
@@ -432,10 +437,22 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
 
   // ---- stepping stones ---------------------------------------------------------------------------------------------------------------
   const lt = world.terrain as { waterDepth?: (x: number, z: number) => number };
+  // (the trail fords the stream beside an aqueduct pier, and two stones were set into its foot: its cut-water buttress reaches past its round collider. Those
+  // stones are moved out from the pier, not dropped, so the crossing keeps its stepping stones)
+  const piers = ruinPlan(world.terrain).piers;
   for (const st of getFordStones()) {
-    const surface = h(st.x, st.z) + (lt.waterDepth?.(st.x, st.z) ?? 0);
+    let x = st.x, z = st.z;
+    for (const p of piers) {
+      const d = Math.hypot(x - p.x, z - p.z), clear = p.r * Math.SQRT2 + st.r;
+      if (d < clear && d > 1e-6) {
+        x = p.x + ((x - p.x) / d) * clear;
+        z = p.z + ((z - p.z) / d) * clear;
+      }
+    }
+    if (blocked(x, z, st.r * 0.8)) continue;
+    const surface = h(x, z) + (lt.waterDepth?.(x, z) ?? 0);
     // flat stones set into the stream: their tops a hand above the water
-    plan.flagstones.push(item(st.x, surface - 0.14, st.z, st.yaw, st.r, 1, st.r * (0.85 + h01(30, st.x, st.z) * 0.3), 1, h01(31, st.x, st.z)));
+    plan.flagstones.push(item(x, surface - 0.14, z, st.yaw, st.r, 1, st.r * (0.85 + h01(30, st.x, st.z) * 0.3), 1, h01(31, st.x, st.z)));
   }
   // a flagged apron round the well, and a stepping-stone path to it from the gramophone's corner of the camp
   for (let i = 0; i < 9; i++) {
@@ -443,8 +460,8 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
     const d = WELL.r + 0.55 + h01(32, i) * 0.25;
     const x = WELL.x + Math.cos(a) * d;
     const z = WELL.z + Math.sin(a) * d;
-    if (blocked(x, z, 0.1)) continue;
     const r = 0.3 + h01(33, i) * 0.14;
+    if (blocked(x, z, r + 0.05)) continue; // (the stone's own radius: one stood a fifth of a metre inside the aqueduct's pier)
     plan.flagstones.push(item(x, h(x, z) - 0.09, z, h01(34, i) * 6.28, r, 1, r * 0.9, 0, h01(35, i)));
   }
   const px0 = -1.6;
@@ -454,8 +471,8 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
     const t = (i + 0.5) / n;
     const x = px0 + (WELL.x + 0.9 - px0) * t + (h01(36, i) - 0.5) * 0.3;
     const z = pz0 + (WELL.z - 1.4 - pz0) * t + (h01(37, i) - 0.5) * 0.3;
-    if (blocked(x, z, 0.1)) continue;
     const r = 0.28 + h01(38, i) * 0.14;
+    if (blocked(x, z, r + 0.05)) continue;
     plan.flagstones.push(item(x, h(x, z) - 0.09, z, h01(39, i) * 6.28, r, 1, r * 0.9, 0, h01(40, i)));
   }
   return plan;
