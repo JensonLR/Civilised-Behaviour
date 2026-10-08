@@ -1,7 +1,7 @@
 import { FLAG, type PlayerStateType } from "@cb/shared";
 import { npcKey, type CampaignState, type CastApi, type NpcSpec, type PlayersView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import {
-  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, bandName, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident, wagonName,
+  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, bandName, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident, ringOpen, wagonName,
   type IncidentEvent, type IncidentId, type IncidentRecord, type IncidentResult,
 } from "@cb/shared";
 
@@ -228,7 +228,10 @@ export class Incidents {
     });
     if (n === 0) return; // nobody standing to meet it: wait
     const seed = (this.host.seed ^ Math.imul(Math.max(0, Math.round(c.day)) + 1, 0x9e3779b1)) >>> 0;
-    const at = placeIncident({ x: sx / n, z: sz / n }, this.host.hostiles(), (x, z) => this.host.land(x, z), this.host.bounds(), seed);
+    // (the powder wagon needs room for its spill: the whole ring of kegs on open, dry ground. It stood on Kessar's waterline with three of its kegs in the surf)
+    const land = (x: number, z: number): boolean => this.host.land(x, z);
+    const open = this.id === "powder_wagon" ? (x: number, z: number): boolean => land(x, z) && ringOpen({ x, z }, INCIDENT.wagonRing, land) : land;
+    const at = placeIncident({ x: sx / n, z: sz / n }, this.host.hostiles(), open, this.host.bounds(), seed);
     if (!at) {
       this.id = "none"; // nowhere open near the party: this run stays quiet (never in a wall)
       return;
@@ -256,7 +259,7 @@ export class Incidents {
       const d = Math.max(1, Math.hypot(at.x - cx, at.z - cz));
       const stand = { x: cx + ((at.x - cx) / d) * INCIDENT.collectorStandM, z: cz + ((at.z - cz) / d) * INCIDENT.collectorStandM };
       const back = { x: stand.x + ((at.x - cx) / d) * 2.6, z: stand.z + ((at.z - cz) / d) * 2.6 };
-      this.host.spillKegs?.(this.host.land(back.x, back.z) ? back : at, INCIDENT.collectorKegs, 0.8, 0);
+      this.host.spillKegs?.(this.host.land(back.x, back.z) && ringOpen(back, 0.8, land) ? back : at, INCIDENT.collectorKegs, 0.8, 0);
       this.host.cast.order("incident", { o: "guard", x: stand.x, z: stand.z, r: 3 });
       this.invoice = INCIDENT.collectorDemandS;
       this.horseLabel = bandName(seed);
