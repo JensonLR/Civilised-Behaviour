@@ -350,3 +350,18 @@ html .pause .dispatches ol { margin: 0.3rem 0 0; padding-left: 1.1rem; max-heigh
 .t-top .t-btn .t-ico { width: 62%; height: 62%; }
 .t-top .t-btn .cap { display: none; }
 #hud .goalmark.quiet .label, #hud .goalmark.quiet .mdist { display: none; } /* D-074: over a person whose plate is up: the flag alone */
+
+/* ---- D-084: the casualty column (the gazette), down the left in print, and the Society's request under the line ---- */
+#hud .gazette { position: absolute; left: calc(var(--edge-l) + 0.3rem); top: 36%; width: min(23rem, 40vw); display: flex; flex-direction: column; gap: 0.32rem; pointer-events: none; color: var(--ink); text-shadow: var(--halo); }
+#hud .gazette[hidden] { display: none; }
+#hud .gazette .line { margin: 0; font: italic 0.9rem/1.25 var(--serif); animation: gazetteIn 0.35s ease-out; transition: opacity 0.5s; }
+#hud .gazette .line::before { content: "\2020\00a0"; color: var(--stamp); font-style: normal; }
+#hud .gazette .line.leaving { opacity: 0; }
+@keyframes gazetteIn { from { opacity: 0; transform: translateX(-0.6rem); } }
+@media (prefers-reduced-motion: reduce) { #hud .gazette .line { animation: none; transition: none; } }
+:root[data-motion="reduced"] #hud .gazette .line { animation: none; transition: none; }
+body.touch-ui #hud .gazette { top: 24%; width: min(18rem, 46vw); }
+body.touch-ui #hud .gazette .line { font-size: 0.8rem; }
+#hud .objectives li.request { display: block; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(36rem, 86vw); margin-top: 0.15rem; font: italic 0.8rem/1.2 var(--serif); color: var(--stamp); } /* (under the whole card: the line, its distance and the clock stay together) */
+#hud .objectives li.request.done .text { text-decoration: none; opacity: 1; }
+#hud .objectives li.request.done .text::after { content: " \2014\00a0met"; font-style: normal; } /* (a hex escape eats the space after it) */

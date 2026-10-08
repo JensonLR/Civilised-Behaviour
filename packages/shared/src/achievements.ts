@@ -1,4 +1,4 @@
-import type { CampaignState } from "./campaignTypes.ts";
+import type { CampaignState, ResolutionId } from "./campaignTypes.ts";
 import { stanceOf } from "./factions.ts";
 import { ACHIEVEMENTS, type AchievementId } from "./platform.ts";
 import { powerStance } from "./powers.ts";
@@ -12,6 +12,7 @@ import type { PowersState, SettlementsState } from "./worldTypes.ts";
  */
 type Rule = (c: CampaignState, p: PowersState, s: SettlementsState) => boolean;
 
+const ended = (c: CampaignState, r: ResolutionId): boolean => c.history.some((h) => h.resolution === r);
 const WARM = (st: ReturnType<typeof stanceOf>): boolean => st === "warm" || st === "allied";
 const post = (s: SettlementsState) => Object.values(s.posts).find((x) => x && x.stage !== "none");
 
@@ -36,6 +37,22 @@ export const ACHIEVEMENT_RULES: Readonly<Record<AchievementId, Rule>> = {
   chair_settled: (c) => c.sites.succession !== undefined && c.sites.succession !== "open",
   /** The Ward and all three minor powers are warm toward the Society at the same moment. */
   four_at_once: (c, p) => WARM(stanceOf(c.factions.ward)) && WARM(powerStance(p.minor.brine)) && WARM(powerStance(p.minor.reapers)) && WARM(powerStance(p.minor.choir)),
+  // The later contracts' best endings, read from the ledger's history (twelve entries: the client evaluates on every revision, and an unlock is kept by the storefront).
+  honest_measure: (c) => ended(c, "honest_measure"),
+  miners_out: (c) => ended(c, "dug_out") || ended(c, "blasted_through"),
+  engine_blown: (c) => ended(c, "engine_blown"),
+  claim_staked: (c) => ended(c, "staked") || ended(c, "jumped"),
+  cargo_landed: (c) => ended(c, "landed"),
+  lot_won: (c) => ended(c, "lot_won"),
+  post_held: (c) => ended(c, "post_held"),
+  /** D-052/D-071: the last incident (it is printed in the next paper, and the client evaluates when it is written). */
+  good_samaritan: (c) => c.sites.lastIncident?.result === "helped",
+  powder_salvaged: (c) => c.sites.lastIncident?.result === "salvaged",
+  /** D-084: the last run's bill. */
+  learned_society: (c) => c.sites.lastBill?.met === true,
+  unscheduled_flight: (c) => (c.sites.lastBill?.bill.longest ?? 0) >= 20,
+  museum_piece: (c) => (c.sites.lastBill?.bill.limbs ?? 0) >= 5,
+  umbrella_man: (c) => (c.sites.lastBill?.bill.brolly ?? 0) >= 1,
 };
 
 /** Ids the campaign has earned and `already` does not hold, in table order. Never throws on a hostile or partial state (an unreadable campaign earns nothing). */

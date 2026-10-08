@@ -17,7 +17,7 @@ export const INCIDENT_RESULTS: readonly IncidentResult[] = ["helped", "passed_by
 
 export const INCIDENT = {
   /** Seconds of the run before it may happen, and how long the party must have gone without hostilities. */
-  delayMinS: 60, delayMaxS: 150, calmS: 20,
+  delayMinS: 45, delayMaxS: 110, calmS: 20, // (D-084: sooner, from 60..150: the road should get interesting before the contract does)
   /** How far from the party's centre it is placed (metres), and how far from any hostile it should be. */
   distMin: 22, distMax: 32, clearOfHostiles: 18,
   /** The Society's arrears the courier carries (pounds), and the trust a helped traveller earns with the region's home power. */
@@ -31,8 +31,8 @@ export const INCIDENT = {
    * in, pick it up and throw it clear); the powder is "salvaged" when at least this many kegs are still on the road when the fuse is out, else the road "went up".
    */
   wagonKegs: 5, wagonRing: 1.7, wagonFuseS: 14, wagonSalvage: 3,
-  /** Roughly half of runs are quiet: the weight of "none" against each incident. */
-  noneWeight: 4, entryWeight: 1, // (D-071: 4, from 3, with a fifth incident in the pool: still about half of runs quiet)
+  /** About one run in five is quiet: the weight of "none" against each incident (D-084: 1, from 4; half the runs had nothing happen on the road, and the owner found the contracts stale). */
+  noneWeight: 1, entryWeight: 1,
 } as const;
 
 /**

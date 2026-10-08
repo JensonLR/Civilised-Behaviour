@@ -4,6 +4,7 @@ import type {
 } from "./campaignTypes.ts";
 import { isRegionId } from "./campaignTypes.ts";
 import { INCIDENT_IDS, INCIDENT_RESULTS } from "./incidents.ts";
+import { parseBillRecord } from "./mayhem.ts";
 import { hash3 } from "./rng.ts";
 import { FLAG_FX } from "./powersText.ts";
 import { NEW_RESOLUTIONS, NEW_TEMPLATE_IDS, NEW_TEMPLATE_RESOLUTIONS, isNewTemplate, pluck } from "./regionEndings.ts";
@@ -196,7 +197,14 @@ function parseSites(raw: unknown): SiteLedger {
     succession: oneOf(r.succession, ["open", "elder", "younger", "regency", "usurped", "sold"] as const, "open"),
     ends: parseEnds(r.ends),
     ...parseLastIncident(r.lastIncident),
+    ...parseLastBill(r.lastBill),
   };
+}
+
+/** D-084: the last run's bill, if it is well formed (mayhem.ts validates every field). Never throws. */
+function parseLastBill(raw: unknown): Pick<SiteLedger, "lastBill"> {
+  const r = parseBillRecord(raw, isRegionId);
+  return r ? { lastBill: r } : {};
 }
 
 /** D-052: the last incident, if it is a real one (an unknown id or result, or a bad region, drops it: the field is optional). Never throws. */

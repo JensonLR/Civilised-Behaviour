@@ -97,9 +97,8 @@ const TOON_STEPS = [120, 175, 225, 255] as const;
 let worldRamp: DataTexture | undefined;
 
 /**
- * The 4-step lighting ramp for anything that is not a character (terrain, trees, rocks, camp, props). It holds the same four
- * values as the ramp the character rig uses, so a hill and a hat are lit in the same bands. (rig.ts keeps its own private copy;
- * if the two ever diverge, the world will look lit by a different sun - keep them equal.)
+ * The 4-step lighting ramp, one texture for everything: the characters (rig.ts) and the world (terrain, trees, rocks, camp, props), so a hill and a hat are
+ * lit in the same bands. Banded light and shadow give forms a graphic, illustrated read that flat PBR shading smears out.
  */
 export function sharedToonRamp(): DataTexture {
   if (worldRamp) return worldRamp;

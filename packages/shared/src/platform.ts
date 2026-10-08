@@ -13,6 +13,9 @@ import type { RegionId } from "./campaignTypes.ts";
 export const ACHIEVEMENTS = [
   "first_crossing", "paid_in_full", "bridge_down", "rescued_quim", "wagon_taken", "border_mediated", "outpost_founded", "town_by_neglect", "steam_launch", "all_powers_met",
   "chair_settled", "four_at_once",
+  // (later contracts, incidents and D-084's appetites: appended, so a stored id's index never moves)
+  "honest_measure", "miners_out", "engine_blown", "claim_staked", "cargo_landed", "lot_won", "post_held", "good_samaritan", "powder_salvaged",
+  "learned_society", "unscheduled_flight", "museum_piece", "umbrella_man",
 ] as const;
 export type AchievementId = (typeof ACHIEVEMENTS)[number];
 export const isAchievementId = (v: unknown): v is AchievementId => typeof v === "string" && (ACHIEVEMENTS as readonly string[]).includes(v);

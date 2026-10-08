@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BORDER, FLAG, HOSTAGE, PropKind, hash3, answerParley, openParley, applyOutcome, askingToll, leverageOf, newCampaign, generatePaper, npcKey, weatherAt,
-  HIGHMARK_RESOLUTIONS, TEMPLATES, KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
+  HIGHMARK_RESOLUTIONS, TEMPLATES, TEMPLATE_IDS, KESSAR_ANCHORS, KESSAR_SITES, NPC_CAP, RESOLVED_LINGER_S, SCENARIO, CONVOY_DEPART_S, HOSTAGE_DEADLINE_S, BORDER_ESCALATE_S, TEMPLATE_RESOLUTIONS,
   type BridgeState, type CampaignState, type NewEnding, type ParleyView, type PlayerStateType, type ResolutionId, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView,
 } from "@cb/shared";
 import type { CastApi, CastCount, CastOrder, MountApi, NpcSide, NpcSpec } from "@cb/shared";
@@ -956,7 +956,8 @@ describe("hostile input at every entry point", () => {
       const id = ids[i % 4]!;
       const f = fake(newCampaign(1 + (i % 40)));
       const s = setup(f, id, row("p1", 0, 88), row("p2", 4, 90));
-      const garbage = [undefined, "", "b1", "npc:warden", "__proto__", "prop-1", "prop-2"];
+      // (D-084: "prop-2" on is a garrison's powder store, real powder by a story point: blowing it up beside the convoy's wagon is an ending a client CAN earn, by shooting it)
+      const garbage = [undefined, "", "b1", "npc:warden", "__proto__", "prop-1", "prop-99"];
       for (let k = 0; k < 12; k++) {
         const roll = Math.floor(rnd() * 8);
         if (roll === 0) s.onInteract(rnd() < 0.5 ? "p1" : "p2", me(f, rnd() < 0.5 ? "p1" : "p2"), garbage[Math.floor(rnd() * garbage.length)]);
@@ -1005,5 +1006,33 @@ describe("the runner: a use spec that asks for a CRATE (D-037)", () => {
       expect(s.onInteract("p1", me(f), "crate")).toBe(false);   // empty hands: not a crate press
       expect(f.consumed).toEqual(["crate"]);
     });
+  });
+});
+
+describe("D-084: powder by the post", () => {
+  const storeOf = (id: ScenarioTemplateId, seed = 424242): { x: number; z: number }[] => {
+    const f = fake();
+    f.host.seed = seed;
+    f.players.set("p1", row("p1", 0, 88));
+    const s = new Scenario(f.host, id);
+    s.start();
+    const own = (TEMPLATES[id].props ?? []).filter((p) => p.kind === PropKind.BARREL).length;
+    const kegs = [...f.props.values()].filter((p) => p.kind === PropKind.BARREL);
+    return kegs.slice(own).map((p) => ({ x: p.x, z: p.z }));
+  };
+  it("every contract with an armed party against it at the start keeps two or three kegs by its post; the talk-only ones and the late arrivals none; placed the same way for the same run", () => {
+    const armed: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "claim_race", "smuggling_run"];
+    for (const id of TEMPLATE_IDS) {
+      const kegs = storeOf(id);
+      if (armed.includes(id)) {
+        expect(kegs.length, id).toBeGreaterThanOrEqual(2);
+        expect(kegs.length, id).toBeLessThanOrEqual(3);
+        // a pace apart, in one little stack
+        for (const k of kegs) expect(Math.hypot(k.x - kegs[0]!.x, k.z - kegs[0]!.z), id).toBeLessThan(1.6);
+      } else expect(kegs, id).toEqual([]); // (the mine and the market: nobody armed; the strike and the raid: their parties land later; the engine and the chair opt out)
+    }
+    expect(storeOf("secure_crossing")).toEqual(storeOf("secure_crossing"));
+    const bearings = new Set([1, 2, 3, 4, 5, 6].map((seed) => JSON.stringify(storeOf("hostage_rescue", seed)[0])));
+    expect(bearings.size).toBeGreaterThan(1);
   });
 });

@@ -65,6 +65,8 @@ export class CharacterAnimator {
   private phase = 0;
   private time = 0;
   private expression: ExpressionId = "neutral";
+  private lookTarget = 0;
+  private lookYaw = 0;
   private expressionIntensity = 1;
   private readonly faceAnim: FaceAnimator;
   private lean = 0;
@@ -191,6 +193,16 @@ export class CharacterAnimator {
 
   get currentExpression(): ExpressionId {
     return this.expression;
+  }
+
+  /** D-084: the head turns toward something (radians of yaw relative to the body, + the way the body turns; clamped to what a neck allows), easing there and back. 0 is "eyes front". */
+  setLook(yaw: number): void {
+    this.lookTarget = Number.isFinite(yaw) ? clamp(yaw, -1.05, 1.05) : 0;
+  }
+
+  /** The head's current look (radians), for tests. */
+  get look(): number {
+    return this.lookYaw;
   }
 
   /**
@@ -666,8 +678,9 @@ export class CharacterAnimator {
     if (this.rideBlend > 0.002) applyRidePose(this.rig, this.rideIn, this.rideBlend);
 
     // ---- head: stays level against the torso, glances, leads the turn, takes the mood ---------------------------------------------------------
+    this.lookYaw = damp(this.lookYaw, this.lookTarget, 7, dt);
     j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1) + nb.headPitch;
-    j.head.rotation.y = -(j.torso.rotation.y + j.pelvis.rotation.y) * 0.8 + Math.sin(this.time * 0.6) * 0.05 * (0.4 + idle) + headYaw + this.turn * 0.05 + m.fear * Math.sin(this.time * 6) * 0.05 + nb.headYaw;
+    j.head.rotation.y = -(j.torso.rotation.y + j.pelvis.rotation.y) * 0.8 + Math.sin(this.time * 0.6) * 0.05 * (0.4 + idle) + headYaw + this.turn * 0.05 + m.fear * Math.sin(this.time * 6) * 0.05 + nb.headYaw + this.lookYaw;
     j.head.rotation.z = -(j.pelvis.rotation.z + j.torso.rotation.z) * 0.5 + m.drunk * Math.sin(this.time * 1.3) * 0.16 - bank * 0.4 + nb.headRoll;
 
     // ---- downed: rotate the whole figure onto its back ---------------------------------------------------------------------------------

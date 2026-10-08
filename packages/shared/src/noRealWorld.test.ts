@@ -18,6 +18,7 @@ import * as rivalText from "./rivalText.ts";
 import { HIGHMARK_SIGNS } from "./highmark.ts";
 import { REGIONS } from "./regions.ts";
 import { PEOPLE } from "./peoples.ts";
+import { REQUESTS } from "./mayhem.ts";
 
 /** The world is fictional. This scans the authored text of the campaign layer (and any other authored-text file that exists) for real-world names. */
 const BANNED = [
@@ -50,7 +51,7 @@ describe("no real-world terms in authored text", () => {
   });
 
   it("exported data tables are clean", () => {
-    const all = [...strings(factions.POWERS), ...strings(factions.WARD), ...strings(negText), ...strings(newsText), ...strings(COMPLICATION_HINT), ...HIGHMARK_SIGNS, ...strings(REGIONS.highmark), ...strings(PEOPLE)];
+    const all = [...strings(factions.POWERS), ...strings(factions.WARD), ...strings(negText), ...strings(newsText), ...strings(COMPLICATION_HINT), ...HIGHMARK_SIGNS, ...strings(REGIONS.highmark), ...strings(PEOPLE), ...strings(REQUESTS)];
     for (const id of TEMPLATE_IDS) all.push(TEMPLATES[id].title, TEMPLATES[id].brief);
     expect(all.length).toBeGreaterThan(200);
     for (const s of all) expect(RE.test(s), s).toBe(false);
@@ -108,7 +109,9 @@ describe("no real-world terms in authored text", () => {
       // D-036: Highmark (region two): the plan and its signs, the succession dispute, the chart
       "highmark.ts", "scenarios/succession.ts", "mapData.ts", "outpostText.ts",
       // D-037..D-045: every later template's notices and objectives live in its reducer
-      "scenarios/mineRescue.ts", "scenarios/claimRace.ts", "scenarios/windingEngine.ts", "scenarios/smugglingRun.ts", "scenarios/floodedMarket.ts", "scenarios/reapersStrike.ts", "scenarios/outpostRaid.ts"]) {
+      "scenarios/mineRescue.ts", "scenarios/claimRace.ts", "scenarios/windingEngine.ts", "scenarios/smugglingRun.ts", "scenarios/floodedMarket.ts", "scenarios/reapersStrike.ts", "scenarios/outpostRaid.ts",
+      // D-084: the casualty column, the Butcher's Bill and the Society's requests
+      "mayhem.ts"]) {
       const url = new URL(f, dir);
       expect(existsSync(url), f).toBe(true);
       const hit = readFileSync(url, "utf8").split("\n").findIndex((l) => RE.test(l));

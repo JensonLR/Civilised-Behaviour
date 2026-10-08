@@ -4,6 +4,7 @@ import * as S from "../settings.ts";
 import { ACTION_GROUPS } from "./controlsInfo.ts";
 import { Modal, h } from "./modal.ts";
 import { buildPadSection, type PadSection } from "./SettingsPad.ts";
+import { eraseMyRecords } from "../net/Session.ts";
 
 /**
  * The settings screen ("Standing Orders"): four tabs, every control a real form control (range, checkbox, select, button) so it works with
@@ -429,6 +430,55 @@ export class SettingsSheet {
     preview.addEventListener("click", () => previewCaption("[musket shot, left]"));
     p.appendChild(h("div", { class: "row-end" }, preview));
     this.slider(p, { label: "Screen shake", min: 0, max: 100, step: 5, get: () => Math.round(S.getShake() * 100), set: (v) => S.setShake(v / 100), fmt: (v) => (v === 0 ? "None" : `${v}%`), note: "How far the camera jolts when you are hit or blown about. Reduce motion caps it further." });
+    this.buildRecords(p);
+  }
+
+  /** Whether a game is running in this page (then the records cannot be erased: the room would save the membership straight back). Set once by boot. */
+  set inGame(on: boolean) {
+    this.playing = on;
+    this.refreshErase();
+  }
+  private playing = false;
+  private eraseBtn?: HTMLButtonElement;
+  private eraseNote?: HTMLElement;
+  private eraseArmed = 0;
+
+  /** Your records: erase this browser's campaigns from the server and its identity from here (PRIVACY_DATA_MAP). Two presses, and only at the front door. */
+  private buildRecords(p: HTMLElement): void {
+    const id = `e${++uid}`;
+    const btn = h("button", { type: "button", id, class: "small" }, "Erase my records");
+    btn.addEventListener("click", () => void this.onErase());
+    this.row(p, "Your records", id, btn, " ");
+    const note = btn.parentElement?.querySelector<HTMLElement>("p.note");
+    note?.setAttribute("role", "status");
+    this.eraseBtn = btn;
+    this.eraseNote = note ?? undefined;
+    this.refreshErase();
+  }
+
+  private refreshErase(msg?: string): void {
+    if (!this.eraseBtn || !this.eraseNote) return;
+    this.eraseBtn.disabled = this.playing;
+    this.eraseBtn.textContent = this.eraseArmed > Date.now() ? "Press again to erase" : "Erase my records";
+    this.eraseNote.textContent = msg ?? (this.playing
+      ? "Leave the expedition first (from the front door): a game in progress would write your membership straight back."
+      : "Removes you from every campaign this browser has played (a campaign with nobody left in it is deleted) and forgets this browser's identity and expedition list. Settings are kept. It cannot be undone.");
+  }
+
+  private async onErase(): Promise<void> {
+    if (this.playing || !this.eraseBtn) return;
+    if (this.eraseArmed <= Date.now()) {
+      this.eraseArmed = Date.now() + 5000;
+      this.refreshErase();
+      window.setTimeout(() => this.refreshErase(), 5100);
+      return;
+    }
+    this.eraseArmed = 0;
+    this.eraseBtn.disabled = true;
+    const r = await eraseMyRecords();
+    this.eraseBtn.disabled = this.playing;
+    if (r.ok) this.refreshErase(r.campaigns === 0 ? "Done. The Society held nothing of yours; this browser has forgotten its identity." : `Done. You have been removed from ${r.campaigns} campaign${r.campaigns === 1 ? "" : "s"}, and this browser has forgotten its identity.`);
+    else this.refreshErase(r.reason === "busy" ? "The Society's clerks are busy. Try again in a minute." : r.reason === "offline" ? "The Society's offices cannot be reached. Nothing was erased; try again when online." : "The request was refused. Nothing was erased.");
   }
 }
 

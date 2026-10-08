@@ -25,6 +25,7 @@ import {
   type HitEvent,
   type LimbId,
   type SeverEvent,
+  type WeaponId,
   type PlayerStateType,
   type Rng,
   type ZoneId,
@@ -74,6 +75,8 @@ export interface HitInfo {
   by?: string;
   /** 0..1, blasts only: how hard it threw the body up (carried to the clients on the hit event; cosmetic). */
   lift?: number;
+  /** D-084: what dealt it (the gazette and the Society's requests tell a sabre from an umbrella). */
+  weapon?: WeaponId;
 }
 
 interface Revive {

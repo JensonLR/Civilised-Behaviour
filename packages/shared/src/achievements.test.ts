@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ACHIEVEMENT_RULES, evaluateAchievements } from "./achievements.ts";
-import type { CampaignState, ResolutionId, ScenarioTemplateId } from "./campaignTypes.ts";
+import type { CampaignState, RegionId, ResolutionId, ScenarioTemplateId } from "./campaignTypes.ts";
+import { newBill } from "./mayhem.ts";
 import { applyOutcome, newCampaign } from "./factions.ts";
 import { ACHIEVEMENTS, type AchievementId } from "./platform.ts";
 import { ACHIEVEMENT_TEXT } from "./platformText.ts";
@@ -10,7 +11,7 @@ import { deliverTo, newSettlements, techOf } from "./settlement.ts";
 import type { PowersState, SettlementsState } from "./worldTypes.ts";
 
 const zero = { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 };
-const play = (c: CampaignState, scenario: ScenarioTemplateId, resolution: ResolutionId, extra: { bridge?: "intact" | "collapsed"; region?: "highmark" } = {}): CampaignState =>
+const play = (c: CampaignState, scenario: ScenarioTemplateId, resolution: ResolutionId, extra: { bridge?: "intact" | "collapsed"; region?: RegionId } = {}): CampaignState =>
   applyOutcome(c, { scenario, resolution, toll: 40, paid: resolution === "paid" ? 20 : 0, bridge: extra.bridge ?? "intact", tally: zero, brokePromise: false, seconds: 30, region: extra.region });
 const SEED = 17;
 const fresh = (): { c: CampaignState; p: PowersState; s: SettlementsState } => ({ c: newCampaign(SEED), p: newPowers(SEED), s: newSettlements() });
@@ -54,7 +55,31 @@ const SCRIPT: Record<AchievementId, () => { c: CampaignState; p: PowersState; s:
     const minor = Object.fromEntries(Object.entries(f.p.minor).map(([k, v]) => [k, { ...v, ...warm }])) as PowersState["minor"];
     return { ...f, c: { ...f.c, factions: { ...f.c.factions, ward: { ...f.c.factions.ward, ...warm } } }, p: { ...f.p, minor } };
   },
+  honest_measure: () => ({ ...fresh(), c: play(newCampaign(SEED), "reapers_strike", "honest_measure", { region: "highmark" }) }),
+  miners_out: () => ({ ...fresh(), c: play(newCampaign(SEED), "mine_rescue", "blasted_through", { region: "vesper" }) }),
+  engine_blown: () => ({ ...fresh(), c: play(newCampaign(SEED), "winding_engine", "engine_blown", { region: "vesper" }) }),
+  claim_staked: () => ({ ...fresh(), c: play(newCampaign(SEED), "claim_race", "jumped", { region: "vesper" }) }),
+  cargo_landed: () => ({ ...fresh(), c: play(newCampaign(SEED), "smuggling_run", "landed", { region: "saltmarket" }) }),
+  lot_won: () => ({ ...fresh(), c: play(newCampaign(SEED), "flooded_market", "lot_won", { region: "saltmarket" }) }),
+  post_held: () => ({ ...fresh(), c: play(newCampaign(SEED), "outpost_raid", "post_held") }),
+  good_samaritan: () => {
+    const f = fresh();
+    return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastIncident: { id: "wounded_traveller", result: "helped", day: 1, region: "kessar" } } } };
+  },
+  powder_salvaged: () => {
+    const f = fresh();
+    return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastIncident: { id: "powder_wagon", result: "salvaged", day: 1, region: "kessar" } } } };
+  },
+  learned_society: () => withBill({}, true),
+  unscheduled_flight: () => withBill({ flings: 1, longest: 21, longestWho: "Carter Obadiah Plume" }),
+  museum_piece: () => withBill({ limbs: 5 }),
+  umbrella_man: () => withBill({ brolly: 1, foes: 1 }),
 };
+
+function withBill(over: Partial<ReturnType<typeof newBill>>, met = false): { c: CampaignState; p: PowersState; s: SettlementsState } {
+  const f = fresh();
+  return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastBill: { day: 1, region: "kessar", bill: { ...newBill(), ...over }, request: "flight", met, spectacle: 0 } } } };
+}
 
 describe("achievements", () => {
   it("a fresh campaign earns nothing", () => {
@@ -62,8 +87,9 @@ describe("achievements", () => {
     expect(evaluateAchievements(c, p, s, [])).toEqual([]);
   });
 
-  it("every one of the twelve ids is reachable in a scripted campaign, and has text", () => {
-    expect(ACHIEVEMENTS).toHaveLength(12);
+  it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084)", () => {
+    expect(ACHIEVEMENTS).toHaveLength(25);
+    expect(ACHIEVEMENTS.slice(0, 12)).toEqual(["first_crossing", "paid_in_full", "bridge_down", "rescued_quim", "wagon_taken", "border_mediated", "outpost_founded", "town_by_neglect", "steam_launch", "all_powers_met", "chair_settled", "four_at_once"]); // (append-only: a stored id never moves)
     for (const id of ACHIEVEMENTS) {
       const { c, p, s } = SCRIPT[id]();
       expect(evaluateAchievements(c, p, s, []), id).toContain(id);

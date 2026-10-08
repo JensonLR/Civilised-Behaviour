@@ -1,5 +1,5 @@
 import {
-  FLAG, PropKind, SCENARIO, createWeather, hash3, isNpcKey, npcKey, weatherAt,
+  FLAG, PropKind, SCENARIO, WEAPON, createWeather, hash3, isNpcKey, npcKey, weatherAt,
   type BridgeState, type CampaignState, type CasualtyTally, type Leverage, type ParleyKind, type ParleyStep, type ParleyView, type PlayerStateType,
   type ScenarioFx, type ScenarioInput, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView, type RivalPresence,
 } from "@cb/shared";
@@ -134,8 +134,47 @@ export class Scenario {
       const id = this.host.spawnProp(p.kind, p.x, p.z);
       if (id !== undefined) this.props.set(p.id, { id, x: p.x, z: p.z });
     }
+    this.powderStore(c.day);
     for (const f of def.opening?.(this.s) ?? []) this.fx(f);
     this.publish(true);
+  }
+
+  /**
+   * D-084: powder by the post. The largest armed party a contract sets against you (a garrison, the Syndicate's guards, deserters, raiders) keeps a small store of kegs
+   * beside its post, three for a party of four or more: a shot into it is the loudest answer to any contract that has a fight in it, and a chain of three is the Ordnance
+   * Board's commission. Placed on the first open bearing about three metres from the group's centre (deterministic per run); a contract with nobody armed against you
+   * (the mine, the market) gets none. The kegs are ordinary props: anybody's stray round can set them off.
+   */
+  powderStore(day: number): { x: number; z: number }[] {
+    if (this.def.noPowderStore) return [];
+    const groups = new Map<string, NpcSpec[]>();
+    for (const sp of this.specs) {
+      if (sp.group.startsWith("late:") || sp.weapon === WEAPON.FISTS || (sp.side !== "ward" && sp.side !== "rival" && sp.side !== "outlaw")) continue;
+      if (!this.def.observe.hostileGroups.includes(sp.group)) continue;
+      const g = groups.get(sp.group);
+      if (g) g.push(sp);
+      else groups.set(sp.group, [sp]);
+    }
+    let best: NpcSpec[] | undefined;
+    for (const g of groups.values()) if (!best || g.length > best.length) best = g;
+    if (!best || best.length < 2) return [];
+    const cx = best.reduce((a, sp) => a + sp.post.x, 0) / best.length;
+    const cz = best.reduce((a, sp) => a + sp.post.z, 0) / best.length;
+    const n = best.length >= 4 ? 3 : 2;
+    const open = (x: number, z: number): boolean => this.host.cast.openAt?.(x, z) ?? true;
+    const a0 = (hash3(this.host.seed, day, 0xb0d) / 4294967296) * Math.PI * 2;
+    for (let k = 0; k < 8; k++) {
+      const a = a0 + (k * Math.PI) / 4;
+      const x = cx + Math.cos(a) * 3.2;
+      const z = cz + Math.sin(a) * 3.2;
+      // a little triangle (or a pair) of kegs, a pace apart, on open ground every one
+      const spots = [{ x, z }, { x: x + Math.cos(a + 1.6) * 0.75, z: z + Math.sin(a + 1.6) * 0.75 }, { x: x + Math.cos(a) * 0.7, z: z + Math.sin(a) * 0.7 }].slice(0, n);
+      if (!spots.every((p) => open(p.x, p.z))) continue;
+      const placed: { x: number; z: number }[] = [];
+      for (const p of spots) if (this.host.spawnProp(PropKind.BARREL, p.x, p.z) !== undefined) placed.push(p);
+      return placed;
+    }
+    return [];
   }
 
   // ---- entry points from the room (all validated here) -----------------------------------------------------------------------------------------
@@ -317,6 +356,16 @@ export class Scenario {
       this.publish(false);
     }
     if (!this.despawned && lingerDone(this.s)) this.despawnAll();
+  }
+
+  /** D-084: the run is still being played (started, not yet resolved): what happens now goes on its bill. */
+  get live(): boolean {
+    return this.started && this.s.phase !== "resolved";
+  }
+
+  /** D-084: something the view carries from outside the template (the Society's request) changed: publish again. */
+  touch(): void {
+    if (this.started) this.publish(true);
   }
 
   dispose(): void {

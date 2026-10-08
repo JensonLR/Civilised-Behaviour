@@ -100,6 +100,7 @@ export class ObjectiveTracker {
       }
       li.classList.toggle("done", !!o.done);
       li.classList.toggle("optional", !!o.optional);
+      li.classList.toggle("request", id === "society"); // (D-084: the Society's commission, shown under the line in play)
       li.classList.toggle("current", id === cur); // (D-063: the HUD shows this one line; the whole list is on the pause sheet)
       const sr = li.children[1] as HTMLElement;
       const text = li.children[2] as HTMLElement;

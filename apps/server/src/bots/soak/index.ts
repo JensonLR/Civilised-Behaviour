@@ -106,7 +106,7 @@ function topUp(room: WorldRoom, target: number, serial: { n: number }): void {
 function syncBotWorld(bot: Bot, keys: WeakMap<Bot, string>, region: RegionId, seed: number): void {
   const st = bot.room.state;
   if (!st.campaign || !st.settlements) return;
-  const opts = regionWorldOpts(st.campaign, st.settlements, region);
+  const opts = regionWorldOpts(st.campaign, st.settlements, region, st.powers);
   const key = `${region}|${worldKey(opts)}`;
   if (keys.get(bot) === key) return;
   keys.set(bot, key);

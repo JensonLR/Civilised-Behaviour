@@ -33,8 +33,41 @@ export function serverUrl(): string {
   return `${proto}://${location.hostname}:2567`;
 }
 
-function httpUrl(): string {
+export function httpUrl(): string {
   return serverUrl().replace(/^ws/, "http");
+}
+
+/**
+ * Self-service erasure (PRIVACY_DATA_MAP): the server forgets this browser's memberships (every campaign it was in; a campaign left with nobody goes), then this browser forgets
+ * its identity and its list of expeditions (the settings stay: they are preferences, not records). Offered only at the front door: a room in play would save the membership
+ * straight back. Never throws.
+ */
+export async function eraseMyRecords(): Promise<{ ok: true; campaigns: number } | { ok: false; reason: "offline" | "busy" | "refused" }> {
+  let token: string | null = null;
+  try {
+    token = localStorage.getItem("cb.identity");
+  } catch {
+    // storage blocked: nothing of ours was kept here either
+  }
+  let campaigns = 0;
+  if (token) {
+    try {
+      const res = await fetch(`${httpUrl()}/privacy/erase`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identity: token }) });
+      if (res.status === 429) return { ok: false, reason: "busy" };
+      if (!res.ok) return { ok: false, reason: "refused" };
+      const body = (await res.json()) as { campaigns?: unknown };
+      campaigns = typeof body.campaigns === "number" && Number.isFinite(body.campaigns) ? Math.max(0, Math.round(body.campaigns)) : 0;
+    } catch {
+      return { ok: false, reason: "offline" };
+    }
+  }
+  try {
+    localStorage.removeItem("cb.identity");
+    localStorage.removeItem("cb.expeditions");
+  } catch {
+    // (blocked storage holds nothing to clear)
+  }
+  return { ok: true, campaigns };
 }
 
 /** Stable per-browser identity until the Steam adapter supplies a real one (PlatformIdentity). */
@@ -107,13 +140,23 @@ export class Session {
   }
 
   /** What the collision world depends on, read from the two replicated JSON strings (the server calls the same function): bridge, outpost stage, telegraph (D-035), for the region the room stands in (D-056). */
-  static worldOptsOf(st: { campaign?: string; settlements?: string; region?: string }): RegionWorldOpts {
-    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "", isRegionId(st.region) ? st.region : "hollowmere");
+  static worldOptsOf(st: { campaign?: string; settlements?: string; region?: string; powers?: string }): RegionWorldOpts {
+    return regionWorldOpts(st.campaign ?? "", st.settlements ?? "", isRegionId(st.region) ? st.region : "hollowmere", st.powers ?? "");
   }
 
   /** The world's identity: the Game rebuilds the collision world and the scenery only when it changes. */
-  static worldKeyOf(st: { campaign?: string; settlements?: string; region?: string }): string {
-    return worldKey(Session.worldOptsOf(st));
+  private static readonly keyMemo: { c?: string; s?: string; r?: string; p?: string; key: string } = { key: "" };
+
+  static worldKeyOf(st: { campaign?: string; settlements?: string; region?: string; powers?: string }): string {
+    // asked every frame: the sections are parsed again only when one of them changes
+    const m = Session.keyMemo;
+    if (m.c === st.campaign && m.s === st.settlements && m.r === st.region && m.p === st.powers && m.key !== "") return m.key;
+    m.c = st.campaign;
+    m.s = st.settlements;
+    m.r = st.region;
+    m.p = st.powers;
+    m.key = worldKey(Session.worldOptsOf(st));
+    return m.key;
   }
 
   static worldFor(region: string | undefined, seed: number, opts: RegionWorldOpts | BridgeState): CollisionWorld {

@@ -3,9 +3,6 @@ import {
   Group,
   Mesh,
   MeshToonMaterial,
-  DataTexture,
-  NearestFilter,
-  RedFormat,
   Matrix4,
   ShaderMaterial,
   Skeleton,
@@ -21,7 +18,7 @@ import { encodeSpec, type CharacterSpec } from "../spec.ts";
 import { buildHead } from "./head.ts";
 import { morphOutlineMaterial } from "./faceMorph.ts";
 import { buildFace, clearFaceCaches, inertFace, irisColour, type FaceBuild, type FaceParts } from "./faceRig.ts";
-import { outlineMaterial } from "./outline.ts";
+import { outlineMaterial, sharedToonRamp } from "./outline.ts";
 import { hairSwayHullMaterial, hairSwayMaterial, type HairSwayUniform } from "./hairSway.ts";
 import { mergeRigid, posedBounds, type RigidPart } from "./merged.ts";
 import { PartBuilder, singe, type Lod } from "./parts.ts";
@@ -110,17 +107,6 @@ const geometryCache = new Map<string, BufferGeometry | null>();
 const MAX_CACHE = 1536; // main + outline hull per bone per live spec per level (22 villagers at three levels need ~800; a 512 cap made people rebuild as you crossed the village)
 let sharedMaterial: MeshToonMaterial | undefined;
 
-/** A 4-step lighting ramp: banded light and shadow give forms a graphic, illustrated read that flat PBR shading smears out. */
-let ramp: DataTexture | undefined;
-function toonRamp(): DataTexture {
-  if (ramp) return ramp;
-  const tex = new DataTexture(new Uint8Array([120, 175, 225, 255]), 4, 1, RedFormat);
-  tex.minFilter = NearestFilter;
-  tex.magFilter = NearestFilter;
-  tex.needsUpdate = true;
-  return (ramp = tex);
-}
-
 /** D-078: the bones whose geometry is clothes (a sleeve, a coat, trousers, a skirt): their vertices are woven unless skin or leather. */
 const CLOTH_BONES = /^(pelvis|torso|upperArm|foreArm|upperLeg|lowerLeg)/;
 
@@ -158,7 +144,7 @@ const WEAVE_BODY = /* glsl */ `
 `;
 
 function makeClothMaterial(): MeshToonMaterial {
-  const m = new MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() });
+  const m = new MeshToonMaterial({ vertexColors: true, gradientMap: sharedToonRamp() }); // (the world's own ramp: a hill and a hat are lit in the same bands)
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", `#include <common>\n${WEAVE_VERT_HEAD}`)
@@ -406,7 +392,7 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   // ---- face (animated parts, separate small meshes; a far-crowd rig gets a placeholder that costs nothing) ----------------------
   const headAttachment = attachments.find((a) => a.bone === "head")!;
   const irisC = irisColour(spec);
-  const faceCtx = { spec, P, skin, hairC, accent, irisC, ramp: toonRamp(), toonMaterial: material, headMesh: () => headAttachment.mesh };
+  const faceCtx = { spec, P, skin, hairC, accent, irisC, ramp: sharedToonRamp(), toonMaterial: material, headMesh: () => headAttachment.mesh };
   // The face parts are built the first time the figure is near enough to show them (a far-crowd rig never builds them); the FaceParts object is the same one
   // throughout (filled in place), so references to `rig.face` stay valid. Their geometry and materials are shared between rigs (faceRig.ts).
   const faceParts: FaceParts = inertFace();

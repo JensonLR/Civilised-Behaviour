@@ -1,7 +1,7 @@
 import { Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
-import { FLAG, WEAPONS, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
+import { FLAG, WEAPONS, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
@@ -95,6 +95,12 @@ export class CharacterActor {
   heldGrip: { L?: number | undefined; R?: number | undefined } = {};
   private currentLook = "";
   private painTimer = 0;
+  /** D-084: a passing mood (fear, triumph, surprise, a gritted shot) and how long it holds; where the head is looking, and for how long. */
+  private mood: ExpressionId = "neutral";
+  private moodTimer = 0;
+  private lookX = 0;
+  private lookZ = 0;
+  private lookTimer = 0;
   private ragdoll: Ragdoll | undefined;
   /** The weapon in the hands: model, recoil, blows (weapons/WeaponRig.ts). Rebuilt with the rig. */
   private weapons!: WeaponRig;
@@ -367,7 +373,20 @@ export class CharacterActor {
     } else this.visFacing = pose.facing;
     this.rig.root.rotation.y = this.visFacing;
     this.painTimer = Math.max(0, this.painTimer - dt);
-    this.anim.setExpression(downed || this.painTimer > 0 ? "pain" : "neutral");
+    this.moodTimer = Math.max(0, this.moodTimer - dt);
+    this.lookTimer = Math.max(0, this.lookTimer - dt);
+    // D-084: the face in play. Pain wins; then a passing mood (a scream of panic, a grin over a fallen enemy, the start at a blast); a raised sight narrows the eyes.
+    if (downed || this.painTimer > 0) this.anim.setExpression("pain");
+    else if (this.moodTimer > 0) this.anim.setExpression(this.mood, Math.min(1, 0.4 + this.moodTimer));
+    else if ((pose.flags & FLAG.AIMING) !== 0) this.anim.setExpression("angry", 0.55);
+    else this.anim.setExpression("neutral");
+    // and the head turns to what drew it (a blast, a shout), unless that is behind the shoulder or the body is down
+    let look = 0;
+    if (this.lookTimer > 0 && !downed) {
+      const rel = wrapAngle(Math.atan2(-(this.lookX - pose.x), -(this.lookZ - pose.z)) - this.visFacing);
+      if (Math.abs(rel) < 2.3) look = rel;
+    }
+    this.anim.setLook(look);
     this.lastVx = pose.vx;
     this.lastVy = pose.vy ?? 0;
     this.lastVz = pose.vz;
@@ -488,6 +507,31 @@ export class CharacterActor {
   /** A free-standing copy of a limb in its current pose, to fly off as debris (see CharacterRig.detachLimb). */
   detachLimb(limb: LimbId): Group | undefined {
     return this.rig.detachLimb(limb);
+  }
+
+  /** Moods by how much they matter: a weaker one never cuts a stronger short (a soldier who panicked does not grin at the next shot). */
+  static readonly MOOD_RANK: Readonly<Partial<Record<ExpressionId, number>>> = { fear: 4, triumph: 3, disgust: 2, surprise: 2, laugh: 2, angry: 1 };
+
+  /** D-084: a passing mood held for `seconds` (the face eases back after). Ignored while a stronger one still holds. */
+  cue(mood: ExpressionId, seconds: number): void {
+    const rank = CharacterActor.MOOD_RANK[mood] ?? 0;
+    if (this.moodTimer > 0 && (CharacterActor.MOOD_RANK[this.mood] ?? 0) > rank) return;
+    const same = this.mood === mood && this.moodTimer > 0;
+    this.mood = mood;
+    this.moodTimer = same ? Math.max(this.moodTimer, seconds) : seconds;
+  }
+
+  /** D-084: the head turns toward the world point (x, z) for `seconds`. */
+  lookAt(x: number, z: number, seconds: number): void {
+    if (!Number.isFinite(x + z)) return;
+    this.lookX = x;
+    this.lookZ = z;
+    this.lookTimer = Math.max(this.lookTimer, seconds);
+  }
+
+  /** The passing mood, if one holds (tests). */
+  get currentMood(): ExpressionId | undefined {
+    return this.moodTimer > 0 ? this.mood : undefined;
   }
 
   setExpression(id: ExpressionId): void {

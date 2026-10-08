@@ -142,6 +142,7 @@ export class CombatView {
     room.onMessage("boom", (e: BoomEvent) => this.onBoom(e));
     room.onMessage("hitmark", (e: HitMarkEvent) => {
       this.hud.hitMarker(e.zone, e.down, e.sever);
+      if (e.down) this.actors().get(this.session.sessionId)?.body.cue("triumph", 2.2); // (D-084: you grin over the one you dropped)
       this.controls.rumble("hit", e.down ? 1 : 0.6);
     });
   }
@@ -397,6 +398,7 @@ export class CombatView {
     const isMe = e.id === this.session.sessionId;
     if (e.id.startsWith("cannon:")) return this.onCannonShot(e);
     const actor = this.actors().get(e.id)?.body;
+    actor?.cue("angry", 0.8); // (D-084: teeth set as the shot goes)
     if (e.m) {
       if (isMe && this.pendingBlows > 0) {
         this.pendingBlows--;
@@ -441,6 +443,15 @@ export class CombatView {
 
   private onBoom(e: BoomEvent): void {
     this.fx.explosion(e.x, e.y, e.z, e.radius);
+    // D-084: everyone in earshot starts and looks at it
+    for (const a of this.actors().values()) {
+      const p = a.body.root.position;
+      const d = Math.hypot(p.x - e.x, p.z - e.z);
+      if (d > 0.5 && d < 16) {
+        a.body.cue("surprise", 1.3);
+        a.body.lookAt(e.x, e.z, 2.6);
+      }
+    }
     this.stage.decals.blast(e.x, e.z, Math.max(0.9, e.radius * 0.55)); // the scorch stays on the field (it is the first thing the battlefield's aftermath is made of)
     if (this.audio) this.audio.blast("explosion", e.x, e.y, e.z);
     else sfx.sound("explosion", { x: e.x, y: e.y, z: e.z });

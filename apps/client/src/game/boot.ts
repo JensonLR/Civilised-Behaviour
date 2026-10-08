@@ -27,6 +27,7 @@ import { isDormantSave } from "../ui/menuLogic.ts";
 import type { SaveStatus } from "../net/saveStatus.ts";
 import { SoundPlaque } from "../ui/SoundPlaque.ts";
 import { Game } from "./Game.ts";
+import { settingsSheet } from "../ui/Settings.ts";
 
 /** Resolves after the browser has painted what was just added to the page (so a heavy step that follows cannot delay it). */
 const afterPaint = (delayMs = 0): Promise<void> => new Promise((r) => requestAnimationFrame(() => setTimeout(r, delayMs)));
@@ -225,6 +226,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     session = s;
     rememberExpedition(s, name); // (before the Game: its orientation card reads this campaign's entry)
     game = new Game(stage, s, controls, hud, debugEl, link);
+    settingsSheet().inGame = true; // (the records cannot be erased under a room that would save them straight back)
     if (demoClosed) game.endDemo();
     showHud(s);
     s.room.onLeave((code) => {

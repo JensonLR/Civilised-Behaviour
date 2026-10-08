@@ -44,7 +44,7 @@ export interface SettlementsState { v: 1; posts: Partial<Record<RegionId, Outpos
 export type SettlementEventKind = "founded" | "delivered" | "promoted" | "demoted" | "raided" | "abandoned" | "road" | "telegraph" | "launch";
 export interface SettlementEvent { kind: SettlementEventKind; day: number; region: RegionId; stage: OutpostStage; name: string }
 /** What the COLLISION world depends on (both sides build the same world from these). */
-export interface RegionWorldOpts { bridge?: BridgeState; outpost?: OutpostStage; telegraph?: boolean }
+export interface RegionWorldOpts { bridge?: BridgeState; outpost?: OutpostStage; telegraph?: boolean; /** The Syndicate's own post at Kessar (absent: none; never 0, so a world without it keeps its old key). */ rivalPost?: 1 | 2 }
 /** What the VIEW draws (no collision). */
 export interface RegionDress { outpost: OutpostStage; rivalPost: 0 | 1 | 2; road: 0 | 1 | 2; telegraph: boolean; launch: boolean; name: string }
 export const FOUNDATION_CRATES = 4, DAYS_IDLE_CAP = 3, POWERS_JSON_MAX = 3072, SETTLEMENTS_JSON_MAX = 2048;
