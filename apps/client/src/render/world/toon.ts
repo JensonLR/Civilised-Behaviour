@@ -21,6 +21,7 @@ import {
 import { PALETTE } from "@cb/shared";
 import { WORLD_INK, instancedWorldOutline, outlineSettings, sharedToonRamp, worldOutlineMaterial, type OutlineDisplace, type WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms } from "./atmosphere.ts";
+import { LAMP_REACH, LAMP_SLOTS, lampLight } from "./lampLight.ts";
 
 /** Time in seconds, shared by every wind-animated material. One object, updated once per frame (no allocation). */
 export const worldTime = { value: 0 };
@@ -411,7 +412,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     shader.uniforms.uPush = pushers;
     Object.assign(shader.uniforms, atmoUniforms);
     if (wind === "village") Object.assign(shader.uniforms, villageUniforms);
-    if (fire) Object.assign(shader.uniforms, fireLight);
+    if (fire) Object.assign(shader.uniforms, fireLight, lampLight);
     if (patch) Object.assign(shader.uniforms, patch.uniforms);
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nvarying vec3 vWPos;${opts.tinted ? "\nattribute float aTint;" : ""}${wind === "cloth" || wind === "village" ? "\nattribute float aSway;" : ""}${wind === "village" ? `\n${VILLAGE_HEAD}` : ""}${vpatch ? `\n${vpatch.head}` : ""}${season ? "\nattribute vec2 aSeason; varying vec2 vSeason;" : ""}`)
@@ -446,7 +447,7 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
     }
     let fs = shader.fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? "uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol;" : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}${contact ? "\nuniform sampler2D uGround; uniform vec4 uGroundRect;" : ""}`,
+      `#include <common>\nvarying vec3 vWPos;${season ? "\nvarying vec2 vSeason; uniform vec3 uAutumn0; uniform vec3 uAutumn1; uniform vec3 uAutumn2;" : ""}\nuniform float uTime; uniform float uWet; uniform vec3 uSheen; uniform vec3 uSunDirW; uniform vec3 uSunColW; uniform float uRain; uniform float uMist;\n${lite ? "" : MIST_HEAD}${fire ? `uniform vec3 uFirePos; uniform float uFireI; uniform vec3 uFireCol; uniform vec4 uLamps[${LAMP_SLOTS}]; uniform vec3 uLampCol;` : ""}\n${patch?.head ?? ""}${puddles ? PUDDLE_HEAD : ""}${grain ? `${grainFull ? "\n#define G_FULL" : ""}${GRAIN_HEAD}` : ""}${fade ? FADE_HEAD : ""}${contact ? "\nuniform sampler2D uGround; uniform vec4 uGroundRect;" : ""}`,
     );
     if (fade) fs = fs.replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>\n${FADE_BODY}`);
     // Wet ground darkens (all presets: one multiply), and on flat terrain the wettest hollows become pools that mirror the sky.
@@ -472,6 +473,21 @@ export function toonMaterial(opts: ToonOptions = {}): MeshToonMaterial {
           float fa = uFireI * (1.0 - smoothstep(1.0, 9.5, fd));
           fa = floor(fa * 3.0 + 0.5) / 3.0;
           outgoingLight += uFireCol * fa * diffuseColor.rgb * 0.62;
+        }
+        {
+          // the lanterns' pools (lampLight.ts): the nearest few, banded like the fire, only on what faces the flame
+          float la = 0.0;
+          for (int i = 0; i < ${LAMP_SLOTS}; i++) {
+            vec4 L = uLamps[i];
+            if (L.w <= 0.0) continue;
+            vec3 lv = L.xyz + vViewPosition;   // (the lamp is in view space already: no matrix per lamp)
+            float d = length(lv);
+            if (d >= ${LAMP_REACH.toFixed(2)}) continue;
+            float f = 1.0 - d / ${LAMP_REACH.toFixed(2)};
+            la += L.w * f * f * smoothstep(-0.15, 0.35, dot(normal, lv) / max(d, 0.01));   // (falls off about as the square: a pool, not a painted disc)
+          }
+          la = floor(min(la, 1.0) * 4.0 + 0.5) / 4.0;   // (four toon bands: dim at the rim, bright under the flame)
+          outgoingLight += uLampCol * la * diffuseColor.rgb * 0.6;
         }
         #include <opaque_fragment>`,
       );

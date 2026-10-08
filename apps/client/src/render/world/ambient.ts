@@ -18,6 +18,7 @@ import { PALETTE, Rng } from "@cb/shared";
 import { LANTERN_SWING } from "./camplife.ts";
 import { atmoUniforms } from "./atmosphere.ts";
 import { WIND_HEAD, worldTime } from "./toon.ts";
+import { setLamps } from "./lampLight.ts";
 
 /**
  * Ambient life, all of it driven by the GPU from the clock: pollen drifting by day and fireflies blinking at dusk (one Points draw
@@ -398,6 +399,7 @@ export function buildSmoke(sources: readonly SmokeSource[], u: AmbientUniforms):
 
 /** Soft additive glows at the lanterns' positions; they brighten with `uLamp` (a candle by day, a lamp at dusk). */
 export function buildLanternGlow(positions: readonly Vector3[], u: AmbientUniforms, lit: readonly number[] = []): Points | undefined {
+  setLamps(positions, lit, u.uLamp); // (the same lanterns light what is round them: lampLight.ts)
   if (positions.length === 0) return undefined;
   const geo = new BufferGeometry();
   geo.setAttribute("position", new BufferAttribute(new Float32Array(positions.flatMap((p) => [p.x, p.y, p.z])), 3));
@@ -407,6 +409,8 @@ export function buildLanternGlow(positions: readonly Vector3[], u: AmbientUnifor
     transparent: true,
     depthWrite: false,
     blending: AdditiveBlending,
+    // (an emitter, not a lit surface: through the scene's ACES curve the halo was squeezed to a dim smear that rain and mist swallowed, and at night a lamp read as a speck)
+    toneMapped: false,
     uniforms: { ...shared(u), glow: { value: new Color(PALETTE.camp.glowLantern) } },
     vertexShader: /* glsl */ `
       ${WIND_HEAD}
@@ -415,17 +419,19 @@ export function buildLanternGlow(positions: readonly Vector3[], u: AmbientUnifor
       varying float vA;
       void main() {
         vec4 mv = viewMatrix * vec4(position + windCloth(position, ${LANTERN_SWING.toFixed(2)}), 1.0);
+        // (drawn 35 cm toward the eye: at the flame itself the lamp's own housing hid the middle of the glow, and most of a lantern read as unlit)
+        mv.xyz *= max(0.0, 1.0 - 0.35 / max(length(mv.xyz), 0.5));
         gl_Position = projectionMatrix * mv;
         float flick = 0.94 + 0.06 * sin(uTime * 7.0 + position.x * 3.0 + position.z * 5.0);
         vA = max(aBase, 0.14 + 0.86 * uLamp) * flick;
-        gl_PointSize = clamp((0.9 + 2.6 * max(uLamp, aBase * 0.7)) * 190.0 / max(-mv.z, 1.0), 4.0, 90.0);
+        gl_PointSize = clamp((0.9 + 3.4 * max(uLamp, aBase * 0.7)) * 190.0 / max(-mv.z, 1.0), 4.0, 110.0);
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 glow; varying float vA;
       void main() {
         float r = length(gl_PointCoord - 0.5) * 2.0;
-        float core = 1.0 - smoothstep(0.0, 0.18, r);
-        float halo = (1.0 - smoothstep(0.1, 1.0, r)) * 0.5;
+        float core = 1.0 - smoothstep(0.0, 0.16, r);
+        float halo = 0.7 * pow(1.0 - smoothstep(0.12, 1.0, r), 1.3);   // (broad: a halo carries well beyond the lamp's head)
         float a = (core + halo) * vA;
         gl_FragColor = vec4(glow, a);
         #include <tonemapping_fragment>
