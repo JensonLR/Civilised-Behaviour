@@ -159,14 +159,17 @@ function cloister(k: Kit, world: CollisionWorld, lod: Lod, glows: { x: number; y
     const zc = C.recordsZ1 + 2.4 + i * 4.8;
     const px = (C.backX + C.pierIn) / 2;
     box(k, [C.pierIn - C.backX, 0.06, 4.7], [px, g(px, zc) + 0.02, zc], i % 2 ? P.strataBuff : P.strataBone);
-    // a lantern hung from the beam at every second bay: the corridor is lit
+    // a lantern on a wrought bracket from the back wall at every second bay: the corridor is lit. (It hung from the roof's beam, and the roof is lifted while the
+    // viewer is in the gallery: the chains were left hanging from nothing.) The chain runs from the bracket's end into the lamp's iron cap, which sits on the glass.
     if (i % 2 === 0) {
-      const ly = g(px, zc) + 2.7;
-      // (the chain runs from the roof's beam into the lamp's iron cap, which sits on the glass: nothing hangs clear of what holds it)
-      k.limb([px, gy + H, zc], [px, ly + 0.16, zc], 0.012, 0.012, P.iron, 3);
-      k.add(new CylinderGeometry(0.05, 0.09, 0.07, 6), { at: [px, ly + 0.14, zc], colour: P.iron, flat: true });
-      k.add(new SphereGeometry(0.13, 6, 4), { at: [px, ly, zc], colour: P.glowLamp });
-      glows.push({ x: px, y: ly, z: zc, lit: 0.45 });   // (a lamp under a roof burns bright even at noon, so the gallery is seen to be lit from the forecourt)
+      const lx = C.backX + 0.7;
+      const ly = g(lx, zc) + 2.7;
+      k.limb([C.backX - 0.05, ly + 0.62, zc], [lx + 0.04, ly + 0.62, zc], 0.025, 0.02, P.iron, 4);
+      k.limb([C.backX - 0.05, ly + 0.15, zc], [C.backX + 0.45, ly + 0.6, zc], 0.018, 0.015, P.iron, 4);   // (its brace)
+      k.limb([lx, ly + 0.63, zc], [lx, ly + 0.16, zc], 0.012, 0.012, P.iron, 3);
+      k.add(new CylinderGeometry(0.05, 0.09, 0.07, 6), { at: [lx, ly + 0.14, zc], colour: P.iron, flat: true });
+      k.add(new SphereGeometry(0.13, 6, 4), { at: [lx, ly, zc], colour: P.glowLamp });
+      glows.push({ x: lx, y: ly, z: zc, lit: 0.45 });   // (a lamp under a roof burns bright even at noon, so the gallery is seen to be lit from the forecourt)
     }
   }
   // the roof over the corridor (flat stone, a parapet each side): its own piece, lifted while the viewer is in the gallery

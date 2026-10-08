@@ -1,9 +1,9 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Group, HemisphereLight, SphereGeometry, type Material, type Mesh, type MeshToonMaterial, type Object3D } from "three";
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, Group, SphereGeometry, type Material, type Mesh, type MeshToonMaterial, type Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { roomAt, saltmarketLevel, type RoomRect } from "@cb/shared";
 import type { Lod } from "./flora.ts";
 import { Kit, blend, type ColourFn, type V3 } from "./kit.ts";
-import { makeSolid } from "./toon.ts";
+import { makeSolid, roomFill } from "./toon.ts";
 import type { WorldInkClass } from "@cb/procedural/three";
 
 /**
@@ -145,9 +145,11 @@ export function interiorShell(k: Kit, s: ShellSpec, st: ShellStyle, lod: Lod, ma
       if (lod) for (const sz of [-1, 1]) bx(k, [depth, top + 0.3, 0.08], [off, (top - 0.3) / 2, sz * (Math.max(door + 1.0, 2.2) / 2 - 0.04)], st.trim);
     }
   }
-  // a lantern hung inside, a hand off the ceiling: its glass is the warm point the view lights at dusk
+  // a lantern hung inside from a tie beam across the room at the wall head (not from the ceiling: the roof is lifted while the viewer is inside, and the lamp must not hang from nothing);
+  // its glass is the warm point the view lights at dusk
   const lampAt: V3 = [-hx * 0.15, y0 + Math.min(wallH - 0.5, 2.3), 0];
-  k.limb([lampAt[0], y1 - 0.05, lampAt[2]], [lampAt[0], lampAt[1] + 0.2, lampAt[2]], 0.012, 0.012, st.strap, 3);
+  bx(k, [0.14, 0.16, hz * 2 - 0.02], [lampAt[0], y1 - 0.13, 0], st.trim);
+  k.limb([lampAt[0], y1 - 0.2, lampAt[2]], [lampAt[0], lampAt[1] + 0.1, lampAt[2]], 0.012, 0.012, st.strap, 3);
   k.add(new SphereGeometry(0.13, 6, 4), { at: lampAt, colour: st.lamp });
   const m = k.worldPoint(hx, y0, 0);
   marks.push({ id: `${s.id}.door`, leads: "interior", leaf: true, x: m[0], y: m[1], z: m[2], yaw: at.yaw, width: door });
@@ -364,39 +366,80 @@ export class RoofKits {
 
 /**
  * The warm light of a room the viewer stands in. With the roof lifted, a narrow room's inner faces are in the walls' own shadow and lit by the sky's hemisphere alone, which at a toon ramp's floor reads
- * as near-black (a records room and a customs house were unreadable in the stills: D-038 follow-up). Every region that has walkable interiors adds ONE of these: a hemisphere light in the region's own
- * lamp and lime-wash colours, at intensity 0 outside a room and eased up to `peak` inside one (the light is always in the scene, so the shaders never recompile when the viewer walks in). Eased, never
- * snapped; `update` takes the world clock the views already get. Presentation only: it moves no collision and no server state.
+ * as near-black (a records room and a customs house were unreadable in the stills: D-038 follow-up; Highmark's hall and Hollowmere's at night). Every region with walkable interiors has ONE of these: a fill
+ * in the region's own lamp and lime-wash colours, from above and from the floor as a hemisphere light's, added by the world toon shader (`roomFill`, toon.ts) to what lies inside the room's box and to
+ * nothing else (it was a hemisphere light, and lit the whole region: at night, stepping into a room lit the gorge like day). Strength 0 outside a room, eased up to `peak` inside one, never snapped;
+ * `update` takes the world clock the views already get. The shaders never recompile when the viewer walks in. Presentation only: it moves no collision and no server state. (The characters' own
+ * materials do not take it: a body in a lit room is lit as it is outside.)
  */
 export class InteriorFill {
-  readonly light: HemisphereLight;
   private k = 0;
   private target = 0;
   private last = Number.NaN;
+  private readonly sky: Color;
+  private readonly ground: Color;
+  private roomId: string | undefined;
 
   /** `sky` is the colour of the light from above (the lime-wash the lamp throws on a wall), `ground` the bounce from the floor; both PALETTE colours of the region. */
-  constructor(parent: Object3D, sky: number, ground: number, private readonly peak: number) {
-    this.light = new HemisphereLight(sky, ground, 0);
-    this.light.name = "interior-fill";
-    parent.add(this.light);
+  constructor(sky: number, ground: number, private readonly peak: number) {
+    this.sky = new Color(sky);
+    this.ground = new Color(ground);
   }
 
-  /** Once a frame (from `setViewer`): whether the viewer is inside a room now. */
-  setInside(inside: boolean): void {
-    this.target = inside ? 1 : 0;
+  /**
+   * Once a frame (from `setViewer`): the room the viewer is in (its rect, and the heights from its floor to its top), or undefined outside. The box is kept while the fill eases out.
+   * The rect is the room's inside; the box reaches a hand past it, so the inner faces of its walls are in it and their outer faces are not.
+   */
+  setRoom(room: RoomRect | undefined, yFrom = 0, yTo = 0): void {
+    if (!room) {
+      this.target = 0;
+      return;
+    }
+    this.target = 1;
+    roomFill.uRoomA.value.set(room.x, room.z, Math.cos(room.yaw), Math.sin(room.yaw));
+    roomFill.uRoomB.value.set(room.hx + ROOM_REACH, room.hz + ROOM_REACH, yFrom, yTo);
+    roomFill.uRoomSky.value.copy(this.sky);
+    roomFill.uRoomGround.value.copy(this.ground);
+  }
+
+  /**
+   * Once a frame (a region view's `setViewer`): the room the viewer is in by id, as `RoofSet.setViewer` returns it, in the region's `level`. The box is worked out only when the room changes: from just
+   * under its floor to its top (the building's highest point), over the ground at its middle.
+   */
+  enter(id: string | undefined, level: { rooms: readonly RoomRect[]; buildings: readonly { id: string; floor: number; height: number }[] }, world: { terrainHeight(x: number, z: number): number }): void {
+    if (id === this.roomId) return;
+    this.roomId = id;
+    const room = id === undefined ? undefined : level.rooms.find((r) => r.id === id);
+    if (!room) return this.setRoom(undefined);
+    const b = level.buildings.find((q) => q.id === id);
+    const g = world.terrainHeight(room.x, room.z);
+    this.setRoom(room, g + (b?.floor ?? 0) - 0.15, g + (b?.height ?? 6) + 0.2);
   }
 
   /** 0..1: how far the fill has come up. */
   get amount(): number {
     return this.k;
   }
+  /** The strength the shader burns it at now. */
+  get strength(): number {
+    return this.peak * this.k;
+  }
 
-  /** Eases toward the target (about a third of a second) and sets the light. `t` is a clock in seconds. */
+  /** Eases toward the target (about a third of a second) and sets the shader's strength. `t` is a clock in seconds. */
   update(t: number): void {
     const dt = Number.isNaN(this.last) ? 1 : Math.min(0.25, Math.max(0, t - this.last));
     this.last = t;
     this.k += (this.target - this.k) * (1 - Math.exp(-8 * dt));
     if (Math.abs(this.target - this.k) < 0.002) this.k = this.target;
-    this.light.intensity = this.peak * this.k;
+    roomFill.uRoomK.value = this.peak * this.k;
+  }
+
+  /** A region view's dispose: the fill goes out with it (the uniforms are shared by every region). */
+  dispose(): void {
+    this.target = this.k = 0;
+    roomFill.uRoomK.value = 0;
   }
 }
+
+/** How far past a room's inside its fill reaches (m): its walls' inner faces, never their outer ones. */
+const ROOM_REACH = 0.06;

@@ -369,7 +369,7 @@ function cottage(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   windowOn(k, lod, 0, 1, -0.3, b.hz, y0 + 1.35, 0.55, 0.62, st.shutter, seed + 5, true);
   windowOn(k, lod, 0, -1, 0.4, -b.hz, y0 + 1.35, 0.55, 0.62, st.shutter, seed + 6, false);
   gableRoof(kr, lod, b, y1, 1.55, 0.5, st.roof, seed + 10, st.wall);   // (the roof is its own piece: the cutaway lifts it)
-  chimney(k, lod, -b.hx * 0.4, 0.6, y1 - 0.3, y1 + 2.0, seed + 11);
+  chimney(kr, lod, -b.hx * 0.4, 0.6, y1 - 0.3, y1 + 2.0, seed + 11);   // (the stack rises from the roof: it goes with it when the cutaway lifts it)
   // the room: a table, a stool and a bed on the floor (dark; you see them from the door)
   if (lod) {
     bx(k, [0.9, 0.06, 0.7], [-0.4, y0 + 0.74, -0.8], timberC(W.vlTimberLight, seed), undefined);
@@ -680,11 +680,12 @@ function mill(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   windowOn(k, lod, 0, 1, 0.4, b.hz, y0 + 2.9, 0.5, 0.6, st.shutter, seed + 6, false);
   // the hoist door in the gable, with a beam and pulley
   gableRoof(kr, lod, b, y1, 1.9, 0.5, st.roof, seed + 10, st.wall);
-  bx(k, [0.06, 0.9, 0.7], [b.hx + 0.02, y1 + 0.6, 0], W.vlDoor);
-  k.limb([b.hx - 0.2, y1 + 1.2, 0], [b.hx + 1.0, y1 + 1.25, 0], 0.05, 0.05, W.vlTimber, 5);
-  k.limb([b.hx + 0.95, y1 + 1.2, 0], [b.hx + 0.95, y1 + 0.2, 0], 0.01, 0.01, C.rope, 3);
-  bx(k, [0.16, 0.14, 0.14], [b.hx + 0.95, y1 + 0.1, 0], W.vlHay);
-  chimney(k, lod, -b.hx * 0.5, -b.hz * 0.4, y1 - 0.4, y1 + 2.1, seed + 12);
+  // (the hoist and the chimney hang off the gable and rise from the roof: they are drawn with it, so the cutaway lifts them together)
+  bx(kr, [0.06, 0.9, 0.7], [b.hx + 0.02, y1 + 0.6, 0], W.vlDoor);
+  kr.limb([b.hx - 0.2, y1 + 1.2, 0], [b.hx + 1.0, y1 + 1.25, 0], 0.05, 0.05, W.vlTimber, 5);
+  kr.limb([b.hx + 0.95, y1 + 1.2, 0], [b.hx + 0.95, y1 + 0.2, 0], 0.01, 0.01, C.rope, 3);
+  bx(kr, [0.16, 0.14, 0.14], [b.hx + 0.95, y1 + 0.1, 0], W.vlHay);
+  chimney(kr, lod, -b.hx * 0.5, -b.hz * 0.4, y1 - 0.4, y1 + 2.1, seed + 12);
   // inside: the runner stone on its bed, a hopper above it, sacks
   cyl(k, 0.8, 0.8, 0.28, [0.2, fl + 0.14, 0.9], (p, _n, out) => blend(out, W.rock, W.rockPale, 0.3 + 0.3 * f01(seed, Math.floor(p.x * 7))), 12);
   cyl(k, 0.06, 0.06, 0.45, [0.2, fl + 0.5, 0.9], C.iron, 5);

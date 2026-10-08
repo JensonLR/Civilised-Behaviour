@@ -72,6 +72,27 @@ describe("D-076: nothing in a region floats", () => {
   }
 });
 
+describe("D-076: nothing floats when a room's roof is lifted (the cutaway, D-038)", () => {
+  // the roofs of the rooms are their own meshes ("roofs", Hollowmere's "village-roofs"); the cutaway drops one at a time, but a piece can only rest on its own building's roof, so dropping them all at once finds every piece that would hang
+  for (const id of REGION_IDS) {
+    it(`${id}: with every room's roof gone, nothing that stood on one is left hanging (a chimney goes with its roof)`, () => {
+      const world = createRegionWorld(id, 7);
+      const view = createRegionView(id, new Scene(), world, PRESETS.medium, sun, 7);
+      let roofs = 0;
+      view.root.traverse((o) => {
+        if (o.name === "roofs" || o.name === "village-roofs") {
+          o.visible = false;
+          roofs++;
+        }
+      });
+      expect(roofs, `${id} has its room roofs as their own mesh`).toBeGreaterThan(0);
+      const fl = floatingPieces(view.root, world.terrain);
+      view.dispose();
+      expect(fl.length, describeFloaters(fl)).toBe(0);
+    }, 120_000);
+  }
+});
+
 describe("D-076: nothing on a prop, a mount, a wagon or the cannon floats", () => {
   const audit = (root: Object3D): Floater[] => {
     root.updateMatrixWorld(true);

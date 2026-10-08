@@ -158,7 +158,7 @@ export class WorldView {
     sun: Vector3,
   ) {
     this.root.name = "world";
-    this.fill = new InteriorFill(this.root, PALETTE.world.vlPlaster, PALETTE.world.vlTimberLight, INTERIOR_FILL);
+    this.fill = this.track(new InteriorFill(PALETTE.world.vlPlaster, PALETTE.world.vlTimberLight, INTERIOR_FILL));
     setToonLite(detail.liteShading);
     if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
@@ -463,7 +463,8 @@ export class WorldView {
 
   /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7), and the room's fill comes up. */
   setViewer(x: number, z: number): void {
-    this.fill.setInside(this.roofSet?.setViewer(villageLevel().rooms, x, z) !== undefined);
+    const level = villageLevel();
+    this.fill.enter(this.roofSet?.setViewer(level.rooms, x, z), level, this.world);
   }
   /** The roof set (for tests and tools). */
   get roofs(): RoofSet | undefined {

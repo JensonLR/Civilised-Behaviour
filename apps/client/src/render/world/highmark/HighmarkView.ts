@@ -67,7 +67,7 @@ export class HighmarkView implements RegionView {
     seed = 7,
   ) {
     this.root.name = "world";
-    this.fill = new InteriorFill(this.root, PALETTE.highmark.chalk, PALETTE.highmark.timberLight, INTERIOR_FILL);
+    this.fill = this.track(new InteriorFill(PALETTE.highmark.chalk, PALETTE.highmark.timberLight, INTERIOR_FILL));
     this.dress = new OutpostDress(this.root, world, detail.outlines, "highmark");
     setToonLite(detail.liteShading);
     if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
@@ -248,7 +248,8 @@ export class HighmarkView implements RegionView {
 
   /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7), and the room's fill comes up. */
   setViewer(x: number, z: number): void {
-    this.fill.setInside(this.roofSet?.setViewer(highmarkLevel().rooms, x, z) !== undefined);
+    const level = highmarkLevel();
+    this.fill.enter(this.roofSet?.setViewer(level.rooms, x, z), level, this.world);
   }
   /** The doors the view drew, and the roof set (for tests and tools). */
   get doorMarks(): readonly DoorMark[] {

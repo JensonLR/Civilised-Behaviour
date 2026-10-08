@@ -212,9 +212,9 @@ function stiltHouse(k: Kit, b: SaltmarketBox, gy: number, style: HouseStyle, lb:
       box(k, [0.2, 0.2, 0.2], [b.hx + 1.5, eaveY - 1.5, b.hz * 0.5], P.iron);
     }
     if (style === "customs") {
-      // a brass lantern on the ridge and a plaque of the Constabulary's stamp over the door
-      k.limb([0, eaveY + rise + 0.05, 0], [0, eaveY + rise + 0.5, 0], 0.05, 0.05, P.iron, 4);
-      k.add(new SphereGeometry(0.2, 6, 5), { at: [0, eaveY + rise + 0.62, 0], colour: P.glowLantern });
+      // a brass lantern on the ridge (drawn with the roof: the cutaway lifts them together) and a plaque of the Constabulary's stamp over the door
+      roofKit.limb([0, eaveY + rise + 0.05, 0], [0, eaveY + rise + 0.5, 0], 0.05, 0.05, P.iron, 4);
+      roofKit.add(new SphereGeometry(0.2, 6, 5), { at: [0, eaveY + rise + 0.62, 0], colour: P.glowLantern });
       box(k, [0.08, 0.5, 1.6], [b.hx + 0.04, fy + 0.08 + Math.min(wallH - 0.2, lb.doorH + 0.5), 0], P.brass);
     }
   } else if (lb.kind === "sealed") {

@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Color, Object3D, Scene, Vector3, type HemisphereLight } from "three";
+import { Color, Scene, Vector3, type HemisphereLight } from "three";
 import { PALETTE, REGION_IDS, createRegionWorld, highmarkLevel, kessarLevel, saltmarketLevel, vesperLevel, villageLevel, type RegionId } from "@cb/shared";
 import { PRESETS } from "../../render/Stage.ts";
 import { createRegionView, type RegionView } from "./regionView.ts";
 import { InteriorFill, type RoofSet } from "./rooms.ts";
+import { roomFill } from "./toon.ts";
 
 /**
  * THE CUTAWAY (D-038, docs/LEVEL_PLAN.md section 4, rule 7): while the local player is inside a room (`roomAt(rooms, x, z, 0.3)`) the view lifts that building's roof so the third-person camera never sits under a
@@ -77,56 +78,91 @@ describe("the roof over the room the player is in is lifted, and only that one",
   });
 });
 
-describe("a room the viewer stands in is lit (Vesper's and the Saltmarket's interiors read as near-black in the stills: D-038 follow-up; Highmark's hall and Hollowmere's at night: D-089)", () => {
-  const fillOf = (view: RegionView): HemisphereLight => view.root.getObjectByName("interior-fill") as HemisphereLight;
+describe("a room the viewer stands in is lit, and only that room (Vesper's and the Saltmarket's interiors read as near-black in the stills: D-038 follow-up; Highmark's hall and Hollowmere's at night)", () => {
   const settle = (view: RegionView, from: number): number => {
     let t = from;
     for (let i = 0; i < 40; i++) view.update(t += 0.1);
     return t;
   };
+  // the shader's own test of a world point against the fill's box (toon.ts ROOM_BODY), on the CPU
+  const inBox = (x: number, y: number, z: number): boolean => {
+    const a = roomFill.uRoomA.value, b = roomFill.uRoomB.value;
+    const dx = x - a.x, dz = z - a.y;
+    return Math.abs(dx * a.z + dz * a.w) < b.x && Math.abs(-dx * a.w + dz * a.z) < b.y && y > b.z && y < b.w;
+  };
   // the fill's sky colour per region (a palette colour, not a literal). Kessar has none: its one room, the toll booth, is open to the sky and reads under its own lamp at night
   const SKY: Partial<Record<RegionId, number>> = { vesper: PALETTE.vesper.companyCream, saltmarket: PALETTE.saltmarket.salt, highmark: PALETTE.highmark.chalk, hollowmere: PALETTE.world.vlPlaster };
-  for (const [id, sky] of Object.entries(SKY) as [RegionId, number][]) {
-    it(`${id}: a warm fill in the region's own palette is off outside a room, comes up inside every room, and goes out again`, () => {
+  for (const id of REGION_IDS) {
+    const sky = SKY[id];
+    it(`${id}: ${sky === undefined ? "no fill" : "a warm fill in the region's own palette is off outside a room, comes up inside every room over its floor and nowhere outside its walls, and goes out again"}`, () => {
       const view = viewOf(id);
-      const fill = fillOf(view);
-      expect(fill, `${id} has an interior fill`).toBeDefined();
-      expect(fill.isHemisphereLight).toBe(true);
-      expect(fill.color.getHex()).toBe(new Color(sky).getHex());
+      const world = createRegionWorld(id, 7);
+      // (no light for the whole region: a hemisphere light lit the gorge like day at night when the viewer stepped into a room)
+      let hemis = 0;
+      view.root.traverse((o) => void ((o as HemisphereLight).isHemisphereLight && hemis++));
+      expect(hemis).toBe(0);
       let t = settle(view, 0);
-      expect(fill.intensity, "outside: nothing").toBe(0);
+      expect(roomFill.uRoomK.value, "outside: nothing").toBe(0);
       expect(LEVELS[id].rooms.length).toBeGreaterThan(0);
       for (const room of LEVELS[id].rooms) {
         view.setViewer!(room.x, room.z);
         t = settle(view, t);
-        expect(fill.intensity, `${room.id}: inside, readable`).toBeGreaterThan(0.8);
+        if (sky === undefined) {
+          expect(roomFill.uRoomK.value, `${room.id}: no fill`).toBe(0);
+          continue;
+        }
+        expect(roomFill.uRoomK.value, `${room.id}: inside, readable`).toBeGreaterThan(0.8);
+        expect(roomFill.uRoomSky.value.getHex()).toBe(new Color(sky).getHex());
+        const b = LEVELS[id].buildings.find((q) => q.id === room.id)!;
+        const floorY = world.terrainHeight(room.x, room.z) + b.floor;
+        const c = Math.cos(room.yaw), sn = Math.sin(room.yaw);
+        // (a point at local (lx, lz) of the rect, as `roomAt` reads one)
+        const at = (lx: number, lz: number): [number, number] => [room.x + lx * c - lz * sn, room.z + lx * sn + lz * c];
+        for (const [lx, lz] of [[0, 0], [room.hx - 0.05, room.hz - 0.05], [-(room.hx - 0.05), room.hz - 0.05]] as const) {
+          const [x, z] = at(lx, lz);
+          expect(inBox(x, floorY + 0.01, z), `${room.id}: the floor at ${lx.toFixed(1)},${lz.toFixed(1)} is lit`).toBe(true);
+          expect(inBox(x, floorY + 1.5, z), `${room.id}: the room at head height is lit`).toBe(true);
+        }
+        // the inner face of a wall is lit; its outer face (a wall's thickness out) and the ground beyond are not
+        const [ix, iz] = at(room.hx, 0);
+        expect(inBox(ix, floorY + 1, iz), `${room.id}: the inner face of the wall`).toBe(true);
+        for (const out of [0.25, 1.5, 4]) {
+          const [ox, oz] = at(room.hx + out, 0);
+          expect(inBox(ox, floorY + 1, oz), `${room.id}: ${out} m outside its wall`).toBe(false);
+          const [px, pz] = at(0, room.hz + out);
+          expect(inBox(px, floorY + 1, pz), `${room.id}: ${out} m outside its side wall`).toBe(false);
+        }
         view.setViewer!(0, 1000);
         t = settle(view, t);
-        expect(fill.intensity, `${room.id}: outside again`).toBe(0);
+        expect(roomFill.uRoomK.value, `${room.id}: outside again`).toBe(0);
       }
       view.dispose();
+      expect(roomFill.uRoomK.value, "a disposed view leaves no fill burning").toBe(0);
     }, 60_000);
   }
 
   it("InteriorFill eases (never snaps), reaches its peak, and a long frame cannot jump it", () => {
-    const parent = new Object3D();
-    const f = new InteriorFill(parent, 0xffffff, 0x808080, 2);
-    expect(parent.children).toContain(f.light);
+    const f = new InteriorFill(0xffffff, 0x808080, 2);
+    const room = { id: "r", x: 3, z: 4, hx: 2, hz: 1.5, yaw: 0.5 };
     f.update(0);
-    expect(f.light.intensity).toBe(0);
-    f.setInside(true);
+    expect(f.strength).toBe(0);
+    f.setRoom(room, 0, 3);
     f.update(0.016);
-    const first = f.light.intensity;
+    const first = f.strength;
     expect(first).toBeGreaterThan(0);
     expect(first).toBeLessThan(0.5); // (one 16 ms frame: a fraction of the way)
+    expect(roomFill.uRoomK.value).toBe(first);
     f.update(5); // a 5 s hitch is clamped to a quarter second
-    expect(f.light.intensity).toBeGreaterThan(first);
-    expect(f.light.intensity).toBeLessThan(2);
+    expect(f.strength).toBeGreaterThan(first);
+    expect(f.strength).toBeLessThan(2);
     for (let t = 5; t < 8; t += 0.05) f.update(t);
-    expect(f.light.intensity).toBe(2);
+    expect(f.strength).toBe(2);
     expect(f.amount).toBe(1);
-    f.setInside(false);
+    f.setRoom(undefined);
+    f.update(8.016);
+    expect(roomFill.uRoomA.value.x, "the box is kept while the fill eases out").toBe(3);
     for (let t = 8; t < 11; t += 0.05) f.update(t);
-    expect(f.light.intensity).toBe(0);
+    expect(f.strength).toBe(0);
+    expect(roomFill.uRoomK.value).toBe(0);
   });
 });
