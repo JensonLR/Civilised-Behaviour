@@ -33,9 +33,11 @@ export const STENCIL_TEXT = [
   ["SOCIETY PROPERTY", "NOT FOR NATIVES"],
   ["FRAGILE:", "THE COLONEL'S DIGNITY"],
 ] as const;
-export const ATLAS_H = STENCIL_Y + 256;
-/** Bunting swatches: four flat colours (Society red, cream, gilt, river blue) in the free strip beside the first signboard. */
-export const swatchUv = (i: number): Rect => rectUv(432 + i * 18 + 3, 303, 10, 10);
+/** The bunting's swatches have a strip of their own at the foot (they were painted at the end of the first signboard, whose board showed them). */
+const SWATCH_Y = STENCIL_Y + 256;
+export const ATLAS_H = SWATCH_Y + 32;
+/** Bunting swatches: four flat colours (Society red, cream, gilt, river blue), 32 px blocks sampled at their middles (no bleed into a neighbour). */
+export const swatchUv = (i: number): Rect => rectUv(i * 32 + 8, SWATCH_Y + 8, 16, 16);
 
 export type Rect = readonly [number, number, number, number];
 /** A canvas rectangle (x, y, w, h in pixels from the top-left) as a UV rectangle (u0, v0, u1, v1; v = 1 is the top). */
@@ -43,8 +45,6 @@ const rectUv = (x: number, y: number, w: number, h: number): Rect => [x / ATLAS_
 
 /** UV rectangle of the pinned survey map. */
 export const MAP_UV: Rect = rectUv(0, MAP_Y, ATLAS_W, MAP_H);
-/** A small opaque white patch: cloth (shirts, hammock) samples it so its vertex colour is the whole colour. UV centre. */
-export const WHITE_UV = [0.955, 1 - 279 / ATLAS_H] as const;
 
 /** UV rectangle (u0, v0, u1, v1) of the pennant. v = 1 is the top of the canvas. */
 export const FLAG_UV: Rect = rectUv(0, 0, ATLAS_W, FLAG_H);
@@ -653,13 +653,8 @@ function drawSwatches(ctx: CanvasRenderingContext2D): void {
   const cols = [PALETTE.camp.flagCloth, PALETTE.camp.flagMark, PALETTE.world.vlHeraldGold, PALETTE.world.vlHeraldBlue];
   cols.forEach((c, i) => {
     ctx.fillStyle = cssHex(c);
-    ctx.fillRect(432 + i * 18, 300, 16, 16);
+    ctx.fillRect(i * 32, SWATCH_Y, 32, 32);
   });
-}
-
-function drawWhitePatch(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = cssHex(0xffffff);
-  ctx.fillRect(470, 268, 30, 22);
 }
 
 /** Draws the atlas and returns the texture; needs a DOM (never called from unit tests). */
@@ -672,7 +667,6 @@ export function createAtlasTexture(): CanvasTexture {
     ctx.clearRect(0, 0, ATLAS_W, ATLAS_H);
     drawFlag(ctx);
     drawBoards(ctx);
-    drawWhitePatch(ctx);
     drawSwatches(ctx);
     drawMap(ctx);
     drawVillageSigns(ctx);

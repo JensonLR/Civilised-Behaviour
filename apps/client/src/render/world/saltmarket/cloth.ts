@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshToonMaterial, SRGBColorSpace } from "three";
+import { letterSign } from "../signLettering.ts";
 import { PALETTE, SALTMARKET_SEALED_SIGNS, SALTMARKET_SIGNS, cssHex, saltmarketLevel, saltmarketPlan, type SaltmarketBanner, type Terrain } from "./shared.ts";
 import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
@@ -211,8 +212,6 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.restore();
   }
   // ---- the signboards: salt strips, tarred lettering
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
   [...SALTMARKET_SIGNS, ...SALTMARKET_SEALED_SIGNS].forEach((text, i) => {
     const y = SIGN_Y + i * SIGN_H;
     ctx.fillStyle = c(P.salt);
@@ -221,31 +220,7 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.lineWidth = 6;
     ctx.strokeRect(3, y + 3, ATLAS_W - 6, SIGN_H - 6);
     ctx.fillStyle = c(P.tarPlankDark);
-    const fit = (line: string, max: number): number => {
-      let size = max;
-      ctx.font = `${size}px "IM Fell English SC", "IM Fell English", serif`;
-      while (size > 14 && ctx.measureText(line).width > ATLAS_W - 40) {
-        size -= 2;
-        ctx.font = `${size}px "IM Fell English SC", "IM Fell English", serif`;
-      }
-      return size;
-    };
-    // one line when it fits at 26 px or more, else two: split at the sentence break nearest the middle
-    ctx.font = '26px "IM Fell English SC", "IM Fell English", serif';
-    if (ctx.measureText(text).width <= ATLAS_W - 40) {
-      fit(text, 38);
-      ctx.fillText(text, 20, y + SIGN_H / 2 + 2);
-    } else {
-      const cuts: number[] = [];
-      for (let k = text.indexOf(". "); k >= 0; k = text.indexOf(". ", k + 1)) cuts.push(k + 1);
-      const mid = text.length / 2;
-      const cut = cuts.length ? cuts.reduce((a, b) => (Math.abs(b - mid) < Math.abs(a - mid) ? b : a)) : text.lastIndexOf(" ", Math.floor(mid));
-      const l1 = text.slice(0, cut).trim(), l2 = text.slice(cut).trim();
-      fit(l1, 30);
-      ctx.fillText(l1, 20, y + SIGN_H * 0.3);
-      fit(l2, 30);
-      ctx.fillText(l2, 20, y + SIGN_H * 0.7);
-    }
+    letterSign(ctx, text, 0, y, ATLAS_W, SIGN_H);
   });
 }
 

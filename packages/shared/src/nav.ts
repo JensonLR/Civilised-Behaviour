@@ -1,6 +1,7 @@
 import type { CollisionWorld, Obstacle } from "./collision.ts";
 import { CHARACTER } from "./constants.ts";
 import { NAV, type NavApi, type NavPath } from "./expeditionTypes.ts";
+import { hyp } from "./math.ts";
 
 /**
  * A small navigation grid over a region's REAL `CollisionWorld` (D-034). Not a navmesh: one static world and one collapsed bridge, so a 2 m grid
@@ -571,10 +572,10 @@ export class NavQuery implements NavApi {
         const k = j * n + i;
         if (gr.open[k] === 0 || gr.tall[k] === 1) continue;
         const x = this.cx(i), z = this.cx(j);
-        const d = Math.hypot(x - fx, z - fz);
+        const d = hyp(x - fx, z - fz);
         if (d > radius || d >= bestD) continue;
         const ux = thx - x, uz = thz - z;
-        const ul = Math.hypot(ux, uz);
+        const ul = Math.sqrt(ux * ux + uz * uz);
         if (ul < gr.cell * 2) continue;
         const nx = ux / ul, nz = uz / ul;
         let shield = false;

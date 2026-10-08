@@ -158,8 +158,10 @@ export function findStation(id: RegionId, x: number, z: number, facing: number):
     const s = list[i]!;
     const dx = s.x - x;
     const dz = s.z - z;
-    const dist = Math.hypot(dx, dz);
-    if (dist > s.r) continue;
+    // (a square root of a sum, never Math.hypot: that builtin boxed both arguments and its result, 38 B for every station on every call, 304 B a lookup at the depot: findStationAlloc.test.ts)
+    const d2 = dx * dx + dz * dz;
+    if (d2 > s.r * s.r) continue;
+    const dist = Math.sqrt(d2);
     const off = Math.abs(angleDelta(facing, Math.atan2(-dx, -dz)));
     if (dist > CHARACTER.radius + 0.35 && off > INTERACT.cone) continue;
     const score = dist + off * 0.6;

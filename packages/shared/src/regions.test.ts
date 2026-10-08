@@ -94,16 +94,4 @@ describe("stations", () => {
     expect(findStation("hollowmere", A.landing.x, A.landing.z, 0)).toBeUndefined();
   });
 
-  it("findStation does not allocate (a call that allocated 20 bytes would grow the heap by 8 MB here)", () => {
-    const run = (n: number): number => {
-      let hits = 0;
-      for (let i = 0; i < n; i++) if (findStation("hollowmere", -2.4, -5.4 + (i % 3) * 0.1, (i % 7) * 0.1)) hits++;
-      return hits;
-    };
-    run(20_000); // warm up: compile, settle
-    const before = process.memoryUsage().heapUsed;
-    const hits = run(400_000);
-    expect(hits).toBeGreaterThan(0);
-    expect(process.memoryUsage().heapUsed - before).toBeLessThan(8_000_000);
-  });
 });
