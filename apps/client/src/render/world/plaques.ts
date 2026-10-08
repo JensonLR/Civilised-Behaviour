@@ -29,9 +29,9 @@ export function pushPlaques(buildings: readonly LevelBuilding[], terrainHeight: 
     const nz = Math.sin(b.yaw);
     const rx = nz;
     const rz = -nx;
-    // (pinned to the cross-braces, 5 mm proud of their face at hx + 0.185: it stood 0.3 m out, 11 cm clear of anything)
-    const cx = b.x + nx * (b.hx + 0.19);
-    const cz = b.z + nz * (b.hx + 0.19);
+    // (hung on the door's chain, 7 mm in front of it, so the chain runs behind the lettering: it stood 0.3 m out, 6 cm clear of the chain and 11 cm of the boards)
+    const cx = b.x + nx * (b.hx + 0.245);
+    const cz = b.z + nz * (b.hx + 0.245);
     const y = terrainHeight(b.x, b.z) + b.floor + 0.08 + b.doorH * 0.62;
     const corner = (u: number, v: number): [number, number, number] => [cx + rx * u * PLAQUE.hw, y + v * PLAQUE.hh, cz + rz * u * PLAQUE.hw];
     const q = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
