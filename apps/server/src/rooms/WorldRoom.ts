@@ -145,7 +145,7 @@ import {
   startHourFor,
 } from "@cb/shared";
 import { HISTORY_KEYS, applyClientAppearance, applyPeople, decodeSpec, encodeSpec, generateCharacter, societyDress, specFromUntrusted } from "@cb/procedural";
-import { log } from "../log.ts";
+import { codeTag, log } from "../log.ts";
 import { metrics } from "../metrics.ts";
 import { Demo } from "../systems/Demo.ts";
 import { tickProbe } from "../tickProbe.ts";
@@ -624,7 +624,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     void this.setPrivate(true);
     metrics.rooms++;
     this.created = true;
-    log.info("room.create", { roomId: this.roomId, code: this.state.code, seed });
+    log.info("room.create", { roomId: this.roomId, room: codeTag(this.state.code), seed });
 
     this.setFixedTimestep((ctx) => {
       const t0 = performance.now();
@@ -741,7 +741,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       const p = this.state.players.get(client.sessionId);
       if (p) this.travel.ready(p.slot, msg?.ready);
     });
-    this.onMessage("travelCancel", () => this.travel.cancel());
+    this.onMessage("travelCancel", (client) => {
+      const p = this.state.players.get(client.sessionId);
+      if (p && !p.npc) this.travel.cancel(); // (a member of the party, not any socket in the room; only a vote can be cancelled, and a vote waits on the propose cooldown)
+    });
     this.onMessage("regionReady", (client, msg: { region?: unknown }) => {
       const p = this.state.players.get(client.sessionId);
       if (p && isRegionId(msg?.region)) this.travel.regionReady(p.slot, msg.region);
@@ -901,7 +904,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (live.some((r) => r.roomId !== this.roomId && (r.metadata as { code?: string } | undefined)?.code === code)) return deny("live");
     const r = restore(CAMPAIGN_CODECS, rec);
     if (r.repaired.length) log.warn("room.resume_repaired", { roomId: this.roomId, sections: r.repaired });
-    log.info("room.resume", { roomId: this.roomId, code, rev: rec.rev });
+    log.info("room.resume", { roomId: this.roomId, room: codeTag(code), rev: rec.rev });
     if (r.newer.length) log.warn("room.resume_newer_sections", { roomId: this.roomId, sections: r.newer, note: "written by a newer build; kept untouched, not saved over" });
     // a section damaged at this version is replaced by a fresh one, so keep its bytes first (as `damaged_<key>`, carried verbatim by every later save)
     const q = quarantineDamaged(rec, r);
@@ -1035,7 +1038,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         metrics.physicsBodies -= this.physics.props.size; // player capsules are released in onLeave
         this.physics.dispose();
       }
-      log.info("room.dispose", { roomId: this.roomId, code: this.state.code });
+      log.info("room.dispose", { roomId: this.roomId, room: codeTag(this.state.code) });
       await this.saver?.flush(5000); // the last save is awaited (5 s cap): the campaign survives the room
     } finally {
       this.releaseClaim();

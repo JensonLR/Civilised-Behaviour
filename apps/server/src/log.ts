@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 type Level = "debug" | "info" | "warn" | "error";
 const ORDER: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
@@ -22,3 +24,11 @@ export const log = {
   warn: (msg: string, f?: Record<string, unknown>) => emit("warn", msg, f),
   error: (msg: string, f?: Record<string, unknown>) => emit("error", msg, f),
 };
+
+/**
+ * A join code opens a session to whoever holds it, so it never goes to the log shipper. Lines that need to say "the same room" (create, resume, dispose) carry this
+ * one-way tag instead: stable for a code, eight hex characters, no way back.
+ */
+export function codeTag(code: string): string {
+  return createHash("sha256").update(`cb-room:${code}`).digest("hex").slice(0, 8);
+}

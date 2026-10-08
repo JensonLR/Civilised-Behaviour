@@ -12,7 +12,7 @@ Status: reflects the code as of 2026-10-02 (D-039 added the local expeditions re
 | Expeditions record (D-039): for each of up to 12 campaigns this browser has been in: join code, the display name used there, last region, day, last-played time, first-run orientation progress | Browser localStorage `cb.expeditions` only (never sent to the server, never read by it) | The front door's Continue and "Your expeditions" list; remembering the orientation per campaign. The code is what resume needs; the credential that proves membership is still `cb.identity` above, which is NOT copied here. No seed, no identity key, no member list | Until the player forgets the entry (door button), the 12-entry cap pushes it out, or storage is cleared. The server's own copy follows `SAVE_RETENTION_DAYS` regardless |
 | Identity key | Inside the record (`owner`, `members`) and as the keys of the `honours` section (D-055), nothing else | Membership check on resume; whose honours are whose | Same as the record |
 | Honours (D-055) | Record section `honours`: for each member in the book (identity KEY), the ids of their last three honours (from a fixed list of eight, never free text) | A member's title on their name plate after a resume | Same as the record; erased with the key (below) |
-| Server logs | stdout JSON (room ids, session ids, names) | Operations | Per hosting provider |
+| Server logs | stdout JSON (room ids, session ids, names; a join code only as an 8-hex one-way tag, `codeTag`, never the code itself) | Operations | Per hosting provider |
 
 
 ## Campaign persistence (apps/server/src/persistence)
