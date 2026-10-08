@@ -687,7 +687,7 @@ export class WorldView {
     // butterflies, birds and pollen stay in when it rains
     const fine = 1 - Math.min(1, d.rain * 1.6 + Math.max(0, d.cover - 0.7));
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
-    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
+    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
     fireLight.uFireI.value = d.fire;

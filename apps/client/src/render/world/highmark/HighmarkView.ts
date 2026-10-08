@@ -350,7 +350,7 @@ export class HighmarkView implements RegionView {
     this.tint.lerp(WHITE, 0.4).multiplyScalar(0.42 + 0.58 * d.ambient);
     const fine = 1 - Math.min(1, d.rain * 1.6 + Math.max(0, d.cover - 0.7));
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
-    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
+    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = Math.max(d.fire, d.dusk * 0.9);   // the lamps are lit at the harvest bell hour
     this.lantern?.color.copy(this.lanternDark).lerp(this.lanternLit, this.ambientU.uLamp.value); // ... and so is the tower's glass
     this.ambientU.uLight.value.copy(this.tint);

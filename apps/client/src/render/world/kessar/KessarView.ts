@@ -296,7 +296,7 @@ export class KessarView implements RegionView {
     this.tint.lerp(WHITE, 0.4).multiplyScalar(0.42 + 0.58 * d.ambient);
     const fine = 1 - Math.min(1, d.rain * 1.6 + Math.max(0, d.cover - 0.7));
     this.ambientU.uDay.value = (1 - smoothstep(0.25, 0.85, d.night)) * fine;
-    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night);
+    this.ambientU.uFly.value = Math.max(d.dusk * 0.85, d.night) * (1 - d.rain); // (no fireflies out in the rain)
     this.ambientU.uLamp.value = d.fire;
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
