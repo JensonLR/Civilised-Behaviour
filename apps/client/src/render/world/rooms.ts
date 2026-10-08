@@ -184,17 +184,17 @@ export function sealedDoor(k: Kit, id: string, hx: number, floor: number, width:
   const ang = Math.atan2(height - 0.8, w);
   const dl = Math.hypot(w, height - 0.8) + 0.2;
   for (const s of [-1, 1]) bx(k, [0.07, dl, 0.17], [hx + 0.15, y0 + height / 2, 0], st.board, [s * (Math.PI / 2 - ang), 0, 0]);
+  // the chain: two sagging runs between staples (at every detail: the notice hangs on it, and the door must read as chained shut from afar)
+  for (const [a, b] of [[-w / 2 - 0.1, 0.0], [0.0, w / 2 + 0.1]] as const) {
+    k.limb([hx + 0.2, y0 + height * 0.5 + 0.45, a], [hx + 0.22, y0 + height * 0.5 + 0.25, (a + b) / 2], 0.018, 0.018, st.iron, 3);
+    k.limb([hx + 0.22, y0 + height * 0.5 + 0.25, (a + b) / 2], [hx + 0.2, y0 + height * 0.5 + 0.45, b], 0.018, 0.018, st.iron, 3);
+  }
   if (lod) {
     // nail heads at the crossings
     for (const sz of [-1, 1]) for (const y of [0.35, height - 0.4]) k.add(new SphereGeometry(0.035, 4, 3), { at: [hx + 0.15, y0 + y, sz * (w / 2 - 0.1)], colour: st.iron });
     // a hasp and a padlock
     bx(k, [0.06, 0.34, 0.12], [hx + 0.16, y0 + height * 0.5 - 0.18, w * 0.18], st.iron);
     bx(k, [0.1, 0.16, 0.12], [hx + 0.19, y0 + height * 0.5 - 0.42, w * 0.18], st.brass);
-    // the chain: two sagging runs between staples
-    for (const [a, b] of [[-w / 2 - 0.1, 0.0], [0.0, w / 2 + 0.1]] as const) {
-      k.limb([hx + 0.2, y0 + height * 0.5 + 0.45, a], [hx + 0.22, y0 + height * 0.5 + 0.25, (a + b) / 2], 0.018, 0.018, st.iron, 3);
-      k.limb([hx + 0.22, y0 + height * 0.5 + 0.25, (a + b) / 2], [hx + 0.2, y0 + height * 0.5 + 0.45, b], 0.018, 0.018, st.iron, 3);
-    }
     // the paper seal: a cream sheet and a red blob, tacked over the crossed planks
     bx(k, [0.03, 0.5, 0.38], [hx + 0.2, y0 + height * 0.5 + 0.7, -w * 0.22], st.paper, [0.1, 0, 0]);
     k.add(new SphereGeometry(0.06, 5, 4), { at: [hx + 0.23, y0 + height * 0.5 + 0.55, -w * 0.22], colour: st.wax });
