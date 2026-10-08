@@ -23,6 +23,8 @@ const C = PALETTE.camp;
 const M = PALETTE.material;
 const f01 = (seed: number, a: number, b = 0, c = 0): number => hash3(seed, a, b, c) / 4294967296;
 const WALL_T = 0.28;
+/** How far below the floor the stone footing stops (its top is jittered by up to 1.8 cm: it must never show through the planks). */
+const FOOTING_DROP = 0.03;
 // D-038: the inside of a room is warm timber, never black (LEVEL_PLAN section 4, rule 6): the village's rooms are lit by their windows and a lamp
 const INTERIOR = new Color(W.vlTimber);
 const cStoneDark = new Color(W.vlStoneDark);
@@ -308,24 +310,32 @@ function windowOn(k: Kit, lod: Lod, fx: number, fz: number, lx: number, lz: numb
   }
 }
 
-/** A rectangular footing: courses of river stone from below ground up to the floor, and plank floor inside. */
+/**
+ * A rectangular footing: courses of river stone from below ground up to the floor, and plank floor inside. The planks are their own board, inside the walls with its edge tucked
+ * 6 cm under them, top at the floor; the stone stops 3 cm below it. (One box coloured per triangle left stone teeth inside the room: its top's triangles straddled the wall line.)
+ */
 function footing(k: Kit, lod: Lod, hx: number, hz: number, floor: number, seed: number, cx = 0, depth = 0.7, floorCol: number = W.vlTimberLight, floorInset = WALL_T): void {
-  const g = new BoxGeometry(hx * 2 + 0.16, floor + depth, hz * 2 + 0.16, lod ? Math.max(2, Math.round(hx * 2.4)) : 1, lod ? 2 : 1, lod ? Math.max(2, Math.round(hz * 2.4)) : 1);
+  const top = floor - FOOTING_DROP;
+  const g = new BoxGeometry(hx * 2 + 0.16, top + depth, hz * 2 + 0.16, lod ? Math.max(2, Math.round(hx * 2.4)) : 1, lod ? 2 : 1, lod ? Math.max(2, Math.round(hz * 2.4)) : 1);
   k.add(g, {
-    at: [cx, (floor - depth) / 2, 0],
-    colour: (p, n, out) => {
-      if (n.y > 0.7) {
-        const inner = Math.abs(p.x) < hx - floorInset + 0.02 && Math.abs(p.z) < hz - floorInset + 0.02;
-        if (inner) blend(out, floorCol, W.vlTimber, 0.15 + 0.5 * f01(seed, Math.floor(p.z * 5), Math.floor(p.x * 0.7)));
-        else stoneC(seed, 0)(p, n, out);
-        return;
-      }
-      stoneC(seed, 0)(p, n, out);
-    },
+    at: [cx, (top - depth) / 2, 0],
+    colour: stoneC(seed, 0),
     perFace: lod === 1,
     flat: lod === 0,
     jitter: lod ? 0.018 : 0,
     seed,
+  });
+  plankFloor(k, lod, hx - floorInset, hz - floorInset, floor, seed, floorCol, cx);
+}
+
+/** A plank floor between walls whose inner faces are `ix`, `iz` from the middle: a board 6 cm thick, top at `floor`, its edge tucked 6 cm under the walls. Never jittered (it is what is walked on). */
+function plankFloor(k: Kit, lod: Lod, ix: number, iz: number, floor: number, seed: number, floorCol: number = W.vlTimberLight, cx = 0, rows = 5): void {
+  const fx = ix + 0.06, fz = iz + 0.06;
+  k.add(new BoxGeometry(fx * 2, 0.06, fz * 2, lod ? Math.max(1, Math.round(fx * 2.4)) : 1, 1, lod ? Math.max(1, Math.round(fz * 2.4)) : 1), {
+    at: [cx, floor - 0.03, 0],
+    colour: (p, _n, out) => blend(out, floorCol, W.vlTimber, 0.15 + 0.5 * f01(seed, Math.floor(p.z * rows), Math.floor(p.x * 0.7))),
+    perFace: lod === 1,
+    flat: lod === 0,
   });
 }
 
@@ -507,23 +517,28 @@ function hall(k: Kit, kr: Kit, lod: Lod, b: Building, st: Style): void {
   const s = b.spec;
   const seed = 900;
   const fl = s.floor;
-  // the terrace: a stone plinth under floor and porch, a wide low step, then the porch
-  k.add(new BoxGeometry(b.hx * 2 + 1.2, fl + 0.7, b.hz * 2 + 0.3, lod ? 8 : 1, lod ? 2 : 1, lod ? 10 : 1), {
-    at: [0.6, (fl - 0.7) / 2, 0],
-    colour: (p, n, out) => {
-      if (n.y > 0.7) {
-        const inner = p.x < b.hx - 0.6 - WALL_T + 0.02 && p.x > -b.hx - 0.6 + WALL_T - 0.02 && Math.abs(p.z) < b.hz - WALL_T;
-        if (inner) blend(out, W.vlTimberLight, W.vlTimber, 0.15 + 0.5 * f01(seed, Math.floor(p.z * 4), Math.floor(p.x * 0.7)));
-        else blend(out, W.vlCobble, W.vlCobbleDark, 0.15 + 0.5 * f01(seed, Math.floor(p.x * 2), Math.floor(p.z * 2)));
-        return;
-      }
-      stoneC(seed, 0)(p, n, out);
-    },
+  // the terrace: a stone plinth under the hall (3 cm below the floor, as a footing's), the porch's cobbles at the floor out to 1.2 m before the doors and on into the doorway,
+  // and the plank floor inside the walls as its own board (one box coloured per triangle left cobble teeth inside the hall: its top's triangles straddled the wall line)
+  const cobble = (sd: number): ColourFn => (p, n, out) => (n.y > 0.7 ? blend(out, W.vlCobble, W.vlCobbleDark, 0.15 + 0.5 * f01(sd, Math.floor(p.x * 2), Math.floor(p.z * 2))) : stoneC(sd, 0)(p, n, out));
+  const plinthTop = fl - FOOTING_DROP;
+  k.add(new BoxGeometry(b.hx * 2, plinthTop + 0.7, b.hz * 2 + 0.3, lod ? 7 : 1, lod ? 2 : 1, lod ? 10 : 1), {
+    at: [0, (plinthTop - 0.7) / 2, 0],
+    colour: cobble(seed),
     perFace: lod === 1,
     flat: lod === 0,
     jitter: lod ? 0.02 : 0,
     seed,
   });
+  const px0 = b.hx - WALL_T + 0.06, px1 = b.hx + 1.2;
+  k.add(new BoxGeometry(px1 - px0, fl + 0.7, b.hz * 2 + 0.3, lod ? 2 : 1, lod ? 2 : 1, lod ? 10 : 1), {
+    at: [(px0 + px1) / 2, (fl - 0.7) / 2, 0],
+    colour: cobble(seed + 3),
+    perFace: lod === 1,
+    flat: lod === 0,
+    jitter: lod ? 0.02 : 0,
+    seed: seed + 3,
+  });
+  plankFloor(k, lod, b.hx - WALL_T, b.hz - WALL_T, fl, seed, W.vlTimberLight, 0, 4);
   k.add(new BoxGeometry(1.1, fl - 0.45 + 0.7, 7.2, 2, 2, 8), {
     at: [b.hx + 1.3 + 0.55, (fl - 0.45 - 0.7) / 2, 0],
     colour: (p, n, out) => (n.y > 0.7 ? blend(out, W.vlCobble, W.vlCobbleDark, 0.2 + 0.4 * f01(seed + 2, Math.floor(p.z * 2))) : stoneC(seed + 1, 0)(p, n, out)),

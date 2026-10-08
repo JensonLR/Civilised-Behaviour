@@ -135,13 +135,13 @@ describe("D-089: lit windows", () => {
     expect(paneGeometry([])).toBeUndefined();
   });
 
-  it("burns at night, all but out by day", () => {
+  it("burns at night, out by day", () => {
     setWindowNight(0);
-    expect(windowLight.value).toBeCloseTo(0.04, 5);
+    expect(windowLight.value).toBe(0);
     setWindowNight(1);
     expect(windowLight.value).toBeCloseTo(1, 5);
     setWindowNight(0.4);
-    expect(windowLight.value).toBeGreaterThan(0.04);
+    expect(windowLight.value).toBeGreaterThan(0);
     expect(windowLight.value).toBeLessThan(1);
   });
 });

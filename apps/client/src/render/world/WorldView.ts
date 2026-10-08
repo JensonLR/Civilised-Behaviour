@@ -59,13 +59,14 @@ import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
 import { buildVillage } from "./village.ts";
-import { RoofSet, doorGroups, type DoorMark, type RoofSource } from "./rooms.ts";
+import { InteriorFill, RoofSet, doorGroups, type DoorMark, type RoofSource } from "./rooms.ts";
 import { Villagers, folkBudget } from "./villagers.ts";
 import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 import { setRgb } from "./sky.ts";
 import { buildTerrain, groundDetailTexture, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
 import { buildFalls, buildWaterMesh, type WaterUniforms } from "./water.ts";
-import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, setToonLite, toonMaterial, villageUniforms, windowLight, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
+import { setWindowNight } from "./litWindows.ts";
+import { clothBasicMaterial, composeInstance, fireLight, makeInstances, makeSolid, MAX_PUSHERS, pushers, setToonLite, toonMaterial, villageUniforms, worldTime, type InstanceSet, type WindKind } from "./toon.ts";
 
 /** What a graphics preset decides about the world. */
 export interface WorldDetail {
@@ -109,6 +110,8 @@ export interface WorldStats {
   parts: Record<string, number>;
 }
 
+/** Peak intensity of the room's fill light (see `InteriorFill`): the village's timber halls and cottages read at night, by the window that burns. */
+const INTERIOR_FILL = 1.6;
 const trianglesOf = (g: BufferGeometry, instances = 1): number => ((g.index ? g.index.count : g.attributes.position!.count) / 3) * instances;
 const fract = (x: number): number => x - Math.floor(x);
 
@@ -155,6 +158,7 @@ export class WorldView {
     sun: Vector3,
   ) {
     this.root.name = "world";
+    this.fill = new InteriorFill(this.root, PALETTE.world.vlPlaster, PALETTE.world.vlTimberLight, INTERIOR_FILL);
     setToonLite(detail.liteShading);
     if (!detail.liteShading) bakeGroundHeights(world); // D-079: the scenery darkens where it meets the ground
     scene.add(this.root);
@@ -450,15 +454,16 @@ export class WorldView {
 
   private windowPanes: import("./camplife.ts").WindowPane[] = [];
   private roofSet?: RoofSet;
+  private readonly fill: InteriorFill;
   private doors: DoorMark[] = [];
   /** The doors the village drew (for tests and tools). */
   get doorMarks(): readonly DoorMark[] {
     return this.doors;
   }
 
-  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
+  /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7), and the room's fill comes up. */
   setViewer(x: number, z: number): void {
-    this.roofSet?.setViewer(villageLevel().rooms, x, z);
+    this.fill.setInside(this.roofSet?.setViewer(villageLevel().rooms, x, z) !== undefined);
   }
   /** The roof set (for tests and tools). */
   get roofs(): RoofSet | undefined {
@@ -700,7 +705,7 @@ export class WorldView {
     this.fireLevel = d.fire;
     this.hours = d.hours;
     if (this.lanternMat) this.lanternMat.color.setScalar(0.52 + 0.48 * d.fire);
-    windowLight.value = 0.04 + 0.96 * smoothstep(0.1, 0.7, d.fire);
+    setWindowNight(d.fire);
   }
 
   /** Up to four things the grass and flowers bend away from. Entries past `n` are cleared. */
@@ -723,6 +728,7 @@ export class WorldView {
     worldTime.value = t;
     this.hillU.uSailAngle.value = t * 0.32;
     this.flock?.update(worldSec, this.hours);
+    this.fill.update(t);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
     this.ambientU.uMotion.value = motion.value;
     if (this.rainMesh) this.rainMesh.visible = atmoUniforms.uRain.value > 0.01;

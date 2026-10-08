@@ -623,8 +623,10 @@ export function makeSolid(scene: Scene | Object3D, geometry: BufferGeometry, mat
   return out;
 }
 
-/** How brightly the village's lit windows burn (near 0 by day, 1 at night): the lantern glass mesh carries them as panes with `aLit = 1`. */
+/** How brightly the lit windows burn (near 0 by day, 1 at night): the lantern glass mesh carries them as panes with `aLit = 1`. */
 export const windowLight = { value: 0.05 };
+/** What a lit pane fades to by day: the same dark glass as a pane with nobody home (D-089), so by day the two cannot be told apart. */
+const windowDark = { value: new Color(PALETTE.camp.windowDark) };
 
 /** An unlit vertex-coloured material (lantern glass and lit window panes) whose vertices sway like the cloth around it. Geometry needs `aSway` and `aLit`. */
 export function clothBasicMaterial(): MeshBasicMaterial {
@@ -634,9 +636,10 @@ export function clothBasicMaterial(): MeshBasicMaterial {
     shader.uniforms.uPush = pushers;
     shader.uniforms.uWindK = atmoUniforms.uWindK;
     shader.uniforms.uWinK = windowLight;
+    shader.uniforms.uWinDark = windowDark;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nattribute float aSway; attribute float aLit; uniform float uWinK;`)
-      .replace("#include <color_vertex>", "#include <color_vertex>\nvColor.rgb *= mix(1.0, uWinK, aLit);")
+      .replace("#include <common>", `#include <common>\n${WIND_HEAD}\nattribute float aSway; attribute float aLit; uniform float uWinK; uniform vec3 uWinDark;`)
+      .replace("#include <color_vertex>", "#include <color_vertex>\nvColor.rgb = mix(vColor.rgb, mix(uWinDark, vColor.rgb, uWinK), aLit);")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed += windCloth(transformed, aSway);");
   };
   m.customProgramCacheKey = (): string => "clothBasic";

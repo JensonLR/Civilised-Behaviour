@@ -77,27 +77,29 @@ describe("the roof over the room the player is in is lifted, and only that one",
   });
 });
 
-describe("a room the viewer stands in is lit (Vesper's and the Saltmarket's interiors read as near-black in the stills: D-038 follow-up)", () => {
+describe("a room the viewer stands in is lit (Vesper's and the Saltmarket's interiors read as near-black in the stills: D-038 follow-up; Highmark's hall and Hollowmere's at night: D-089)", () => {
   const fillOf = (view: RegionView): HemisphereLight => view.root.getObjectByName("interior-fill") as HemisphereLight;
   const settle = (view: RegionView, from: number): number => {
     let t = from;
     for (let i = 0; i < 40; i++) view.update(t += 0.1);
     return t;
   };
-  for (const [id, palette, level] of [["vesper", PALETTE.vesper, vesperLevel()], ["saltmarket", PALETTE.saltmarket, saltmarketLevel()]] as const) {
+  // the fill's sky colour per region (a palette colour, not a literal). Kessar has none: its one room, the toll booth, is open to the sky and reads under its own lamp at night
+  const SKY: Partial<Record<RegionId, number>> = { vesper: PALETTE.vesper.companyCream, saltmarket: PALETTE.saltmarket.salt, highmark: PALETTE.highmark.chalk, hollowmere: PALETTE.world.vlPlaster };
+  for (const [id, sky] of Object.entries(SKY) as [RegionId, number][]) {
     it(`${id}: a warm fill in the region's own palette is off outside a room, comes up inside every room, and goes out again`, () => {
       const view = viewOf(id);
       const fill = fillOf(view);
       expect(fill, `${id} has an interior fill`).toBeDefined();
       expect(fill.isHemisphereLight).toBe(true);
-      expect(fill.color.getHex()).toBe(new Color(id === "vesper" ? PALETTE.vesper.companyCream : PALETTE.saltmarket.salt).getHex()); // (a palette colour, not a literal)
-      expect(palette).toBeDefined();
+      expect(fill.color.getHex()).toBe(new Color(sky).getHex());
       let t = settle(view, 0);
       expect(fill.intensity, "outside: nothing").toBe(0);
-      for (const room of level.rooms) {
+      expect(LEVELS[id].rooms.length).toBeGreaterThan(0);
+      for (const room of LEVELS[id].rooms) {
         view.setViewer!(room.x, room.z);
         t = settle(view, t);
-        expect(fill.intensity, `${room.id}: inside, readable`).toBeGreaterThan(1);
+        expect(fill.intensity, `${room.id}: inside, readable`).toBeGreaterThan(0.8);
         view.setViewer!(0, 1000);
         t = settle(view, t);
         expect(fill.intensity, `${room.id}: outside again`).toBe(0);

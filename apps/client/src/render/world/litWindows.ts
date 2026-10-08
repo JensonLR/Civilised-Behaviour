@@ -35,7 +35,7 @@ const tmp = new Color();
 
 /**
  * The panes as one geometry for the lantern-glass material (`clothBasicMaterial`): a quad each, facing out. A lit pane is warm (brighter at its middle) with `aLit = 1`, so the
- * night level (`windowLight`) burns it at night and dims it to dark glass by day; an unlit one is dark glass with `aLit = 0`. `aSway` is 0 (windows do not move in the wind).
+ * night level (`windowLight`) burns it at night and fades it to dark glass by day; an unlit one is dark glass with `aLit = 0`. `aSway` is 0 (windows do not move in the wind).
  */
 export function paneGeometry(panes: readonly LitPane[]): BufferGeometry | undefined {
   if (panes.length === 0) return undefined;
@@ -64,10 +64,10 @@ export function paneGeometry(panes: readonly LitPane[]): BufferGeometry | undefi
   return g;
 }
 
-/** The night level a region's lamps are at (0 by day, 1 lit), as the windows burn: never quite black by day (the glass still reads as glass). */
+/** The night level a region's lamps are at (0 by day, 1 lit), as the windows burn: by day a lit pane is the same dark glass as an empty one (the shader fades it there). */
 export function setWindowNight(lamp: number): void {
   const t = Math.min(1, Math.max(0, (lamp - 0.1) / 0.6));
-  windowLight.value = 0.04 + 0.96 * t * t * (3 - 2 * t);
+  windowLight.value = t * t * (3 - 2 * t);
 }
 
 /** The panes as a mesh under `root` ("windows"), its geometry and material handed to `track` for disposal; nothing when there are none. A region view calls this once. */
