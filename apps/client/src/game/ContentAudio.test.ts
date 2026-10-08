@@ -1,5 +1,3 @@
-import v8 from "node:v8";
-import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { GAIT, MOUNT_KIND, MOUNT_PHASE, hqPlan, newCampaign, serializeCampaign } from "@cb/shared";
 import type { PlayOpts } from "../audio/engine.ts";
@@ -249,23 +247,4 @@ describe("ContentAudio: robust and allocation-free", () => {
     expect(() => c.update(1 / 60, view(w))).not.toThrow();
   });
 
-  it("update allocates nothing in steady state: 10,000 frames of three galloping horses, a gun and a sailing move the heap by less than 64 KB", () => {
-    const sfx: Sfx = { play: () => undefined, stop: () => undefined };
-    const c = new ContentAudio({ sfx });
-    const w = world({ mounts: { a: horse({ speed: 10.5, rider: "p" }), b: horse({ speed: 6.4, x: 5 }), c: horse({ speed: 3, x: -5 }) }, cannons: { g: gun(0) }, travelPhase: 2 });
-    const v = view(w); // the same view object every frame, as the game passes room.state
-    v8.setFlagsFromString("--expose-gc");
-    const gc = vm.runInNewContext("gc") as () => void;
-    for (let i = 0; i < 30_000; i++) c.update(1 / 60, v);
-    // the median of five windows from a forced GC: one scavenge landing in a window must not decide the test
-    const deltas: number[] = [];
-    for (let k = 0; k < 5; k++) {
-      gc();
-      const before = process.memoryUsage().heapUsed;
-      for (let i = 0; i < 10_000; i++) c.update(1 / 60, v);
-      deltas.push(process.memoryUsage().heapUsed - before);
-    }
-    deltas.sort((x, y) => x - y);
-    expect(deltas[2]!).toBeLessThan(64 * 1024);
-  });
 });

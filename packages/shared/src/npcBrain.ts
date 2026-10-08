@@ -1,7 +1,7 @@
 import { BUTTON, FLAG, MOVEMENT } from "./constants.ts";
 import type { NavPath, NpcBody, NpcBrain, NpcMode, NpcSenses, NpcSpec } from "./expeditionTypes.ts";
 import { moraleBand, moraleStep, newMorale, MORALE } from "./morale.ts";
-import { angleDelta, clamp } from "./math.ts";
+import { angleDelta, clamp, hyp } from "./math.ts";
 import { newNavPath } from "./nav.ts";
 import { yawToWire, type MoveCommand } from "./movement.ts";
 import { hashFloat, seedFromString } from "./rng.ts";
@@ -94,7 +94,7 @@ function followPath(b: NpcBrain, me: NpcBody, out: MoveCommand, sprint: boolean)
   while (b.route < p.n) {
     const wx = p.x[b.route]!, wz = p.z[b.route]!;
     const last = b.route === p.n - 1;
-    if (Math.hypot(wx - me.x, wz - me.z) < (last ? NPC_TUNING.reach * 0.7 : NPC_TUNING.reach)) {
+    if (hyp(wx - me.x, wz - me.z) < (last ? NPC_TUNING.reach * 0.7 : NPC_TUNING.reach)) {
       b.route++;
       continue;
     }
@@ -172,7 +172,7 @@ export function npcThink(nb: NpcBrain, me: NpcBody, sn: NpcSenses, dt: number, o
   const maxShot = NPC_TUNING.maxShot[wid];
   let dist = Infinity;
   if (e !== undefined) {
-    dist = Math.hypot(e.x - me.x, e.z - me.z);
+    dist = hyp(e.x - me.x, e.z - me.z);
     if (b.target !== e.id || now - b.lastSeen > NPC_TUNING.react.forget) {
       if (b.target !== e.id) b.targetHash = seedFromString(e.id);
       b.react = NPC_TUNING.react.base + (1 - b.skill / 100) * NPC_TUNING.react.perSkill + NPC_TUNING.react.jitter * hashFloat(b.seed, b.targetHash, Math.floor(now * 4), 7);
@@ -232,7 +232,7 @@ export function npcThink(nb: NpcBrain, me: NpcBody, sn: NpcSenses, dt: number, o
   }
   if (e === undefined || !isCombat(m)) {
     if (m === "follow" && sn.leader !== undefined) {
-      const d = Math.hypot(sn.leader.x - me.x, sn.leader.z - me.z);
+      const d = hyp(sn.leader.x - me.x, sn.leader.z - me.z);
       if (d > 4) {
         plan(b, me, sn, sn.leader.x, sn.leader.z, false);
         if (!followPath(b, me, out, d > 14)) walkTo(me, sn.leader.x, sn.leader.z, out, false);
@@ -241,7 +241,7 @@ export function npcThink(nb: NpcBrain, me: NpcBody, sn: NpcSenses, dt: number, o
     }
     // lost sight of someone it was fighting (or heard a shot it could not place): go and look where it last saw them (a man behind a rock is not a man who has gone away)
     if (e === undefined && sn.alert && now - b.lastSeen < NPC_TUNING.search) {
-      const d = Math.hypot(b.lastTx - me.x, b.lastTz - me.z);
+      const d = hyp(b.lastTx - me.x, b.lastTz - me.z);
       // (to the distance it fights from, not to the man's boots; but from where it could SEE that spot, or it stands at its range behind the wall he is behind)
       if (d > 3 && (d > Math.max(eff * 0.75, 3) || !sn.nav.los(me.x, me.z, b.lastTx, b.lastTz))) {
         plan(b, me, sn, b.lastTx, b.lastTz, false);
@@ -254,7 +254,7 @@ export function npcThink(nb: NpcBrain, me: NpcBody, sn: NpcSenses, dt: number, o
       return;
     }
     // post / alert / guard: go home and keep watch
-    const homeD = Math.hypot(b.px - me.x, b.pz - me.z);
+    const homeD = hyp(b.px - me.x, b.pz - me.z);
     if (homeD > 1.2) {
       if (homeD > NPC_TUNING.straight || b.route < b.path.n) {
         plan(b, me, sn, b.px, b.pz, false);
@@ -363,7 +363,7 @@ function fireRanged(b: NpcBrainState, me: NpcBody, e: NonNullable<NpcSenses["ene
   const T = NPC_TUNING;
   if (!b.haveErr) {
     // one error per burst: grows with range and motion, shrinks as the shooter ranges in on a target that stands still
-    const moving = fin(e.moving, 0) > 0.8 || Math.hypot(me.vx, me.vz) > 0.8;
+    const moving = fin(e.moving, 0) > 0.8 || Math.sqrt(me.vx * me.vx + me.vz * me.vz) > 0.8;
     let sigma = T.aimBase[wid] * (1 + dist / T.aimRange) * (moving ? T.movingMul : 1) * (T.skillBase - b.skill / 100);
     sigma *= Math.pow(T.rangeShrink, Math.min(b.ranged, T.rangedMax));
     b.errYaw = gauss(b.seed, b.shotNo, 11) * sigma;
