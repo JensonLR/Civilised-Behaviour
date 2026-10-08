@@ -75,7 +75,7 @@ export class Menu {
         <p class="society">The Imperial Cartographic &amp; Improvement Society</p>
         <div class="rule" aria-hidden="true">${COMPASS}</div>
         <h1 id="title">Civilised Behaviour</h1>
-        <p class="tag">Charter for an expedition into territories not yet improved</p>
+        <p class="tag">By Appointment to Her Majesty: a charter for an expedition into territories not yet improved</p>
         <label>Name upon the manifest
           <input id="name" maxlength="20" autocomplete="off" data-pad-chars="${NAME_DIAL}" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
         </label>

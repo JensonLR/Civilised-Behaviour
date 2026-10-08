@@ -74,6 +74,7 @@ export * from "./partyState.ts";
 export * from "./chaos.ts";
 export * from "./incidents.ts";
 export * from "./mayhem.ts";
+export * from "./realWorld.ts";
 export * from "./emblem.ts";
 export * from "./honours.ts";
 

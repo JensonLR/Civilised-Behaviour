@@ -1,3 +1,4 @@
+import { REAL_WORLD_RE } from "@cb/shared";
 import v8 from "node:v8";
 import vm from "node:vm";
 import { CAMP } from "@cb/shared";
@@ -129,9 +130,9 @@ describe("the orientation machine", () => {
   });
 });
 
-describe("the orientation copy is fictional", () => {
-  it("names no real nation, city, faith or flag", () => {
-    const RE = /(?<![a-z])(england|english|britain|british|scotland|french|france|german|germany|spain|spanish|italy|dutch|russia|china|chinese|japan|india|indian|america|american|europe|african|africa|asia|london|paris|berlin|rome|cairo|delhi|christian|muslim|islam|jewish|hindu|buddhist|catholic|church|mosque|bible|pope|union jack)(?![a-z])/i;
+describe("the orientation copy is fictional abroad (the Empire is London's: D-085)", () => {
+  it("names no real nation, city, faith or flag but the Empire's own home", () => {
+    const RE = REAL_WORLD_RE;
     const strings: string[] = [];
     const walk = (v: unknown): void => {
       if (typeof v === "string") strings.push(v);

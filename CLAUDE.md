@@ -16,8 +16,10 @@ Read first: `docs/BUILD_STATE.md` (where we are), `docs/DECISIONS.md` (why), `do
 - **Client and server share one pure movement step** (`packages/shared/src/movement.ts`). It must stay deterministic and
   allocation-free. Never use `Math.random`/`Date.now` in shared sim code - use `Rng`/`hash3` from `rng.ts`.
 - **No runtime LLMs.** Newspapers/dialogue are authored templates + deterministic generation. Utility-scored AI.
-- **Fictional cultures only.** Satire targets institutions, never a real ethnicity/nation/religion/protected group.
-  Local societies have agency, factions, humour, and manipulate the players back. Keep the comedy smart.
+- **Fictional cultures abroad; the Empire is London's** (owner's decision, D-085). The Society and its Empire are British and boast of it
+  (London, Britannia, Pall Mall, Whitehall, the Union Jack; never a real monarch or statesman by name). The joke is always the Empire's vanity and
+  incompetence, never the peoples abroad: they stay invented, with agency, factions, humour, and they manipulate the players back. No other real
+  nation, people or religion appears (`packages/shared/src/realWorld.ts` is the guard). Keep the comedy smart.
   The native peoples are drawn from the darker end of the skin palette, several tones per people (owner's decision,
   legal-approved, D-067); players choose freely from the whole palette. Native dress suits each people's land.
 - **Every asset/AI-generated content is registered** in `docs/ASSET_REGISTER.md` / `docs/AI_CONTENT_REGISTER.md`.

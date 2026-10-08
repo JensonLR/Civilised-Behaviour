@@ -148,7 +148,7 @@ describe("D-084: the bill, the supplement and the paper", () => {
 
   it("the paper prints the spectacle of the expedition it reports, with the learned body's thanks, and nothing for an old record", () => {
     const s = billStory(withBill());
-    expect(s?.head).toBe("SOCIETY MEN IN SPIRITED ENGAGEMENT");
+    expect(s?.head).toBe("BRITANNIA TRIUMPHANT: SOCIETY MEN IN SPIRITED ENGAGEMENT");
     expect(s?.body).toContain("3 limbs");
     expect(s?.body).toContain("Museum of Comparative Anatomy");
     expect(billStory(withBill({ day: 2 }))).toBeUndefined();

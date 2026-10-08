@@ -132,7 +132,7 @@ describe("hqRoute: the authored lines and their finger-posts", () => {
   });
 
   it("the lettering is short, filled in, and free of real-world terms", () => {
-    const BANNED = /(?<![a-z])(england|english|britain|british|london|paris|france|french|germany|german|spain|china|india|america|american|europe|african|africa|christian|muslim|jewish|church|bible|pope|union jack)(?![a-z])/i;
+    const BANNED = /(?<![a-z])(england|english|paris|france|french|germany|german|spain|china|india|america|american|europe|african|africa|christian|muslim|jewish|church|bible|pope)(?![a-z])/i;
     const all: HqSign[] = r.signs;
     for (const s of all) {
       for (const b of s.boards) {

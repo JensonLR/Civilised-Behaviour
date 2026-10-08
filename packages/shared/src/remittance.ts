@@ -38,10 +38,10 @@ export const PRESS_GRADE: Readonly<Record<ResolutionId, PressGrade>> = {
 };
 
 const LINE: Readonly<Record<PressGrade, string>> = {
-  triumph: "The Committee for Remittances pays £{n} for a triumph, by the column-inch.",
-  story: "The Committee for Remittances pays £{n} for a story it can print.",
-  embarrassment: "The Committee for Remittances pays £{n}, marked \"for the avoidance of further columns\".",
-  condolence: "The Committee for Remittances sends a condolence voucher worth £{n}.",
+  triumph: "The Committee for Remittances pays £{n} for a triumph, by the column-inch. London is in raptures.",
+  story: "The Committee for Remittances pays £{n} for a story it can print. Pall Mall reads it over breakfast.",
+  embarrassment: "The Committee for Remittances pays £{n}, marked \"for the avoidance of further columns\". Whitehall has not been told.",
+  condolence: "The Committee for Remittances sends a condolence voucher worth £{n}, and a small Union Jack.",
 };
 
 export interface Remittance {

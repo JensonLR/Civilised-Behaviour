@@ -98,6 +98,7 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{victim} and the {limb} have parted company, at {by}'s insistence.",
     "{by} reports a specimen for the Museum: one {limb}, late of {victim}.",
     "{victim}'s {limb} has gone on ahead, {dir}.",
+    "{by} takes {victim}'s {limb} in the name of the Empire. A receipt will follow.",
   ],
   severPowder: [
     "The powder has redistributed {victim}. The {limb} was last seen heading {dir}.",
@@ -112,6 +113,7 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{victim} has flown {yards} yards: a regional record for the unwilling.",
     "{victim} leaves the ground at {by}'s expense. {yards} yards, and a poor landing.",
     "The Society's surveyor measures {victim}'s flight at {yards} yards and asks for it again.",
+    "{victim} has been sent {yards} yards in the general direction of London.",
   ],
   flingOwn: [
     "{victim} has been sent {yards} yards by the Society's own powder, and is reviewing the arrangement.",
@@ -121,16 +123,19 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{by} has settled the question of {victim}'s hat.",
     "{victim} has been struck in the opinions by {by}.",
     "{by} parts {victim}'s hair, permanently.",
+    "{by} removes {victim}'s hat for the Empire. The head went with it.",
   ],
   chain: [
     "{Kegs} kegs went up in a ripple. The Ordnance Board will want it in writing.",
     "A chain of {kegs} kegs: {by} calls it an experiment in sequence.",
     "{Kegs} kegs in succession. The road has been rearranged and the birds have left the district.",
+    "{Kegs} kegs at once: the loudest thing done in the Empire's name this week. Rule, Britannia.",
   ],
   friendly: [
     "{by} has shot {victim}. The Society notes the enthusiasm.",
     "{victim} has been downed by {by}, who describes {victim} as a colleague.",
     "{by} and {victim} have had a disagreement. {by} won it.",
+    "{by} has shot {victim}, but in a very British manner, and apologised.",
   ],
   civilian: [
     "{victim}, a bystander, is entered in the ledger under 'regrettable'.",
@@ -139,10 +144,12 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
   brolly: [
     "{by} has felled {victim} with an umbrella. The Umbrella Makers' Company is beside itself.",
     "{victim} has been put down by {by}'s umbrella, closed. Imagine it open.",
+    "{by} fells {victim} with a British umbrella. Pall Mall is beside itself.",
   ],
   double: [
     "{by} has dropped {n} in as many seconds. The Committee for Remittances leans forward.",
     "{n} down in a breath, by {by}. Somebody fetch the Gazette's artist.",
+    "{Nn} down in a breath, by {by}. Rule, Britannia.",
   ],
 };
 
@@ -168,7 +175,7 @@ export function gazetteLine(f: MayhemFact, salt: number): string {
     case "chain":
       return fill(pick(GAZ.chain), { kegs: numberWord(f.kegs), Kegs: capital(numberWord(f.kegs)), by: f.by === "" ? "the powder" : who(f.by) });
     case "double":
-      return fill(pick(GAZ.double), { by: who(f.by), n: numberWord(f.n) });
+      return fill(pick(GAZ.double), { by: who(f.by), n: numberWord(f.n), Nn: capital(numberWord(f.n)) });
     default:
       return fill(pick(GAZ[f.k]), { victim: who(f.victim), by: who(f.by) });
   }
@@ -264,7 +271,7 @@ export function spectacle(b: Bill): { pay: number; line: string } {
   const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly;
   const pay = Math.min(SPECTACLE_CAP, raw);
   if (pay <= 0) return { pay: 0, line: "" };
-  return { pay, line: `The Committee adds £${pay} for spectacle${pay === SPECTACLE_CAP ? ", the most it will pay for anything it has to print with a warning" : ""}.` };
+  return { pay, line: `The Committee adds £${pay} for spectacle${pay === SPECTACLE_CAP ? ", the most it will pay for anything it has to print with a warning" : ""}. London wants more of this.` };
 }
 
 const plural = (n: number, one: string, many: string): string => `${n === 0 ? "no" : n} ${n === 1 ? one : many}`;
@@ -296,7 +303,7 @@ export function billStory(c: CampaignState): { head: string; body: string } | un
   const req = REQUESTS[r.request];
   const thanks = r.met ? fill(req.paper, { longest: b.longest, chain: b.chain, limbs: b.limbs }) : "";
   if (loud === 0 && !r.met) return undefined;
-  const head = b.limbs >= 3 || b.chain >= 3 ? "SOCIETY MEN IN SPIRITED ENGAGEMENT" : b.flings > 0 ? "LOCAL MAN ACHIEVES FLIGHT" : b.friendly > 0 ? "EXPEDITION RESOLVES INTERNAL DIFFERENCES" : loud > 0 ? "A LIVELY AFTERNOON" : "LEARNED BODIES SATISFIED";
+  const head = b.limbs >= 3 || b.chain >= 3 ? "BRITANNIA TRIUMPHANT: SOCIETY MEN IN SPIRITED ENGAGEMENT" : b.flings > 0 ? "LOCAL MAN ACHIEVES FLIGHT" : b.friendly > 0 ? "EXPEDITION RESOLVES INTERNAL DIFFERENCES" : loud > 0 ? "A LIVELY AFTERNOON" : "LEARNED BODIES SATISFIED";
   const facts = billLine(b).replace("The Butcher's Bill: ", "The surgeon's tally: ");
   return { head, body: `${facts}${facts && thanks ? " " : ""}${thanks}`.trim() };
 }
