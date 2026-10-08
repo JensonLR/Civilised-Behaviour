@@ -215,6 +215,17 @@ variables (which come from `PALETTE.ui`); meaning is never colour alone (gauge =
 English (text), IM Fell English SC (labels, buttons), Special Elite (codes and telegrams); ornament is CSS/inline SVG only; nothing animates with `prefers-reduced-motion`.
 Review with `node scripts/shot.mjs "?x=1" out.png 1440x800 4000` (menu) and a scratch Playwright session for the in-game HUD (enter a campaign, send `debug` `hit:0:50`, `down`, `sever:4`).
 
+### Slips of paper (D-086, 2026-10-08): the words must read on anything
+Ink with a halo straight on the picture smeared at night and over busy walls, and the small italic was hard work (the owner: "readability of the HUD looks quite unpleasant").
+Every block of words on the HUD is now a **slip**:
+- `--slip` is field paper at 93%. `--slip-edge` is a thin shadow and a faint ruled edge.
+- The ink sits on it with no halo, upright, and a size larger than before.
+- The slips are the orders (the contract's line, its rule in stamp red, the clock), the Society's commission (its own slip under the orders), the casualty column (each line a cutting), the key strip, the prompt, the armoury card, the goal's label and the compass reading.
+- Figures come from the typewriter face everywhere on the HUD (`"CB Figures"`, the digits only): IM Fell's old-style zero reads as a letter.
+- A short screen compacts the orders slip to about a quarter of the height.
+
+This supersedes "legibility without boxes" below. The quiet plate's rules on WHAT is shown and WHEN still hold.
+
 ### The quiet plate (D-063, 2026-10-03): what is on screen, and when
 On top of the Survey Plate's look: **one line** under the heading strip says what to do next (game/guidance.ts) and **one flag** in the world marks the place (ui/Guide.ts); everything else earns
 its place by meaning something now. No pools of mist (a tight paper edge only). Telegrams are small slips top-right, never over the play area (one at a time on a phone; the pause

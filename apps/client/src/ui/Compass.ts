@@ -52,6 +52,8 @@ export class Compass {
   private readonly ticks: { deg: number; el: HTMLElement }[] = [];
   private marks: MarkEl[] = [];
   private readonly readout: HTMLElement;
+  private readonly readName: HTMLElement;
+  private readonly readDeg: HTMLElement;
   private lastYaw = NaN;
   private lastDeg = -1;
   private readonly place: StripPlace = { x: 0, inside: true };
@@ -72,10 +74,12 @@ export class Compass {
     this.root.className = "compass";
     this.root.setAttribute("role", "img");
     this.root.setAttribute("aria-label", "Heading");
-    this.root.innerHTML = `<div class="strip"></div><div class="readout" aria-hidden="true"></div><div class="marks" aria-hidden="true"></div>`;
+    this.root.innerHTML = `<div class="strip"></div><div class="readout" aria-hidden="true"><span class="hn"></span> <span class="deg"></span></div><div class="marks" aria-hidden="true"></div>`;
     const strip = this.root.querySelector<HTMLElement>(".strip")!;
     this.marksEl = this.root.querySelector<HTMLElement>(".marks")!;
     this.readout = this.root.querySelector<HTMLElement>(".readout")!;
+    this.readName = this.readout.querySelector<HTMLElement>(".hn")!;
+    this.readDeg = this.readout.querySelector<HTMLElement>(".deg")!;
     for (const deg of TICKS) {
       const el = document.createElement("i");
       el.className = `tick${isCardinal(deg) ? " card" : isPoint(deg) ? " pt" : ""}`;
@@ -189,7 +193,9 @@ export class Compass {
     const deg = headingDegrees(yaw);
     if (deg !== this.lastDeg) {
       this.lastDeg = deg;
-      this.readout.textContent = `${headingName(deg)} ${String(deg).padStart(3, "0")}°`;
+      // (the figures in the typewriter face: the display face's old-style figures read "N ooo")
+      this.readName.textContent = headingName(deg);
+      this.readDeg.textContent = `${String(deg).padStart(3, "0")}°`;
       this.root.setAttribute("aria-label", `Heading ${headingName(deg)}, ${deg} degrees`);
     }
   }
