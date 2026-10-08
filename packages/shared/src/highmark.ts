@@ -417,6 +417,9 @@ export function highmarkPlan(): HighmarkPlan {
   for (const d of [8, 20]) lampAt(30.4, d);
   for (const [x, z] of [[-6, -88], [6, -88], [-6, -96], [6, -96]] as const) lamps.push({ x, z, h: 3.4 });
   for (const s of [-1, 1]) lamps.push({ x: s * 5.4, z: g.z + 6.6, h: 3.4 });
+  // two at the Reed Landing, either side of the road just ahead of where a party lands: everybody arrives here, and at night it was the darkest place in the
+  // region (behind the arrival ring they stood beside the camera and blocked the first view)
+  for (const s of [-1, 1]) lamps.push({ x: s * 2.7, z: 109.8, h: 3.2 });
 
   // milestones every ~26 m from the quay to the first ramp (I..V) on the road's east verge; the Waiting Stones on its west one
   const milestones = [96, 70, 44, 18, -8].map((z, i) => ({ x: grassRoadX(z) + 4.2, z, n: i + 1 }));
