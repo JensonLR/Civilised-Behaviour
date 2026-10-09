@@ -27,6 +27,7 @@ export const OUTCOME_KIND: Readonly<Record<ResolutionId, OutcomeKind>> = {
   post_held: "won", protection_paid: "partial", post_burned: "lost",
   survey_home: "won", chart_ceded: "partial", survey_sold: "partial", survey_lost: "lost",
   grey_trophy: "won", grey_driven: "won", grey_sold: "partial", grey_escaped: "lost",
+  siege_honours: "won", siege_stormed: "won", siege_bought: "partial", siege_lifted: "lost",
 };
 
 /** An ending's kind, from what was committed: the Crown sold for the party's cheque is a sale; the Crown sold because nobody settled anything is a loss. */
@@ -150,6 +151,13 @@ export const TERMS: Readonly<Record<ScenarioTemplateId, ContractTerms>> = {
     lose: ["The harvest bell rings first", "It is driven or bolts off the herd ground", DOWN],
     fighting: "costly",
     rule: "Every beast on the grassland is the Crown's: a shot at it without the Master's licence, even a miss, is poaching.",
+  },
+  counting_house: {
+    win: ["Invest the post on all three picket marks, then summon the factor once his stores are out, his relief beaten or half his guns down: the honours of war", "Storm it: drop three of its four guns, or send them running"],
+    partial: ["Buy the post from the factor as a going concern"],
+    lose: ["Two of the Syndicate's relief stand in the post's yard together", DOWN],
+    fighting: "expected",
+    rule: "A shot into the post, even a miss, starts the storm; while a sally is out, only a hit on the post's men does.",
   },
 };
 

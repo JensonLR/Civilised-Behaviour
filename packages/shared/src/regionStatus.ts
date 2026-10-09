@@ -16,7 +16,7 @@ export const regionIsLive = (id: RegionId): boolean => (id === "vesper" ? !VESPE
 export const liveRegions = (): RegionId[] => REGION_IDS.filter(regionIsLive);
 export const liveResolutions = (): ResolutionId[] =>
   RESOLUTIONS.filter((r) => !((VESPER_RESOLUTIONS as readonly string[]).includes(r) && VESPER_STATUS.stub) && !((SALTMARKET_RESOLUTIONS as readonly string[]).includes(r) && SALTMARKET_STATUS.stub));
-const TEMPLATE_HOME: Partial<Record<ScenarioTemplateId, RegionId>> = { mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket", reapers_strike: "highmark", winding_engine: "vesper", outpost_raid: "kessar", lost_survey: "saltmarket", great_grey: "highmark" };
+const TEMPLATE_HOME: Partial<Record<ScenarioTemplateId, RegionId>> = { mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket", reapers_strike: "highmark", winding_engine: "vesper", outpost_raid: "kessar", lost_survey: "saltmarket", great_grey: "highmark", counting_house: "kessar" };
 export const liveTemplates = (): ScenarioTemplateId[] => TEMPLATE_IDS.filter((t) => { const h = TEMPLATE_HOME[t]; return h === undefined || regionIsLive(h); });
 /** Compile-time anchor: the four newer templates are exactly the keys of NEW_TEMPLATE_RESOLUTIONS. */
 export const NEW_TEMPLATES_LISTED: readonly ScenarioTemplateId[] = Object.keys(NEW_TEMPLATE_RESOLUTIONS) as ScenarioTemplateId[];

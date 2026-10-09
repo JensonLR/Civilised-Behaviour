@@ -1,4 +1,4 @@
-import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type HuntEnding, type ReapersEnding, type RegionId, type RivalPresence } from "@cb/shared";
+import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type HuntEnding, type ReapersEnding, type SiegeEnding, type RegionId, type RivalPresence } from "@cb/shared";
 import type { MapRoomView } from "../ui/MapRoom.ts";
 
 /** What the campaign remembers about a region, written beside it on the chart. Plain text; no markup. */
@@ -16,8 +16,17 @@ export function regionNote(id: RegionId, c: CampaignState | undefined, seed?: nu
   const bridge = cr.bridge === "collapsed" ? "The bridge is down" : cr.bridge === "rigged" ? "The bridge is rigged" : "The bridge stands";
   const control = cr.control === "ward" ? "the Ward holds it" : cr.control === "society" ? "the Society holds it" : cr.control === "rival" ? "the Syndicate holds it" : "it is contested";
   const toll = cr.toll > 0 ? `toll £${cr.toll}` : "no toll";
-  return `${bridge}; ${control}; ${toll}.${contract}`;
+  const siege = c.sites.ends.counting_house;
+  return `${bridge}; ${control}; ${toll}.${siege !== undefined && siege !== "abandoned" ? ` ${SIEGE_NOTE[siege as SiegeEnding]}` : ""}${contract}`;
 }
+
+/** What became of the Society's siege of the Syndicate's post (D-095): the ledger's `ends.counting_house`. */
+const SIEGE_NOTE: Record<SiegeEnding, string> = {
+  siege_honours: "The Syndicate's Counting-House surrendered to the Society with the honours of war.",
+  siege_stormed: "The Syndicate's Counting-House was taken by storm.",
+  siege_bought: "The Society bought the Syndicate's Counting-House, as a going concern.",
+  siege_lifted: "The Society's siege of the Syndicate's Counting-House was lifted by its relief.",
+};
 
 /** What the chair at Highmark looks like from the chart (D-036): the ledger's `succession`, in the Society's voice. */
 const CHAIR_NOTE: Record<CampaignState["sites"]["succession"], string> = {

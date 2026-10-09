@@ -31,6 +31,7 @@ export const PRESS_GRADE: Readonly<Record<ResolutionId, PressGrade>> = {
   lot_won: "triumph", consortium: "story", shorted: "story", washed_out: "embarrassment",
   survey_home: "triumph", chart_ceded: "story", survey_sold: "embarrassment", survey_lost: "embarrassment",   // D-093
   grey_trophy: "triumph", grey_driven: "story", grey_sold: "embarrassment", grey_escaped: "embarrassment",   // D-094
+  siege_honours: "triumph", siege_stormed: "story", siege_bought: "embarrassment", siege_lifted: "embarrassment",   // D-095
   // Highmark's strike (D-042)
   honest_measure: "triumph", bought_back: "story", strike_broken: "embarrassment", barley_lost: "embarrassment",
   // Vesper's engine (D-044)

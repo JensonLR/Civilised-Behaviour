@@ -91,6 +91,7 @@ import {
   newPowers,
   newSettlements,
   raidAftermath,
+  siegeAftermath,
   defendOutpost,
   parseParty,
   serializePowers,
@@ -1339,6 +1340,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // D-045: a Raid on the Post was the Syndicate's raid, played: it is spent before the rival's days run (so it never lands twice), and the post takes what the ending says
     const raided = raidAftermath(p, o);
     p = raided.p;
+    // D-095: a won or bought siege strikes the Syndicate's post at Kessar (the world below is rebuilt without it: `synBefore`)
+    p = siegeAftermath(p, o).p;
     const idle = this.pendingIdle;
     this.pendingIdle = 0;
     const adv = rivalAdvance(c, p, c.day + idle);
@@ -1955,6 +1958,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.scenario = undefined;
         this.startScenario("kessar");
       }
+    }
+    else if (cmd?.startsWith("synpost:")) {
+      // synpost:<0|1|2> : the Syndicate's own post at Kessar stands at once at that stage, or is struck (QA + the siege's room test, D-095)
+      const n = Number(cmd.slice(8));
+      if (n !== 0 && n !== 1 && n !== 2) return;
+      this.powers = { ...this.powers, rival: { ...this.powers.rival, where: { ...this.powers.rival.where }, posts: n } };
+      this.publishPowers();
+      this.rebuildWorld();
     }
     else if (cmd === "ride") {
       // Step up to the nearest free horse and get in the saddle (for looking at a rider: the same `mount` a player's USE runs).

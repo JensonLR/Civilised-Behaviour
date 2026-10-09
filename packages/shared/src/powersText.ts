@@ -2,6 +2,7 @@ import type { NeedId } from "./campaignTypes.ts";
 import { endingNews } from "./regionEndings.ts";
 import { ENGINE_COPY } from "./engineText.ts";
 import { RAID_COPY } from "./raidText.ts";
+import { SIEGE_COPY } from "./siegeText.ts";
 import { HUNT_COPY } from "./huntText.ts";
 import { REAPERS_COPY } from "./reapersText.ts";
 import { SALTMARKET_COPY } from "./saltmarketText.ts";
@@ -223,7 +224,7 @@ export const REPLY: Record<MinorPowerId, Record<"accepted" | "haggled" | "bribed
 export const POWER_SHORT: Record<PowerId, string> = { ward: "the Ward", rival: "the Syndicate", brine: "the Brine Houses", reapers: "the Reapers", choir: "the Guild" };
 export interface NewsDef { head: readonly string[]; body: readonly string[] }
 export const NEWS: Record<string, NewsDef> = {
-  ...endingNews(VESPER_COPY), ...endingNews(SALTMARKET_COPY), ...endingNews(REAPERS_COPY), ...endingNews(ENGINE_COPY), ...endingNews(RAID_COPY), ...endingNews(HUNT_COPY),   // D-037: `end_<resolution>`, one dispatch per ending of Vesper Gorge and the Saltmarket Delta (regionEndings.ts)
+  ...endingNews(VESPER_COPY), ...endingNews(SALTMARKET_COPY), ...endingNews(REAPERS_COPY), ...endingNews(ENGINE_COPY), ...endingNews(RAID_COPY), ...endingNews(HUNT_COPY), ...endingNews(SIEGE_COPY),   // D-037: `end_<resolution>`, one dispatch per ending of Vesper Gorge and the Saltmarket Delta (regionEndings.ts)
   rel_feud: {
     head: ["{A} and {b} Not Speaking, Loudly", "Feud Declared Between {a} and {b}", "{A} Withdraws Its Compliments From {b}"],
     body: ["Insults have been exchanged in both directions, in writing, with a postage surcharge. Neither side has fired a shot, yet. Both sides have bought ammunition.", "Observers describe the rift as 'considerable' and 'fully catered'. The Society takes no side and has offered to sell to both.", "A representative of each said the other started it. The Society is minded to agree with both."],

@@ -1,5 +1,5 @@
 import type { CampaignState, CasualtyTally, ComplicationId, ObjectiveView, ScenarioFx, ScenarioOutcome, ScenarioView } from "../campaignTypes.ts";
-import { NPC } from "../campaignTypes.ts";
+import { KESSAR_SITES, NPC } from "../campaignTypes.ts";
 import { COMPLICATION_HINT, dealComplication } from "../chaos.ts";
 import type { NpcSpec } from "../expeditionTypes.ts";
 import { FOLLOWER_DEFS } from "../followers.ts";
@@ -56,14 +56,14 @@ const SITE = KESSAR_OUTPOST.site;
  * post and the scatter, and a town's houses stand across the direct line, so the walk swings north first. The assault is the whole chain, joined at the nearest waypoint (`join`), so a
  * raid that starts before the muster is reached still walks only clear legs.
  */
-const MUSTER_WALK = [{ x: 60, z: 60 }, { x: 56, z: 60 }, { x: 56, z: 48 }, { x: 50, z: 52 }] as const;
+const MUSTER_WALK = KESSAR_SITES.raid.walk;
 export const RAID_SITES = {
   landing: MUSTER_WALK[0],
   muster: MUSTER_WALK[3],
   /** Where the raiders stand while their captain talks: spread behind him (a `guard` order, planned on the nav grid), so the party meets the captain first and sees a party, not a clump. */
   ranks: { x: 54, z: 50 },
   route: MUSTER_WALK,
-  assault: [...MUSTER_WALK, { x: 38, z: 52 }, { x: SITE.x, z: SITE.z - 18 }, { x: SITE.x, z: SITE.z - 8 }, { x: SITE.x, z: SITE.z }],
+  assault: [...MUSTER_WALK, KESSAR_SITES.raid.round, { x: SITE.x, z: SITE.z - 18 }, { x: SITE.x, z: SITE.z - 8 }, { x: SITE.x, z: SITE.z }],
 } as const;
 
 export interface RaidState extends BaseState {

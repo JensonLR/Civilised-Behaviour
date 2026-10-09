@@ -6,6 +6,7 @@ import { hash3 } from "./rng.ts";
 import { pluck } from "./regionEndings.ts";
 import { ENGINE_ENDINGS } from "./engineLedger.ts";
 import { RAID_ENDINGS } from "./raidLedger.ts";
+import { SIEGE_ENDINGS } from "./siegeLedger.ts";
 import { HUNT_ENDINGS } from "./huntLedger.ts";
 import { REAPERS_ENDINGS } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS } from "./saltmarketLedger.ts";
@@ -40,13 +41,13 @@ export const COUNTER: Record<RivalGoal, Partial<Record<ResolutionId, number>>> =
   buy_crossing: { paid: 20, bargained: 20, bribed: 18, sided_ward: 15, tipped_off: 15 },
   survey_route: { seized: 20, burned: 20, tipped_off: 15, rescued: 15 },
   arm_brine: { seized: 30, tipped_off: 25, burned: 25, mediated: 15 },
-  found_post: { sided_ward: 20, seized: 15, burned: 20, mediated: 15 },
+  found_post: { sided_ward: 20, seized: 15, burned: 20, mediated: 15, siege_honours: 25, siege_stormed: 30, siege_bought: 15 },   // (D-095: a siege that strikes the post sets its next one back)
   sabotage_party: { tipped_off: 25, mediated: 20, paid: 15, bargained: 15 },
   lie_low: { rescued: 15, seized: 20, burned: 15 },
 };
 /** How an ending sits with the Syndicate: grudge in points (exhaustive, so a new resolution must choose). */
 export const GRUDGE_FX: Record<ResolutionId, number> = {
-  ...pluck(VESPER_ENDINGS, "grudge"), ...pluck(SALTMARKET_ENDINGS, "grudge"), ...pluck(REAPERS_ENDINGS, "grudge"), ...pluck(ENGINE_ENDINGS, "grudge"), ...pluck(RAID_ENDINGS, "grudge"), ...pluck(HUNT_ENDINGS, "grudge"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "grudge"), ...pluck(SALTMARKET_ENDINGS, "grudge"), ...pluck(REAPERS_ENDINGS, "grudge"), ...pluck(ENGINE_ENDINGS, "grudge"), ...pluck(RAID_ENDINGS, "grudge"), ...pluck(HUNT_ENDINGS, "grudge"), ...pluck(SIEGE_ENDINGS, "grudge"),   // D-037 (regionEndings.ts)
   paid: 0, bargained: 0, bribed: 0, forced: 2, sabotaged: 4, rival_secured: -10, abandoned: 0,
   ransomed: -3, rescued: 6, slipped_away: 0, hostage_lost: -2, seized: 12, tipped_off: 8, burned: 12, passed: -8, mediated: -2, sided_ward: 8, sided_syndicate: -8, provoked: 4, escalated: 3,
   // D-036: a chair the Society filled is a concession the Syndicate did not get (a regency stalls it longest, a usurpation shuts it); a sold crown is the Syndicate's own good day

@@ -2,6 +2,7 @@ import type { ResolutionId } from "./campaignTypes.ts";
 import { pluck } from "./regionEndings.ts";
 import { ENGINE_COPY } from "./engineText.ts";
 import { RAID_COPY } from "./raidText.ts";
+import { SIEGE_COPY } from "./siegeText.ts";
 import { HUNT_COPY } from "./huntText.ts";
 import { REAPERS_COPY } from "./reapersText.ts";
 import { SALTMARKET_COPY } from "./saltmarketText.ts";
@@ -150,7 +151,7 @@ export const FOUNDATION_SIGN = "FUTURE SITE OF SOMETHING. DELIVER CRATES HERE.";
 export type HqPieceKind = "lamp" | "bridge" | "portrait" | "crate" | "frame" | "stone" | "board" | "key" | "pennant" | "model" | "envelope" | "barrel";
 export type HqSurface = "table" | "chest" | "wall";
 export const HISTORY_PIECE: Record<ResolutionId, { kind: HqPieceKind; surface: HqSurface; label: string }> = {
-  ...pluck(VESPER_COPY, "piece"), ...pluck(SALTMARKET_COPY, "piece"), ...pluck(REAPERS_COPY, "piece"), ...pluck(ENGINE_COPY, "piece"), ...pluck(RAID_COPY, "piece"), ...pluck(HUNT_COPY, "piece"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_COPY, "piece"), ...pluck(SALTMARKET_COPY, "piece"), ...pluck(REAPERS_COPY, "piece"), ...pluck(ENGINE_COPY, "piece"), ...pluck(RAID_COPY, "piece"), ...pluck(HUNT_COPY, "piece"), ...pluck(SIEGE_COPY, "piece"),   // D-037 (regionEndings.ts)
   paid: { kind: "frame", surface: "wall", label: "A receipt for the toll, framed, with the Warden's thumbprint." },
   bargained: { kind: "frame", surface: "wall", label: "The discount, in writing. Nobody can believe it either." },
   bribed: { kind: "envelope", surface: "chest", label: "An empty envelope, kept in case it is ever asked for." },

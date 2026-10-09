@@ -308,7 +308,7 @@ export class Scenario {
   onShotAt(attacker: string, victim: string): void {
     if (!this.started || this.s.phase === "resolved" || isNpcKey(attacker) || attacker === "") return;
     const sp = this.bySpecKey.get(victim);
-    if (sp && sp.id !== "hostage" && this.def.observe.hostileGroups.includes(sp.group)) this.apply({ t: "hostile", at: sp.group });
+    if (sp && sp.id !== "hostage" && this.def.observe.hostileGroups.includes(sp.group)) this.apply({ t: "hostile", at: sp.group, near: true });
   }
 
   /** A report carried `radius` metres from (x, z) (a shot, a blast). The site hears it as `noise`, loudest at its centre. */

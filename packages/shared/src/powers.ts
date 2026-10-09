@@ -4,6 +4,7 @@ import { HIGHMARK_RESOLUTIONS } from "./highmark.ts";
 import type { MinorDelta as EndingMinorDelta } from "./regionEndings.ts";
 import { ENGINE_ENDINGS, ENGINE_FAVOUR } from "./engineLedger.ts";
 import { RAID_ENDINGS } from "./raidLedger.ts";
+import { SIEGE_ENDINGS } from "./siegeLedger.ts";
 import { HUNT_ENDINGS, HUNT_FAVOUR } from "./huntLedger.ts";
 import { REAPERS_ENDINGS, REAPERS_FAVOUR } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS, SALTMARKET_FAVOUR } from "./saltmarketLedger.ts";
@@ -183,7 +184,7 @@ const CHAIR_FX: Record<ChairKey, Record<MinorPowerId, MinorDelta>> = {
 };
 const isChair = (r: string): r is ChairKey => (HIGHMARK_RESOLUTIONS as readonly string[]).includes(r);
 /** D-037: the rows of the newer regions' endings (their numbers: what each meant to each minor power, and the dispatch the paper prints). */
-const ENDING_ROWS: Partial<Record<ResolutionId, { minors: Record<MinorPowerId, EndingMinorDelta>; news: { a: PowerId; b?: PowerId } }>> = { ...VESPER_ENDINGS, ...SALTMARKET_ENDINGS, ...REAPERS_ENDINGS, ...ENGINE_ENDINGS, ...RAID_ENDINGS, ...HUNT_ENDINGS };
+const ENDING_ROWS: Partial<Record<ResolutionId, { minors: Record<MinorPowerId, EndingMinorDelta>; news: { a: PowerId; b?: PowerId } }>> = { ...VESPER_ENDINGS, ...SALTMARKET_ENDINGS, ...REAPERS_ENDINGS, ...ENGINE_ENDINGS, ...RAID_ENDINGS, ...HUNT_ENDINGS, ...SIEGE_ENDINGS };
 
 /** One day of the minors' drift (fear cools by 2, grudges soften by 1, as the Ward's do) and what this ending meant to each. */
 function minorAfter(m: PowerState, o: ScenarioOutcome): PowerState {
