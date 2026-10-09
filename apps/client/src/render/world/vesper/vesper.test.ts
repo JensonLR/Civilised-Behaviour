@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,10 @@ import { planVesperScatter } from "./scatter.ts";
 import { buildVesperSolid } from "./solid.ts";
 import { VesperView } from "./VesperView.ts";
 import { sheaveGeometry } from "./works.ts";
+
+// (CPU-bound: most tests here build the whole region at least once, up to about 2 s each alone; under the full suite's four workers one ran past vitest's 5 s default.
+// A time limit, not a budget: the budgets are the assertions.)
+vi.setConfig({ testTimeout: 30_000 });
 
 // The banner and sign atlas is drawn on a canvas; the unit-test environment has no DOM, so give it a recording stub (as highmark.test does).
 const g = globalThis as unknown as Record<string, unknown>;

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import { createDayState, dayState } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
@@ -10,6 +10,10 @@ import { palmGeometry } from "./palms.ts";
 import { KESSAR, KESSAR_ANCHORS as A, KESSAR_SIGNS, createKessarWorld, kessarBridgeWreck, createRegionWorld, kessarPlan, type KessarTerrain } from "./shared.ts";
 import { buildKessarSolid } from "./structures.ts";
 import { buildKessarWater, riverShore } from "./water.ts";
+
+// (CPU-bound: most tests here build the whole region at least once, up to about 2 s each alone; under the full suite's four workers one ran past vitest's 5 s default.
+// A time limit, not a budget: the budgets are the assertions.)
+vi.setConfig({ testTimeout: 30_000 });
 
 // The banner and sign atlas is drawn on a canvas; the unit-test environment has no DOM, so give it a recording stub (as WorldView.test does).
 const g = globalThis as unknown as Record<string, unknown>;
