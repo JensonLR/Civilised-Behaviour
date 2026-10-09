@@ -170,7 +170,8 @@ export class SettingsSheet {
     const noteId = note ? `${id}-note` : undefined;
     if (noteId) control.setAttribute("aria-describedby", noteId);
     parent.append(
-      h("div", { class: "srow" }, h("label", { for: id }, label), control, value ?? h("span"), note ? h("p", { class: "note", id: noteId! }, note) : null),
+      // (a button keeps its own words as its name: a label pointing at it renamed "Erase my records" to "Your records" for a screen reader)
+      h("div", { class: "srow" }, h("label", { for: control.tagName === "BUTTON" ? undefined : id }, label), control, value ?? h("span"), note ? h("p", { class: "note", id: noteId! }, note) : null),
     );
   }
 
@@ -458,7 +459,7 @@ export class SettingsSheet {
     const copy = h("button", { type: "button", id: copyId, class: "small", "aria-describedby": `${copyId}-note` }, "Copy my code");
     const shown = h("textarea", { class: "profilecode", rows: 3, readonly: true, spellcheck: "false", "aria-label": "Your profile code", hidden: true });
     const copyNote = h("p", { class: "note", id: `${copyId}-note`, role: "status" }, "Your characters and expeditions in one code, to keep safe or paste on another device. Keep it private: it lets anyone resume your expeditions.");
-    p.append(h("div", { class: "srow code" }, h("label", { for: copyId }, "Profile code"), copy, shown, copyNote));
+    p.append(h("div", { class: "srow code" }, h("label", {}, "Profile code"), copy, shown, copyNote));
     copy.addEventListener("click", () => {
       const code = myProfileCode();
       shown.value = code;

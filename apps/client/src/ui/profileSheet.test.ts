@@ -28,7 +28,9 @@ describe("the Profile page", () => {
     const writeText = vi.fn(async () => undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     settingsSheet().open(null, "profile");
-    btn(/copy my code/i).click();
+    const copy = btn(/copy my code/i);
+    expect(copy.labels?.length ?? 0).toBe(0); // (its name is its own words, not the row's heading)
+    copy.click();
     await flush();
     const shown = page().querySelector<HTMLTextAreaElement>("textarea[readonly]")!;
     expect(shown.hidden).toBe(false);
