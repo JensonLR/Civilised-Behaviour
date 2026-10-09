@@ -151,7 +151,7 @@ export function standingHeight(world: CollisionWorld, x: number, z: number, feet
 }
 
 /** True if a walker can go straight from a to b (every 0.45 m standable, the ground height followed from `y0`). */
-function segmentOk(world: CollisionWorld, ax: number, az: number, ay: number, bx: number, bz: number, r = FOLK_RADIUS, ignore?: (o: Obstacle) => boolean): boolean {
+export function segmentOk(world: CollisionWorld, ax: number, az: number, ay: number, bx: number, bz: number, r = FOLK_RADIUS, ignore?: (o: Obstacle) => boolean): boolean {
   const len = Math.hypot(bx - ax, bz - az);
   const n = Math.max(1, Math.ceil(len / 0.45));
   let y = ay;

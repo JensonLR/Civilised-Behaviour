@@ -18,6 +18,9 @@ import { disposeProps } from "./villagerProps.ts";
  * waves and says hello when you come near, and somebody in your way steps aside. They change no schedule and no shared state.
  */
 
+/** How near (m) a walker passes somebody standing before stepping round them. */
+const PASS_BY = 1.1;
+
 export interface FolkBudget {
   /** How many of the roster (in priority order) are on the stage at all. */
   count: number;
@@ -369,12 +372,33 @@ export class Villagers {
         oz = (dz / d) * k;
         if (standingHeight(this.world, pose.x + ox, pose.z + oz, pose.y) === undefined) ox = oz = 0;
       }
+      // and a walker steps round anybody standing in the way (the schedule walks its paths as if nobody stood on them): sideways, on whichever side
+      // of them the path already runs, so a walker heading straight at somebody is never pushed back and then forward
+      if (pose.act === "walk" && pose.speed > 0.2) {
+        const rx = Math.cos(pose.facing), rz = -Math.sin(pose.facing); // (across the way of travel)
+        let sx = 0;
+        let sz = 0;
+        for (let j = 0; j < n; j++) {
+          const q = this.poses[j]!;
+          if (j === i || !q.visible || q.act === "walk") continue;
+          const d = Math.hypot(pose.x - q.x, pose.z - q.z);
+          if (d >= PASS_BY) continue;
+          const side = (pose.x - q.x) * rx + (pose.z - q.z) * rz < -1e-3 ? -1 : 1;
+          const k = (1 - d / PASS_BY) * 0.6 * side;
+          sx += rx * k;
+          sz += rz * k;
+        }
+        if ((sx !== 0 || sz !== 0) && standingHeight(this.world, pose.x + ox + sx, pose.z + oz + sz, pose.y) !== undefined) {
+          ox += sx;
+          oz += sz;
+        }
+      }
       slot.offX += (ox - slot.offX) * Math.min(1, dt * 4);
       slot.offZ += (oz - slot.offZ) * Math.min(1, dt * 4);
 
       // ---- pose ------------------------------------------------------------------------------------------------------------------------------
-      // whoever is at a seat sits (reading, writing or resting), whatever the schedule calls it
-      s.act = stations[pose.station]?.seat === true && pose.act !== "walk" ? "sit" : pose.act;
+      // whoever has a seat sits (reading, writing or resting), whatever the schedule calls it; a bench's overflow stands beside it
+      s.act = pose.seated && pose.act !== "walk" ? "sit" : pose.act;
       s.carry = pose.carry;
       s.speed = pose.speed / v.scale;
       s.t = f.worldSec + i * 1.37;

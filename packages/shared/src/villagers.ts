@@ -3,7 +3,7 @@ import { phaseOfHour, wrapHours, WORLD_CLOCK } from "./daycycle.ts";
 import { clamp, smoothstep, wrapAngle } from "./math.ts";
 import { hash3, hashFloat, Rng } from "./rng.ts";
 import { pickLine, type LineKind } from "./villagerLines.ts";
-import { buildNav, routePoint, type Nav, type Route } from "./villagerNav.ts";
+import { buildNav, routePoint, segmentOk, standingHeight, type Nav, type Route } from "./villagerNav.ts";
 import { weatherAt, createWeather } from "./weather.ts";
 
 /**
@@ -97,12 +97,22 @@ export interface Stint {
   partner: number;
   /** Where they wait out rain instead of this station, or -1 (under a roof already, or indoors already). */
   shelter: number;
+  /** Which of the spots round the station (`Folk.spots`) is theirs here, at their shelter and at the far end of their loop: nobody shares one at once. */
+  slot: number;
+  shelterSlot: number;
+  toSlot: number;
 }
 
 export interface Folk {
   readonly nav: Nav;
   readonly roster: readonly Villager[];
   readonly seed: number;
+  /**
+   * Per station, the places people take when more than one is there at once, as (dx, dz, y, sit) from the station's point, in the order that
+   * station's people prefer them: the station itself first, then (for a bench seat) the bench's other seat, then places to stand beside it and
+   * behind it (or in front of a bench), each one standable. A stint's `slot` picks one; `sit` is 1 for a seat.
+   */
+  readonly spots: readonly Float64Array[];
 }
 
 export interface FolkClock {
@@ -307,7 +317,7 @@ export function buildFolk(world: CollisionWorld, seed: number): Folk {
       const at = isMeet ? at0 : at0 < 4.5 ? at0 : clamp(at0 + jit, 4.7, 23.9);
       const to = opt?.to ? okStation(opt.to) : -1;
       const partner = opt?.with ? (keyToId.get(opt.with) ?? -1) : -1;
-      stints.push({ at, st, act, carry: opt?.carry ?? "none", carryIn: opt?.carryIn ?? opt?.carry ?? "none", to, actTo: opt?.actTo ?? act, carryOut: opt?.carryOut ?? "none", partner, shelter: -1 });
+      stints.push({ at, st, act, carry: opt?.carry ?? "none", carryIn: opt?.carryIn ?? opt?.carry ?? "none", to, actTo: opt?.actTo ?? act, carryOut: opt?.carryOut ?? "none", partner, shelter: -1, slot: 0, shelterSlot: 0, toSlot: 0 });
     }
     stints.sort((a, b) => a.at - b.at);
     base.stints = stints;
@@ -354,9 +364,214 @@ export function buildFolk(world: CollisionWorld, seed: number): Folk {
     out.sort((a, b) => a.at - b.at);
     v.stints = pruneUnroutable(nav, out);
   }
-  const folk: Folk = { nav, roster, seed };
+  const { spotsOf, idsOf, groupOf } = stationSpots(nav);
+  assignSpots(roster, idsOf, groupOf);
+  const folk: Folk = { nav, roster, seed, spots: spotsOf };
   bySeed.set(seed, folk);
   return folk;
+}
+
+/** Where people stand round a station when more than one is there at once (metres across its facing, then behind it): the station itself first. */
+const SPOT_OFFSETS: readonly (readonly [number, number])[] = [
+  [0, 0], [0.7, 0], [-0.7, 0], [1.4, 0], [-1.4, 0], [0.35, 0.7], [-0.35, 0.7], [1.05, 0.7], [-1.05, 0.7], [0, 1.4], [0.7, 1.4], [-0.7, 1.4],
+];
+/** Where people stand by a seat that is taken (metres across, then in front of it): a bench's overflow stands to the side before it, and right in front of the sitter's knees only last. */
+const SEAT_STAND: readonly (readonly [number, number])[] = [[0.75, 0.75], [-0.75, 0.75], [1.45, 0.75], [-1.45, 0.75], [2.15, 0.75], [-2.15, 0.75], [1.05, 1.45], [-1.05, 1.45], [0.35, 1.45], [-0.35, 1.45], [0, 0.75]];
+
+interface Spot { x: number; z: number; y: number; sit: boolean }
+
+/**
+ * The places round each station. Stations whose places come within reach of each other (a bench's two seats, the gate's arches side by side)
+ * share them, as one group, so people at the two never stand in one place: `spotsOf` is every station's list (see `Folk.spots`), `idsOf` the same
+ * list as indices into its group's places, and `groupOf` the group.
+ */
+function stationSpots(nav: Nav): { spotsOf: Float64Array[]; idsOf: Int32Array[]; groupOf: Int32Array } {
+  const S = nav.stations;
+  const APART = 0.6;
+  const near = (p: Spot, q: Spot): boolean => Math.hypot(p.x - q.x, p.z - q.z) < APART;
+  // each station's own places: its point, then the places beside and behind it (or, for a seat, in front of it) that a person can stand on
+  const own: Spot[][] = S.map((st) => {
+    const list: Spot[] = [{ x: st.x, z: st.z, y: st.y, sit: st.seat }];
+    if (!st.ok || st.hidden) return list;
+    const lx = Math.cos(st.facing), lz = -Math.sin(st.facing); // (across the way it faces)
+    const bx = Math.sin(st.facing), bz = Math.cos(st.facing); // (behind it)
+    for (const [a, b] of st.seat ? SEAT_STAND : SPOT_OFFSETS.slice(1)) {
+      const f = st.seat ? -b : b; // (a seat's overflow stands in front of it)
+      const sp: Spot = { x: st.x + lx * a + bx * f, z: st.z + lz * a + bz * f, y: 0, sit: false };
+      if (list.some((q) => near(q, sp))) continue;
+      const y = standingHeight(nav.world, sp.x, sp.z, st.y);
+      if (y === undefined || Math.abs(y - st.y) > 0.3) continue;
+      if (!st.seat && !segmentOk(nav.world, st.x, st.z, st.y, sp.x, sp.z)) continue;
+      sp.y = y;
+      list.push(sp);
+    }
+    return list;
+  });
+  // groups: stations any of whose places come near each other's
+  const groupOf = new Int32Array(S.length).map((_, i) => i);
+  const root = (i: number): number => (groupOf[i] === i ? i : (groupOf[i] = root(groupOf[i]!)));
+  for (let i = 0; i < S.length; i++)
+    for (let j = i + 1; j < S.length; j++) if (own[i]!.some((p) => own[j]!.some((q) => near(p, q)))) groupOf[Math.max(root(i), root(j))] = Math.min(root(i), root(j));
+  for (let i = 0; i < S.length; i++) groupOf[i] = root(i);
+  // a group's places: every member's own point first, then the rest, none within reach of another; `from[k]` is the station that offered place k
+  const places = new Map<number, Spot[]>();
+  const from = new Map<number, number[]>();
+  for (const pass of [0, 1])
+    for (let i = 0; i < S.length; i++) {
+      const g = groupOf[i]!;
+      let list = places.get(g);
+      if (!list) {
+        places.set(g, (list = []));
+        from.set(g, []);
+      }
+      for (const sp of pass === 0 ? own[i]!.slice(0, 1) : own[i]!.slice(1))
+        if (!list.some((q) => near(q, sp))) {
+          list.push(sp);
+          from.get(g)!.push(i);
+        }
+    }
+  const spotsOf: Float64Array[] = [];
+  const idsOf: Int32Array[] = [];
+  for (let i = 0; i < S.length; i++) {
+    const st = S[i]!;
+    const g = groupOf[i]!;
+    const list = places.get(g)!;
+    const by = from.get(g)!;
+    // this station's own point; for a seat, the bench's other seat; then its own places; then a neighbour's places a step away and straight in
+    // reach (never a seat for someone who is not sitting, never a place across a wall or a jump away)
+    const rank = (k: number): number => {
+      const sp = list[k]!;
+      if (Math.abs(sp.x - st.x) < 1e-9 && Math.abs(sp.z - st.z) < 1e-9) return 0;
+      const d = Math.hypot(sp.x - st.x, sp.z - st.z);
+      if (sp.sit) return st.seat && d < 1 ? 1000 + k : -1;
+      if (by[k] === i) return 2000 + k;
+      if (d > 1.5 || (!st.seat && !segmentOk(nav.world, st.x, st.z, st.y, sp.x, sp.z))) return -1;
+      return 3000 + k;
+    };
+    const order = list.map((_, k) => k).filter((k) => rank(k) >= 0).sort((p, q) => rank(p) - rank(q));
+    const out = new Float64Array(order.length * 4);
+    order.forEach((k, j) => {
+      const sp = list[k]!;
+      out[j * 4] = sp.x - st.x;
+      out[j * 4 + 1] = sp.z - st.z;
+      out[j * 4 + 2] = sp.y;
+      out[j * 4 + 3] = sp.sit ? 1 : 0;
+    });
+    spotsOf.push(out);
+    idsOf.push(Int32Array.from(order));
+  }
+  return { spotsOf, idsOf, groupOf };
+}
+
+/**
+ * Gives every person their own place at each station for as long as they may be there, so two people never stand (or sit) in one place: they did,
+ * two gossips on one paving stone, two readers on one bench seat, a crowd sheltering in one body on the hall's porch bench. A person may be at a
+ * station through a run of consecutive stints (working there, sheltering there when it rains, or at the far end of a loop); each run is an
+ * interval of the day, and runs in one group of places (a station, or a bench's seats) that overlap get different places: each takes the first
+ * free one in its station's order (its own seat or spot first). Rain is not known in advance, so a shelter run counts whether or not it rains.
+ * Deterministic: fixed by the roster.
+ */
+function assignSpots(roster: readonly Villager[], idsOf: readonly Int32Array[], groupOf: Int32Array): void {
+  interface Run { v: number; x: number; a: number; b: number; ks: number[]; id: number }
+  const runs: Run[] = [];
+  for (const v of roster) {
+    const S = v.stints;
+    const n = S.length;
+    if (n === 0) continue;
+    const span = (k: number): number => {
+      let d = S[(k + 1) % n]!.at - S[k]!.at;
+      while (d <= 1e-9) d += 24;
+      return d;
+    };
+    const at = (k: number, x: number): boolean => S[k]!.st === x || S[k]!.shelter === x || S[k]!.to === x;
+    const seen = new Set<number>();
+    for (const s of S) for (const x of [s.st, s.shelter, s.to]) if (x >= 0) seen.add(x);
+    for (const x of seen) {
+      if (S.every((_, k) => at(k, x))) {
+        runs.push({ v: v.id, x, a: S[0]!.at, b: S[0]!.at + 24, ks: S.map((_, k) => k), id: -1 });
+        continue;
+      }
+      for (let k = 0; k < n; k++) {
+        if (!at(k, x) || at((k - 1 + n) % n, x)) continue; // (a run starts where the stint before it is elsewhere)
+        const ks: number[] = [];
+        let len = 0;
+        for (let j = k; at(j, x) && ks.length < n; j = (j + 1) % n) {
+          ks.push(j);
+          len += span(j);
+        }
+        runs.push({ v: v.id, x, a: S[k]!.at, b: S[k]!.at + len, ks, id: -1 });
+      }
+    }
+  }
+  const overlap = (p: Run, q: Run): boolean => [-24, 0, 24].some((d) => p.a < q.b + d && q.a + d < p.b); // (round the clock: a run may pass midnight)
+  const byGroup = new Map<number, Run[]>();
+  for (const r of runs) {
+    const g = groupOf[r.x]!;
+    let list = byGroup.get(g);
+    if (!list) byGroup.set(g, (list = []));
+    list.push(r);
+  }
+  for (const list of byGroup.values()) {
+    list.sort((p, q) => p.a - q.a || p.v - q.v || p.x - q.x);
+    for (const r of list) {
+      const ids = idsOf[r.x]!;
+      let slot = 0;
+      while (slot < ids.length - 1 && list.some((q) => q.id === ids[slot] && q.v !== r.v && overlap(r, q))) slot++;
+      r.id = ids[slot]!;
+      const S = roster[r.v]!.stints;
+      for (const k of r.ks) {
+        const s = S[k]!;
+        if (s.st === r.x) s.slot = slot;
+        if (s.shelter === r.x) s.shelterSlot = slot;
+        if (s.to === r.x) s.toSlot = slot;
+      }
+    }
+  }
+}
+
+/** A person's own place at a station: its offset from the station's point, its height, whether it is a seat, and how far it is from the point. */
+interface Place { dx: number; dz: number; y: number; sit: boolean; len: number }
+const placeA: Place = { dx: 0, dz: 0, y: 0, sit: false, len: 0 };
+const placeB: Place = { dx: 0, dz: 0, y: 0, sit: false, len: 0 };
+
+/** The place `slot` at `station` (the last place takes any overflow), written into `o`. */
+function placeAt(folk: Folk, station: number, slot: number, o: Place): Place {
+  const sp = folk.spots[station]!;
+  const i = Math.min(slot, sp.length / 4 - 1) * 4;
+  o.dx = sp[i]!;
+  o.dz = sp[i + 1]!;
+  o.y = sp[i + 2]!;
+  o.sit = sp[i + 3]! > 0;
+  o.len = Math.hypot(o.dx, o.dz);
+  return o;
+}
+
+/**
+ * Where a walker is `s` metres along a walk from their place `a` at station `A` to their place `b` at `B`: a straight step from the place to the
+ * station's point, the route, and a straight step from the far station's point onto the place (both steps were tested walkable when the places
+ * were made, so a walker is always on ground somebody can stand on).
+ */
+function placeOnWalk(v: Villager, nav: Nav, r: Route, A: number, a: Place, B: number, b: Place, s: number, out: VillagerPose): void {
+  if (s < a.len) {
+    const sa = nav.stations[A]!;
+    const t = s / a.len;
+    out.x = sa.x + a.dx * (1 - t);
+    out.z = sa.z + a.dz * (1 - t);
+    out.y = a.y + (sa.y - a.y) * t;
+    out.facing = Math.atan2(a.dx, a.dz);
+    return;
+  }
+  const d = s - a.len;
+  if (d <= r.len || b.len <= 0) {
+    placeOnRoute(v, r, Math.min(d, r.len), out);
+    return;
+  }
+  const sb = nav.stations[B]!;
+  const t = Math.min(1, (d - r.len) / b.len);
+  out.x = sb.x + b.dx * t;
+  out.z = sb.z + b.dz * t;
+  out.y = sb.y + (b.y - sb.y) * t;
+  out.facing = Math.atan2(-b.dx, -b.dz);
 }
 
 /** Drops stints that cannot be walked to from the one before (a station cut off in this world); disables shelters whose route is missing. */
@@ -448,9 +663,11 @@ export interface VillagerPose {
   station: number;
   /** True while they are out of their routine because of weather. */
   rained: boolean;
+  /** True while they sit on a seat (a bench's overflow stands beside it instead). */
+  seated: boolean;
 }
 
-export const createVillagerPose = (): VillagerPose => ({ x: 0, y: 0, z: 0, facing: 0, speed: 0, act: "idle", carry: "none", visible: true, partner: -1, station: 0, rained: false });
+export const createVillagerPose = (): VillagerPose => ({ x: 0, y: 0, z: 0, facing: 0, speed: 0, act: "idle", carry: "none", visible: true, partner: -1, station: 0, rained: false, seated: false });
 
 const rainTmp = createWeather();
 const rainCache = new Map<number, number>();
@@ -510,6 +727,7 @@ export function villagerAt(folk: Folk, index: number, clock: FolkClock, out: Vil
   out.visible = true;
   out.speed = 0;
   out.rained = false;
+  out.seated = false;
   if (n === 0) {
     out.act = "sleep";
     out.visible = false;
@@ -535,9 +753,12 @@ export function villagerAt(folk: Folk, index: number, clock: FolkClock, out: Vil
   const Bn = flagN ? sn.shelter : sn.st;
   const st = nav.stations[A]!;
   const route = A === Bn ? undefined : nav.route(A, Bn);
+  const pa = placeAt(folk, A, flagK ? sk.shelterSlot : sk.slot, placeA);
+  const pb = placeAt(folk, Bn, flagN ? sn.shelterSlot : sn.slot, placeB);
+  const walkLen = route ? pa.len + route.len + pb.len : 0;
   const gap = tn - tk;
   const hourSec = hourSecAt(clock, tn);
-  const c = route ? Math.min(commuteHours(route.len, v.walk, hourSec), gap * 0.85) : 0;
+  const c = route ? Math.min(commuteHours(walkLen, v.walk, hourSec), gap * 0.85) : 0;
   const td = tn - c;
   out.rained = flagK || flagN;
 
@@ -545,15 +766,16 @@ export function villagerAt(folk: Folk, index: number, clock: FolkClock, out: Vil
   if (route && c > 0 && h >= td) {
     const u = (h - td) / c;
     const tz = trapezoid(u);
-    const s = tz.p * route.len;
-    placeOnRoute(v, route, s, out);
-    out.speed = (tz.v * route.len) / (c * hourSec);
+    const s = tz.p * walkLen;
+    placeOnWalk(v, nav, route, A, pa, Bn, pb, s, out);
+    out.speed = (tz.v * walkLen) / (c * hourSec);
     out.act = "walk";
     out.carry = sn.carryIn;
     out.station = Bn;
-    out.visible = s > route.hideUntil && s < route.hideFrom;
+    const rs = s - pa.len;
+    out.visible = rs > route.hideUntil && rs < route.hideFrom;
     // turn to the station's own facing over the last stretch
-    const rest = route.len - s;
+    const rest = walkLen - s;
     if (rest < 1.4) out.facing = out.facing + wrapAngle(nav.stations[Bn]!.facing - out.facing) * smoothstep(1.4, 0.3, rest);
     // and turn away from it at the start
     if (s < 0.7) out.facing = st.facing + wrapAngle(out.facing - st.facing) * smoothstep(0, 0.7, s);
@@ -562,11 +784,12 @@ export function villagerAt(folk: Folk, index: number, clock: FolkClock, out: Vil
 
   // ---- at the station (or looping from it) -----------------------------------------------------------------------------------------------
   out.station = A;
-  out.x = st.x;
-  out.z = st.z;
-  out.y = st.y;
+  out.x = st.x + pa.dx;
+  out.z = st.z + pa.dz;
+  out.y = pa.y;
   out.facing = st.facing;
   out.visible = !st.hidden;
+  out.seated = pa.sit;
   if (flagK) {
     out.act = st.hidden ? "sleep" : "shelter";
     return out;
@@ -578,8 +801,11 @@ export function villagerAt(folk: Folk, index: number, clock: FolkClock, out: Vil
     const leg = nav.route(A, sk.to);
     const back = nav.route(sk.to, A);
     if (leg && back) {
+      const pt = placeAt(folk, sk.to, sk.toSlot, placeB);
+      const legLen = pa.len + leg.len + pt.len;
+      const backLen = pt.len + back.len + pa.len;
       const hs = hourSecAt(clock, tk); // (fixed for the stint, so a loop never changes pace mid-way)
-      const w = commuteHours(leg.len, v.walk, hs);
+      const w = commuteHours(legLen, v.walk, hs);
       const T = 2 * w + 2 * LOOP_DWELL;
       const cycles = Math.floor((td - tk) / T);
       const t = h - tk;
@@ -589,27 +815,30 @@ export function villagerAt(folk: Folk, index: number, clock: FolkClock, out: Vil
         if (p < LOOP_DWELL) return out;
         if (p < LOOP_DWELL + w) {
           const q = trapezoid((p - LOOP_DWELL) / w, 0.2);
-          placeOnRoute(v, leg, q.p * leg.len, out);
-          out.speed = (q.v * leg.len) / (w * hs);
+          placeOnWalk(v, nav, leg, A, pa, sk.to, pt, q.p * legLen, out);
+          out.speed = (q.v * legLen) / (w * hs);
           out.act = "walk";
           out.carry = sk.carryOut;
           out.visible = true;
+          out.seated = false;
           return out;
         }
         if (p < 2 * LOOP_DWELL + w) {
-          out.x = tgt.x;
-          out.z = tgt.z;
-          out.y = tgt.y;
+          out.x = tgt.x + pt.dx;
+          out.z = tgt.z + pt.dz;
+          out.y = pt.y;
           out.facing = tgt.facing;
           out.act = sk.actTo;
           out.carry = "none";
+          out.seated = pt.sit;
           return out;
         }
         const q = trapezoid((p - 2 * LOOP_DWELL - w) / w, 0.2);
-        placeOnRoute(v, back, q.p * back.len, out);
-        out.speed = (q.v * back.len) / (w * hs);
+        placeOnWalk(v, nav, back, sk.to, pt, A, pa, q.p * backLen, out);
+        out.speed = (q.v * backLen) / (w * hs);
         out.act = "walk";
         out.carry = "none";
+        out.seated = false;
         return out;
       }
     }
