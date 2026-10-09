@@ -24,4 +24,12 @@ describe("sign lettering", () => {
     expect(l.lines).toHaveLength(2);
     expect(l.lines.join(" ")).toBe("THE VERY LONG AND UNPUNCTUATED NOTICE OF THE BOARD OF WORKS");
   });
+  it("D-097: a short heading over a long line is set larger than the long line, by no more than a third", () => {
+    const l = signLayout("MARKET TERRACE. CHEQUES ACCEPTED AT THE CHEQUE STALL.", 472, measure);
+    expect(l.lines).toEqual(["MARKET TERRACE.", "CHEQUES ACCEPTED AT THE CHEQUE STALL."]);
+    expect(l.sizes[0]).toBeGreaterThan(l.sizes[1]!);
+    expect(l.sizes[0]! / l.sizes[1]!).toBeLessThanOrEqual(1.35);
+    l.lines.forEach((line, i) => expect(measure(line, l.sizes[i]!)).toBeLessThanOrEqual(472));
+    expect(l.px).toBe(Math.min(...l.sizes));
+  });
 });

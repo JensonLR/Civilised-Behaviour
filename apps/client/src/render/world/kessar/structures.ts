@@ -6,7 +6,7 @@ import { RoofKits, interiorShell, sealedDoor, type DoorMark, type RoofSource, ty
 import { cart, tent } from "../landmarks.ts";
 import { crateParts } from "../objects.ts";
 import { pane, type LitPane } from "../litWindows.ts";
-import { KESSAR, KESSAR_ANCHORS as A, kessarPlan, type WallSeg } from "./shared.ts";
+import { KESSAR, KESSAR_ANCHORS as A, WRECK, bridgeLips, kessarPlan, type WallSeg } from "./shared.ts";
 
 /**
  * Every solid thing in Kessar Reach merged into ONE vertex-coloured geometry (one draw, one ink hull): the hill-fort (curtain wall with merlons, four round
@@ -232,7 +232,7 @@ function bridgeBody(span: number, depth: number, width: number, arcSeg: number):
   return g;
 }
 
-function bridge(k: Kit, plan: ReturnType<typeof kessarPlan>, intact: boolean, lod: Lod): void {
+function bridge(k: Kit, plan: ReturnType<typeof kessarPlan>, intact: boolean, lod: Lod, terrain: (x: number, z: number) => number): void {
   const b = plan.bridge;
   const L = KESSAR.level;
   const span = b.z1 - b.z0;
@@ -250,41 +250,99 @@ function bridge(k: Kit, plan: ReturnType<typeof kessarPlan>, intact: boolean, lo
       const px = s * (KESSAR.deckHalf + 0.3);
       slab(k, [0.6, KESSAR.parapetHeight, span], [px, KESSAR.parapetHeight / 2, 0], masonry(33 + s), lod, undefined, true);
       box(k, [0.95, 0.2, span + 0.4], [px, KESSAR.parapetHeight + 0.1, 0], K.stoneCap);
-      for (const e of [-1, 1]) {
-        k.limb([px, 0, e * (span / 2 - 0.4)], [px, 2.6, e * (span / 2 - 0.4)], 0.13, 0.1, K.iron, 5);
-        k.add(new SphereGeometry(0.3, 7, 5), { at: [px, 2.85, e * (span / 2 - 0.4)], colour: gold });
-      }
     }
   }
-  // piers: standing under the deck, or the stumps the charge left
+  // the lamps at the bridge's two ends: they stand on the abutments, so they are still there when the span is not
+  for (const s of [-1, 1]) {
+    const px = s * (KESSAR.deckHalf + 0.3);
+    for (const e of [-1, 1]) {
+      k.limb([px, 0, e * (span / 2 - 0.4)], [px, 2.6, e * (span / 2 - 0.4)], 0.13, 0.1, K.iron, 5);
+      k.add(new SphereGeometry(0.3, 7, 5), { at: [px, 2.85, e * (span / 2 - 0.4)], colour: gold });
+    }
+  }
+  // piers: standing under the deck, or the stumps the charge left (snapped off ragged)
   const stumpTop = intact ? L - 0.8 : L - 2.4;
   for (const p of b.piers) {
     k.setBase(p.x, bed - 0.5, p.z, 0);
     const h = stumpTop - (bed - 0.5);
     k.add(new CylinderGeometry(p.r, p.r * 1.15, h, lod ? 10 : 6), { at: [0, h / 2, 0], colour: masonry(36), flat: true, perFace: true });
-    if (!intact) for (let i = 0; i < 4; i++) box(k, [0.5, 0.7, 0.6], [Math.cos(i * 1.7) * 0.9, h + 0.15, Math.sin(i * 1.7) * 0.9], K.stoneShade, [0.3 * i, i, 0.2]);
+    if (!intact) for (let i = 0; i < 4; i++) box(k, [0.5, 0.45 + 0.2 * (i % 2), 0.55], [Math.cos(i * 1.57 + 0.4) * 0.45, h + 0.12, Math.sin(i * 1.57 + 0.4) * 0.45], i % 2 ? K.stoneShade : K.stone, [0.15 * i, i * 0.8, 0.1]);
   }
   k.clearBase();
-  if (!intact) {
-    // broken deck lying in the water
-    for (let i = 0; i < 4; i++) {
-      const x = b.x + (i - 1.5) * 1.9;
-      const z = A.bridge.z + (i % 2 ? 3.4 : -3.1);
-      box(k, [2.2, 0.55, 1.6], [x, bed + 0.35, z], masonry(37 + i), [0.15 * i, i * 0.9, 0.2 - 0.1 * i]);
+  if (!intact) brokenEnds(k, plan, lod, terrain);
+}
+
+/**
+ * D-097: what the charge leaves of the bridge at each bank (the span itself lies in the gorge: bridgeWreck.ts). The abutment and a slab of the deck reaching `WRECK.overhang`
+ * out over the gorge, its end a ragged break; the parapets on it, snapped lower at the break; and across the road at the lip, where a walker is stopped from stepping into the
+ * gap (`plan.stubs`, solid to the rim's height), a heap of the masonry the blast threw back: blocks of every size, so the view across the gorge is over and between them, not
+ * a wall (the first build put up two plain 8 m walls there; seen in play, they read as walls and hid the river).
+ */
+function brokenEnds(k: Kit, plan: ReturnType<typeof kessarPlan>, lod: Lod, terrain: (x: number, z: number) => number): void {
+  const b = plan.bridge;
+  const L = KESSAR.level;
+  const [lipN, lipS] = bridgeLips();
+  const W = KESSAR.deckHalf;
+  const rough = (seed: number): ColourFn => (p, n, out) => (n.y > 0.6 ? blend(out, K.roadDust, K.stoneCap, h01(seed, Math.floor(p.x * 2), Math.floor(p.z * 2)) * 0.6) : blend(out, K.stoneShade, K.stoneDark, h01(seed + 1, Math.floor(p.y * 3), Math.floor((p.x + p.z) * 2)) * 0.7));
+  for (const [lip, dir, end] of [[lipN, 1, b.z0], [lipS, -1, b.z1]] as const) {
+    const face = lip + dir * WRECK.overhang;
+    const zc = (face + end) / 2, len = Math.abs(face - end);
+    // the abutment and the slab: from the deck's top down to the ground under the break (the ramp falls away beneath it)
+    const depth = L - terrain(b.x, face) + 0.5;
+    slab(k, [W * 2, depth, len], [b.x, L + 0.03 - depth / 2, zc], masonry(240 + dir), lod, undefined, true);
+    box(k, [W * 2 - 0.1, 0.06, len], [b.x, L + 0.06, zc], K.roadDust);
+    // the break: teeth of the deck's masonry standing proud of the face, of uneven depth and height (inside the next metre: the wreck plan keeps that clear)
+    const n = lod ? 9 : 6;
+    for (let i = 0; i < n; i++) {
+      const tw = (W * 2) / n, tl = 0.12 + h01(250 + dir, i) * 0.4, th = 0.4 + h01(251 + dir, i) * (WRECK.deckThick - 0.4);
+      box(k, [tw - 0.05, th, tl], [b.x - W + (i + 0.5) * tw, L + 0.03 - th / 2 - (i % 3 === 1 ? 0.25 : 0), face + dir * tl / 2], rough(260 + i));
+    }
+    // the parapets on the stump, snapped at the break: full height to within a metre of it, then a lower ragged end
+    for (const s of [-1, 1]) {
+      const px = b.x + s * (W + 0.3);
+      const full = len - 0.9;
+      slab(k, [0.6, KESSAR.parapetHeight, full], [px, L + KESSAR.parapetHeight / 2, end + dir * full / 2], masonry(33 + s), lod, undefined, true);
+      box(k, [0.95, 0.2, full], [px, L + KESSAR.parapetHeight + 0.1, end + dir * full / 2], K.stoneCap);
+      const stub = 0.45 + h01(270 + s, dir) * 0.35;
+      box(k, [0.6, stub, 0.8], [px, L + stub / 2, end + dir * (full + 0.4)], rough(280 + s));
+    }
+    // the heap across the road at the lip: a course of thrown blocks about waist high, a few more on top, and two slabs of the deck stood on end by the blast, so it
+    // reaches the rim's height only where those stand (the gorge is seen over it)
+    for (const sx of [-0.35, 0.3]) {
+      const sh = KESSAR.rimHeight - 0.05 - h01(302 + dir, sx) * 0.2;
+      box(k, [1.1, sh, 0.28], [b.x + sx * W, L + sh / 2 - 0.1, lip + dir * 0.12], rough(305 + dir), [0.12 * dir, sx * 0.9, (h01(303 + dir, sx) - 0.5) * 0.3]);
+    }
+    for (let i = 0; i < 8; i++) {
+      const bw = 0.75 + h01(290 + dir, i) * 0.35, bh = 0.45 + h01(291 + dir, i) * 0.3;
+      const x = b.x - W + 0.45 + i * ((W * 2 - 0.9) / 7);
+      box(k, [bw, bh, 0.55 + h01(292 + dir, i) * 0.2], [x, L + bh / 2 - 0.05, lip + (h01(293 + dir, i) - 0.5) * 0.25], i % 3 ? masonry(300 + i) : rough(300 + i), [0, (h01(294 + dir, i) - 0.5) * 0.5, (h01(295 + dir, i) - 0.5) * 0.12]);
+      if (h01(296 + dir, i) < 0.4) {
+        const th = 0.3 + h01(297 + dir, i) * 0.3;
+        box(k, [bw * 0.75, th, 0.5], [x + (h01(298 + dir, i) - 0.5) * 0.3, L + bh - 0.05 + th / 2, lip + (h01(299 + dir, i) - 0.5) * 0.2], rough(310 + i), [0.08, (h01(300 + dir, i) - 0.5) * 0.6, (h01(301 + dir, i) - 0.5) * 0.25]);
+      }
     }
   }
 }
 
 // ---- the rim wall, the toll station, the landing, the camps --------------------------------------------------------------------------
 
-function rim(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number, z: number) => number, lod: Lod, collapsed: boolean): void {
-  const segs = collapsed ? [...plan.rim, ...plan.stubs] : plan.rim;
+/**
+ * The rim along the gorge's lips: a stone railing (D-097; it was a plain wall the rim's height, which hid the gorge, the river and the bridge's arches from the bank). A plinth,
+ * posts, a rail and a capping rail at the rim's height: as solid to a walker as the wall was (its collider is the same box), and the gorge is seen through it.
+ */
+function rim(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number, z: number) => number, lod: Lod): void {
+  const segs = plan.rim;   // (with the span down, the gap's solid is drawn as the heap at each broken end: brokenEnds)
+  const H = KESSAR.rimHeight, plinth = 0.5, cap = 0.16;
   for (const [i, s] of segs.entries()) {
     const y = terrain(s.x, s.z);
     k.setBase(s.x, y, s.z, s.yaw);
-    const h = KESSAR.rimHeight + 0.4;
-    slab(k, [s.hx * 2, h, s.hz * 2], [0, h / 2 - 0.4 + 0.0, 0], masonry(200 + (i % 9)), lod, undefined, true);
-    if (lod) box(k, [s.hx * 2 + 0.05, 0.16, s.hz * 2 + 0.3], [0, KESSAR.rimHeight - 0.4 + 0.08 + 0.4, 0], K.stoneCap);
+    const len = s.hx * 2, t = s.hz * 2;
+    slab(k, [len, plinth + 0.4, t + 0.1], [0, (plinth - 0.4) / 2, 0], masonry(200 + (i % 9)), lod, undefined, true);
+    box(k, [len + 0.04, cap, t + 0.22], [0, H - cap / 2, 0], K.stoneCap);
+    // a post where each run begins (the next run's begins where this one ends), more only on a long run; and one rail between plinth and cap: open, so the gorge shows
+    const posts = Math.max(1, Math.round(len / 3.2));
+    for (let p = 0; p < posts; p++) box(k, [0.3, H - cap - plinth, t + 0.04], [-len / 2 + 0.15 + (p / posts) * len, plinth + (H - cap - plinth) / 2, 0], K.stone);
+    box(k, [len, 0.1, t * 0.5], [0, plinth + (H - cap - plinth) * 0.52, 0], K.stoneCap);
   }
   k.clearBase();
 }
@@ -517,8 +575,8 @@ export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: B
     const seg = f.wall.reduce((a, s) => (Math.hypot(s.x - c.x, s.z - c.z) < Math.hypot(a.x - c.x, a.z - c.z) ? s : a));
     cannon(k, c, terrain(seg.x, seg.z) + KESSAR.wallHeight, lod);
   }
-  bridge(k, plan, intact, lod);
-  rim(k, plan, terrain, lod, !intact);
+  bridge(k, plan, intact, lod, terrain);
+  rim(k, plan, terrain, lod);
   tollStation(k, plan, terrain, lod, out);
   signposts(k, plan, terrain);
   banners(k, plan, terrain);

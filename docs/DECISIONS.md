@@ -510,3 +510,24 @@ The hired hands are the expedition: their shots count for the Hatters and agains
   - Client: the dress reads the real views (flags per station, plum, green, the candle), the signals are solid and drawn, the instrument's mesh stays inside its physics box.
   - Looked at in software-rendered stills (the showcase, dressed by `?trig=` and `&candle=1`): the three signals with the Society's red, the Guild's plum on the terrace, the vigil's candle at dusk, and the theodolite's case beside the landing's ore crates. The first look found the cairn a dark lump (jittered shale; now pale bench stone, whitewashed on top) and the terrace signal three metres from the terrace's lip (moved onto the terrace; a test now keeps every signal on level ground, off the road and four metres clear of every post, banner, lamp, tent, cart and peg).
 - **Not yet.** The angles are presses, not an aiming minigame through the instrument; the needles' names are copy, not lettering on the scenery. Unplayed by a person; every number is a first pass.
+
+**D-097 The bridge comes down; the signs stand clear (2026-10-09).** The owner's play report: "bridge explosion was tacky ... just threw a barrel on a bridge & lit the fuse then basic small explosion no bridge destruction just disappear & put up 2 big walls", and "signs have ugly overlaps & missing text". Both were true. The collapse swapped the span out in one frame, and the two bridge stubs were drawn as 8.4 m by 2 m solid walls along the rim, so at the moment of the big event you saw nothing at all. Several signs had a lamp post through the board, a toll post in front of the lettering, or a terrace wall through one face.
+- **The fall (shared `bridgeWreck.ts`, one pure plan).** Between the two broken ends the span breaks into eight deck pieces (four runs, two halves across) and six parapet runs.
+  - Each piece leaves the deck on a shared timetable: the middle first, the ends last.
+  - Free pieces are kicked up 2 m/s by the blast and fall under gravity. The two end runs stay hinged on the broken face and swing down in 1.1 s.
+  - Every piece comes to rest on the gorge ramps or in the channel, tilted to the ground it lies on and sunk 0.18 m into the bed, partly under water.
+  - The plan is a function of the terrain only, so the server and every client agree. Each resting piece is solid (`bridgeWreckObstacles`; the old seeded rubble is gone).
+  - Tests: nothing overlaps (separating-axis test), every piece is on the ground and clear of the lips and the piers, and the plan is the same twice.
+- **What you see.**
+  - The pieces fall in the client (`kessar/bridgeWreck.ts`), with broken ends drawn on every slab.
+  - Secondary blasts fire at the pier heads, a column of dust rises, each piece throws a splash or rubble where it lands, a long synthesised `bridge_collapse` rumble plays (captioned), and the camera shakes.
+  - The broken ends are an abutment slab reaching 1.2 m over the gorge with ragged teeth, parapet stubs, two upright slabs and a lower heap of blocks. The piers stand as ragged stumps.
+  - The rim wall that replaced the span is now a see-through railing: a 0.5 m plinth, posts every ~3.2 m, a mid rail and a cap at the collider's 1.6 m.
+  - A collapse seen live plays the fall; one already in the save loads as the wreck at rest. Dev hook: `?bridge=collapsed&fallat=T`.
+- **Signs (every region and the HQ route).**
+  - A new test (`signClearance.test.ts`) holds every board clear of every other solid, and nothing taller than a person within 0.35 to 1.8 m of either face across the board's width.
+  - It also guards the count per region: an end-of-line comment had once commented two of Highmark's signs out of existence.
+  - The offenders moved: Kessar's toll sign (off the road, clear of the toll post) and its Syndicate-bank sign (clear of a tent and a boulder), Highmark's granary-terrace sign (a pace off the terrace wall), the Saltmarket's quay sign (clear of a lamp post), and the HQ route's third dock post (three metres on, past the stilt house). Hollowmere's recorded arena hash was re-recorded for that post; the count is unchanged.
+  - Lettering: a short heading over a long line is set at its own size (up to 1.35 times the other line) instead of shrinking to the long line's size.
+- **Looked at.** Software-rendered stills from the bank and from the gorge, the fall at 0.2, 0.6 and 1.0 s, and every sign in every region from both faces.
+- **Not yet.** The pieces are scenery with colliders, not physics bodies: nothing bounces off them as they fall, and a player under the bridge is not struck. Unplayed by a person.

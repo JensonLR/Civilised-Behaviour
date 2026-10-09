@@ -386,7 +386,7 @@ export function saltmarketPlan(): SaltmarketPlan {
     { x: 3.9, z: 117, yaw: Math.PI / 2, text: 0 },
     { x: -28, z: 73, yaw: Math.PI / 2, text: 1 },
     { x: 5.5, z: -28, yaw: Math.PI / 2, text: 2 },
-    { x: 4.4, z: 104, yaw: Math.PI / 2, text: 3 },
+    { x: 5.6, z: 103.6, yaw: Math.PI / 2, text: 3 },   // (D-097: clear of the quay's lamp post, which ran through its board)
   ];
   const banners: SaltmarketBanner[] = [
     { x: -33.1, z: 60.2, yaw: Math.PI / 2, top: 7.3, w: 2.0, h: 3.0, kind: "customs" },

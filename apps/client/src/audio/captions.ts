@@ -25,6 +25,7 @@ export const CAPTIONS: Readonly<Record<string, CaptionDef>> = {
   crank_shot: D("crank gun fire"),
   bellow: D("a beast bellows", 160, 1.2),
   explosion: D("explosion", 400, 1),
+  bridge_collapse: D("the bridge collapses", 520, 1),
   sabre_hit: D("steel on steel", 30, 0.5),
   hurt: D("a cry of pain", 35, 0.8),
   down: D("someone goes down", 35, 1.2),

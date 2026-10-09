@@ -37,10 +37,11 @@ describe("Kessar Reach: the world", () => {
     const down = createKessarWorld(seed, "collapsed");
     expect(hashOf(rigged)).toBe(hashOf(intact));
     const key = (o: { kind: string; tag?: string; x: number; z: number }): string => `${o.kind}:${o.tag}:${o.x.toFixed(2)}:${o.z.toFixed(2)}`;
-    const near = (o: { x: number; z: number }): boolean => Math.abs(o.x) < 8 && Math.abs(o.z - A.bridge.z) < 14;
+    // (D-097: "at the bridge" reaches 12 m up and down the river: the fallen span lies spread along the gorge where it came down)
+    const near = (o: { x: number; z: number }): boolean => Math.abs(o.x) < 12 && Math.abs(o.z - A.bridge.z) < 14;
     const far = (w: CollisionWorld): string[] => w.obstacles.filter((o) => !near(o)).map(key);
     expect(far(down)).toEqual(far(intact));
-    // no deck, no parapets; pier stumps and rubble remain
+    // no deck, no parapets; pier stumps and the fallen span remain
     expect(down.obstacles.some((o) => o.tag === "bridge" && o.kind === "box")).toBe(false);
     expect(intact.obstacles.some((o) => o.tag === "bridge" && o.kind === "box")).toBe(true);
     expect(down.obstacles.filter((o) => o.tag === "bridge" && o.kind === "circle").length).toBe(2);

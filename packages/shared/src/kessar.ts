@@ -10,6 +10,7 @@ import { Rng } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
 import { KESSAR_OUTPOST, rivalPostObstacles, withOutpost } from "./outpost.ts";
 import type { OutpostStage } from "./worldTypes.ts";
+import { bridgeWreckObstacles } from "./bridgeWreck.ts";
 
 /**
  * KESSAR REACH, region 1: the authored plan (ONE pure description the terrain, the colliders, the props and the client's geometry all read, like
@@ -280,11 +281,11 @@ export function kessarPlan(): KessarPlan {
     { x: 4.4, z: A.landing.z - 1.6, yaw: Math.PI / 2, top: 4.6, w: 1.5, h: 2.6, kind: "society" },
   ];
   const signs: KessarSign[] = [
-    { x: -3.5, z: 5.6, yaw: Math.PI / 2, text: 0 },
+    { x: -4.7, z: 3.0, yaw: Math.PI / 2, text: 0 },   // (D-097: off the road, and three metres short of the toll post, which stood in front of its lettering)
     { x: 4.6, z: 33.2, yaw: Math.PI / 2, text: 1 },
     { x: 37.5, z: 35, yaw: Math.PI / 2, text: 2 },
     { x: -4.4, z: 85.8, yaw: Math.PI / 2, text: 3 },
-    { x: -38.5, z: 58, yaw: Math.PI / 2, text: 4 },
+    { x: -39.7, z: 57.4, yaw: Math.PI / 2, text: 4 },   // (D-097: clear of the Syndicate's tent and the boulder, which stood either side of its faces)
     { x: 4.6, z: -30.5, yaw: Math.PI / 2, text: 5 },
   ];
   // palms: a fringe on the shore, a few at the river's edge and round the Syndicate's camp (authored; no seed)
@@ -420,17 +421,11 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
     for (const p of b.piers) out.push({ kind: "circle", tag: "bridge", x: p.x, z: p.z, r: p.r, y0: bed - 1, y1: L - 0.8 });
   } else {
     for (const p of b.piers) out.push({ kind: "circle", tag: "bridge", x: p.x, z: p.z, r: p.r, y0: bed - 1, y1: L - 2.4 });
-    const rub = new Rng(seed ^ 0x4b17ab1e);
-    for (let i = 0; i < 7; i++) {
-      const x = b.x + rub.range(-4.5, 4.5);
-      const z = A.bridge.z + rub.range(-4.5, 4.5);
-      if (b.piers.some((p) => Math.hypot(p.x - x, p.z - z) < p.r + 1.3)) continue;
-      const r = rub.range(0.5, 1.1);
-      out.push({ kind: "circle", tag: ROCK_TAG, x, z, r, y0: bed - 1, y1: bed + r * 1.4 });
-    }
+    // D-097: the span lies in the gorge where it fell, solid (bridgeWreck.ts plans it; the scenery draws the same pieces)
+    out.push(...bridgeWreckObstacles(terrain));
   }
 
-  // the rim wall along the gorge (and, once the span is down, the broken abutments that close the gap)
+  // the rim wall along the gorge (and, once the span is down, the solid across each broken end that keeps a walker out of the gap: drawn as the masonry heaped there)
   const rimY0 = L - KESSAR.gorgeDepth - 1;
   for (const w of [...plan.rim, ...(bridge === "collapsed" ? plan.stubs : [])]) out.push({ kind: "box", tag: "wall", x: w.x, z: w.z, hx: w.hx, hz: w.hz, yaw: w.yaw, y0: rimY0, y1: L + KESSAR.rimHeight });
 

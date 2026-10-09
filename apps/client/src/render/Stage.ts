@@ -250,6 +250,11 @@ export class Stage {
 
   private scenario: ScenarioView | undefined;
 
+  /** D-097: the bridge went in front of us: start its span's fall (the region view rebuilt without it); the landings, for the effects. */
+  bridgeFell(): { at: number; x: number; y: number; z: number; water: boolean; size: number }[] {
+    return this.worldView?.bridgeFell?.() ?? [];
+  }
+
   /** The contract in play (D-037): handed to the region view, which may dress it (a fall, a flood); re-applied to every new view. */
   setScenario(v: ScenarioView | undefined): void {
     this.scenario = v;

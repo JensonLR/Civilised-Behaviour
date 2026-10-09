@@ -71,6 +71,29 @@ describe("hqRoute: the authored lines and their finger-posts", () => {
     }
   });
 
+  it("D-097: every board stands clear of every other solid (a board ran into a stilt house)", () => {
+    const w = createArena(7);
+    const inside = (o: (typeof w.obstacles)[number], x: number, z: number, m: number): boolean => {
+      if (o.kind === "circle") return Math.hypot(x - o.x, z - o.z) <= o.r + m;
+      const c = Math.cos(o.yaw), s = Math.sin(o.yaw), dx = x - o.x, dz = z - o.z;
+      return Math.abs(dx * c + dz * s) <= o.hx + m && Math.abs(-dx * s + dz * c) <= o.hz + m;
+    };
+    const cuts: string[] = [];
+    for (const sg of hqRoute().signs) {
+      const y = w.terrainHeight(sg.x, sg.z);
+      sg.boards.forEach((b, i) => {
+        for (const o of w.obstacles) {
+          if (o.kind === "circle" && Math.hypot(o.x - sg.x, o.z - sg.z) < 0.3) continue;
+          for (let t = 0.15; t <= b.len + 0.15; t += 0.1) {
+            const x = sg.x + Math.cos(b.yaw) * t, z = sg.z + Math.sin(b.yaw) * t;
+            if (o.y1 > y + b.y - 0.15 && o.y0 < y + b.y + 0.15 && inside(o, x, z, 0.08)) { cuts.push(`${sg.id} board ${i}`); break; }
+          }
+        }
+      });
+    }
+    expect(cuts).toEqual([]);
+  });
+
   it("are solid in the world (tag fingerpost, appended last), and the same world otherwise", () => {
     const w = createArena(91);
     const posts = w.obstacles.filter((o) => classifyObstacle(o) === "fingerpost");

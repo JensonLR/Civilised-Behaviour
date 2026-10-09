@@ -32,6 +32,7 @@ export * from "./factions.ts";
 export * from "./negotiation.ts";
 export * from "./newspaper.ts";
 export * from "./kessar.ts";
+export * from "./bridgeWreck.ts";   // D-097: the bridge's fall
 export * from "./highmark.ts";
 // ---- D-037: regions three and four (Vesper Gorge, the Saltmarket Delta) ----
 export * from "./regionEndings.ts";
