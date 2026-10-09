@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshDepthMaterial, RGBADepthPacking, SphereGeometry, type WebGLProgramParametersWithUniforms } from "three";
-import { PALETTE, animalPose, createAnimalPose, type Animal, type AnimalKind, type CollisionWorld, villagePlan } from "@cb/shared";
+import { BODY_R, PALETTE, animalPose, createAnimalPose, separateBodies, type Animal, type AnimalKind, type CollisionWorld, villagePlan } from "@cb/shared";
 import { WORLD_INK, instancedWorldOutline, type OutlineDisplace } from "@cb/procedural/three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Kit, blend, weldedOutlineNormals, type ColourFn, type V3 } from "./kit.ts";
@@ -322,15 +322,26 @@ export function buildAnimals(animals: readonly Animal[], outlines: boolean): Flo
     }
     sets.push({ name: g.name, kinds, mesh, hull, anim, animals: group });
   }
-  const pose = createAnimalPose();
+  // each set's poses this frame, so the set can be parted (`separateBodies`) before it is drawn: allocated once
+  const most = Math.max(...sets.map((s) => s.animals.length));
+  const poses = Array.from({ length: most }, () => createAnimalPose());
+  const px = new Float64Array(most), pz = new Float64Array(most), pr = new Float64Array(most);
   return {
     sets,
     update(worldSec: number, hours = 12): void {
       for (const s of sets) {
+        const n = s.animals.length;
         s.animals.forEach((a, i) => {
-          animalPose(a, worldSec, pose, hours);
+          const pose = animalPose(a, worldSec, poses[i]!, hours);
+          px[i] = pose.x;
+          pz[i] = pose.z;
+          pr[i] = BODY_R[a.kind] * a.size;
+        });
+        separateBodies(px, pz, pr, n);
+        s.animals.forEach((a, i) => {
+          const pose = poses[i]!;
           // model faces +x; three's rotation.y = -yaw. Ducks ride the water line (the pond's surface, not the bed under it).
-          composeInstance(mat4, pose.x, a.kind === "duck" ? waterAt(pose.x, pose.z) : groundAt(pose.x, pose.z), pose.z, -pose.yaw, a.size, a.size, a.size);
+          composeInstance(mat4, px[i]!, a.kind === "duck" ? waterAt(px[i]!, pz[i]!) : groundAt(px[i]!, pz[i]!), pz[i]!, -pose.yaw, a.size, a.size, a.size);
           s.mesh.setMatrixAt(i, mat4);
           // the stride phase runs with the distance walked; a swimming duck paddles no legs, so its phase only drives the bob
           const stride = (worldSec * 5.2 + a.seed * 40) % (Math.PI * 200);

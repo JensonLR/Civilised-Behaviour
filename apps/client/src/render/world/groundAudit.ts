@@ -55,6 +55,33 @@ function labelOf(o: Object3D, root: Object3D): string {
   return (names.reverse().join("/") || "(unnamed)") + (geo?.name ? `[${geo.name}]` : "");
 }
 
+/** A piece's footprint as a box at its own yaw (its edges' dominant direction in plan), from its world vertices (x, y, z, x, y, z, ... three per triangle). */
+export function orientedBox(w: Float64Array): { c: number; s: number; cx: number; cz: number; hu: number; hv: number } {
+  // the yaw: the length-weighted mean of its edges' directions in plan, modulo a right angle (as 4 x the angle); a round piece has none and keeps 0
+  let sc = 0, ss = 0;
+  for (let t = 0; t + 2 < w.length / 3; t += 3) for (let e = 0; e < 3; e++) {
+    const a = (t + e) * 3, b = (t + ((e + 1) % 3)) * 3;
+    const dx = w[b]! - w[a]!, dz = w[b + 2]! - w[a + 2]!;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) continue;
+    const ang = 4 * Math.atan2(dz, dx);
+    sc += len * Math.cos(ang);
+    ss += len * Math.sin(ang);
+  }
+  const yaw = Math.hypot(sc, ss) > 1e-6 ? Math.atan2(ss, sc) / 4 : 0;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (let j = 0; j < w.length; j += 3) {
+    const u = w[j]! * c + w[j + 2]! * s, vv = -w[j]! * s + w[j + 2]! * c;
+    if (u < u0) u0 = u;
+    if (u > u1) u1 = u;
+    if (vv < v0) v0 = vv;
+    if (vv > v1) v1 = vv;
+  }
+  const uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+  return { c, s, cx: uc * c - vc * s, cz: uc * s + vc * c, hu: (u1 - u0) / 2, hv: (v1 - v0) / 2 };
+}
+
 /** Connected components of a geometry's triangles: for each component, its vertex indices. */
 export function geometryPieces(geo: BufferGeometry): { verts: number[]; triangles: number }[] {
   const pos = geo.getAttribute("position");
@@ -202,29 +229,8 @@ export function floatingPieces(root: Object3D, terrain: Terrain, skip: (label: s
           if (above < gap) gap = above;
           if (above <= ON_GROUND || ground(v.x, v.z, v.y)) grounded = true;
         });
-        // the yaw: the length-weighted mean of its edges' directions in plan, modulo a right angle (as 4 x the angle); a round piece has none and keeps 0
-        let sc = 0, ss = 0;
-        for (let t = 0; t < part.verts.length; t += 3) for (let e = 0; e < 3; e++) {
-          const a = (t + e) * 3, b = (t + ((e + 1) % 3)) * 3;
-          const dx = w[b]! - w[a]!, dz = w[b + 2]! - w[a + 2]!;
-          const len = Math.hypot(dx, dz);
-          if (len < 0.01) continue;
-          const ang = 4 * Math.atan2(dz, dx);
-          sc += len * Math.cos(ang);
-          ss += len * Math.sin(ang);
-        }
-        const yaw = Math.hypot(sc, ss) > 1e-6 ? Math.atan2(ss, sc) / 4 : 0;
-        const c = Math.cos(yaw), s = Math.sin(yaw);
-        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
-        for (let j = 0; j < w.length; j += 3) {
-          const u = w[j]! * c + w[j + 2]! * s, vv = -w[j]! * s + w[j + 2]! * c;
-          if (u < u0) u0 = u;
-          if (u > u1) u1 = u;
-          if (vv < v0) v0 = vv;
-          if (vv > v1) v1 = vv;
-        }
-        const uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
-        pieces.push({ min, max, c, s, cx: uc * c - vc * s, cz: uc * s + vc * c, hu: (u1 - u0) / 2, hv: (v1 - v0) / 2, grounded, supported: grounded, label, instance: inst ? k : -1, triangles: part.triangles, gap });
+        const ob = orientedBox(w);
+        pieces.push({ min, max, ...ob, grounded, supported: grounded, label, instance: inst ? k : -1, triangles: part.triangles, gap });
       }
     }
   });

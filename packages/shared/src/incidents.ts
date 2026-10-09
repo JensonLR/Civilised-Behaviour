@@ -109,6 +109,35 @@ export function placeIncident(party: { x: number; z: number }, hostiles: readonl
   return best;
 }
 
+/**
+ * Where an incident's kegs lie: `n` round `at` on a ring of radius `ring`, the first at bearing `turn`. Each stands on open ground (`open`): where the ring meets a
+ * wall, a tree or the water, its keg slides along the ring (a quarter and a half radian either way) to the nearest open spot clear of the others, or is left out
+ * (a keg is never spawned half inside a wall: the physics would fling it out). Deterministic.
+ */
+export function kegRing(at: { x: number; z: number }, n: number, ring: number, turn: number, open: (x: number, z: number) => boolean): { x: number; z: number }[] {
+  const out: { x: number; z: number }[] = [];
+  for (let k = 0; k < n; k++) {
+    const a = turn + (k / n) * Math.PI * 2;
+    for (const da of [0, 0.25, -0.25, 0.5, -0.5]) {
+      const x = at.x + Math.cos(a + da) * ring, z = at.z + Math.sin(a + da) * ring;
+      if (!open(x, z) || out.some((p) => Math.hypot(p.x - x, p.z - z) < KEG_GAP)) continue;
+      out.push({ x, z });
+      break;
+    }
+  }
+  return out;
+}
+/** True when the whole ring of radius `ring` round `at` is open ground (sixteen bearings): room for a spill of kegs, every one where it falls. */
+export function ringOpen(at: { x: number; z: number }, ring: number, open: (x: number, z: number) => boolean): boolean {
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    if (!open(at.x + Math.cos(a) * ring, at.z + Math.sin(a) * ring)) return false;
+  }
+  return true;
+}
+/** The least distance between two spilled kegs' middles (m): a keg is 0.64 across. */
+const KEG_GAP = 0.7;
+
 /** The people of an incident (group "incident"). The wounded traveller is spawned standing and the server lays them down. */
 export function incidentRoster(id: IncidentId, at: { x: number; z: number }, region: RegionId, seed: number, party = 4): NpcSpec[] {
   const look = (k: number): number => hash3(seed >>> 0, k, 0x1c1d) >>> 0;

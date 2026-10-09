@@ -173,6 +173,107 @@ export function buildFlock(world: CollisionWorld, flocks: readonly FlockSpec[] =
   return out;
 }
 
+/** Body radius of each kind at scale 1 (m), nose to tail: two animals' middles never come nearer than the sum of theirs (a head never pokes into a neighbour). */
+export const BODY_R: Readonly<Record<AnimalKind, number>> = { sheep: 0.62, goat: 0.56, deer: 0.72, stag: 0.82, duck: 0.2, cat: 0.24 };
+
+/**
+ * A flock grazes shoulder to shoulder, never through each other: each animal walks its own route, the routes of a small flock cross, and two of them stood in
+ * one another. This pushes apart any two of the first `n` animals (middles `x`, `z`, body radii `r`) that are nearer than their radii allow, each by half the
+ * overlap, in a few passes. Deterministic in its inputs (every client sees the same flock) and allocation-free.
+ */
+export function separateBodies(x: Float64Array, z: Float64Array, r: Float64Array, n: number, passes = 4): void {
+  for (let p = 0; p < passes; p++) {
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const dx = x[j]! - x[i]!, dz = z[j]! - z[i]!;
+      const want = r[i]! + r[j]!;
+      const d = Math.hypot(dx, dz);
+      if (d >= want) continue;
+      let ux = dx / d, uz = dz / d;
+      if (d < 1e-6) {
+        // (exactly on top of each other: part them along a direction fixed by the pair, the same on every client)
+        const a = (i * 7 + j * 13) * 0.61803;
+        ux = Math.cos(a);
+        uz = Math.sin(a);
+      }
+      const push = (want - d) / 2;
+      x[i] = x[i]! - ux * push;
+      z[i] = z[i]! - uz * push;
+      x[j] = x[j]! + ux * push;
+      z[j] = z[j]! + uz * push;
+    }
+  }
+}
+
+/** Scratch for `separateCapsules`: the two closest points (x, z, x, z). */
+const closest = new Float64Array(4);
+
+/** Writes the closest points of the plan segments p1-q1 and p2-q2 into `closest` and returns their distance (Ericson's method, clamped to both segments). */
+function segmentGap(p1x: number, p1z: number, q1x: number, q1z: number, p2x: number, p2z: number, q2x: number, q2z: number): number {
+  const d1x = q1x - p1x, d1z = q1z - p1z, d2x = q2x - p2x, d2z = q2z - p2z;
+  const rx = p1x - p2x, rz = p1z - p2z;
+  const a = d1x * d1x + d1z * d1z, e = d2x * d2x + d2z * d2z, f = d2x * rx + d2z * rz;
+  let s = 0, t = 0;
+  if (a <= 1e-9 && e <= 1e-9) {
+    s = t = 0;
+  } else if (a <= 1e-9) {
+    t = clamp(f / e, 0, 1);
+  } else {
+    const c = d1x * rx + d1z * rz;
+    if (e <= 1e-9) s = clamp(-c / a, 0, 1);
+    else {
+      const b = d1x * d2x + d1z * d2z;
+      const den = a * e - b * b;
+      s = den > 1e-9 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+  closest[0] = p1x + d1x * s;
+  closest[1] = p1z + d1z * s;
+  closest[2] = p2x + d2x * t;
+  closest[3] = p2z + d2z * t;
+  return Math.hypot(closest[2]! - closest[0]!, closest[3]! - closest[1]!);
+}
+
+/**
+ * As `separateBodies`, for long beasts: each of the first `n` is a capsule along its heading `yaw` (from `back` behind its middle to `front` ahead of it, `r`
+ * wide), and two that overlap are pushed apart along the line between their nearest points. A circle round a 2.8 m beast would hold its neighbours a body
+ * length off at the shoulder; one round its body let a head stand in the next one's flank.
+ */
+export function separateCapsules(x: Float64Array, z: Float64Array, yaw: Float64Array, back: number, front: number, r: number, n: number, passes = 8): void {
+  const want = 2 * r;
+  const reach = 2 * Math.max(front, back) + want; // (two heads facing: each spine's longer end towards the other)
+  for (let p = 0; p < passes; p++) {
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      if (Math.abs(x[j]! - x[i]!) > reach || Math.abs(z[j]! - z[i]!) > reach) continue;
+      const ci = Math.cos(yaw[i]!), si = Math.sin(yaw[i]!), cj = Math.cos(yaw[j]!), sj = Math.sin(yaw[j]!);
+      const d = segmentGap(x[i]! - ci * back, z[i]! - si * back, x[i]! + ci * front, z[i]! + si * front, x[j]! - cj * back, z[j]! - sj * back, x[j]! + cj * front, z[j]! + sj * front);
+      if (d >= want) continue;
+      let ux = closest[2]! - closest[0]!, uz = closest[3]! - closest[1]!;
+      if (d < 1e-6) {
+        // (the spines cross: part them along a direction fixed by the pair, the same on every client)
+        const a = (i * 7 + j * 13) * 0.61803;
+        ux = Math.cos(a);
+        uz = Math.sin(a);
+      } else {
+        ux /= d;
+        uz /= d;
+      }
+      const push = (want - d) / 2;
+      x[i] = x[i]! - ux * push;
+      z[i] = z[i]! - uz * push;
+      x[j] = x[j]! + ux * push;
+      z[j] = z[j]! + uz * push;
+    }
+  }
+}
+
 const legIndex = (a: Animal, t: number): { i: number; u: number } => {
   const n = a.route.length / 2;
   const tt = t + a.phase;

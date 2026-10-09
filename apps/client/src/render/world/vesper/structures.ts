@@ -491,10 +491,20 @@ export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, par
     parts.glows.push({ x: l.x, y: y + l.h + 0.26, z: l.z });
   }
   for (const [i, n] of plan.needles.entries()) needle(k, n.x, g(n.x, n.z) - 1, n.z, n.r, n.height + 1, 300 + i * 7, lod);
-  // posts for the free-standing banners and the sign boards (the cloth hangs from them)
+  // posts for the free-standing banners and the sign boards (the cloth hangs from them); a banner on a wall hangs from an iron rod on two arms out from it
   for (const b of plan.banners) {
-    if (b.top > 6.2 || b.kind === "company") continue;
     const y = g(b.x, b.z);
+    if (b.wall !== undefined) {
+      const nx = Math.cos(b.yaw), nz = Math.sin(b.yaw), rx = nz, rz = -nx;
+      const ry = y + b.top + 0.03, cx = b.x + nx * 0.02, cz = b.z + nz * 0.02;   // (the cloth hangs 2 cm out from its line: cloth.ts)
+      const half = b.w / 2 + 0.06;
+      k.limb([cx - rx * half, ry, cz - rz * half], [cx + rx * half, ry, cz + rz * half], 0.025, 0.025, P.iron, 5);
+      for (const s of [-1, 1]) {
+        const ax = cx + rx * s * (b.w / 2 - 0.08), az = cz + rz * s * (b.w / 2 - 0.08);
+        k.limb([ax - nx * (b.wall + 0.07), ry, az - nz * (b.wall + 0.07)], [ax, ry, az], 0.02, 0.02, P.iron, 4);
+      }
+      continue;
+    }
     k.limb([b.x, y - 0.2, b.z], [b.x, y + b.top + 0.4, b.z], 0.1, 0.075, P.timber, 6);
     k.add(new SphereGeometry(0.14, 5, 4), { at: [b.x, y + b.top + 0.5, b.z], colour: P.glowLamp });
   }

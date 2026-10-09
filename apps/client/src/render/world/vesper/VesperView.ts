@@ -19,6 +19,7 @@ import type { VesperTerrain } from "./shared.ts";
 import { buildVesperSolid } from "./solid.ts";
 import { addWindows, setWindowNight } from "../litWindows.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { cullPlants } from "../plantCull.ts";
 import { sheaveAt, sheaveGeometry } from "./works.ts";
 
 const WHITE = new Color(1, 1, 1);
@@ -91,6 +92,7 @@ export class VesperView implements RegionView {
     this.addCloth(terrain);
     this.dress = new VesperDress(this.root, world, detail, (x) => this.track(x));
     this.addAmbient();
+    cullPlants(this.root); // (no plant grows through anything built)
     this.count();
     // (a dev hook for stills: ?fall=open|dug|blasted|sealed|consecrated and ?pegs=party,rival,none,party dress the scenery without a room; harmless in a game)
     this.applyScenario(dressFromUrl());

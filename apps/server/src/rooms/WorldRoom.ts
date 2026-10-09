@@ -124,6 +124,7 @@ import {
   newParty,
   serializeParty,
   PropKind,
+  kegRing,
   REGIONS,
   hash3,
   type ScenarioTemplateId,
@@ -575,10 +576,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         });
         return out;
       },
-      land: (x, z) => {
-        const wd = (this.world.terrain as { waterDepth?: (x: number, z: number) => number }).waterDepth;
-        return (this.cast.openAt?.(x, z) ?? true) && (wd === undefined || wd(x, z) <= 0);
-      },
+      land: (x, z) => this.dryOpen(x, z),
       fighting: () => this.simT - this.lastShotT < INCIDENT.calmS || this.scenario?.phase === "fighting" || this.scenario?.phase === "escalated",
       join: (name, lookSeed, at) => this.followers.join(name, lookSeed, at),
       looseHorse: (at) => this.mounts.spawnHorse({ x: at.x, z: at.z, yaw: 0 }, { coat: (this.state.seed ^ 0x40) >>> 0 }),
@@ -587,9 +585,9 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       spillKegs: (at, n, ring, fuseS) => {
         const out: string[] = [];
         const turn = ((this.state.seed >>> 3) % 628) / 100;
-        for (let k = 0; k < n; k++) {
-          const a = turn + (k / n) * Math.PI * 2;
-          const id = this.spawnPropAt(PropKind.BARREL, at.x + Math.cos(a) * ring, at.z + Math.sin(a) * ring);
+        // (each keg on open, dry ground: the wreck can stand a pace from a wall or a tree, and a keg spawned in one was flung out or left half inside it)
+        for (const p of kegRing(at, n, ring, turn, (x, z) => this.dryOpen(x, z))) {
+          const id = this.spawnPropAt(PropKind.BARREL, p.x, p.z);
           if (id) out.push(id);
         }
         const first = out[0];
@@ -1495,6 +1493,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   }
 
   /** A free prop of `kind` at (x, z), on the ground (scenario sites, the powder kegs of the manifest). */
+  /** Open, dry ground (the nav grid's open cells include the shallows and the sea off a landing: the first look put a courier in the surf). */
+  private dryOpen(x: number, z: number): boolean {
+    const wd = (this.world.terrain as { waterDepth?: (x: number, z: number) => number }).waterDepth;
+    return (this.cast.openAt?.(x, z) ?? true) && (wd === undefined || wd(x, z) <= 0);
+  }
+
   private spawnPropAt(kind: number, x: number, z: number): string | undefined {
     if (!(kind in PROP_DEFS)) return undefined;
     const body = this.physics.spawnProp({ kind: kind as PropKindId, x, z, yaw: hash3(this.state.seed, Math.round(x * 4), Math.round(z * 4)) / 4294967296 * Math.PI * 2 }, this.world.terrainHeight(x, z));

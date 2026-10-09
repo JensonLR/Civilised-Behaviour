@@ -14,6 +14,7 @@ import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToo
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { RoofSet, doorGroups, type DoorMark } from "../rooms.ts";
+import { cullPlants } from "../plantCull.ts";
 import { buildKessarCloth, createKessarAtlas, kessarClothMaterial } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover, visualY } from "./ground.ts";
 import { palmGeometry, palmHullGeometry } from "./palms.ts";
@@ -82,6 +83,7 @@ export class KessarView implements RegionView {
     this.addCloth(terrain);
     this.addWater(terrain);
     this.addAmbient();
+    cullPlants(this.root); // (no plant grows through anything built)
     this.count();
   }
 
@@ -273,7 +275,9 @@ export class KessarView implements RegionView {
   // ---- the dress: the outpost, the roads, the wire, the launch, the Syndicate's post (swapped in place: outpostDress.ts) ----------------------------
 
   applyDress(d: RegionDress): void {
-    if (this.dress.apply(d)) this.count();
+    if (!this.dress.apply(d)) return;
+    cullPlants(this.root); // (the founded post displaces the grass it stands on, and gives it back if it goes)
+    this.count();
   }
 
   // ---- the day ---------------------------------------------------------------------------------------------------------------------------

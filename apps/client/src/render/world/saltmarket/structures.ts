@@ -688,7 +688,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
     k.limb([sg.x - rx * (post + 0.08), y + 2.15, sg.z - rz * (post + 0.08)], [sg.x + rx * (post + 0.08), y + 2.15, sg.z + rz * (post + 0.08)], 0.05, 0.05, P.tarPlankLight, 4);
     k.add(new BoxGeometry(SIGN_BOARD.w, SIGN_BOARD.h, SIGN_BOARD.d), { at: [sg.x, y + SIGN_BOARD.y, sg.z], rot: [0, Math.PI / 2 - sg.yaw, 0], colour: P.tarPlankDark });
   }
-  // free-standing banners hang from a pole (the Houses' and the Constabulary's hang on the Exchange's beam, the campanile and the flagpole)
+  // free-standing banners hang from a pole (the Houses' and the Constabulary's hang under the Exchange's eave, from the campanile and from the flagpole)
   // every cloth hangs from a rod along its top edge (the cloth's frame: `n` its face, `r` along it, as `buildSaltmarketCloth` lays it), and the rod is held by something standing
   for (const b of plan.banners) {
     const y = g(b.x, b.z);
@@ -706,8 +706,9 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
     }
     // on a hair (the Constabulary's on the flagpole, a House's on the campanile): a rod along the top edge and iron arms back to the hair
     const hostHair = plan.hairs.find((h) => (h.kind === "flagpole" || h.kind === "campanile") && Math.hypot(h.x - b.x, h.z - b.z) < h.r + 3);
-    if (!hostHair) continue;   // (the Exchange's House banner hangs on the colonnade's front beam: the beam is its rod)
+    // (the Exchange's House banner: its rod is fixed under the ceiling's overhang, in front of the joists' tails)
     k.limb(along(-b.w / 2 - 0.06), along(b.w / 2 + 0.06), 0.03, 0.03, P.tarPlankDark, 4);
+    if (!hostHair) continue;
     if (hostHair.kind === "flagpole") {
       // a gaff arm from the pole to the rod's near end
       const near = along(-b.w / 2 - 0.02);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ScenarioTemplateId } from "./campaignTypes.ts";
 import { newCampaign, parseCampaign, serializeCampaign } from "./factions.ts";
 import {
-  HOME_POWER, INCIDENT, INCIDENT_DONE, INCIDENT_IDS, INCIDENT_OPEN, INCIDENT_PAPER, INCIDENT_PROMPT, applyIncident, dealIncident, incidentDelayS, incidentRoster, incidentStep, placeIncident,
+  HOME_POWER, INCIDENT, INCIDENT_DONE, INCIDENT_IDS, INCIDENT_OPEN, INCIDENT_PAPER, INCIDENT_PROMPT, applyIncident, dealIncident, incidentDelayS, incidentRoster, incidentStep, kegRing, placeIncident, ringOpen,
 } from "./incidents.ts";
 import { newPowers } from "./powers.ts";
 import { generatePaper } from "./newspaper.ts";
@@ -61,6 +61,29 @@ describe("incidents: chaos during play (D-052)", () => {
     const edge = placeIncident({ x: 110, z: 110 }, [], () => true, 120, 3);
     if (edge) expect(Math.max(Math.abs(edge.x), Math.abs(edge.z))).toBeLessThanOrEqual(116);
     expect(placeIncident(party, [], () => false, 120, 7)).toBeUndefined();
+  });
+
+  it("an incident's spilled kegs lie on open ground, a keg apart: where the ring meets a wall they slide round it or are left out, never spawned inside it", () => {
+    const at = { x: 10, z: -4 };
+    // open ground all round: the plain ring, the first keg at the given bearing
+    const all = kegRing(at, 5, 1.7, 0.4, () => true);
+    expect(all.length).toBe(5);
+    expect(all[0]!.x).toBeCloseTo(at.x + Math.cos(0.4) * 1.7, 9);
+    for (const p of all) expect(Math.hypot(p.x - at.x, p.z - at.z)).toBeCloseTo(1.7, 9);
+    // a wall along x = 11 (the wreck a pace from it): every keg on the open side, none on top of another, the same every time
+    const open = (x: number): boolean => x < 11 - 0.4;
+    const some = kegRing(at, 5, 1.7, 0.4, (x) => open(x));
+    expect(some.length).toBeGreaterThanOrEqual(INCIDENT.wagonSalvage);
+    expect(some.length).toBeLessThan(5);
+    for (const p of some) expect(open(p.x)).toBe(true);
+    for (let i = 0; i < some.length; i++) for (let j = i + 1; j < some.length; j++) expect(Math.hypot(some[i]!.x - some[j]!.x, some[i]!.z - some[j]!.z)).toBeGreaterThanOrEqual(0.7);
+    expect(kegRing(at, 5, 1.7, 0.4, (x) => open(x))).toEqual(some);
+    // nowhere open: no kegs (the incident then stays quiet)
+    expect(kegRing(at, 5, 1.7, 0.4, () => false)).toEqual([]);
+    // the wagon is placed only where its whole ring is open (so it never stands with kegs in the surf or against a wall)
+    expect(ringOpen(at, 1.7, () => true)).toBe(true);
+    expect(ringOpen(at, 1.7, (x) => open(x))).toBe(false);
+    expect(ringOpen(at, 0.5, (x) => open(x))).toBe(true);
   });
 
   it("each incident's people are civilians of the right sort, on no side, unarmed, in their own group", () => {

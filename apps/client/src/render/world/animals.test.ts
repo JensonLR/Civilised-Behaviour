@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Box3, Matrix4, Vector3, type BufferGeometry } from "three";
-import { animalPose, buildFlock, createAnimalPose, createArena, villagePlan } from "@cb/shared";
+import { BODY_R, animalPose, buildFlock, createAnimalPose, createArena, separateBodies, villagePlan } from "@cb/shared";
 import { DIP, SPECIES, buildAnimals, setAnimalGround } from "./animals.ts";
 
 /** The bounding box of the vertices of one species (kind id) in a group geometry. */
@@ -76,7 +76,7 @@ describe("the animals as instanced toon animals", () => {
     expect(DIP.duck).toBeGreaterThan(DIP.sheep);
   });
 
-  it("puts every animal where the shared pose says, on the ground, each frame, without allocating new instance buffers", () => {
+  it("puts every animal where the shared pose says (parted from its neighbours by the shared separation), on the ground, each frame, without allocating new instance buffers", () => {
     const flock = buildAnimals(animals, false)!;
     const pose = createAnimalPose();
     const m = new Matrix4();
@@ -86,13 +86,25 @@ describe("the animals as instanced toon animals", () => {
       for (const hours of [3, 12]) {
         flock.update(t, hours);
         for (const s of flock.sets) {
+          // where each stands: its pose, then the set parted so no two bodies meet (what every client draws)
+          const n = s.animals.length;
+          const px = new Float64Array(n), pz = new Float64Array(n), pr = new Float64Array(n);
+          s.animals.forEach((a, i) => {
+            animalPose(a, t, pose, hours);
+            px[i] = pose.x;
+            pz[i] = pose.z;
+            pr[i] = BODY_R[a.kind] * a.size;
+          });
+          separateBodies(px, pz, pr, n);
           s.animals.forEach((a, i) => {
             animalPose(a, t, pose, hours);
             s.mesh.getMatrixAt(i, m);
             const p = new Vector3().setFromMatrixPosition(m);
-            expect(p.x).toBeCloseTo(pose.x, 4);
-            expect(p.z).toBeCloseTo(pose.z, 4);
-            expect(p.y).toBeCloseTo(a.kind === "duck" ? waterY : w.terrainHeight(pose.x, pose.z), 4);
+            expect(p.x).toBeCloseTo(px[i]!, 4);
+            expect(p.z).toBeCloseTo(pz[i]!, 4);
+            // (parting moves an animal a step at most: never off across the field)
+            expect(Math.hypot(p.x - pose.x, p.z - pose.z)).toBeLessThan(2 * pr[i]!);
+            expect(p.y).toBeCloseTo(a.kind === "duck" ? waterY : w.terrainHeight(p.x, p.z), 4);
             expect(s.anim.getX(i)).toBeCloseTo(pose.speed, 5);
             expect(s.anim.getY(i)).toBeCloseTo(pose.graze * DIP[a.kind], 5);
             expect(s.anim.getW(i)).toBeCloseTo(pose.curl, 5);

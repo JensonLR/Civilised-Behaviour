@@ -66,7 +66,10 @@ export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail
       const s = 1 + far.next() * 0.5;
       if (treeDensity < 1 && h01(32, x, z) >= treeDensity) continue;
       if (Math.hypot(x - C.x, z - C.z) < 90) continue;
-      out.acacia.push(item(x, visualY(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next()));
+      const it = item(x, visualY(h(x, z), x, z), z, far.range(0, 6.28), s, s * (0.9 + far.next() * 0.3), s, 0, far.next());
+      // past the playable edge means past it, crown and all (one stood on the landing quay among its rails); after the draws, so no other tree moves
+      if (Math.hypot(x, z) < world.boundsRadius + 2.6 * s) continue;
+      out.acacia.push(it);
     }
   }
   // shrubs: thorn scrub in clumps on the flats
