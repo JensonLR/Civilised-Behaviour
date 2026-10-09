@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { OUTPOST_STAGES, isRegionId, TEMPLATE_RESOLUTIONS, PropKind, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
+import { OUTPOST_STAGES, isRegionId, TEMPLATE_RESOLUTIONS, PropKind, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, newTech, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
@@ -48,14 +48,19 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   const regionParam = params.get("region");
   const region: RegionId = isRegionId(regionParam) ? regionParam : "hollowmere";   // (D-037: every region id of the contract, dev starts included)
   // D-035: the Society's outpost and what comes of it. outpost=none|camp|trading_post|fortified_outpost|settlement|town, telegraph=1, road=0|1|2, launch=1, rivalpost=0|1|2
+  // (D-091: railway=1 the railhead at Kessar's post, works=1 the works beside a post at Kessar or Highmark)
   const stageParam = params.get("outpost");
   const outpost: OutpostStage = (OUTPOST_STAGES as readonly string[]).includes(stageParam ?? "") ? (stageParam as OutpostStage) : "none";
   const telegraph = params.get("telegraph") === "1" && outpost !== "none";
-  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph }) : region === "hollowmere" ? createArena(seed) : createRegionWorld(region, seed);
+  const railway = params.get("railway") === "1" && outpost !== "none" && region === "kessar";
+  const worksOn = params.get("works") === "1" && outpost !== "none";
+  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph, railway, works: worksOn })
+    : region === "hollowmere" ? createArena(seed) : region === "highmark" ? createRegionWorld(region, seed, { outpost, works: worksOn }) : createRegionWorld(region, seed);
   if (region === "highmark" || region === "vesper" || region === "saltmarket") {
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
     inner.builtFor = world;
     inner.worldView = createRegionView(region, stage.scene, world, PRESETS[(params.get("gfx") as keyof typeof PRESETS | null) ?? "medium"], inner.lightDir, seed);
+    if (region === "highmark" && outpost !== "none") inner.worldView.applyDress?.({ outpost, rivalPost: 0, road: 0, telegraph: false, launch: false, name: "Quim's Rest", ...(worksOn ? { works: true } : {}) });
   } else if (region === "kessar") {
     // (the Stage builds Hollowmere's WorldView itself; until it builds through createRegionView, the region's own view is handed to it here)
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
@@ -63,7 +68,7 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     inner.worldView = createRegionView("kessar", stage.scene, world, PRESETS[(params.get("gfx") as keyof typeof PRESETS | null) ?? "medium"], inner.lightDir);
     inner.worldView.applyDress?.({
       outpost, rivalPost: Math.min(2, Math.max(0, Number(params.get("rivalpost") ?? 0))) as 0 | 1 | 2, road: Math.min(2, Math.max(0, Number(params.get("road") ?? 0))) as 0 | 1 | 2,
-      telegraph, launch: params.get("launch") === "1", name: "Quim's Rest",
+      telegraph, launch: params.get("launch") === "1", name: "Quim's Rest", ...(railway ? { railway: true } : {}), ...(worksOn ? { works: true } : {}),
     });
   } else {
     stage.buildWorld(world);
@@ -77,7 +82,7 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       let s = newSettlements();
       if (outpost !== "none") {
         for (let i = 0; i < 4; i++) s = deliverTo(s, "kessar", PropKind.CRATE, c, 1).s;
-        s = { ...s, posts: { kessar: { ...s.posts.kessar!, stage: outpost } }, tech: { road: Number(params.get("road") ?? 0) as 0 | 1 | 2, telegraph, launch: params.get("launch") === "1", since: { road: 1, telegraph: 1, launch: 1 } } };
+        s = { ...s, posts: { kessar: { ...s.posts.kessar!, stage: outpost } }, tech: { ...newTech(), road: Number(params.get("road") ?? 0) as 0 | 1 | 2, telegraph, launch: params.get("launch") === "1", railway, works: worksOn ? "kessar" : "", since: { ...newTech().since, road: 1, telegraph: 1, launch: 1, railway: 1, works: 1 } } };
       }
       stage.setHistory(historyPieces(c, s));
     }

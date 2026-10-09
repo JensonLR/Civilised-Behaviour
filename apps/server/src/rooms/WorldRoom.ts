@@ -95,6 +95,7 @@ import {
   rivalAdvance,
   rivalPresence,
   regionClimate,
+  worksDay,
   powerEffects,
   regionWorldOpts,
   worldKey,
@@ -464,6 +465,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.cast.shotFrom(target, shooter);
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
+      // D-091: the Society's breech-loaders, for its own people (a player, never a row: the garrison's and the bandits' guns are their own)
+      reloadScale: (sid, weapon) => (this.state.players.get(sid)?.npc === 0 && (weapon === WEAPON.RIFLE || weapon === WEAPON.PISTOL) ? techEffects(this.settlements.tech).reloadScale : 1),
       propShot: (id, shooter) => this.propShot(id, shooter),
       toss: (id, dx, dz, power, lift, dmg, bias, by) => {
         const before = this.state.players.get(id)?.missing ?? 0;
@@ -1308,12 +1311,17 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (raided.defended) this.commitSettlements(defendOutpost(this.settlements, "kessar"), []);
     for (const e of adv.events) if (e.kind === "raided_outpost") events.push(...this.outposts.raid(e.region, e.day));
     events.push(...this.outposts.evolve(c.day, (r) => regionClimate(c, p, r)));   // (each post in its own region's weather, D-056; the outposts publish themselves and tell the powers: commitSettlements)
+    // D-091: a day of the works (its dividend into the purse, its smoke into the home power's river), after the posts have had their day
+    const works = worksDay(this.campaign, this.powers, this.settlements);
+    this.campaign = works.c;
+    this.powers = works.p;
     this.publishCampaign();
     this.publishPowers();
     if (this.worldOpts().rivalPost !== synBefore) this.rebuildWorld();
     // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
     const debrief = [pay.line, ...[billLine(m.bill), m.spectacleLine, m.requestLine].filter((l) => l !== ""), ...consequenceLines(before, this.campaign).slice(0, 3)];
-    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch") debrief.push(this.settlementLine(e));
+    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch" || e.kind === "railway" || e.kind === "breech" || e.kind === "works") debrief.push(this.settlementLine(e));
+    if (works.paid > 0) debrief.push(`The works at ${this.settlements.posts[this.settlements.tech.works as RegionId]?.name ?? "the post"} paid £${works.paid} into the purse. The river did not thank it.`);
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
     debrief.push(...this.followers.settle(o).slice(0, 4));
     const honoured = this.awardHonours(o);
@@ -1355,6 +1363,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       case "raided": return `${e.name} was visited in the night. It is being described as an inspection.`;
       case "telegraph": return `The telegraph reaches ${e.name}.`;
       case "launch": return `A steam launch now serves ${e.name}.`;
+      // D-091
+      case "railway": return `Nine yards of railway open at ${e.name}, the rest to follow. Freight moves; the Syndicate has written.`;
+      case "breech": return "The armourers have rifled the Society's barrels: rifles and pistols now load at the breech, much faster.";
+      case "works": return `A works has opened beside ${e.name}. It pays; it smokes.`;
       default: return `${e.name}: ${e.kind}.`;
     }
   }

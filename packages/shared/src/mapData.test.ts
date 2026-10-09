@@ -3,7 +3,7 @@ import { newCampaign } from "./factions.ts";
 import { campaignMapOf } from "./mapData.ts";
 import { mapPins, newPowers } from "./powers.ts";
 import { rivalSighting } from "./rival.ts";
-import { newSettlements, deliverTo } from "./settlement.ts";
+import { newSettlements, deliverTo, newTech } from "./settlement.ts";
 import { PropKind } from "./props.ts";
 import type { RegionId } from "./campaignTypes.ts";
 import { REGIONS } from "./regions.ts";
@@ -26,7 +26,7 @@ describe("campaignMapOf", () => {
   it("with an outpost, the rival's post, a sighting and a launch", () => {
     let s = newSettlements();
     for (let i = 0; i < 4; i++) s = deliverTo(s, "kessar", PropKind.CRATE, c, 1).s;
-    const tech = { road: 2 as const, telegraph: true, launch: true, since: { road: 1, telegraph: 2, launch: 3 } };
+    const tech = { ...newTech(), road: 2 as const, telegraph: true, launch: true, since: { ...newTech().since, road: 1, telegraph: 2, launch: 3 } };
     const seen = { ...p, rival: { ...p.rival, seenDay: 3, day: 5, where: { region: "kessar" as const, spot: "ford" as const } } };
     const m = campaignMapOf(c, { ...s, tech }, rivalSighting(c, seen, 2), pins, undefined, tech, "kessar", 2);
     expect(m.regions[1]!.here).toBe(true);

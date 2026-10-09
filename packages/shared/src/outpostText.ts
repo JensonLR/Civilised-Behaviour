@@ -98,7 +98,32 @@ export const SETTLEMENT_NEWS: Record<SettlementEventKind, { head: readonly strin
   launch: {
     head: ["Steam Launch Now Calls at {name}", "A Launch at the Landing", "The Sea Is Shorter Now"],
     body: ["A steam launch now serves {name}, cutting the crossing to a few seconds of unpleasant noise. The Brine Houses have been invited to be impressed.", "The launch works the landing in the hours when the tide permits and a clerk is awake. Passage is faster; the boat is louder.", "A steam launch has replaced the rowing boat. The rowing boat has been retired with a small pension."],
+  },  // D-091: the industrial age
+  railway: {
+    head: ["The Railway Reaches {name}", "Steam on the Rails at {name}", "{name} Opens Its Railway: Nine Yards, Both Ways"],
+    body: [
+      "The {name} Railway has opened: nine yards of track, one engine and a buffer stop at each end. The Committee calls it 'the first stage'; the second is on order. The engine is called Perseverance and frequently is.",
+      "The first train at {name} ran the full length of the line, nine yards, and back again, to cheers. Freight now crosses the siding at a speed the Society calls progress and the porters call walking.",
+      "Rails of good British iron have been laid at {name}, all the way to the end of them. The rest of the line to the sea is 'to follow'; the sleepers are local timber and were not consulted.",
+    ],
   },
+  breech: {
+    head: ["Breech-Loaders Issued to the Society's Parties", "The Armourers Rifle the Society's Barrels", "Rifles That Load From the Wrong End, Now Standard"],
+    body: [
+      "The garrison's armourers have converted the Society's rifles and pistols to load at the breech. Parties will reload in half the time and apologise in the same.",
+      "A crate of breech-loaders has arrived from Pall Mall with a covering letter calling them 'a civilising instrument'. They load faster; the letter does not say at whom.",
+      "From this issue the Society's rifles open at the back. The War Office asks to be told how it went, in writing, at length, in triplicate.",
+    ],
+  },
+  works: {
+    head: ["Works Opened Beside {name}", "{name} Begins to Smoke", "Industry at {name}: A Chimney, Mostly"],
+    body: [
+      "A works has opened beside {name} and pays a handsome dividend into the Society's purse. The river below it has taken the colour of strong tea, and its neighbours have taken offence.",
+      "The chimney at {name} is now the tallest thing for miles, which the Society regards as a statement. The people downwind regard it as smoke, and have said so.",
+      "Extraction has begun at {name}. Shareholders on Threadneedle Street are delighted; the neighbours were invited to be delighted and declined in writing.",
+    ],
+  },
+
 };
 
 /** What the signboard on each stage says (the view letters them; no real-world term in any). */
@@ -144,8 +169,11 @@ export const HISTORY_PIECE: Record<ResolutionId, { kind: HqPieceKind; surface: H
   crown_sold: { kind: "envelope", surface: "chest", label: "A counterfoil from the Syndicate's cheque for a crown. It cleared; the Society wishes it knew how." },
 };
 export const MODEL_LABEL = "A scale model of the outpost, to the scale of a prospectus.";
-export const PENNANT_LABEL: Record<"road" | "telegraph" | "launch", string> = {
+export const PENNANT_LABEL: Record<"road" | "telegraph" | "launch" | "railway" | "breech" | "works", string> = {
   road: "A pennant for the road, which is the first thing the Committee will take credit for.",
   telegraph: "A pennant for the telegraph, tied to a very small pole.",
   launch: "A pennant for the steam launch, which is smaller than the launch.",
+  railway: "A pennant for the railway, with a timetable pinned to it that nobody has kept.",
+  breech: "A pennant for the breech-loaders, presented by the armourers with their compliments and an invoice.",
+  works: "A pennant for the works. It arrived slightly sooty.",
 };

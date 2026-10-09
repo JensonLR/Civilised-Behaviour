@@ -263,6 +263,12 @@ export function powersAfterSettlement(c: CampaignState, p0: PowersState, ev: rea
       p.rel["ward|brine"] = clampRelI(p.rel["ward|brine"] + 4);
       p.rel["ward|rival"] = clampRelI(p.rel["ward|rival"] - 2);
       p.log = withLog(p.log, { day: e.day, kind: "settle_founded", a: "brine", b: "rival", n: 1 });
+    } else if (e.kind === "railway") {
+      // D-091: the Syndicate wanted that concession; the Brine Houses' cargo rides it to the post
+      p.rival.grudge = pct(p.rival.grudge + 8, p.rival.grudge);
+      p.minor.brine.prosperity = pct(p.minor.brine.prosperity + 4, 60);
+      p.rel["rival|brine"] = clampRelI(p.rel["rival|brine"] - 3);
+      p.log = withLog(p.log, { day: e.day, kind: "settle_railway", a: "rival", b: "brine", n: 1 });
     } else if (e.kind === "raided") {
       p.flags = withFlag(p.flags, "party_post_raided");
       p.minor.reapers.grievance = pct(p.minor.reapers.grievance + 3, 5);

@@ -88,6 +88,8 @@ export interface CombatHost {
   propShot?(propId: string, shooter: string): void;
   /** D-064: a blast caught a body already down (Casualties.toss: thrown, and a fallen NPC may come apart). */
   toss?(id: string, dirX: number, dirZ: number, power: number, lift: number, severDamage: number, severBias: number, by?: string): void;
+  /** D-091: a reload's share of the weapon's own time for `sessionId` (the Society's breech-loaders: its people only); absent = 1. */
+  reloadScale?(sessionId: string, weapon: WeaponId): number;
   /** D-064: a blast went off, credited to `owner` (the room lights the powder kegs it reaches). */
   blastAt?(owner: string, x: number, y: number, z: number, radius: number): void;
   /**
@@ -395,9 +397,9 @@ export class Combat {
   }
 
   /** Read-only view for tests and diagnostics. */
-  inspect(sessionId: string): { owned: number; current: number; mag: number[]; reserve: number[]; ready: number; reloadLeft: number; shots: number } | undefined {
+  inspect(sessionId: string): { owned: number; current: number; mag: number[]; reserve: number[]; ready: number; reloadLeft: number; reloadTotal: number; shots: number } | undefined {
     const pc = this.pcs.get(sessionId);
-    return pc && { owned: pc.owned, current: pc.current, mag: [...pc.mags], reserve: [...pc.reserve], ready: pc.ready, reloadLeft: pc.reloadLeft, shots: pc.shots };
+    return pc && { owned: pc.owned, current: pc.current, mag: [...pc.mags], reserve: [...pc.reserve], ready: pc.ready, reloadLeft: pc.reloadLeft, reloadTotal: pc.reloadTotal, shots: pc.shots };
   }
 
   /** Test hook: removes a weapon from a player's kit (the server owns the kit; clients can only ask). */
@@ -458,7 +460,7 @@ export class Combat {
     this.handleSwitch(pc, weaponFromWire(cmd.weapon ?? 0));
     const def = pc.current >= 0 ? WEAPONS[pc.current as WeaponId] : undefined;
 
-    if ((pressed & BUTTON.RELOAD) !== 0) this.startReload(pc, def);
+    if ((pressed & BUTTON.RELOAD) !== 0) this.startReload(sessionId, pc, def);
     if (def?.fire === "melee") {
       // Blades and sticks swing on the press and keep swinging while it is held (each swing waits out the cooldown).
       if ((cmd.buttons & (BUTTON.FIRE | BUTTON.MELEE)) !== 0) this.beginSwing(sessionId, p, pc, def, def.melee!);
@@ -506,12 +508,13 @@ export class Combat {
     pc.ready = Math.max(pc.ready, draw, COMBAT.switchSeconds);
   }
 
-  private startReload(pc: PlayerCombat, def: WeaponDef | undefined): void {
+  private startReload(sessionId: string, pc: PlayerCombat, def: WeaponDef | undefined): void {
     const r = def?.ranged;
     if (!def || !r || def.id === WEAPON.CANNON || pc.reloadLeft > 0) return;
     if (pc.mags[def.id]! >= r.magazine || pc.reserve[def.id]! <= 0) return;
-    pc.reloadLeft = r.reload;
-    pc.reloadTotal = r.reload;
+    const t = r.reload * Math.min(1, Math.max(0.25, this.host.reloadScale?.(sessionId, def.id) ?? 1)); // (never slower than the gun's own, never instant)
+    pc.reloadLeft = t;
+    pc.reloadTotal = t;
   }
 
   // ---- shooting -----------------------------------------------------------------------------------------------------------------
@@ -541,7 +544,7 @@ export class Combat {
     if (pc.ready > 0 || pc.reloadLeft > 0 || def.id === WEAPON.CANNON) return;
     if (pc.mags[def.id]! <= 0) {
       this.stats.refused++;
-      this.startReload(pc, def); // a click on an empty gun starts the reload
+      this.startReload(sessionId, pc, def); // a click on an empty gun starts the reload
       return;
     }
     pc.mags[def.id]!--;

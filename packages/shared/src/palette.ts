@@ -547,6 +547,17 @@ export const PALETTE = {
     pennantRival: 0x3f6b57,
     sign: 0xe0cfa2,
     mud: 0x8a6d4a,
+    // D-091, the industrial age: the tank engine in a dusty Society green with a red buffer beam, rails on tarred sleepers, the works' brick and soot, its spoil
+    engine: 0x3d5646,
+    engineRed: 0x9a4a3e,
+    rail: 0x67625c,
+    sleeper: 0x5a4632,
+    ballast: 0x958b7b,
+    tankIron: 0x4f5558,
+    brick: 0xa45a40,
+    brickShade: 0x80473a,
+    soot: 0x37322f,
+    spoil: 0x726352,
   },
 
   /** Vesper Gorge (region three, D-037): red-violet strata in cool shade, black crepe, the Guild's plum, lamp amber. Owned by paletteVesper.ts (package C3). */

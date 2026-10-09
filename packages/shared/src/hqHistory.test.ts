@@ -4,7 +4,7 @@ import { applyOutcome, newCampaign, RESOLUTIONS, TEMPLATE_RESOLUTIONS } from "./
 import { HISTORY_MAX, historyPieces } from "./hqHistory.ts";
 import { HISTORY_PIECE } from "./outpostText.ts";
 import { PropKind } from "./props.ts";
-import { deliverTo, newSettlements } from "./settlement.ts";
+import { deliverTo, newSettlements, newTech } from "./settlement.ts";
 import type { CampaignState, ScenarioTemplateId, ResolutionId } from "./campaignTypes.ts";
 import type { SettlementsState } from "./worldTypes.ts";
 
@@ -18,7 +18,7 @@ const standing = (): SettlementsState => {
   let s = newSettlements();
   const c = newCampaign(1);
   for (let i = 0; i < 4; i++) s = deliverTo(s, "kessar", PropKind.CRATE, c, 1).s;
-  return { ...s, tech: { road: 1, telegraph: true, launch: true, since: { road: 3, telegraph: 5, launch: 7 } } };
+  return { ...s, tech: { ...newTech(), road: 1, telegraph: true, launch: true, since: { ...newTech().since, road: 3, telegraph: 5, launch: 7 } } };
 };
 
 describe("HQ history", () => {

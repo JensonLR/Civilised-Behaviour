@@ -17,6 +17,15 @@ const SEED = 17;
 const fresh = (): { c: CampaignState; p: PowersState; s: SettlementsState } => ({ c: newCampaign(SEED), p: newPowers(SEED), s: newSettlements() });
 
 /** One scripted way to earn each id. Contract endings go through the REAL `applyOutcome`/`deliverTo`/`techOf`; the few deep states (audiences, a grown town, trust) are legal field edits. */
+const GOOD = { security: 50, trade: 50, hostility: 0, rivalPressure: 0, labour: 50 };
+/** A founded Kessar post made a town (the launch's own script, reused). */
+function steamTown(): { c: CampaignState; p: PowersState; s: SettlementsState } {
+  const f = fresh();
+  let s = f.s;
+  for (let i = 0; i < 4; i++) s = deliverTo(s, "kessar", PropKind.CRATE, f.c, SEED).s;
+  return { ...f, s: { ...s, posts: { kessar: { ...s.posts.kessar!, stage: "town" as const, stageSince: 1 } } } };
+}
+
 const SCRIPT: Record<AchievementId, () => { c: CampaignState; p: PowersState; s: SettlementsState }> = {
   first_crossing: () => ({ ...fresh(), c: play(newCampaign(SEED), "secure_crossing", "bargained") }),
   paid_in_full: () => ({ ...fresh(), c: play(newCampaign(SEED), "secure_crossing", "paid") }),
@@ -74,6 +83,17 @@ const SCRIPT: Record<AchievementId, () => { c: CampaignState; p: PowersState; s:
     const f = fresh();
     return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastIncident: { id: "syndicate_collectors", result: "repelled", day: 1, region: "kessar" } } } };
   },
+  // D-091: earned by the real rules (techOf), not set by hand
+  perseverance: () => {
+    const f = steamTown();
+    const s = { ...f.s, tech: { ...f.s.tech, road: 2 as const, telegraph: true } };
+    return { ...f, c: { ...f.c, day: 40 }, s: { ...s, tech: techOf(s, { ...f.c, day: 40 }, GOOD) } };
+  },
+  dividend_day: () => {
+    const f = steamTown();
+    const s = { ...f.s, posts: { kessar: { ...f.s.posts.kessar!, stage: "settlement" as const, priority: "extraction" as const } } };
+    return { ...f, s: { ...s, tech: techOf(s, f.c, GOOD) } };
+  },
   learned_society: () => withBill({}, true),
   unscheduled_flight: () => withBill({ flings: 1, longest: 21, longestWho: "Carter Obadiah Plume" }),
   museum_piece: () => withBill({ limbs: 5 }),
@@ -91,8 +111,8 @@ describe("achievements", () => {
     expect(evaluateAchievements(c, p, s, [])).toEqual([]);
   });
 
-  it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084; one for D-088's collectors)", () => {
-    expect(ACHIEVEMENTS).toHaveLength(26);
+  it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084; one for D-088's collectors; two for D-091's industry)", () => {
+    expect(ACHIEVEMENTS).toHaveLength(28);
     expect(ACHIEVEMENTS.slice(0, 12)).toEqual(["first_crossing", "paid_in_full", "bridge_down", "rescued_quim", "wagon_taken", "border_mediated", "outpost_founded", "town_by_neglect", "steam_launch", "all_powers_met", "chair_settled", "four_at_once"]); // (append-only: a stored id never moves)
     for (const id of ACHIEVEMENTS) {
       const { c, p, s } = SCRIPT[id]();

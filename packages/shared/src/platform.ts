@@ -17,6 +17,8 @@ export const ACHIEVEMENTS = [
   "honest_measure", "miners_out", "engine_blown", "claim_staked", "cargo_landed", "lot_won", "post_held", "good_samaritan", "powder_salvaged",
   "learned_society", "unscheduled_flight", "museum_piece", "umbrella_man",
   "not_today_gentlemen",
+  // D-091: the industrial age
+  "perseverance", "dividend_day",
 ] as const;
 export type AchievementId = (typeof ACHIEVEMENTS)[number];
 export const isAchievementId = (v: unknown): v is AchievementId => typeof v === "string" && (ACHIEVEMENTS as readonly string[]).includes(v);

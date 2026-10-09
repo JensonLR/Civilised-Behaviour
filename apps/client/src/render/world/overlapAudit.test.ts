@@ -51,9 +51,9 @@ function judged(a: OverlapPiece, b: OverlapPiece): boolean {
 }
 
 function audit(id: RegionId, town: boolean): string[] {
-  const world = createRegionWorld(id, 7, town ? { outpost: "town", telegraph: true } : undefined);
+  const world = createRegionWorld(id, 7, town ? { outpost: "town", telegraph: true, railway: true, works: true } : undefined);
   const view = createRegionView(id, new Scene(), world, PRESETS.medium, sun, 7);
-  if (town) view.applyDress?.({ outpost: "town", rivalPost: 2, road: 2, telegraph: true, launch: true, name: "Fort Audit" });
+  if (town) view.applyDress?.({ outpost: "town", rivalPost: 2, road: 2, telegraph: true, launch: true, name: "Fort Audit", railway: true, works: true });
   const pieces = scenePieces(view.root).filter((p) => !NOT_THINGS.test(p.mesh));
   const found = overlaps(pieces, judged, Math.min(TOL, ANIMAL_TOL)).filter((o) => o.depth > (ANIMAL.test(o.a.mesh) && ANIMAL.test(o.b.mesh) ? ANIMAL_TOL : TOL));
   view.dispose();

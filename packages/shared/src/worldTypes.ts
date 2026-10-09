@@ -39,14 +39,29 @@ export type OutpostPriority = "trade" | "military" | "growth" | "extraction" | "
 /** 0..100 except days and crates. */
 export interface OutpostState { region: RegionId; name: string; stage: OutpostStage; priority: OutpostPriority; foundedDay: number; stageSince: number; crates: number; supply: number; security: number; trade: number; growth: number; raidedDay: number; ruined: boolean; raids: number /* raids that landed on a weak outpost (D-035 addendum); 0..9 */ }
 /** Derived, then latched. */
-export interface TechState { road: 0 | 1 | 2; telegraph: boolean; launch: boolean; since: { road: number; telegraph: number; launch: number } }
+/**
+ * The Society's infrastructure, LATCHED (once earned it stays). D-091 adds the industrial age: a `railway` from Kessar's landing to its post, `breech`-loading rifles from a
+ * garrisoned post's armourers, and the `works` of an extraction post (the region it stands in, or "").
+ */
+export interface TechState {
+  road: 0 | 1 | 2; telegraph: boolean; launch: boolean; railway: boolean; breech: boolean; works: RegionId | "";
+  since: { road: number; telegraph: number; launch: number; railway: number; breech: number; works: number };
+}
 export interface SettlementsState { v: 1; posts: Partial<Record<RegionId, OutpostState>>; tech: TechState }
-export type SettlementEventKind = "founded" | "delivered" | "promoted" | "demoted" | "raided" | "abandoned" | "road" | "telegraph" | "launch";
+export type SettlementEventKind = "founded" | "delivered" | "promoted" | "demoted" | "raided" | "abandoned" | "road" | "telegraph" | "launch" | "railway" | "breech" | "works";
 export interface SettlementEvent { kind: SettlementEventKind; day: number; region: RegionId; stage: OutpostStage; name: string }
 /** What the COLLISION world depends on (both sides build the same world from these). */
-export interface RegionWorldOpts { bridge?: BridgeState; outpost?: OutpostStage; telegraph?: boolean; /** The Syndicate's own post at Kessar (absent: none; never 0, so a world without it keeps its old key). */ rivalPost?: 1 | 2 }
+export interface RegionWorldOpts {
+  bridge?: BridgeState; outpost?: OutpostStage; telegraph?: boolean; /** The Syndicate's own post at Kessar (absent: none; never 0, so a world without it keeps its old key). */ rivalPost?: 1 | 2;
+  /** D-091: the railhead at Kessar's post and the works beside an extraction post are solid (absent: none, so a world without them keeps its old key). */
+  railway?: boolean; works?: boolean;
+}
 /** What the VIEW draws (no collision). */
-export interface RegionDress { outpost: OutpostStage; rivalPost: 0 | 1 | 2; road: 0 | 1 | 2; telegraph: boolean; launch: boolean; name: string }
+export interface RegionDress {
+  outpost: OutpostStage; rivalPost: 0 | 1 | 2; road: 0 | 1 | 2; telegraph: boolean; launch: boolean; name: string;
+  /** D-091: the railhead at Kessar's post, and the works beside an extraction post (absent: none). */
+  railway?: boolean; works?: boolean;
+}
 export const FOUNDATION_CRATES = 4, DAYS_IDLE_CAP = 3, POWERS_JSON_MAX = 3072, SETTLEMENTS_JSON_MAX = 2048;
 export interface MapPowerPin { id: PowerId; name: string; seat: string; stance: FactionStance; note: string; known: boolean; audience: boolean }
 export interface RivalSighting { region: RegionId; where: string; day: number; age: number; goal?: string /* only with intel */ }

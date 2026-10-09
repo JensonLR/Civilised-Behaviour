@@ -47,9 +47,9 @@ function survey(name: string, fl: readonly Floater[]): void {
 }
 
 function region(id: RegionId, preset: "low" | "medium" | "high", stage: OutpostStage): Floater[] {
-  const world = createRegionWorld(id, 7, stage === "none" ? undefined : { outpost: stage, telegraph: true });
+  const world = createRegionWorld(id, 7, stage === "none" ? undefined : { outpost: stage, telegraph: true, railway: true, works: true });
   const view = createRegionView(id, new Scene(), world, PRESETS[preset], sun, 7);
-  if (stage !== "none") view.applyDress?.({ outpost: stage, rivalPost: 2, road: 2, telegraph: true, launch: true, name: "Fort Audit" });
+  if (stage !== "none") view.applyDress?.({ outpost: stage, rivalPost: 2, road: 2, telegraph: true, launch: true, name: "Fort Audit", railway: true, works: true });
   const fl = floatingPieces(view.root, world.terrain);
   view.dispose();
   return fl;

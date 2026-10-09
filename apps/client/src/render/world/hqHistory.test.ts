@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BufferGeometry } from "three";
-import { applyOutcome, createArena, deliverTo, historyPieces, newCampaign, newSettlements, PropKind, RESOLUTIONS, TEMPLATE_RESOLUTIONS, type ResolutionId, type ScenarioTemplateId } from "@cb/shared";
+import { applyOutcome, createArena, deliverTo, historyPieces, newCampaign, newSettlements, newTech, PropKind, RESOLUTIONS, TEMPLATE_RESOLUTIONS, type ResolutionId, type ScenarioTemplateId } from "@cb/shared";
 import { buildHqHistoryGeometry } from "./hqHistory.ts";
 
 const tris = (g: BufferGeometry): number => (g.index ? g.index.count : g.attributes.position!.count) / 3;
@@ -25,7 +25,7 @@ describe("HQ history geometry", () => {
     }
     let s = newSettlements();
     for (let i = 0; i < 4; i++) s = deliverTo(s, "kessar", PropKind.CRATE, newCampaign(1), 1).s;
-    s = { ...s, posts: { kessar: { ...s.posts.kessar!, stage: "town" } }, tech: { road: 2, telegraph: true, launch: true, since: { road: 1, telegraph: 2, launch: 3 } } };
+    s = { ...s, posts: { kessar: { ...s.posts.kessar!, stage: "town" } }, tech: { ...newTech(), road: 2, telegraph: true, launch: true, since: { ...newTech().since, road: 1, telegraph: 2, launch: 3 } } };
     let c = newCampaign(2);
     for (const r of ["forced", "sabotaged", "seized", "rescued", "paid", "mediated", "burned"] as const) c = applyOutcome(c, { scenario: tpl(r), resolution: r, toll: 30, paid: 0, bridge: "intact", brokePromise: false, seconds: 1, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 } });
     const full = historyPieces(c, s);
