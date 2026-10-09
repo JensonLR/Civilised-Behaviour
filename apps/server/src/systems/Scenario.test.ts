@@ -1010,7 +1010,7 @@ describe("the runner: a use spec that asks for a CRATE (D-037)", () => {
 });
 
 describe("D-084: powder by the post", () => {
-  const storeOf = (id: ScenarioTemplateId, seed = 424242): { x: number; z: number }[] => {
+  const storeOf = (id: ScenarioTemplateId, seed = 424242, posts?: { x: number; z: number }[]): { x: number; z: number }[] => {
     const f = fake();
     f.host.seed = seed;
     f.players.set("p1", row("p1", 0, 88));
@@ -1018,17 +1018,23 @@ describe("D-084: powder by the post", () => {
     s.start();
     const own = (TEMPLATES[id].props ?? []).filter((p) => p.kind === PropKind.BARREL).length;
     const kegs = [...f.props.values()].filter((p) => p.kind === PropKind.BARREL);
+    if (posts) for (const sp of f.cast.specs) posts.push({ x: sp.post.x, z: sp.post.z });
     return kegs.slice(own).map((p) => ({ x: p.x, z: p.z }));
   };
   it("every contract with an armed party against it at the start keeps two or three kegs by its post; the talk-only ones and the late arrivals none; placed the same way for the same run", () => {
-    const armed: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "claim_race", "smuggling_run"];
+    const armed: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "claim_race", "smuggling_run", "lost_survey"];   // (D-093: the Houses' two wardens at the hut)
     for (const id of TEMPLATE_IDS) {
-      const kegs = storeOf(id);
+      const posts: { x: number; z: number }[] = [];
+      const kegs = storeOf(id, 424242, posts);
       if (armed.includes(id)) {
         expect(kegs.length, id).toBeGreaterThanOrEqual(2);
         expect(kegs.length, id).toBeLessThanOrEqual(3);
-        // a pace apart, in one little stack
+        // a pace apart, in one little stack, and never on anybody's spot
         for (const k of kegs) expect(Math.hypot(k.x - kegs[0]!.x, k.z - kegs[0]!.z), id).toBeLessThan(1.6);
+        for (const seed of [1, 2, 3, 4, 5, 6, 424242]) {
+          const ps: { x: number; z: number }[] = [];
+          for (const k of storeOf(id, seed, ps)) for (const p of ps) expect(Math.hypot(k.x - p.x, k.z - p.z), `${id} @${seed}: a keg on somebody's spot`).toBeGreaterThan(0.9);
+        }
       } else expect(kegs, id).toEqual([]); // (the mine and the market: nobody armed; the strike and the raid: their parties land later; the engine and the chair opt out)
     }
     expect(storeOf("secure_crossing")).toEqual(storeOf("secure_crossing"));
