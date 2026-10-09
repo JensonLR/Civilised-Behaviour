@@ -123,12 +123,22 @@ test("character creator: customise, join, and each player sees the other's look"
     const page = await (await browser.newContext()).newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(code ? `/?join=${code}&gfx=test` : "/?gfx=test");
-    await page.waitForSelector(".creator .fields"); // the game boots via dynamic import after `load`
+    await page.waitForSelector("#name"); // the game boots via dynamic import after `load`
     return page;
+  };
+  // D-098: a narrow door (this viewport) shows one panel at a time, the creator behind "Appearance" and back by Done; a wide one shows both
+  const dress = async (p: Page) => {
+    if (await p.locator("#dress").isVisible()) await p.click("#dress");
+    await p.waitForSelector(".creator .fields");
+  };
+  const undress = async (p: Page) => {
+    if (await p.locator(".creator-done").isVisible()) await p.click(".creator-done");
+    await p.waitForSelector("#name", { state: "visible" });
   };
   const storedLook = (p: Page) => p.evaluate(() => localStorage.getItem("cb.look"));
 
   const a = await pageWith("Ada");
+  await dress(a);
   const initialLook = await storedLook(a);
   expect(initialLook).toMatch(/^[A-Za-z0-9_-]{40,120}$/);
 
@@ -146,6 +156,7 @@ test("character creator: customise, join, and each player sees the other's look"
   await a.locator(".swatch").nth(2).click();
   const finalLookA = (await storedLook(a))!;
   await a.screenshot({ path: "test-results/creator.png" });
+  await undress(a);
 
   await a.fill("#name", "Ada");
   await a.click("#create");
@@ -153,9 +164,11 @@ test("character creator: customise, join, and each player sees the other's look"
   const code = await a.locator(".codebar b").textContent();
 
   const b = await pageWith("Bertram", code!);
+  await dress(b);
   await b.click('[data-act="dice"]');
   const finalLookB = (await storedLook(b))!;
   expect(finalLookB).not.toBe(finalLookA);
+  await undress(b);
   await b.fill("#name", "Bertram");
   await b.click("#join");
   await b.waitForFunction(() => Boolean((window as unknown as { __cb?: { session?: { predicted?: unknown } } }).__cb?.session?.predicted));
