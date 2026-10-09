@@ -89,6 +89,19 @@ export const HIGHMARK_SITES = {
     scale: { x: -42, z: -43 },
     breakers: [{ x: -3, z: 112 }, { x: 3, z: 112 }, { x: -5, z: 108 }, { x: 5, z: 108 }],
   },
+  /**
+   * D-094, the Great Grey (the hunt): the herds' old sire has come down into the Reapers' barley. The Master of the Royal Hunt (who sells the licence to shoot it) waits by the road at the
+   * barley's east edge; `fold` is where it is driven home to, its own herd on the west grass (the herd centred at -100, 62: `HERD_BASE`), past the drovers' camp, about 55 m from the barley;
+   * the Syndicate's menagerie agent keeps a pen by the river east of the landing. Beyond `range` of the herd ground's centre it has gone back to the high pasture.
+   */
+  hunt: {
+    grey: { x: -30, z: 42 },
+    master: { x: -13, z: 47 },
+    fold: { x: -84, z: 58, r: 9 },
+    agent: { x: 22, z: 96 },
+    pen: { x: 27, z: 89, r: 6 },
+    range: 112,
+  },
 } as const;
 
 // ---- the plan ---------------------------------------------------------------------------------------------------------------------------
@@ -657,6 +670,8 @@ export function highmarkSitePoints(): { id: string; x: number; z: number }[] {
     // D-042: the Reapers' Strike
     { id: "strike.barley", x: S.strike.barley.x, z: S.strike.barley.z }, { id: "strike.foreperson", ...S.strike.foreperson }, ...S.strike.pickets.map((p, i) => ({ id: `strike.picket${i}`, ...p })),
     { id: "strike.steward", ...S.strike.steward }, { id: "strike.scale", ...S.strike.scale }, ...S.strike.breakers.map((p, i) => ({ id: `strike.breaker${i}`, ...p })),
+    // D-094: the Great Grey (the beast starts in the barley; the agent and his pen by the river)
+    { id: "hunt.grey", ...S.hunt.grey }, { id: "hunt.master", ...S.hunt.master }, { id: "hunt.agent", ...S.hunt.agent }, { id: "hunt.pen", x: S.hunt.pen.x, z: S.hunt.pen.z }, { id: "hunt.fold", x: S.hunt.fold.x, z: S.hunt.fold.z },
   ];
 }
 

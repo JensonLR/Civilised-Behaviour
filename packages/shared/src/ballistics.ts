@@ -24,6 +24,21 @@ export const BODY_SHAPES: readonly (readonly [number, number, number, number, nu
   /* LEG_R */ [0.13, 0.43, 0, 0.15, 0.45, 0.15],
 ];
 
+/**
+ * D-094: a BEAST's body (`FLAG.BEAST`): the six zones of a great long-horned grazer 2.9 m from horns to tail and 1.5 m at the shoulder, in the same frame (it faces -Z).
+ * The arm zones are its forelegs and the leg zones its hind legs, so a wound is still a zone and nothing new travels; it never loses one (Casualties).
+ */
+export const BEAST_SHAPES: readonly (readonly [number, number, number, number, number, number])[] = [
+  /* HEAD     */ [0, 1.12, -1.45, 0.26, 0.48, 0.4],   // (tall: it covers the head raised and lowered to graze)
+  /* BARREL   */ [0, 1.12, 0, 0.5, 0.46, 1.05],
+  /* FORE L   */ [-0.27, 0.45, -0.72, 0.13, 0.48, 0.14],
+  /* FORE R   */ [0.27, 0.45, -0.72, 0.13, 0.48, 0.14],
+  /* HIND L   */ [-0.27, 0.45, 0.72, 0.13, 0.48, 0.14],
+  /* HIND R   */ [0.27, 0.45, 0.72, 0.13, 0.48, 0.14],
+];
+/** A beast down lies in a heap on its side: its shapes squashed to this fraction of their height. */
+const BEAST_LIE_K = 0.45;
+
 /** A crouching body is squashed to this fraction of its height; a downed one lies on its back (the animator's angle and lift). */
 const CROUCH_K = CHARACTER.crouchHeight / CHARACTER.height;
 const LIE_ANGLE = Math.PI / 2 - 0.1;
@@ -87,8 +102,9 @@ let ldz = 0;
  */
 export function rayBody(pose: BodyPose, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, inflate: number, out: BodyHit): boolean {
   const downed = (pose.flags & FLAG.DOWNED) !== 0;
-  // broad phase: closest approach in the ground plane to the body's axis (a lying body reaches ~1.9 m behind it)
-  const reachR = (downed ? 2.05 : 0.6) + inflate;
+  const beast = (pose.flags & FLAG.BEAST) !== 0;
+  // broad phase: closest approach in the ground plane to the body's axis (a lying body reaches ~1.9 m behind it; a beast ~1.85 m before and behind)
+  const reachR = (beast ? 1.95 : downed ? 2.05 : 0.6) + inflate;
   const hx = pose.x - ox;
   const hz = pose.z - oz;
   const a = dx * dx + dz * dz;
@@ -109,7 +125,7 @@ export function rayBody(pose: BodyPose, ox: number, oy: number, oz: number, dx: 
   ldx = dx * c - dz * s;
   ldz = dx * s + dz * c;
   ldy = dy;
-  if (downed) {
+  if (downed && !beast) {
     loy -= LIE_LIFT;
     const ny = loy * LIE_COS + loz * LIE_SIN;
     const nz = -loy * LIE_SIN + loz * LIE_COS;
@@ -120,11 +136,12 @@ export function rayBody(pose: BodyPose, ox: number, oy: number, oz: number, dx: 
     ldy = nyd;
     ldz = nzd;
   }
-  const k = (pose.flags & FLAG.CROUCHING) !== 0 && !downed ? CROUCH_K : 1;
+  const k = beast ? (downed ? BEAST_LIE_K : 1) : (pose.flags & FLAG.CROUCHING) !== 0 && !downed ? CROUCH_K : 1;
+  const shapes = beast ? BEAST_SHAPES : BODY_SHAPES;
   let best = Infinity;
   let bestZone = -1;
   for (let z = 0; z < ZONE_COUNT; z++) {
-    const sh = BODY_SHAPES[z]!;
+    const sh = shapes[z]!;
     const t = rayEllipsoid(lox, loy, loz, ldx, ldy, ldz, sh[0], sh[1] * k, sh[2], sh[3] + inflate, sh[4] * k + inflate, sh[5] + inflate);
     if (t >= 0 && t < best) {
       best = t;
@@ -142,6 +159,13 @@ export function rayBody(pose: BodyPose, ox: number, oy: number, oz: number, dx: 
 
 /** The middle of the chest in world space (aim point, explosion line of sight). */
 export function bodyCentre(pose: BodyPose, out: { x: number; y: number; z: number }): void {
+  if ((pose.flags & FLAG.BEAST) !== 0) {
+    // the middle of the barrel
+    out.x = pose.x;
+    out.y = pose.y + 1.12 * ((pose.flags & FLAG.DOWNED) !== 0 ? BEAST_LIE_K : 1);
+    out.z = pose.z;
+    return;
+  }
   if ((pose.flags & FLAG.DOWNED) !== 0) {
     out.x = pose.x - Math.sin(pose.facing) * -0.6;
     out.z = pose.z - Math.cos(pose.facing) * -0.6;
@@ -157,6 +181,16 @@ export function bodyCentre(pose: BodyPose, out: { x: number; y: number; z: numbe
 /** Distance from a blast centre to the nearest part of a body (its chest line minus its girth). 0 when the blast is inside it. */
 export function blastDistance(pose: BodyPose, cx: number, cy: number, cz: number): number {
   const lying = (pose.flags & FLAG.DOWNED) !== 0;
+  if ((pose.flags & FLAG.BEAST) !== 0) {
+    // a beast: the nearest point of its barrel's axis (horns to rump, along its heading), minus its girth
+    const fx = -Math.sin(pose.facing), fz = -Math.cos(pose.facing);
+    let u = (cx - pose.x) * fx + (cz - pose.z) * fz;
+    u = u < -1.0 ? -1.0 : u > 1.45 ? 1.45 : u;
+    const lo = pose.y + (lying ? 0.1 : 0.4), hi = pose.y + (lying ? 0.65 : 1.45);
+    const y = cy < lo ? lo : cy > hi ? hi : cy;
+    const d = Math.hypot(cx - (pose.x + fx * u), cy - y, cz - (pose.z + fz * u)) - 0.5;
+    return d > 0 ? d : 0;
+  }
   const k = (pose.flags & FLAG.CROUCHING) !== 0 && !lying ? CROUCH_K : 1;
   const lo = pose.y + (lying ? 0.05 : 0.25 * k);
   const hi = pose.y + (lying ? 0.5 : 1.55 * k);

@@ -626,4 +626,38 @@ export const PLANS: Plan[] = [
       await p.until(() => p.view?.resolution !== undefined, 10_000, "resolution");
     },
   },
+  // D-094: the Great Grey. Driving it: stand on the far side of it from the drovers' camp and walk at it; it walks away from people, so it goes where you push.
+  {
+    name: "grey-drive",
+    join: { region: "highmark", scenario: "great_grey", seed: SEED },
+    expect: ["grey_driven"],
+    async run(p) {
+      const F = HS.hunt.fold;
+      const grey = (): { x: number; z: number } | undefined => p.npc("grey");
+      for (let i = 0; i < 40 && p.view?.resolution === undefined; i++) {
+        const g = grey();
+        if (!g) break;
+        const dx = F.x - g.x, dz = F.z - g.z, d = Math.hypot(dx, dz) || 1;
+        // behind it, opposite the camp, outside its shying distance; then a few steps in to push
+        await p.goTo(g.x - (dx / d) * 11, g.z - (dz / d) * 11, { within: 2.5, sprint: true, ms: 20_000, label: "round behind the Grey" });
+        const h = grey() ?? g;
+        await p.goTo(h.x - (dx / d) * 4, h.z - (dz / d) * 4, { within: 1.5, sprint: false, ms: 6000, label: "walk at it" });
+        if (i % 4 === 0) p.note(`Grey at ${h.x.toFixed(1)},${h.z.toFixed(1)}, ${Math.hypot(F.x - h.x, F.z - h.z).toFixed(1)} m from the camp`);
+      }
+      await p.until(() => p.view?.resolution !== undefined, 10_000, "resolution");
+    },
+  },
+  {
+    name: "grey-licensed-shot",
+    join: { region: "highmark", scenario: "great_grey", seed: SEED },
+    expect: ["grey_trophy"],
+    async run(p) {
+      p.debug("give:all");
+      if (await talkTo(p, "master")) await p.pick(/licence/i);
+      await p.sleep(500);
+      if (p.parley) await p.pick(/Walk away/);
+      await fight(p, "grey", 120_000);
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+    },
+  },
 ];

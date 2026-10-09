@@ -6,6 +6,7 @@ import { hash3 } from "./rng.ts";
 import { pluck } from "./regionEndings.ts";
 import { ENGINE_ENDINGS } from "./engineLedger.ts";
 import { RAID_ENDINGS } from "./raidLedger.ts";
+import { HUNT_ENDINGS } from "./huntLedger.ts";
 import { REAPERS_ENDINGS } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS } from "./saltmarketLedger.ts";
 import { VESPER_ENDINGS } from "./vesperLedger.ts";
@@ -45,7 +46,7 @@ export const COUNTER: Record<RivalGoal, Partial<Record<ResolutionId, number>>> =
 };
 /** How an ending sits with the Syndicate: grudge in points (exhaustive, so a new resolution must choose). */
 export const GRUDGE_FX: Record<ResolutionId, number> = {
-  ...pluck(VESPER_ENDINGS, "grudge"), ...pluck(SALTMARKET_ENDINGS, "grudge"), ...pluck(REAPERS_ENDINGS, "grudge"), ...pluck(ENGINE_ENDINGS, "grudge"), ...pluck(RAID_ENDINGS, "grudge"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "grudge"), ...pluck(SALTMARKET_ENDINGS, "grudge"), ...pluck(REAPERS_ENDINGS, "grudge"), ...pluck(ENGINE_ENDINGS, "grudge"), ...pluck(RAID_ENDINGS, "grudge"), ...pluck(HUNT_ENDINGS, "grudge"),   // D-037 (regionEndings.ts)
   paid: 0, bargained: 0, bribed: 0, forced: 2, sabotaged: 4, rival_secured: -10, abandoned: 0,
   ransomed: -3, rescued: 6, slipped_away: 0, hostage_lost: -2, seized: 12, tipped_off: 8, burned: 12, passed: -8, mediated: -2, sided_ward: 8, sided_syndicate: -8, provoked: 4, escalated: 3,
   // D-036: a chair the Society filled is a concession the Syndicate did not get (a regency stalls it longest, a usurpation shuts it); a sold crown is the Syndicate's own good day

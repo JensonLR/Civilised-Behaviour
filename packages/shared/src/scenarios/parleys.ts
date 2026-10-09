@@ -15,7 +15,7 @@ import { VESPER_PARLEYS } from "./vesperParleyText.ts";
 
 export type SiteParleyKind = Exclude<ParleyKind, "warden">;
 /** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below; D-042: so are the strike's two. */
-export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head" | "reaper" | "steward" | "engineer" | "raid_captain" | "dues_collector" | "lost_surveyor";
+export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head" | "reaper" | "steward" | "engineer" | "raid_captain" | "dues_collector" | "lost_surveyor" | "master_of_hunt" | "menagerie_agent";
 type LegacyKind = Exclude<SiteParleyKind, ScriptKind>;
 export type Key = "pay" | "flatter" | "threaten" | "walk" | "propose" | "ask" | "tell" | "envelope" | "tip";
 const WIRE: Record<Key, ParleyOption["id"]> = {

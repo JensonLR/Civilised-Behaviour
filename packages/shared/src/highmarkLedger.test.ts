@@ -225,7 +225,7 @@ describe("Highmark on the chart: every live region, a lane from each, every orde
     expect(offers.highmark!.title).toBe("The Vacant Chair");
     const m = campaignMapOf(c, s, undefined, pins, offers, s.tech, "hollowmere");
     expect(m.regions.map((r) => r.offered?.title)).toEqual([undefined, "Secure the River Crossing", "The Vacant Chair", offers.vesper!.title, offers.saltmarket!.title]);
-    expect(REGION_TEMPLATES.highmark).toEqual(["succession_dispute", "reapers_strike"]);   // D-042: the chair is still the first visit's offer
+    expect(REGION_TEMPLATES.highmark).toEqual(["succession_dispute", "reapers_strike", "great_grey"]);   // D-042: the chair is still the first visit's offer; D-094: the hunt the third
   });
 
   it("every ordered pair of regions sails in the travel machine: propose, vote, sail, arrive", () => {

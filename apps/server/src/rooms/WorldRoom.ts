@@ -1,11 +1,13 @@
 import { CloseCode, Room, ServerError, matchMaker, type Client } from "@colyseus/core";
 import {
+  BEAST,
   BUTTON,
   CASUALTY,
   CHARACTER,
   CollisionWorld,
   FLAG,
   INTERACT,
+  isBeastRole,
   MOUNT_KIND,
   MOUNT_PHASE,
   PROP_DEFS,
@@ -482,6 +484,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
     this.cast = new Cast({
       cry: (key) => this.broadcast("cry", { id: key }), // (D-073: a voice of panic, cosmetic)
+      // D-094: a beast's horns: a hard blow that throws the person it struck (thrown like a blast's, never cut: a beast's blow takes no limb)
+      gore: (key, target) => {
+        const b = this.state.players.get(key), t = this.state.players.get(target);
+        if (!b || !t || (t.flags & FLAG.DOWNED) !== 0) return;
+        const dx = t.x - b.x, dz = t.z - b.z, len = Math.hypot(dx, dz) || 1;
+        this.damagePlayer(target, BEAST.hornDamage, { zone: ZONE.TORSO, dirX: dx / len, dirZ: dz / len, by: key, lift: 0.6, severBias: 0 });
+        this.broadcast("cry", { id: key });
+      },
       players: this.party,
       spawnNpc: (spec) => this.spawnNpc(spec),
       removeNpc: (key) => this.removeNpc(key),
@@ -1755,6 +1765,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     Object.assign(p, c);
     p.facing = Math.PI; // facing the bridge from the north bank, the Syndicate from the south: near enough; npcDecide turns them
     p.npc = spec.role;
+    // D-094: a beast is not a person: its own body for every hit test, its own health
+    if (isBeastRole(spec.role)) {
+      p.flags |= FLAG.BEAST;
+      p.health = BEAST.health;
+      p.look = "";
+    }
     this.state.players.set(key, p);
     p.shots = 0;
     p.aim = 0;

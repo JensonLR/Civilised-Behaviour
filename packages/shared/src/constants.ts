@@ -72,6 +72,11 @@ export const FLAG = {
   HITCHED: 8192,
   /** Derived by the mounted step: the horse is at a gallop, so remote clients pose it that way. */
   GALLOPING: 16384,
+  /**
+   * D-094: server-set on a BEAST's row (never a person's): its body is a quadruped's, so the hit tests use `BEAST_SHAPES` (every pose carries the flags, the lag
+   * compensation's history included), it never loses a limb and it is drawn as an animal. The last free bit of the uint16.
+   */
+  BEAST: 32768,
 } as const;
 
 /** Bit flags packed into MoveInput.buttons (uint16). */

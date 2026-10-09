@@ -26,6 +26,7 @@ export const OUTCOME_KIND: Readonly<Record<ResolutionId, OutcomeKind>> = {
   engine_fouled: "won", engine_blown: "won", engine_bought: "won", vein_struck: "lost",
   post_held: "won", protection_paid: "partial", post_burned: "lost",
   survey_home: "won", chart_ceded: "partial", survey_sold: "partial", survey_lost: "lost",
+  grey_trophy: "won", grey_driven: "won", grey_sold: "partial", grey_escaped: "lost",
 };
 
 /** An ending's kind, from what was committed: the Crown sold for the party's cheque is a sale; the Crown sold because nobody settled anything is a loss. */
@@ -142,6 +143,13 @@ export const TERMS: Readonly<Record<ScenarioTemplateId, ContractTerms>> = {
     lose: ["The tide floods the reeds while he is still at the house", "The surveyor goes down on the way", DOWN],
     fighting: "costly",
     rule: "A shot at the house, even a miss, ends all talk with the Collector: then the books come only by breaking both wardens.",
+  },
+  great_grey: {
+    win: ["Shoot it for the Club (buy the Master's licence first)", "Drive it back to its herd on the west grass: it walks away from people"],
+    partial: ["Agree a price with the Syndicate's agent and drive it into his pen"],
+    lose: ["The harvest bell rings first", "It is driven or bolts off the herd ground", DOWN],
+    fighting: "costly",
+    rule: "Every beast on the grassland is the Crown's: a shot at it without the Master's licence, even a miss, is poaching.",
   },
 };
 

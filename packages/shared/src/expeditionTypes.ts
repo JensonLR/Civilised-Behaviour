@@ -19,8 +19,10 @@ export const NPC_SIDE: Readonly<Record<number, NpcSide>> = {
   [NPC.CHAMBERLAIN]: "ward", [NPC.COURT_GUARD]: "ward", [NPC.CLAIMANT]: "neutral", [NPC.HERDER]: "neutral",
   // D-037: Vesper Gorge (a foreman is the company's, i.e. the local authority's; miners and mourners keep out of it), the Saltmarket Delta (customs men are the Constabulary's; bargemen and factors keep out of it)
   [NPC.FOREMAN]: "ward", [NPC.MINER]: "neutral", [NPC.MOURNER]: "neutral", [NPC.CUSTOMS]: "ward", [NPC.BARGEMAN]: "neutral", [NPC.FACTOR]: "neutral", [NPC.RAIDER]: "rival",
+  // D-094: the hunt's quarry belongs to nobody's side (it is not a combatant: it shies, bolts and, wounded, charges whoever hurt it)
+  [NPC.BEAST]: "neutral",
 };
-export type BrainId = "garrison" | "follower" | "civil";   // civil = hostage, driver: never fights, flees, follows when freed
+export type BrainId = "garrison" | "follower" | "civil" | "beast";   // civil = hostage, driver: never fights, flees, follows when freed; beast (D-094) = grazes, shies from people, bolts from shots, charges whoever wounds it
 export interface NpcSpec {
   id: string; role: number; faction: FactionId; side: NpcSide; group: string; post: { x: number; z: number }; weapon: WeaponId; lookSeed: number;
   look?: Record<string, number> /* authored CharacterSpec patch, run through specFromUntrusted */; people?: PeopleId /* D-038: which native people they are (peoples.ts `peopleForNpc`); the server lays the people's overlay under `look`; absent = colonial */; name: string; skill: number; bravery: number; brain: BrainId;

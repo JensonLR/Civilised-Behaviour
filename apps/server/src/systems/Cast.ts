@@ -3,7 +3,7 @@ import {
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
-import { NAV, NPC_SIDE } from "@cb/shared";
+import { BEAST, NAV, NPC_SIDE, hash3 } from "@cb/shared";
 import type {
   BrainFn, BrainId, CastApi, CastCount, CastOrder, NavApi, NavPath, NpcBody, NpcBrain, NpcSenses, NpcSide, NpcSpec, PlayersView,
 } from "@cb/shared";
@@ -38,6 +38,8 @@ export interface CastHost {
   /** Navigation options for a world (Kessar closes the gorge and prunes the courtyard: `kessarNavOptions`). */
   navOptions?(world: CollisionWorld): NavOptions;
   sendTo?(sid: string, type: string, msg: unknown): void;
+  /** D-094: a beast's horns struck `target` (a person within its reach): the room deals the blow (thrown, a hard wound) as from `key`. Optional: test hosts need not. */
+  gore?(key: string, target: string): void;
 }
 
 interface Group { alert: boolean; standDown: boolean; holdFire: boolean; attack: NpcSide | "any" | undefined }
@@ -49,6 +51,16 @@ interface Rec {
   brain: NpcBrainState;
   fn: BrainFn | undefined;
   civil: boolean;
+  /** D-094: a beast (civil too: it has no enemies and bolts from reports; it also shies from people, grazes, and charges whoever wounds it). */
+  beast: boolean;
+  /** The beast's last shooter, its charge (target, until), its next strike, and where it is grazing to. */
+  lastShooter: string;
+  chargeTarget: string;
+  chargeUntil: number;
+  hornAt: number;
+  gx: number;
+  gz: number;
+  grazeUntil: number;
   gone: boolean;
   wasDown: boolean;
   lastHp: number;
@@ -153,9 +165,11 @@ export class Cast implements CastApi {
     for (const spec of specs) {
       if (this.byKey.has(npcKey(spec.id)) || !this.host.spawnNpc(spec)) continue;
       const side = spec.side ?? NPC_SIDE[spec.role] ?? "neutral";
-      const civil = spec.brain === "civil";
+      const beast = spec.brain === "beast";
+      const civil = spec.brain === "civil" || beast;
       const rec: Rec = {
-        spec, key: npcKey(spec.id), side, group: spec.group, brain: npcBrainNew(spec), civil,
+        spec, key: npcKey(spec.id), side, group: spec.group, brain: npcBrainNew(spec), civil, beast,
+        lastShooter: "", chargeTarget: "", chargeUntil: -1, hornAt: -1, gx: spec.post.x, gz: spec.post.z, grazeUntil: -1,
         fn: civil ? undefined : this.host.brains[spec.brain] ?? this.host.brains.garrison ?? npcThink,
         gone: false, wasDown: false, lastHp: 100, lastWounds: 0, lastMissing: 0, token: false, tokenHeld: false, tokenTarget: "", follow: "", fleeUntil: -1, fleeX: 0, fleeZ: 0, lastBand: "steady", lastCry: -Infinity,
         tx: "", td: Infinity, hasEnemy: false, ex: 0, ez: 0, ev: 0, earmed: false, allies: 0, alliesDown: 0,
@@ -337,6 +351,19 @@ export class Cast implements CastApi {
    */
   shotFrom(target: string, shooter: string): void {
     const r = this.byKey.get(target);
+    if (r?.beast && !r.gone) {
+      // D-094: a beast remembers who shot at it (a wound turns it on them: `sense`) and bolts from the report
+      const from = this.host.players.get(shooter);
+      if (!from || isNpcKey(shooter)) return;
+      const now = this.host.worldMs() / 1000;
+      r.lastShooter = shooter;
+      if (now >= r.chargeUntil) {
+        r.fleeUntil = now + CAST.civilFleeSeconds;
+        r.fleeX = from.x;
+        r.fleeZ = from.z;
+      }
+      return;
+    }
     if (!r || r.gone || r.civil || r.spec.brain !== "garrison") return;
     const from = this.host.players.get(shooter);
     if (!from || this.byKey.get(shooter)?.side === r.side) return;
@@ -356,8 +383,9 @@ export class Cast implements CastApi {
       if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
       const d = Math.hypot(row.x - x, row.z - z);
       if (r.civil) {
+        if (r.beast && now < r.chargeUntil) continue; // (a charging beast does not stop for a bang)
         if (d <= Math.min(radius, CAST.civilFleeRange)) {
-          if (r.fleeUntil < now) this.cry(r, now); // (D-073: a civilian who starts to run cries out)
+          if (r.fleeUntil < now && !r.beast) this.cry(r, now); // (D-073: a civilian who starts to run cries out)
           r.fleeUntil = now + CAST.civilFleeSeconds;
           r.fleeX = x;
           r.fleeZ = z;
@@ -502,6 +530,12 @@ export class Cast implements CastApi {
     }
     const down = (row.flags & FLAG.DOWNED) !== 0;
     // wounds and witnessed falls feed morale
+    if (r.beast && !down && row.health < r.lastHp && r.lastShooter !== "") {
+      // D-094: wounded, it turns on whoever shot it
+      r.chargeTarget = r.lastShooter;
+      r.chargeUntil = now + BEAST.chargeSeconds;
+      r.fleeUntil = -1;
+    }
     if (row.health < r.lastHp || row.wounds !== r.lastWounds) {
       r.brain.hurtAt = now;
       r.brain.morale.shock = Math.min(60, r.brain.morale.shock + Math.max(0, r.lastHp - row.health) * CAST.hurtShock);
@@ -697,7 +731,8 @@ export class Cast implements CastApi {
     } else sn.enemy = undefined;
     sn.leader = this.leaderOf(r, row);
 
-    if (r.civil) this.civilThink(r, row, sn, dt, now);
+    if (r.beast) this.beastThink(r, row, now);
+    else if (r.civil) this.civilThink(r, row, sn, dt, now);
     else (r.fn ?? npcThink)(r.brain, me, sn, dt, this.cmd);
     if (g.holdFire) this.cmd.buttons &= ~(BUTTON.FIRE | BUTTON.MELEE | BUTTON.THROW);
     if ((this.cmd.buttons & (BUTTON.FIRE)) !== 0) this.stats.shots++;
@@ -748,5 +783,84 @@ export class Cast implements CastApi {
       return;
     }
     if (r.brain.mode === "follow" && sn.leader !== undefined) (r.fn ?? npcThink)(r.brain, this.body, sn, dt, out);
+  }
+
+  /**
+   * D-094: a beast. Down, it lies still. Charging (wounded by someone), it runs at them and strikes once in reach, then bolts. Bolting (a report close by), it runs from
+   * the bang. Otherwise it walks away from anyone nearer than `BEAST.shyR` (trots inside `startleR`), pushed by every one of them at once, which is what lets a party
+   * DRIVE it: come at it from the side you want it to leave by. With nobody near it grazes, a few slow steps at a time about where it stands. Deterministic per tick.
+   */
+  private beastThink(r: Rec, row: PlayerStateType, now: number): void {
+    const out = this.cmd;
+    out.moveF = 0; out.moveR = 0; out.buttons = 0;
+    out.yaw = yawToWire(Number.isFinite(row.facing) ? row.facing : 0);
+    out.aimYaw = out.yaw; out.aimElev = 0; out.weapon = 0;
+    if ((row.flags & FLAG.DOWNED) !== 0) return;
+    const toward = (x: number, z: number): number => yawToWire(Math.atan2(row.x - x, row.z - z));   // heading (0 = -Z) toward (x, z)
+    if (now < r.chargeUntil) {
+      const t = this.host.players.get(r.chargeTarget);
+      if (t && t.connected && (t.flags & FLAG.DOWNED) === 0) {
+        out.yaw = toward(t.x, t.z);
+        out.aimYaw = out.yaw;
+        out.moveF = 127;
+        out.buttons = BUTTON.SPRINT;
+        if (Math.hypot(t.x - row.x, t.z - row.z) <= BEAST.hornReach && now >= r.hornAt) {
+          r.hornAt = now + BEAST.hornCooldown;
+          this.host.gore?.(r.key, r.chargeTarget);
+          // struck: it has made its point, and goes
+          r.chargeUntil = -1;
+          r.fleeUntil = now + CAST.civilFleeSeconds;
+          r.fleeX = t.x;
+          r.fleeZ = t.z;
+        }
+        return;
+      }
+      r.chargeUntil = -1;
+    }
+    if (now < r.fleeUntil) {
+      out.yaw = yawToWire(Math.atan2(r.fleeX - row.x, r.fleeZ - row.z));   // away from the report
+      out.aimYaw = out.yaw;
+      out.moveF = 127;
+      out.buttons = BUTTON.SPRINT;
+      return;
+    }
+    // shy: walk away from everybody near, the nearer the harder
+    let px = 0, pz = 0, nearest = Infinity;
+    for (const p of this.humans) {
+      const dx = row.x - p.x, dz = row.z - p.z, d = Math.hypot(dx, dz);
+      if (d >= BEAST.shyR || d < 1e-3) continue;
+      const w = (BEAST.shyR - d) / BEAST.shyR;
+      px += (dx / d) * w;
+      pz += (dz / d) * w;
+      if (d < nearest) nearest = d;
+    }
+    if (px * px + pz * pz > 1e-6) {
+      // along the push, but it jinks: a new angle up to ~30 degrees either side every two seconds, so a party driving it has to keep correcting
+      const jh = hash3(r.spec.lookSeed >>> 0, Math.floor(now / 2), 0x1b4c);
+      const jink = (((jh & 0xffff) / 65535) * 2 - 1) * BEAST.jink;
+      out.yaw = yawToWire(Math.atan2(-px, -pz) + jink);
+      out.aimYaw = out.yaw;
+      out.moveF = nearest < BEAST.startleR ? 127 : 80;
+      if (nearest < BEAST.startleR) out.buttons = BUTTON.SPRINT;
+      r.grazeUntil = now + 3;   // (and it stands a while before it settles to graze)
+      r.gx = row.x;
+      r.gz = row.z;
+      return;
+    }
+    // graze: a few slow steps to a spot near where it is, every few seconds; strayed from its post (the barley it came down for), it ambles back towards it
+    if (now >= r.grazeUntil) {
+      const h = hash3(r.spec.lookSeed >>> 0, Math.floor(now), 0xb3a5);
+      const a = ((h & 0xffff) / 65536) * Math.PI * 2, d = BEAST.grazeR * (((h >>> 16) & 0xff) / 255);
+      const hx = r.spec.post.x - row.x, hz = r.spec.post.z - row.z, home = Math.hypot(hx, hz);
+      const back = home > BEAST.grazeR * 1.5 ? Math.min(BEAST.homeStep, home) / home : 0;
+      r.gx = row.x + Math.cos(a) * d * 0.5 + hx * back;
+      r.gz = row.z + Math.sin(a) * d * 0.5 + hz * back;
+      r.grazeUntil = now + (back > 0 ? 2.5 : 4 + ((h >>> 24) & 3));
+    }
+    if (Math.hypot(r.gx - row.x, r.gz - row.z) > 0.6) {
+      out.yaw = toward(r.gx, r.gz);
+      out.aimYaw = out.yaw;
+      out.moveF = 40;
+    }
   }
 }

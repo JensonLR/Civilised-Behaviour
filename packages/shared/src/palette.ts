@@ -511,6 +511,9 @@ export const PALETTE = {
     hide: 0x9a6c46,
     hideDark: 0x6e4a32,
     hidePale: 0xc9a77a,
+    /** D-094: the Great Grey, the herds' old sire (a warm grey, darker at the hump and legs; his horns are `hidePale`). */
+    greyHide: 0x9c978c,
+    greyHideDark: 0x6c675e,
     hull: 0x7a5238,
     awning: 0xc4a460,
     // the skyline pass (D-037, package P): what lets the capital hold its edge against the haze

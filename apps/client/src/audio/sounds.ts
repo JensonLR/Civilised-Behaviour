@@ -69,6 +69,21 @@ const crankShot = def({
   ],
 });
 
+/**
+ * D-094: the Great Grey's bellow (wounded, charging, struck): a long low voice, rough with breath, that rises, holds and falls away, with a grunt at its start. Heard a long way off
+ * on the open grass; it is the beast's whole vocabulary.
+ */
+const bellow = def({
+  group: "body", peakDb: -6, ref: 14, max: 160, reverb: 0.35, prio: 2, cap: 2, gap: 0.6, jitter: 0.06, variants: 3,
+  layers: (p) => [
+    T({ hz: 92 * jit(p, 0.08), to: 120 * jit(p, 0.06), over: 0.45, atk: 0.08, dec: 1.1, peak: 0.9 }),
+    T({ at: 0.45, hz: 120 * jit(p, 0.06), to: 70, over: 0.7, dec: 0.75, peak: 0.6 }),
+    T({ hz: 184 * jit(p, 0.08), to: 236, over: 0.45, atk: 0.08, dec: 1.0, peak: 0.35 }),
+    N({ kind: "brown", atk: 0.06, dec: 1.2, peak: 0.45, f: [lp(520 * jit(p, 0.1))] }),
+    N({ dec: 0.08, peak: 0.5, f: [bp(300, 2)] }),
+  ],
+});
+
 const cannon = def({
   group: "weapon", peakDb: -0.3, ref: 45, max: 520, reverb: 0.7, prio: 4, cap: 3, gap: 0.1, duck: 0.8, drive: 1.2, jitter: 0.03, variants: 2,
   layers: (p) => [
@@ -712,6 +727,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   blunderbuss_shot: blunderbuss,
   cannon_shot: cannon,
   crank_shot: crankShot,
+  bellow,
   explosion,
   sabre_swing: sabreSwing,
   sabre_hit: sabreHit,

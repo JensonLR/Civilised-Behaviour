@@ -350,3 +350,43 @@ describe("explosions and melee geometry", () => {
     expect(hit.t).toBeGreaterThan(0.5);
   });
 });
+
+describe("D-094: a beast's body (FLAG.BEAST)", () => {
+  // a beast facing -Z (yaw 0) at the origin: horns forward at -Z, rump at +Z
+  const beast = { x: 0, y: 0, z: 0, facing: 0, flags: FLAG.GROUNDED | FLAG.BEAST };
+  const man = { x: 0, y: 0, z: 0, facing: 0, flags: FLAG.GROUNDED };
+  const hit = newBodyHit();
+  it("a shot from the side at shoulder height takes the barrel; from the front at the head's height, the head; low by the legs, a leg", () => {
+    expect(rayBody(beast, 10, 1.1, 0, -1, 0, 0, 50, 0, hit)).toBe(true);
+    expect(hit.zone).toBe(ZONE.TORSO);
+    expect(hit.x).toBeGreaterThan(0.4);
+    expect(rayBody(beast, 0, 1.3, -10, 0, 0, 1, 50, 0, hit)).toBe(true);
+    expect(hit.zone).toBe(ZONE.HEAD);
+    // a foreleg (an "arm" zone) and a hind leg (a "leg" zone), from the side under the barrel
+    expect(rayBody(beast, 10, 0.3, -0.72, -1, 0, 0, 50, 0, hit)).toBe(true);
+    expect(hit.zone === ZONE.ARM_L || hit.zone === ZONE.ARM_R).toBe(true);
+    expect(rayBody(beast, 10, 0.3, 0.72, -1, 0, 0, 50, 0, hit)).toBe(true);
+    expect(hit.zone === ZONE.LEG_L || hit.zone === ZONE.LEG_R).toBe(true);
+  });
+  it("is the size of a beast, not a man: a ray 1.3 m before a man's chest misses him and takes the beast's head; one over its back misses", () => {
+    expect(rayBody(man, 10, 1.3, -1.45, -1, 0, 0, 50, 0, hit)).toBe(false);
+    expect(rayBody(beast, 10, 1.3, -1.45, -1, 0, 0, 50, 0, hit)).toBe(true);
+    expect(hit.zone).toBe(ZONE.HEAD);
+    expect(rayBody(beast, 10, 2.1, 0, -1, 0, 0, 50, 0, hit)).toBe(false);
+  });
+  it("turns with its heading, lies low when down, and its centre and blast distance follow the barrel", () => {
+    const turned = { ...beast, facing: Math.PI / 2 };   // facing -X: horns toward -X
+    expect(rayBody(turned, -10, 1.3, 0, 1, 0, 0, 50, 0, hit)).toBe(true);
+    expect(hit.zone).toBe(ZONE.HEAD);
+    const down = { ...beast, flags: beast.flags | FLAG.DOWNED };
+    expect(rayBody(down, 10, 1.1, 0, -1, 0, 0, 50, 0, hit)).toBe(false);
+    expect(rayBody(down, 10, 0.45, 0, -1, 0, 0, 50, 0, hit)).toBe(true);
+    const c = { x: 0, y: 0, z: 0 };
+    bodyCentre(beast, c);
+    expect(c.y).toBeCloseTo(1.12, 2);
+    // a blast at its rump is close; the same distance off a man's axis is not
+    expect(blastDistance(beast, 0, 1, 1.4)).toBeLessThan(0.05);
+    expect(blastDistance(man, 0, 1, 1.4)).toBeGreaterThan(1);
+    expect(blastDistance(beast, 0, 1, 1.9)).toBeCloseTo(0.4, 2);
+  });
+});

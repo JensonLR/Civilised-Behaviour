@@ -418,3 +418,41 @@ The hired hands are the expedition: their shots count for the Hatters and agains
 - **Where.** The first choice of hut (by the west pond) stood where two seed-wandering creeks cross, in water on every seed; the survey moved to the north-west hut, whose south bank is dry on all five test seeds. The people stand there; the walk home is searched on the nav grid in legs on three seeds. The playtest bots found the quay's circle too tight (the surveyor walks about 4 m behind his leader, so a party at the flag left him outside a 6 m circle): it is 8 m round a point 6 m inland of the landing. The scenery: the ranging rod and the chalk, drawn in the delta's own kit, within the medium preset's triangle budget, passing the ground and overlap audits.
 - **Tests.** Shared: the reducer (every ending, the dues' band, the forced release, the tide's warning and the shift with the weather, leaving, freezing), the trail and the compass, the scripts, the spots on open dry ground on three seeds with a whole path home; the Saltmarket ledger at twelve endings (distinct campaign and powers JSON within the template, the chart note, the picker never offering it first); terms held to the code. Server, through the runner: one commit per ending, the follow order naming whoever settled it, a stranger's pick. Bots in a real room: trail, hut, dues and home in 120 s (`survey-dues-home`); sold in 35 s (`survey-sold`). Looked at in software-rendered stills (the rod, the chalk, the hut from the bank).
 - **Not yet.** The surveyor stands still if his named leader goes down (Cast's rule for an escort, as the hostage's). The GDD's survey, audience, hunt and siege kinds are still unbuilt. Unplayed by a person; the tide and the prices are a first pass.
+
+**D-094 The Great Grey: the hunt, and the first animal you can hunt (2026-10-09).** The GDD's "hunt", as Highmark's third contract (`great_grey`), making fourteen templates. It needed something the game did not have: an animal that is simulated, can be shot, and runs. Highmark's herds are scenery (`herdAt`, never on the server).
+- **The premise.** The old grey sire of Thornfield's herds has come down into the Reapers' barley. The Crown, as host, asks the Society to see to him before the harvest bell. The Natural History Committee wants his head for the Club's wall in Pall Mall. The drovers want him back with his herd alive, since he is the luck of the herds. The Syndicate's menagerie agent wants him in his pen. Every beast on the grassland is the Crown's, and the Master of the Royal Hunt sells the licence to shoot. The satire is the Society's: a Committee that would rather have a head than know anything about the animal.
+- **A beast in the engine.**
+  - **Row and flag.** `NPC.BEAST` is a new role (appended). The server sets `FLAG.BEAST` on the row, using the last free bit of the flags.
+  - **Body.** Every pose carries its flags, lag-compensated history included. So every hit test (`rayBody`, `bodyCentre`, `blastDistance`, `meleeFan`) uses the beast's own six ellipsoids, `BEAST_SHAPES`: head, barrel, and fore and hind legs in the arm and leg zones. That needed no schema change. Its head shape is tall enough to cover a lowered, grazing head.
+  - **Health and wounds.** It has 240 health. It never loses a limb (Casualties). It is never revived or dragged, because it is not in the helpable scan, and the client offers no such prompt.
+  - **Not a casualty.** Its wounds and its fall are not casualties. The runner keeps it out of the tally, but a shot at it is still a shot.
+- **Its behaviour.** It is a flavour of the civil brain with its own think (`Cast.beastThink`):
+  - it grazes, a few steps at a time;
+  - it walks away from anyone within 9 m, pushed by all of them at once, and trots inside 4 m; this is what lets a party drive it;
+  - while driven it jinks up to about 30° either side of the push, a new angle every two seconds;
+  - left alone, it ambles back toward the barley;
+  - it bolts from a report;
+  - wounded, it turns on whoever shot it and charges; in reach its horns strike once (34 damage, through the room's own damage path, the victim thrown), then it bolts.
+- **Watching one actor several ways.** An actor watch can now report under its own name (`as`). The one beast is watched three ways: `grey@fold` (its herd), `grey@pen` (the agent's pen) and `grey@range` (off the herd ground, `left`).
+- **No menu.** Endings:
+  - **`grey_trophy`** (won): shot down. Without the Master's licence, any shot at it, even a miss, is poaching, a broken promise.
+  - **`grey_driven`** (won): driven back into its herd on the west grass, about 55 m past the drovers' camp.
+  - **`grey_sold`** (partial): the agent agrees a price and opens his pen by the river; the beast is driven in.
+  - **`grey_escaped`** (lost): off the herd ground, or the harvest bell (480 to 560 s; rain brings it 75 s sooner).
+  - **`abandoned`**.
+  - Ledger and copy live in their own package (`huntLedger.ts`, `huntText.ts`), spread into every central table. Highmark's picker goes round the chair, the strike and the hunt. There is an achievement ("The Luck of the Herds").
+- **Shown.** `BeastView` draws a beast's row, never a `CharacterActor`:
+  - the herds' long-horned grazer, larger and grey with age, with lyre horns;
+  - four legs that swing with its speed;
+  - a head lowered to graze when it stands and lifted when it moves;
+  - when down, it lies on its side over its row, where its downed hit shapes are;
+  - hits on it bleed at its barrel and it flinches;
+  - it bellows (a synthesised `bellow`) when it charges, strikes or falls.
+- **Found while building it.** The drive's first goal was the drovers' camp, 23 m from the barley; the bot drove it there in 21 s. The goal is now its own herd, and the beast jinks and wanders home, so a bot takes 42 s and a person longer.
+- **Tests.**
+  - Shared: the beast's hit shapes (side, front, legs, its size against a man, heading, lying, blast distance), the reducer through every ending (the licence's band, poaching, the shut pen, the bell's warning), the compass, the scripts, and the spots on three seeds with walkable ways to the herd and the pen.
+  - Server, through a real room: it is flagged with its own health; it walks away from a person 5 m off; a real rifle ball takes its barrel; wounded, it charges and its horns hurt; shot down, it is the trophy; at its herd, it is driven.
+  - Bots in a real room: driven home in 42 s; a licensed shot in 24 s, gored once on the way.
+  - Client: the view follows the row, swings its legs, lies down centred and is dropped with its row.
+  - Looked at in software-rendered stills (grazing, walking, at a run, down).
+- **Not yet.** Mounted players push it like walkers (a horse is not yet more frightening). It is not drawn in the herds' instanced scenery as one of them before the contract. Unplayed by a person; every number is a first pass.

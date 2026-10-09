@@ -171,7 +171,12 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
   flooded_market: {
     hall: at("Exchange", SALTMARKET_ANCHORS.exchange), bid: at("Auctioneer", SALTMARKET_SITES.auctioneer), paddles: at("Exchange", SALTMARKET_ANCHORS.exchange),
     pool: at("House-Heads", SALTMARKET_SITES.houseHeads[0]!), lot: at("Exchange", SALTMARKET_ANCHORS.exchange), home: "home",
-  },  lost_survey: {   // D-093: the strip follows the surveyor's trail (the objective's id names the next mark), then the house, then the quay
+  },
+  great_grey: {   // D-094: the barley (where the beast is found), its herd (where it is driven), the Master (the licence), the agent's pen (once agreed)
+    barley: at("Reapers' barley", HIGHMARK_SITES.strike.barley), out: at("The herd", HIGHMARK_SITES.hunt.fold), licence: at("Master of the Hunt", HIGHMARK_SITES.hunt.master),
+    pen: at("Menagerie pen", HIGHMARK_SITES.hunt.pen), home: "home",
+  },
+  lost_survey: {   // D-093: the strip follows the surveyor's trail (the objective's id names the next mark), then the house, then the quay
     peg: at("Survey peg", SALTMARKET_SURVEY.peg), pump: at("Windpump", SALTMARKET_SURVEY.pumpMark), house: at("Reed-cutter's house", SALTMARKET_SURVEY.house),
     books: at("The Collector", SALTMARKET_SURVEY.collector), quay: at("The quay", SALTMARKET_SURVEY.quay), home: "home",
   },
