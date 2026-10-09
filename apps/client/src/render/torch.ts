@@ -39,8 +39,18 @@ function parts(): NonNullable<typeof shared> {
 }
 
 const qWrist = new Quaternion();
-const qUp = new Quaternion();
 const tilt = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -0.18);
+
+/**
+ * Keeps a thing held in a hand upright in the world, whatever the wrist is doing (a person holds a torch or a pennant up, not along their fingers), with a slight forward
+ * lean: local = inverse(parent world) * wanted. Allocation-free. Shared by the torch (D-047) and the picket's pennant (D-095).
+ */
+export function holdUpright(group: Group): void {
+  const hand = group.parent;
+  if (!hand) return;
+  hand.getWorldQuaternion(qWrist);
+  group.quaternion.copy(qWrist.invert()).multiply(tilt);
+}
 
 /** One character's torch: built on first use, hung on the hand bone, shown or hidden each frame. */
 export class TorchHold {
@@ -71,13 +81,7 @@ export class TorchHold {
   update(on: boolean, t: number): void {
     this.group.visible = on;
     if (!on) return;
-    const hand = this.group.parent;
-    if (hand) {
-      hand.getWorldQuaternion(qWrist);
-      // world orientation wanted: upright with a slight forward lean; local = inverse(parent world) * wanted
-      qUp.copy(tilt);
-      this.group.quaternion.copy(qWrist.invert()).multiply(qUp);
-    }
+    holdUpright(this.group);
     const f = 0.85 + 0.15 * Math.sin(t * 17 + this.phase) * Math.sin(t * 7.3 + this.phase * 2.1);
     this.outer.scale.set(1, f, 1);
     this.glow.scale.setScalar(0.9 + 0.2 * f);

@@ -21,6 +21,8 @@ export const NPC_SIDE: Readonly<Record<number, NpcSide>> = {
   [NPC.FOREMAN]: "ward", [NPC.MINER]: "neutral", [NPC.MOURNER]: "neutral", [NPC.CUSTOMS]: "ward", [NPC.BARGEMAN]: "neutral", [NPC.FACTOR]: "neutral", [NPC.RAIDER]: "rival",
   // D-094: the hunt's quarry belongs to nobody's side (it is not a combatant: it shies, bolts and, wounded, charges whoever hurt it)
   [NPC.BEAST]: "neutral",
+  // D-095: the siege's picket boys, the Ward's people hired by the hour: bystanders to everyone's guns (and to the Butcher's Bill), never the party's hands
+  [NPC.PICKET]: "neutral",
 };
 export type BrainId = "garrison" | "follower" | "civil" | "beast";   // civil = hostage, driver: never fights, flees, follows when freed; beast (D-094) = grazes, shies from people, bolts from shots, charges whoever wounds it
 export interface NpcSpec {

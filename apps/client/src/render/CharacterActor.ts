@@ -7,6 +7,7 @@ import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
 import { ghostTree, seeThroughTree } from "./ghost.ts";
 import { WeaponRig } from "./weapons/WeaponRig.ts";
+import { PennantHold } from "./pennant.ts";
 import { TorchHold } from "./torch.ts";
 
 /**
@@ -65,6 +66,8 @@ export interface ActorPose {
   ground?: Omit<ExposureInput, "moving">;
   /** D-047: a lit torch in the off hand (the raid's raiders whose weapon leaves it free). Absent = none. */
   torch?: boolean;
+  /** D-095: the Society's pennant in the off hand (the siege's picket boys: a planted picket reads from across the field). Absent = none. */
+  pennant?: boolean;
 }
 
 /** The replicated combat state of one figure, as the actor needs it. */
@@ -108,6 +111,9 @@ export class CharacterActor {
   private torch?: TorchHold;
   private torchT = 0;
   private torchWasOn = false;
+  /** D-095: built on the first frame that wants one. */
+  private pennant?: PennantHold;
+  private pennantT = 0;
   /** A lit torch left the hand because the body went down: where it fell (world x, ground y, z) and the way it lies. Set by the game (`GroundTorches`); absent = it just goes out. */
   onTorchDropped?: (x: number, y: number, z: number, yaw: number, seed: number) => void;
   private lastVy = 0;
@@ -171,9 +177,11 @@ export class CharacterActor {
     this.ragdoll = undefined;
     this.marks?.dispose();
     this.torch?.dispose();   // (off the old hand before the rig goes: its geometry is shared by every torch)
+    this.pennant?.dispose();
     this.rig?.dispose();
     this.rig = buildCharacter(spec, { outline: this.outline });
     this.torch?.attach(this.rig.joints.wristL);
+    this.pennant?.attach(this.rig.joints.wristL);
     this.marks = new BodyMarks(this.rig);
     this.marksKey = -1;
     this.anim = new CharacterAnimator(this.rig);
@@ -427,6 +435,15 @@ export class CharacterActor {
     this.torchWasOn = torchOn;
     this.torchT += dt;
     this.torch?.update(torchOn, this.torchT);
+    // D-095: a pennant in the same free off hand (a picket boy who goes down lets it go: it is not lit, so it simply goes)
+    const pennantOn = pose.pennant === true && !torchOn && !busy && !(h.visible && h.left.w > 0.3) && (pose.flags & FLAG.DOWNED) === 0;
+    if (pennantOn && !this.pennant) {
+      this.pennant = new PennantHold(this.fallbackSeed);
+      this.pennant.attach(this.rig.joints.wristL);
+    }
+    if (pennantOn) this.heldGrip.L = 0.85;
+    this.pennantT += dt;
+    this.pennant?.update(pennantOn, this.pennantT);
     this.hands.update(dt, pose.flags, Math.hypot(pose.vx, pose.vz), this.anim.currentExpression, this.heldGrip.L, this.heldGrip.R);
     // The animator overwrites root.position.y each update with its own offset (e.g. lift when lying down);
     // the ground height is added afterwards.
@@ -540,6 +557,7 @@ export class CharacterActor {
 
   dispose(): void {
     this.torch?.dispose();
+    this.pennant?.dispose();
     this.marks.dispose();
     this.ragdoll?.dispose();
     this.ragdoll = undefined;

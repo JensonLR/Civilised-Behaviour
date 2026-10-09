@@ -13,8 +13,8 @@ Last updated: 2026-10-09 (D-095, the Siege of the Counting-House, D-094, the Gre
   - **Endings.** Honours (won), stormed (won), bought (partial), lifted (lost), abandoned. A won or bought siege strikes the Syndicate's post at Kessar and rebuilds the world without it.
   - **Also.** Every siege point and the raid's road are now Kessar story points, so no seeded rock can block either on any seed (the raid's road had only been proven on seven).
   - **Tested.** Shared (every ending, the ground on seven seeds and every post stage), server (the runner on a fake host; a real room: the post solid, a picket boy, a real rifle ball starting the storm, the post struck when it falls) and bots (the honours in 71 s; a lone storm is shot down).
-  - **Looked at.** Software-rendered stills of the post, its garrison, the factor and the Ward's boys.
-  - **Limits.** Unplayed by a person. The picket boys hold no flag yet; the post is struck when the outcome is committed, not before the party's eyes.
+  - **Looked at.** Software-rendered stills of the post, its garrison, the factor and the Ward's boys, each holding the Society's pennant (a planted picket reads from across the field).
+  - **Limits.** Unplayed by a person. The post is struck when the outcome is committed, not before the party's eyes.
 - **D-094 (2026-10-09): the Great Grey.** The GDD's "hunt", as Highmark's third contract, and the game's first animal you can hunt. Fourteen templates now.
   - **The job.** The herds' old grey sire is in the Reapers' barley. You can:
     - shoot him for the Club's wall (lawfully, with the Master of the Royal Hunt's licence, or as poaching without it);

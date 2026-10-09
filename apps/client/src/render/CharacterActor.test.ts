@@ -183,6 +183,22 @@ describe("CharacterActor torch (the raid's raiders)", () => {
   });
 });
 
+describe("CharacterActor pennant (the siege's picket boys, D-095)", () => {
+  it("held up in a free hand while standing; put away when the hands are busy; let go when the boy goes down", () => {
+    const a = new CharacterActor(new Scene(), look(14), 4, false);
+    const pennant = (): { group: { visible: boolean } } | undefined => (a as unknown as { pennant?: { group: { visible: boolean } } }).pennant;
+    settle(a, pose(FLAG.GROUNDED));
+    expect(pennant(), "built only when wanted").toBeUndefined();
+    settle(a, pose(FLAG.GROUNDED, { pennant: true }));
+    expect(pennant()?.group.visible).toBe(true);
+    settle(a, pose(FLAG.GROUNDED | FLAG.CARRYING, { pennant: true }), 5);
+    expect(pennant()?.group.visible).toBe(false);
+    settle(a, pose(FLAG.GROUNDED | FLAG.DOWNED, { pennant: true }), 10);
+    expect(pennant()?.group.visible).toBe(false);
+    a.dispose();
+  });
+});
+
 describe("D-084: faces in play", () => {
   const anim = (a: CharacterActor) => (a as unknown as { anim: { currentExpression: string; look: number } }).anim;
 

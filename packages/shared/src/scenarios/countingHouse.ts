@@ -131,7 +131,7 @@ function strike(s: SiegeState, k: number): Reduction<SiegeState> {
   return {
     s: n,
     fx: [order(picketGroup(k), { o: "flee" }), order("sally", { o: "post" }),
-      say(`The sally reaches the ${PICKET_NAMES[k]} picket. The Ward's boy takes one look at them and runs for the fort. The investment is broken: plant it again, or the garrison eats.`)],
+      say(`The sally reaches the ${PICKET_NAMES[k]} picket. The Ward's boy takes one look at them and runs for the fort, pennant and all. The investment is broken: plant it again, or the garrison eats.`)],
   };
 }
 
@@ -191,7 +191,7 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
         fx.push(say(n.starve > 0
           ? "The picket stands again and the post is invested on three sides once more. The garrison's stores go back to running down."
           : "The third picket is planted. The Counting-House is invested on three sides, which the Articles require; the fourth side is the Society's own ground, which the Articles did not foresee. Its stores are now running down."));
-      } else fx.push(say(`A boy from the Ward takes up the ${PICKET_NAMES[i]} picket, at a penny an hour, which the Lamp-Warden will invoice.`));
+      } else fx.push(say(`A boy from the Ward takes up the ${PICKET_NAMES[i]} picket with the Society's pennant, at a penny an hour, which the Lamp-Warden will invoice.`));
       return { s: n, fx };
     }
     case "hostile": {
@@ -406,11 +406,12 @@ function roster(_c: CampaignState, seed: number, s: SiegeState): NpcSpec[] {
   for (let i = 0; i < s.relief.total; i++) {
     out.push(guard(`relief-${i}`, "late:relief", { x: L.x - 5 + (i % 3) * 2.2, z: L.z + 0.2 + Math.floor(i / 3) * 2.2 }, RELIEF_ARMS[i]!, RELIEF[i]!, 10 + i));
   }
-  // the Ward's picket boys: a garrison brain (they walk back to their mark when sent; nobody's side, so nobody fights them), unarmed, drawn as Kessar's own people. A civilian's
-  // role, not a porter's: a porter is the party's hired hand to the client's roster and to the Butcher's Bill (a stray round on a boy was billed as "a colleague shot")
+  // the Ward's picket boys: a garrison brain (they walk back to their mark when sent; nobody's side, so nobody fights them), unarmed, drawn as Kessar's own people, each with the
+  // Society's pennant in hand (NPC.PICKET: the client gives them it). Not a porter's role: a porter is the party's hired hand to the client's roster and to the Butcher's Bill (a
+  // stray round on a boy was billed as "a colleague shot")
   for (let k = 0; k < 3; k++) {
     out.push({
-      id: `picket-${k}`, role: NPC.DRIVER, faction: "ward", side: "neutral", group: picketGroup(k), post: { ...S.pickets[k]! }, weapon: WEAPON.FISTS,
+      id: `picket-${k}`, role: NPC.PICKET, faction: "ward", side: "neutral", group: picketGroup(k), post: { ...S.pickets[k]! }, weapon: WEAPON.FISTS,
       lookSeed: hash3(seed >>> 0, k, 0x91c7), name: PICKETS[k]!, skill: 5, bravery: 20, brain: "garrison",
     });
   }

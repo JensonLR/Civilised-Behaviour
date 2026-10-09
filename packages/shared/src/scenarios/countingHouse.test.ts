@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CampaignState } from "../campaignTypes.ts";
 import { NPC } from "../campaignTypes.ts";
 import { NPC_SIDE } from "../expeditionTypes.ts";
+import { peopleForNpc } from "../peoples.ts";
 import { OBJECTIVE_SPOTS, objectiveMark } from "../compassMarks.ts";
 import { newCampaign } from "../factions.ts";
 import { kessarNavOptions } from "../garrison.ts";
@@ -257,8 +258,9 @@ describe("the Siege of the Counting-House (D-095): the reducer", () => {
     expect(r.filter((p) => p.group === "late:relief")).toHaveLength(S0.relief.total);
     const boys = r.filter((p) => p.group.startsWith("late:picket-"));
     expect(boys).toHaveLength(3);
-    for (const b of boys) expect(b).toMatchObject({ role: NPC.DRIVER, side: "neutral", faction: "ward" });
-    expect(NPC_SIDE[NPC.DRIVER], "a bystander to the Butcher's Bill and the client, not a hand").toBe("neutral");
+    for (const b of boys) expect(b).toMatchObject({ role: NPC.PICKET, side: "neutral", faction: "ward" });
+    expect(NPC_SIDE[NPC.PICKET], "a bystander to the Butcher's Bill and the client, not a hand").toBe("neutral");
+    expect(peopleForNpc(NPC.PICKET, "kessar"), "drawn as Kessar's own people").toBe(peopleForNpc(NPC.DRIVER, "kessar"));
     expect(new Set(r.map((p) => p.id)).size).toBe(r.length);
     expect(r.length).toBeLessThanOrEqual(16);
     // every group the template orders is in the roster, and every hostile group is a Syndicate one
