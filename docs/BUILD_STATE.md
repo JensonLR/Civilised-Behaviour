@@ -1,9 +1,16 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-09 (D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-09 (D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-093 (2026-10-09): the Lost Survey.** The GDD's "missing expedition", as the Saltmarket's third contract. Thirteen templates now.
+  - **The job.** The Society's surveyor is held with his field books at a stilt hut in the north-west reeds until the Houses' harbour dues are paid. Follow his trail (a ranging rod by the bridge, chalk on the windpump) or just find the hut; pay the Collector, cede the chart, sell the Houses the survey, talk the surveyor into leaving his books, or break the two wardens and take them. Then walk him to the quay before the tide comes into the reeds.
+  - **Endings.** Home with his books (won), home without them (partial), sold with his survey (partial), lost to the tide or on the way (lost), abandoned.
+  - **How it is built.** A pure reducer with two scripted parleys, ledger and copy rows in the D-037 shape, a new `follow` effect in the runner, the trail on the compass, a rod and chalk in the delta's scenery, an achievement.
+  - **Tested.** Shared (reducer, ledger, terms, spots on three seeds with a path home), server (the runner, every ending) and bots in a real room (trail, dues and home in 120 s; sold in 35 s). The bots found the quay's circle too tight and it was widened.
+  - **Looked at.** Software-rendered stills of the rod, the chalk and the hut.
+  - **Limits.** Unplayed by a person; the tide and the prices are a first pass. The GDD's survey, audience, hunt and siege are still unbuilt.
 - **D-092 (2026-10-09): the crank gun.** This is the GDD's fourth and last late technology (early machine weapons).
   - **When it comes.** Once the works and the breech-loaders both exist, every fortified post gets a five-barrelled crank gun inside its gate, aimed at the gate.
   - **Working it.** Hold Use at the gun to crew it and add the trigger to turn the handle: eight rounds a second from a 40-round hopper. There are four hoppers per visit. Changing a hopper or clearing a jam (one round in 34) means holding Use with the trigger let go.

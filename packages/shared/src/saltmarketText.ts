@@ -258,12 +258,138 @@ export const SALTMARKET_COPY: Record<SaltmarketEnding, EndingCopy> = {
       ],
     },
   },
+  // D-093, the Lost Survey (lost_survey): the surveyor home with his books, home without them, sold to the Houses with his survey, or lost to the reeds.
+  survey_home: {
+    piece: { kind: "frame", surface: "wall", label: "The first page of the Delta Survey, framed: nineteen canals, two of them twice, and a pond, in an indignant hand." },
+    memoryLine: [
+      "I hear the Society fetched its surveyor out of the delta with his books intact. The Houses are said to be furious, which in the Houses is a rate of interest.",
+      "Word from the delta: your man came home with his measurements. I would very much like a copy, for my own purposes, which are entirely cartographic.",
+    ],
+    headlines: [
+      "Society Surveyor Returns from Delta With Books, Bearings and Grievance",
+      "\"Nineteen Canals, Two Twice\": Delta Survey Reaches London Intact",
+      "Mensuration Party Recovered; Houses' Hospitality Ends at the Quay",
+      "Lost Surveyor Found Exactly Where the Houses Left Him",
+    ],
+    standfirsts: [
+      "Mr. Augustus Pellow-Brane, Surveyor to the Society, walked out of the west reeds with his field books under his arm and has asked that the Houses' tea be entered in the minutes as an act of war. Purse: £{purse}. {spin}",
+      "The Delta Mensuration Party is home, after a week as the guests of the Brine Houses, who billed it for every chain it measured and several it only thought about. Purse: £{purse}. {spin}",
+      "The Admiralty will have its map of the delta, and the delta will have its name spelled three ways on it. Purse: £{purse}. {spin}",
+    ],
+    siteLines: [
+      "The Society \"concluded its survey of the western waters\", which meant walking a man in his shirtsleeves out of a reed-cutter's house past two wardens and a ledger.",
+      "The surveyor's books were \"recovered from a regrettable administrative hold\", the hold being a table, the administration being the Houses.",
+    ],
+    debrief: "At Saltmarket the Society's surveyor came home from the west reeds with his field books.",
+    news: {
+      head: ["{A}'s Canals Charted; {A} Charges for the Ink", "Society Survey Leaves the Reeds; {A} Keeps the Receipt", "{A} Counts Its Canals, and Finds the Society Has Too"],
+      body: [
+        "{A} confirms that its canals have been measured by a foreign survey and that the dues on the measuring have been paid, or will be remembered. A map of the delta is now in London, which {A} regards as a leak.",
+        "The Society's surveyor has left the delta with his books. {A} has opened a new ledger for 'charts no longer exclusively ours' and entered the first item in red. {b} has asked for a copy.",
+        "{A} says it extended the Society's surveyor every hospitality, and has the invoices to prove it, and would like them back.",
+      ],
+    },
+  },
+  chart_ceded: {
+    piece: { kind: "board", surface: "wall", label: "A blank board with a brass plate: THE DELTA SURVEY, CEDED. The surveyor has written the canals on it from memory, in pencil, in protest." },
+    memoryLine: [
+      "I hear your surveyor came home and his chart did not. The Houses are pleased, which I find more alarming than when they are not.",
+      "Word from the delta: the Society gave the Houses its map of their canals. Generous. I did not know the Society could be generous by accident.",
+    ],
+    headlines: [
+      "Surveyor Home, Survey Not: Society Cedes Delta Chart to Houses",
+      "Mr. Pellow-Brane Returns Without His Books, and Without His Temper",
+      "Houses Keep the Canals' Secrets; Society Keeps Its Man",
+      "\"The Delta May Be Measured Again\", Says Society, Measuring Nothing",
+    ],
+    standfirsts: [
+      "The Society's surveyor is home from the west reeds. His nineteen canals, two of them twice, are not: the chart was ceded to the Brine Houses for his release. Purse: £{purse}. {spin}",
+      "Mr. Augustus Pellow-Brane came home in the Society's boat and has begun the survey again from memory, on the back of the Houses' receipt. Purse: £{purse}. {spin}",
+      "The Houses have kept the chart of their canals and returned the man who drew it, which the Committee calls a fair exchange and the man calls a theft. Purse: £{purse}. {spin}",
+    ],
+    siteLines: [
+      "The Society \"left the cartographic record in local custody\", that is, in the Houses' ledger, which is a custody nothing has ever left.",
+      "The chart was \"ceded in a spirit of mutual understanding\": the Houses understood the chart and the Society understood the wardens.",
+    ],
+    debrief: "At Saltmarket the surveyor came home, and the Houses kept his chart of their canals.",
+    news: {
+      head: ["{A} Keeps the Society's Chart; Calls It \"Hospitality, Returned\"", "Delta Survey Stays in the Delta; {A} Delighted, Quietly", "{A} Accepts a Map of Itself, With Thanks"],
+      body: [
+        "{A} has accepted the Society's survey of its canals in settlement of dues, and has released the surveyor with his hat. The chart is filed under 'ours', which in {A}'s ledgers is the largest heading.",
+        "A map of the delta, measured at the Society's expense, now belongs to {A}, who did not have to measure anything. {b} has written to ask how this is done.",
+        "{A} reports a cordial settlement with the Society: the Society gave, {A} kept, and everybody went home, some of them without their books.",
+      ],
+    },
+  },
+  survey_sold: {
+    piece: { kind: "envelope", surface: "table", label: "The Houses' bank draft for the Delta Survey, and a postcard from Mr. Pellow-Brane, Pilot, who is very happy." },
+    memoryLine: [
+      "I hear the Society sold its own surveyor to the Houses, with his books. I have never admired you more, or trusted you less.",
+      "Word from the delta: your man is a pilot now, and the Houses own his chart. I hope the price was good. It usually is, for the buyer.",
+    ],
+    headlines: [
+      "Society Sells Delta Survey to Houses; Surveyor Included, Free",
+      "Mr. Pellow-Brane Takes Post as Brine House Pilot; Society \"Delighted\"",
+      "Lost Surveyor Found, Sold",
+      "The Delta Survey: Measured by the Society, Owned by the Houses, Piloted by Both",
+    ],
+    standfirsts: [
+      "The Society's rescue party reached its surveyor in the west reeds and, after a frank discussion with the Collector of Canal Dues, sold the Houses his survey. He has stayed on as a pilot. Purse: £{purse}. {spin}",
+      "The Brine Houses have bought the Delta Survey, its books and its author, the last at no extra charge. The author describes himself as 'very happy, eventually'. Purse: £{purse}. {spin}",
+      "The Committee has received the Houses' bank draft and a postcard. The postcard is the more cheerful document. Purse: £{purse}. {spin}",
+    ],
+    siteLines: [
+      "The Society \"realised the commercial value of its western survey\", by selling it, with the surveyor still attached.",
+      "A surveyor was \"seconded to local maritime employment\", at a salary the Society has never mentioned to anybody.",
+    ],
+    debrief: "At Saltmarket the Houses bought the Society's survey, and its surveyor stayed on as their pilot.",
+    news: {
+      head: ["{A} Buys a Survey and Gains a Pilot", "{A} Acquires the Society's Map of Itself, and Its Mapmaker", "Society Sells; {A} Buys; Surveyor Stays"],
+      body: [
+        "{A} has bought the Society's survey of its canals, for less than it would have charged the Society in dues, and has offered the surveyor a post. He has accepted it, after consideration, and a raise.",
+        "The delta's canals are now charted, the chart is {A}'s, and the man who drew it pilots its barges. {b} calls it the most efficient piece of business on the water this year.",
+        "{A} is pleased to announce the appointment of Mr. Augustus Pellow-Brane, formerly of the Society, as Second Pilot of the Western Reaches. He reads a tide, {A} says, like a hymn-book.",
+      ],
+    },
+  },
+  survey_lost: {
+    piece: { kind: "frame", surface: "wall", label: "A photograph of Mr. Pellow-Brane on the step of a reed-cutter's house, waving with a theodolite. The water is up to the step." },
+    memoryLine: [
+      "I hear the Society left its surveyor in the delta for the tide to keep. The Houses will send him home in the spring, with the bill. I would not be standing near the bill.",
+      "Word from the delta: your man is an island now. I am told he is measuring it.",
+    ],
+    headlines: [
+      "Delta Survey Lost to the Tide; Surveyor Expected in Spring",
+      "Mr. Pellow-Brane Cut Off by the Reeds; Society \"Monitoring the Situation\"",
+      "Rescue Party Returns Without the Party It Went to Rescue",
+      "The Lost Survey Remains Lost, Now Officially",
+    ],
+    standfirsts: [
+      "The Society's expedition to recover its surveyor from the west reeds has returned without him. The tide came in first, which the tide tables could have told anybody who had read them. Purse: £{purse}. {spin}",
+      "Mr. Augustus Pellow-Brane remains the Brine Houses' guest, now on an island, and has sent word by a passing barge that he is 'measuring it'. Purse: £{purse}. {spin}",
+      "The Committee regrets that the Delta Survey is lost to the reeds, and has opened a subscription for a second survey, to find the first. Purse: £{purse}. {spin}",
+    ],
+    siteLines: [
+      "The Society's surveyor was \"left in the care of the local authorities\", who are the tide.",
+      "The rescue \"reached a natural conclusion\" in the west reeds, where nature concluded it by flooding.",
+    ],
+    debrief: "At Saltmarket the Society's surveyor was left in the west reeds; the Houses will bill for his keep.",
+    news: {
+      head: ["{A} Keeps the Society's Surveyor Another Season", "Tide Settles the Society's Account with {A}", "{A} Extends Its Hospitality, Involuntarily"],
+      body: [
+        "{A} confirms that the Society's surveyor remains its guest, the tide having closed the reeds before anybody could open the ledger. The tea continues. The bill grows.",
+        "The Society's attempt to fetch its surveyor out of the delta ended at the water's edge. {A} has added a line to the account: 'Spring, return of gentleman, carriage forward'.",
+        "{A} reports that Mr. Pellow-Brane is in good health, good spirits and an island, and has been charged accordingly. {b} has sent him a book.",
+      ],
+    },
+  },
 };
 
 /** The ledger story's heading per template (>= 3 each), by the paper's `lastTemplate`. */
 export const SALTMARKET_STORY_HEADS = {
   smuggling_run: ["The Quiet Barge, in Figures", "Saltmarket: the Customs Report", "On the Matter of a Cargo"],
   flooded_market: ["The High-Water Sale, in Figures", "Saltmarket: the Exchange Reports", "On the Matter of a Lot"],
+  lost_survey: ["The Lost Survey, in Figures", "Saltmarket: the Reeds Report", "On the Matter of a Surveyor"],
 } as const;
 
 /** Signage of the delta (Latin capitals; the view letters these). */
@@ -276,11 +402,12 @@ export const SALTMARKET_SIGNS: readonly string[] = [
 
 export const SALTMARKET_REGION: RegionCopy = {
   chartNote: (c: CampaignState): string => {
-    const cargo = c.sites.ends.smuggling_run, market = c.sites.ends.flooded_market;
+    const cargo = c.sites.ends.smuggling_run, market = c.sites.ends.flooded_market, survey = c.sites.ends.lost_survey;
     if (!c.history.some((h) => h.region === "saltmarket")) return "Not yet visited. Braided channels, stilted warehouses and an exchange that floods on schedule.";
     const parts: string[] = [];
     if (cargo !== undefined) parts.push(`the barge was ${cargo.replace("_", " ")}`);
     if (market !== undefined) parts.push(`the sale ${market === "lot_won" ? "went to you" : market === "consortium" ? "was pooled" : market === "shorted" ? "was shorted" : market === "washed_out" ? "washed out" : "was left"}`);
+    if (survey !== undefined) parts.push(`the surveyor ${survey === "survey_home" ? "came home with his books" : survey === "chart_ceded" ? "came home without his chart" : survey === "survey_sold" ? "was sold, with his survey" : "was left to the reeds"}`);
     return `Last time: ${parts.length ? parts.join("; ") : "an expedition that left no mark"}. The Houses keep the receipts.`;
   },
   presence: ["Day {day}: {party} at Saltmarket, bidding on weather", "Day {day} at Saltmarket, {party}, in the Houses' ledger"],

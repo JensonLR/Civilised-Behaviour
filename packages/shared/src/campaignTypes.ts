@@ -19,7 +19,8 @@ export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_
   // D-042: Highmark's second contract, the Reapers' Strike
   | "reapers_strike"
   | "winding_engine"   // D-044: Vesper's third
-  | "outpost_raid";   // D-045: Kessar's fifth (only while the Syndicate means to raid the party's outpost)
+  | "outpost_raid"   // D-045: Kessar's fifth (only while the Syndicate means to raid the party's outpost)
+  | "lost_survey";   // D-093: the Saltmarket's third (the GDD's missing expedition)
 export type ResolutionId =
   | "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned"
   | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated"
@@ -34,7 +35,9 @@ export type ResolutionId =
   // D-044, Vesper Gorge: the Winding Engine (winding_engine)
   | "engine_fouled" | "engine_blown" | "engine_bought" | "vein_struck"
   // D-045, Kessar: the Raid on the Post (outpost_raid)
-  | "post_held" | "post_burned" | "protection_paid";
+  | "post_held" | "post_burned" | "protection_paid"
+  // D-093, the Saltmarket Delta: the Lost Survey (lost_survey)
+  | "survey_home" | "chart_ceded" | "survey_sold" | "survey_lost";
 export type ComplicationId = "none" | "rival_scouts" | "rain" | "reinforcements" | "rival_bid" | "outriders" | "ward_patrol" | "fog" | "stray_shot";
 export interface CrossingState { bridge: BridgeState; control: CrossingControl; toll: number; tollPaidTotal: number; bribed: boolean; exposed: boolean }  // toll in pounds per crossing (0 = free)
 export interface CasualtyTally { wounded: number; downed: number; limbsLost: number; garrisonKilled: number; garrisonRouted: number; civiliansHarmed: number; rivalKilled: number }
@@ -101,14 +104,17 @@ export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_
   | "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head"   // D-037: Vesper's three, then the Saltmarket's three
   | "reaper" | "steward"   // D-042: the Reapers' Strike (the Compact's Foreperson, the Steward of the Granary)
   | "engineer"   // D-044: the Winding Engine (the Syndicate's engineer at the headframe)
-  | "raid_captain";   // D-045: the Raid on the Post (the Syndicate's raiding captain)
+  | "raid_captain"   // D-045: the Raid on the Post (the Syndicate's raiding captain)
+  | "dues_collector" | "lost_surveyor";   // D-093: the Lost Survey (the Houses' Collector of Canal Dues, the Society's surveyor)
 export type TalkResult = "open" | "close" | "hostile" | "paid" | "bargained" | "bribed" | "ransom" | "survey" | "learn" | "tell" | "envelope" | "tip";
 export type ScenarioEffect = "garrison_alert" | "garrison_stand_down" | "gate_open" | "arm_charge" | "rival_advance" | "commit";
 /** What a template asks the server to DO (the runner turns each into Cast / Mounts / host calls). Sites are named in KESSAR_SITES / KESSAR_ANCHORS. */
 export type ScenarioFx =
   | { k: "spawn"; group: string } | { k: "order"; group: string; order: CastOrder } | { k: "war"; a: NpcSide; b: NpcSide; on: boolean } | { k: "say"; text: string }
   | { k: "open"; what: "gate" | "cage" } | { k: "explode"; at: string } | { k: "bridge"; state: BridgeState } | { k: "commit" }
-  | { k: "wagon"; op: "go" | "halt" | "seize" | "wreck" } | { k: "parley"; kind: ParleyKind; price: number };
+  | { k: "wagon"; op: "go" | "halt" | "seize" | "wreck" } | { k: "parley"; kind: ParleyKind; price: number }
+  /** D-093: the group follows the last player who acted on the scenario (the hostage's cage does this for its own group). */
+  | { k: "follow"; group: string };
 export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation" | "court" | "post";   // D-036: "court" = a person of Highmark's court (the chamberlain, a claimant), acted on through the scenario; D-037: "post" = the same for any later region (a foreman, a clerk, a customs shed)
 export interface UseStation { id: string; kind: StationKind; x: number; z: number; r: number; prompt: string }
 export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10, CHAMBERLAIN: 11, CLAIMANT: 12, COURT_GUARD: 13, HERDER: 14,

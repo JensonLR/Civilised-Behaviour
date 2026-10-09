@@ -6,7 +6,7 @@ import { hqPins } from "./hqRoute.ts";
 import { HILL, JETTY } from "./landscape.ts";
 import { KESSAR_OUTPOST, OUTPOST_SITES } from "./outpost.ts";
 import { RAID_SITES } from "./scenarios/outpostRaid.ts";
-import { SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS } from "./saltmarket.ts";
+import { SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS, SALTMARKET_SURVEY } from "./saltmarket.ts";
 import { SITES } from "./village.ts";
 import { VESPER_ANCHORS, VESPER_SITES, VESPER_STOCK } from "./vesper.ts";
 
@@ -171,6 +171,9 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
   flooded_market: {
     hall: at("Exchange", SALTMARKET_ANCHORS.exchange), bid: at("Auctioneer", SALTMARKET_SITES.auctioneer), paddles: at("Exchange", SALTMARKET_ANCHORS.exchange),
     pool: at("House-Heads", SALTMARKET_SITES.houseHeads[0]!), lot: at("Exchange", SALTMARKET_ANCHORS.exchange), home: "home",
+  },  lost_survey: {   // D-093: the strip follows the surveyor's trail (the objective's id names the next mark), then the house, then the quay
+    peg: at("Survey peg", SALTMARKET_SURVEY.peg), pump: at("Windpump", SALTMARKET_SURVEY.pumpMark), house: at("Reed-cutter's house", SALTMARKET_SURVEY.house),
+    books: at("The Collector", SALTMARKET_SURVEY.collector), quay: at("The quay", SALTMARKET_SURVEY.quay), home: "home",
   },
 };
 

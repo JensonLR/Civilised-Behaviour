@@ -30,7 +30,7 @@ const NONE_WEIGHT = 3, ENTRY_WEIGHT = 3;
 /** The crossing's own rule, unchanged since slice 1: the Syndicate turns up early when it smells a precedent. */
 const crossingScouts = (c: CampaignState): boolean => c.factions.ward.rivalInfluence >= 45 || hash3(c.seed, Math.max(0, Math.round(c.day)), 0x5c07) % 100 < 35;
 
-const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10, winding_engine: 11, outpost_raid: 12 };
+const TEMPLATE_TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10, winding_engine: 11, outpost_raid: 12, lost_survey: 13 };
 
 export function dealComplication(c: CampaignState, id: ScenarioTemplateId, seed: number, presence?: RivalPresence): ComplicationId {
   if (id === "secure_crossing") return crossingScouts(c) ? "rival_scouts" : "none";

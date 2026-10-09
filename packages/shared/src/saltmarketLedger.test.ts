@@ -35,8 +35,16 @@ const OUTCOMES: Record<SaltmarketEnding, ScenarioOutcome> = {
   consortium: out("flooded_market", "consortium", { paid: 25 }),
   shorted: out("flooded_market", "shorted", { loot: 35, brokePromise: true }),
   washed_out: out("flooded_market", "washed_out", { paid: 40 }),
+  survey_home: out("lost_survey", "survey_home", { paid: 65 }),
+  chart_ceded: out("lost_survey", "chart_ceded"),
+  survey_sold: out("lost_survey", "survey_sold", { loot: 55 }),
+  survey_lost: out("lost_survey", "survey_lost", { tally: tally({ wounded: 1 }) }),
 };
-const TEMPLATES = { smuggling_run: ["landed", "impounded", "scuttled", "informed"], flooded_market: ["lot_won", "consortium", "shorted", "washed_out"] } as const;
+const TEMPLATES = {
+  smuggling_run: ["landed", "impounded", "scuttled", "informed"], flooded_market: ["lot_won", "consortium", "shorted", "washed_out"],
+  lost_survey: ["survey_home", "chart_ceded", "survey_sold", "survey_lost"],
+} as const;
+type Tpl = keyof typeof TEMPLATES;
 
 const leaves = (v: unknown, path = "", acc = new Map<string, string>()): Map<string, string> => {
   if (Array.isArray(v)) {
@@ -58,7 +66,7 @@ const pw0 = newPowers(11);
 const after = (r: SaltmarketEnding): CampaignState => applyOutcome(before, OUTCOMES[r]);
 const powers = (r: SaltmarketEnding): PowersState => powersAfterOutcome(before, after(r), pw0, OUTCOMES[r]);
 
-describe("The Saltmarket's ledger: the eight endings", () => {
+describe("The Saltmarket's ledger: the twelve endings", () => {
   it("every table is exhaustive, each template's resolutions are its four plus abandoned, and the rows are real (not neutral)", () => {
     for (const r of SALTMARKET_RESOLUTIONS) {
       expect(RELATION_FX[r], r).toBeDefined();
@@ -99,7 +107,7 @@ describe("The Saltmarket's ledger: the eight endings", () => {
   it("sites.ends and history[].region are right, and Kessar's crossing, toll, bridge, the Ward's need and the other sites are left alone", () => {
     for (const r of SALTMARKET_RESOLUTIONS) {
       const a = after(r);
-      const tpl = OUTCOMES[r].scenario as "smuggling_run" | "flooded_market";
+      const tpl = OUTCOMES[r].scenario as Tpl;
       expect(a.sites.ends[tpl], r).toBe(r);
       expect(Object.keys(a.sites.ends)).toEqual([tpl]);
       expect(a.history[a.history.length - 1], r).toMatchObject({ region: "saltmarket", resolution: r, template: tpl });
@@ -124,7 +132,7 @@ describe("The Saltmarket's ledger: the eight endings", () => {
 
   it("the Lamp-Warden's memory of each is distinct and none of it is a toll", () => {
     const mem = new Set(SALTMARKET_RESOLUTIONS.map((r) => JSON.stringify([wardMemory(after(r)).gratitude, wardMemory(after(r)).resentment, wardMemory(after(r)).contempt])));
-    expect(mem.size).toBe(8);
+    expect(mem.size).toBe(12);
   });
 
   it("the Houses move for every ending, the story pairs carry it, no two endings of a template read alike, and the saved powers stay inside their caps", () => {
@@ -159,7 +167,7 @@ describe("The Saltmarket's ledger: the eight endings", () => {
       dispatches.add(d!.head);
       const paper = generatePaper(c, 9, { dispatches: items });
       expect(paper.stories.some((s) => s.slug === d!.slug)).toBe(true);
-      const tpl = OUTCOMES[r].scenario as "smuggling_run" | "flooded_market";
+      const tpl = OUTCOMES[r].scenario as Tpl;
       expect(STORY_HEADS[tpl].length).toBeGreaterThanOrEqual(3);
       expect(STORY_HEADS[tpl]).toContain(paper.stories.find((s) => s.slug === "ledger")!.head);
       for (let seed = 0; seed < 60; seed++) heads.add(generatePaper(c, seed).headline);
@@ -171,8 +179,8 @@ describe("The Saltmarket's ledger: the eight endings", () => {
       // every headline and standfirst fits the paper's column once filled
       for (let seed = 0; seed < 60; seed++) { const pp = generatePaper(c, seed); expect(pp.headline.length).toBeLessThanOrEqual(90); expect(pp.standfirst.length).toBeLessThanOrEqual(280); }
     }
-    expect(dispatches.size).toBeGreaterThanOrEqual(7);
-    expect(heads.size).toBeGreaterThanOrEqual(8 * 3);
+    expect(dispatches.size).toBeGreaterThanOrEqual(11);
+    expect(heads.size).toBeGreaterThanOrEqual(12 * 3);
     // the debrief card says what happened, and names the place
     for (const r of SALTMARKET_RESOLUTIONS) expect(consequenceLines(before, after(r)).join(" "), r).toMatch(/Saltmarket/);
     for (const r of SALTMARKET_RESOLUTIONS) expect(SALTMARKET_COPY[r].debrief.length).toBeGreaterThan(30);
@@ -188,21 +196,23 @@ describe("The Saltmarket's ledger: the eight endings", () => {
       return !q.flags.includes("errand_brine") && q.minor.brine.owes === p.minor.brine.owes + 1;
     };
     for (const r of ["scuttled", "informed"] as const) expect(satisfied(r), r).toBe(true);
-    for (const r of ["landed", "impounded", "lot_won", "consortium", "shorted", "washed_out"] as const) expect(satisfied(r), r).toBe(false);
+    for (const r of ["landed", "impounded", "lot_won", "consortium", "shorted", "washed_out", "survey_home", "chart_ceded", "survey_sold", "survey_lost"] as const) expect(satisfied(r), r).toBe(false);
   });
 
-  it("a campaign with all four `ends` filled stays small, and the contract picker offers both templates and never the same one twice running", () => {
+  it("a campaign with every `ends` filled stays small, and the contract picker offers all three templates, never the same one twice running, and never the survey first", () => {
     let c = before;
     const seen = new Set<ScenarioTemplateId>();
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       const t = pickTemplate(c, "saltmarket", 100 + i)!;
-      expect(["smuggling_run", "flooded_market"]).toContain(t);
+      expect(["smuggling_run", "flooded_market", "lost_survey"]).toContain(t);
       if (i > 0) expect(t, "never twice running").not.toBe(c.history[c.history.length - 1]!.template);
       seen.add(t);
       c = applyOutcome(c, out(t, TEMPLATE_RESOLUTIONS[t][i % 4]!));
     }
-    expect(seen.size).toBe(2);
-    expect(Object.keys(c.sites.ends).length).toBe(2);
+    expect(seen.size).toBe(3);
+    expect(Object.keys(c.sites.ends).length).toBe(3);
+    // D-093: the Society sends its surveyor in only once it has been to the delta (a first visit never draws it)
+    for (let seed = 0; seed < 200; seed++) expect(pickSaltmarketContract({ ...before, history: [] }, seed)).not.toBe("lost_survey");
     expect(serializeCampaign(c).length).toBeLessThan(2400);
     // deterministic from the ledger and the seed
     for (let seed = 0; seed < 40; seed++) expect(pickSaltmarketContract(c, seed)).toBe(pickSaltmarketContract(structuredClone(c), seed));
@@ -217,17 +227,22 @@ describe("The Saltmarket's ledger: the eight endings", () => {
     expect(share(rich, undefined, "smuggling_run")).toBeGreaterThan(share(idle, undefined, "smuggling_run"));
     const arming = { goal: "arm_brine", arrivesInS: 0, escort: 2, wagon: false, surveyors: 0, postStage: 0 } as const;
     expect(share(idle, arming, "flooded_market")).toBeGreaterThan(share(idle, undefined, "flooded_market"));
-    for (const id of ["smuggling_run", "flooded_market"] as const) expect(COMPLICATION_POOL[id]).toEqual(SALTMARKET_COMPLICATIONS[id]);
+    // ...and the Houses, with a grievance to collect on (a barge landed past their customs), hold the Society's surveyor more often
+    const been = applyOutcome(idle, out("flooded_market", "consortium"));
+    const landed = applyOutcome(applyOutcome(idle, out("smuggling_run", "landed")), out("flooded_market", "consortium"));
+    expect(share(landed, undefined, "lost_survey")).toBeGreaterThan(share(been, undefined, "lost_survey"));
+    for (const id of ["smuggling_run", "flooded_market", "lost_survey"] as const) expect(COMPLICATION_POOL[id]).toEqual(SALTMARKET_COMPLICATIONS[id]);
   });
 
   it("the parley scripts are complete: each opens, offers a way out and the options its templates read, and never reports a result its script does not offer", () => {
-    for (const kind of ["tide_reeve", "auctioneer", "house_head"] as const) {
+    for (const kind of ["tide_reeve", "auctioneer", "house_head", "dues_collector", "lost_surveyor"] as const) {
       expect(SCRIPTED_KINDS).toContain(kind);
       const sc = parleyScript(kind)!;
       expect(sc.speaker.length).toBeGreaterThan(8);
       for (const list of [sc.open, sc.round2]) expect(list.length).toBeGreaterThanOrEqual(2);
-      expect(sc.flatter!.ok.length).toBeGreaterThanOrEqual(2);
-      expect(sc.flatter!.fail.length).toBeGreaterThanOrEqual(2);
+      // (the surveyor is not haggled with: he wants his books, not a compliment)
+      if (kind !== "lost_surveyor") expect(sc.flatter!.ok.length).toBeGreaterThanOrEqual(2);
+      if (kind !== "lost_surveyor") expect(sc.flatter!.fail.length).toBeGreaterThanOrEqual(2);
       for (const text of [...sc.open, ...sc.round2, sc.walk, sc.hostile, sc.short, ...Object.values(sc.deal)]) {
         expect(text.length, `${kind}: ${text}`).toBeGreaterThan(30);
         expect(text.replace(/\{price\}/g, "")).not.toMatch(/[{}]/);
@@ -250,7 +265,7 @@ describe("The Saltmarket's ledger: the eight endings", () => {
       for (const r of results) expect(["paid", "survey", "tell", "hostile", "walked", "envelope", "tip"], `${kind} ${r}`).toContain(r);
     }
     // what each template needs from its people is on offer
-    const has = (kind: "tide_reeve" | "auctioneer" | "house_head", r: string): boolean => {
+    const has = (kind: "tide_reeve" | "auctioneer" | "house_head" | "dues_collector" | "lost_surveyor", r: string): boolean => {
       const ctx = { price: 45, purse: 300, seed: 3, day: 2 };
       const v = openSiteParley(kind, ctx);
       return v.options.some((_, i) => answerSiteParley(kind, ctx, v, i).done?.result === r);
@@ -258,6 +273,9 @@ describe("The Saltmarket's ledger: the eight endings", () => {
     expect(has("tide_reeve", "survey") && has("tide_reeve", "paid") && has("tide_reeve", "tell")).toBe(true);
     expect(has("auctioneer", "paid") && has("auctioneer", "tip")).toBe(true);
     expect(has("house_head", "paid") && has("house_head", "survey") && has("house_head", "tell")).toBe(true);
+    expect(has("dues_collector", "paid") && has("dues_collector", "survey") && has("dues_collector", "tip") && has("dues_collector", "hostile")).toBe(true);
+    expect(has("lost_surveyor", "survey"), "the surveyor can be talked into leaving his books at once").toBe(true);
+    expect(has("lost_surveyor", "paid") || has("lost_surveyor", "tip"), "and takes no money").toBe(false);
   });
 
   it("the region's own copy: the chart note grows with the ledger, the presence lines and the parley heading are filled, and the signs are Latin capitals", () => {
@@ -270,6 +288,10 @@ describe("The Saltmarket's ledger: the eight endings", () => {
     expect(note).toMatch(/informed/);
     expect(note).toMatch(/shorted/);
     expect(note.length).toBeLessThanOrEqual(240);
+    // all three of the delta's contracts on the books still fit the chart
+    const all = applyOutcome(c, OUTCOMES.survey_sold);
+    expect(rc.chartNote(all)).toMatch(/sold, with his survey/);
+    expect(rc.chartNote(all).length).toBeLessThanOrEqual(240);
     expect(rc.parley.asked).toContain("{price}");
     expect(SALTMARKET_SIGNS.length).toBeGreaterThanOrEqual(4);
     for (const s of SALTMARKET_SIGNS) expect(/^[A-Z0-9 .,'!?:-]+$/.test(s), s).toBe(true);

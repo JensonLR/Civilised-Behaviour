@@ -69,6 +69,9 @@ const popcount = (n: number): number => { let c = 0; for (let v = n & 0xff; v; v
 
 interface ParleyRun { owner: string; kind: ParleyKind; view: ParleyView; at: string; price: number }
 
+/** D-084: how far a powder keg stands from anybody's post (a keg's radius, a body's, and a hand between). */
+const KEG_CLEAR = 1.0;
+
 export class Scenario {
   private readonly def: AnyTemplate;
   private s!: BaseState;
@@ -153,7 +156,8 @@ export class Scenario {
     const cx = best.reduce((a, sp) => a + sp.post.x, 0) / best.length;
     const cz = best.reduce((a, sp) => a + sp.post.z, 0) / best.length;
     const n = best.length >= 4 ? 3 : 2;
-    const open = (x: number, z: number): boolean => this.host.cast.openAt?.(x, z) ?? true;
+    // open ground, and clear of everybody's post (a keg is not stood on: it sat 0.84 m from a convoy guard's spot on one seed)
+    const open = (x: number, z: number): boolean => (this.host.cast.openAt?.(x, z) ?? true) && this.specs.every((sp) => Math.hypot(sp.post.x - x, sp.post.z - z) > KEG_CLEAR);
     const a0 = (hash3(this.host.seed, day, 0xb0d) / 4294967296) * Math.PI * 2;
     for (let k = 0; k < 8; k++) {
       const a = a0 + (k * Math.PI) / 4;
@@ -415,6 +419,8 @@ export class Scenario {
       case "open":
         if (f.what === "cage") cast.order("hostage", { o: "follow", target: this.actor });
         break;
+      // D-093: whoever settled it leads (no one yet, as when a fight settled it: the nearest standing member, Cast's own fallback)
+      case "follow": cast.order(f.group, { o: "follow", target: this.actor }); break;
       case "explode": {
         const at = f.at === "wagon" && this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : this.def.sites?.[f.at];
         if (at) this.host.explode(at.x, this.host.groundY(at.x, at.z), at.z, f.at === "pier" ? SCENARIO.chargeRadius : 6, this.actor);

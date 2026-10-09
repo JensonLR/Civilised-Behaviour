@@ -1,6 +1,6 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry, TorusGeometry } from "three";
 import { pane, type LitPane } from "../litWindows.ts";
-import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, hash3, saltmarketLevel, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
+import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, SALTMARKET_SURVEY, hash3, saltmarketLevel, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import { SIGN_BOARD } from "./cloth.ts";
 import type { Lod } from "../flora.ts";
@@ -631,6 +631,47 @@ function lamp(k: Kit, x: number, z: number, gy: number, h: number): void {
   k.add(cap, { at: [x, gy + h + 0.55, z], colour: P.coralDark, flat: true });
 }
 
+// ---- the Lost Survey's trail (D-093) --------------------------------------------------------------------------------------------------------
+
+/** The surveyor's ranging rod by the west bridge: banded red and white, sunk in the silt, a pennant at its head and his note tied on halfway up. */
+function surveyPeg(k: Kit, x: number, z: number, gy: number): void {
+  const R = 0.035, H = 1.6, band = 0.3;
+  k.setBase(x, gy, z, 0.6);
+  for (let i = 0, y = -0.3; y < H - 0.01; i++, y += i === 1 ? 0.4 : band) k.limb([0, y, 0], [0, Math.min(H, y + (i === 0 ? 0.4 : band)), 0], R, R, i % 2 ? P.salt : P.coralCanvas, 4);
+  k.add(new SphereGeometry(R * 1.3, 5, 3), { at: [0, H, 0], colour: P.iron });
+  // the pennant: one edge in the rod
+  box(k, [0.34, 0.2, 0.012], [0.17 + R * 0.5, H - 0.14, 0], P.coralCanvas);
+  // the note, folded and tied on (its back face in the rod), and the twine round it
+  box(k, [0.1, 0.13, 0.02], [0, 0.85, R + 0.004], P.saltShade);
+  k.limb([0, 0.84, 0], [0, 0.86, 0], R + 0.006, R + 0.006, P.rope, 4);
+  k.clearBase();
+}
+
+/** His chalk on the windpump's leg nearest the bank: two bands round it and a stroke up its outer face between them, following the leg's lean. Same frame as the windpump's `hair`. */
+function pumpChalk(k: Kit, h: SaltmarketHair, gy: number): void {
+  const top = h.height - 1.0;
+  // (the leg the mark is on is the one nearest the chalk's spot; legs run from (±1.1, -0.3, ±1.1) to (±0.35, top, ±0.35) in the pump's frame, 0.07 m thick at the foot, 0.05 at the head)
+  const c = Math.cos(0.3), sn = Math.sin(0.3);
+  let best = { sx: 1, sz: 1, d: Infinity };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const wx = h.x + sx * 1.1 * c - sz * 1.1 * sn, wz = h.z + sx * 1.1 * sn + sz * 1.1 * c;
+    const d = Math.hypot(wx - SALTMARKET_SURVEY.pumpMark.x, wz - SALTMARKET_SURVEY.pumpMark.z);
+    if (d < best.d) best = { sx, sz, d };
+  }
+  const at = (y: number): V3 => {
+    const f = (y + 0.3) / (top + 0.3), r = 1.1 - 0.75 * f;
+    return [best.sx * r, y, best.sz * r];
+  };
+  const rad = (y: number): number => 0.07 - 0.02 * ((y + 0.3) / (top + 0.3));
+  k.setBase(h.x, gy, h.z, 0.3);
+  // the bands: short sleeves just proud of the leg, along it
+  for (const y of [1.3, 2.05]) k.limb(at(y - 0.04), at(y + 0.04), rad(y) + 0.004, rad(y) + 0.004, P.salt, 4);
+  // the stroke: a thin chalk line on the leg's outer face (its centre inside the leg's skin)
+  const out = (y: number): V3 => { const p = at(y), n = Math.SQRT1_2, r = rad(y) - 0.004; return [p[0] + best.sx * n * r, y, p[2] + best.sz * n * r]; };
+  k.limb(out(1.36), out(1.99), 0.012, 0.012, P.salt, 3);
+  k.clearBase();
+}
+
 // ---- assembly ------------------------------------------------------------------------------------------------------------------------------
 
 export interface SaltmarketSolid {
@@ -669,6 +710,9 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   stiltHouse(kitAt(plan.dropHouse.x, plan.dropHouse.z), plan.dropHouse, g(plan.dropHouse.x, plan.dropHouse.z), "dropHouse", lbOf("dropHouse"), lod, 310, houseOut);
   exchange(kitAt(plan.exchange.x, plan.exchange.z), world, lod);
   plan.hairs.forEach((h, i) => hair(kitAt(h.x, h.z), h, g(h.x, h.z), lod, i));
+  // D-093: the Lost Survey's trail stays where he left it, contract or no contract (a peg and some chalk are not news in the delta)
+  surveyPeg(kitAt(SALTMARKET_SURVEY.peg.x, SALTMARKET_SURVEY.peg.z), SALTMARKET_SURVEY.peg.x, SALTMARKET_SURVEY.peg.z, g(SALTMARKET_SURVEY.peg.x, SALTMARKET_SURVEY.peg.z));
+  for (const h of plan.hairs) if (h.kind === "windpump") pumpChalk(kitAt(h.x, h.z), h, g(h.x, h.z));
   plan.boats.forEach((b, i) => boat(kitAt(b.x, b.z), b, lod, i));
   plan.racks.forEach((r, i) => rack(kitAt(r.x, r.z), r, g(r.x, r.z), lod, i));
   plan.saltPans.forEach((p) => saltPan(kitAt(p.x, p.z), p, g(p.x, p.z)));
