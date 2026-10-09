@@ -1121,7 +1121,12 @@ export class Combat {
       c.crank = 0;
       return;
     }
-    const lead = workers[0]!;
+    // (the one turning the handle lays it and fires it; with nobody turning, the first of the crew)
+    let lead = workers[0]!;
+    for (const id of workers) if ((this.pcs.get(id)!.held & BUTTON.FIRE) !== 0) {
+      lead = id;
+      break;
+    }
     const pc = this.pcs.get(lead)!;
     const rate = CRANK.slew * dt;
     const wantYaw = c.restYaw + clamp(angleDelta(c.restYaw, pc.aimYaw), -CRANK.traverse, CRANK.traverse);

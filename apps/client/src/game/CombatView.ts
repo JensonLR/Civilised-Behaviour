@@ -276,7 +276,8 @@ export class CombatView {
       if (drawn) this.localReadyAt = Math.max(this.localReadyAt, now + Math.max(drawn.drawSeconds, COMBAT.switchSeconds) * 1000 * 0.94);
       this.triggerPending = false;
     }
-    if (w < 0 || (me.flags & BUSY) !== 0) {
+    // (D-092: Use held at the crank gun makes the trigger the gun's from the first frame, before the server's OPERATING comes back: the hand weapon is never predicted)
+    if (w < 0 || (me.flags & BUSY) !== 0 || ((it.buttons & BUTTON.INTERACT) !== 0 && this.lastPromptCannon?.kind === 1)) {
       this.triggerPending = false;
       return;
     }

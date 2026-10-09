@@ -143,4 +143,37 @@ describe("the crank gun (D-092)", () => {
     await holdUntil(me, 0, g.yaw, () => (me.p.flags & FLAG.OPERATING) === 0, 2000, "released");
     expect(g.crew).toBe(0);
   }, 90_000);
+
+  it("two at the gun: whoever turns the handle fires it, though the other came first and only holds Use", async () => {
+    const { room, me, priv } = await setup();
+    const c2 = await colyseus.connectTo(room as never, { name: "Loader" });
+    for (const t of ["hit", "sever", "shot", "impact", "boom", "hitmark", "notice", "parley", "station", "saved", "bark"]) c2.onMessage(t, () => undefined);
+    const other = { id: c2.sessionId, p: room.state.players.get(c2.sessionId)!, input: c2.input({ type: MoveInput, mode: "reliable" }) as unknown as Input };
+    await sleep(150);
+    const g = room.state.cannons.get("crank")!;
+    behind(priv, me.p, g, 1.3);
+    behind(priv, other.p, g, 1.3);
+    other.p.x += Math.cos(g.yaw) * 0.8;
+    other.p.z -= Math.sin(g.yaw) * 0.8;
+    // the first joined (me) holds Use only; the second turns
+    const send = (who: { input: Input }, buttons: number) => {
+      const d = who.input.data;
+      d.moveF = d.moveR = 0;
+      d.buttons = buttons;
+      d.yaw = yawToWire(g.yaw);
+      d.aimYaw = yawToWire(g.yaw);
+      d.aimElev = elevToWire(0);
+      who.input.send();
+    };
+    const end = Date.now() + 6000;
+    while (g.fired < 4 && g.phase !== CRANK_PHASE.JAMMED && Date.now() < end) {
+      send(me, BUTTON.INTERACT);
+      send(other, BUTTON.INTERACT | BUTTON.FIRE);
+      await sleep(33);
+    }
+    expect(g.crew).toBe(2);
+    expect(g.fired === 0 && g.phase !== CRANK_PHASE.JAMMED, "the turner's handle fires").toBe(false);
+    send(me, 0);
+    send(other, 0);
+  }, 30_000);
 });
