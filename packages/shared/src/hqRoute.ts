@@ -57,7 +57,7 @@ const MAP: readonly Pt[] = [{ x: 1.5, z: -7.5 }, { x: 3.5, z: -6.5 }, { x: 0.5, 
 const DOCK_POSTS: readonly { at: number; side: 1 | -1; off: number }[] = [
   { at: 4, side: -1, off: 1.9 },
   { at: 27, side: -1, off: 1.9 },
-  { at: 52, side: -1, off: 2.2 },
+  { at: 55, side: -1, off: 2.2 },   // (D-097: three metres on, past the stilt house; at 52 its "camp" board ran into the house)
   { at: 78, side: 1, off: 2.1 },
 ];
 const MAP_POSTS: readonly { at: number; side: 1 | -1; off: number }[] = [

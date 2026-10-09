@@ -489,6 +489,24 @@ export class CombatView {
     this.rig.addKick(Math.max(0, 1 - d / (e.radius * 6)) * 0.03);
   }
 
+  /** D-097: the bridge's fall, as the span's pieces land (seconds from now, where, into water or not): a splash or a burst of rubble each, on the shared timetable. */
+  private readonly landings: { t: number; x: number; y: number; z: number; water: boolean; size: number; blast?: boolean }[] = [];
+
+  /**
+   * D-097: the bridge has gone (the charge's own blast came as a `boom`). Over it: the long dust of a span coming down, the sound of it going into the gorge, a heavier shake than
+   * any keg, and each piece's landing when it lands.
+   */
+  bridgeFell(x: number, y: number, z: number, spanW: number, spanL: number, landings: readonly { at: number; x: number; y: number; z: number; water: boolean; size: number }[]): void {
+    this.fx.collapseDust(x, y, z, spanW, spanL);
+    sfx.sound("bridge_collapse", { x, y, z });
+    // the span's masonry blows out along it a beat after the charge: two more bursts, either side of the mid-span, as the arches go
+    this.landings.push({ t: this.time + 0.12, x, y: y + 1.2, z: z - spanL * 0.22, water: false, size: 7, blast: true }, { t: this.time + 0.3, x, y: y + 1.2, z: z + spanL * 0.22, water: false, size: 7, blast: true });
+    for (const l of landings) this.landings.push({ t: this.time + l.at, x: l.x, y: l.y, z: l.z, water: l.water, size: l.size });
+    const d = Math.hypot(x - this.stage.camera.position.x, z - this.stage.camera.position.z);
+    this.rig.addShake(Math.max(0.25, 1 - d / 90));
+    this.controls.rumble("blast", Math.max(0.3, 1 - d / 90));
+  }
+
   /** The local player was hit: a bearing mark pointing at where it came from (the blow's push direction reversed, relative to the view). */
   onHit(e: HitEvent): void {
     if (e.id !== this.session.sessionId) return;
@@ -504,6 +522,14 @@ export class CombatView {
 
   update(dt: number, gamepad: boolean): void {
     this.time += dt;
+    for (let i = this.landings.length - 1; i >= 0; i--) {
+      const l = this.landings[i]!;
+      if (this.time < l.t) continue;
+      if (l.blast) this.fx.explosion(l.x, l.y, l.z, l.size);
+      else if (l.water) this.fx.splash(l.x, l.y, l.z, l.size);
+      else this.fx.rubble(l.x, l.y, l.z, l.size);
+      this.landings.splice(i, 1);
+    }
     const cam = this.stage.camera.position;
     this.fx.listener.x = cam.x;
     this.fx.listener.y = cam.y;

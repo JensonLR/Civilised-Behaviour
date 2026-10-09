@@ -462,7 +462,7 @@ export function highmarkPlan(): HighmarkPlan {
     { x: 3.9, z: 113.5, yaw: Math.PI / 2, text: 0 },
     { x: -6.2, z: 72, yaw: Math.PI / 2, text: 1 },
     ...[
-      { p: hillPoint(72.8, 14), text: 2 }, { p: hillPoint(56.4, 22), text: 3 }, { p: hillPoint(43.8, -22), text: 4 },
+      { p: hillPoint(71.8, 13.4), text: 2 }, { p: hillPoint(56.4, 22), text: 3 }, { p: hillPoint(43.8, -22), text: 4 },   // (D-097: the granary terrace's a pace up from its wall, which the board's end ran into)
     ].map(({ p, text }): HighmarkSign => ({ x: p.x, z: p.z, yaw: -p.th + Math.PI / 2, text })),
     { x: -7.6, z: g.z + 6.6, yaw: Math.PI / 2, text: 5 },
     { x: 7.5, z: -92, yaw: Math.PI / 2, text: 6 },

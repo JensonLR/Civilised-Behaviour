@@ -26,7 +26,7 @@ import { getAtmosphere } from "../world/atmosphere.ts";
  */
 
 export const SHOTFX = {
-  puffs: 260,
+  puffs: 340,   // (D-097: the bridge's fall puts a dust column and a dozen splashes on top of its blast)
   flashes: 28,
   streaks: 110,
   debris: 180,
@@ -659,6 +659,44 @@ export class ShotFx {
       this.debris(x, y + 0.2, z, Math.cos(a) * sp, rnd(4, 12) * Math.sqrt(k), Math.sin(a) * sp, rnd(0.04, 0.12), rnd(0.03, 0.08), rnd(0.04, 0.12), i % 3 === 0 ? PALETTE.world.dirtDark : i % 3 === 1 ? PALETTE.world.dirt : FX.spark, rnd(0.9, 1.6));
     }
     this.ringAt(x, y + 0.05, z, radius * 1.3, 0.55, 0.7);
+  }
+
+  /**
+   * D-097: a heavy piece of masonry into water (`size`: its longest side, metres): a column of white spray that climbs and falls back, a ring of foam, droplets thrown out.
+   */
+  splash(x: number, y: number, z: number, size: number): void {
+    const k = Math.min(2.2, Math.max(0.6, size / 2.5));
+    const W = PALETTE.world;
+    for (let i = 0; i < this.n(9); i++) {
+      const a = rnd(0, 6.28), r = rnd(0, 0.8 * k);
+      this.puff(x + Math.cos(a) * r, y + 0.1, z + Math.sin(a) * r, Math.cos(a) * rnd(0.3, 1.4), rnd(3.5, 7) * Math.sqrt(k), Math.sin(a) * rnd(0.3, 1.4), 0.35 * k, 1.5 * k, rnd(0.9, 1.5), W.waterFoam, W.waterShallow, 0.85, 1.6, -0.9);
+    }
+    for (let i = 0; i < this.n(10); i++) {
+      const a = rnd(0, 6.28), sp = rnd(2, 6) * Math.sqrt(k);
+      this.debris(x, y + 0.2, z, Math.cos(a) * sp, rnd(3, 8) * Math.sqrt(k), Math.sin(a) * sp, 0.05, 0.05, 0.05, W.waterFoam, rnd(0.6, 1.1));
+    }
+    this.ringAt(x, y + 0.03, z, 2.4 * k, 0.6, 1.1);
+  }
+
+  /** D-097: masonry into dry ground: a burst of dust that hangs, and stone chips. */
+  rubble(x: number, y: number, z: number, size: number): void {
+    const k = Math.min(2.2, Math.max(0.6, size / 2.5));
+    for (let i = 0; i < this.n(7); i++) {
+      const a = rnd(0, 6.28);
+      this.puff(x + Math.cos(a) * rnd(0, 0.9) * k, y + 0.2, z + Math.sin(a) * rnd(0, 0.9) * k, Math.cos(a) * rnd(0.6, 2.4), rnd(0.6, 1.8), Math.sin(a) * rnd(0.6, 2.4), 0.4 * k, 1.8 * k, rnd(1.6, 2.6), PALETTE.world.dust, FX.dust, 0.85, 1.4, 0.25);
+    }
+    for (let i = 0; i < this.n(10); i++) {
+      const a = rnd(0, 6.28), sp = rnd(1.5, 5);
+      this.debris(x, y + 0.3, z, Math.cos(a) * sp, rnd(2, 6), Math.sin(a) * sp, rnd(0.06, 0.16), rnd(0.05, 0.12), rnd(0.06, 0.16), i % 2 ? FX.stone : PALETTE.world.rockPale, rnd(0.9, 1.5));
+    }
+  }
+
+  /** D-097: a span coming down: a long, slow column of masonry dust over the whole of it (w across, l along), that lifts out of the gorge and hangs. */
+  collapseDust(x: number, y: number, z: number, w: number, l: number): void {
+    for (let i = 0; i < this.n(26); i++) {
+      const px = x + rnd(-w / 2, w / 2), pz = z + rnd(-l / 2, l / 2);
+      this.puff(px, y + rnd(-2, 0.5), pz, rnd(-0.5, 0.5), rnd(0.6, 2.2), rnd(-0.5, 0.5), 1.0, rnd(3.5, 5.5), rnd(4.5, 7.5), PALETTE.world.dust, FX.smokeLight, 0.8, 0.5, 0.35);
+    }
   }
 
   /** A flat ring of dust racing out along the ground to `radius` metres in `life` seconds. */

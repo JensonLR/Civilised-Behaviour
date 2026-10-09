@@ -7,7 +7,7 @@ import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildKessarCloth } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover, kessarGroundColour, skirtY } from "./ground.ts";
 import { palmGeometry } from "./palms.ts";
-import { KESSAR_ANCHORS as A, KESSAR_SIGNS, createKessarWorld, createRegionWorld, kessarPlan, type KessarTerrain } from "./shared.ts";
+import { KESSAR, KESSAR_ANCHORS as A, KESSAR_SIGNS, createKessarWorld, kessarBridgeWreck, createRegionWorld, kessarPlan, type KessarTerrain } from "./shared.ts";
 import { buildKessarSolid } from "./structures.ts";
 import { buildKessarWater, riverShore } from "./water.ts";
 
@@ -132,8 +132,41 @@ describe("Kessar Reach view: geometry", () => {
     const intact = buildKessarSolid(world, 1);
     const fallen = buildKessarSolid(down, 1);
     expect(fallen.collapsed).toBe(true);
-    expect(tris(fallen.geometry!)).toBeLessThan(tris(intact.geometry!));
+    // (D-097: the broken ends and the heaped masonry draw more than the span did, so the old "fewer triangles" proxy no longer holds: test the claim itself. Nothing of
+    // the merged scenery is where the span stood, over the middle of the gap; the standing bridge fills it. The span's own pieces are the wreck, drawn apart.)
+    const inSpan = (g: BufferGeometry): number => {
+      const p = g.attributes.position!.array as ArrayLike<number>;
+      let n = 0;
+      for (let i = 0; i < p.length; i += 3) if (Math.abs(p[i]!) < 3 && Math.abs(p[i + 2]! - 20) < 6 && p[i + 1]! > KESSAR.level - 1.2 && p[i + 1]! < KESSAR.level + 1.5) n++;
+      return n;
+    };
+    expect(inSpan(intact.geometry!)).toBeGreaterThan(50);
+    expect(inSpan(fallen.geometry!)).toBe(0);
     finite(fallen.geometry!, "fallen");
+  });
+
+  it("D-097: a fallen span lies in the gorge as its own pieces (none while the bridge stands); seen falling, they go back into the span and land on the shared timetable", () => {
+    const sun = new Vector3(0.4, 0.8, 0.3).normalize();
+    const standing = createRegionView("kessar", new Scene(), world, PRESETS.medium, sun);
+    expect(standing.root.getObjectByName("bridge-wreck")).toBeUndefined();
+    expect(standing.bridgeFell?.() ?? []).toEqual([]);
+    standing.dispose();
+    const down = createKessarWorld(7, "collapsed");
+    const view = createRegionView("kessar", new Scene(), down, PRESETS.medium, sun);
+    const wreck = view.root.getObjectByName("bridge-wreck")!;
+    const plan = kessarBridgeWreck(down.terrain);
+    expect(wreck.children).toHaveLength(plan.length);
+    // at rest where the plan lays them
+    expect(wreck.children[0]!.position.x).toBeCloseTo(plan[0]!.rest.x, 4);
+    const landings = view.bridgeFell!();
+    expect(landings).toHaveLength(plan.length);
+    expect(landings.some((l) => l.water) && landings.some((l) => !l.water)).toBe(true);
+    // back in the span the moment it goes; at rest again once the last has landed
+    expect(wreck.children[0]!.position.z).toBeCloseTo(plan[0]!.from.z, 4);
+    for (let t = 0; t < 4; t += 0.05) view.update(t);
+    expect(wreck.children[0]!.position.x).toBeCloseTo(plan[0]!.rest.x, 3);
+    expect(wreck.children[0]!.position.y).toBeCloseTo(plan[0]!.rest.y, 3);
+    view.dispose();
   });
 
   it("the cloth and signs are finite, inside the atlas, and lettered from the authored text", () => {

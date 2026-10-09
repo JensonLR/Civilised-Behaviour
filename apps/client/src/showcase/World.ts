@@ -406,6 +406,13 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     get ready() {
       return frames > 2;
     },
+    /** (Stills tooling: move the camera without rebuilding the world, e.g. to walk a list of signs.) */
+    look: (c: [number, number, number], a: [number, number, number]): void => {
+      cam.set(c[0], c[1], c[2]);
+      at.set(a[0], a[1], a[2]);
+      stage.camera.position.copy(cam);
+      stage.camera.lookAt(at);
+    },
     stats: () => ({ calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries, world: stage.worldStats, camp: CAMP.fire, anchors: region === "kessar" ? KA : undefined, folk: (stage["worldView"] as { folkView?: { stats: unknown } } | undefined)?.folkView?.stats }),
   };
 }

@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, TAG_RANGE, WEAPON, carryUsePrompt, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, TAG_RANGE, WEAPON, carryUsePrompt, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -96,6 +96,9 @@ function dressPrompt(use: string, patient: PlayerStateType | undefined): string 
 }
 
 /** Frame orchestration: fixed-step input, prediction, remote interpolation, camera, render. */
+/** D-097: a Kessar world with its bridge's deck in it (the span stands). */
+const hasSpan = (w: { obstacles: readonly { tag?: string; kind: string }[] }): boolean => w.obstacles.some((o) => o.tag === "bridge" && o.kind === "box");
+
 export class Game {
   readonly rig: CameraRig;
   readonly overlay: DebugOverlay;
@@ -750,10 +753,16 @@ export class Game {
       await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30))); // let the card paint before the synchronous build
       const st = this.session.room.state;
       const region = this.session.region;
+      // D-097: was the bridge standing in the world we had? (a fall seen live is played; one we land into already happened)
+      const hadSpan = this.builtRegion === "kessar" && region === "kessar" && hasSpan(this.session.world);
       const world = this.session.refreshWorld();
       this.rig.setWorld(world);
       this.combat.setWorld();
       this.stage.buildWorld(world, region, st.seed);
+      if (hadSpan && !hasSpan(world)) {
+        const B = KESSAR_ANCHORS.bridge;
+        this.combat.bridgeFell(B.x, KESSAR.level - 1.5, B.z, B.width + 2, B.length, this.stage.bridgeFell());
+      }
       if (region !== this.builtRegion) {
         // a new shore: nothing of the old field's fight is here, and the music starts from a baseline (nothing already on the field counts as a shot or a death)
         this.ledger.reset();

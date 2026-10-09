@@ -115,6 +115,35 @@ const explosion = def({
   },
 });
 
+/**
+ * D-097: a stone bridge going into its gorge, after the charge's own report: masonry cracking and grinding, the span's long rumble down, the slabs into the water one after another
+ * (heavy, low splashes), and stone pattering on for a while after. Placed at the span; four seconds.
+ */
+const bridgeCollapse = def({
+  group: "weapon", peakDb: -1, ref: 40, max: 520, reverb: 0.8, prio: 4, cap: 1, gap: 2, duck: 0.6, drive: 1.2, jitter: 0.03, variants: 1,
+  layers: (p) => {
+    const out: Layer[] = [
+      // the cracks: sharp, high, three or four of them close together
+      N({ dec: 0.05, peak: 0.9, f: [hp(1800)] }),
+      N({ at: 0.11, dec: 0.04, peak: 0.7, f: [hp(2200)] }),
+      N({ at: 0.24, dec: 0.06, peak: 0.6, f: [bp(1400, 1.2)] }),
+      // the grind and the long rumble of the span coming down
+      N({ kind: "pink", at: 0.05, atk: 0.15, dec: 1.4, peak: 0.6, f: [bp(420, 0.7, 180, 1.2)] }),
+      N({ kind: "brown", at: 0.1, atk: 0.35, dec: 3.2, peak: 1.0, f: [lp(220, 70, 3)] }),
+      T({ hz: 46, to: 28, over: 2.4, atk: 0.3, dec: 2.6, peak: 0.6 }),
+    ];
+    // the slabs into the water, one after another: a low thump and a wash of spray each
+    for (let i = 0; i < 6; i++) {
+      const at = 0.75 + i * 0.16 + p.rng.next() * 0.08;
+      out.push(T({ at, hz: 70 + p.rng.next() * 20, to: 40, over: 0.2, dec: 0.3, peak: 0.55 }));
+      out.push(N({ kind: "pink", at: at + 0.02, atk: 0.04, dec: 0.7, peak: 0.45, f: [lp(2600, 700, 0.6)] }));
+    }
+    // stone pattering on afterwards
+    for (let i = 0; i < 16; i++) out.push(N({ at: 0.5 + i * 0.17 + p.rng.next() * 0.1, dec: 0.03 + p.rng.next() * 0.05, peak: 0.28 * (1 - i / 18), f: [bp(700 + p.rng.next() * 2600, 1.4)] }));
+    return out;
+  },
+});
+
 const sabreSwing = def({
   group: "weapon", peakDb: -9, ref: 6, max: 50, reverb: 0.12, prio: 1, cap: 3, gap: 0.05, jitter: 0.08,
   layers: (p) => [
@@ -729,6 +758,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   crank_shot: crankShot,
   bellow,
   explosion,
+  bridge_collapse: bridgeCollapse,   // D-097
   sabre_swing: sabreSwing,
   sabre_hit: sabreHit,
   reload_click: reload,

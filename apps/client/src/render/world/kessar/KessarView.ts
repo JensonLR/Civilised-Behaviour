@@ -20,8 +20,9 @@ import { buildKessarGround, buildKessarSkirt, kessarCover, visualY } from "./gro
 import { palmGeometry, palmHullGeometry } from "./palms.ts";
 import { buildKessarSites } from "./sites.ts";
 import { OutpostDress } from "../outpostDress.ts";
-import { kessarPlan, type KessarTerrain } from "./shared.ts";
+import { kessarPlan, kessarWaterY, type KessarTerrain } from "./shared.ts";
 import { buildKessarSolid } from "./structures.ts";
+import { BridgeWreck } from "./bridgeWreck.ts";
 import { addWindows, setWindowNight } from "../litWindows.ts";
 import { buildKessarWater } from "./water.ts";
 import type { WaterUniforms } from "../water.ts";
@@ -199,6 +200,11 @@ export class KessarView implements RegionView {
     if (hull) this.track(hull);
     const mat = this.track(toonMaterial({ wetDark: 0.8 }));
     makeSolid(this.root, solid.geometry, mat, { name: "kessar", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true });
+    // D-097: with the span down, its pieces lie in the gorge (and fall there, if we saw it go)
+    if (solid.collapsed) this.wreck = new BridgeWreck(this.root, this.world, lod, this.detail.outlines, (x) => this.track(x));
+    // (a dev hook for stills: ?bridge=collapsed&fallat=0.6 holds the span's pieces where they are 0.6 s after the blast; harmless in a game)
+    const fallAt = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("fallat");
+    if (this.wreck && fallAt !== null && Number.isFinite(Number(fallAt))) this.wreck.holdAt(Number(fallAt));
     // D-038: the doors drawn, the lamps hung in the rooms, and the roofs of the rooms (one mesh; the one over the viewer is dropped)
     this.doors = solid.marks;
     this.roomLamps = solid.lamps;
@@ -332,7 +338,19 @@ export class KessarView implements RegionView {
     }
   }
 
+  /** D-097: the span's pieces (only when the bridge is down). */
+  private wreck?: BridgeWreck;
+  private lastT = -1;
+
+  bridgeFell(): { at: number; x: number; y: number; z: number; water: boolean; size: number }[] {
+    if (!this.wreck) return [];
+    this.wreck.fall();
+    return this.wreck.landings(kessarWaterY(0));
+  }
+
   update(t: number, camera?: { x: number; y?: number; z: number }): void {
+    if (this.wreck && this.lastT >= 0) this.wreck.update(t - this.lastT);
+    this.lastT = t;
     worldTime.value = t;
     this.hillU.uSailAngle.value = t * 0.32;
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);

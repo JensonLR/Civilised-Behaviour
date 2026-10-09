@@ -34,6 +34,11 @@ export interface RegionView {
   setViewer?(x: number, z: number): void;
   /** D-035: what HQ keeps of the campaign, on the planning table, the strongbox and the marquee's back wall (Hollowmere). */
   applyHistory?(pieces: readonly HqHistoryPiece[]): void;
+  /**
+   * D-097: the bridge has just gone, in front of us (Kessar: the view was rebuilt without its span). The fallen pieces go back into the span and fall; returns each piece's
+   * landing (seconds after the blast, where, into water or not) for the splashes and the dust.
+   */
+  bridgeFell?(): { at: number; x: number; y: number; z: number; water: boolean; size: number }[];
   dispose(): void;
 }
 
