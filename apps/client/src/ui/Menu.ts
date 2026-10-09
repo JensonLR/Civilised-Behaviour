@@ -120,7 +120,7 @@ export class Menu {
           <h2 id="consult-head">Consulting the Society...</h2>
           <p id="consult-step" role="status" aria-live="polite"></p>
           <div class="bar" aria-hidden="true"><div class="fill"></div></div>
-          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="forget" hidden>Forget this expedition</button><button type="button" class="back">Return to the door</button></div>
+          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="forget" hidden>Forget this expedition</button><button type="button" class="back">Back to the menu</button></div>
         </div>
       </div>`;
     // a pad's hint under the door (shown only while a pad is the device in use): the front door is the first thing a pad player sees

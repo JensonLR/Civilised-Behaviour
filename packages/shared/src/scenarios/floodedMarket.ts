@@ -362,7 +362,7 @@ const observe: ObserveSpec = {
   use: [
     { id: "auctioneer", npc: "auctioneer", r: MARKET.personR, talk: "auctioneer", carry: "none" },
     ...[0, 1, 2, 3].map((i) => ({ id: `head${i}`, npc: `head-${i}`, r: MARKET.personR, talk: "house_head" as const, carry: "none" as const })),
-    { id: "factor", npc: "factor", r: MARKET.personR, carry: "none" },
+    { id: "factor", npc: "factor", r: MARKET.personR, carry: "none", prompt: "Shake the factor's hand" },
   ],
   count: [],
   seen: [],

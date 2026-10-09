@@ -264,7 +264,7 @@ const observe: ObserveSpec = {
   use: [
     { id: "ward_post", npc: "ward-0", r: 2.4, talk: "ward_post", carry: "none" },
     { id: "surveyor", npc: "rival-0", r: 2.4, talk: "surveyor", carry: "none" },
-    { id: "marker", at: KESSAR_SITES.border.marker, r: 3.2, carry: "none" },
+    { id: "marker", at: KESSAR_SITES.border.marker, r: 3.2, carry: "none", prompt: "Pull up the marker stone" },
   ],
   count: [{ group: "ward" }, { group: "rival" }],
   seen: [],

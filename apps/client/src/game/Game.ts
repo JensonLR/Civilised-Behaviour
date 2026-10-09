@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, TAG_RANGE, WEAPON, carryUsePrompt, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, MOUNT_KIND, TAG_RANGE, WEAPON, carryUsePrompt, contractUse, WEAPONS, npcKey, seedFromString, type UsePlaces, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -79,6 +79,18 @@ interface Actor {
 const TALK_TURN = 1.25;
 /** D-099: the share of the picture's height it slides up during a talk. */
 const TALK_LIFT = 0.2;
+/** D-100: about how far behind you the lens sits (the rig's orbit), to judge which side of a talk has the clearer view; and how near a body to that line of sight counts as in the way. */
+const TALK_CAM_D = 5;
+const TALK_BLOCK_R = 0.9;
+/** Distance from (x, z) to the segment (ax, az)-(bx, bz). */
+function segDist(ax: number, az: number, bx: number, bz: number, x: number, z: number): number {
+  const dx = bx - ax, dz = bz - az;
+  const t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+  return Math.hypot(x - (ax + t * dx), z - (az + t * dz));
+}
+/** D-100: the station kinds whose people talk (the contract's table words their prompt, where the server listens), and `placePrompt`'s answer at the foundation. */
+const TALK_STATIONS: ReadonlySet<string> = new Set(["warden", "court", "post", "pier"]);
+const FOUNDATION_HERE = "foundation";
 const tmp = new Vector3();
 /** D-063: the key hints along the foot show for this long after the game starts (they are in the pause sheet's "How to play" for good). */
 const HINTS_FOR_MS = 90_000;
@@ -195,6 +207,8 @@ export class Game {
   private talkFocus: { x: number; z: number } | undefined;
   /** 0..1, eased: how far the picture is slid up while a talk is open (the strip covers the foot of the screen; the two of you stand in the part above it). */
   private talkLift = 0;
+  /** D-100: which way the talk's lens swings round (+1 or -1), chosen once as the talk opens. */
+  private talkSide: 1 | -1 = 1;
   private readonly paper: NewspaperView;
   private readonly tracker: ObjectiveTracker;
   private builtRegion: RegionId;
@@ -653,8 +667,9 @@ export class Game {
     if (this.parley.isOpen) this.parley.update(m.view);
     else {
       const me = this.session.predicted;
-      const st = me ? findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
-      this.talkFocus = st && (st.kind === "warden" || st.kind === "post" || st.kind === "court") ? { x: st.x, z: st.z } : undefined;
+      const here = me ? contractUse(this.scenarioView, this.session.value(me, "x"), this.session.value(me, "z"), undefined, this.placesAt()) : undefined;
+      this.talkFocus = here?.talk ? { x: here.x, z: here.z } : undefined;
+      if (this.talkFocus && me) this.talkSide = this.clearerSide(this.session.value(me, "x"), this.session.value(me, "z"), this.session.value(me, "y"), this.talkFocus);
     }
     if (!this.parley.isOpen) this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion, this.scenarioView?.template);
   }
@@ -939,8 +954,8 @@ export class Game {
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
       this.rig.ready = this.combat.firearmReady;
       if (this.parley.isOpen && this.talkFocus) {
-        // the lens turns a little left of the speaker, so they stand to the right of your own figure above the talk strip (eased; the mouse is held off while the sheet is up)
-        const want = Math.atan2(-(this.talkFocus.x - tmp.x), -(this.talkFocus.z - tmp.z)) + TALK_TURN;
+        // the lens swings round to the side with the clearer view, so you and the speaker stand side by side above the talk strip (eased; the mouse is held off while the sheet is up)
+        const want = Math.atan2(-(this.talkFocus.x - tmp.x), -(this.talkFocus.z - tmp.z)) + this.talkSide * TALK_TURN;
         const d = ((want - this.rig.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         this.rig.yaw += d * (1 - Math.exp(-4 * dt));
       }
@@ -1145,9 +1160,9 @@ export class Game {
       const spot = this.builtRegion !== "hollowmere" ? findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
       const heldKind = this.heldKind();
       const fuse = this.heldFuse();
-      // D-096: a contract's own use point for what is in your arms (a trig station and the theodolite: the same table and ranges the runner checks)
-      const usePrompt = carryUsePrompt(this.scenarioView, this.session.value(me, "x"), this.session.value(me, "z"), heldKind);
-      prompt = usePrompt !== undefined ? `${use}  ${usePrompt}     ${throwKey}  Throw` : spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw`
+      // D-096: a contract's own use point for what is in your arms (a trig station and the theodolite, the pier, a delegate: the same table and ranges the runner checks)
+      const usePrompt = carryUsePrompt(this.scenarioView, this.session.value(me, "x"), this.session.value(me, "z"), heldKind, this.placesAt());
+      prompt = usePrompt !== undefined ? `${use}  ${usePrompt}     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw`
         // D-054: a keg in your arms can be lit (reload), and a lit one wants throwing (the seconds left are on the prompt: the fuse does not wait for a decision)
         : heldKind === PropKind.BARREL && fuse > 0 ? `${throwKey}  Throw it!  (${Math.ceil(fuse / 10)})     ${use}  Drop`
         : heldKind === PropKind.BARREL ? `${use}  Drop     ${throwKey}  Throw     {reload}  Light the fuse` : `${use}  Drop     ${throwKey}  Throw`;
@@ -1160,54 +1175,30 @@ export class Game {
       } else if (mp !== undefined) {
         prompt = `${use}  ${mp}`;
       } else {
-        const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
-        const woundedId = findWoundedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
-          players.forEach((o, pid) => pid !== this.session.sessionId && (o.flags & (FLAG.DRAGGED | FLAG.BEAST)) === 0 && cb(pid, o)),
-        );
-        if (id !== undefined) {
-          const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
-          // Same shared rule the server enforces on the pickup (injury.ts), so the prompt never promises what the server will refuse.
-          injuryMods(mine.wounds, mine.missing, (flags & FLAG.PEG_LEG) !== 0, injuries);
-          if (kind !== undefined && !canCarry(injuries, PROP_DEFS[kind].mass)) prompt = woundedId === undefined ? carryRefusal(injuries) : dressPrompt(use, players.get(woundedId));
-          else prompt = `${use}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
-        } else if (woundedId !== undefined) {
-          prompt = dressPrompt(use, players.get(woundedId));
+        // D-100: the press goes where the server sends it, in its order (WorldRoom: the cannon's crew, then the places you can USE, then a prop on the ground), so the
+        // prompt names what will happen: a person you can talk to wins over a barrel at their feet
+        const place = this.combat.cannonPrompt(use) || this.placePrompt(me);
+        if (place !== "" && place !== FOUNDATION_HERE) prompt = place;
+        else {
+          const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
+          const woundedId = findWoundedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
+            players.forEach((o, pid) => pid !== this.session.sessionId && (o.flags & (FLAG.DRAGGED | FLAG.BEAST)) === 0 && cb(pid, o)),
+          );
+          if (id !== undefined) {
+            const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
+            // Same shared rule the server enforces on the pickup (injury.ts), so the prompt never promises what the server will refuse.
+            injuryMods(mine.wounds, mine.missing, (flags & FLAG.PEG_LEG) !== 0, injuries);
+            if (kind !== undefined && !canCarry(injuries, PROP_DEFS[kind].mass)) prompt = woundedId === undefined ? carryRefusal(injuries) : dressPrompt(use, players.get(woundedId));
+            else prompt = `${use}  Pick up ${kind !== undefined ? PROP_DEFS[kind].name : "item"}`;
+          } else if (woundedId !== undefined) {
+            prompt = dressPrompt(use, players.get(woundedId));
+          } else if (place === FOUNDATION_HERE) {
+            // (empty-handed at the foundation the server takes nothing: this is the yard's tally, shown only when nothing else is in reach)
+            prompt = this.foundationText(undefined);
+            foundation = true;
+          }
         }
       }
-    }
-    if (prompt === "" && (flags & FLAG.DOWNED) === 0) prompt = this.combat.cannonPrompt(use);
-    if (prompt === "" && (flags & FLAG.DOWNED) === 0 && this.tracker.visibleOrders !== "resolved") {
-      // D-052: an incident's courier or deserter within reach (the server's own reach, `INCIDENT.useR`)
-      const mx = this.session.value(me, "x");
-      const mz = this.session.value(me, "z");
-      for (const [rowId, inc] of Object.entries(INCIDENT_USE_IDS)) {
-        const o = players.get(npcKey(rowId));
-        if (o && (o.flags & FLAG.DOWNED) === 0 && Math.hypot(o.x - mx, o.z - mz) <= INCIDENT.useR) prompt = `${use}  ${INCIDENT_PROMPT[inc].replace("%n", o.name)}`;
-      }
-    }
-    if (prompt === "" && (flags & FLAG.DOWNED) === 0) {
-      // the places you can USE: the map table, the notice board, the dock, the Warden (same shared table the server checks). Once the contract is settled the people
-      // to parley with (the Warden, the court) have nothing more to say, but the dock still takes you home and the foundation still takes crates (the dock's prompt went too)
-      const px = this.session.value(me, "x");
-      const pz = this.session.value(me, "z");
-      const found = findStation(this.builtRegion, px, pz, me.facing);
-      // D-063: abroad, you land ON the dock, and "Take the boat home" was the first thing a new arrival was offered. The boat waits until you have gone ashore and come back,
-      // or the contract is settled (the prompt is the server's own table either way: this only chooses when to offer it)
-      if (this.builtRegion !== this.landingRegion) {
-        this.landingRegion = this.builtRegion;
-        this.wentAshore = false;
-      }
-      if (!this.wentAshore) {
-        const home = regionMarks(this.builtRegion)[0];
-        if (!home || Math.hypot(px - home.x, pz - home.z) > 12) this.wentAshore = true;
-      }
-      const dockNow = this.builtRegion === "hollowmere" || this.wentAshore || this.tracker.visibleOrders === "resolved" || !this.tracker.visible;
-      const st = found && (found.kind !== "dock" || dockNow) && (this.tracker.visibleOrders !== "resolved" || found.kind === "dock" || found.kind === "foundation") ? found : undefined;
-      if (st && st.kind === "foundation") {
-        prompt = this.foundationText(undefined);
-        foundation = true;
-      }
-      else if (st && st.kind !== "pier") prompt = `${use}  ${st.prompt}`;
     }
     // what the pad's Use control will do this frame: a tap is Use only when there is something to use, otherwise it reloads (input/Controls.ts)
     this.usable = foundation || prompt.includes(use);
@@ -1243,6 +1234,94 @@ export class Game {
     });
     this.audio.revive(byMe >= 0 ? byMe : mine.reviveProgress > 0 ? mine.reviveProgress : -1);
   }
+
+  /**
+   * D-100: what Use does at a place with empty hands, in the server's order (WorldRoom.useStation): an incident's courier or deserter, the contract's own points and people
+   * (`contractUse`: the talker where they stand now, within their own reach), then the region's stations (the map table, the notice board, the supplies, the dock).
+   * "" for nothing; FOUNDATION_HERE at the outpost's foundation, which takes only a carried crate.
+   */
+  private placePrompt(me: NonNullable<Game["session"]["predicted"]>): string {
+    const use = "{interact}";
+    const px = this.session.value(me, "x");
+    const pz = this.session.value(me, "z");
+    if (this.tracker.visibleOrders !== "resolved") {
+      // D-052: an incident's courier or deserter within reach (the server's own reach, `INCIDENT.useR`)
+      const players = this.session.room.state.players;
+      for (const [rowId, inc] of Object.entries(INCIDENT_USE_IDS)) {
+        const o = players.get(npcKey(rowId));
+        if (o && (o.flags & FLAG.DOWNED) === 0 && Math.hypot(o.x - px, o.z - pz) <= INCIDENT.useR) return `${use}  ${INCIDENT_PROMPT[inc].replace("%n", o.name)}`;
+      }
+    }
+    const here = contractUse(this.scenarioView, px, pz, undefined, this.placesAt());
+    if (here) return `${use}  ${here.prompt}`;
+    const found = findStation(this.builtRegion, px, pz, me.facing);
+    // D-063: abroad, you land ON the dock, and "Take the boat home" was the first thing a new arrival was offered. The boat waits until you have gone ashore and come back,
+    // or the contract is settled (the prompt is the server's own table either way: this only chooses when to offer it)
+    if (this.builtRegion !== this.landingRegion) {
+      this.landingRegion = this.builtRegion;
+      this.wentAshore = false;
+    }
+    if (!this.wentAshore) {
+      const home = regionMarks(this.builtRegion)[0];
+      if (!home || Math.hypot(px - home.x, pz - home.z) > 12) this.wentAshore = true;
+    }
+    if (!found || TALK_STATIONS.has(found.kind)) return "";   // (a talk's prompt is the contract's, above: a fixed post's ring was not where the server listens)
+    const dockNow = this.builtRegion === "hollowmere" || this.wentAshore || this.tracker.visibleOrders === "resolved" || !this.tracker.visible;
+    if (found.kind === "dock" && !dockNow) return "";
+    if (found.kind === "foundation") return FOUNDATION_HERE;
+    if (this.tracker.visibleOrders === "resolved" && found.kind !== "dock") return "";   // (once the contract is settled, the boat home)
+    return `${use}  ${found.prompt}`;
+  }
+
+  /**
+   * D-100: which way a talk's lens swings round. A side-on two-shot from the side where a sentry or a post stood between the lens and the speaker hid the person you
+   * were talking to (the Warden behind her own standard, a sentry filling the foreground); the other side is usually clear. Scored once as the talk opens: a body
+   * near either line of sight costs 1, a wall or a post the world's ray meets costs 2.
+   */
+  private clearerSide(px: number, pz: number, py: number, f: { x: number; z: number }): 1 | -1 {
+    const base = Math.atan2(-(f.x - px), -(f.z - pz));
+    let best: 1 | -1 = 1;
+    let bestCost = Infinity;
+    for (const side of [1, -1] as const) {
+      const yaw = base + side * TALK_TURN;
+      const cx = px + Math.sin(yaw) * TALK_CAM_D, cz = pz + Math.cos(yaw) * TALK_CAM_D, cy = py + 2;
+      let cost = 0;
+      this.session.room.state.players.forEach((o) => {
+        if (Math.hypot(o.x - f.x, o.z - f.z) < 0.4 || Math.hypot(o.x - px, o.z - pz) < 0.4) return;   // (the two in the picture)
+        if (segDist(cx, cz, f.x, f.z, o.x, o.z) < TALK_BLOCK_R || segDist(cx, cz, px, pz, o.x, o.z) < TALK_BLOCK_R) cost++;
+      });
+      const dx = f.x - cx, dy = py + 1.5 - cy, dz = f.z - cz, d = Math.hypot(dx, dy, dz) || 1;
+      if (rayWorld(this.session.world, cx, cy, cz, dx / d, dy / d, dz / d, d - 0.6, aimHit)) cost += 2;
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = side;
+      }
+    }
+    return best;
+  }
+
+  /** Where the contract's people and its wagon are this frame, for `contractUse` (one object, reused: the prompt runs every frame). */
+  private placesAt(): UsePlaces {
+    const me = this.session.predicted;
+    let wagon: { x: number; z: number } | undefined;
+    if (me) {
+      const px = this.session.value(me, "x"), pz = this.session.value(me, "z");
+      let best = Infinity;
+      this.session.room.state.mounts.forEach((m) => {
+        if (m.kind !== MOUNT_KIND.wagon) return;
+        const d = Math.hypot(m.x - px, m.z - pz);
+        if (d < best) { best = d; wagon = m; }
+      });
+    }
+    this.usePlaces.wagon = wagon;
+    return this.usePlaces;
+  }
+  private readonly usePlaces: UsePlaces = {
+    person: (npc) => {
+      const row = this.session.room.state.players.get(npcKey(npc));
+      return row && (row.flags & FLAG.DOWNED) === 0 ? row : undefined;
+    },
+  };
 
   private mountPromptNow(me: NonNullable<Game["session"]["predicted"]>, mine: PlayerStateType, flags: number): string | undefined {
     return this.mountPrompter.now(this.session.value(me, "x"), this.session.value(me, "z"), me.facing, flags, mine.missing);
@@ -1470,7 +1549,7 @@ export class Game {
   private plate(id: string, p: PlayerStateType, a: Actor, x: number, y: number, z: number): void {
     const down = (p.flags & FLAG.DOWNED) !== 0;
     const text = this.plates.text(id, p);
-    tmp.set(x, y + a.body.height + 0.55, z).project(this.stage.camera);
+    tmp.set(x, y + a.body.crown + 0.18, z).project(this.stage.camera);   // (D-100: just over the hat, so a near figure's plate is not hung over the one behind)
     const cam = this.stage.camera.position;
     const dist = Math.sqrt((x - cam.x) ** 2 + (y - cam.y) ** 2 + (z - cam.z) ** 2); // not Math.hypot: it allocates per call
     const topPx = ((1 - tmp.y) / 2) * window.innerHeight;

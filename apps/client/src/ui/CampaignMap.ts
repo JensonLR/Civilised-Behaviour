@@ -274,10 +274,12 @@ export class CampaignMap {
     for (const p of data.pins) {
       const li = h("li", { class: p.known ? "known" : "unmet" });
       li.append(h("span", { class: "mark", "aria-hidden": "true" }, p.known ? p.name.charAt(0) : "?"));
-      const body = h("span", { class: "who" }, h("strong", {}, p.known ? p.name : "A power you have not met"), p.known ? ` (${p.seat}). Stance: ${p.stance}. ${p.note}` : ` ${p.note}`);
-      li.append(body);
+      // D-100: a power you have not met that asks to see you says so (it read "A power you have not met. Nobody has told you about them yet." beside "Request an audience")
+      const who = p.known ? p.name : p.audience ? "A stranger asks to see you" : "A power you have not met";
+      const note = p.known ? ` (${p.seat}). Stance: ${p.stance}. ${p.note}` : p.audience ? " They have not said who they are." : ` ${p.note}`;
+      li.append(h("span", { class: "who" }, h("strong", {}, who), note));
       if (p.audience) {
-        const b = h("button", { type: "button", class: "audience", "data-power": p.id }, "Request an audience") as HTMLButtonElement;
+        const b = h("button", { type: "button", class: "audience", "data-power": p.id }, "Meet them") as HTMLButtonElement;
         b.setAttribute("aria-label", `Request an audience with ${p.known ? p.name : "the power asking for you"}`);
         b.addEventListener("click", () => cb.audience?.(p.id));
         li.append(b);

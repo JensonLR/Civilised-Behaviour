@@ -394,8 +394,8 @@ const observe: ObserveSpec = {
   use: [
     { id: "reeve", npc: "reeve", r: SMUGGLE.personR, talk: "tide_reeve", carry: "none" },
     { id: "drop", at: SP.dropDoor, r: SMUGGLE.doorR, carry: "crate", consume: true, prompt: "Pass the crate in at the door" },
-    { id: "plug", at: SP.plug, r: SMUGGLE.plugR, carry: "none" },
-    { id: "lantern", at: SP.lantern, r: SMUGGLE.lanternR, carry: "none" },
+    { id: "plug", at: SP.plug, r: SMUGGLE.plugR, carry: "none", prompt: "Pull the barge's plug" },
+    { id: "lantern", at: SP.lantern, r: SMUGGLE.lanternR, carry: "none", prompt: "Light the lantern" },
   ],
   count: [{ group: "customs", routed: "garrisonRouted" }, { group: "patrol", routed: "garrisonRouted" }, { group: "late:extra", routed: "garrisonRouted" }],
   seen: [{ group: "patrol", sight: SMUGGLE.sightPatrol }, { group: "customs", sight: SMUGGLE.sightCustoms }, { group: "late:extra", sight: SMUGGLE.sightPatrol }],

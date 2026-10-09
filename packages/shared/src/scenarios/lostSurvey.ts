@@ -307,8 +307,8 @@ function roster(_c: CampaignState, seed: number, _s: SurveyState): NpcSpec[] {
 const observe: ObserveSpec = {
   near: [{ id: "house", x: SALTMARKET_SURVEY.house.x, z: SALTMARKET_SURVEY.house.z, r: LOST.houseR }],
   use: [
-    { id: "peg", at: SALTMARKET_SURVEY.peg, r: LOST.markR },
-    { id: "pump", at: SALTMARKET_SURVEY.pumpMark, r: LOST.markR },
+    { id: "peg", at: SALTMARKET_SURVEY.peg, r: LOST.markR, prompt: "Read the survey peg" },
+    { id: "pump", at: SALTMARKET_SURVEY.pumpMark, r: LOST.markR, prompt: "Read the chalk mark" },
     { id: "surveyor", npc: "surveyor", r: LOST.personR, talk: "lost_surveyor", carry: "none" },
     { id: "collector", npc: "collector", r: LOST.personR, talk: "dues_collector", carry: "none" },
   ],

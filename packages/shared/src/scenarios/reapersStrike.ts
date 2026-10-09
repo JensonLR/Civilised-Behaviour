@@ -359,7 +359,7 @@ const observe: ObserveSpec = {
   use: [
     { id: "reaper", npc: "foreperson", r: STRIKE.personR, talk: "reaper", carry: "none" },
     { id: "steward", npc: "steward", r: STRIKE.personR, talk: "steward", carry: "none" },
-    { id: "proof", npc: "steward", r: STRIKE.personR, carry: "barrel", consume: true, prop: "bushel" },
+    { id: "proof", npc: "steward", r: STRIKE.personR, carry: "barrel", consume: true, prop: "bushel", prompt: "Set the royal bushel beside his" },
   ],
   count: [{ group: "late:breakers" }],
   seen: [],

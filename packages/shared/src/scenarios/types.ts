@@ -40,7 +40,7 @@ export interface UseSpec {
   r: number;
   /** "barrel" / "crate" (D-037), "instrument" (D-096): must be carrying that kind of prop (and the press is only taken when the machine accepts it); "none": hands empty; undefined: either. */
   carry?: CarryKind | "none";
-  /** D-096: what INTERACT does here with the right thing in your arms, for the HUD (without it, a carried prop's prompt says Drop). Only for a fixed `at` point. */
+  /** D-096/D-100: the HUD's words for what INTERACT does here (a talk point without one says TALK_PROMPT[talk]). Every point has words: `contract use points all have words` (registry.test.ts). */
   prompt?: string;
   /** D-096: the objective whose being done ends the prompt (a booked station takes no more: the press there drops what you carry). */
   until?: string;

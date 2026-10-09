@@ -191,7 +191,7 @@ const observe: ObserveSpec = {
   near: [{ id: "bar", x: KESSAR_ANCHORS.tollBar.x, z: KESSAR_ANCHORS.tollBar.z, r: SCENARIO.arriveRange }, { id: "past", x: RUN_BAR.x, z: RUN_BAR.z, r: RUN_BAR.r }],
   use: [
     { id: "warden", npc: "warden", r: SCENARIO.talkRange, talk: "warden", carry: "none" },
-    { id: "pier", at: KESSAR_ANCHORS.pier, r: SCENARIO.pierRange, carry: "barrel", consume: true },
+    { id: "pier", at: KESSAR_ANCHORS.pier, r: SCENARIO.pierRange, carry: "barrel", consume: true, prompt: "Light the charge" },
   ],
   count: [{ group: "ward", routed: "garrisonRouted" }],
   seen: [],

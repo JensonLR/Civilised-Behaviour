@@ -50,6 +50,16 @@ describe("MapRoom", () => {
     room.dispose();
   });
 
+  it("D-100: opens with the chosen shore focused, and the crew's tick boxes only during a vote", () => {
+    const room = new MapRoom(host);
+    room.open(view(), cbs());
+    expect(document.activeElement).toBe(radios().find((r) => r.checked));
+    expect([...document.querySelectorAll(".crew li")].map((li) => li.className)).toEqual(["aboard", "aboard"]);
+    room.update(view({ phase: 1, to: "kessar", ready: [{ slot: 0, name: "Colonel", ready: true }, { slot: 1, name: "Miss Pym", ready: false }] }));
+    expect([...document.querySelectorAll(".crew li")].map((li) => li.className)).toEqual(["yes", "no"]);
+    room.dispose();
+  });
+
   it("proposing sends the chosen region; choosing home disables it with a reason", () => {
     const room = new MapRoom(host);
     const cb = cbs();

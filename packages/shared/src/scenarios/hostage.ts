@@ -288,7 +288,7 @@ const observe: ObserveSpec = {
   ],
   use: [
     { id: "ransom", npc: "deserter-0", r: 2.4, talk: "ransom", carry: "none" },
-    { id: "cage", at: KESSAR_SITES.hostage.cage, r: 2.6, carry: "none" },
+    { id: "cage", at: KESSAR_SITES.hostage.cage, r: 2.6, carry: "none", prompt: "Open the cage" },
   ],
   count: [{ group: "deserters" }],
   seen: [{ group: "deserters", sight: HOSTAGE.sightCarousers }, { group: "lookout", sight: HOSTAGE.sightLookout }, { group: "late:reinf", sight: HOSTAGE.sightLookout }],

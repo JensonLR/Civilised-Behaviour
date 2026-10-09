@@ -367,7 +367,7 @@ const observe: ObserveSpec = {
     { id: "dirge", npc: "dirge-master", r: MINE.personR, talk: "dirge_master", carry: "none" },
     { id: "timber", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "crate", consume: true, prompt: "Set the pit-props against the fall", until: "timber" },
     { id: "keg", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "barrel", consume: true, prompt: "Wedge the keg in the fall and light it" },
-    { id: "dig", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "none" },
+    { id: "dig", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "none", prompt: "Dig at the fall" },
   ],
   count: [{ group: "miners" }],
   seen: [],

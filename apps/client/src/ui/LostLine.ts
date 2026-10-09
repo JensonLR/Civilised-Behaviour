@@ -18,8 +18,8 @@ export class LostLine {
     root.dataset.state = "error";
     root.innerHTML = `<div class="card panel" role="alertdialog" aria-labelledby="lost-head" aria-describedby="lost-body" tabindex="-1">
       <h2 id="lost-head">The line has gone dead</h2>
-      <p id="lost-body">The telegraph to this expedition has failed and could not be raised again. The ledger was saved at its last change; where you stood was not.</p>
-      <div class="actions"><button type="button" class="primary back">Return to the door</button></div>
+      <p id="lost-body">The connection to the game was lost. Your progress is saved; you start again at HQ.</p>
+      <div class="actions"><button type="button" class="primary back">Back to the menu</button></div>
     </div>`;
     const back = root.querySelector<HTMLButtonElement>(".back")!;
     back.addEventListener("click", onBack);

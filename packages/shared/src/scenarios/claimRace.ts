@@ -305,7 +305,7 @@ function roster(_c: CampaignState, seed: number, _s: ClaimState): NpcSpec[] {
 const observe: ObserveSpec = {
   near: [{ id: "ground", x: VESPER_ANCHORS.pegging.x, z: VESPER_ANCHORS.pegging.z, r: CLAIM.nearR }],
   use: [
-    ...VESPER_SITES.claimPegs.map((p, i) => ({ id: `peg${i}`, at: { x: p.x, z: p.z }, r: CLAIM.pegR, carry: "none" as const })),
+    ...VESPER_SITES.claimPegs.map((p, i) => ({ id: `peg${i}`, at: { x: p.x, z: p.z }, r: CLAIM.pegR, carry: "none" as const, prompt: "Drive in a claim peg" })),
     { id: "assayer", npc: "assayer", r: CLAIM.personR, talk: "assayer" as const, carry: "none" as const },
   ],
   count: [{ group: "surveyors" }, { group: "guards" }],

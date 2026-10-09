@@ -236,7 +236,7 @@ const observe: ObserveSpec = {
   near: [{ id: "cut", x: KESSAR_SITES.convoy.cut.x, z: KESSAR_SITES.convoy.cut.z, r: 16 }],
   use: [
     { id: "ford_post", npc: "post-0", r: 2.4, talk: "ford_post", carry: "none" },
-    { id: "wagon", mount: true, r: 3.4, carry: "none" },
+    { id: "wagon", mount: true, r: 3.4, carry: "none", prompt: "Seize the wagon" },
   ],
   count: [{ group: "guards" }],
   seen: [{ group: "late:outrider", sight: CONVOY.sightOutrider }, { group: "late:patrol", sight: CONVOY.sightPatrol }],

@@ -208,6 +208,8 @@ export class MapRoom {
       const input = h("input", { type: "radio", name: "maproom-dest", value: r.id, id: `maproom-${r.id}` }) as HTMLInputElement;
       input.checked = r.id === this.selected;
       input.disabled = v.phase === 1 && r.id !== pending;
+      // D-100: the sheet opens on the choice (the modal focused the first control in the page, an audience button below the chart, and scrolled the choice away)
+      if (input.checked) input.dataset.autofocus = "";
       input.addEventListener("change", () => {
         this.selected = r.id;
         this.render(this.view!);
@@ -242,7 +244,8 @@ export class MapRoom {
     if (focusedAudience) this.campaign.root.querySelector<HTMLElement>(`button[data-power="${focusedAudience}"]`)?.focus();
     // the crew
     this.crew.replaceChildren();
-    for (const c of v.ready) this.crew.appendChild(h("li", { class: c.ready ? "yes" : "no" }, h("span", { class: "who" }, c.name), h("span", { class: "state" }, v.phase === 1 ? (c.ready ? "ready" : "waiting") : "aboard")));
+    // (the tick boxes are the vote's: before a sailing is proposed there is nothing to tick, and an empty box beside "aboard" read as a missing letter)
+    for (const c of v.ready) this.crew.appendChild(h("li", { class: v.phase === 1 ? (c.ready ? "yes" : "no") : "aboard" }, h("span", { class: "who" }, c.name), h("span", { class: "state" }, v.phase === 1 ? (c.ready ? "ready" : "waiting") : "aboard")));
     const you = v.you !== undefined ? v.ready.find((c) => c.slot === v.you) : undefined;
     if (you) this.myReady = you.ready;
     if (v.phase === 0) this.myReady = false;

@@ -267,6 +267,12 @@ export class Mayhem {
     this.settled = true;
     const r = REQUESTS[this.request];
     const met = this.met || r.done(this.bill, end);
+    // (a quiet commission is decided only now: the orders show it done, as the debrief says it was paid)
+    if (met && !this.met) {
+      this.met = true;
+      this.progress = "met";
+      this.host.changed();
+    }
     const sp = spectacle(this.bill);
     return { bill: { ...this.bill }, request: this.request, met, reward: met ? r.reward : 0, spectacle: sp.pay, spectacleLine: sp.line, requestLine: met ? r.met : "" };
   }

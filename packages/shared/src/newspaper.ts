@@ -115,7 +115,7 @@ export function generatePaper(c: CampaignState, worldSeed: number, extras?: Pape
   const other = POWERS.slice(1);
   if (hash3(s, 46, 2) % 2 === 0) {
     const p = pick(other, 47);
-    cands.push({ slug: "colonies", head: cap(`Word From ${p.name}`, PAPER_LIMITS.head), body: cap(`${p.blurb} Motto: \"${p.motto}\"`, PAPER_LIMITS.body) });
+    cands.push({ slug: "colonies", head: cap(`Word From the ${p.name}`, PAPER_LIMITS.head), body: cap(`${p.blurb} Motto: \"${p.motto}\"`, PAPER_LIMITS.body) });
   } else {
     story("filler", STORY_HEADS.filler, pick(FILLER, 48), 49);
   }

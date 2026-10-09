@@ -260,7 +260,7 @@ describe("carried things at use points (D-096): every fixed point that takes a c
   it("each `at` use point that asks for a carried kind names its prompt, and the prompt is offered in reach and not out of it", () => {
     for (const id of TEMPLATE_IDS) {
       for (const u of TEMPLATES[id].observe.use) {
-        if (!u.at || u.carry === undefined || u.carry === "none" || id === "secure_crossing") continue;   // (the crossing's pier has the HUD's own fuse prompt)
+        if (!u.at || u.carry === undefined || u.carry === "none") continue;
         expect(u.prompt, `${id}:${u.id}`).toBeTruthy();
         expect(u.prompt!.length, `${id}:${u.id}`).toBeLessThanOrEqual(48);
         const v = { phase: "waiting", objectives: [], hint: "", timerLabel: "", endsAtWorldMs: 0, template: id, title: "" } as ScenarioView;

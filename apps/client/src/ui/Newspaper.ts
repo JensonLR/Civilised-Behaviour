@@ -9,6 +9,17 @@ import "./newspaper.css";
  * The broadsheet pinned to the notice board at HQ. `generatePaper` (shared, deterministic) writes it from the campaign; this only sets it in type.
  * Every string goes in as text. A sheet like the others: focus trapped, Escape / pad B close, the game's controls held off while it is up.
  */
+/**
+ * D-100: a masthead's second half (after ", ", " & " or " (") is set as a small line under the paper's name, as a broadsheet prints its motto: in one line of
+ * display type "The Depot Dispatch, By Appointment to Her Majesty" ran to two and pushed the notices and the button below the fold. The words are unchanged.
+ */
+function mastheadParts(m: string): (string | HTMLElement)[] {
+  const at = [", ", " & ", " ("].map((sep) => m.indexOf(sep)).filter((i) => i > 0).sort((a, b) => a - b)[0];
+  if (at === undefined) return [m];
+  const sep = m.startsWith(", ", at) ? ", " : " ";
+  return [m.slice(0, at), h("span", { class: "sep" }, sep), h("span", { class: "sub" }, m.slice(at + sep.length))];
+}
+
 export class NewspaperView {
   private readonly modal = new Modal("paper", "paper", "paper-masthead");
   private readonly body = h("div", { class: "sheetbody" });
@@ -35,7 +46,7 @@ export class NewspaperView {
     const stories = Array.isArray(p.stories) ? p.stories : [];
     const notices = Array.isArray(p.notices) ? p.notices : [];
     this.body.replaceChildren(
-      h("h2", { id: "paper-masthead", class: "masthead" }, String(p.masthead ?? "")),
+      h("h2", { id: "paper-masthead", class: "masthead" }, ...mastheadParts(String(p.masthead ?? ""))),
       h("p", { class: "dateline" }, `Edition ${Math.max(1, Number(p.edition) | 0)}  —  ${String(p.dateline ?? "")}`),
       h("h3", { class: "headline" }, typeset(String(p.headline ?? ""))),
       h("p", { class: "standfirst" }, typeset(String(p.standfirst ?? ""))),

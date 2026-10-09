@@ -84,6 +84,19 @@ describe("CampaignMap", () => {
     expect(m.root.hidden).toBe(true);
   });
 
+  it("D-100: a power asking to see you says so in plain words, met or not (an unmet one read \"Nobody has told you about them yet\" beside its own audience button)", () => {
+    const m = new CampaignMap();
+    host.append(m.root);
+    m.render(data({ asking: ["brine", "choir"] }));
+    const asking = [...m.root.querySelectorAll("li")].filter((li) => li.querySelector("button.audience"));
+    expect(asking.length).toBe(2);
+    for (const li of asking) {
+      expect(li.querySelector("button")!.textContent).toBe("Meet them");
+      expect(li.textContent).not.toContain("Nobody has told you");
+      if (li.classList.contains("unmet")) expect(li.querySelector("strong")!.textContent).toBe("A stranger asks to see you");
+    }
+  });
+
   it("an audience is a real button in reading order, labelled with the power, and calls the callback with its id", () => {
     const m = new CampaignMap();
     host.append(m.root);

@@ -14,4 +14,4 @@ export const WISHLIST_BODY = [
 ] as const;
 export const WISHLIST_BUTTON = "Add it to the wish list";
 export const WISHLIST_SOON = "The full game is coming. There is no store page yet, so there is nothing to click: the Society will announce it when it has something to bill.";
-export const WISHLIST_BACK = "Return to the door";
+export const WISHLIST_BACK = "Back to the menu";

@@ -492,4 +492,5 @@ html .pause .menu .pair button { white-space: nowrap; padding-inline: 0.5rem; fo
   html #sheet-parley .sheet.parley .options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
 }
 /* while a talk is open it is the one thing on screen: the orders card, its bonus slip, the line and the marker step aside (they stood on the speaker's head in the two-shot) */
-body:has(#sheet-parley:not([hidden])) #hud .objectives, body:has(#sheet-parley:not([hidden])) #hud .guide, body:has(#sheet-parley:not([hidden])) #hud .goalmark { visibility: hidden; }
+body:has(#sheet-parley:not([hidden])) #hud .objectives, body:has(#sheet-parley:not([hidden])) #hud .guide, body:has(#sheet-parley:not([hidden])) #hud .goalmark,
+body:has(#sheet-parley:not([hidden])) #hud .taglayer, body:has(#sheet-parley:not([hidden])) #hud .help { visibility: hidden; }   /* (D-100: the strip names the speaker; a plate floated over whoever stood behind them) */
