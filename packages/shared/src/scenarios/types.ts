@@ -2,6 +2,7 @@ import type {
   CampaignState, CasualtyTally, ParleyKind, ResolutionId, ScenarioEffect, ScenarioFx, ScenarioOutcome, ScenarioPhase, ScenarioTemplateId, ScenarioView,
 } from "../campaignTypes.ts";
 import type { NpcSpec } from "../expeditionTypes.ts";
+import { PropKind, type PropKindId } from "../props.ts";
 import type { ScenarioInput } from "../scenario.ts";
 import type { RivalPresence } from "../worldTypes.ts";
 
@@ -26,6 +27,10 @@ export type Fx = ScenarioEffect | ScenarioFx;
 export interface Reduction<S> { s: S; fx: Fx[] }
 
 /** Something a player can INTERACT with. Exactly one of `npc` / `at` / `mount` places it. */
+/** The props a use point can ask for, and their kinds (D-096). */
+export type CarryKind = "barrel" | "crate" | "instrument";
+export const CARRY_KIND: Readonly<Record<CarryKind, PropKindId>> = { barrel: PropKind.BARREL, crate: PropKind.CRATE, instrument: PropKind.INSTRUMENT };
+
 export interface UseSpec {
   id: string;
   npc?: string;
@@ -33,8 +38,12 @@ export interface UseSpec {
   /** The scenario's wagon. */
   mount?: boolean;
   r: number;
-  /** "barrel" / "crate" (D-037): must be carrying that kind of prop (and the press is only taken when the machine accepts it); "none": hands empty; undefined: either. */
-  carry?: "barrel" | "crate" | "none";
+  /** "barrel" / "crate" (D-037), "instrument" (D-096): must be carrying that kind of prop (and the press is only taken when the machine accepts it); "none": hands empty; undefined: either. */
+  carry?: CarryKind | "none";
+  /** D-096: what INTERACT does here with the right thing in your arms, for the HUD (without it, a carried prop's prompt says Drop). Only for a fixed `at` point. */
+  prompt?: string;
+  /** D-096: the objective whose being done ends the prompt (a booked station takes no more: the press there drops what you carry). */
+  until?: string;
   /** Consume the carried prop when the machine accepted the press. */
   consume?: boolean;
   /** D-042: with `carry`, only THIS template prop (an id of `props`) will do: the royal bushel is a barrel, but not any barrel. */

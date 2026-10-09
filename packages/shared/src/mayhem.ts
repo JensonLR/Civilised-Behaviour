@@ -259,9 +259,9 @@ export const REQUESTS: Readonly<Record<RequestId, RequestDef>> = {
 
 /**
  * Contracts that get only the quiet commissions: those where fighting loses the contract (the border, the saleroom: D-086, the Society used to ask for two limbs at a
- * border the party lost by its first shot), and the mine, a rescue, where the loud ones would be met on the men the party came for.
+ * border the party lost by its first shot), the mine, a rescue, where the loud ones would be met on the men the party came for, and the survey (D-096), where nobody is armed.
  */
-export const quietOnly = (template: ScenarioTemplateId): boolean => TERMS[template].fighting === "forbidden" || template === "mine_rescue";
+export const quietOnly = (template: ScenarioTemplateId): boolean => TERMS[template].fighting === "forbidden" || template === "mine_rescue" || template === "triangulation";
 
 /** The commission for a run: deterministic in (seed, day, template); never the one the last run was dealt, never one the contract forbids or has no powder for (`kegs` in reach). */
 export function dealRequest(seed: number, day: number, template: ScenarioTemplateId, last?: RequestId, kegs = 3): RequestId {

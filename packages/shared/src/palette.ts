@@ -241,6 +241,12 @@ export const PALETTE = {
     cork: 0xb59060,
     chairDark: 0x6a3626,
     chairCane: 0xb08a5a,
+    /** D-096: the Society's theodolite case (French-polished mahogany, brass corners, a leather strap) and its folded tripod (ash legs, brass feet). */
+    caseWood: 0x6a3022,
+    caseWoodDark: 0x643424,
+    caseBrass: 0xb0985c,
+    caseStrap: 0x5a4030,
+    tripod: 0xa88a5e,
   },
 
   /** The expedition camp at the spawn: canvas, rope, the Society's pennant, a fire, luggage and a cart. Flame colours are light sources. */

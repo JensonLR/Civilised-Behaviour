@@ -4,7 +4,7 @@ import { Vector3 } from "three";
  * Vesper Gorge's named vantage points for `?showcase=world&region=vesper&view=<name>` (D-037, package C3; `ky(x, z)` is the ground height there). A view is [camera position, look-at]. `time=13` is noon, `time=dusk`
  * is the lamps' hour (the Guild's lamps and the headframe's work-light burn), `weather=fog` thickens the gorge. The gorge is a CLEFT: `cleft` is the silhouette shot (the whole gorge from the landing), `rim` looks
  * down into it from the west cliff's top, `road` and `floor` walk it, and the rest are the story points: wharf, headframe, trestle, assay, pegging, cloister, adit and fall (the Lower Gallery's plug).
- * The scenario's state can be dressed for a still with `fall=open|dug|blasted|sealed|consecrated` and `pegs=party,rival,none,party` (see VesperView.applyScenario).
+ * The scenario's state can be dressed for a still with `fall=open|dug|blasted|sealed|consecrated`, `pegs=party,rival,none,party` and (D-096) `trig=party,none,guild&candle=1` (see VesperView.applyScenario).
  */
 export const VESPER_DEFAULT_VIEW = "cleft";
 export function vesperViews(ky: (x: number, z: number) => number): Record<string, [Vector3, Vector3]> {
@@ -23,5 +23,11 @@ export function vesperViews(ky: (x: number, z: number) => number): Record<string
     cleft: [new Vector3(0, ky(0, 128) + 3.2, 134), new Vector3(0, ky(0, -90) + 8, -90)],
     rim: [new Vector3(-76, ky(-76, 30) + 3, 34), new Vector3(24, 6, -30)],
     top: [new Vector3(0, 190, 10), new Vector3(0, 0, 10)],
+    // D-096: the trig signals (dress them with `trig=party,none,guild&candle=1`), and the theodolite's case among the landing's crates
+    trig0: [new Vector3(31, ky(31, 32) + 1.9, 32.5), new Vector3(35.6, ky(35.6, 28.6) + 1.8, 28.6)],
+    trig1: [new Vector3(-37.5, ky(-37.5, -27) + 1.9, -27), new Vector3(-42.2, ky(-42.2, -31) + 1.6, -31)],
+    candle: [new Vector3(-40.9, ky(-40.9, -30.2) + 0.9, -30.2), new Vector3(-42.1, ky(-42.1, -30.9) + 0.45, -30.9)],
+    trig2: [new Vector3(27.5, ky(27.5, -53.5) + 1.9, -53.5), new Vector3(23.8, ky(23.8, -57) + 1.8, -57)],
+    theodolite: [new Vector3(5.5, ky(5.5, 114) + 1.6, 114.5), new Vector3(1.5, ky(1.5, 110) + 0.3, 110)],
   };
 }

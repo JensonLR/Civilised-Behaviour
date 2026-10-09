@@ -84,6 +84,7 @@ export const ACHIEVEMENT_TEXT: Readonly<Record<AchievementId, { title: string; b
   perseverance: { title: "Perseverance", blurb: "Run a railway to a town at Kessar. The engine is called Perseverance and frequently is." },
   dividend_day: { title: "Dividend Day", blurb: "Open a works beside an outpost. Its chimney is the tallest thing for miles; its neighbours have noticed." },
   luck_of_the_herds: { title: "The Luck of the Herds", blurb: "Walk the Great Grey home to his herd without firing a shot. The Club's wall can wait." },
+  the_aunt_who_waited: { title: "The Aunt Who Waited", blurb: "Close the triangle over Vesper Gorge and put the Guild's names on the Society's chart. Mount Fothergill-Pym can wait." },
   honours_of_war: { title: "The Honours of War", blurb: "Take the Syndicate's Counting-House by the Articles: invest it, summon it, and let its factor march out with his ledger for colours." },
   nineteen_canals: { title: "Nineteen Canals, Two Twice", blurb: "Walk the Society's surveyor out of the delta with his field books. The Houses will remember the page numbers." },
   mind_the_handle: { title: "Mind the Handle", blurb: "Have the works cast a crank gun for the Society's stockades. It jams only at the moment of greatest interest." },

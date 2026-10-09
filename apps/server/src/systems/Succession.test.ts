@@ -338,7 +338,7 @@ describe("hostile input at every entry point", () => {
   it("a delegate is fed once; a downed delegate and a downed envoy cannot be dealt with", () => {
     const { f, s } = newRun();
     expect(feed(f, s, 0)).toBe(true);
-    expect(feed(f, s, 0), "the same delegate twice is a taken press that changes nothing").toBe(true);
+    expect(feed(f, s, 0), "the same delegate twice is refused: the press falls through to the room (D-096)").toBe(false);
     expect(f.consumed.length, "(the runner consumes only what the machine accepted)").toBeGreaterThanOrEqual(1);
     down(f, npcKey("grange-1"));
     expect(feed(f, s, 1), "a downed delegate cannot be reached").toBe(false);

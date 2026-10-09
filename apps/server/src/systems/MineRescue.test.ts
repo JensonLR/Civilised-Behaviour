@@ -131,7 +131,7 @@ describe("the four endings through the real runner, one commit each", () => {
   it("a second keg after the first is not taken (nothing is consumed twice)", () => {
     const { f, s } = newRun();
     carry(f, s, PropKind.BARREL, 0);
-    expect(carry(f, s, PropKind.BARREL, 1), "the press is taken (the fuse is lit) but changes nothing").toBe(true);
+    expect(carry(f, s, PropKind.BARREL, 1), "refused (the fuse is lit): the press falls through to the room, which sets the keg down (D-096)").toBe(false);
     expect(f.consumed).toEqual(["keg0"]);
     run(f, s, 9);
     expect(f.blasts).toHaveLength(1);
@@ -353,7 +353,7 @@ describe("hostile input at every entry point", () => {
     for (let i = 0; i < 100; i++) press(f, s);
     expect(objective(f, "dig")).toMatch(/\(2%\)/);
     shore(f, s);
-    expect(carry(f, s, PropKind.CRATE, 3), "a fourth set is a taken press that changes nothing").toBe(true);
+    expect(carry(f, s, PropKind.CRATE, 3), "a fourth set is refused: the press falls through to the room (D-096)").toBe(false);
     expect(f.consumed, "the runner consumes only what the machine accepted").toEqual(["timber0", "timber1", "timber2"]);
     expect(f.commits).toEqual([]);
   });

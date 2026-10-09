@@ -22,7 +22,8 @@ export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_
   | "outpost_raid"   // D-045: Kessar's fifth (only while the Syndicate means to raid the party's outpost)
   | "lost_survey"   // D-093: the Saltmarket's third (the GDD's missing expedition)
   | "great_grey"   // D-094: Highmark's third (the GDD's hunt)
-  | "counting_house";   // D-095: Kessar's sixth (the GDD's siege; only while the Syndicate keeps a post at Kessar)
+  | "counting_house"   // D-095: Kessar's sixth (the GDD's siege; only while the Syndicate keeps a post at Kessar)
+  | "triangulation";   // D-096: Vesper's fourth (the GDD's survey)
 export type ResolutionId =
   | "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned"
   | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated"
@@ -43,7 +44,9 @@ export type ResolutionId =
   // D-094, Highmark: the Great Grey (great_grey)
   | "grey_trophy" | "grey_driven" | "grey_sold" | "grey_escaped"
   // D-095, Kessar: the Siege of the Counting-House (counting_house)
-  | "siege_honours" | "siege_stormed" | "siege_bought" | "siege_lifted";
+  | "siege_honours" | "siege_stormed" | "siege_bought" | "siege_lifted"
+  // D-096, Vesper Gorge: the Triangulation (triangulation)
+  | "trig_guild" | "trig_committee" | "trig_sold" | "trig_outsurveyed";
 export type ComplicationId = "none" | "rival_scouts" | "rain" | "reinforcements" | "rival_bid" | "outriders" | "ward_patrol" | "fog" | "stray_shot";
 export interface CrossingState { bridge: BridgeState; control: CrossingControl; toll: number; tollPaidTotal: number; bribed: boolean; exposed: boolean }  // toll in pounds per crossing (0 = free)
 export interface CasualtyTally { wounded: number; downed: number; limbsLost: number; garrisonKilled: number; garrisonRouted: number; civiliansHarmed: number; rivalKilled: number }
@@ -113,7 +116,8 @@ export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_
   | "raid_captain"   // D-045: the Raid on the Post (the Syndicate's raiding captain)
   | "dues_collector" | "lost_surveyor"   // D-093: the Lost Survey (the Houses' Collector of Canal Dues, the Society's surveyor)
   | "master_of_hunt" | "menagerie_agent"   // D-094: the Great Grey (the Crown's Master of the Royal Hunt, the Syndicate's menagerie agent)
-  | "siege_factor";   // D-095: the Siege of the Counting-House (the Syndicate's factor, behind his counter)
+  | "siege_factor"   // D-095: the Siege of the Counting-House (the Syndicate's factor, behind his counter)
+  | "needle_names" | "railway_surveyor";   // D-096: the Triangulation (the Dirge-Master's names for the needles, the Syndicate's railway surveyor)
 export type TalkResult = "open" | "close" | "hostile" | "paid" | "bargained" | "bribed" | "ransom" | "survey" | "learn" | "tell" | "envelope" | "tip";
 export type ScenarioEffect = "garrison_alert" | "garrison_stand_down" | "gate_open" | "arm_charge" | "rival_advance" | "commit";
 /** What a template asks the server to DO (the runner turns each into Cast / Mounts / host calls). Sites are named in KESSAR_SITES / KESSAR_ANCHORS. */

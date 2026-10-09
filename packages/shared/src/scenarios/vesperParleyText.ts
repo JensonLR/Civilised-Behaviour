@@ -147,4 +147,58 @@ const engineer: ParleyScript = {
   },
 };
 
-export const VESPER_PARLEYS = { foreman, dirge_master, assayer, engineer } as const satisfies Partial<Record<"foreman" | "dirge_master" | "assayer" | "engineer", ParleyScript>>;
+/**
+ * D-096, the Triangulation: the Dirge-Master again, at the Long Cloister, on the subject of names. The needles have had names for nine hundred years, each somebody's; the Guild will enter them
+ * in the Society's chart for a fee (pay), or hear the Committee's (tell) and enter something else in its own ledger. Whether the gorge is measured yet, and whether the party measured the Guild's
+ * vigil, are the template's (the deal lines are the conversation, not the verdict). Satire aimed at a Committee that names a country after itself.
+ */
+const needle_names: ParleyScript = {
+  speaker: "Dirge-Master Osric Veil-Mourne",
+  frame: { heading: "A word at the Long Cloister", asked: "The Guild's fee for its names: £{price} · Round {round} · The Dirge-Master seems {mood}." },
+  open: [
+    "\"The needles,\" says the Dirge-Master, opening a ledger older than your Society, \"have names. Seven of them, each somebody's: we bury the name there when we cannot bury the person. The Guild will write them on your chart for £{price}, a fee per name, the dead being expensive. Or you may tell me what your Committee calls them. I am always glad of a laugh at a funeral.\"",
+    "\"Your Committee wishes to name the needles,\" says the Dirge-Master. \"So did the last empire, and the one before. We have kept all their names, in a drawer, for reference. Ours are £{price} for the set, entered in your chart in a good hand. Yours are free, and will be invoiced.\"",
+  ],
+  round2: [
+    "\"The tall one is the Aunt Who Waited,\" says the Dirge-Master, running a finger down the page. \"The split one is the Two Who Argued; they still do, in a west wind. The small one is Small Ottilie, who was. The others you will learn when you have paid for them. £{price}.\"",
+    "\"Every needle in this gorge,\" says the Dirge-Master, \"marks a debt the Guild could not collect, which is to say a person. Old Tamsey's Debt is the third from the river. He still owes us. £{price} for the set, and his is included.\"",
+  ],
+  walk: "You step back. The Dirge-Master closes the ledger on a ribbon, at the page with the needles on it.",
+  hostile: "The Dirge-Master closes the ledger with a sound like a lid. \"The Guild,\" he says, \"will see you at your own arrangements.\"",
+  deal: {
+    paid: "The fee is counted twice into a black velvet bag, and the Dirge-Master takes the Society's chart and a pen.",
+    tell: "You take out the Committee's list and begin to read it aloud. The Dirge-Master takes out a second ledger and begins to write.",
+  },
+  short: "\"You are short,\" says the Dirge-Master. \"Names are the one thing the Guild has never discounted.\"",
+  options: (round, p): readonly Opt[] => {
+    const pay: Opt = { key: "pay", label: `Enter the Guild's names on the chart (£${p})`, hint: "The needles keep their own names on the Society's map. The Committee will be furious; the Guild will be civil.", cost: p };
+    const tell: Opt = { key: "tell", label: "Read him the Committee's names", hint: "Mount Fothergill-Pym and six more. The chart is the Committee's; the Guild sends the bill.", cost: 0 };
+    const leave: Opt = { key: "walk", label: "Walk away", hint: "The needles stay unnamed a little longer. The Syndicate's surveyors do not.", cost: 0 };
+    return round === 1 ? [pay, tell, { key: "ask", label: "Ask what the needles are called", hint: "He will tell you some of it. The rest is in the fee.", cost: 0 }, leave] : [pay, tell, leave];
+  },
+};
+
+/** D-096: the Syndicate's railway surveyor on the west bench, who will buy a closed triangle for a railway and sees no reason to name anything not on a timetable. */
+const railway_surveyor: ParleyScript = {
+  speaker: "Railway Surveyor Ptolemy Gradient-Hythe, of the Syndicate",
+  frame: { heading: "A word at the Syndicate's tripod", asked: "His price for your survey: £{price} · Round {round} · The surveyor seems {mood}." },
+  open: [
+    "The surveyor does not take his eye from his instrument. \"The Society is measuring the gorge for a map,\" he says. \"The Syndicate is measuring it for a railway. A railway is a map that pays. If you close your triangle, I will buy it, field books and all, for £{price}, and save us both a fortnight.\"",
+    "\"Names,\" says the surveyor, as if the word were a pebble in his boot. \"Your Committee wants names. We want a gradient. Close your triangle and it is worth £{price} to the Syndicate. The needles can be called whatever fits on a timetable.\"",
+  ],
+  round2: [
+    "\"When do we file?\" The surveyor consults a watch and a barge timetable. \"When the field books are dry and the next ore barge leaves. Soon. Whoever's survey reaches London first is the gorge; the other is a curiosity. £{price} for yours, and you may keep the curiosity.\"",
+    "\"Between ourselves,\" says the surveyor, \"we are behind. You have a better instrument and a worse employer. £{price} for the closed triangle, and the Syndicate's railway will run on the Society's arithmetic, which is the nearest your arithmetic will ever come to a dividend.\"",
+  ],
+  walk: "You step back. The surveyor makes a mark in his field book, possibly about you.",
+  hostile: "The surveyor looks at you, then at his chainman, and the chainman looks at the wharf.",
+  deal: { survey: "\"Done,\" says the surveyor, taking out a purse. \"Show me the closed triangle.\"" },
+  short: "\"I am buying,\" says the surveyor, \"not selling.\"",
+  options: (round): readonly Opt[] => {
+    const sell: Opt = { key: "propose", label: "Sell him the closed triangulation", hint: "He pays, and the gorge becomes a railway on your arithmetic. Only a closed triangle will do.", cost: 0 };
+    const leave: Opt = { key: "walk", label: "Walk away", hint: "His survey goes on.", cost: 0 };
+    return round === 1 ? [sell, { key: "ask", label: "Ask when the Syndicate files", hint: "He will tell you. He is a surveyor: he likes being asked.", cost: 0 }, leave] : [sell, leave];
+  },
+};
+
+export const VESPER_PARLEYS = { foreman, dirge_master, assayer, engineer, needle_names, railway_surveyor } as const satisfies Partial<Record<"foreman" | "dirge_master" | "assayer" | "engineer" | "needle_names" | "railway_surveyor", ParleyScript>>;

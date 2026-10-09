@@ -88,6 +88,23 @@ export const VESPER_SITES = {
   },
 } as const;
 
+/**
+ * D-096, the Triangulation: the Society's three trig stations (each in sight of the other two over the gorge, proven by a ray through the world on every seed the tests take: the assay bench,
+ * the west bench by the pegging ground, the headframe terrace at the head of the east ramp), the theodolite in its case on the wharf, and the Syndicate's railway surveyors at their own instrument
+ * on the west bench (the claim race's surveyors' ground).
+ */
+export const VESPER_TRIG = {
+  stations: [{ x: 34, z: 27 }, { x: -40, z: -31 }, { x: 26, z: -57 }],
+  /**
+   * The signals themselves, two paces off each station (where the instrument is set up), away from the road and the pegs: a dry-stone cairn, a pole and a whitewashed vane, raised
+   * by last season's advance party and standing in every visit (solid: `signalR` round, `signalH` tall). The contract's dress flies the flags on them (client vesper/dress.ts).
+   */
+  signals: [{ x: 35.6, z: 28.6 }, { x: -42.2, z: -31 }, { x: 23.8, z: -57 }],
+  signalR: 0.45, signalH: 3.6,
+  theodolite: { x: 3, z: 111 },
+  surveyors: [{ x: -26, z: -34 }, { x: -30, z: -28 }],
+} as const;
+
 /** What the Lower Gallery's template places: the shoring timber, the powder keg, and where the fall is dug and blown. */
 export const VESPER_STOCK = {
   /** Five crates of pit-prop timber in the Company's yard (three shore the fall). */
@@ -495,6 +512,7 @@ export function vesperObstacles(terrain: Terrain, seed: number): Obstacle[] {
   for (const s of plan.spoil) circle("rock", s.x, s.z, s.r, s.height);
   for (const l of plan.lamps) circle("pole", l.x, l.z, 0.18, l.h);
   for (const s of plan.signs) circle("sign", s.x, s.z, 0.12, 2);
+  for (const s of VESPER_TRIG.signals) circle("pole", s.x, s.z, VESPER_TRIG.signalR, VESPER_TRIG.signalH);   // D-096: the trig signals (their cairns)
   for (const k of plan.tents) box("tent", k.x, k.z, 2, 1.6, k.yaw, 2.4);
   for (const k of plan.carts) circle("cart", k.x, k.z, 1.1, 1.3);
   for (const b of plan.banners) if (b.kind === "syndicate" || b.kind === "guild") if (b.top < 6) circle("flag", b.x, b.z, 0.15, b.top);
@@ -642,6 +660,8 @@ export function vesperSitePoints(): { id: string; x: number; z: number }[] {
     ...K.timber.map((p, i) => ({ id: `timber${i}`, ...p })), { id: "keg", ...K.keg }, { id: "dig", ...K.dig },
     { id: "engine.boiler", ...S.engine.boiler }, { id: "engine.engineer", ...S.engine.engineer }, { id: "engine.yard", ...S.engine.yard },
     ...S.engine.beat.map((p, i) => ({ id: `engine.beat${i}`, ...p })), ...S.engine.grit.map((p, i) => ({ id: `engine.grit${i}`, ...p })),
+    // D-096: the trig stations and the theodolite's case (the surveyors stand on the claim race's spots, already here)
+    ...VESPER_TRIG.stations.map((p, i) => ({ id: `trig.station${i}`, ...p })), { id: "trig.theodolite", ...VESPER_TRIG.theodolite },
   ];
 }
 

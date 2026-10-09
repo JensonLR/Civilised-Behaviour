@@ -94,7 +94,7 @@ export class VesperView implements RegionView {
     this.addAmbient();
     cullPlants(this.root); // (no plant grows through anything built)
     this.count();
-    // (a dev hook for stills: ?fall=open|dug|blasted|sealed|consecrated and ?pegs=party,rival,none,party dress the scenery without a room; harmless in a game)
+    // (a dev hook for stills: ?fall=open|dug|blasted|sealed|consecrated, ?pegs=party,rival,none,party and ?trig=party,none,none&candle=1 dress the scenery without a room; harmless in a game)
     this.applyScenario(dressFromUrl());
   }
 
@@ -309,10 +309,20 @@ export class VesperView implements RegionView {
   }
 }
 
-/** A dev hook for stills (`?fall=...&pegs=...`): a made-up published view for the dress. `undefined` when the URL asks for nothing. */
+/** A dev hook for stills (`?fall=...&pegs=...`, D-096 `?trig=party,none,guild&candle=1`): a made-up published view for the dress. `undefined` when the URL asks for nothing. */
 export function dressFromUrl(): ScenarioView | undefined {
   if (typeof location === "undefined") return undefined;
   const q = new URLSearchParams(location.search);
+  const trig = q.get("trig");
+  if (trig !== null) {
+    const ws = trig.split(",");
+    const objectives: ScenarioView["objectives"] = [0, 1, 2].map((k) => ({ id: `station${k}`, text: "Observe", done: ws[k] === "party" }));
+    if (q.get("candle") === "1") objectives.push({ id: "vigil", text: "The vigil is over", done: true, optional: true });
+    const v: ScenarioView = { phase: "waiting", objectives, hint: "", timerLabel: "", endsAtWorldMs: 0, template: "triangulation", title: "The Triangulation" };
+    if (ws.includes("guild")) v.resolution = "trig_guild";
+    else if (ws.includes("rival")) v.resolution = "trig_sold";
+    return v;
+  }
   const fall = q.get("fall"), pegs = q.get("pegs");
   if (fall === null && pegs === null) return undefined;
   const objectives: ScenarioView["objectives"] = [];

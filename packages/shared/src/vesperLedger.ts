@@ -102,8 +102,8 @@ export const VESPER_FAVOUR: FavourExtra = { choir: ["sealed", "blasted_through",
  * engine struck the vein; once the engine was blown or fouled it rests a while (the Syndicate is shopping for a new one).
  */
 export function pickVesperContract(c: CampaignState, seed: number, presence?: RivalPresence): ScenarioTemplateId {
-  type Id = "mine_rescue" | "claim_race" | "winding_engine";
-  const ids: readonly Id[] = ["mine_rescue", "claim_race", "winding_engine"];
+  type Id = "mine_rescue" | "claim_race" | "winding_engine" | "triangulation";
+  const ids: readonly Id[] = ["mine_rescue", "claim_race", "winding_engine", "triangulation"];
   const mine = c.history.filter((h) => h.region === "vesper");
   const last = mine.length > 0 ? mine[mine.length - 1]!.template : undefined;
   const w: Record<Id, number> = {
@@ -111,6 +111,9 @@ export function pickVesperContract(c: CampaignState, seed: number, presence?: Ri
     winding_engine: 2 + (c.factions.ward.rivalInfluence >= 40 ? 3 : 0) + (c.sites.ends.claim_race === "jumped" || c.sites.ends.claim_race === "outpaced" ? 3 : 0)
       + (c.sites.ends.winding_engine === "vein_struck" ? 2 : 0) - (c.sites.ends.winding_engine === "engine_blown" || c.sites.ends.winding_engine === "engine_fouled" ? 1 : 0),
     claim_race: 3 + (c.factions.ward.rivalInfluence >= 50 ? 3 : 0) + (presence !== undefined && presence.surveyors > 0 ? 4 : 0) + (c.sites.ends.claim_race === "outpaced" ? 2 : 0) + (c.sites.ends.mine_rescue === "sealed" || c.sites.ends.mine_rescue === "consecrated" ? 0 : 1),
+    // D-096: the survey is likelier while the Syndicate's surveyors are about (a railway line is being run), and after it beat the party to the claim; once the gorge is measured it rests
+    triangulation: 2 + (presence !== undefined && presence.surveyors > 0 ? 3 : 0) + (c.sites.ends.claim_race === "outpaced" || c.sites.ends.claim_race === "jumped" ? 2 : 0)
+      - (c.sites.ends.triangulation === "trig_guild" || c.sites.ends.triangulation === "trig_committee" || c.sites.ends.triangulation === "trig_sold" ? 1 : 0),
   };
   if (last === undefined) return c.factions.ward.rivalInfluence >= 50 && presence !== undefined && presence.surveyors > 0 ? "claim_race" : "mine_rescue";
   const pool = ids.filter((id) => id !== last);

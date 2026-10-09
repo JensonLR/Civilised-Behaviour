@@ -316,8 +316,8 @@ const observe: ObserveSpec = {
   near: [{ id: "yard", x: E0.yard.x, z: E0.yard.z, r: ENGINE.yardR }],
   use: [
     { id: "engineer", npc: "engineer", r: ENGINE.personR, talk: "engineer", carry: "none" },
-    { id: "feed", at: E0.boiler, r: ENGINE.useR, carry: "crate", consume: true },
-    { id: "keg", at: E0.boiler, r: ENGINE.useR, carry: "barrel", consume: true },
+    { id: "feed", at: E0.boiler, r: ENGINE.useR, carry: "crate", consume: true, prompt: "Tip the grit into the feed" },
+    { id: "keg", at: E0.boiler, r: ENGINE.useR, carry: "barrel", consume: true, prompt: "Wedge the keg under the boiler and light it" },
   ],
   count: [{ group: "guards" }, { group: "beat" }, { group: "late:extra" }],
   seen: [{ group: "guards", sight: ENGINE.sight }, { group: "beat", sight: ENGINE.sight }, { group: "late:extra", sight: ENGINE.sight }],

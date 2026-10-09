@@ -28,6 +28,7 @@ export const OUTCOME_KIND: Readonly<Record<ResolutionId, OutcomeKind>> = {
   survey_home: "won", chart_ceded: "partial", survey_sold: "partial", survey_lost: "lost",
   grey_trophy: "won", grey_driven: "won", grey_sold: "partial", grey_escaped: "lost",
   siege_honours: "won", siege_stormed: "won", siege_bought: "partial", siege_lifted: "lost",
+  trig_guild: "won", trig_committee: "won", trig_sold: "partial", trig_outsurveyed: "lost",
 };
 
 /** An ending's kind, from what was committed: the Crown sold for the party's cheque is a sale; the Crown sold because nobody settled anything is a loss. */
@@ -151,6 +152,13 @@ export const TERMS: Readonly<Record<ScenarioTemplateId, ContractTerms>> = {
     lose: ["The harvest bell rings first", "It is driven or bolts off the herd ground", DOWN],
     fighting: "costly",
     rule: "Every beast on the grassland is the Crown's: a shot at it without the Master's licence, even a miss, is poaching.",
+  },
+  triangulation: {
+    win: ["Carry the theodolite to all three trig stations and take a round of angles at each; then put the Guild's names on the chart, for its fee", "Or close the triangle and read the Dirge-Master the Committee's names"],
+    partial: ["Sell the closed triangulation to the Syndicate's surveyor"],
+    lose: ["The Syndicate files its survey first", DOWN],
+    fighting: "costly",
+    rule: "Nobody here is armed: a shot at the surveyors or the Guild is a broken promise. Measuring the vigil costs its names.",
   },
   counting_house: {
     win: ["Invest the post on all three picket marks, then summon the factor once his stores are out, his relief beaten or half his guns down: the honours of war", "Storm it: drop three of its four guns, or send them running"],

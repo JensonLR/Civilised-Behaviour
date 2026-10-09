@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import {
-  PALETTE, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_VIEW_BUDGET, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign, vesperPlan,
+  PALETTE, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_TRIG, VESPER_VIEW_BUDGET, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign, vesperPlan,
   type ScenarioView, type VesperTerrain,
 } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
@@ -265,7 +265,7 @@ describe("Vesper view: scatter", () => {
 
 describe("Vesper view: the dress follows the contract", () => {
   const camp = newCampaign(3);
-  const viewOf = (id: "mine_rescue" | "claim_race", events: readonly unknown[]): ScenarioView => {
+  const viewOf = (id: "mine_rescue" | "claim_race" | "triangulation", events: readonly unknown[]): ScenarioView => {
     const t = TEMPLATES[id] as unknown as {
       init(c: typeof camp, a: number, s: number): unknown;
       reduce(s: unknown, e: unknown): { s: unknown };
@@ -336,6 +336,49 @@ describe("Vesper view: the dress follows the contract", () => {
     expect([0, 1, 2, 3].map(scaleOf)).toEqual([1, 1, 1, 0]);
     view.applyScenario(viewOf("mine_rescue", []));
     for (let i = 0; i < 4; i++) expect(scaleOf(i)).toBe(0);
+    view.dispose();
+  });
+});
+
+describe("Vesper view: the Triangulation's signals (D-096)", () => {
+  const camp = { ...newCampaign(3), purse: 300 };
+  const run = (events: readonly unknown[]): ScenarioView => {
+    const t = TEMPLATES.triangulation as unknown as { init(c: typeof camp, a: number, s: number): { need: number; vigilAt: number }; reduce(s: unknown, e: unknown): { s: unknown }; view(s: unknown, now: number): ScenarioView };
+    let s: unknown = t.init(camp, 0, 5);
+    for (const e of events) s = t.reduce(s, e).s;
+    return t.view(s, 0);
+  };
+  const need = (TEMPLATES.triangulation.init(camp, 0, 5) as unknown as { need: number; vigilAt: number }).need;
+  const vigilAt = (TEMPLATES.triangulation.init(camp, 0, 5) as unknown as { vigilAt: number }).vigilAt;
+  const round = (k: number): unknown[] => Array.from({ length: need }, () => [{ t: "use", target: `station-${k}`, slot: 0 }, { t: "tick", dt: 1.2 }]).flat();
+  const ticks = (n: number): unknown[] => Array.from({ length: n }, () => ({ t: "tick", dt: 1 }));
+
+  it("reads the views: a booked station flies the Society's flag; the Guild's names fly plum on all three, a sale green; the vigil's candle once it is over", () => {
+    expect(dressOf(run([])).trig).toEqual(["none", "none", "none"]);
+    expect(dressOf(run(round(2))).trig).toEqual(["none", "none", "party"]);
+    const closed = [...round(1), ...round(0), ...round(2)];
+    expect(dressOf(run(closed)).trig).toEqual(["party", "party", "party"]);
+    expect(dressOf(run([...closed, { t: "talk", kind: "needle_names", result: "open", paid: 0 }, { t: "talk", kind: "needle_names", result: "paid", paid: (TEMPLATES.triangulation.init(camp, 0, 5) as unknown as { price: { names: number } }).price.names }])).trig).toEqual(["guild", "guild", "guild"]);
+    expect(dressOf(run([...closed, { t: "talk", kind: "railway_surveyor", result: "open", paid: 0 }, { t: "talk", kind: "railway_surveyor", result: "survey", paid: 0 }])).trig).toEqual(["rival", "rival", "rival"]);
+    expect(dressOf(run(ticks(vigilAt + 5))).candle, "the vigil is on: no candle yet").toBe(false);
+    expect(dressOf(run(ticks(vigilAt + 90))).candle).toBe(true);
+  });
+
+  it("the signals stand in every visit (solid, drawn); the dress flies the flags and lights the candle, and a different contract takes them down", () => {
+    for (const s of VESPER_TRIG.signals) {
+      const pos = { x: s.x, z: s.z };
+      expect(world.resolveXZ(pos, world.terrainHeight(s.x, s.z) + 0.2, 0.3, 1.2), `the cairn at ${s.x},${s.z} is solid`).toBe(true);
+    }
+    const view = createRegionView("vesper", new Scene(), world, PRESETS.medium, sun) as VesperView;
+    const dress = (view as unknown as { dress: { trigShown(): boolean[]; shown(): string[] } }).dress;
+    expect(dress.trigShown()).toEqual([false, false, false]);
+    view.applyScenario(run([...round(1), ...round(0)]));
+    expect(dress.trigShown()).toEqual([true, true, false]);
+    view.applyScenario(run(ticks(vigilAt + 90)));
+    expect(dress.shown()).toContain("trig_candle");
+    view.applyScenario(undefined);
+    expect(dress.trigShown()).toEqual([false, false, false]);
+    expect(dress.shown()).not.toContain("trig_candle");
     view.dispose();
   });
 });
