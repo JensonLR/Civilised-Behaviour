@@ -34,9 +34,12 @@ export type RaidEnding = (typeof RAID_RESOLUTIONS)[number];
 /** D-094: Highmark's third contract, the Great Grey (the GDD's hunt): a real animal, shot, driven, sold or lost. */
 export const HUNT_RESOLUTIONS = ["grey_trophy", "grey_driven", "grey_sold", "grey_escaped"] as const satisfies readonly ResolutionId[];
 export type HuntEnding = (typeof HUNT_RESOLUTIONS)[number];
+/** D-095: Kessar's sixth contract, the Siege of the Counting-House (the GDD's siege): offered only while the Syndicate keeps a post at Kessar. */
+export const SIEGE_RESOLUTIONS = ["siege_honours", "siege_stormed", "siege_bought", "siege_lifted"] as const satisfies readonly ResolutionId[];
+export type SiegeEnding = (typeof SIEGE_RESOLUTIONS)[number];
 export type SaltmarketEnding = (typeof SALTMARKET_RESOLUTIONS)[number];
-/** Every ending in the D-037 shape (35: Vesper's eight and the Saltmarket's twelve, the strike's four, the engine's four, the raid's three, the hunt's four). Tests that script Kessar's twenty or Highmark's chair exclude these. */
-export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS, ...REAPERS_RESOLUTIONS, ...ENGINE_RESOLUTIONS, ...RAID_RESOLUTIONS, ...HUNT_RESOLUTIONS] as const;
+/** Every ending in the D-037 shape (39: Vesper's eight and the Saltmarket's twelve, the strike's four, the engine's four, the raid's three, the hunt's four, the siege's four). Tests that script Kessar's twenty or Highmark's chair exclude these. */
+export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS, ...REAPERS_RESOLUTIONS, ...ENGINE_RESOLUTIONS, ...RAID_RESOLUTIONS, ...HUNT_RESOLUTIONS, ...SIEGE_RESOLUTIONS] as const;
 export type NewEnding = (typeof NEW_RESOLUTIONS)[number];
 
 /** What each new template can end as (each has >= 3 materially different endings besides the shared `abandoned`). */
@@ -50,6 +53,7 @@ export const NEW_TEMPLATE_RESOLUTIONS = {
   outpost_raid: ["post_held", "post_burned", "protection_paid", "abandoned"],   // D-045 (Kessar)
   lost_survey: ["survey_home", "chart_ceded", "survey_sold", "survey_lost", "abandoned"],   // D-093 (the Saltmarket)
   great_grey: ["grey_trophy", "grey_driven", "grey_sold", "grey_escaped", "abandoned"],   // D-094 (Highmark)
+  counting_house: ["siege_honours", "siege_stormed", "siege_bought", "siege_lifted", "abandoned"],   // D-095 (Kessar)
 } as const satisfies Partial<Record<ScenarioTemplateId, readonly ResolutionId[]>>;
 export type NewTemplateId = keyof typeof NEW_TEMPLATE_RESOLUTIONS;
 export type VesperTemplate = "mine_rescue" | "claim_race" | "winding_engine";
@@ -61,7 +65,7 @@ export const isNewTemplate = (t: unknown): t is NewTemplateId => typeof t === "s
 export const TEMPLATE_REGION: Readonly<Record<ScenarioTemplateId, RegionId>> = {
   secure_crossing: "kessar", hostage_rescue: "kessar", convoy_ambush: "kessar", border_incident: "kessar", succession_dispute: "highmark",
   mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket", reapers_strike: "highmark", winding_engine: "vesper", outpost_raid: "kessar",
-  lost_survey: "saltmarket", great_grey: "highmark",
+  lost_survey: "saltmarket", great_grey: "highmark", counting_house: "kessar",
 };
 
 /** What one ending does to a minor power's mood (integer deltas, applied after the day's drift, clamped 0..100). */

@@ -1022,7 +1022,7 @@ describe("D-084: powder by the post", () => {
     return kegs.slice(own).map((p) => ({ x: p.x, z: p.z }));
   };
   it("every contract with an armed party against it at the start keeps two or three kegs by its post; the talk-only ones and the late arrivals none; placed the same way for the same run", () => {
-    const armed: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "claim_race", "smuggling_run", "lost_survey"];   // (D-093: the Houses' two wardens at the hut)
+    const armed: ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "claim_race", "smuggling_run", "lost_survey", "counting_house"];   // (D-093: the Houses' two wardens at the hut; D-095: the Counting-House's two guns in the yard)
     for (const id of TEMPLATE_IDS) {
       const posts: { x: number; z: number }[] = [];
       const kegs = storeOf(id, 424242, posts);

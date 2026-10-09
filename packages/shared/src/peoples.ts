@@ -128,6 +128,7 @@ export function peopleForNpc(role: number, region: RegionId): PeopleId | undefin
     case NPC.FACTOR:
       return "brinefolk";
     case NPC.DRIVER:
+    case NPC.PICKET:
     case NPC.PORTER:
     case NPC.HOSTAGE:
       return PEOPLE_OF_REGION[region];

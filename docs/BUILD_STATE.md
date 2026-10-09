@@ -1,9 +1,20 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-09 (D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-09 (D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-095 (2026-10-09): the Siege of the Counting-House.** The GDD's "siege", as Kessar's sixth contract. Fifteen templates now; the GDD's survey and audience remain.
+  - **The job.** Lay siege to the Syndicate's trading post on Kessar's south bank, by the War Committee's Articles. It is offered only while that post stands, and not while the Syndicate's raid on the party's post is due. You can:
+    - invest it (stand on three picket marks; the Ward's boys take them up), keep the pickets through two sabre sallies, and summon the factor once his stores are out, his relief beaten or half his guns down: the honours of war;
+    - storm it (a shot into the post, even a miss, starts it): three of its four guns down or run;
+    - buy it at his counter as a going concern.
+    The relief launch is the clock: two of it in the yard lift the siege.
+  - **Endings.** Honours (won), stormed (won), bought (partial), lifted (lost), abandoned. A won or bought siege strikes the Syndicate's post at Kessar and rebuilds the world without it.
+  - **Also.** Every siege point and the raid's road are now Kessar story points, so no seeded rock can block either on any seed (the raid's road had only been proven on seven).
+  - **Tested.** Shared (every ending, the ground on seven seeds and every post stage), server (the runner on a fake host; a real room: the post solid, a picket boy, a real rifle ball starting the storm, the post struck when it falls) and bots (the honours in 71 s; a lone storm is shot down).
+  - **Looked at.** Software-rendered stills of the post, its garrison, the factor and the Ward's boys, each holding the Society's pennant (a planted picket reads from across the field).
+  - **Limits.** Unplayed by a person. The post is struck when the outcome is committed, not before the party's eyes.
 - **D-094 (2026-10-09): the Great Grey.** The GDD's "hunt", as Highmark's third contract, and the game's first animal you can hunt. Fourteen templates now.
   - **The job.** The herds' old grey sire is in the Reapers' barley. You can:
     - shoot him for the Club's wall (lawfully, with the Master of the Royal Hunt's licence, or as poaching without it);

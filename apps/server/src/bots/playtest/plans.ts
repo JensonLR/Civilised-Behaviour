@@ -53,11 +53,11 @@ async function sailHome(p: Pilot, landing: { x: number; z: number }): Promise<vo
 
 /** Fights the group until the contract resolves, the pilot is down, or time runs out. Takes cover by standing still behind nothing: a deliberately plain shooter. */
 /** `hold`: a defender behind a wall shoots what comes into sight and never walks out to look for it (the fortified post's gate). */
-async function fight(p: Pilot, prefix: string, ms: number, hold = false): Promise<void> {
+async function fight(p: Pilot, prefix: string, ms: number, hold = false, stop?: () => boolean): Promise<void> {
   p.draw(WEAPON.RIFLE);
   await p.sleep(1200);
   const end = Date.now() + ms;
-  while (Date.now() < end && p.view?.resolution === undefined && p.me && (p.me.flags & FLAG.DOWNED) === 0 && p.me.health > 0) {
+  while (Date.now() < end && p.view?.resolution === undefined && p.me && (p.me.flags & FLAG.DOWNED) === 0 && p.me.health > 0 && !(stop?.() ?? false)) {
     const live = p.npcs(prefix).filter(([, n]) => n.health > 0 && (n.flags & FLAG.DOWNED) === 0);
     if (!live.length) break;
     const me = p.pos;
@@ -657,6 +657,65 @@ export const PLANS: Plan[] = [
       await p.sleep(500);
       if (p.parley) await p.pick(/Walk away/);
       await fight(p, "grey", 120_000);
+      await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+    },
+  },
+  // D-095: the Siege of the Counting-House, at a real Syndicate post (`synpost:2`: the dev-forced contract stands none). By the Articles: plant the three pickets, keep them standing
+  // through the sallies (stand on the mark a sally is going for, and fight it there), and summon the factor when his stores are out. A miss toward the post is a storm, which also ends it.
+  {
+    name: "siege-honours",
+    join: { region: "kessar", scenario: "counting_house", seed: SEED },
+    expect: ["siege_honours", "siege_stormed"],
+    async run(p) {
+      p.debug("synpost:2");
+      p.debug("give:all");
+      await p.sleep(1000);
+      const G = KS.siege;
+      const end = Date.now() + 360_000;
+      while (Date.now() < end && p.view?.resolution === undefined) {
+        const first = p.view?.objectives.find((o) => !o.done);
+        const sally = p.view?.objectives.find((o) => /^sally\d$/.test(o.id));
+        if (/now$/.test(p.view?.objectives.find((o) => o.id === "terms")?.text ?? "")) break;
+        if (sally) {
+          const m = G.pickets[Number(sally.id.slice(5))]!;
+          await p.goTo(m.x, m.z, { within: 1.2, sprint: true, ms: 20_000, label: "the picket the sally is going for" });
+          // (and stop when the sally is broken: its men run home through the post, and a round after them there is the storm)
+          await fight(p, "sally-", 40_000, true, () => !p.view?.objectives.some((o) => /^sally\d$/.test(o.id)));
+        } else if (first && /^picket\d$/.test(first.id)) {
+          const m = G.pickets[Number(first.id.slice(6))]!;
+          await p.goTo(m.x, m.z, { within: 1.2, sprint: true, ms: 30_000, label: `the ${first.id} mark` });
+        } else await p.sleep(1000);
+      }
+      if (p.view?.resolution === undefined && (await talkTo(p, "factor", 2.4))) await p.pick(/Summon him/);
+      await p.until(() => p.view?.resolution !== undefined, 10_000, "resolution");
+    },
+  },
+  {
+    name: "siege-storm",
+    join: { region: "kessar", scenario: "counting_house", seed: SEED },
+    expect: ["siege_stormed", "abandoned"],
+    async run(p) {
+      p.debug("synpost:2");
+      p.debug("give:all");
+      await p.sleep(1000);
+      // up from the river side, where the yard's two guns face; open with the post's own powder (D-084: its store stands by the yard's guns), then go in over the counter
+      await p.goTo(KS.siege.pickets[0]!.x, KS.siege.pickets[0]!.z, { within: 2, sprint: true, label: "north of the post" });
+      const keg = nearestProp(p, PropKind.BARREL, KS.siege.yard.x, KS.siege.yard.z, 9);
+      if (keg) {
+        p.draw(WEAPON.RIFLE);
+        await p.sleep(1200);
+        const shots = p.me!.shots;
+        p.aim({ x: keg.x, y: (p.bot.room.state.props.get(keg.id)?.y ?? 0) + 0.35, z: keg.z });
+        p.holdButtons(BUTTON.AIM);
+        await p.sleep(500);
+        p.holdButtons(BUTTON.AIM | BUTTON.FIRE);
+        await p.until(() => p.me!.shots !== shots, 2000, "the shot at the kegs");
+        p.holdButtons(BUTTON.AIM);
+        p.note(`fired at the post's kegs at ${keg.x.toFixed(1)},${keg.z.toFixed(1)}`);
+        await p.sleep(1500);
+      } else p.note("NO KEGS by the post");
+      await fight(p, "garrison-", 120_000);
+      await fight(p, "sally-", 120_000);
       await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
     },
   },

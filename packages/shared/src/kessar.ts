@@ -8,7 +8,7 @@ import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLe
 import { PropKind, type PropSpawn } from "./props.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
-import { rivalPostObstacles, withOutpost } from "./outpost.ts";
+import { KESSAR_OUTPOST, rivalPostObstacles, withOutpost } from "./outpost.ts";
 import type { OutpostStage } from "./worldTypes.ts";
 
 /**
@@ -531,11 +531,17 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
 
 /** Every story point of the newer sites, named (the dressing keeps clear of them and the tests prove each is open and reachable). */
 export function kessarSitePoints(): { id: string; x: number; z: number }[] {
-  const H = SITES.hostage, C = SITES.convoy, B = SITES.border;
+  const H = SITES.hostage, C = SITES.convoy, B = SITES.border, S = SITES.siege, R = SITES.raid, P = KESSAR_OUTPOST.site;
   return [
     { id: "hostage.cage", ...H.cage }, ...H.posts.map((p, i) => ({ id: `hostage.post${i}`, ...p })), { id: "hostage.lookout", ...H.lookout },
     ...C.route.map((p, i) => ({ id: `convoy.route${i}`, ...p })), { id: "convoy.cut", ...C.cut },
     { id: "border.marker", ...B.marker }, ...B.ward.map((p, i) => ({ id: `border.ward${i}`, ...p })), ...B.rival.map((p, i) => ({ id: `border.rival${i}`, ...p })),
+    // D-045's raid (its walk, its turn for the gate and the gate's approach down to the post's yard), made story points by D-095
+    ...R.walk.map((p, i) => ({ id: `raid.walk${i}`, ...p })), { id: "raid.round", ...R.round }, { id: "raid.gate", x: P.x, z: P.z - 18 }, { id: "raid.approach", x: P.x, z: P.z - 8 },
+    // D-095: the siege's ground (every point a leg of its walks starts or ends at, so the scatter keeps out of every leg)
+    { id: "siege.yard", x: S.yard.x, z: S.yard.z }, ...S.pickets.map((p, i) => ({ id: `siege.picket${i}`, ...p })), ...S.garrison.map((p, i) => ({ id: `siege.garrison${i}`, ...p })),
+    ...S.sallyPosts.map((p, i) => ({ id: `siege.sallyPost${i}`, ...p })), { id: "siege.factor", ...S.factor },
+    ...S.sallies.flatMap((r, k) => r.map((p, i) => ({ id: `siege.sally${k}.${i}`, ...p }))), ...S.relief.map((p, i) => ({ id: `siege.relief${i}`, ...p })),
   ];
 }
 

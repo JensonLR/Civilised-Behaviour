@@ -16,6 +16,7 @@ import { windingEngineTemplate } from "./windingEngine.ts";
 import { outpostRaidTemplate } from "./outpostRaid.ts";
 import { lostSurveyTemplate } from "./lostSurvey.ts";
 import { greatGreyTemplate } from "./greatGrey.ts";
+import { countingHouseTemplate } from "./countingHouse.ts";
 import { smugglingRunTemplate } from "./smugglingRun.ts";
 import { successionTemplate } from "./succession.ts";
 import type { AnyTemplate } from "./types.ts";
@@ -30,6 +31,7 @@ export { ENGINE } from "./windingEngine.ts";
 export { RAID, RAID_SITES } from "./outpostRaid.ts";
 export { LOST } from "./lostSurvey.ts";
 export { HUNT } from "./greatGrey.ts";
+export { SIEGE } from "./countingHouse.ts";
 
 /** Every template, by id. The runner (server `Scenario`) is generic over this table. */
 export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
@@ -47,12 +49,13 @@ export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
   outpost_raid: outpostRaidTemplate as unknown as AnyTemplate,   // D-045: Kessar's fifth
   lost_survey: lostSurveyTemplate as unknown as AnyTemplate,   // D-093: the Saltmarket's third
   great_grey: greatGreyTemplate as unknown as AnyTemplate,   // D-094: Highmark's third
+  counting_house: countingHouseTemplate as unknown as AnyTemplate,   // D-095: Kessar's sixth
 };
-export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike", "winding_engine", "outpost_raid", "lost_survey", "great_grey"];
+export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike", "winding_engine", "outpost_raid", "lost_survey", "great_grey", "counting_house"];
 /** D-036: the contracts each region offers (the ledger weights WITHIN a region's list; Kessar's four are unchanged). D-042: Highmark has two. */
 export const REGION_TEMPLATES: Readonly<Record<RegionId, readonly ScenarioTemplateId[]>> = {
   hollowmere: [],
-  kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "outpost_raid"],   // D-045: the raid only while one is due
+  kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "outpost_raid", "counting_house"],   // D-045: the raid only while one is due; D-095: the siege only while the Syndicate keeps a post
   highmark: ["succession_dispute", "reapers_strike", "great_grey"],
   vesper: ["mine_rescue", "claim_race", "winding_engine"],   // D-037; D-044 the engine
   saltmarket: ["smuggling_run", "flooded_market", "lost_survey"],
@@ -89,6 +92,9 @@ export function pickTemplate(c: CampaignState, region: RegionId, seed: number, p
     border_incident: 1 + (w.militaryStrength >= 55 && w.rivalInfluence >= 35 ? 4 : 0) + (presence !== undefined && presence.postStage > 0 ? 3 : 0),
     // D-045: the raid is offered only while the Syndicate means to raid the party's post, and then above everything else (a weight of 0 otherwise keeps the hashed old weights byte-identical)
     outpost_raid: presence?.raidDue ? 12 : 0,
+    // D-095: the siege only while the Syndicate keeps a post at Kessar (0 without a presence or a post, so the hashed old weights stay byte-identical), and not while its raid on
+    // the party's own post is due: the post is defended before the Syndicate's is besieged
+    counting_house: presence !== undefined && presence.postStage > 0 && !presence.raidDue ? 5 : 0,
     succession_dispute: 0,   // never offered at Kessar
     mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0, reapers_strike: 0, winding_engine: 0, lost_survey: 0, great_grey: 0,   // (D-037, D-042, D-093, D-094: nor are the later regions' contracts)
   };

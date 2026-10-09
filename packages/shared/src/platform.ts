@@ -25,6 +25,8 @@ export const ACHIEVEMENTS = [
   "nineteen_canals",
   // D-094: the Great Grey
   "luck_of_the_herds",
+  // D-095: the Siege of the Counting-House
+  "honours_of_war",
 ] as const;
 export type AchievementId = (typeof ACHIEVEMENTS)[number];
 export const isAchievementId = (v: unknown): v is AchievementId => typeof v === "string" && (ACHIEVEMENTS as readonly string[]).includes(v);
