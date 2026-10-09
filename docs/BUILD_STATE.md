@@ -1,9 +1,20 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-03 (D-050 to D-060 are under "Now". Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-09 (D-091, the industrial age, heads "Now"; D-050 to D-090 are under it. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-091 (2026-10-09): the industrial age.** Three of the GDD's four late technologies now exist, latched like the road, the wire and the launch (no menu). The fourth, early machine weapons, is not built yet.
+  - **The railway.** It comes once Kessar's post has been a town for three days with the level-2 road and the wire. It adds 20 kg of carrying capacity, and the post loses 1 supply a day instead of 3. In the world it is a siding east of the stockade: nine yards of track, a green tank engine, buffer stops and a water tank. The paper calls the line "to follow".
+  - **Breech-loaders.** They come once a post is held as a garrison for four days, or with any town. A player's rifle and pistol then reload in 0.6 of the time, set by the server.
+  - **The works.** It goes beside the first settlement whose priority is extraction. It pays £9 a day and gives the region's home power a grievance. In the world it is a brick engine-house with a chimney and a spoil heap, north of the gate at Kessar or Highmark.
+  - **Shown.** Each has paper stories, an HQ pennant, a line on the campaign map and an achievement.
+  - **Layout fixes in the town.** A new footprint test found pre-existing overlaps, now fixed at the cause:
+    - a telegraph pole stood in the camp's tent, another in a hut, and the last in the bridge's fingerpost;
+    - a hut had a corner inside a tower;
+    - another hut stood through the stockade wall;
+    - the road ran under the stockade wall and three buildings. It now runs out through the gate.
+  - **Verified.** Shared, raid-ground and server tests pass, and so do the overlap and ground audits with all of it drawn. Looked at in software-rendered stills. Unplayed by a person; every number is a first pass.
 - **Villagers never stand in each other (2026-10-09, D-090 follow-up).** Every person at a station stood on its one point, so two or three villagers merged into one body (idling, reading on one bench seat, sheltering on the hall's porch bench). Each station now has its own places, every person gets a place of their own for as long as they may be there, and they walk onto it; only a seat is sat on, and a walker steps round anybody standing in the way. Tested over a day on two seeds, dry and wet: standing people are never nearer than 0.7 m. Looked at in the rain at the hall's porch. Unplayed by a person.
 - **D-090 (2026-10-08): nothing passes through anything.** The owner asked that placed things not overlap. A new audit (`overlapAudit.test.ts`) checks every region, with and without a founded town: nothing built through a plant, stone, tree or anything else built, no animal through anything but grass, no two animals in each other. Everything it found is fixed at the cause.
   - Plants growing through built things (grass out of ruins, reeds through stepping stones, a bush in Kessar's keep) are hidden once the view is built and again when a town is founded (`plantCull.ts`): 181 of about 25,000 on seed 7.

@@ -24,8 +24,10 @@ import {
   type HitMarkEvent,
   type ImpactEvent,
   type PlayerStateType,
+  type SettlementsState,
   type ShotEvent,
   type WeaponId,
+  INDUSTRY,
 } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
@@ -537,6 +539,36 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       expect(a.p.shots).toBe((shots + 1) & 255); // one ball, after the draw; 1.5 s more of holding (four cooldowns) fired nothing more
       frame(a, { buttons: BUTTON.AIM, yaw, aimYaw: yaw, aimElev: 0, weapon: WEAPON.PISTOL });
       await sleep(100);
+    }, 30000);
+
+    it("D-091: once the armourers issue breech-loaders, the party's rifle reloads in the breech-loader's share of its time (a row's gun is its own)", async () => {
+      const { room, ps } = await setup(1);
+      const [a] = ps as [Player];
+      place(a.p, 0, 0);
+      combatOf(room).give(a.id);
+      const dir = openBearing(room, 20);
+      const yaw = yawTo({ x: 0, z: 0 }, { x: Math.cos(dir), z: Math.sin(dir) });
+      await equip(a, WEAPON.RIFLE);
+      const send = async (buttons: number, ms: number): Promise<void> => {
+        const end = Date.now() + ms;
+        do {
+          frame(a, { buttons, yaw, aimYaw: yaw, aimElev: 0, weapon: WEAPON.RIFLE });
+          await sleep(33);
+        } while (Date.now() < end);
+      };
+      const total = async (): Promise<number> => {
+        await send(BUTTON.AIM | BUTTON.FIRE, 100);
+        await send(BUTTON.AIM, 1000);
+        await send(BUTTON.AIM | BUTTON.RELOAD, 100);
+        const t = combatOf(room).inspect(a.id)!.reloadTotal;
+        await send(BUTTON.AIM, Math.ceil(combatOf(room).inspect(a.id)!.reloadLeft * 1000) + 400);
+        return t;
+      };
+      const own = WEAPONS[WEAPON.RIFLE].ranged!.reload;
+      expect(await total()).toBeCloseTo(own, 5);
+      const priv = room as unknown as { settlements: SettlementsState };
+      priv.settlements = { ...priv.settlements, tech: { ...priv.settlements.tech, breech: true } };
+      expect(await total()).toBeCloseTo(own * INDUSTRY.breechReload, 5);
     }, 30000);
 
     it("D-048: a trigger squeezed during a reload fires the moment the reload completes if still held (once); let go before the end, and nothing fires", async () => {

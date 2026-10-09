@@ -72,7 +72,14 @@ describe("outpost geometry", () => {
   it("the road is a ground ribbon: none at level 0, wider at level 2, finite and hugging the terrain", () => {
     expect(buildRoadRibbon(world, 0)).toBeUndefined();
     const r1 = buildRoadRibbon(world, 1)!, r2 = buildRoadRibbon(world, 2)!;
-    expect(tris(r2)).toBeGreaterThan(tris(r1));
+    // (D-091: both levels run the one way, out through the gate; level 2 is the same road, wider. Each cross-section is three vertices, edge to edge.)
+    const width = (g: typeof r1): number => {
+      const q = g.attributes.position!.array as ArrayLike<number>;
+      return Math.hypot(q[6]! - q[0]!, q[8]! - q[2]!);
+    };
+    expect(tris(r2)).toBe(tris(r1));
+    expect(width(r1)).toBeCloseTo(2.2, 3);
+    expect(width(r2)).toBeCloseTo(3.4, 3);
     const p = r2.attributes.position!.array as ArrayLike<number>;
     for (let i = 0; i < p.length; i += 3) {
       expect(Number.isFinite(p[i]! + p[i + 1]! + p[i + 2]!)).toBe(true);

@@ -253,7 +253,9 @@ export class CampaignMap {
 
     // what has been latched: words, not colour
     const t = data.tech;
-    this.root.append(h("p", { class: "tech" }, `Infrastructure: ${roadWord(t.road)}; ${t.telegraph ? "a telegraph line (news travels, wrongly, faster)" : "no telegraph"}; ${t.launch ? "a steam launch at the landing" : "no steam launch"}.`));
+    // (D-091: the industrial age, only once it has come: a map that lists what nobody has yet is a list of disappointments)
+    const age = [t.railway ? "a railway (nine yards, the rest to follow)" : "", t.breech ? "breech-loading rifles for the garrison" : "", t.works ? `the works at ${data.regions.find((r) => r.id === t.works)?.name ?? t.works}` : ""].filter((x) => x !== "");
+    this.root.append(h("p", { class: "tech" }, `Infrastructure: ${roadWord(t.road)}; ${t.telegraph ? "a telegraph line (news travels, wrongly, faster)" : "no telegraph"}; ${t.launch ? "a steam launch at the landing" : "no steam launch"}${age.length ? `; ${age.join("; ")}` : ""}.`));
     for (const l of data.lanes) this.root.append(h("p", { class: "lane-note" }, `${data.regions.find((r) => r.id === l.to)?.name ?? l.to}: ${sailLong(l.seconds)}.`));
 
     // the Syndicate

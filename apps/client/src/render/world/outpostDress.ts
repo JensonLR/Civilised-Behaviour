@@ -18,7 +18,7 @@ export class OutpostDress {
 
   /** True when something was rebuilt (the caller recounts its stats). */
   apply(d: RegionDress): boolean {
-    const key = `${d.outpost}|${d.rivalPost}|${d.road}|${d.telegraph}|${d.launch}|${d.name}`;
+    const key = `${d.outpost}|${d.rivalPost}|${d.road}|${d.telegraph}|${d.launch}|${d.name}|${d.railway === true}|${d.works === true}`;
     if (key === this.key) return false;
     this.key = key;
     this.clear();

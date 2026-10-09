@@ -98,7 +98,8 @@ export function regionNavOptions(id: RegionId, world: CollisionWorld): NavOption
 
 /** The collision world of a region. `opts` (bridge, outpost stage, telegraph) matter where they exist (the bridge to Kessar, the outpost to Kessar and Highmark): the world is a pure function of (seed, those). */
 export function createRegionWorld(id: RegionId, seed: number, opts?: RegionWorldOpts): CollisionWorld {
-  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph, rivalPost: opts?.rivalPost }) : id === "highmark" ? createHighmarkWorld(seed, { outpost: opts?.outpost, telegraph: opts?.telegraph })
+  return id === "kessar" ? createKessarWorld(seed, opts?.bridge ?? "intact", { outpost: opts?.outpost, telegraph: opts?.telegraph, rivalPost: opts?.rivalPost, railway: opts?.railway, works: opts?.works })
+    : id === "highmark" ? createHighmarkWorld(seed, { outpost: opts?.outpost, telegraph: opts?.telegraph, works: opts?.works })
     : id === "vesper" ? createVesperWorld(seed) : id === "saltmarket" ? createSaltmarketWorld(seed) : createArena(seed);
 }
 

@@ -55,6 +55,9 @@ export const ACHIEVEMENT_RULES: Readonly<Record<AchievementId, Rule>> = {
   unscheduled_flight: (c) => (c.sites.lastBill?.bill.longest ?? 0) >= 20,
   museum_piece: (c) => (c.sites.lastBill?.bill.limbs ?? 0) >= 5,
   umbrella_man: (c) => (c.sites.lastBill?.bill.brolly ?? 0) >= 1,
+  /** D-091: the railway reaches Kessar's town; the works opens beside an extraction post. */
+  perseverance: (_c, _p, s) => s.tech.railway,
+  dividend_day: (_c, _p, s) => s.tech.works !== "",
 };
 
 /** Ids the campaign has earned and `already` does not hold, in table order. Never throws on a hostile or partial state (an unreadable campaign earns nothing). */

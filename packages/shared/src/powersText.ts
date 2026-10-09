@@ -308,6 +308,15 @@ export const NEWS: Record<string, NewsDef> = {
     head: ["Society Plants a Flag in the Barley", "A Post on the Grass; Reapers Count the Customers", "Highmark Foundation Laid, Cattle Rerouted"],
     body: ["Four crates have been laid on the grass west of the Reed Landing. The Reapers call it a market for the barley. The Syndicate calls it trespass with paperwork. The cattle have been asked to graze elsewhere and have agreed, slowly.", "The Society has a post on the high grass. The Assembly has asked whether it pays rates; the Society has asked what rates are.", "The first crate went down by the landing at dawn; the herd moved off by noon, offended. The Reapers sent bread."],
   },
+  // D-091
+  settle_railway: {
+    head: ["Railway Opens; Syndicate Files Objection in Triplicate", "The Line Is Laid, the Concession Lost", "Brine Houses Ship by Rail; Syndicate by Letter"],
+    body: [
+      "{A} had wanted the railway concession for itself and has written to say so, at length, on headed paper. The Society hears that {b} has already booked a wagon.",
+      "The rails reached the post this week. {A} calls it a breach of an understanding nobody else remembers; {b} calls it Tuesday's freight.",
+      "{A} has asked who authorised a railway; {b} has asked when the next train is. The Society has answered neither, on principle.",
+    ],
+  },
   settle_raided: {
     head: ["Society Post Subject to Unscheduled Inspection", "An Outpost Has Been Visited", "Raid on the Post: Everyone Regrets It Politely"],
     body: ["An outpost was visited in the night by persons who left no cards. Damage is described as 'communicative'.", "The Society regards the matter as an inspection and reserves its right to be inspected back.", "Nobody has claimed responsibility. Everyone has claimed to be shocked."],

@@ -5,7 +5,7 @@ import { PropKind } from "./props.ts";
 import { Rng } from "./rng.ts";
 import { SAIL_SECONDS, type CampaignState } from "./campaignTypes.ts";
 import {
-  DELIVERY, DWELL, SUPPLY_DECAY, deliverEffect, deliverTo, evolveSettlements, foundationStatus, newSettlements, parseSettlements, raidOutpost, regionDressOf, regionWorldOpts, serializeSettlements,
+  DELIVERY, DWELL, SUPPLY_DECAY, deliverEffect, deliverTo, evolveSettlements, foundationStatus, newSettlements, newTech, parseSettlements, raidOutpost, regionDressOf, regionWorldOpts, serializeSettlements,
   settlementDispatches, settlementNews, techEffects, techOf, worldKey,
 } from "./settlement.ts";
 import { OUTPOST_STAGES, SETTLEMENTS_JSON_MAX, FOUNDATION_CRATES, type OutpostStage, type RegionClimate, type SettlementEvent, type SettlementEventKind, type SettlementsState } from "./worldTypes.ts";
@@ -205,7 +205,7 @@ describe("settlements: evolution", () => {
 
   it("the telegraph is blocked by a fallen bridge (unless trade is high) and by a Syndicate-held crossing; the launch halves the sailing", () => {
     const base = haul(60, GOOD, camp(1)).s;
-    const fresh: SettlementsState = { ...base, tech: { road: 0, telegraph: false, launch: false, since: { road: 0, telegraph: 0, launch: 0 } } };
+    const fresh: SettlementsState = { ...base, tech: newTech() };
     const post = { ...base.posts.kessar!, stage: "settlement" as const, stageSince: 1, trade: 60, priority: "trade" as const };
     const s0: SettlementsState = { ...fresh, posts: { kessar: post } };
     const c = camp(30);
@@ -217,8 +217,8 @@ describe("settlements: evolution", () => {
     expect(after(rival)).toBe(false);
     const ford = { ...s0, posts: { kessar: { ...post, trade: 75 } } };
     expect(techOf({ ...ford, tech: techOf(ford, down, GOOD) }, down, GOOD).telegraph).toBe(true);
-    expect(techEffects(newSettlements().tech)).toEqual({ sailSeconds: undefined, capacityKg: 0, intelDays: 0 });
-    const t = techEffects({ road: 2, telegraph: true, launch: true, since: { road: 1, telegraph: 1, launch: 1 } });
+    expect(techEffects(newSettlements().tech)).toEqual({ sailSeconds: undefined, capacityKg: 0, intelDays: 0, reloadScale: 1 });
+    const t = techEffects({ ...newTech(), road: 2, telegraph: true, launch: true, since: { ...newTech().since, road: 1, telegraph: 1, launch: 1 } });
     expect(t.sailSeconds).toBe(SAIL_SECONDS / 2);
     expect(t.capacityKg).toBe(40);
     expect(t.intelDays).toBe(2);
@@ -269,11 +269,17 @@ describe("settlements: what the world and the view read", () => {
     expect(keys.size).toBe(2 * OUTPOST_STAGES.length * 2);
     expect(worldKey({ bridge: "rigged" })).toBe(worldKey({ bridge: "intact" }));
     expect(worldKey({})).toBe(worldKey({ bridge: "intact", outpost: "none", telegraph: false }));
+    // D-091: the railhead and the works are new worlds; without them every older world keeps its key
+    const town = { bridge: "intact", outpost: "town", telegraph: true } as const;
+    expect(worldKey({ ...town, railway: false, works: false })).toBe(worldKey(town));
+    expect(new Set([worldKey(town), worldKey({ ...town, railway: true }), worldKey({ ...town, works: true }), worldKey({ ...town, railway: true, works: true })]).size).toBe(4);
   });
   it("regionWorldOpts reads both JSON strings and shrugs off garbage", () => {
     const c = applyOutcome(newCampaign(1), { scenario: "secure_crossing", resolution: "sabotaged", toll: 40, paid: 0, bridge: "collapsed", brokePromise: false, seconds: 1, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 } });
     const r = haul(60, GOOD, camp(1)).s;
-    expect(regionWorldOpts(serializeCampaign(c), serializeSettlements(r))).toEqual({ bridge: "collapsed", outpost: "town", telegraph: true });
+    // (D-091: sixty good days make a town that has its railway, and its extraction priority built the works beside it)
+    expect(regionWorldOpts(serializeCampaign(c), serializeSettlements(r))).toEqual({ bridge: "collapsed", outpost: "town", telegraph: true, railway: true, works: true });
+    expect(regionWorldOpts(serializeCampaign(c), serializeSettlements(r), "highmark")).toEqual({ bridge: "collapsed", outpost: "none", telegraph: false });
     expect(regionWorldOpts("nope", "nope")).toEqual({ bridge: "intact", outpost: "none", telegraph: false });
     expect(regionWorldOpts(serializeCampaign(newCampaign(1)), serializeSettlements(newSettlements()))).toEqual({ bridge: "intact", outpost: "none", telegraph: false });
   });
@@ -289,7 +295,7 @@ describe("settlements: what the world and the view read", () => {
 describe("settlements: the paper", () => {
   it("every event kind has at least three authored variants and prints deterministically, filled in", () => {
     const kinds = Object.keys(SETTLEMENT_NEWS) as SettlementEventKind[];
-    expect(kinds.length).toBe(9);
+    expect(kinds.length).toBe(12); // (D-091 added the railway, the breech-loaders and the works)
     for (const k of kinds) {
       expect(SETTLEMENT_NEWS[k].head.length, k).toBeGreaterThanOrEqual(3);
       expect(SETTLEMENT_NEWS[k].body.length, k).toBeGreaterThanOrEqual(3);

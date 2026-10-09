@@ -262,7 +262,8 @@ describe("the raid's ground (D-045): every stage, both bridges, five seeds", () 
     const pts = [RAID_SITES.landing, RAID_SITES.muster, RAID_SITES.ranks, ...RAID_SITES.route, ...RAID_SITES.assault];
     expect(RAID_SITES.assault.slice(0, RAID_SITES.route.length), "the assault is the muster walk, continued").toEqual(RAID_SITES.route);
     for (const seed of [1, 7, 19, 42, 91, 4242, 4243]) for (const st of OUTPOST_STAGES) for (const bridge of ["intact", "collapsed"] as const) {
-      const w = createKessarWorld(seed, bridge, { outpost: st, telegraph: st === "town" });
+      // (D-091: with the railhead and the works too, where the stage has them: the plan stands each only at its stage)
+      const w = createKessarWorld(seed, bridge, { outpost: st, telegraph: st === "town", railway: true, works: true });
       const q = new NavQuery(buildNavGrid(w, kessarNavOptions(w)));
       for (const p of pts) expect(q.open(p.x, p.z), `${st} ${bridge} @${seed}: ${p.x},${p.z} open`).toBe(true);
       // (the bot playtest's town-stage check found 52,58 -> 46,60 through a house; the Cast does not plan between a route's points)

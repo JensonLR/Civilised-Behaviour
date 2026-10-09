@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
 import {
-  CAMP, FLAG, KESSAR_ANCHORS, MoveInput, createRegionWorld, ROOM_WORLD, SAIL_SECONDS, audiencesAt, newCampaign, parseCampaign, parsePowers, parseSettlements, serializeCampaign, serializePowers, serializeSettlements,
+  CAMP, FLAG, KESSAR_ANCHORS, MoveInput, createRegionWorld, ROOM_WORLD, SAIL_SECONDS, audiencesAt, newCampaign, parseCampaign, parsePowers, parseSettlements, newTech, serializeCampaign, serializePowers, serializeSettlements,
   type CampaignState, type ParleyView, type PlayerStateType, type PowersState, type SettlementsState,
 } from "@cb/shared";
 import { createGameServer } from "../app.ts";
@@ -142,7 +142,7 @@ describe("campaign world: audiences, the launch, standing deals (server authorit
     await until(() => room.state.travelPhase === 0, 3000, "ashore");
     // the launch is built (latched): the sailing home is shorter
     const s = parseSettlements(room.state.settlements)!;
-    priv.settlements = { ...s, tech: { road: 1, telegraph: false, launch: true, since: { road: 1, telegraph: 0, launch: 1 } } };
+    priv.settlements = { ...s, tech: { ...newTech(), road: 1, launch: true, since: { ...newTech().since, road: 1, launch: 1 } } };
     priv.publishSettlements();
     place(priv, me.p, 0, 88);
     await sleep(1100); // (the propose cooldown)
