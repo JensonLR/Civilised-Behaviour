@@ -481,3 +481,13 @@ html .pause #pause-info { font-size: 0.82rem; }
   html .pause > .hintbar { grid-area: hints; }
 }
 html .pause .menu .pair button { white-space: nowrap; padding-inline: 0.5rem; font-size: 0.94rem; letter-spacing: 0.05em; } /* ("How to / play" wrapped in its half of the column) */
+/* a phone held sideways: the talk strip may take more of the height, and its answers are set tighter, so six of them fit without a scroll */
+@media (max-height: 34rem) {
+  html #sheet-parley .panel.sheet.parley { max-height: 86vh; padding-top: 0.85rem; } /* (clear of the inset rule round the sheet) */
+  html #sheet-parley .parley h2 { font-size: 1rem; margin-bottom: 0.15rem; }
+  html #sheet-parley .sheet.parley .line { font-size: 0.88rem; line-height: 1.25; margin-bottom: 0.25rem; }
+  html #sheet-parley .sheet.parley .opt { padding: 0.2rem 0.4rem 0.22rem 1.4rem; }
+  html #sheet-parley .parley .opt .label { font-size: 0.9rem; }
+  html #sheet-parley .parley .opt .hint { font-size: 0.76rem; line-height: 1.18; }
+  html #sheet-parley .sheet.parley .options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+}

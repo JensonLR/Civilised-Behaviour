@@ -12,3 +12,6 @@
 .paper .notices { list-style: none; margin: 0.4rem 0 0; padding: 0.5rem 0.7rem; border: 1.5px dashed var(--brass-dark); font-family: var(--type); font-size: 0.85rem; }
 .paper .notices li + li { margin-top: 0.3rem; }
 @media (max-width: 34rem) { .paper .columns { column-count: 1; } }
+/* D-099: the masthead and the lead headline a size down (the masthead ran to two lines in 3 rem type and pushed the stories below the fold) */
+.paper .masthead { font-size: clamp(1.5rem, 4.2vw, 2.25rem); }
+.paper .headline { font-size: clamp(1.25rem, 3.4vw, 1.8rem); }
