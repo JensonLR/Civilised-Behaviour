@@ -489,7 +489,7 @@ html .pause .menu .pair button { white-space: nowrap; padding-inline: 0.5rem; fo
   html #sheet-parley .sheet.parley .opt { padding: 0.2rem 0.4rem 0.22rem 1.4rem; }
   html #sheet-parley .parley .opt .label { font-size: 0.9rem; }
   html #sheet-parley .parley .opt .hint { font-size: 0.76rem; line-height: 1.18; }
-  html #sheet-parley .sheet.parley .options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+  html #sheet-parley .sheet.parley .options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }   /* (D-100: three abreast on a phone held sideways: seven answers in two columns ran past the screen) */
 }
 /* while a talk is open it is the one thing on screen: the orders card, its bonus slip, the line and the marker step aside (they stood on the speaker's head in the two-shot) */
 body:has(#sheet-parley:not([hidden])) #hud .objectives, body:has(#sheet-parley:not([hidden])) #hud .guide, body:has(#sheet-parley:not([hidden])) #hud .goalmark,
