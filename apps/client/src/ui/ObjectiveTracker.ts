@@ -23,6 +23,8 @@ export const withKeys = (text: string): string => text.replace(/\(Use\)/g, "({in
 export const DEFAULT_TITLE = "Orders of the Day";
 /** Under this many seconds the timer turns urgent (colour and weight, not just motion). */
 export const URGENT_SECONDS = 15;
+/** D-098: how long a new rule stays on the card by itself; after that it shows while a weapon is out (when it matters), and the card is the one line. */
+export const RULE_NEWS_MS = 20_000;
 
 /**
  * The objective tracker: a small paper card listing the scenario's orders, the hint line and the one countdown that matters (fuse or rival).
@@ -41,6 +43,8 @@ export class ObjectiveTracker {
   private readonly dist: HTMLElement;
   private readonly rule: HTMLElement;
   private endsAt = 0;
+  private ruleUntil = 0;
+  private armed = false;
 
   constructor(parent: HTMLElement) {
     this.root = document.createElement("section");
@@ -128,8 +132,11 @@ export class ObjectiveTracker {
       }
     }
     const rule = typeset(String(view.rule ?? "")).slice(0, 200);
-    if (this.rule.textContent !== rule) this.rule.textContent = rule;
-    this.rule.hidden = rule === "";
+    if (this.rule.textContent !== rule) {
+      this.rule.textContent = rule;
+      this.ruleUntil = -1; // (its time as news starts at the first tick of play, not while the world is still being built)
+    }
+    this.refreshRule();
     const hint = typeset(String(view.hint ?? ""));
     if (this.hint.textContent !== hint) this.hint.textContent = hint;
     this.hint.hidden = hint === "";
@@ -137,6 +144,18 @@ export class ObjectiveTracker {
     if (this.label.textContent !== label) this.label.textContent = label;
     this.endsAt = Number.isFinite(view.endsAtWorldMs) && view.endsAtWorldMs > 0 && label !== "" ? view.endsAtWorldMs : 0;
     if (this.endsAt === 0) this.timer.hidden = true;
+  }
+
+  /** Whether the player has a weapon out (the contract's rule about fighting is shown while one is). */
+  setArmed(on: boolean): void {
+    if (on === this.armed) return;
+    this.armed = on;
+    this.refreshRule();
+  }
+
+  private refreshRule(): void {
+    const show = this.rule.textContent !== "" && (this.armed || this.ruleUntil < 0 || performance.now() < this.ruleUntil);
+    if (this.rule.hidden === show) this.rule.hidden = !show;
   }
 
   /** Metres to the current objective's place (-1 or 0: none shown), from the guide's marker. */
@@ -147,6 +166,8 @@ export class ObjectiveTracker {
 
   /** Advance the countdown against the world clock (call ~4 times a second; cheap when there is no timer). */
   tick(worldMs: number): void {
+    if (this.ruleUntil < 0) this.ruleUntil = performance.now() + RULE_NEWS_MS;
+    this.refreshRule();
     if (this.endsAt === 0) return;
     const left = this.endsAt - worldMs;
     this.timer.hidden = left <= 0;

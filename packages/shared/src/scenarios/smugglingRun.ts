@@ -147,11 +147,11 @@ function settle(s: SmugglingState, said: ScenarioFx[] = []): Reduction<Smuggling
       return resolveWith(s, "landed", { loot }, [
         ...said, ...stand(),
         say(s.declared
-          ? "The third crate crosses the drop-house sill. Everything in the barge was declared, which is why none of it is yours: the duty is the Houses', the salt is the Houses', and the receipt, in triplicate, is yours."
-          : "The third crate crosses the drop-house sill and the door is shut on it, quietly, in the best traditions of the trade. Nobody saw anything, and the Constabulary will so testify. The cargo is landed and its price is yours."),
+          ? "The third crate is in the drop-house. But you declared it all, so none of it is yours. The Houses get the salt and the duty. You get a receipt, in triplicate."
+          : "The third crate is in, and the drop-house door shuts quietly. Nobody saw a thing, and the Constabulary will swear to it. The cargo is landed, and its price is yours."),
       ]);
     }
-    if (s.hot === 0) return { s: fin({ ...s, hot: SMUGGLE.hotS }), fx: [...said, say("The cargo is in, and so is the Constabulary, about a minute behind you and gaining. Break them, or be broken: the drop-house is not a place to be found with the lamps lit.")] };
+    if (s.hot === 0) return { s: fin({ ...s, hot: SMUGGLE.hotS }), fx: [...said, say("The cargo is in, but the Constabulary is right behind you. Drop them or send them running before they reach the drop-house, or they seize the lot.")] };
   }
   return { s: fin(s), fx: said };
 }
@@ -173,24 +173,24 @@ function reduce(s: SmugglingState, e: ScenarioInput): Reduction<SmugglingState> 
       }
       if (n.lit && n.lureUntil > 0 && n.t >= n.lureUntil) {
         n = { ...n, lureUntil: 0, legAt: n.t };
-        if (!n.alarm) fx.push(say("The patrol has found the lantern's post at the cove empty, and a quantity of lamp-oil, and no explanation, and is walking back to the boardwalk to write all three down."));
+        if (!n.alarm) fx.push(say("The patrol finds nobody at the cove lantern, only some lamp-oil. They walk back to the boardwalk to write it down."));
       }
       if (s.complication === "ward_patrol" && !n.extra && n.t >= SMUGGLE.extraAt) {
         n = { ...n, extra: true, guards: { ...n.guards, extra: NOCOUNT(1) }, legAt: n.t };
-        fx.push({ k: "spawn", group: "late:extra" }, say("A Ward patrolman has come down the Customs Bridge on some business of his own, which he is writing down. He is now on the boardwalk, in the way of your plans."));
+        fx.push({ k: "spawn", group: "late:extra" }, say("A Ward patrolman comes down the Customs Bridge, writing something down. He is now on the boardwalk, and in your way."));
       }
       if (n.challenge > 0 && !n.parley && !n.alarm) {
         n = { ...n, challenge: Math.max(0, n.challenge - dt) };
         if (n.challenge === 0) {
-          return resolveWith(n, "impounded", {}, [...fx, ...stand(), say("\"That,\" says the patrolman, writing, \"is a cargo, and you are standing near it, and I have a form for that.\" The Constabulary takes the cargo into its keeping with the quiet efficiency of a customs service that has never once lost money on a seizure.")]);
+          return resolveWith(n, "impounded", {}, [...fx, ...stand(), say("\"That is a cargo,\" says the patrolman, writing. \"I have a form for that.\" The Constabulary seizes the cargo. It has never lost money on a seizure.")]);
         }
       }
       if (n.hot > 0) {
         n = { ...n, hot: Math.max(0, n.hot - dt) };
-        if (n.hot === 0) return resolveWith(n, "impounded", {}, [...fx, ...stand(), say("The Constabulary arrives at the drop-house at a brisk walk, with a lantern and a warrant. Whatever is inside is now, officially, in the Houses' keeping.")]);
+        if (n.hot === 0) return resolveWith(n, "impounded", {}, [...fx, ...stand(), say("The Constabulary reaches the drop-house with a lantern and a warrant. Everything inside now belongs to the Houses.")]);
       }
       if (n.t >= SMUGGLE.slackS) {
-        return resolveWith(n, "impounded", {}, [...fx, ...stand(), say("Slack water ends. The tide turns, the barge swings, and the Constabulary, which has been patient since dawn, finds her at the cove, exactly where she was not.")]);
+        return resolveWith(n, "impounded", {}, [...fx, ...stand(), say("Slack water ends. The tide turns, and the Constabulary finds the barge at the cove. It has waited patiently since dawn.")]);
       }
       return settle(n, fx);
     }
@@ -201,21 +201,21 @@ function reduce(s: SmugglingState, e: ScenarioInput): Reduction<SmugglingState> 
       const n = Math.max(0, Math.min(8, int(e.party, 0, 8, 0)));
       if (s.near[at] === n) return stay(s);
       const loads = at === "cove" && n > 0 && !s.loaded;
-      return { s: fin({ ...s, near: { ...s.near, [at]: n }, loaded: s.loaded || loads }), fx: loads ? [say("The barge lies low at the cove with four unmarked crates under a tarpaulin and a lantern post at her bows. Nobody has declared her. Somebody has certainly noticed her. Carry the crates to the drop-house in the west reeds.")] : [] };
+      return { s: fin({ ...s, near: { ...s.near, [at]: n }, loaded: s.loaded || loads }), fx: loads ? [say("The barge sits low in the cove: four unmarked crates under a tarpaulin, and a lantern post at the bow. Carry the crates to the drop-house in the west reeds.")] : [] };
     }
     case "noise": {
       const level = clamp(Number.isFinite(e.level) ? e.level : 0, 0, 100);
       if (level <= s.noise) return stay(s);
       const n = { ...s, noise: level };
-      return level >= noiseLimit(n) ? raise(n, "A shot rolls across the reeds. The Customs House is on its feet and the patrol is running.") : stay(n);
+      return level >= noiseLimit(n) ? raise(n, "A shot rings across the reeds. The Customs House is awake, and the patrol is running.") : stay(n);
     }
     case "seen": {
       if (e.group !== "patrol" && e.group !== "customs" && e.group !== "late:extra") return stay(s);
       if (s.alarm || s.challenge > 0) return stay(s);
       if (e.group !== "customs" && lured(s)) return stay(s);   // (the patrol is looking at a lantern)
       if (!s.loaded) return stay(s);   // nothing to answer for yet
-      if (permitted(s)) return { s, fx: [say("The patrolman looks at you, looks at the stamped slip in your hand, and waves you through with the weary courtesy of a man who has been told which way to look.")] };
-      return { s: fin({ ...s, challenge: SMUGGLE.challengeS }), fx: [say("\"Halt for inspection!\" A Constabulary man has seen you. He is not shooting, which is courtesy; he is writing, which is policy. You have a moment to answer him, or to be somewhere else.")] };
+      if (permitted(s)) return { s, fx: [say("The patrolman looks at your stamped pass and waves you through. Somebody has told him which way to look.")] };
+      return { s: fin({ ...s, challenge: SMUGGLE.challengeS }), fx: [say("\"Halt for inspection!\" A Constabulary man has seen you. He is not shooting yet, only writing. Answer him quickly, or the cargo is seized.")] };
     }
     case "count": {
       if (e.group !== "customs" && e.group !== "patrol" && e.group !== "late:extra") return stay(s);
@@ -228,12 +228,12 @@ function reduce(s: SmugglingState, e: ScenarioInput): Reduction<SmugglingState> 
     }
     case "hostile": {
       if (e.at !== undefined && e.at !== "customs" && e.at !== "patrol" && e.at !== "late:extra" && e.at !== "reeve") return stay(s);
-      const r = raise(s, "Blood on the boards. The Customs House remembers that it is, in the last resort, a place with rifles.", s.parley !== undefined || s.permit > 0 || s.declared);
+      const r = raise(s, "Blood on the boards. The Customs House remembers that it has rifles.", s.parley !== undefined || s.permit > 0 || s.declared);
       return settle(r.s, r.fx as ScenarioFx[]);
     }
     case "actor": {
       if (e.state !== "down" || e.id !== "reeve" || s.down.reeve) return stay(s);
-      const r = raise({ ...s, down: { ...s.down, reeve: true } }, "The Tide-Reeve is down. Every form in the Customs House is, as of this moment, in abeyance, and the patrol knows whom to blame.");
+      const r = raise({ ...s, down: { ...s.down, reeve: true } }, "The Tide-Reeve is down. All his paperwork stops at once, and the patrol knows who to blame.");
       return settle(r.s, r.fx as ScenarioFx[]);
     }
     case "use": {
@@ -245,11 +245,11 @@ function reduce(s: SmugglingState, e: ScenarioInput): Reduction<SmugglingState> 
         }
         case "plug": {
           if (!s.loaded) return stay(s);
-          return resolveWith(s, "scuttled", {}, [...stand(), say("You pull the plug. The barge sits down in the cove with an expression of dignified surprise, taking four crates of unmarked evidence with her. It is, by any measure, the cleanest thing the Constabulary will never find.")]);
+          return resolveWith(s, "scuttled", {}, [...stand(), say("You pull the plug. The barge sinks into the cove, taking four crates of evidence with her. Nobody will ever find them, least of all the Constabulary.")]);
         }
         case "lantern": {
-          if (s.lit) return { s, fx: [say("The lantern burns on its post at the cove. It has already told the patrol everything it can.")] };
-          return { s: fin({ ...s, lit: true, lureUntil: s.t + SMUGGLE.lureS }), fx: [{ k: "order", group: "patrol", order: { o: "march", route: "lure" } }, { k: "order", group: "late:extra", order: { o: "march", route: "lure" } }, say("You light the lantern on the cove's post. Somewhere on the boardwalk a patrolman sees it, remarks to his colleague that it is an irregularity, and the pair of them set off to look at it from the cutter berth, which is the wrong direction by about a hundred metres.")] };
+          if (s.lit) return { s, fx: [say("The lantern is already lit. It can only fool the patrol once.")] };
+          return { s: fin({ ...s, lit: true, lureUntil: s.t + SMUGGLE.lureS }), fx: [{ k: "order", group: "patrol", order: { o: "march", route: "lure" } }, { k: "order", group: "late:extra", order: { o: "march", route: "lure" } }, say("You light the lantern at the cove. The patrol spots it and walks off to the cutter berth to look, which is the wrong way. That buys you about a minute.")] };
         }
         default: return stay(s);
       }
@@ -279,21 +279,21 @@ function talk(s: SmugglingState, kind: string, result: string, paid: number): Re
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
     case "hostile": {
-      const r = raise({ ...s, parley: undefined }, "You have made your point to the Tide-Reeve, with a raised voice and a lowered weapon. The Customs House unfolds.", true);
+      const r = raise({ ...s, parley: undefined }, "You threaten the Tide-Reeve with a weapon. The whole Customs House comes out to fight.", true);
       return settle(r.s, r.fx as ScenarioFx[]);
     }
     case "learn": return stay(fin({ ...s, asked: true }));
     case "survey": {
       // a declaration: free, stamped, and the cargo's profit is the Houses'
       // (D-086: a stamped slip answers a patrolman who is waiting for one: the challenge ends, as the orders always said it would)
-      return { s: fin({ ...s, parley: undefined, declared: true, challenge: 0, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say("The barge is declared. A stamped slip is yours for four minutes; the patrol has been told that it has been told. The Houses will want the duty, and, in due course, the cargo.")] };
+      return { s: fin({ ...s, parley: undefined, declared: true, challenge: 0, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say("The barge is declared. Your stamped pass holds for four minutes, so the patrol will let you through. The Houses will take the duty, and later the cargo.")] };
     }
     case "paid": {
       if (!paidOk(s, paid)) return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid, challenge: 0, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say(`A courtesy of £${paid} goes under the ledger. The stamped passage is yours for four minutes, and so is the cargo.`)] };
+      return { s: fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid, challenge: 0, permit: Math.max(s.permit, s.t + SMUGGLE.permitS) }), fx: [say(`You slip the Reeve £${paid}. Your stamped pass holds for four minutes, and the cargo stays yours.`)] };
     }
     case "tell": {
-      return resolveWith({ ...s, parley: undefined, told: true }, "informed", { loot: s.price.tip }, [...stand(), say(`You inform on your own barge. The Tide-Reeve writes it down with every sign of pleasure, the finder's fee of £${s.price.tip} is counted out, and a Constabulary launch leaves the berth for the cove with the air of a vessel that has been told where to go.`)]);
+      return resolveWith({ ...s, parley: undefined, told: true }, "informed", { loot: s.price.tip }, [...stand(), say(`You inform on your own barge. The Tide-Reeve happily counts out a finder's fee of £${s.price.tip}. A Constabulary boat sets off for the cove.`)]);
     }
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -311,23 +311,23 @@ function leave(s: SmugglingState): ReturnType<TemplateDef<SmugglingState>["leave
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const HINT: Record<string, string> = {
-  approach: "A barge lies at the reed cove with four unmarked crates under a tarpaulin. The drop-house is in the west reeds: the boardwalk crosses the Customs Bridge, the Long Cut's bridge and the Reed Bridge, and the Constabulary patrols between them. Start at the cove.",
-  extract: "The cargo is yours to move. Carry the crates one at a time to the drop-house door (Use there with a crate in hand). The patrol walks the boardwalk: crouch, and it has to come a good deal closer to see you; the reed flats north of the cuts are slower and quieter. The Tide-Reeve at the Customs House can square a patrol; the lantern at the cove can draw it off.",
-  standoff: "A patrolman has seen you and is counting. Answer him before the cargo is impounded: a stamped permit from the Tide-Reeve (declare, or pay a courtesy; while you talk to the Reeve the count stops), a shot (which wakes the whole Customs House), or the barge's plug.",
-  parley: "The Tide-Reeve is listening. Mind what you declare; he keeps carbon copies.",
-  fighting: "The Customs House is awake. Drop most of its men or send them running, and then there is only the cargo and the explanation.",
+  approach: "Go to the barge at the reed cove. Its four crates must reach the drop-house in the west reeds. The Constabulary patrols the boardwalk and its three bridges.",
+  extract: "Carry each crate to the drop-house door and press Use. Crouch to hide from the patrol. The Tide-Reeve sells passes. The cove lantern lures the patrol away.",
+  standoff: "A patrolman has seen you. Answer him in time, or lose the cargo. Get a pass from the Tide-Reeve (talking to him stops the count), fight, or sink the barge.",
+  parley: "The Tide-Reeve is listening. Careful what you declare: he keeps copies.",
+  fighting: "The Customs House is awake. Drop most of its men or send them running. Then only the cargo is left to explain.",
 };
 const DONE: Record<string, string> = {
-  landed: "The cargo is landed. The Houses will notice in the morning; the Constabulary will notice in the afternoon; nobody will notice in the evening. Take the boat home from the quay.",
-  impounded: "The Constabulary has the cargo. It will be sold on by the Houses at auction, for a great deal more than anybody paid for it, including you. Take the boat home.",
-  scuttled: "The barge is on the bottom of the cove, and so is the evidence, and so is the profit. Take the boat home from the quay.",
-  informed: "You informed on yourself, and were paid for it. The Houses are delighted; the Syndicate has been told that somebody has. Take the boat home from the quay.",
+  landed: "The cargo is landed. The Houses will notice tomorrow, and the Constabulary the day after. Take the boat home from the quay.",
+  impounded: "The Constabulary has the cargo. The Houses will auction it for far more than anyone paid, including you. Take the boat home.",
+  scuttled: "The barge, the evidence and the profit are all at the bottom of the cove. Take the boat home from the quay.",
+  informed: "You informed on yourselves, and got paid for it. The Houses are delighted. The Syndicate hears that someone talked. Take the boat home from the quay.",
   abandoned: "The expedition is down. The reeds are unmoved. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
-  fog: "Fog on the delta: the patrol sees half as far, which is not the same as half as well. So do you.",
-  rain: "Rain on the boards: footsteps carry less, shots carry a little less, and the patrol squints.",
-  ward_patrol: "A Ward patrolman is expected on the boardwalk around the minute-and-a-half mark. He writes everything down.",
+  fog: "Fog on the delta: the patrol sees only half as far. So do you.",
+  rain: "Rain on the boards: footsteps and shots are quieter, and the patrol squints.",
+  ward_patrol: "A Ward patrolman joins the boardwalk patrol after about ninety seconds. He writes everything down.",
 };
 
 function view(s: SmugglingState, now: number): ScenarioView {
@@ -336,15 +336,15 @@ function view(s: SmugglingState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { id: "cove", text: "Reach the barge at the reed cove", done: s.loaded },
     { id: "carry", text: `Carry the crates to the drop-house door (${Math.min(s.delivered, SMUGGLE.need)} of ${SMUGGLE.need})`, done: s.delivered >= SMUGGLE.need },
-    { id: "reeve", text: s.declared ? "The barge is declared at the Customs House" : permitted(s) ? "A stamped passage is in your pocket" : "Square the Tide-Reeve: declare, or pay a courtesy", done: s.declared || s.permit > 0, optional: true },
+    { id: "reeve", text: s.declared ? "The barge is declared at the Customs House" : permitted(s) ? "You have a stamped pass" : "Get a pass from the Tide-Reeve: declare, or pay him", done: s.declared || s.permit > 0, optional: true },
     { id: "lamp", text: s.lit ? "The lantern is lit: the patrol is at the berth" : "Light the lantern at the cove to draw the patrol off", done: s.lit, optional: true },
-    { id: "land", text: res === "abandoned" ? "Lost: the expedition went down" : res === "impounded" ? "Lost: the cargo was impounded" : res === "scuttled" ? "Settled: the barge was scuttled" : res === "informed" ? "Settled: you informed on yourselves" : "Land the cargo before slack water ends", done: won },
+    { id: "land", text: res === "abandoned" ? "Lost: the expedition went down" : res === "impounded" ? "Lost: the cargo was seized" : res === "scuttled" ? "Settled: the barge was scuttled" : res === "informed" ? "Settled: you informed on yourselves" : "Land the cargo before slack water ends", done: won },
   ];
-  if (s.challenge > 0 && res === undefined) objectives.push({ id: "answer", text: `Answer the patrolman (${Math.ceil(s.challenge)} s): a Reeve's permit, or the plug`, done: false, optional: true });
+  if (s.challenge > 0 && res === undefined) objectives.push({ id: "answer", text: `Answer the patrolman (${Math.ceil(s.challenge)} s): show a pass, or sink the barge`, done: false, optional: true });
   if (s.alarm && res === undefined) objectives.push({ id: "break", text: `Drop the Customs men or send them running (${Math.min(brokenAll(s), Math.ceil(guardTotal(s) * 0.6))} of ${Math.ceil(guardTotal(s) * 0.6)})`, done: guardBroken(s), optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the quay", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
-  if (res === undefined && s.asked) hint += " (The Reeve's hint: lit at the cove, the lantern draws the patrol off for a minute; a stamped passage keeps it civil for four.)";
+  if (res === undefined && s.asked) hint += " (The Reeve's tip: the cove lantern draws the patrol off for a minute. A stamped pass keeps them friendly for four.)";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const remain = res !== undefined ? 0 : s.hot > 0 ? s.hot : SMUGGLE.slackS - s.t;
@@ -409,7 +409,7 @@ const LINE: readonly { x: number; z: number }[] = [{ x: -14, z: 70 }, { x: -12, 
 
 export const smugglingRunTemplate: TemplateDef<SmugglingState> = {
   id: "smuggling_run", title: "The Quiet Barge",
-  brief: "A barge of unmarked crates waits in a reed cove. The Society wants them landed at a drop-house in the west reeds, and has declined to say what is in them, on the grounds that it would then have to declare it. Slip them past the Tide Constabulary at slack water, or square the Tide-Reeve first. If it goes wrong, scuttle the barge, or inform on yourselves and collect the reward.",
+  brief: "Sneak a barge's unmarked crates past the Tide Constabulary to a drop-house in the reeds. The Society will not say what is in them, or it would have to declare it.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { line: LINE, back: [...LINE].reverse(), lure: [{ x: -34, z: 70 }, { x: -44, z: 76 }] },
   props: Array.from({ length: SMUGGLE.crates }, (_, i) => ({ id: `cargo-${i}`, kind: PropKind.CRATE, x: SALTMARKET_SITES.cargo.x + [-1.2, 0.2, 1.4, -0.2][i]!, z: SALTMARKET_SITES.cargo.z + [-0.8, 0.9, -0.5, -1.8][i]! })),

@@ -104,11 +104,11 @@ function settle(s: StrikeState, said: ScenarioFx[] = []): Reduction<StrikeState>
   if (s.phase === "resolved") return { s, fx: said };
   if (s.proof && s.agreed.steward && s.agreed.compact) {
     return resolveWith(s, "honest_measure", { brokePromise: s.brokePromise || s.tipped }, [...said, CALM,
-      say("Two signatures on one sheet: the Steward's, small and reluctant, and the Foreperson's, a cross and a scythe. The royal bushel is sawn down to size on the spot, by a reaper who has waited forty harvests to do it. The Compact walks into the barley singing something the Steward pretends not to hear.")]);
+      say("Both sides sign: the Steward slowly, the Foreperson with a cross. A reaper who has waited forty harvests saws the royal bushel down to size. The Compact goes back to work, singing.")]);
   }
   if (s.inField >= STRIKE.breakersNeeded) {
     return resolveWith(s, "strike_broken", feeFor(s), [...said,
-      say("The strike-breakers are in the barley, sickles out, armbands on, and the Crown's harvest begins without the people who grew it. The Compact's picket line stands where it stood, which is now simply a place where some people are standing. The Steward makes a note.")]);
+      say("The strike-breakers are in the barley, sickles out. The Crown's harvest starts without the people who grew it. The picket line is now just some people standing in a field.")]);
   }
   return { s: fin(s), fx: said };
 }
@@ -124,15 +124,15 @@ function reduce(s: StrikeState, e: ScenarioInput): Reduction<StrikeState> {
       if (!n.landed && n.t >= n.barge) {
         n = { ...n, landed: true, marchAt: Math.round(n.t + STRIKE.musterS), crew: { ...n.crew, alive: STRIKE.breakers } };
         fx.push({ k: "spawn", group: "late:breakers" },
-          say("A barge noses into the quay below the hill and lets down a plank. Four men in Syndicate armbands come down it with sickles, a contract and a supervisor: \"seasonal operatives, bonded\". They form up on the quay while the supervisor reads the contract aloud, all of it. When he has finished they will march for the barley, and if two of them get there before the Compact is back at work, the strike is broken."));
+          say("A Syndicate barge lands at the quay. Four strike-breakers line up while their supervisor reads out the whole contract. If two reach the barley while the strike is on, it is broken."));
       }
       if (n.landed && !n.marched && !n.fight && n.t >= n.marchAt) {
         n = { ...n, marched: true };
-        fx.push({ k: "order", group: "late:breakers", order: { o: "march", route: "breakers" } }, say("The supervisor reaches the end of the contract, signs it on his knee and points up the road. The strike-breakers set off for the barley."));
+        fx.push({ k: "order", group: "late:breakers", order: { o: "march", route: "breakers" } }, say("The supervisor finishes the contract, signs it on his knee and points up the road. The strike-breakers march for the barley."));
       }
       if (n.t >= n.rainAt) {
         return resolveWith(n, "barley_lost", {}, [...fx, CALM,
-          say("The rain comes over the hill in a grey wall and lies down on the barley, and the barley lies down under it. The Compact stands in it with its scythes. The Steward stands under an umbrella with his ledger. Nobody has won, and the grain will be bought from the delta, at the delta's prices.")]);
+          say("The rain comes over the hill and flattens the barley. The Compact stands in it; the Steward stands under an umbrella. Nobody won. Now the grain comes from the delta, at delta prices.")]);
       }
       return settle(n, fx);
     }
@@ -152,18 +152,18 @@ function reduce(s: StrikeState, e: ScenarioInput): Reduction<StrikeState> {
       if (e.state === "arrived" && /^breaker-[0-3]$/.test(e.id)) {
         if (s.fight) return stay(s);
         const n = fin({ ...s, inField: s.inField + 1 });
-        return settle(n, n.inField < STRIKE.breakersNeeded ? [say("A strike-breaker steps off the road into the barley and looks about for a supervisor. The Compact's picket line goes very quiet. One more and the strike is broken.")] : []);
+        return settle(n, n.inField < STRIKE.breakersNeeded ? [say("A strike-breaker steps into the barley and looks around for his supervisor. The picket line goes very quiet. One more and the strike is broken.")] : []);
       }
       if (e.state !== "down") return stay(s);
-      if (e.id === "foreperson" && !s.refused) return { s: fin({ ...s, refused: true, parley: s.parley === "reaper" ? undefined : s.parley }), fx: [say("The Foreperson is down. The Compact closes ranks around her, and nobody on that line will sign anything for the Society today.")] };
-      if (e.id === "steward" && !s.stewardGone) return { s: fin({ ...s, stewardGone: true, parley: s.parley === "steward" ? undefined : s.parley }), fx: [say("The Steward of the Granary is down, and with him the only signature the Crown sends to a harvest. There will be no decree today.")] };
+      if (e.id === "foreperson" && !s.refused) return { s: fin({ ...s, refused: true, parley: s.parley === "reaper" ? undefined : s.parley }), fx: [say("The Foreperson is down. The Compact gathers round her. Nobody on that line will sign anything for the Society today.")] };
+      if (e.id === "steward" && !s.stewardGone) return { s: fin({ ...s, stewardGone: true, parley: s.parley === "steward" ? undefined : s.parley }), fx: [say("The Steward is down, and he was the only one who could sign for the Crown. There will be no honest measure today.")] };
       return stay(s);
     }
     case "use": {
       if (e.target !== "proof") return stay(s);
       if (s.proof || s.stewardGone) return stay(s);
       const n = fin({ ...s, proof: true });
-      return settle(n, [say("You set the royal bushel down beside the Steward's selling measure and fill both from the same sack. The selling bushel is full. The royal bushel takes a third as much again and still has room for the Steward's hat. The Compact, who have come to watch, say nothing very loudly.")]);
+      return settle(n, [say("You set the royal bushel beside the Steward's selling bushel and fill both from one sack. The royal one holds a third more. The watching Compact says nothing, very loudly.")]);
     }
     case "talk": return e.kind === "reaper" ? talkReaper(s, e.result, e.paid) : e.kind === "steward" ? talkSteward(s, e.result) : stay(s);
     case "tally": return stay({ ...s, tally: addTally(s.tally, e.add) });
@@ -181,15 +181,15 @@ function hostile(s: StrikeState, at: string | undefined): Reduction<StrikeState>
   if (at === "late:breakers") {
     if (s.fight) return stay(s);
     return { s: fin({ ...s, fight: true }), fx: [{ k: "order", group: "late:breakers", order: { o: "alert" } },
-      say("The strike-breakers drop their sickles and come for you instead, supervisor first. Whatever else happens, they are not cutting barley this afternoon.")] };
+      say("The strike-breakers drop their sickles and come for you instead. Whatever else happens, they will not cut barley today.")] };
   }
   if (at === "compact" && !s.refused) {
     return { s: fin({ ...s, refused: true, parley: s.parley === "reaper" ? undefined : s.parley, brokePromise: s.brokePromise || s.agreed.compact || s.paid > 0 }),
-      fx: [{ k: "order", group: "compact", order: { o: "flee" } }, say("Blood on the picket line. The Compact scatters into the barley, and whatever it was going to sign today it will not sign for the Society.")] };
+      fx: [{ k: "order", group: "compact", order: { o: "flee" } }, say("Blood on the picket line. The Compact scatters into the barley. It will sign nothing for the Society today.")] };
   }
   if (at === "granary" && !s.stewardGone) {
     return { s: fin({ ...s, stewardGone: true, parley: s.parley === "steward" ? undefined : s.parley, brokePromise: s.brokePromise || s.tipped || s.agreed.steward }),
-      fx: [{ k: "order", group: "granary", order: { o: "flee" } }, say("The Steward of the Granary runs for the hill, ledger first. There will be no decree from him today, and the Crown will hear about the manner of his going.")] };
+      fx: [{ k: "order", group: "granary", order: { o: "flee" } }, say("The Steward runs for the hill, ledger first. He will sign no honest measure today, and the Crown will hear how he left.")] };
   }
   return stay(s);
 }
@@ -217,14 +217,14 @@ function talkReaper(s: StrikeState, result: string, paid: number): Reduction<Str
       const n = fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid });
       return resolveWith(n, "bought_back", feeFor(n), [CALM,
         say(n.tipped
-          ? `The Compact goes back into the barley on £${paid} of the Society's money. The Steward, watching from the road, pays you his £${n.price.fee} for the result with the face of a man who has just been charged twice for the same harvest.`
-          : `The Compact goes back into the barley on £${paid} of the Society's money. The royal bushel stays on its scale, as large as ever. The Steward thanks you, in writing, on the Crown's paper.`)]);
+          ? `The Compact goes back to work on £${paid} of the Society's money. The Steward pays you his £${n.price.fee}, looking like a man charged twice for one harvest.`
+          : `The Compact goes back to work on £${paid} of the Society's money. The royal bushel stays as big as ever. The Steward thanks you, in writing.`)]);
     }
     case "survey": {
       const n = fin({ ...s, parley: undefined });
-      if (!n.proof) return { s: n, fx: [say("\"Prove it to the Steward first,\" says the Foreperson. \"Up the hill, on the granary scale. A grievance with no evidence is a hobby, and we have had this one forty years.\"")] };
+      if (!n.proof) return { s: n, fx: [say("\"Prove it to the Steward first,\" says the Foreperson. \"The royal bushel is on the granary scale, up the hill. Without proof, a grievance is just a hobby.\"")] };
       return settle(fin({ ...n, agreed: { ...n.agreed, compact: true } }), [say(n.agreed.steward
-        ? "\"Then the Compact signs,\" says the Foreperson, and makes her cross under the Steward's name with great care, and then a small scythe beside it, for the avoidance of doubt."
+        ? "\"Then the Compact signs,\" says the Foreperson. She makes her cross under the Steward's name, and draws a small scythe beside it, to be sure."
         : "\"The Compact signs,\" says the Foreperson, \"the minute the Steward does. Not one minute before. We have been here before, and he had a pen then too.\"")]);
     }
     default: return stay(s);
@@ -234,7 +234,7 @@ function talkReaper(s: StrikeState, result: string, paid: number): Reduction<Str
 function talkSteward(s: StrikeState, result: string): Reduction<StrikeState> {
   if (result === "open") {
     if (s.parley || s.stewardGone) return stay(s);
-    if (s.agreed.steward) return { s, fx: [say("\"I have signed,\" says the Steward, as a man says he has had a tooth out. \"Kindly take it to the Compact before I recover.\"")] };
+    if (s.agreed.steward) return { s, fx: [say("\"I have signed,\" says the Steward, like a man who has just had a tooth out. \"Take it to the Compact before I change my mind.\"")] };
     return { s: fin({ ...s, parley: "steward" }), fx: [{ k: "parley", kind: "steward", price: s.price.fee }] };
   }
   if (s.parley !== "steward") return stay(s);
@@ -248,14 +248,14 @@ function talkSteward(s: StrikeState, result: string): Reduction<StrikeState> {
     case "tip": {
       if (s.tipped) return stay(fin({ ...s, parley: undefined }));
       const n = fin({ ...s, parley: undefined, tipped: true, barge: s.landed ? s.barge : Math.min(s.barge, Math.round(s.t + STRIKE.hurriedS)) });
-      return { s: n, fx: s.landed ? [] : [say("A boy runs down to the quay with the Steward's note. Somewhere on the river, a barge stops dawdling.")] };
+      return { s: n, fx: s.landed ? [] : [say("A boy runs down to the quay with the Steward's note. Somewhere on the river, a barge speeds up.")] };
     }
     case "survey": {
       const n = fin({ ...s, parley: undefined });
-      if (!n.proof) return { s: n, fx: [say("\"On whose evidence?\" says the Steward. \"The royal bushel is on the granary scale, up the hill, sealed. Nobody has carried it down here, and I am certainly not going up there.\"")] };
+      if (!n.proof) return { s: n, fx: [say("\"On whose evidence?\" says the Steward. \"The royal bushel is sealed on the granary scale, up the hill. Nobody has brought it here, and I am not going up there.\"")] };
       return settle(fin({ ...n, agreed: { ...n.agreed, steward: true } }), [say(n.agreed.compact
-        ? "The Steward signs an honest measure, retroactive to this afternoon and not one minute earlier, under the Compact's cross."
-        : "The Steward signs an honest measure, retroactive to this afternoon and not one minute earlier. \"Take it to them,\" he says, \"before I think about it.\"")]);
+        ? "The Steward signs an honest measure under the Compact's cross. It starts this afternoon, and not one minute earlier."
+        : "The Steward signs an honest measure. It starts this afternoon, not one minute earlier. \"Take it to them,\" he says, \"before I think about it.\"")]);
     }
     default: return stay(s);
   }
@@ -274,23 +274,23 @@ function leave(s: StrikeState): ReturnType<TemplateDef<StrikeState>["leave"]> {
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const HINT: Record<string, string> = {
-  approach: "Harvest week at Highmark, and the Reapers' Compact has laid down its scythes at the foot of the hill. The barley stands; the rain is coming. Walk up to the picket line, west of the road.",
-  waiting: "The Compact says the royal bushel it is paid by is a third larger than the one the Crown sells by. Pay the harvest bonus, or prove it: the royal bushel sits on the granary scale up the hill. Carry it down to the Steward. An honest measure needs both signatures.",
-  parley: "They are listening. The Compact remembers who paid it and who threatened it; the Steward remembers everything, in a ledger.",
-  tension: "The Syndicate's strike-breakers have landed at the quay. If two reach the barley before the Compact is back at work, the strike is broken. Settle it first, or stop them: the strike-breakers are fair game.",
-  fighting: "The strike-breakers have turned on you instead of the barley. Whatever is agreed today will be agreed over this, before the rain.",
+  approach: "Harvest week at Highmark. The reapers are on strike, and rain is coming. Walk up to their picket line, at the foot of the hill, west of the road.",
+  waiting: "The reapers are paid by a royal bushel a third too big. Pay their bonus, or carry that bushel from the granary scale up the hill to the Steward. Then get both sides to sign.",
+  parley: "They are listening. The Compact remembers who paid and who threatened. The Steward writes everything down.",
+  tension: "The Syndicate's strike-breakers have landed. If two reach the barley before the Compact goes back to work, the strike is broken. Settle it first, or fight them.",
+  fighting: "The strike-breakers are fighting you instead of cutting barley. You can still settle the strike, but the rain is coming.",
 };
 const DONE: Record<string, string> = {
-  honest_measure: "An honest bushel, two signatures, and the Compact back in the barley at the old rate. The Crown calls it a rounding correction. Take the boat home from the Reed Landing.",
-  bought_back: "The Compact is back at work on the Society's money, and the royal bushel is as large as ever. This harvest is paid for; the next is not. Take the boat home.",
-  strike_broken: "The Syndicate's bonded men are cutting the Crown's barley, and the Compact is watching from the hedge with a long memory. Take the boat home.",
-  barley_lost: "The rain has the barley. Nobody won; everybody will pay for bread, and the Houses are already selling it. Take the boat home.",
+  honest_measure: "An honest bushel, two signatures, and the Compact back at work. The Crown calls it a rounding correction. Take the boat home from the Reed Landing.",
+  bought_back: "The Compact is back at work on the Society's money, and the royal bushel is as big as ever. This harvest is paid for; the next is not. Take the boat home.",
+  strike_broken: "The Syndicate's men are cutting the Crown's barley. The Compact watches from the hedge, and it will remember. Take the boat home.",
+  barley_lost: "The rain has the barley. Nobody won. Bread will cost everyone more, and the Houses are already selling it. Take the boat home.",
   abandoned: "The expedition is down. The barley is still standing, for now. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
-  rain: "The rain is early this year: the barley has less time than anyone would like.",
-  outriders: "Syndicate outriders came up the river road ahead of the barge: it will land soon.",
-  fog: "Fog on the river: the barge is feeling its way upstream, and the rain is in no hurry either.",
+  rain: "The rain is early this year: the barley has less time.",
+  outriders: "Syndicate riders came up the river road ahead of the barge: it will land soon.",
+  fog: "Fog on the river: the barge is slow, and so is the rain.",
 };
 
 function view(s: StrikeState, now: number): ScenarioView {
@@ -301,19 +301,19 @@ function view(s: StrikeState, now: number): ScenarioView {
     { id: "line", text: "Walk up to the Compact's picket line at the barley", done: s.near.line > 0 || s.phase !== "approach" },
   ];
   if (told) {
-    objectives.push({ id: "bushel", text: s.proof ? "The royal bushel is weighed: a third too large" : s.stewardGone ? "Nobody is left to weigh the royal bushel for" : "Carry the royal bushel from the granary scale to the Steward", done: s.proof, optional: true });
+    objectives.push({ id: "bushel", text: s.proof ? "The royal bushel is weighed: a third too large" : s.stewardGone ? "Nobody is left to show the royal bushel to" : "Carry the royal bushel from the granary scale to the Steward", done: s.proof, optional: true });
     objectives.push({ id: "steward", text: s.stewardGone && !s.agreed.steward ? "The Steward has gone up the hill" : "Get the Steward to sign an honest measure", done: s.agreed.steward, optional: true });
     objectives.push({ id: "compact", text: s.refused && !s.agreed.compact ? "The Compact will not deal with the Society today" : `Get the Compact to sign too (or pay its £${s.price.bonus} bonus)`, done: s.agreed.compact || res === "bought_back", optional: true });
   }
   objectives.push({ id: "settle", text: res === "abandoned" ? "Lost: the expedition went down" : res === "strike_broken" ? "Lost: the Syndicate's men broke the strike" : res === "barley_lost" ? "Lost: the rain reached the barley first" : "Get the Compact back in the barley before the rain", done: back });
   if (s.landed && res === undefined) {
-    objectives.push({ id: "breakers", text: s.fight ? "The strike-breakers are fighting you instead of reaping" : !s.marched ? "Strike-breakers are mustering on the quay" : `Fight the strike-breakers before ${STRIKE.breakersNeeded} reach the barley (${Math.min(s.inField, STRIKE.breakersNeeded)} in)`, done: s.fight, optional: true });
+    objectives.push({ id: "breakers", text: s.fight ? "The strike-breakers are fighting you instead of reaping" : !s.marched ? "Strike-breakers are lining up on the quay" : `Fight the strike-breakers before ${STRIKE.breakersNeeded} reach the barley (${Math.min(s.inField, STRIKE.breakersNeeded)} in)`, done: s.fight, optional: true });
   }
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the Reed Landing", done: false });
 
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
-  if (res === undefined && s.asked.reaper && !s.proof) hint += " (The Foreperson: \"Up the hill, on the granary terrace, by the first granary. A thing weighed in front of witnesses is proof.\")";
-  if (res === undefined && s.tipped) hint += ` (You took the Steward's £${s.price.fee}, on results: the Compact back with nothing reformed.)`;
+  if (res === undefined && s.asked.reaper && !s.proof) hint += " (The Foreperson: \"The royal bushel is on the scale up the hill, on the granary terrace. Weigh it in front of the Steward.\")";
+  if (res === undefined && s.tipped) hint += ` (You took the Steward's £${s.price.fee} fee. He pays only if the Compact goes back with nothing fixed.)`;
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const clock: [string, number] = !s.landed && s.barge < s.rainAt ? ["The Syndicate's barge lands", s.barge - s.t]
@@ -372,7 +372,7 @@ const observe: ObserveSpec = {
 
 export const reapersStrikeTemplate: TemplateDef<StrikeState> = {
   id: "reapers_strike", title: "The Reapers' Strike",
-  brief: "Harvest week at Highmark, and the Reapers' Compact has laid down its scythes: the Crown pays them by a royal bushel a third larger than the one it sells by, and calls the difference tradition. A Syndicate barge of strike-breakers is on the river and the rain is due. Pay a harvest bonus, or carry the royal bushel to the Steward and prove the fraud. If the barge's men reach the barley first, the strike is theirs to break.",
+  brief: "Harvest week at Highmark. The reapers strike: the Crown pays them by a bushel a third too big. Pay a bonus or prove the fraud, before the rain and the Syndicate's strike-breakers arrive.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { breakers: [{ x: 0, z: 100 }, { x: -4, z: 84 }, { x: -14, z: 62 }, { x: -26, z: 46 }, { x: S0.barley.x, z: S0.barley.z }] },
   props: [{ id: "bushel", kind: PropKind.BARREL, x: S0.scale.x, z: S0.scale.z }],

@@ -12,11 +12,12 @@ import { eraseMyRecords } from "../net/Session.ts";
  * control reads and writes settings.ts (which persists and announces changes), so the audio engine, camera, stage and stylesheet follow live.
  */
 
-export type TabId = "audio" | "video" | "controls" | "access";
+export type TabId = "audio" | "video" | "controls" | "pad" | "access";
 const TABS: readonly { id: TabId; label: string }[] = [
   { id: "audio", label: "Sound" },
   { id: "video", label: "Display" },
   { id: "controls", label: "Controls" },
+  { id: "pad", label: "Gamepad" }, // (D-098: its own page; under Controls it made that page six screens long)
   { id: "access", label: "Accessibility" },
 ];
 
@@ -59,6 +60,7 @@ export class SettingsSheet {
     this.buildAudio(body);
     this.buildVideo(body);
     this.buildControls(body);
+    this.buildPad(body);
     this.buildAccess(body);
     const done = h("button", { type: "button", class: "primary" }, "Done");
     done.addEventListener("click", () => this.close());
@@ -115,6 +117,9 @@ export class SettingsSheet {
 
   open(opener?: HTMLElement | null, tab?: TabId): void {
     if (tab) this.showTab(tab, false);
+    // (a phone either way up; not a short desktop window, whose player wants the keys)
+    const phone = typeof matchMedia === "function" && matchMedia("(max-width: 40rem), (max-height: 30rem) and (pointer: coarse)").matches;
+    for (const d of this.modal.panel.querySelectorAll<HTMLDetailsElement>("details.fold")) d.open = !phone;
     this.refresh();
     this.status.textContent = "";
     this.modal.open(opener);
@@ -141,6 +146,7 @@ export class SettingsSheet {
       else b.removeAttribute("data-autofocus");
       this.panels.get(t.id)!.hidden = !on;
       if (on && focus) b.focus();
+      if (on) b.scrollIntoView?.({ block: "nearest", inline: "nearest" }); // (a phone's tab strip scrolls sideways)
     }
   }
 
@@ -226,13 +232,13 @@ export class SettingsSheet {
   private buildAudio(body: HTMLElement): void {
     const p = this.page("audio", body);
     const pct = (v: number): string => `${v}%`;
-    const vol = (k: S.VolumeKey, label: string, note: string, test?: () => void): void =>
+    const vol = (k: S.VolumeKey, label: string, note?: string, test?: () => void): void =>
       this.slider(p, { label, min: 0, max: 100, step: 1, get: () => Math.round(S.getVolume(k) * 100), set: (v) => S.setVolume(k, v / 100), fmt: pct, note, test });
-    vol("master", "Master", "Everything at once. The slider follows the ear: halfway sounds about half as loud.", () => playSfx("ui_confirm"));
-    vol("music", "Music", "The parlour band in the menu and a calmer air in the field.");
+    vol("master", "Master", undefined, () => playSfx("ui_confirm"));
+    vol("music", "Music");
     vol("sfx", "Effects", "Guns, footsteps, voices, the interface.", () => playSfx("impact_wood"));
-    vol("ambience", "Ambience", "Wind, birds, crickets, the fire, the stream, rain and thunder.");
-    this.toggle(p, { label: "Silent when unfocused", get: S.getMuteUnfocused, set: S.setMuteUnfocused, note: "Mutes the game while its window is in the background.", on: "Yes", off: "No" });
+    vol("ambience", "Ambience", "Wind, birds, fire, water and weather.");
+    this.toggle(p, { label: "Silent in the background", get: S.getMuteUnfocused, set: S.setMuteUnfocused, on: "Yes", off: "No" });
   }
 
   private buildVideo(body: HTMLElement): void {
@@ -242,14 +248,14 @@ export class SettingsSheet {
       options: S.GFX_PLAYER_LEVELS.map((l) => [l, l[0]!.toUpperCase() + l.slice(1)] as const), // (the `test` preset is never offered)
       get: S.getGfx,
       set: S.setGfx,
-      note: "Applied at once to the world, shadows and sharpness. Ink outlines on characters take effect for people who arrive after the change, and edge smoothing (off on Low) at the next start.",
+      note: "Applies at once; edge smoothing (off on Low) at the next start.",
     });
-    this.slider(p, { label: "Interface scale", min: 80, max: 150, step: 5, get: () => Math.round(S.getUiScale() * 100), set: (v) => S.setUiScale(v / 100), fmt: (v) => `${v}%`, note: "Scales every menu and the gauge, tags and prompts in the field." });
-    this.slider(p, { label: "Field of view", min: 50, max: 100, step: 1, get: S.getFov, set: S.setFov, fmt: (v) => `${v}°`, note: "Vertical, in third person. First person keeps its own wider view, shifted by the same amount." });
-    this.toggle(p, { label: "Reduce motion", get: S.getReduceMotion, set: S.setReduceMotion, note: "Stills interface animation and nearly removes screen shake. Follows your system setting until you choose." });
+    this.slider(p, { label: "Interface scale", min: 80, max: 150, step: 5, get: () => Math.round(S.getUiScale() * 100), set: (v) => S.setUiScale(v / 100), fmt: (v) => `${v}%` });
+    this.slider(p, { label: "Field of view", min: 50, max: 100, step: 1, get: S.getFov, set: S.setFov, fmt: (v) => `${v}°`, note: "Third person; first person's wider view shifts with it." });
+    this.toggle(p, { label: "Reduce motion", get: S.getReduceMotion, set: S.setReduceMotion, note: "Stills animation and screen shake. Follows your system until set." });
     this.heading(p, "Camera");
-    this.select(p, { label: "View", options: [["third", "Third person"], ["first", "First person"]], get: S.getView, set: S.setView, note: "You can switch at any time in the field. Other players always see your whole figure." });
-    this.toggle(p, { label: "Head bob (first person)", get: S.getHeadBob, set: S.setHeadBob, note: "The sway of your own footsteps in first person." });
+    this.select(p, { label: "View", options: [["third", "Third person"], ["first", "First person"]], get: S.getView, set: S.setView, note: "Switch any time in the field." });
+    this.toggle(p, { label: "Head bob (first person)", get: S.getHeadBob, set: S.setHeadBob });
     this.heading(p, "Sensibilities");
     this.select(p, { label: "Gore", options: [["full", "Full"], ["reduced", "Reduced"], ["off", "Off"]], get: S.getGore, set: S.setGore, note: "Off replaces all blood with bandages and iodine. Wounds stay just as readable." });
     this.select(p, {
@@ -257,40 +263,45 @@ export class SettingsSheet {
       options: [["1", "Shown"], ["0", "Hidden"]],
       get: () => (S.getShowLimbs() ? "1" : "0"),
       set: (v) => S.setShowLimbs(v === "1"),
-      note: "Hidden shows the same injuries as ordinary dressings. It only changes what you see, never what happens.",
+      note: "Hidden draws them as dressings. Only what you see changes.",
     });
   }
 
   private buildControls(body: HTMLElement): void {
     const p = this.page("controls", body);
     this.slider(p, { label: "Mouse sensitivity", min: 25, max: 300, step: 5, get: () => Math.round(S.getSensitivity() * 100), set: (v) => S.setSensitivity(v / 100), fmt: (v) => `${v}%` });
-    this.slider(p, { label: "Stick sensitivity", min: 25, max: 300, step: 5, get: () => Math.round(S.getPadSensitivity() * 100), set: (v) => S.setPadSensitivity(v / 100), fmt: (v) => `${v}%` });
-    this.toggle(p, { label: "Invert look (vertical)", get: S.getInvertY, set: S.setInvertY, note: "Push up to look down, like an aeroplane.", on: "Inverted", off: "Normal" });
-    this.select(p, { label: "Sprint", options: [["hold", "Hold the key"], ["toggle", "Tap to toggle"]], get: () => (S.getHoldToSprint() ? "hold" : "toggle"), set: (v) => S.setHoldToSprint(v === "hold"), note: "Toggle lets you keep the key up while running." });
+    this.toggle(p, { label: "Invert look (vertical)", get: S.getInvertY, set: S.setInvertY, on: "Inverted", off: "Normal" });
+    this.select(p, { label: "Sprint", options: [["hold", "Hold the key"], ["toggle", "Tap to toggle"]], get: () => (S.getHoldToSprint() ? "hold" : "toggle"), set: (v) => S.setHoldToSprint(v === "hold") });
+    this.select(p, { label: "Aim", options: [["hold", "Hold the button"], ["toggle", "Tap to toggle"]], get: () => (S.getHoldToAim() ? "hold" : "toggle"), set: (v) => S.setHoldToAim(v === "hold") }); // (the same setting as the Gamepad page's)
 
-    this.heading(p, "Keyboard");
-    p.appendChild(h("p", { class: "fine" }, "Choose a key, then press the new one. Backspace clears an alternate key; Esc cancels. Esc, F3 and the browser's function keys are reserved."));
+    // D-098: the key list folds away on a phone (where it is rarely wanted and was most of the page); open everywhere else
+    const keys = h("details", { class: "fold", open: true }, h("summary", {}, "Keys"));
+    p.appendChild(keys);
+    keys.appendChild(h("p", { class: "fine" }, "Choose a key, then press the new one. Backspace clears an alternate; Esc cancels. Fire and Aim are the mouse buttons."));
     this.conflictBar = h("div", { class: "conflict", role: "alert", hidden: true });
-    p.appendChild(this.conflictBar);
+    keys.appendChild(this.conflictBar);
     const table = h("div", { class: "binds", role: "group", "aria-label": "Key bindings" });
-    table.append(h("div", { class: "bind head", "aria-hidden": "true" }, h("span"), h("span", {}, "Key"), h("span", {}, "Alternate")));
+    // one block per group, each headed with its column names, so a wide sheet sets them side by side (D-098)
     for (const group of ACTION_GROUPS) {
-      table.appendChild(h("div", { class: "bind group" }, h("span", {}, group)));
-      for (const a of ACTIONS.filter((x) => x.group === group)) table.appendChild(this.bindRow(a));
+      const block = h("div", { class: "bindgroup" }, h("div", { class: "bind group" }, h("span", {}, group), h("span", { "aria-hidden": "true" }, "Key"), h("span", { "aria-hidden": "true" }, "Alternate")));
+      for (const a of ACTIONS.filter((x) => x.group === group)) block.appendChild(this.bindRow(a));
+      table.appendChild(block);
     }
-    p.appendChild(table);
-    const resetKeys = h("button", { type: "button", class: "small" }, "Reset keys to defaults");
+    keys.appendChild(table);
+    const resetKeys = h("button", { type: "button", class: "small" }, "Reset keys");
     resetKeys.addEventListener("click", () => {
       this.cancelCapture();
       setBindings(defaultBindings());
       this.say("Keys restored.");
     });
-    p.appendChild(h("div", { class: "row-end" }, resetKeys));
+    keys.appendChild(h("div", { class: "row-end" }, resetKeys));
     this.refreshers.push(() => this.refreshBindings());
+  }
 
-    this.heading(p, "Mouse and gamepad");
-    p.appendChild(h("p", { class: "fine" }, "Fire is the left mouse button and Aim the right (hold, or toggle below). The gamepad's feel and layout are here too; the prompts on screen follow whichever device you last used."));
-    // D-038: the pad's feel, aim assist, rumble and a rebindable layout (ui/SettingsPad.ts); every prompt in the game follows it
+  /** The gamepad's page: its stick speed, then (D-038, ui/SettingsPad.ts) the feel, aim assist, hold or toggle aim, rumble and a rebindable layout; every prompt in the game follows it. */
+  private buildPad(body: HTMLElement): void {
+    const p = this.page("pad", body);
+    this.slider(p, { label: "Stick sensitivity", min: 25, max: 300, step: 5, get: () => Math.round(S.getPadSensitivity() * 100), set: (v) => S.setPadSensitivity(v / 100), fmt: (v) => `${v}%` });
     this.padSection?.dispose();
     this.padSection = buildPadSection();
     p.appendChild(this.padSection.el);
@@ -415,21 +426,21 @@ export class SettingsSheet {
       label: "Colour-blind safe marks",
       get: S.getCvd,
       set: S.setCvd,
-      note: "Injury and vitality charts use ink hatching and shape marks instead of relying on red and brown fills. Nothing in the game is colour alone even without this.",
+      note: "Injury charts carry hatching and marks, not only red and brown.",
     });
     this.toggle(p, { label: "High contrast", get: S.getHighContrast, set: S.setHighContrast, note: "Stark ink on plain paper, heavier borders, no textured grain." });
-    this.toggle(p, { label: "Larger text", get: S.getLargeText, set: S.setLargeText, note: "Bumps every size in the interface by a fifth, on top of the interface scale.", on: "Larger", off: "Normal" });
-    this.toggle(p, { label: "Never show tutorials", get: S.getSkipTutorials, set: S.setSkipTutorials, note: "Keeps the orientation card away from every campaign. Otherwise it greets each new campaign once, and the Pause sheet can replay it.", on: "Never", off: "As needed" });
+    this.toggle(p, { label: "Larger text", get: S.getLargeText, set: S.setLargeText, note: "A fifth larger, on top of the interface scale.", on: "Larger", off: "Normal" });
+    this.toggle(p, { label: "Never show tutorials", get: S.getSkipTutorials, set: S.setSkipTutorials, note: "No orientation card in any campaign (the Pause sheet can still replay it).", on: "Never", off: "As needed" });
     this.toggle(p, {
       label: "Captions",
       get: S.getCaptions,
       set: S.setCaptions,
-      note: "Brief italic captions for the sounds that matter, with the direction they came from: [musket shot, left].",
+      note: "The sounds that matter, and where from: [musket shot, left].",
     });
     const preview = h("button", { type: "button", class: "small" }, "Preview a caption");
     preview.addEventListener("click", () => previewCaption("[musket shot, left]"));
     p.appendChild(h("div", { class: "row-end" }, preview));
-    this.slider(p, { label: "Screen shake", min: 0, max: 100, step: 5, get: () => Math.round(S.getShake() * 100), set: (v) => S.setShake(v / 100), fmt: (v) => (v === 0 ? "None" : `${v}%`), note: "How far the camera jolts when you are hit or blown about. Reduce motion caps it further." });
+    this.slider(p, { label: "Screen shake", min: 0, max: 100, step: 5, get: () => Math.round(S.getShake() * 100), set: (v) => S.setShake(v / 100), fmt: (v) => (v === 0 ? "None" : `${v}%`), note: "Reduce motion caps it further." });
     this.buildRecords(p);
   }
 
@@ -462,7 +473,7 @@ export class SettingsSheet {
     this.eraseBtn.textContent = this.eraseArmed > Date.now() ? "Press again to erase" : "Erase my records";
     this.eraseNote.textContent = msg ?? (this.playing
       ? "Leave the expedition first (from the front door): a game in progress would write your membership straight back."
-      : "Removes you from every campaign this browser has played (a campaign with nobody left in it is deleted) and forgets this browser's identity and expedition list. Settings are kept. It cannot be undone.");
+      : "Takes you out of every campaign this browser played (one left empty is deleted) and forgets this browser. Settings stay. Cannot be undone.");
   }
 
   private async onErase(): Promise<void> {

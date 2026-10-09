@@ -181,6 +181,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       },
     });
     preview = new CreatorPreview(stage, canvas);
+    menu.onFrame = (f) => preview.setFocus(f); // (D-098: the figure stands where the door's panels leave the picture free)
     const initial = decodeSpec(look)!;
     new CharacterCreator(menu.creatorHost, initial, (spec) => {
       look = encodeSpec(spec);

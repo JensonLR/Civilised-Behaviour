@@ -57,7 +57,7 @@ export function startPadNav(root: HTMLElement, isActive: () => boolean): () => v
     return h !== null && h !== root && root.contains(h);
   };
   const focusables = (): HTMLElement[] =>
-    [...root.querySelectorAll<HTMLElement>("input, select, button, a[href], [role='menuitem'], [role='button']")].filter(
+    [...root.querySelectorAll<HTMLElement>("input, select, button, summary, a[href], [role='menuitem'], [role='button']")].filter(
       (el) => !(el as HTMLInputElement).disabled && el.getAttribute("aria-disabled") !== "true" && el.offsetParent !== null && el.getAttribute("tabindex") !== "-1" && !el.closest("[inert]") && !insideHidden(el),
     );
   const trapped = (): boolean => root.classList.contains("overlay") || root.querySelector("[aria-modal='true']") !== null;

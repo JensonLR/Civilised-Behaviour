@@ -111,17 +111,17 @@ function reduce(s: ClaimState, e: ScenarioInput): Reduction<ClaimState> {
           const pegs = n.pegs.slice();
           pegs[i] = 2;
           n = { ...n, pegs, rivalAt: n.t + CLAIM.pegEvery };
-          fx.push(say(`A Syndicate surveyor drives a peg at the ${NAME(i)} corner, with a mallet that has been engraved, and unfurls a brochure that says the claim is already theirs.`));
+          fx.push(say(`A Syndicate surveyor drives a peg at the ${NAME(i)} corner with an engraved mallet. He waves a brochure saying the claim is already theirs.`));
         } else n = { ...n, rivalAt: n.t + CLAIM.pegEvery };
       }
       // three pegs and they file; the clerk has marked their survey provisional, they cannot
       if (n.rivalFilesAt === 0 && count(n, 2) >= CLAIM.need && !n.fraud) n = { ...n, rivalFilesAt: n.t + n.pegFile };
       if (n.rivalFilesAt > 0 && n.fraud) n = { ...n, rivalFilesAt: 0 };
       if (n.rivalFilesAt > 0 && n.t >= n.rivalFilesAt) {
-        return resolveWith(n, "outpaced", {}, [...fx, say("The Syndicate's clerk is at the Assay House counter with a claim in a binder so thick it has its own ribbon. The Assay clerk stamps it, and the Society's notes on the matter, taken from the second row, are accepted as an appendix.")]);
+        return resolveWith(n, "outpaced", {}, [...fx, say("The Syndicate files its claim at the Assay House, in a binder so thick it has a ribbon. The clerk stamps it. The Society's notes are added as an appendix.")]);
       }
       if (n.t >= n.closeAt) {
-        return resolveWith(n, "outpaced", {}, [...fx, say("The Assay House bell rings, and the shutters come down. By the House's rule, an unfiled claim is registered to whoever's brochure is on the counter, which is the Syndicate's. The clerk apologises, in writing.")]);
+        return resolveWith(n, "outpaced", {}, [...fx, say("The Assay House bell rings and the shutters come down. By house rules, the claim goes to whoever's brochure is on the counter: the Syndicate's. The clerk apologises, in writing.")]);
       }
       return { s: fin(n), fx };
     }
@@ -192,27 +192,27 @@ function talk(s: ClaimState, kind: string, result: string, paidIn: number): Redu
   const mine = count(s, 1), theirs = count(s, 2);
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
-    case "hostile": return raise({ ...s, parley: undefined }, "You have made your point to the clerk with a raised voice. The clerk notes the time, which is the only thing he has ever done in a hurry. The surveyors, who heard it, bolt; the guards unfold.", true);
+    case "hostile": return raise({ ...s, parley: undefined }, "You shout at the clerk. He writes down the time, faster than he has ever done anything. The surveyors run. The guards get up.", true);
     case "learn": return stay(fin({ ...s, asked: true }));
     case "tell": {
       if (!s.asked || s.fraud) return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, fraud: true }), fx: [say("The clerk takes your tip with the face of a man who has been waiting years for an excuse. \"The Syndicate's survey,\" he says, stamping it in red, \"is measured with a chain that has been shortened. PROVISIONAL.\" Their pegs are, as of this stamp, decoration.")] };
+      return { s: fin({ ...s, parley: undefined, fraud: true }), fx: [say("The clerk has waited years for this. \"Their chain has been shortened,\" he says, stamping the Syndicate's survey PROVISIONAL in red. Their pegs are now just decoration.")] };
     }
     case "survey": {
       if (s.hostile || s.fraud) return { s: fin({ ...s, parley: undefined }), fx: [say("\"A joint claim is a gentleman's arrangement,\" says the clerk, looking at the surveyors' empty chain. \"I have been shot at in this chair; I am not in the mood for one.\"")] };
       if (mine < 1 || theirs < 1) return { s: fin({ ...s, parley: undefined }), fx: [say(mine < 1 ? "\"Joint with whom, madam?\" says the clerk. \"You have no pegs. A partnership needs something to be a partner in.\"" : "\"Joint with whom?\" says the clerk. \"The Syndicate has not driven a peg. I cannot certify a partnership with a brochure.\"")] };
-      return resolveWith(fin({ ...s, parley: undefined }), "partnered", {}, [say("The clerk produces a form for exactly this and has it signed by both sides on the counter, and sealed by the Guild's seal, which arrives, as it always does, before anybody has called for it. The claim is shared at the line; the ore will be shared at a ratio that the Assay House will be glad to calculate.")]);
+      return resolveWith(fin({ ...s, parley: undefined }), "partnered", {}, [say("The clerk has a form for exactly this. Both sides sign, and the Guild's seal arrives before anyone sends for it. The claim and its ore are shared, at a ratio the clerk will work out.")]);
     }
     case "paid": {
       if (!paidOk(s, paidIn, s.price.fee)) return stay(fin({ ...s, parley: undefined }));
       if (mine < CLAIM.need) return { s: fin({ ...s, parley: undefined }), fx: [say(`\"A claim wants ${CLAIM.need} pegs,\" says the clerk, regretfully. \"You hold ${mine}. The fee is returned to your pocket, as nothing has been filed.\"`)] };
       const standing = s.fraud ? 0 : theirs;
-      if (standing > 0) return { s: fin({ ...s, parley: undefined }), fx: [say("\"The Syndicate holds a peg inside your corners,\" says the clerk. \"Claims may not overlap. I would pull it, but then I would be an interested party, and I have been disinterested for eleven years.\"")] };
+      if (standing > 0) return { s: fin({ ...s, parley: undefined }), fx: [say("\"The Syndicate has a peg inside your corners,\" says the clerk. \"Claims may not overlap. Pull it out first. I cannot; I have been neutral for eleven years.\"")] };
       const jumped = s.pulled > 0 || (s.fraud && theirs > 0);
       const n = fin({ ...s, parley: undefined, spent: s.spent + paidIn, paid: s.paid + paidIn });
       return resolveWith(n, jumped ? "jumped" : "staked", {}, [say(jumped
-        ? `£${paidIn} and a signature, and the claim is registered to the Society, on the ground that the Syndicate's pegs were, as of this morning, a misunderstanding. The surveyors are informed, with a form.`
-        : `£${paidIn} and a signature, and the claim is registered to the Society: ${CLAIM.need} pegs at the corners, first at the counter, with the form. The Syndicate's brochure is filed under "Late".`)]);
+        ? `£${paidIn} and a signature, and the claim is the Society's. The Syndicate's pegs are now called 'a misunderstanding'. The surveyors are told, by form.`
+        : `£${paidIn} and a signature, and the claim is the Society's: ${CLAIM.need} pegs, first at the counter. The Syndicate's brochure is filed under "Late".`)]);
     }
     default: return stay(s);
   }
@@ -230,7 +230,7 @@ function leave(s: ClaimState): ReturnType<TemplateDef<ClaimState>["leave"]> {
 
 const HINT: Record<string, string> = {
   approach: "The pegging ground is on the west bench, a long walk up the gorge. The Syndicate's surveyors are already there with a theodolite and a brochure.",
-  waiting: "Three of your own pegs and the clerk's form make a claim. Stake the open corners (Use at a peg), then file at the Assay House on the east bench (the clerk, a fee, a stamp). The Syndicate pegs a corner every minute or so and files once it holds three. The clerk has views on joint claims and on surveys.",
+  waiting: "Use at the open corners to drive three pegs, then pay the fee at the Assay House on the east bench. The Syndicate pegs a corner every minute or so, and files at three.",
   parley: "The clerk is listening. He has been listening for eleven years and has not once been surprised.",
   fighting: "A shot has been fired. The surveyors have run and the guards are coming down the road. Beat both surveyors and their pegs can be pulled; the joint claim is off.",
 };
@@ -316,7 +316,7 @@ const observe: ObserveSpec = {
 
 export const claimRaceTemplate: TemplateDef<ClaimState> = {
   id: "claim_race", title: "The Claim Race",
-  brief: "Something expensive has been found in the rock of the west bench, and the Assay House will register whoever brings three pegs and a form to its counter first. The Syndicate's surveyors are already there with a theodolite and a brochure. Out-peg them, pull their pegs (beat both surveyors, or get their survey doubted), or offer to share. Second place gets a very good report and nothing else.",
+  brief: "Something valuable is in the rock of the west bench. The claim goes to whoever files three pegs at the Assay House first. Out-peg the Syndicate, pull their pegs, or offer to share.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { pegging: VESPER_ANCHORS.pegging, assay: VESPER_ANCHORS.assay },
 };

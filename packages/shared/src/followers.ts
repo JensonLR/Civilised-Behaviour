@@ -48,7 +48,7 @@ export const FOLLOWER_DEFS: Readonly<Record<FollowerKind, FollowerDef>> = {
       "%n asks, to nobody, whether the Society has heard of money.",
     ],
     desertions: [
-      "%n has put the load down, politely, in the middle of the road, and walked off the way a man walks who has found his own name.",
+      "%n has put the load down in the middle of the road, politely, and walked away a free man.",
       "%n left the tin trunk and a note: 'Re: wages. See attached silence.'",
       "%n has gone home. The trunk is yours. The trunk was always yours. That was the problem.",
     ],

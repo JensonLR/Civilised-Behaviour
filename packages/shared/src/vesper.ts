@@ -679,7 +679,7 @@ export const VESPER_MOUNT_SPOTS: RegionMountSpots = {
 /** The HUD's prompts and the server's "post" use points (acted on through the scenario). */
 export const VESPER_STATIONS: readonly UseStation[] = [
   { id: "dock", kind: "dock", x: VESPER_ANCHORS.landing.x, z: VESPER_ANCHORS.landing.z, r: 4, prompt: "Take the ore barge home" },
-  { id: "foreman", kind: "post", x: VESPER_SITES.foreman.x, z: VESPER_SITES.foreman.z, r: 2.6, prompt: "Speak to the foreman" },
-  { id: "dirge_master", kind: "post", x: VESPER_SITES.dirgeMaster.x, z: VESPER_SITES.dirgeMaster.z, r: 2.6, prompt: "Call on the Dirge-Master" },
-  { id: "assayer", kind: "post", x: VESPER_SITES.assayer.x, z: VESPER_SITES.assayer.z, r: 2.6, prompt: "Present a claim at the Assay House" },
+  { id: "foreman", kind: "post", x: VESPER_SITES.foreman.x, z: VESPER_SITES.foreman.z, r: 2.6, prompt: "Talk to the foreman" },
+  { id: "dirge_master", kind: "post", x: VESPER_SITES.dirgeMaster.x, z: VESPER_SITES.dirgeMaster.z, r: 2.6, prompt: "Talk to the Dirge-Master" },
+  { id: "assayer", kind: "post", x: VESPER_SITES.assayer.x, z: VESPER_SITES.assayer.z, r: 2.6, prompt: "Talk to the Assayer" },
 ];

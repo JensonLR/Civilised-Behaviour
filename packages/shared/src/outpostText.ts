@@ -105,8 +105,8 @@ export const SETTLEMENT_NEWS: Record<SettlementEventKind, { head: readonly strin
   railway: {
     head: ["The Railway Reaches {name}", "Steam on the Rails at {name}", "{name} Opens Its Railway: Nine Yards, Both Ways"],
     body: [
-      "The {name} Railway has opened: nine yards of track, one engine and a buffer stop at each end. The Committee calls it 'the first stage'; the second is on order. The engine is called Perseverance and frequently is.",
-      "The first train at {name} ran the full length of the line, nine yards, and back again, to cheers. Freight now crosses the siding at a speed the Society calls progress and the porters call walking.",
+      "The {name} Railway has opened: nine yards of track, one engine and a buffer stop at each end. The Committee calls it 'the first stage'. The engine is called Perseverance. It needs to be.",
+      "The first train at {name} ran the whole line, all nine yards, and back, to cheers. The Society calls the speed progress. The porters call it walking.",
       "Rails of good British iron have been laid at {name}, all the way to the end of them. The rest of the line to the sea is 'to follow'; the sleepers are local timber and were not consulted.",
     ],
   },
@@ -130,9 +130,9 @@ export const SETTLEMENT_NEWS: Record<SettlementEventKind, { head: readonly strin
   crank: {
     head: ["The Works Casts a Crank Gun", "A Crank Gun for Every Gate", "Progress Arrives, Eight Rounds a Second"],
     body: [
-      "The works has cast a crank gun for every stockade the Society holds. It fires eight rounds a second for as long as somebody turns the handle, and jams, the armourers say, 'only at the moment of greatest interest'.",
-      "A crank gun now stands inside the gate of every Society post. The Committee calls it 'a persuasive argument'; its crews call it the coffee grinder, and keep a spare hopper and a hammer beside it.",
-      "The Society's crank gun has been demonstrated to the Committee, who applauded the noise and asked whether it came in a smaller size for the drawing room. It does not. The Syndicate has been sent a photograph.",
+      "The works has cast a crank gun for every Society stockade. It fires eight rounds a second while somebody turns the handle. It jams, say the armourers, 'only when it matters'.",
+      "A crank gun now stands inside the gate of every Society post. The Committee calls it 'a persuasive argument'. Its crews call it the coffee grinder, and keep a hammer handy.",
+      "The crank gun was shown to the Committee, who loved the noise and asked for a smaller one for the drawing room. There is none. The Syndicate has been sent a photograph.",
     ],
   },
 

@@ -31,16 +31,16 @@ export function detectDevice(pads: readonly (Pick<Gamepad, "connected" | "mappin
 }
 
 const STEPS: readonly string[] = [
-  "Found an expedition, or present a five-letter code to join a party of up to four.",
-  "Mind your comrades. A fallen explorer can be revived, dressed, dragged or carried; leave them and the Society will hear of it.",
-  "The territory remembers what you did to it. Behave accordingly, or as near as you can manage.",
+  "Found an expedition, or join a party of up to four with its code.",
+  "Revive, dress, drag or carry a fallen comrade. Leave one, and the Society hears of it.",
+  "The territory remembers what you did. Behave accordingly, or nearly.",
 ];
 
 class HowToCard {
   private readonly modal = new Modal("howto", "howto", "howto-title");
   private device: Device = "keyboard";
   private readonly list = h("dl", { class: "keys" });
-  private readonly kb = h("button", { type: "button", "aria-pressed": "true" }, "Keyboard & mouse");
+  private readonly kb = h("button", { type: "button", "aria-pressed": "true" }, "Keyboard");
   private readonly pad = h("button", { type: "button", "aria-pressed": "false" }, "Gamepad");
   private readonly touch = h("button", { type: "button", "aria-pressed": "false" }, "Touch");
 
@@ -48,7 +48,7 @@ class HowToCard {
     const done = h("button", { type: "button", class: "primary", "data-autofocus": true }, "Understood");
     done.addEventListener("click", () => this.close());
     const opts = h("button", { type: "button" }, "Options");
-    opts.addEventListener("click", () => openSettings(opts, "controls"));
+    opts.addEventListener("click", () => openSettings(opts, this.device === "pad" ? "pad" : "controls"));
     // the first-run orientation again (the card in the game picks it up now, or at the next expedition)
     const replay = h("button", { type: "button", "data-act": "replay-orientation" }, ORIENT_REPLAY);
     replay.addEventListener("click", () => {

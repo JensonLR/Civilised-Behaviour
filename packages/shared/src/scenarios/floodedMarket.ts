@@ -125,13 +125,13 @@ function hammer(s: MarketState, said: ScenarioFx[], atHighWater: boolean): Reduc
   const real = s.bid > 0 && s.bid >= bar;
   const short = s.short > 0 && s.short >= bar;
   if (real && (!short || s.bid >= s.short)) {
-    return resolveWith(s, "lot_won", { paid: s.spent + s.bid }, [...said, ...hush(), say(`\"Going,\" says the Auctioneer, \"going, gone.\" The hammer falls at £${s.bid}, which in this hall is a great deal of money and, as of this moment, entirely yours. The Tide Concession of Ossuary Bay is the Society's: the right to charge visitors for the weather, in perpetuity or until it rains. It is, at this instant, raining.`)]);
+    return resolveWith(s, "lot_won", { paid: s.spent + s.bid }, [...said, ...hush(), say(`\"Going, going, gone!\" The hammer falls at £${s.bid}. The Tide Concession is the Society's: the right to charge visitors for the weather. It is, right now, raining.`)]);
   }
   if (short) {
-    return resolveWith({ ...s, brokePromise: true }, "shorted", { paid: s.spent, loot: MARKET.commission }, [...said, ...hush(), say(`The hammer falls on an offer of £${s.short} that nobody can find the money behind. The lot goes to the Society, unpaid for, and the commission goes to the Society too, from a buyer who believes he owns something. The Houses are furious, in order of seniority, and the Auctioneer is already writing the apology.`)]);
+    return resolveWith({ ...s, brokePromise: true }, "shorted", { paid: s.spent, loot: MARKET.commission }, [...said, ...hush(), say(`The hammer falls on your bid of £${s.short}, with no money behind it. The lot is the Society's, unpaid, and so is a commission. The Houses are furious, in order of rank.`)]);
   }
   if (!atHighWater) return { s: fin(s), fx: said };
-  return resolveWith(s, "washed_out", { paid: s.spent }, [...said, ...hush(), say("The water reaches the rostrum. \"The Exchange,\" announces the Auctioneer, to a hall that is now a pond, \"holds its sale regardless.\" It does: the hammer falls, on a House, on a famous sum, with a splash. The lot is gone and so is the afternoon.")]);
+  return resolveWith(s, "washed_out", { paid: s.spent }, [...said, ...hush(), say("The water reaches the rostrum. The hammer falls anyway, with a splash, on a rival's bid. The lot is gone, and so is the afternoon.")]);
 }
 
 /**
@@ -139,15 +139,15 @@ function hammer(s: MarketState, said: ScenarioFx[], atHighWater: boolean): Reduc
  * Tide Concession with two free signatures in thirty seconds of a sale meant to run until the water was over the rostrum.
  */
 const inBidding = (s: MarketState): boolean => s.bid > 0 || s.short > 0;
-const NO_POOL_HEAD = "\"The family pools with bidders,\" says the House-Head, without lowering the paddle, \"not with spectators. Put a bid in with the Auctioneer, and then we may talk about whose purse is whose.\"";
-const NO_POOL_FACTOR = "The factor withdraws his hand an inch. \"A partner, madam, is somebody already in the sale. Bid, and then come back and we shall be partners at once.\"";
+const NO_POOL_HEAD = "\"The family partners with bidders, not spectators,\" says the House-Head. \"Place a bid with the Auctioneer first. Then we can talk.\"";
+const NO_POOL_FACTOR = "The factor pulls his hand back. \"A partner is somebody already bidding. Place a bid, then come back, and we shall be partners at once.\"";
 
 /** After every change: does the sale add up to an ending? (The first that does wins.) */
 function settle(s: MarketState, said: ScenarioFx[] = []): Reduction<MarketState> {
   if (s.phase === "resolved") return { s, fx: said };
   if (s.signed >= MARKET.signatures) {
     const share = Math.min(MARKET.share, free(s));
-    return resolveWith(s, "consortium", { paid: s.spent + share }, [...said, ...hush(), say("Two signatures, in two inks, on one salt-stained sheet: the pool is made. The Houses and the Society hold the Tide Concession jointly, in shares nobody will read, to be shared out at the next spring tide, or the one after, or when the water goes down.")]);
+    return resolveWith(s, "consortium", { paid: s.spent + share }, [...said, ...hush(), say("Two signatures on one salt-stained sheet: the deal is made. The Houses and the Society now own the Tide Concession together. Nobody will read the small print.")]);
   }
   // nobody left to outbid: the Auctioneer calls the lot early
   if ((s.bid > 0 || s.short > 0) && rivalMax(s) === 0) return hammer(s, said, false);
@@ -172,7 +172,7 @@ function reduce(s: MarketState, e: ScenarioInput): Reduction<MarketState> {
       const n: MarketState = { ...s, t: s.t + dt };
       if (n.t >= n.high) return hammer({ ...n, parley: undefined }, [], true);
       const fx: ScenarioFx[] = [];
-      if (s.t < s.high - 90 && n.t >= n.high - 90) fx.push(say("The water is over the Exchange's second step and rising by the minute. The hall's regulars have hitched their coats. The Auctioneer has begun, in a voice like a sluice, to say 'going'."));
+      if (s.t < s.high - 90 && n.t >= n.high - 90) fx.push(say("The water is over the second step and rising. The regulars hitch up their coats. The Auctioneer has started saying 'going'. The hammer falls soon."));
       return settle(n, fx);
     }
     case "weather": return stay(fin({ ...s, rain: Number.isFinite(e.rain) ? clamp(e.rain, 0, 1) : 0 }));
@@ -181,26 +181,26 @@ function reduce(s: MarketState, e: ScenarioInput): Reduction<MarketState> {
       const n = Math.max(0, Math.min(8, int(e.party, 0, 8, 0)));
       if (s.near.hall === n) return stay(s);
       const first = s.near.hall === 0 && n > 0 && s.phase === "approach";
-      return { s: fin({ ...s, near: { hall: n } }), fx: first ? [say("The Exchange. The lot is the Tide Concession of Ossuary Bay. The water is at the ankle. Four paddles are up, a factor is waiting with a cheque and the Auctioneer is already selling the weather. Mind your purse; mind your feet.")] : [] };
+      return { s: fin({ ...s, near: { hall: n } }), fx: first ? [say("The Exchange. The lot is the Tide Concession of Ossuary Bay, and the water is at your ankles. Four paddles are up, and a factor waits with a cheque. Mind your purse.")] : [] };
     }
     case "hostile": {
       if (e.at !== undefined && e.at !== "heads" && e.at !== "auction") return stay(s);
-      return suspend(s, "A weapon in the hall. The paddles come down as one, the Auctioneer's hammer comes down on the rail, and the sale is suspended on the grounds of everything.", s.parley !== undefined || s.signed > 0 || s.bid > 0);
+      return suspend(s, "A weapon in the hall! Every paddle drops, the hammer slams on the rail, and the sale is called off.", s.parley !== undefined || s.signed > 0 || s.bid > 0);
     }
     case "actor": {
       if (e.state !== "down") return stay(s);
-      if (e.id === "auctioneer" && !s.down.auctioneer) return suspend({ ...s, down: { auctioneer: true } }, "The Auctioneer is down. There is nobody to knock the lot down to anyone, and the water has noticed.");
-      if (/^head-[0-3]$/.test(e.id)) return suspend(s, "A House-Head is down, with the paddle still in his hand. The Houses do not take that lying down; the Exchange suspends the sale and takes it standing.", true);
+      if (e.id === "auctioneer" && !s.down.auctioneer) return suspend({ ...s, down: { auctioneer: true } }, "The Auctioneer is down. Nobody is left to sell the lot, and the sale is off.");
+      if (/^head-[0-3]$/.test(e.id)) return suspend(s, "A House-Head is down, still holding his paddle. The Houses will not take that lying down. The sale is called off.", true);
       if (e.id === "factor" && !s.factorDown) {
-        return settle(fin({ ...s, factorDown: true }), [say("The Syndicate's factor is down, cheque and all. The Houses regard this as a bystander's misfortune and the Syndicate regards it as a grudge. The loudest paddle in the room is, for the moment, a House's.")]);
+        return settle(fin({ ...s, factorDown: true }), [say("The Syndicate's factor is down, cheque and all. The Houses call it bad luck. The Syndicate calls it a grudge. His bid is out of the sale.")]);
       }
       return stay(s);
     }
     case "use": {
       if (e.target !== "factor" || s.factorDown || s.factorPooled) return stay(s);
-      if (!s.factorOffered) return { s: fin({ ...s, factorOffered: true }), fx: [say("The Syndicate's factor produces a cheque, and a pen, and an expression of enormous reasonableness. \"A consortium, madam,\" he says. \"The Syndicate supplies the cheque; you supply the signature; the Houses supply the rage. Press my hand again and we are partners.\"")] };
+      if (!s.factorOffered) return { s: fin({ ...s, factorOffered: true }), fx: [say("The Syndicate's factor takes out a cheque and a pen. \"A partnership,\" he says. \"The Syndicate pays, you sign, the Houses rage. Shake my hand again to agree.\"")] };
       if (!inBidding(s)) return { s: fin(s), fx: [say(NO_POOL_FACTOR)] };
-      return settle(fin({ ...s, factorPooled: true, signed: s.signed + 1 }), [say("You shake the factor's hand. It is dry, which is remarkable in this hall, and it is already holding a pen. One signature of two: a Syndicate paddle, on the Society's side, for a moment.")]);
+      return settle(fin({ ...s, factorPooled: true, signed: s.signed + 1 }), [say("You shake the factor's hand. It is dry, which is remarkable in this hall. He signs. One signature of two.")]);
     }
     case "talk": return talk(s, e.kind, e.result, e.paid);
     case "tally": return stay({ ...s, tally: addTally(s.tally, e.add) });
@@ -232,7 +232,7 @@ function talkAuctioneer(s: MarketState, result: string, paid: number): Reduction
   if (s.parley !== "auctioneer") return stay(s);
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
-    case "hostile": return suspend({ ...s, parley: undefined }, "You have made your point to the Auctioneer with a raised voice and a lowered weapon. The hammer comes down on the rail and the Exchange comes down with it.", true);
+    case "hostile": return suspend({ ...s, parley: undefined }, "You threaten the Auctioneer with a weapon. His hammer slams the rail, and the sale is called off.", true);
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, auctioneer: true } }));
     case "paid": {
       if (!paidOk(s, paid, free(s))) return stay(fin({ ...s, parley: undefined }));
@@ -241,7 +241,7 @@ function talkAuctioneer(s: MarketState, result: string, paid: number): Reduction
     }
     case "tip": {
       const short = Math.max(s.short, s.parleyPrice);
-      return settle(fin({ ...s, parley: undefined, short }), [say(`A short bid of £${short} is entered, against nothing. The Auctioneer writes it in the other ledger, the one with the water stains.`)]);
+      return settle(fin({ ...s, parley: undefined, short }), [say(`A short bid of £${short} goes in, with no money behind it. The Auctioneer writes it in the other ledger, the water-stained one.`)]);
     }
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -250,27 +250,27 @@ function talkAuctioneer(s: MarketState, result: string, paid: number): Reduction
 function talkHead(s: MarketState, result: string, paid: number): Reduction<MarketState> {
   if (result === "open") {
     if (s.parley || s.hostile) return stay(s);
-    if (headsLeft(s) === 0) return { s, fx: [say("There are no paddles left to catch. The hall's remaining Houses have already left, with their heron badges, in dignified silence.")] };
+    if (headsLeft(s) === 0) return { s, fx: [say("No House paddles are left in the bidding. The Houses have gone, in dignified silence.")] };
     const p = s.price.head[s.gone]!;
     return { s: fin({ ...s, parley: "house_head", parleyPrice: p }), fx: [{ k: "parley", kind: "house_head", price: p }] };
   }
   if (s.parley !== "house_head") return stay(s);
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
-    case "hostile": return suspend({ ...s, parley: undefined }, "You have made your point to a House-Head, with a raised voice and a lowered weapon. The paddles come down and the Exchange suspends the sale on the grounds of everything.", true);
+    case "hostile": return suspend({ ...s, parley: undefined }, "You threaten a House-Head with a weapon. Every paddle drops, and the sale is called off.", true);
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, head: true } }));
     case "paid": {
       if (headsLeft(s) === 0 || !paidOk(s, paid, free(s) - s.bid)) return stay(fin({ ...s, parley: undefined }));
-      return settle(fin({ ...s, parley: undefined, gone: s.gone + 1, spent: s.spent + paid, bought: s.bought + 1 }), [say(`£${paid} changes hands under the rail, in front of witnesses, who are also a contribution. A House-Head sits down in the water with his paddle across his knees. One paddle fewer.`)]);
+      return settle(fin({ ...s, parley: undefined, gone: s.gone + 1, spent: s.spent + paid, bought: s.bought + 1 }), [say(`£${paid} changes hands under the rail. A House-Head sits down in the water, paddle across his knees. One rival fewer.`)]);
     }
     case "survey": {
       if (headsLeft(s) === 0) return stay(fin({ ...s, parley: undefined }));
       if (!inBidding(s)) return { s: fin({ ...s, parley: undefined }), fx: [say(NO_POOL_HEAD)] };
-      return settle(fin({ ...s, parley: undefined, gone: s.gone + 1, signed: s.signed + 1 }), [say(s.signed + 1 >= MARKET.signatures ? "The second signature goes down. The ink, you notice, is salt." : "A House-Head signs for a consortium: the family's paddle and the Society's purse. One signature of two. The heron on his badge looks, for the first time, optimistic.")]);
+      return settle(fin({ ...s, parley: undefined, gone: s.gone + 1, signed: s.signed + 1 }), [say(s.signed + 1 >= MARKET.signatures ? "The second signature goes down. The ink, you notice, is salt." : "A House-Head signs up as your partner. One signature of two. The heron on his badge looks hopeful for the first time.")]);
     }
     case "tell": {
       if (s.whispers >= MARKET.whispers) return stay(fin({ ...s, parley: undefined }));
-      return settle(fin({ ...s, parley: undefined, whispers: s.whispers + 1 }), [say("The whisper goes down the row of Houses faster than the water. Every paddle in the hall is a little lower, and every House-Head is pretending he was not told.")]);
+      return settle(fin({ ...s, parley: undefined, whispers: s.whispers + 1 }), [say("The whisper runs down the row faster than the water. Every House will now bid a little lower, and pretends it was never told.")]);
     }
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -287,22 +287,22 @@ function leave(s: MarketState): ReturnType<TemplateDef<MarketState>["leave"]> {
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const HINT: Record<string, string> = {
-  approach: "The Exchange stands at the end of the boardwalk, and it floods. The Houses sell the Tide Concession of Ossuary Bay at high water, by auction, in the flood. Walk to the hall.",
-  waiting: "The hall is open. Four paddles, a factor and an Auctioneer whose price climbs with the tide. Bid with the Auctioneer (a cash bid has to beat every rival's ceiling, not just the asking price), thin the rival paddles (buy a House off, or sign it up), pool a consortium (bid first, then two signatures), or bid short; the hammer falls at high water.",
-  parley: "They are listening. Mind what you promise; the Exchange minutes everything, and the minutes float.",
+  approach: "The Exchange is at the end of the boardwalk. The Houses auction the Tide Concession there at high water, in the flood. Walk to the hall.",
+  waiting: "Bid with the Auctioneer: to win, you must beat every rival's top figure. Or buy Houses off. Or bid, then get two partners to sign. The hammer falls at high water.",
+  parley: "They are listening. Careful what you promise: the Exchange writes everything down.",
   fighting: "The sale has been suspended. The water has not.",
-  tension: "The water is over the second step. Whatever is standing at the hammer is what is sold.",
+  tension: "The water is over the second step. When the hammer falls, the highest bid standing wins.",
 };
 const DONE: Record<string, string> = {
-  lot_won: "The Tide Concession is the Society's, knocked down at the hammer in an inch of water. Take the boat home and charge somebody for the weather.",
-  consortium: "A pooled lot: the Houses and the Society, jointly, on a salt-stained sheet. Take the boat home and wait for the shares, and the arguments.",
+  lot_won: "The Tide Concession is the Society's, won in an inch of water. Take the boat home and charge somebody for the weather.",
+  consortium: "A shared win: the Houses and the Society own the lot together. Take the boat home and wait for your share, and the arguments.",
   shorted: "The lot is the Society's, and nobody has been paid for it. The Houses will remember. Take the boat home while the hall still has a floor.",
-  washed_out: "The sale closed in the flood, to nobody's credit, and the Concession goes back on the tide table. Take the boat home and read about it.",
+  washed_out: "The sale ended in the flood, and the Society won nothing. Take the boat home and read about it in the papers.",
   abandoned: "The expedition is down. The tide is unmoved. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rain: "Rain on the Exchange: the tide is early and the hammer falls a minute sooner.",
-  fog: "Fog on the delta: the hall is hard to find, and the tide is a minute late for it.",
+  fog: "Fog on the delta: the hall is hard to find, but the hammer falls a minute later.",
 };
 
 function view(s: MarketState, now: number): ScenarioView {
@@ -313,15 +313,15 @@ function view(s: MarketState, now: number): ScenarioView {
   const standing = Math.max(s.bid, s.short);
   const objectives: ObjectiveView[] = [
     { id: "hall", text: "Walk the boardwalk to the Exchange", done: s.near.hall > 0 || s.phase !== "approach" },
-    { id: "bid", text: standing > 0 ? `A bid of £${standing} stands${s.short > s.bid ? " (short: no cash behind it)" : ""}; the price is now £${askAt(s)}` : `Place a bid (the price is £${askAt(s)} and rising with the water)`, done: standing > 0, optional: true },
-    { id: "paddles", text: `Thin the rival paddles: buy off or sign up (${Math.min(5, rivalsOut)} of 5 out)`, done: rival === 0, optional: true },
+    { id: "bid", text: standing > 0 ? `Your bid: £${standing}${s.short > s.bid ? " (short, no cash)" : ""}. Price now: £${askAt(s)}` : `Place a bid (the price is £${askAt(s)} and rising with the water)`, done: standing > 0, optional: true },
+    { id: "paddles", text: `Remove rival bidders: buy off or sign up (${Math.min(5, rivalsOut)} of 5 out)`, done: rival === 0, optional: true },
     { id: "pool", text: `Pool a consortium: bid first, then get signatures (${Math.min(MARKET.signatures, s.signed)} of ${MARKET.signatures})`, done: s.signed >= MARKET.signatures, optional: true },
     { id: "lot", text: res === "abandoned" ? "Lost: the expedition went down" : res === "washed_out" ? "Lost: the sale closed in the flood" : "Win the lot: top cash bid at the hammer, or a consortium", done: won },
   ];
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the quay", done: false });
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
-  if (res === undefined && s.asked.head) hint += ` (A House-Head's hint: the loudest paddle in the room stops at £${rival}.)`;
-  if (res === undefined && s.asked.auctioneer) hint += ` (The Auctioneer's reserve is £${s.reserve} and it rises ${MARKET.riseStep} every half-minute.)`;
+  if (res === undefined && s.asked.head) hint += ` (A House-Head's tip: the top rival bid stops at £${rival}.)`;
+  if (res === undefined && s.asked.auctioneer) hint += ` (The Auctioneer's tip: the price started at £${s.reserve} and rises £${MARKET.riseStep} every half-minute.)`;
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const remain = res !== undefined ? 0 : s.high - s.t;
@@ -372,7 +372,7 @@ const observe: ObserveSpec = {
 
 export const floodedMarketTemplate: TemplateDef<MarketState> = {
   id: "flooded_market", title: "The Auction at High Water",
-  brief: "The Brine Houses auction the Tide Concession of Ossuary Bay in their own Exchange at spring tide; the Exchange floods, and the Houses count the water as part of the price. Four House-Heads and a Syndicate factor will bid, and the reserve rises with the tide. Outbid them, thin the paddles, pool a consortium with a House, or sell the lot short. Raise a hand in anger and the sale is off.",
+  brief: "The Brine Houses auction the Tide Concession in an Exchange that floods at high tide. Outbid four House-Heads and a Syndicate factor, or strike deals with them. Violence ends the sale.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { hall: SALTMARKET_ANCHORS.exchange },
 };

@@ -32,13 +32,14 @@ describe("CampaignMap on five shores (D-036, D-037)", () => {
     const panel = new CampaignMap();
     panel.render(m);
     expect(panel.root.textContent).toContain("Highmark: no outpost of the Society yet: carry four crates to the foundation on the grass west of the Reed Landing; on offer: The Vacant Chair"); // (D-056: Highmark has a foundation too)
-    expect(panel.root.textContent).toContain("Highmark: a day's sail");
+    expect(panel.root.textContent).not.toContain("a day's sail"); // (D-099: the chart's lanes carry the sailing times; the panel no longer writes them out again)
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     drawCampaignOverlay(g, m);
     expect([...g.querySelectorAll("text")].map((t) => t.textContent)).toContain("Thornfield Granges");
     // one sailing time per lane, written on that lane, from where the party stands
     const lanes = [...g.querySelectorAll("text.lane")];
     expect(lanes).toHaveLength(4);
+    expect(lanes.map((t) => t.textContent)).toContain("a day");
     expect(new Set(lanes.map((t) => `${t.getAttribute("x")},${t.getAttribute("y")}`)).size).toBe(4);
     // an unmet Reapers' Compact is not on the chart
     const early = campaignMapOf(c, newSettlements(), undefined, mapPins({ ...c, expeditions: 0 }, p, []), offers, newSettlements().tech, "hollowmere");

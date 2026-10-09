@@ -1,9 +1,19 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-09 (D-097, the bridge's fall and the signs, D-096, the Triangulation, D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-09 (D-099, plain words and small boxes, D-098, pages that fit and one tidy line of orders, D-097, the bridge's fall and the signs, D-096, the Triangulation, D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-099 (2026-10-09): plain words and small boxes.** From the owner's report that the copy was bulky paragraphs in odd wording and the pop-ups blocked the view.
+  - **Copy.** Every talk line, brief, hint, rule, ending and paper head is rewritten to plain English. Two tests (shared and client) hold every line to 190 characters and every sentence to 26 words. Talk prompts all say "Talk to ...".
+  - **Boxes.** A talk is a strip at the foot of the screen, with the speaker visible above it. The end-of-contract report shows three lines and a count, with the rest in the pause sheet. The pause sheet is two columns on a wide screen. The news plate is smaller.
+  - **Fixed on the way.** "The the Guild", "the Brine Houses's", numbers the copy got wrong, and an objective over 60 characters.
+- **D-098 (2026-10-09): pages that fit, and one tidy line of orders.**
+  - **Front door.** It says each thing once. On a phone, one panel shows at a time, and the creator sits behind "Appearance". The figure stands where the panels leave the picture free.
+  - **Options.** A Gamepad page of its own, two columns on a wide screen, notes cut to one fact, and on a phone the key lists fold away.
+  - **Manual.** Short steps and one-line controls.
+  - **HUD.** The distance is said once. The marker is one slip, kept off the bonus slip. The contract's rule shows while it is news and while a weapon is out.
+  - **Measured before and after.** At 1920 x 1080 nothing scrolls but the Gamepad page. On a phone the door fits, where the page was 1,984 px long.
 - **D-097 (2026-10-09): the bridge comes down; the signs stand clear.** From the owner's play report.
   - **The bridge.** Lighting a keg on Kessar's bridge used to swap the span out in one frame and put up two solid walls along the rim. Now the span breaks into fourteen pieces that fall into the gorge on a timetable (the middle first, the end runs swinging down from the broken faces), with blasts at the piers, a dust column, splashes, a rumble and a shake. They come to rest on the ramps and in the water as solid scenery. The broken ends are ragged slabs over the gorge, and the rim is a see-through railing.
   - **Signs.** Every board in every region and on the HQ route is tested clear of every solid, with nothing tall in front of either face; the offenders moved. A sign's short heading is lettered larger than its long line.

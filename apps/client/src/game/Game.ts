@@ -698,6 +698,7 @@ export class Game {
     this.trackerClock -= 1;
     if (this.trackerClock <= 0) {
       this.trackerClock = 8; // (~4 Hz at 30 fps)
+      this.tracker.setArmed(this.combat.sightShown);
       this.tracker.tick(this.worldNowMs);
     }
     this.updateGuide();
@@ -1266,7 +1267,10 @@ export class Game {
       this.guide.setLine(this.guidanceNow?.text, !ordersAreTheLine);
       // where the line ends on screen: the marker stays below it (measured a few times a second, not every frame)
       const lineEl = document.querySelector<HTMLElement>(ordersAreTheLine ? "#hud .objectives" : "#hud .guide");
-      this.guideTop = lineEl && !lineEl.hidden ? lineEl.getBoundingClientRect().bottom + 44 : 0;
+      // (D-098: and below the Society's commission, the slip that hangs under the card: the flag stood on its words)
+      const slip = ordersAreTheLine ? document.querySelector<HTMLElement>("#hud .objectives li.request") : null;
+      const slipBottom = slip && slip.getClientRects().length > 0 ? slip.getBoundingClientRect().bottom : 0;
+      this.guideTop = lineEl && !lineEl.hidden ? Math.max(lineEl.getBoundingClientRect().bottom, slipBottom) + 44 : 0;
       // the HUD's quiet rules (plate.css): the invite code only at camp, where friends are invited; the key hints only for the first minute and a half
       const root = document.getElementById("hud");
       if (root) {
@@ -1294,7 +1298,7 @@ export class Game {
     g2.quiet(quiet);
     if (g2.markOver) this.tags.setObstacle(true, g2.markX - (quiet ? 16 : 56), g2.markY - 40, g2.markX + (quiet ? 16 : 56), g2.markY + (quiet ? -6 : 20));
     else this.tags.setObstacle(false);
-    this.tracker.setDistance(dist >= 4 ? Math.round(dist) : -1);
+    this.tracker.setDistance(quiet && dist >= 4 ? Math.round(dist) : -1); // (D-098: said once: the marker carries it unless it is the flag alone)
   }
 
   private refreshCompass(): void {

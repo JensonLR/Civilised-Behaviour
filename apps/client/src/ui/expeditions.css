@@ -1,8 +1,9 @@
 /* The front door's Continue button and "Your expeditions" list (D-039). Colours come from the :root palette variables only. */
 .panel #continue-row[hidden], .panel .expeditions[hidden] { display: none; }
-.panel button#continue { display: grid; gap: 0.1rem; justify-items: center; text-align: center; }
-.panel button#continue .cont-title { font-size: 1.2rem; letter-spacing: 0.12em; }
-.panel button#continue .cont-meta { font-family: var(--serif); font-size: 0.8rem; letter-spacing: 0.02em; text-transform: none; opacity: 0.92; }
+.panel button#continue, .panel button#create { display: grid; gap: 0.1rem; justify-items: center; text-align: center; }
+.panel button#continue .cont-title, .panel button#create .cont-title { font-size: 1.2rem; letter-spacing: 0.12em; }
+.panel button#continue .cont-meta, .panel button#create .cont-meta { font-family: var(--serif); font-size: 0.8rem; letter-spacing: 0.02em; text-transform: none; opacity: 0.92; }
+.panel button#create:not(.primary) .cont-title { font-size: 1.05rem; }
 .panel .expeditions { margin-top: 0.95rem; padding-top: 0.5rem; border-top: 1px dotted var(--ink); }
 .panel .expeditions h2 { margin: 0 0 0.3rem; font-family: var(--display); font-weight: 400; font-size: 1.05rem; letter-spacing: 0.1em; }
 .panel .expeditions ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; max-height: 10.5rem; overflow-y: auto; }

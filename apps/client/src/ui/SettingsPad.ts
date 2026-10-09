@@ -76,7 +76,6 @@ export function buildPadSection(pads: PadSource = defaultPads): PadSection {
     sync();
   };
 
-  root.append(h("h3", {}, "Gamepad"));
 
   // the glyph family
   {
@@ -87,19 +86,21 @@ export function buildPadSection(pads: PadSource = defaultPads): PadSection {
     };
     sel.addEventListener("change", () => S.setGlyphPreference(sel.value as S.GlyphPreference));
     refreshers.push(sync);
-    row("Button prompts", id, sel, "Which buttons the prompts show. Automatic follows whatever you touched last.");
+    row("Button prompts", id, sel);
     sync();
   }
 
-  slider({ label: "Stick deadzone", spec: S.padDeadzoneSpec, scale: 100, fmt: (v) => `${Math.round(v * 100)}%`, note: "How far a stick must move before it counts. Raise it if the view drifts on its own." });
-  slider({ label: "Stick response", spec: S.padCurveSpec, scale: 10, fmt: (v) => (v <= 1.05 ? "Linear" : v.toFixed(1)), note: "Higher is finer near the centre and full at the rim: easier to aim, still quick to turn." });
-  slider({ label: "Aim sensitivity", spec: S.padAimSensitivitySpec, scale: 100, fmt: (v) => `${Math.round(v * 100)}%`, note: "Look speed while aiming, as a share of your stick sensitivity." });
-  toggle({ label: "Aim assist", get: S.getAimAssist, set: S.setAimAssist, note: "A gentle pull toward a hostile near the crosshair, only on a pad. It never moves the aim more than a hair.", on: "On", off: "Off" });
-  toggle({ label: "Hold to aim", get: S.getHoldToAim, set: S.setHoldToAim, note: "Off: press once to aim, again to lower.", on: "Hold", off: "Toggle" });
-  toggle({ label: "Rumble", get: S.getPadRumble, set: S.setPadRumble, note: "Shots, hits, blasts and being hurt, where the pad can.", on: "On", off: "Off" });
+  slider({ label: "Stick deadzone", spec: S.padDeadzoneSpec, scale: 100, fmt: (v) => `${Math.round(v * 100)}%`, note: "Raise it if the view drifts on its own." });
+  slider({ label: "Stick response", spec: S.padCurveSpec, scale: 10, fmt: (v) => (v <= 1.05 ? "Linear" : v.toFixed(1)), note: "Higher is finer near the centre, still quick at the rim." });
+  slider({ label: "Aim sensitivity", spec: S.padAimSensitivitySpec, scale: 100, fmt: (v) => `${Math.round(v * 100)}%`, note: "While aiming, as a share of stick sensitivity." });
+  toggle({ label: "Aim assist", get: S.getAimAssist, set: S.setAimAssist, note: "A gentle pull toward a hostile near the crosshair.", on: "On", off: "Off" });
+  toggle({ label: "Hold to aim", get: S.getHoldToAim, set: S.setHoldToAim, on: "Hold", off: "Toggle" });
+  toggle({ label: "Rumble", get: S.getPadRumble, set: S.setPadRumble, on: "On", off: "Off" });
 
   // the layout
-  root.append(h("h3", {}, "Gamepad layout"), h("p", { class: "fine" }, "Pick a control for each action, or press Set and then the button. A control already in use swaps places with this one, so nothing is ever left without a button. Reload is the Use control held; the command wheel, weapon cycle, pause and skip keep their places."));
+  // (the layout and the fixed list fold away on a phone: the Settings sheet decides when it opens)
+  const layout = h("details", { class: "fold", open: true }, h("summary", {}, "Layout"), h("p", { class: "fine" }, "Pick a control, or Press a button and then it. A control already taken swaps places, so nothing is left without one. Reload is Use held."));
+  root.append(layout);
   const table = h("div", { class: "binds padbinds", role: "group", "aria-label": "Gamepad layout" });
   const selects = new Map<PadAction, HTMLSelectElement>();
   const glyphs = new Map<PadAction, HTMLElement>();
@@ -121,18 +122,19 @@ export function buildPadSection(pads: PadSource = defaultPads): PadSection {
     set.addEventListener("click", () => startLearn(a.id, set));
     table.append(h("div", { class: "bind" }, h("label", { for: id }, a.label), mark, sel, set));
   }
-  root.append(table);
+  layout.append(table);
   const reset = h("button", { type: "button", class: "small", "data-act": "reset-pad" }, "Reset gamepad layout");
   reset.addEventListener("click", () => {
     cancelLearn();
     setPadBindings(defaultPadBindings());
     status.textContent = "Gamepad layout restored.";
   });
-  root.append(h("div", { class: "row-end" }, reset), status);
+  layout.append(h("div", { class: "row-end" }, reset));
+  root.append(status);
 
   // the fixed controls, drawn with the glyphs of the family in use
   const list = h("dl", { class: "keys pads" });
-  root.append(list);
+  root.append(h("details", { class: "fold", open: true }, h("summary", {}, "Fixed"), list));
 
   const refreshLayout = (): void => {
     const b = getPadBindings();
@@ -143,8 +145,11 @@ export function buildPadSection(pads: PadSource = defaultPads): PadSection {
       sel.value = b[a.id];
       glyphs.get(a.id)!.replaceChildren(glyphEl(a.id satisfies PromptId, fam));
     }
+    // the controls that keep their places (the table above already lists the rest: D-098 stopped listing them twice)
     list.replaceChildren(
-      ...padRows(fam).map((r) => h("div", {}, h("dt", {}, ...(r.prompts ?? []).map((p) => glyphEl(p, fam))), h("dd", {}, r.what))),
+      ...padRows(fam)
+        .filter((r) => !(r.prompts ?? []).some((p) => PAD_ACTIONS.some((a) => a.id === p)))
+        .map((r) => h("div", {}, h("dt", {}, ...(r.prompts ?? []).map((p) => glyphEl(p, fam))), h("dd", {}, r.what))),
     );
   };
   refreshers.push(refreshLayout);

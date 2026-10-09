@@ -140,7 +140,7 @@ test("key rebinding: a clash is reported, swapping fixes both, reserved keys are
   await expect(page.locator("#sheet-settings p.status")).toContainText("reserved");
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Reset keys to defaults" }).click();
+  await page.getByRole("button", { name: "Reset keys" }).click();
   await expect(jump).toHaveText("Space");
   expect(await stored(page, "cb.bindings")).toBeNull();
 });

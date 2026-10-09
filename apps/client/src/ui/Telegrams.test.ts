@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Telegrams } from "./Telegrams.ts";
+import { DEBRIEF_SHOWN, Telegrams } from "./Telegrams.ts";
 
 /** The stack never reaches the aim zone: past the middle of the picture (less 2.5 rem) the older slips fold to one line and the newest stays whole. */
 describe("telegram stack and the aim zone", () => {
@@ -40,7 +40,19 @@ describe("debrief slips", () => {
     t.push("The Committee pays £45.\nThe Ward now regards you as wary.\nThe purse is £165.");
     const slips = Array.from(document.body.querySelectorAll<HTMLElement>(".telegrams .telegram"));
     expect(slips.map((e) => e.classList.contains("debrief"))).toEqual([false, true]);
-    expect(slips[1]!.querySelector(".body")!.textContent!.split("\n")).toHaveLength(3);
+    expect(slips[1]!.querySelectorAll(".body p")).toHaveLength(3);
+    t.dispose();
+  });
+
+  it("D-099: a long debrief shows its first lines and counts the rest (the pause sheet keeps them whole)", () => {
+    const t = new Telegrams(document.body);
+    t.push(["Paid £45.", "The Butcher's Bill: one limb.", "The Ward is wary.", "Two hands want wages.", "A title is earned."].join("\n"));
+    const body = document.body.querySelector<HTMLElement>(".telegram.debrief .body")!;
+    const rows = Array.from(body.querySelectorAll("p")).map((p) => p.textContent);
+    expect(rows).toHaveLength(DEBRIEF_SHOWN + 1);
+    expect(rows[0]).toBe("Paid £45.");
+    expect(rows.at(-1)).toBe("and 2 more in the pause sheet");
+    expect(t.log.at(-1)).toContain("A title is earned."); // (whole in the log the pause sheet reads)
     t.dispose();
   });
 });

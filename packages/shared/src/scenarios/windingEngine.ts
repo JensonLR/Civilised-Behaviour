@@ -137,7 +137,7 @@ function reduce(s: EngineState, e: ScenarioInput): Reduction<EngineState> {
       // the clock (a lit fuse beats it: the cut does not break through under a burning keg)
       if (n.keg === "none" && n.t >= n.cutAt) {
         return resolveWith(n, "vein_struck", {}, [...fx, { k: "order", group: "guards", order: { o: "stand_down" } }, { k: "order", group: "beat", order: { o: "stand_down" } },
-          say("A shout comes up the shaft, then a cheer, then a man with an ore sample held over his head like a prize marrow. The cross-cut is through. The Syndicate's clerk is already running for the Assay House.")]);
+          say("A shout comes up the shaft, then a cheer. The cross-cut is through, and the Syndicate has the vein. Its clerk is already running for the Assay House.")]);
       }
       return { s: fin(n), fx };
     }
@@ -190,7 +190,7 @@ function use(s: EngineState, target: string): Reduction<EngineState> {
     return resolveWith(fin(s), "engine_fouled", {}, [{ k: "order", group: "guards", order: { o: "stand_down" } }, { k: "order", group: "beat", order: { o: "stand_down" } },
       say(s.alarm
         ? "With nobody left to stop you, the crate goes into the feed at the west wall. The engine drinks the gorge, chokes on it, and stops with a noise like a cathedral clearing its throat."
-        : "The crate goes into the feed at the west wall, quietly. A minute later the engine coughs, then groans, then stops with a long, offended sigh. The engineer climbs up to look. The guards look at each other. Nobody looks at you.")]);
+        : "The crate goes quietly into the feed at the west wall. A minute later the engine coughs, groans and stops with an offended sigh. The guards look at each other. Nobody looks at you.")]);
   }
   if (target === "keg") {
     if (s.keg !== "none") return stay(s);
@@ -220,7 +220,7 @@ function talk(s: EngineState, result: string, paid: number): Reduction<EngineSta
       if (!paidOk(s, paid)) return stay(fin({ ...s, parley: undefined }));
       const n = fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid });
       return resolveWith(n, "engine_bought", {}, [{ k: "order", group: "guards", order: { o: "stand_down" } }, { k: "order", group: "beat", order: { o: "stand_down" } },
-        say("The engine stops, with a clunk that will take a week and a fitter from the coast to put right. The engineer writes CRACKED FLYWHEEL in the log, signs it, and takes the rest of the afternoon off.")]);
+        say("The engine stops with a clunk. The engineer writes CRACKED FLYWHEEL in the log, signs it, and takes the afternoon off. A repair will take a week and a fitter from the coast.")]);
     }
     default: return stay(s);
   }
@@ -238,7 +238,7 @@ function leave(s: EngineState): ReturnType<TemplateDef<EngineState>["leave"]> {
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const HINT: Record<string, string> = {
-  approach: "The Syndicate has leased the Company's winding engine on the headframe terrace and is driving a cross-cut at the vein. When it breaks through, the gorge is theirs. Go up the ore road to the terrace and have a look at the engine.",
+  approach: "The Syndicate is using the Company's winding engine to dig toward the vein. If it breaks through, the gorge is theirs. Go up the ore road to the terrace and look at the engine.",
   waiting: "Two guards stand the terrace and a third walks a beat past the winding house. The engineer minds the gauge, and may be persuaded to mind it less. Crouch to keep out of their eyes.",
   standoff: "A guard has challenged you. Clear off the terrace before he blows his whistle, and come back another way.",
   parley: "The engineer is listening, and calculating.",
@@ -328,7 +328,7 @@ const observe: ObserveSpec = {
 export const windingEngineTemplate: TemplateDef<EngineState> = {
   id: "winding_engine", title: "The Winding Engine",
   noPowderStore: true, // (D-084: see the template type)
-  brief: "The Company has leased its winding engine to the Syndicate, which it calls diversification, and the Syndicate is driving a cross-cut at the vein with it. When it breaks through, the gorge's best ore is theirs. Foul the boiler with grit while the guards look away, blow it up with the Company's own powder, or pay the engineer to discover a fault.",
+  brief: "The Company has rented its winding engine to the Syndicate, who are digging toward the vein. Stop them: clog the boiler with grit, blow it up, or pay the engineer to find a fault.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { beatOut: [E0.beat[0]!, E0.beat[1]!], beatBack: [E0.beat[1]!, E0.beat[0]!] },
   props: [

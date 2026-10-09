@@ -49,12 +49,15 @@ function helmet(cx: number, cy: number, w: number, tilt: number, c: { paper: str
   const P = (x: number, y: number): string => `${f(x)} ${f(y)}`;
   const stroke = `stroke="${c.ink}" stroke-width="5" stroke-linejoin="round"`;
   // the brim: long, sloping down to a point at the front and the back, its underside showing below
-  const under = `<path d="M${P(-110, 26)}C${P(-70, 4)} ${P(-30, 2)} ${P(0, 2)}C${P(30, 2)} ${P(70, 4)} ${P(110, 26)}C${P(70, 22)} ${P(30, 26)} ${P(0, 26)}C${P(-30, 26)} ${P(-70, 22)} ${P(-110, 26)}Z" fill="${c.under}" ${stroke}/>`;
-  const brim = `<path d="M${P(-110, 26)}C${P(-74, -2)} ${P(-34, -10)} ${P(0, -10)}C${P(34, -10)} ${P(74, -2)} ${P(110, 26)}C${P(72, 8)} ${P(34, 4)} ${P(0, 4)}C${P(-34, 4)} ${P(-72, 8)} ${P(-110, 26)}Z" fill="${c.paper2}" ${stroke}/>`;
+  const under = `<path d="M${P(-110, 26)}C${P(-70, 4)} ${P(-30, 2)} ${P(0, 2)}C${P(30, 2)} ${P(70, 4)} ${P(110, 26)}`
+    + `C${P(70, 22)} ${P(30, 26)} ${P(0, 26)}C${P(-30, 26)} ${P(-70, 22)} ${P(-110, 26)}Z" fill="${c.under}" ${stroke}/>`;
+  const brim = `<path d="M${P(-110, 26)}C${P(-74, -2)} ${P(-34, -10)} ${P(0, -10)}C${P(34, -10)} ${P(74, -2)} ${P(110, 26)}`
+    + `C${P(72, 8)} ${P(34, 4)} ${P(0, 4)}C${P(-34, 4)} ${P(-72, 8)} ${P(-110, 26)}Z" fill="${c.paper2}" ${stroke}/>`;
   // the crown: a tall egg, fuller at the back, rising to a rounded peak
   const crown = `<path d="M${P(-60, -4)}C${P(-64, -56)} ${P(-38, -104)} ${P(4, -106)}C${P(46, -104)} ${P(68, -58)} ${P(62, -4)}C${P(30, 2)} ${P(-28, 2)} ${P(-60, -4)}Z" fill="${c.paper}" ${stroke}/>`;
   // the pugaree, wound twice round the crown, and the small button on top
-  const band = `<path d="M${P(-61, -8)}C${P(-62, -20)} ${P(-61, -28)} ${P(-59, -34)}C${P(-20, -26)} ${P(22, -26)} ${P(61, -34)}C${P(63, -26)} ${P(63, -16)} ${P(62, -8)}C${P(22, -2)} ${P(-22, -2)} ${P(-61, -8)}Z" fill="${c.band}" ${stroke}/>`;
+  const band = `<path d="M${P(-61, -8)}C${P(-62, -20)} ${P(-61, -28)} ${P(-59, -34)}C${P(-20, -26)} ${P(22, -26)} ${P(61, -34)}`
+    + `C${P(63, -26)} ${P(63, -16)} ${P(62, -8)}C${P(22, -2)} ${P(-22, -2)} ${P(-61, -8)}Z" fill="${c.band}" ${stroke}/>`;
   const fold = `<path d="M${P(-58, -21)}C${P(-20, -14)} ${P(22, -14)} ${P(61, -21)}" fill="none" stroke="${c.ink}" stroke-width="3" opacity="0.6"/>`;
   const button = `<ellipse cx="4" cy="-106" rx="11" ry="6" fill="${c.band}" ${stroke}/>`;
   // a highlight down the lit side of the crown, so it reads as round
@@ -85,7 +88,8 @@ export function emblemSvg(o: EmblemOptions = {}): string {
       const a = (i / 32) * Math.PI * 2;
       const r0 = R * (i % 8 === 0 ? 0.6 : 0.64);
       const r1 = R * 0.69;
-      parts.push(`<line x1="${f(C + Math.sin(a) * r0)}" y1="${f(C - Math.cos(a) * r0)}" x2="${f(C + Math.sin(a) * r1)}" y2="${f(C - Math.cos(a) * r1)}" stroke="${brass}" stroke-width="${f(R * (i % 8 === 0 ? 0.022 : 0.012))}" stroke-linecap="round"/>`);
+      parts.push(`<line x1="${f(C + Math.sin(a) * r0)}" y1="${f(C - Math.cos(a) * r0)}" x2="${f(C + Math.sin(a) * r1)}" y2="${f(C - Math.cos(a) * r1)}"`
+        + ` stroke="${brass}" stroke-width="${f(R * (i % 8 === 0 ? 0.022 : 0.012))}" stroke-linecap="round"/>`);
     }
   }
   if (full) {
@@ -98,7 +102,8 @@ export function emblemSvg(o: EmblemOptions = {}): string {
       const l = { x: C + Math.sin(a) * inn + Math.cos(a) * half, y: C - Math.cos(a) * inn + Math.sin(a) * half };
       const r = { x: C + Math.sin(a) * inn - Math.cos(a) * half, y: C - Math.cos(a) * inn - Math.sin(a) * half };
       const mid = { x: C + Math.sin(a) * inn, y: C - Math.cos(a) * inn };
-      parts.push(`<path d="M${f(mid.x)} ${f(mid.y)}L${f(l.x)} ${f(l.y)}L${f(tip.x)} ${f(tip.y)}Z" fill="${a === 0 ? paper : brass}"/><path d="M${f(mid.x)} ${f(mid.y)}L${f(r.x)} ${f(r.y)}L${f(tip.x)} ${f(tip.y)}Z" fill="${a === 0 ? paper2 : brassDark}"/>`);
+      parts.push(`<path d="M${f(mid.x)} ${f(mid.y)}L${f(l.x)} ${f(l.y)}L${f(tip.x)} ${f(tip.y)}Z" fill="${a === 0 ? paper : brass}"/>`
+        + `<path d="M${f(mid.x)} ${f(mid.y)}L${f(r.x)} ${f(r.y)}L${f(tip.x)} ${f(tip.y)}Z" fill="${a === 0 ? paper2 : brassDark}"/>`);
     }
     // the helmet in the middle of the die, tipped back a little
     parts.push(helmet(C, C + R * 0.14, R * 1.06, -0.14, { paper, paper2, under: brassDark, band: stamp, ink }));

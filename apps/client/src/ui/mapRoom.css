@@ -46,3 +46,26 @@
 @keyframes sailWaves { to { background-position: -44px 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .sailing .waves { animation: none; } }
 :root[data-motion="reduced"] .sailing .waves { animation: none; }
+
+/* D-099: the chosen shore says what it is; the others are their names (five paragraphs under the chart made the room 2,212 px tall) */
+.maproom .dest:not(:has(input:checked)) .blurb, .maproom .dest:not(:has(input:checked)) .note { display: none; }
+.maproom .dest { padding: 0.32rem 0.6rem; }
+.maproom .dest .name { font-size: 1.08rem; }
+.maproom .dest .blurb { font-size: 0.9rem; }
+.maproom .chartwrap .mark { cursor: pointer; }
+.maproom .side h3 { margin-top: 0.7rem; }
+.maproom .campaign { font-size: 0.86rem; }
+@media (min-width: 56rem) {
+  .panel.sheet.maproom { width: min(96vw, 68rem); }
+  .maproom .maprow { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 1fr); column-gap: 1.1rem; align-items: start; }
+  .maproom .maprow .chartwrap { margin-top: 0.5rem; }
+  .maproom .maprow .dests { margin-top: 0.5rem; }
+  .maproom .side .actions { flex-wrap: wrap; }
+  .maproom .campaign .shores { columns: 1; }
+}
+.maproom .dest .blurb { font-family: var(--serif); letter-spacing: 0; text-transform: none; line-height: 1.3; }
+.maproom .dest .note { font: italic 0.84rem/1.3 var(--serif); letter-spacing: 0; }
+.maproom .side .actions button { white-space: nowrap; }
+.maproom .left .campaign { margin-top: 0.6rem; padding: 0.45rem 0.6rem; }
+.maproom .left .campaign .shores { margin: 0; padding-left: 1rem; }
+.maproom .left .campaign .shores li, .maproom .left .campaign .pins li { margin: 0.1rem 0; line-height: 1.28; }

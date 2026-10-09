@@ -429,3 +429,55 @@ html .pause .orders, html .sheet.parley { font-family: var(--serif); } /* (a fon
   #hud .objectives li.request { font-size: 0.72rem; padding: 0.08rem 0.55rem 0.1rem; margin-top: 0.2rem; max-width: min(30rem, 72vw); }
   #hud .gazette .line { font-size: 0.76rem; padding: 0.1rem 0.45rem; }
 }
+
+/* D-098 ("mission objective markers feel sloppy"): the marker's name and distance are one slip side by side (they were two slips stacked, the name's slip wider or narrower than
+   its number's), the distance in the stamp's red as it is everywhere else; a nameless marker is the number alone */
+#hud .goalmark { display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; width: 14rem; margin-left: -7rem; }
+#hud .goalmark .flag, #hud .goalmark .arrow { grid-column: 1 / -1; justify-self: center; }
+#hud .goalmark .label { margin-top: 0.15rem; padding: 0.02rem 0.3rem 0.02rem 0.5rem; border-radius: 2px 0 0 2px; white-space: nowrap; }
+#hud .goalmark .mdist { margin-top: 0.15rem; padding: 0.02rem 0.5rem 0.02rem 0.3rem; border-radius: 0 2px 2px 0; color: var(--stamp); white-space: nowrap; }
+#hud .goalmark .label:empty { display: none; }
+#hud .goalmark .label:empty + .mdist { grid-column: 1 / -1; justify-self: center; border-radius: 2px; padding-left: 0.5rem; }
+
+/* D-099 ("the boxes that pop up look big and bulky and block the view"): a talk is a strip along the foot of the picture, not a card in the middle of it. The person you are
+   talking to stays in view above it; the heading, the price and the round share one small line; the answers sit two abreast where there is room. */
+html #sheet-parley.overlay { align-items: flex-end; padding: 0 0.8rem max(0.8rem, env(safe-area-inset-bottom, 0px)); background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--scrim) 55%, transparent)); }
+html #sheet-parley .panel.sheet.parley { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; column-gap: 1rem; width: min(96vw, 52rem); max-height: min(50vh, 27rem); padding: 0.75rem 1.2rem 0.6rem; overflow-y: auto; }
+html #sheet-parley .parley > * { grid-column: 1 / -1; }
+html #sheet-parley .parley .society { grid-column: 1; grid-row: 1; text-align: left; font-size: 0.68rem; letter-spacing: 0.18em; }
+html #sheet-parley .parley .meta { grid-column: 2; grid-row: 1; margin: 0; text-align: right; font-size: 0.78rem; white-space: nowrap; align-self: baseline; }
+html #sheet-parley .parley h2 { margin: 0.05rem 0 0.25rem; text-align: left; font-size: 1.2rem; }
+html #sheet-parley .sheet.parley .line { margin: 0 0 0.45rem; padding: 0.1rem 0 0.1rem 0.8rem; font-size: 1.05rem; line-height: 1.35; }
+html #sheet-parley .sheet.parley .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); column-gap: 1rem; }
+html #sheet-parley .sheet.parley .opt { padding: 0.35rem 0.5rem 0.38rem 1.5rem; row-gap: 0; }
+html #sheet-parley .parley .opt .label { font-size: 1rem; }
+html #sheet-parley .parley .opt .hint { font-size: 0.82rem; line-height: 1.25; }
+@media (max-height: 34rem) { html #sheet-parley .panel.sheet.parley { max-height: 74vh; padding: 0.5rem 0.9rem 0.4rem; } html #sheet-parley .sheet.parley .line { font-size: 0.95rem; } }
+html #sheet-parley .parley .opt .hint { font-family: var(--serif); font-style: italic; letter-spacing: 0.01em; text-transform: none; } /* (the consequence in the reading face: small capitals were hard work at this size) */
+/* the debrief card: a row per result in the reading face, the first one set a little stronger, and the count of the rest in the stamp's red */
+#hud .telegram.debrief .body { display: block; -webkit-line-clamp: unset; font: 0.86rem/1.28 var(--serif); letter-spacing: 0; }
+#hud .telegram.debrief .body p { margin: 0; }
+#hud .telegram.debrief .body p + p { margin-top: 0.12rem; }
+#hud .telegram.debrief .body p:first-child { font-weight: 700; }
+#hud .telegram.debrief .body p.more { font-style: italic; font-size: 0.78rem; color: var(--stamp); }
+/* the plate is a keepsake, not a billboard: smaller, and higher, clear of the middle of the picture */
+#hud .plate { top: 26%; width: min(14.5rem, 26vw); }
+
+/* D-099: the pause sheet on a wide screen is two columns, the contract on the left and the buttons on the right, so it never scrolls (it ran 768 px in a 686 px sheet at
+   1280 x 720 and hid Leave expedition below the fold); the expedition's number and seed are one small line */
+html .pause #pause-info { font-size: 0.82rem; }
+@media (min-width: 56rem) and (min-height: 30rem) {
+  html .panel.sheet.pause { display: grid; width: min(94vw, 50rem); grid-template-columns: minmax(0, 1fr) 18rem; column-gap: 1.6rem; align-content: start;
+    grid-template-areas: "soc soc" "title title" "info info" "save menu" "orders menu" "disp menu" "plates menu" "fine hints" ". hints"; }
+  html .pause > .society { grid-area: soc; }
+  html .pause > h2 { grid-area: title; }
+  html .pause > #pause-info { grid-area: info; }
+  html .pause > .saveline { grid-area: save; text-align: left; }
+  html .pause > .orders { grid-area: orders; }
+  html .pause > .dispatches { grid-area: disp; }
+  html .pause > .plates { grid-area: plates; }
+  html .pause > .menu { grid-area: menu; align-self: start; margin-top: 0.4rem; }
+  html .pause > p.fine:not(.saveline) { grid-area: fine; text-align: left; }
+  html .pause > .hintbar { grid-area: hints; }
+}
+html .pause .menu .pair button { white-space: nowrap; padding-inline: 0.5rem; font-size: 0.94rem; letter-spacing: 0.05em; } /* ("How to / play" wrapped in its half of the column) */

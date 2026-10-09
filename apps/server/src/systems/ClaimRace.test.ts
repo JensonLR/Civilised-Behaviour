@@ -116,7 +116,7 @@ describe("the four endings through the real runner, one commit each", () => {
     stake(f, s, 2);
     run(f, s, 110);
     pick(f, s, "assayer", /Ask what the Syndicate has filed/);
-    choose(f, s, /Tell him the Syndicate's survey is unsound/);
+    choose(f, s, /Tell him the Syndicate's chain is short/);
     expect(notices(f).join(" ")).toMatch(/PROVISIONAL/);
     expect(lastView(f).objectives.map((o) => o.id)).toContain("provisional");
     for (const i of [0, 1, 3]) expect(stake(f, s, i), `peg ${i}`).toBe(true);
@@ -129,7 +129,7 @@ describe("the four endings through the real runner, one commit each", () => {
   it("the Syndicate cannot file on a PROVISIONAL survey however many pegs it holds", () => {
     const { f, s } = newRun();
     pick(f, s, "assayer", /Ask what the Syndicate has filed/);
-    choose(f, s, /Tell him the Syndicate's survey is unsound/);
+    choose(f, s, /Tell him the Syndicate's chain is short/);
     run(f, s, 320);
     expect(f.commits, "nobody files; the House closes at 330 s").toHaveLength(0);
     run(f, s, 20);

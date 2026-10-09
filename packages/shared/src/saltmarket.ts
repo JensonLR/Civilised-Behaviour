@@ -638,7 +638,7 @@ export const SALTMARKET_MOUNT_SPOTS: RegionMountSpots = {
 /** The HUD's prompts and the server's "post" use points (acted on through the scenario). */
 export const SALTMARKET_STATIONS: readonly UseStation[] = [
   { id: "dock", kind: "dock", x: SALTMARKET_ANCHORS.landing.x, z: SALTMARKET_ANCHORS.landing.z, r: 4, prompt: "Take the barge home" },
-  { id: "tide_reeve", kind: "post", x: SALTMARKET_SITES.tideReeve.x, z: SALTMARKET_SITES.tideReeve.z, r: 2.6, prompt: "Declare yourself to the Tide-Reeve" },
-  { id: "auctioneer", kind: "post", x: SALTMARKET_SITES.auctioneer.x, z: SALTMARKET_SITES.auctioneer.z, r: 2.6, prompt: "Address the Auctioneer" },
-  { id: "house_head", kind: "post", x: SALTMARKET_SITES.houseHeads[0].x, z: SALTMARKET_SITES.houseHeads[0].z, r: 2.6, prompt: "Catch a House-Head's eye" },
+  { id: "tide_reeve", kind: "post", x: SALTMARKET_SITES.tideReeve.x, z: SALTMARKET_SITES.tideReeve.z, r: 2.6, prompt: "Talk to the Tide-Reeve" },
+  { id: "auctioneer", kind: "post", x: SALTMARKET_SITES.auctioneer.x, z: SALTMARKET_SITES.auctioneer.z, r: 2.6, prompt: "Talk to the Auctioneer" },
+  { id: "house_head", kind: "post", x: SALTMARKET_SITES.houseHeads[0].x, z: SALTMARKET_SITES.houseHeads[0].z, r: 2.6, prompt: "Talk to a House-Head" },
 ];

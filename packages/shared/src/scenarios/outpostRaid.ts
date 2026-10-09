@@ -138,7 +138,7 @@ function reduce(s: RaidState, e: ScenarioInput): Reduction<RaidState> {
         fx.push({ k: "spawn", group: "late:raiders" }, { k: "spawn", group: "late:captain" },
           { k: "order", group: "late:raiders", order: { o: "guard", x: RAID_SITES.ranks.x, z: RAID_SITES.ranks.z, r: RAID.ranksR } },
           { k: "order", group: "late:captain", order: { o: "guard", x: RAID_SITES.muster.x, z: RAID_SITES.muster.z, r: 0 } },
-          say(`A Syndicate launch noses into the south bank upstream and puts a raiding party ashore: ${n.crew.total} men with torches, and a captain with a list. They are coming down the bank toward the post.`));
+          say(`A Syndicate boat lands upstream: ${n.crew.total} men with torches, and a captain with a list. They are coming down the bank toward the post.`));
       }
       if (n.landed && !n.attacking && n.demandUntil > 0 && n.t >= n.demandUntil) {
         const r = assault(n, "The captain looks at his watch, shows it to you, and drops his torch into the grass. \"Gentlemen: the yard.\"");
@@ -150,7 +150,7 @@ function reduce(s: RaidState, e: ScenarioInput): Reduction<RaidState> {
         if (n.torchSince === 0) n = { ...n, torchSince: n.t };
         else if (n.t - n.torchSince >= torchS(n)) {
           return resolveWith(n, "post_burned", {}, [...fx,
-            say("The torches go into the store-sheds. The stores go up with a sound like a ledger being closed. The raiders cheer, take the flag down to have something to carry, and leave by the gate, unhurried.")]);
+            say("The torches go into the store-sheds, and the stores burn. The raiders cheer, take the flag as a souvenir, and stroll out of the gate.")]);
         }
       } else if (n.torchSince !== 0) n = { ...n, torchSince: 0 };
       return { s: fin(n), fx };
@@ -178,7 +178,7 @@ function reduce(s: RaidState, e: ScenarioInput): Reduction<RaidState> {
       const n = fin({ ...s, crew: { alive, routed, down, total: tot } });
       if (n.landed && isBroken(n)) {
         return resolveWith(n, "post_held", {}, [{ k: "order", group: "late:raiders", order: { o: "flee" } }, { k: "order", group: "late:captain", order: { o: "flee" } },
-          say("The raid breaks. The men who can still run do, back up the bank to their launch, and the captain goes with them, writing as he runs. The stores stand. Somewhere on the fort's wall, the Lamp-Warden lowers a telescope.")]);
+          say("The raid breaks. The raiders run back to their boat, the captain taking notes as he runs. The stores are safe. On the fort's wall, the Lamp-Warden lowers her telescope.")]);
       }
       return stay(n);
     }
@@ -224,7 +224,7 @@ function talk(s: RaidState, result: string, paid: number): Reduction<RaidState> 
       if (!paidOk(s, paid)) return stay(fin({ ...s, parley: undefined }));
       const n = fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid });
       return resolveWith(n, "protection_paid", {}, [{ k: "order", group: "late:raiders", order: { o: "stand_down" } }, { k: "order", group: "late:captain", order: { o: "stand_down" } },
-        say(`£${paid} changes hands at the edge of the yard. The captain writes a receipt, with the renewal date already filled in, and his men go back up the bank to their launch, unlit and slightly disappointed.`)]);
+        say(`£${paid} changes hands at the edge of the yard. The captain writes a receipt, with next season's date already filled in. His men walk back to their boat, a little disappointed.`)]);
     }
     default: return stay(s);
   }
@@ -244,7 +244,7 @@ function leave(s: RaidState): ReturnType<TemplateDef<RaidState>["leave"]> {
 const HINT: Record<string, string> = {
   planning: "The Syndicate means to raid the Society's post on the south bank, and the party is here first. Get to the post and pick your ground: the raiders will come down the bank from upstream.",
   tension: "The raiders are coming down the bank toward the post. Their captain will stop at the edge of it and offer a \"security consultation\".",
-  standoff: "The captain has made his offer. Pay him, or refuse: walk away and he waits out his watch; tell him to come and try and they come at once; or open fire. When his watch runs out, the raiders come in with torches.",
+  standoff: "The captain has made his offer. Pay him, or refuse and fight. If you walk away, the raiders attack when his watch runs out.",
   parley: "The captain is consulting. His men are holding their torches up so you can see them.",
   fighting: "The raiders are going for the yard. Two of them in it together, long enough, and the stores go up. Drop them before that, or send them running.",
 };
@@ -256,7 +256,7 @@ const DONE: Record<string, string> = {
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   reinforcements: "The raiding party is bigger than the agent's last letter said.",
-  fog: "Fog on the river: the raiders' launch is feeling its way, and will be late.",
+  fog: "Fog on the river: the raiders' boat is feeling its way, and will be late.",
   rain: "Rain: the torches will be slow to take.",
 };
 
@@ -345,7 +345,7 @@ const observe: ObserveSpec = {
 
 export const outpostRaidTemplate: TemplateDef<RaidState> = {
   id: "outpost_raid", title: "The Raid on the Post",
-  brief: "The Syndicate means to raid the Society's post on Kessar's south bank, and for once the party is there when it lands. Its captain will stop at the gate and offer a season's \"protection\" at a reasonable price; the Society's insurers have already declined the post as a fire risk. Hold the yard, or pay him.",
+  brief: "Syndicate raiders are coming to burn the Society's post on the south bank. Their captain will offer \"protection\" for a fee. Pay him, or hold the yard. The insurers have already said no.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { assault: RAID_SITES.assault },
   sites: { yard: SITE, muster: RAID_SITES.muster },
