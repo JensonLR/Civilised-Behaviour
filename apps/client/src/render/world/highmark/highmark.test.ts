@@ -1,6 +1,6 @@
 import vm from "node:vm";
 import v8 from "node:v8";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
@@ -13,6 +13,10 @@ import { HighmarkView, HILL_SCALE } from "./HighmarkView.ts";
 import { buildHighmarkSolid } from "./structures.ts";
 import { buildHighmarkWater, riverShore } from "./water.ts";
 import { buildGranaryScale, buildScythes, scytheSpots } from "./strikeProps.ts";
+
+// (CPU-bound: most tests here build the whole region at least once, up to about 2 s each alone; under the full suite's four workers one ran past vitest's 5 s default.
+// A time limit, not a budget: the budgets are the assertions.)
+vi.setConfig({ testTimeout: 30_000 });
 
 // The banner and sign atlas is drawn on a canvas; the unit-test environment has no DOM, so give it a recording stub (as kessar.test does).
 const g = globalThis as unknown as Record<string, unknown>;

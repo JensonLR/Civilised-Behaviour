@@ -129,11 +129,11 @@ function reduce(s: MineState, e: ScenarioInput): Reduction<MineState> {
       }
       if (n.t >= n.airOut) {
         return resolveWith(n, "consecrated", {}, [...fx, { k: "order", group: "guild", order: { o: "stand_down" } },
-          say("The air is spent. The Guild's choir, which had been standing at the gorge mouth since before the fall, files up the road with the lamps, the bell and the invoice. \"We are so very sorry for your loss,\" says the Dirge-Master, \"which will be itemised.\"")]);
+          say("The air has run out. The Guild's choir files up the road with lamps, a bell and a bill. \"So sorry for your loss,\" says the Dirge-Master. \"It will be itemised.\"")]);
       }
       if (sealLive(n) && n.t >= n.sealAt) {
         return resolveWith(n, "sealed", {}, [...fx, { k: "order", group: "foreman", order: { o: "stand_down" } },
-          say("The whistle blows, and the Company's schedule is met in the only way left: boards across the face, an iron seal, a red plate that says WORK CONTINUES. \"A gallery that is sealed,\" says the foreman, \"cannot be behind schedule.\"")]);
+          say("The whistle blows. The Company seals the gallery on schedule: boards, an iron door and a sign saying WORK CONTINUES. \"A sealed gallery,\" says the foreman, \"cannot be behind schedule.\"")]);
       }
       return { s: fin(n), fx };
     }
@@ -157,7 +157,7 @@ function reduce(s: MineState, e: ScenarioInput): Reduction<MineState> {
     case "actor": {
       if (e.state !== "down") return stay(s);
       if (e.id === "foreman" && !s.foremanDown) {
-        const r = raise({ ...s, foremanDown: true, form: s.form === "pending" ? "none" : s.form }, "The foreman is down. There is a pause in the gorge in which every schedule in Vesper stops being anybody's, and then the whistle, which nobody is left to blow, does not blow.");
+        const r = raise({ ...s, foremanDown: true, form: s.form === "pending" ? "none" : s.form }, "The foreman is down. For a moment, nobody in Vesper owns a schedule. The whistle does not blow, because nobody is left to blow it.");
         return r;
       }
       if (e.id === "dirge-master" && !s.guildDown) return stay(fin({ ...s, guildDown: true }));
@@ -201,7 +201,7 @@ function use(s: MineState, target: string, slot: number): Reduction<MineState> {
     const n = fin({ ...s, dig, lastDig });
     if (dig >= 100) {
       return resolveWith(n, "dug_out", {}, [{ k: "order", group: "foreman", order: { o: "stand_down" } },
-        say("A hand comes through the last of the fall, then a face, then a miner who asks what the date is and whether the Company has noticed. Eleven men walk out into the light behind your shovels, blinking. The Guild's choir, standing ready with a bell, is informed that the funeral is postponed. \"Deferred,\" says the Dirge-Master. \"Funerals do not get cancelled; they get delayed.\"")]);
+        say("A hand comes through the fall, then a face. Eleven miners walk out into the light, blinking. The Guild's choir is told the funeral is off. \"Postponed,\" says the Dirge-Master.")]);
     }
     return { s: n, fx: [] };
   }
@@ -233,7 +233,7 @@ function talkForeman(s: MineState, result: string, paid: number): Reduction<Mine
     }
     case "paid": {
       if (s.bought || !paidOk(s, paid, s.price.handling)) return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, bought: true, spent: s.spent + paid, paid: s.paid + paid, sealAt: s.t + MINE.handlingDefer }), fx: [say(`£${paid} changes hands under the heading HANDLING. The foreman writes a note in the margin of the schedule: REVISED (SEE PAYMENT). The gallery will not be sealed today, or at any hour this contract can see.`)] };
+      return { s: fin({ ...s, parley: undefined, bought: true, spent: s.spent + paid, paid: s.paid + paid, sealAt: s.t + MINE.handlingDefer }), fx: [say(`£${paid} changes hands, filed as HANDLING. The foreman writes REVISED (SEE PAYMENT) on his schedule. The gallery will not be sealed while you are here.`)] };
     }
     default: return stay(s);
   }
@@ -251,16 +251,16 @@ function talkGuild(s: MineState, result: string, paid: number): Reduction<MineSt
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, guild: true } }));
     case "survey": {
       if (s.vigil) return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, vigil: true, airOut: s.airOut + MINE.vigilS }), fx: [say("The choir takes up a vigil at the fall, and begins to sing very slowly. The miners, hearing it through the rock, find they can breathe in time with it, and then more slowly than that. The Guild bills the families for the atmosphere.")] };
+      return { s: fin({ ...s, parley: undefined, vigil: true, airOut: s.airOut + MINE.vigilS }), fx: [say("The choir holds a vigil at the fall and sings very slowly. Behind the rock, the miners breathe in time with it, and use less air. The Guild bills their families for the atmosphere.")] };
     }
     case "tell": {
       if (!s.asked.guild || s.objected || !sealLive(s)) return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, objected: true, sealAt: s.sealAt + MINE.objectS }), fx: [say("The Dirge-Master is appalled. \"Sealing a gallery with customers in it,\" he says, \"is a restraint of mourning.\" The choir lodges an objection with the Company, in the form of several verses. The seal is, procedurally, stayed.")] };
+      return { s: fin({ ...s, parley: undefined, objected: true, sealAt: s.sealAt + MINE.objectS }), fx: [say("The Dirge-Master is appalled. \"Seal a gallery with customers still in it? Never!\" The choir objects to the Company, in several verses. The seal is delayed.")] };
     }
     case "paid": {
       if (!paidOk(s, paid, s.price.bill)) return stay(fin({ ...s, parley: undefined }));
       return resolveWith(fin({ ...s, spent: s.spent + paid, paid: s.paid + paid }), "consecrated", {}, [{ k: "order", group: "guild", order: { o: "stand_down" } },
-        say(`£${paid} is counted twice, by two people, into a black velvet bag. \"The Guild takes the gallery,\" says the Dirge-Master. \"The foreman will be relieved to learn that it is nobody's schedule now.\" The choir files in past you with the lamps. You have, in the narrowest sense, been relieved of the problem.`)]);
+        say(`£${paid} is counted twice into a black velvet bag. \"The Guild takes the gallery,\" says the Dirge-Master. The choir files in with its lamps. It is not your problem now, in a sense.`)]);
     }
     default: return stay(s);
   }
@@ -281,7 +281,7 @@ function leave(s: MineState): ReturnType<TemplateDef<MineState>["leave"]> {
 
 const HINT: Record<string, string> = {
   approach: "The Lower Gallery is at the head of the gorge, behind a fall of rock the Company calls a schedule variance. Eleven men are on the other side. Walk up the ore road.",
-  waiting: "The fall is shored with pit-props from the Company's yard (carry a crate to it) and dug by hand (Use at the fall with empty hands, over and over). The foreman has a schedule and the Guild has a bill. A barrel of powder by the magazine, carried to the fall, is faster, rather louder, and not kind to the men behind it.",
+  waiting: "Carry timber crates from the yard to shore the fall, then dig: Use at the fall with empty hands, again and again. Powder from the magazine is faster, and hard on the miners.",
   parley: "They are listening. Mind what you promise; the Company minutes everything and the Guild minutes the minutes.",
   rigging: "The fuse is lit. Whatever else you meant to do at the fall, you now mean to do it somewhere else.",
   fighting: "The yard has taken sides. The foreman and the choir have run for it, and the fall is still a fall.",
@@ -367,7 +367,7 @@ const observe: ObserveSpec = {
     { id: "dirge", npc: "dirge-master", r: MINE.personR, talk: "dirge_master", carry: "none" },
     { id: "timber", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "crate", consume: true, prompt: "Set the pit-props against the fall", until: "timber" },
     { id: "keg", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "barrel", consume: true, prompt: "Wedge the keg in the fall and light it" },
-    { id: "dig", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "none" },
+    { id: "dig", at: { x: DIG.x, z: DIG.z }, r: MINE.fallR, carry: "none", prompt: "Dig at the fall" },
   ],
   count: [{ group: "miners" }],
   seen: [],
@@ -377,7 +377,7 @@ const observe: ObserveSpec = {
 
 export const mineRescueTemplate: TemplateDef<MineState> = {
   id: "mine_rescue", title: "The Lower Gallery",
-  brief: "Eleven miners are behind a fall in the Lower Gallery, entered in the Company's books as a schedule variance. The foreman means to seal it on time; the Lamentation Guild has a choir standing by and an invoice for every outcome. Shore the fall and dig them out by hand, blast through with the Company's powder, and keep the foreman's schedule and the Guild's invoice off the miners for long enough to do it.",
+  brief: "Eleven miners are trapped behind a rock fall. The foreman wants the gallery sealed on schedule, and the Guild's choir has its bill ready. Dig them out, or blast through, in time.",
   init, reduce, view, outcome, roster, leave, observe,
   props: [...VESPER_STOCK.timber.map((p, i) => ({ id: `timber${i}`, kind: PropKind.CRATE as number, x: p.x, z: p.z })), { id: "keg", kind: PropKind.BARREL as number, x: VESPER_STOCK.keg.x, z: VESPER_STOCK.keg.z }],
   sites: { blast: VESPER_STOCK.blast, fall: VESPER_STOCK.dig, adit: VESPER_ANCHORS.adit },

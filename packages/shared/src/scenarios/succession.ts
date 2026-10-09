@@ -118,23 +118,23 @@ function settle(s: SuccessionState, said: ScenarioFx[] = []): Reduction<Successi
   if (s.cheque === "taken" && formOk(s)) {
     return resolveWith(s, "crown_sold", { loot: s.price.cheque }, [
       ...said, { k: "order", group: "guards", order: { o: "stand_down" } },
-      say(`The Chamberlain's seal comes down on the cheque with a thump that echoes in several offices. £${s.price.cheque} is yours; the Crown's concession is the Syndicate's; the chair is, by a majority of one cheque, sold. \"Subject to contract,\" says the envoy, who has already printed the contract.`),
+      say(`The Chamberlain's seal thumps down on the cheque. £${s.price.cheque} is yours, the Crown's trade rights are the Syndicate's, and the chair is sold. The envoy has the contract ready.`),
     ]);
   }
   // D-041: a court that is READY (the form in, two votes in the barley, one heir pledged or a regency signed) sends for the Assembly: the bell comes forward. The bot playtest
   // set the whole court up by minute three and then stood about for three more with nothing left to do but wait for a bell on a schedule.
   if (!s.bellRung && formOk(s) && votes(s) >= SUCCESSION.votesToRatify && courtReady(s) && s.bell > s.t + SUCCESSION.readyBellS) {
     s = fin({ ...s, bell: Math.round(s.t + SUCCESSION.readyBellS) });
-    said = [...said, say("The Chamberlain looks at the form, the barley and the pledge, and finds nothing left to object to, which visibly pains her. A boy is sent up the bell tower. The Assembly is asked to find its hats.")];
+    said = [...said, say("The Chamberlain checks the form, the votes and the pledge, and can find nothing to object to. It pains her. A boy is sent up the bell tower.")];
   }
   // the Assembly votes at the bell (or at once if it is already ringing and the court is ready)
   if (s.bellRung && formOk(s) && votes(s) >= SUCCESSION.votesToRatify) {
     const { elder: e, younger: y } = s.heir;
-    if (e === "pledged" && y !== "pledged") return resolveWith(s, "backed_elder", {}, [...said, { k: "order", group: "guards", order: { o: "stand_down" } }, say("The Assembly votes by a show of hands, which is also how it harvests. Princess Orla is seated, by Seniority, to the rattle of three scythes laid carefully on the floor. Prince Dunstan applauds, which is what he does.")]);
-    if (y === "pledged" && e !== "pledged") return resolveWith(s, "backed_younger", {}, [...said, { k: "order", group: "guards", order: { o: "stand_down" } }, say("The Assembly votes, and the vote is carried by acclamation, which is not a number but is nonetheless loud. Prince Dunstan takes the chair. Princess Orla notes, in writing, that she is the elder.")]);
-    if (e === "regency" && y === "regency") return resolveWith(s, "regency", {}, [...said, { k: "order", group: "guards", order: { o: "stand_down" } }, say("Three signatures on one sheet, in three inks: the Chamberlain's, the Princess's and the Prince's. The Assembly ratifies a regency, the King remains pending, and the chair is left empty in a way that everybody can now describe as stable.")]);
+    if (e === "pledged" && y !== "pledged") return resolveWith(s, "backed_elder", {}, [...said, { k: "order", group: "guards", order: { o: "stand_down" } }, say("The Assembly votes by a show of hands, which is also how it harvests. Princess Orla takes the chair, by Seniority. Prince Dunstan claps, which is what he does.")]);
+    if (y === "pledged" && e !== "pledged") return resolveWith(s, "backed_younger", {}, [...said, { k: "order", group: "guards", order: { o: "stand_down" } }, say("The Assembly votes by cheering, which is not a number but is very loud. Prince Dunstan takes the chair. Princess Orla notes, in writing, that she is the elder.")]);
+    if (e === "regency" && y === "regency") return resolveWith(s, "regency", {}, [...said, { k: "order", group: "guards", order: { o: "stand_down" } }, say("Three signatures on one sheet: the Chamberlain's, the Princess's and the Prince's. The Assembly approves a regency. The chair stays empty, which everyone now calls stable.")]);
     if (e === "pledged" && y === "pledged" && !s.deadlocked) {
-      return { s: fin({ ...s, deadlocked: true }), fx: [...said, say("The Assembly has been pledged TWO heirs by one party, and it has votes for neither. \"A scythe,\" says the senior delegate, \"is for cutting one thing at a time.\" The Chamberlain makes a note.")] };
+      return { s: fin({ ...s, deadlocked: true }), fx: [...said, say("You have promised the chair to BOTH heirs, so the Assembly votes for neither. \"A scythe cuts one thing at a time,\" says the senior delegate. The Chamberlain makes a note.")] };
     }
   }
   return { s: fin(s), fx: said };
@@ -166,11 +166,11 @@ function reduce(s: SuccessionState, e: ScenarioInput): Reduction<SuccessionState
       }
       if (!n.bellRung && n.t >= n.bell) {
         n = { ...n, bellRung: true };
-        fx.push(say("The harvest bell tolls over Highmark, once for each year the King has been pending, and then stops because it has run out of rope. The Reapers' Assembly takes its seats, in the straw-hatted order of precedence."));
+        fx.push(say("The harvest bell rings once for each year the King has been 'pending', then runs out of rope. The Reapers' Assembly takes its seats to vote."));
       }
       // the Syndicate's cheque is cashed without you, unless the court is busy fighting itself
       if (n.bellRung && n.t >= n.bell + n.grace && (!n.hostile || guardBroken(n))) {
-        const r = resolveWith(n, "crown_sold", {}, [...fx, say("Nobody settled anything, so the Chamberlain does what the court does when nobody settles anything: it takes the best offer on the table, which has been on the table for some time. The envoy's cheque is cashed, the concession is signed, and the Crown keeps the hat.")]);
+        const r = resolveWith(n, "crown_sold", {}, [...fx, say("Nobody settled anything, so the Chamberlain takes the only offer on the table. The envoy's cheque is cashed without you. The Syndicate has bought the chair.")]);
         return r;
       }
       return settle(n, fx);
@@ -187,23 +187,23 @@ function reduce(s: SuccessionState, e: ScenarioInput): Reduction<SuccessionState
       const alive = int(e.alive, 0, total), routed = int(e.routed, 0, total - alive), down = int(e.down, 0, total - alive - routed);
       const was = guardBroken(s) && s.hostile;
       const n = fin({ ...s, guards: { alive, routed, down, total } });
-      if (!was && n.hostile && guardBroken(n)) return { s: n, fx: [say("The court's guard is broken, which in Highmark means somebody has finally been in the room when it mattered. The chair is, in the narrowest sense, unguarded.")] };
+      if (!was && n.hostile && guardBroken(n)) return { s: n, fx: [say("The court's guard is broken. Nothing now stands between you and the chair but good manners.")] };
       return stay(n);
     }
     case "hostile": {
       if (e.at !== undefined && e.at !== "guards" && e.at !== "court" && e.at !== "claimants") return stay(s);
-      return raise({ ...s }, "Blood in the court. The guards, who have waited six years for the King to be pending about something, are delighted.", s.parley !== undefined || formOk(s) || s.heir.elder !== "none" || s.heir.younger !== "none");
+      return raise({ ...s }, "Blood in the court. The guards have waited six years for something to do, and they are delighted.", s.parley !== undefined || formOk(s) || s.heir.elder !== "none" || s.heir.younger !== "none");
     }
     case "actor": {
       const id = e.id;
       if (e.state !== "down") return stay(s);
       if (id === "chamberlain" && !s.down.chamberlain) {
-        const r = raise({ ...s, down: { ...s.down, chamberlain: true } }, "The Lord Chamberlain is down. Every form in Highmark is, as of this moment, in abeyance, and the guards know whom to blame.");
+        const r = raise({ ...s, down: { ...s.down, chamberlain: true } }, "The Lord Chamberlain is down. Every form in Highmark is now on hold, and the guards know whom to blame.");
         return settle(r.s, r.fx as ScenarioFx[]);
       }
       if ((id === "claimant-elder" || id === "claimant-younger") && !s.down[id === "claimant-elder" ? "elder" : "younger"]) {
         const who: Who = id === "claimant-elder" ? "elder" : "younger";
-        const r = raise({ ...s, down: { ...s.down, [who]: true }, heir: { ...s.heir, [who]: "none" } }, `${NAME[who]} is down, and the court discovers it has strong opinions about heirs after all. The Grange has stopped looking at its scythes and started counting them.`);
+        const r = raise({ ...s, down: { ...s.down, [who]: true }, heir: { ...s.heir, [who]: "none" } }, `${NAME[who]} is down. The court turns out to care about heirs after all. The Reapers' delegates start counting their scythes.`);
         return settle(r.s, r.fx as ScenarioFx[]);
       }
       if (id === "envoy" && !s.down.envoy) return stay(fin({ ...s, down: { ...s.down, envoy: true }, cheque: s.cheque === "taken" ? "taken" : "none" }));
@@ -211,7 +211,7 @@ function reduce(s: SuccessionState, e: ScenarioInput): Reduction<SuccessionState
       if (m) {
         const bit = 1 << Number(m[1]);
         if ((s.downD & bit) !== 0) return stay(s);
-        return settle(fin({ ...s, downD: s.downD | bit }), [say("A Reapers' delegate is down. The Assembly's remaining members rise, as one, and sit again, as one, which is how a strike looks from the outside.")]);
+        return settle(fin({ ...s, downD: s.downD | bit }), [say("A Reapers' delegate is down. The others stand up together, then sit down together. In Highmark, that is a protest.")]);
       }
       return stay(s);
     }
@@ -236,25 +236,25 @@ function reduce(s: SuccessionState, e: ScenarioInput): Reduction<SuccessionState
 
 function useThrone(s: SuccessionState): Reduction<SuccessionState> {
   if (guardBroken(s) && s.hostile) {
-    return resolveWith(s, "usurped", {}, [{ k: "order", group: "guards", order: { o: "stand_down" } }, say("Somebody sits in the chair. The Chamberlain, from the floor, observes that this is not the proper form. Nobody who is still standing disagrees with the chair. The court has a new occupant; the Society reports that the furniture was found in that condition.")]);
+    return resolveWith(s, "usurped", {}, [{ k: "order", group: "guards", order: { o: "stand_down" } }, say("Somebody sits in the chair. From the floor, the Chamberlain says this is not the proper form. Nobody still standing disagrees with the chair. Highmark has a new ruler.")]);
   }
-  if (s.hostile) return { s, fx: [say("Several hands lift you out of the chair. The guard, still standing, has opinions about it, and you are not the only one with a sabre.")] };
+  if (s.hostile) return { s, fx: [say("Several hands lift you out of the chair. The guard is still standing, and you are not the only one with a sabre.")] };
   // sitting in it with the guard standing is a declaration
-  const r = raise({ ...s, sat: true }, "You sit in the Vacant Chair. There is a silence of the kind that gets minuted. \"Madam,\" says the Chamberlain, \"that is not on the form.\" The guard has never had a more interesting afternoon.", true);
+  const r = raise({ ...s, sat: true }, "You sit in the Vacant Chair. Silence. \"That,\" says the Chamberlain, \"is not on the form.\" The guards have never had a more interesting afternoon.", true);
   return r;
 }
 
 function useEnvoy(s: SuccessionState): Reduction<SuccessionState> {
   if (s.down.envoy) return stay(s);
   if (s.cheque === "none") {
-    return { s: fin({ ...s, cheque: "offered" }), fx: [say(`The Syndicate's envoy produces a cheque for £${s.price.cheque} against the Crown's concession, and a pen. \"A signature here,\" he says, \"or, failing that, anywhere. The Chamberlain has agreed to countersign anything on a form. Do come again if you would like to take it.\"`)] };
+    return { s: fin({ ...s, cheque: "offered" }), fx: [say(`The Syndicate's envoy offers a cheque for £${s.price.cheque}, for the Crown's trade rights. \"The Chamberlain seals anything with a form,\" he says. \"Come back to take it.\"`)] };
   }
-  if (s.cheque === "taken") return { s, fx: [say("The cheque is already in your pocket. The envoy is not a charity: he is waiting, politely, for a countersignature.")] };
+  if (s.cheque === "taken") return { s, fx: [say("The cheque is already in your pocket. The envoy is waiting, politely, for the Chamberlain's seal.")] };
   // taking it: the heirs' money is wasted and the Syndicate's is not
   const bp = s.heir.elder === "pledged" || s.heir.younger === "pledged";
   const r = settle(fin({ ...s, cheque: "taken", brokePromise: s.brokePromise || bp }), [say(formOk(s)
-    ? "You take the cheque. The envoy, who has not stopped smiling since the fourth quarter of last year, hands over a second copy for the Society's files."
-    : "You take the cheque. \"It needs the Chamberlain's seal,\" says the envoy. \"Everything does. Be a good citizen and have the form seen to.\"")]);
+    ? "You take the cheque. The envoy, who has been smiling since last year, hands you a copy for the Society's files."
+    : "You take the cheque. \"It needs the Chamberlain's seal,\" says the envoy. \"Everything does. Be a good citizen and get Form 11 filed.\"")]);
   return r;
 }
 
@@ -263,14 +263,14 @@ function useGrange(s: SuccessionState, i: number): Reduction<SuccessionState> {
   if ((s.downD & bit) !== 0 || (s.fed & bit) !== 0) return stay(s);
   let n: SuccessionState = fin({ ...s, fed: s.fed | bit });
   const fx: ScenarioFx[] = [say(votes(n) >= SUCCESSION.votesToRatify
-    ? "The delegate weighs the barrel, taps it, listens to it, and passes it down the bench. That is two scythes, and in the Assembly two scythes are a majority. He has noted the weight, in writing."
-    : "The delegate weighs the barrel, taps it, listens to it and writes the weight down. \"Fair,\" he says, which from a farmer is a speech. That is one vote in the barley.")];
+    ? "The delegate weighs the barrel, taps it and passes it down the bench. That makes two votes, and two of three is a majority."
+    : "The delegate weighs the barrel and taps it. \"Fair.\" From a farmer, that is a speech. That is one vote.")];
   // an Assembly that has been fed is an Assembly in a hurry: the bell is rung early (never later than it was going to be)
   if (!n.bellRung && votes(n) >= present(n) && votes(n) >= SUCCESSION.votesToRatify) {
     const at = n.t + SUCCESSION.fedBellS;
     if (at < n.bell) {
       n = { ...n, bell: Math.round(at) };
-      fx.push(say("Every delegate present has had his grain. The Assembly, being fed, grows impatient with procedure and sends a boy up the tower with instructions to ring the bell early."));
+      fx.push(say("Every delegate here has had their grain. Fed and impatient, the Assembly sends a boy up the tower to ring the bell early."));
     }
   }
   return settle(n, fx);
@@ -301,17 +301,17 @@ function talkChamberlain(s: SuccessionState, result: string, paid: number): Redu
   if (s.parley !== "chamberlain") return stay(s);
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
-    case "hostile": return raise({ ...s, parley: undefined }, "You have made your point to the Lord Chamberlain, with a raised voice and a lowered weapon. The court's guards unfold.", true);
+    case "hostile": return raise({ ...s, parley: undefined }, "You threaten the Lord Chamberlain with a raised voice and a lowered weapon. The court's guards come running.", true);
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, chamberlain: true } }));
     case "survey": {
       // file Form 11: the stamp takes its time
       if (s.form !== "none") return stay(fin({ ...s, parley: undefined }));
-      return { s: fin({ ...s, parley: undefined, form: "pending", formAt: s.t + SUCCESSION.formS }), fx: [say(`Form 11 is filed, in triplicate, at the Window. \"The Stamp will see it,\" says the Chamberlain, \"in forty-five seconds, which is what we call prompt.\"`)] };
+      return { s: fin({ ...s, parley: undefined, form: "pending", formAt: s.t + SUCCESSION.formS }), fx: [say(`Form 11 is filed, in three copies, at the Window. \"The Stamp will see it in forty-five seconds,\" says the Chamberlain. \"We call that prompt.\"`)] };
     }
     case "paid": {
       if (s.form !== "none" || !paidOk(s, paid, s.price.bribe)) return stay(fin({ ...s, parley: undefined }));
       const n = fin({ ...s, parley: undefined, form: "bribed", spent: s.spent + paid, paid: s.paid + paid });
-      return settle(n, [say(`An envelope, £${paid} thick, changes hands under the counter of the Window, which is a counter of a very respectable thickness. \"Form 11,\" says the Chamberlain, stamping it twice, \"is hereby in order, retroactively.\"`)]);
+      return settle(n, [say(`An envelope with £${paid} in it slides under the counter. \"Form 11,\" says the Chamberlain, stamping it twice, \"is now in order. It always was.\"`)]);
     }
     default: return stay(s);
   }
@@ -328,18 +328,18 @@ function talkHeir(s: SuccessionState, who: Who, result: string, paid: number): R
   if (s.parley !== kind) return stay(s);
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
-    case "hostile": return raise({ ...s, parley: undefined }, `${NAME[who]} takes your meaning, and the court takes it with her. The guards unfold with a speed that suggests rehearsal.`, true);
+    case "hostile": return raise({ ...s, parley: undefined }, `${NAME[who]} understands the threat, and so does the court. The guards come running, as if they had practised.`, true);
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, [who]: true } }));
     case "survey": {
       // a regency: three signatures, so the other heir must not already be your pledge
-      if (s.heir[other] === "pledged") return { s: fin({ ...s, parley: undefined }), fx: [say(`\"A regency?\" ${NAME[who]} laughs. \"You have already taken ${NAME[other]}'s money. I will not be the second option in a first-class conspiracy.\"`)] };
-      return settle(fin({ ...s, parley: undefined, heir: { ...s.heir, [who]: "regency" } }), [say(`${NAME[who]} signs for a regency, with a flourish and the expression of someone who has agreed to share a wardrobe. One of three signatures.`)]);
+      if (s.heir[other] === "pledged") return { s: fin({ ...s, parley: undefined }), fx: [say(`\"A regency?\" ${NAME[who]} laughs. \"You already paid ${NAME[other]}. I will not be the second choice in a first-class plot.\"`)] };
+      return settle(fin({ ...s, parley: undefined, heir: { ...s.heir, [who]: "regency" } }), [say(`${NAME[who]} signs for a regency, looking like someone who has agreed to share a wardrobe. That is one of three signatures.`)]);
     }
     case "paid": {
       if (s.heir[who] === "pledged" || !paidOk(s, paid, s.price[who])) return stay(fin({ ...s, parley: undefined }));
-      if (s.heir[other] === "pledged") return { s: fin({ ...s, parley: undefined }), fx: [say(`${NAME[who]} looks at the receipt in ${NAME[other]}'s hand, then at yours. \"I will not be bought twice over,\" ${who === "elder" ? "she" : "he"} says. \"Have the money back off the other one, if you like. I know how that goes.\"`)] };
+      if (s.heir[other] === "pledged") return { s: fin({ ...s, parley: undefined }), fx: [say(`${NAME[who]} sees the receipt in ${NAME[other]}'s hand. \"You have already bought one heir,\" ${who === "elder" ? "she" : "he"} says. \"I will not be the second.\"`)] };
       const n = fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid, heir: { ...s.heir, [who]: "pledged", [other]: s.heir[other] === "regency" ? "none" : s.heir[other] } });
-      return settle(n, [say(`£${paid} changes hands, and ${NAME[who]} is yours: ${who === "elder" ? "\"by Seniority, which I shall remember to mention\"" : "\"by Acclamation, which will be arranged\""}. ${s.heir[other] === "regency" ? `${NAME[other]}, who had signed for a regency, says that was before and this is now.` : "The Chamberlain adds a footnote."}`)]);
+      return settle(n, [say(`£${paid} changes hands, and ${NAME[who]} is yours: ${who === "elder" ? "\"by Seniority, as I will often say\"" : "\"by Acclamation, to be arranged\""}. ${s.heir[other] === "regency" ? `${NAME[other]}'s signature for a regency is now worth nothing.` : "The Chamberlain adds a footnote."}`)]);
     }
     default: return stay(s);
   }
@@ -357,24 +357,24 @@ function leave(s: SuccessionState): ReturnType<TemplateDef<SuccessionState>["lea
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const HINT: Record<string, string> = {
-  approach: "Highmark's court sits at the top of five terraces, up a switchback road that exists to give petitioners time to reconsider. The King has been pending for six years; the chair is vacant in a procedural sense. Walk up to the Chamberlain's Window.",
-  waiting: "The court is open and the chair is not. Four things move it: the Chamberlain's Form 11, each heir's price (or a regency), a barrel of grain (any barrel from the quay or the drovers' camp) for two of the Reapers' three delegates, and the Syndicate envoy's cheque. The Assembly votes at the harvest bell; the Syndicate buys the chair a little after it.",
-  parley: "They are listening. Mind what you promise; the court minutes everything, and the minutes outlive both heirs.",
-  fighting: "The guard has been drawn. Break it, and then there is only the chair, and a great deal of explaining.",
-  tension: "The harvest bell has rung. The Assembly will ratify whatever it has been persuaded of; if it has been persuaded of nothing, the Syndicate's cheque will be cashed by default.",
+  approach: "Highmark's court sits at the top of five terraces, up a long winding road. The King has been 'pending' for six years, so the chair is empty. Walk up to the Chamberlain's Window.",
+  waiting: "To seat a ruler: get Form 11 filed, back one heir (or both, for a regency), and give two of the three delegates a barrel of grain. Barrels are at the quay and the drovers' camp.",
+  parley: "They are listening. Mind what you promise: the court writes everything down.",
+  fighting: "The guards are fighting. Beat them and the chair is yours to fill, with a lot of explaining after.",
+  tension: "The harvest bell has rung. The Assembly votes for whatever you have set up. If nothing is set up, the Syndicate buys the chair soon.",
 };
 const DONE: Record<string, string> = {
-  backed_elder: "Princess Orla sits the chair, by Seniority and two scythes, and has already asked to see the receipts. Take the boat home from the Reed Landing.",
-  backed_younger: "Prince Dunstan sits the chair, by Acclamation, two scythes and a band he did not have to pay for. Take the boat home from the landing.",
-  regency: "A regency: three signatures and a chair nobody sits in, which is what stability looks like from the outside. Take the boat home from the landing.",
-  usurped: "The chair has an occupant, and the court is learning to call it an early succession. Take the boat home before it learns anything else.",
-  crown_sold: "The Crown's concession is the Syndicate's, countersigned and stamped. The chair is a very expensive hat stand. Take the boat home from the landing.",
-  abandoned: "The expedition is down. The King is, as ever, pending. Take the boat home and explain yourselves.",
+  backed_elder: "Princess Orla takes the chair, by Seniority and two votes. She has already asked to see the receipts. Take the boat home from the Reed Landing.",
+  backed_younger: "Prince Dunstan takes the chair, by Acclamation, two votes and a band he did not pay for. Take the boat home from the landing.",
+  regency: "A regency: three signatures and an empty chair. Highmark calls this stability. Take the boat home from the landing.",
+  usurped: "Someone is in the chair, and the court is learning to call it an early succession. Take the boat home before it learns anything else.",
+  crown_sold: "The Syndicate has the Crown's trade rights, signed and stamped. The chair is now a very expensive hat stand. Take the boat home from the landing.",
+  abandoned: "The expedition is down. The King is still 'pending'. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
-  rain: "Rain is coming, and the Grange wants the barley in: the bell will ring early.",
-  fog: "Fog on the terraces: the Assembly is lost somewhere on the granary level and the bell will ring late.",
-  outriders: "Syndicate outriders have ridden ahead with the cheque: the envoy's patience is short.",
+  rain: "Rain is coming and the reapers want the barley in: the bell will ring early.",
+  fog: "Fog on the terraces: the Assembly is lost on the granary level, so the bell will ring late.",
+  outriders: "Syndicate riders came ahead with the cheque: the envoy will not wait long.",
 };
 
 function view(s: SuccessionState, now: number): ScenarioView {
@@ -384,18 +384,18 @@ function view(s: SuccessionState, now: number): ScenarioView {
   const v3 = votes(s);
   const objectives: ObjectiveView[] = [
     { id: "court", text: "Climb the Processional Road to the court", done: s.near.court > 0 || s.phase !== "approach" },
-    { id: "form", text: s.form === "pending" ? "Form 11 is with the Stamp" : "Get the Chamberlain's Form 11 filed (or expedited)", done: formOk(s), optional: true },
-    { id: "heir", text: s.heir.elder === "regency" && s.heir.younger === "regency" ? "A regency: three signatures" : s.heir.elder === "pledged" ? "Princess Orla is pledged the chair" : s.heir.younger === "pledged" ? "Prince Dunstan is pledged the chair" : "Back an heir, or talk both heirs into a regency", done: s.heir.elder === "pledged" || s.heir.younger === "pledged" || (s.heir.elder === "regency" && s.heir.younger === "regency"), optional: true },
-    { id: "grange", text: `Feed the delegates a barrel of grain each (${Math.min(v3, SUCCESSION.votesToRatify)} of ${SUCCESSION.votesToRatify} needed)`, done: v3 >= SUCCESSION.votesToRatify, optional: true },
+    { id: "form", text: s.form === "pending" ? "Form 11 is with the Stamp" : "Get the Chamberlain to file Form 11 (or pay to hurry it)", done: formOk(s), optional: true },
+    { id: "heir", text: s.heir.elder === "regency" && s.heir.younger === "regency" ? "A regency: three signatures" : s.heir.elder === "pledged" ? "Princess Orla is promised the chair" : s.heir.younger === "pledged" ? "Prince Dunstan is promised the chair" : "Back an heir, or talk both heirs into a regency", done: s.heir.elder === "pledged" || s.heir.younger === "pledged" || (s.heir.elder === "regency" && s.heir.younger === "regency"), optional: true },
+    { id: "grange", text: `Give the delegates a barrel of grain each (${Math.min(v3, SUCCESSION.votesToRatify)} of ${SUCCESSION.votesToRatify} needed)`, done: v3 >= SUCCESSION.votesToRatify, optional: true },
     { id: "chair", text: res === "abandoned" ? "Lost: the expedition went down" : res === "crown_sold" ? (sold ? "Settled: you sold the chair to the Syndicate" : "Lost: nothing was settled, so the Syndicate bought the chair") : "Have the court seat a ruler when the harvest bell rings", done: won },
   ];
-  if (s.cheque !== "none") objectives.push({ id: "cheque", text: s.cheque === "taken" ? "The Syndicate's cheque is in your pocket" : "Take the envoy's cheque (with Form 11 filed, it sells the chair), or leave it", done: s.cheque === "taken", optional: true });
+  if (s.cheque !== "none") objectives.push({ id: "cheque", text: s.cheque === "taken" ? "The Syndicate's cheque is in your pocket" : "Take the envoy's cheque (with Form 11, it sells the chair)", done: s.cheque === "taken", optional: true });
   if (s.hostile && res === undefined) objectives.push({ id: "break", text: `Drop the court guard or send them running (${Math.min(Math.ceil(s.guards.total * SUCCESSION.brokenFraction), broken(s))} of ${Math.ceil(s.guards.total * SUCCESSION.brokenFraction)})`, done: guardBroken(s), optional: true });
   if (s.hostile && guardBroken(s) && res === undefined) objectives.push({ id: "sit", text: "Sit somebody in the Vacant Chair (Use)", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the Reed Landing", done: false });
 
   let hint = res !== undefined ? DONE[res] ?? "" : HINT[s.phase] ?? "";
-  if (res === undefined && s.asked.chamberlain) hint += " (The Chamberlain's order of precedence: herself, then the heirs by seniority, then the Assembly, then Anyone Else.)";
+  if (res === undefined && s.asked.chamberlain) hint += " (The Chamberlain's order of importance: herself, the heirs by age, the Assembly, then Anyone Else.)";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const remain = res !== undefined ? 0 : !s.bellRung ? s.bell - s.t : s.bell + s.grace - s.t;
@@ -448,11 +448,11 @@ const observe: ObserveSpec = {
     { id: "chamberlain", npc: "chamberlain", r: SUCCESSION.personR, talk: "chamberlain", carry: "none" },
     { id: "elder", npc: "claimant-elder", r: SUCCESSION.personR, talk: "claimant_elder", carry: "none" },
     { id: "younger", npc: "claimant-younger", r: SUCCESSION.personR, talk: "claimant_younger", carry: "none" },
-    { id: "grange0", npc: "grange-0", r: SUCCESSION.personR, carry: "barrel", consume: true },
-    { id: "grange1", npc: "grange-1", r: SUCCESSION.personR, carry: "barrel", consume: true },
-    { id: "grange2", npc: "grange-2", r: SUCCESSION.personR, carry: "barrel", consume: true },
-    { id: "envoy", npc: "envoy", r: SUCCESSION.personR, carry: "none" },
-    { id: "throne", at: THRONE(), r: SUCCESSION.throneR, carry: "none" },
+    { id: "grange0", npc: "grange-0", r: SUCCESSION.personR, carry: "barrel", consume: true, prompt: "Give the delegate the barrel" },
+    { id: "grange1", npc: "grange-1", r: SUCCESSION.personR, carry: "barrel", consume: true, prompt: "Give the delegate the barrel" },
+    { id: "grange2", npc: "grange-2", r: SUCCESSION.personR, carry: "barrel", consume: true, prompt: "Give the delegate the barrel" },
+    { id: "envoy", npc: "envoy", r: SUCCESSION.personR, carry: "none", prompt: "Talk to the Syndicate's envoy" },
+    { id: "throne", at: THRONE(), r: SUCCESSION.throneR, carry: "none", prompt: "Sit in the Vacant Chair" },
   ],
   count: [{ group: "guards", routed: "garrisonRouted" }],
   seen: [],
@@ -464,7 +464,7 @@ void SD;
 export const successionTemplate: TemplateDef<SuccessionState> = {
   id: "succession_dispute", title: "The Vacant Chair",
   noPowderStore: true, // (D-084: see the template type)
-  brief: "The King of Highmark has been pending for six years, and the Vacant Chair has three bidders: Princess Orla by Seniority, Prince Dunstan by Acclamation, the Syndicate by cheque. The Reapers' Assembly ratifies at the harvest bell, and the Lord Chamberlain ratifies nothing without Form 11. Back an heir, broker a regency, buy the vote in grain, take the cheque, or seat somebody by force.",
+  brief: "Highmark's King has been 'pending' for six years. Princess Orla, Prince Dunstan and a Syndicate cheque want the empty chair. Back an heir, arrange a regency, take the cheque, or use force.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { throne: THRONE(), court: HIGHMARK_ANCHORS.capital.court },
 };

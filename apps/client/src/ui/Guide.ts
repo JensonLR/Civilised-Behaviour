@@ -77,7 +77,7 @@ export class Guide {
       this.dist = m;
       this.markDist.textContent = `${m} m`;
     }
-    this.setLineDist(m);
+    this.setLineDist(this.quietOn ? m : -1); // (D-098: the distance is said once: on the marker, or on the line when the marker is the flag alone)
     // on screen: over the place. Off it (or behind): held inside the edge, the arrow pointing the way to turn
     let x = ndcX;
     let y = ndcY;
@@ -115,6 +115,7 @@ export class Guide {
     if (on === this.quietOn) return;
     this.quietOn = on;
     this.mark.classList.toggle("quiet", on);
+    if (!this.mark.hidden) this.setLineDist(on ? this.dist : -1);
   }
 
   hide(): void {

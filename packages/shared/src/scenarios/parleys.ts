@@ -68,101 +68,101 @@ const SPEAKER: Record<LegacyKind, string> = {
 };
 const OPEN: Record<LegacyKind, readonly string[]> = {
   ransom: [
-    "\"Mr. Quim,\" says the colour-sergeant, patting the cage, \"is insured. That makes him worth more alive to everyone, which is a first for a surveyor. The price is £{price}.\"",
-    "\"We were not kidnapping him,\" says the colour-sergeant. \"We were repatriating him, with a handling fee of £{price}. Nobody here has ever been paid on time, so we are very keen on prompt settlement.\"",
+    "\"Mr. Quim is insured,\" says the colour-sergeant, patting the cage. \"So he is worth more alive. A first for a surveyor. Pay £{price} and he is yours.\"",
+    "\"We did not kidnap him,\" says the colour-sergeant. \"We are returning him, for a fee of £{price}. Cash, please. Nobody has ever paid us on time.\"",
   ],
   ward_post: [
-    "The patrol-sergeant does not lower her rifle. \"State your business at Marker Stone No. 4. Be brief. The Syndicate has been brief at me for an hour and I am out of patience and forms.\"",
-    "\"This stone,\" says the patrol-sergeant, \"is in the Ward's ford. The men across the water say it is in theirs. One of us is wrong and I have the bigger gun. What do you want?\"",
+    "The patrol-sergeant keeps her rifle up. \"What do you want at Marker Stone No. 4? Be quick. The Syndicate has been shouting at me for an hour.\"",
+    "\"This stone is in the Ward's ford,\" says the patrol-sergeant. \"The Syndicate says it is in theirs. One of us is wrong, and I have the bigger gun. What do you want?\"",
   ],
   surveyor: [
-    "The surveyor lowers his measuring chain by an inch, which in his profession is practically an embrace. \"The border is a technicality, madam, and I am the technician. What can the Syndicate do for you?\"",
-    "\"Ah. The Society,\" says the surveyor. \"We are about to settle a boundary with a ruler, a lawyer and, if it comes to it, the third thing. Do sit. Do not sit near the stone.\"",
+    "The surveyor lowers his measuring chain an inch. For him, that is a warm welcome. \"The border is a detail, and details are my job. What can the Syndicate do for you?\"",
+    "\"Ah, the Society,\" says the surveyor. \"We are settling this border with a ruler, a lawyer and, if needed, a rifle. Do sit. Not near the stone.\"",
   ],
   ford_post: [
-    "The picket corporal looks at you over a tin of tea. \"Ford post, Ward of the Nine Lamps. If you have a grievance, we have a form. If you have a tip, we have a form and a mug. Which is it?\"",
-    "\"We are on picket,\" says the corporal, \"which means we are looking at the river and not at the Syndicate road, and we have been told to keep it that way. Unless somebody tells us otherwise.\"",
+    "The corporal looks up from his tea. \"Ward ford post. Got a complaint? We have a form. Got a tip? We have a form and a mug. Which is it?\"",
+    "\"We are on guard,\" says the corporal. \"We watch the river, not the Syndicate road. Those are our orders, unless somebody tells us something.\"",
   ],
   chamberlain: [
-    "\"The King,\" says the Lord Chamberlain, without looking up from a form the size of a tablecloth, \"is pending. The chair is therefore vacant in a procedural sense. Kindly take a number. You are four hundred and eleven; we are serving number nine.\"",
-    "\"Welcome to the Chamberlain's Window,\" says the Lord Chamberlain, through the Window, which is a window in the way that a pillory is a collar. \"Form 11 is required for everything. Form 11 is available at the other Window. The other Window is closed for the harvest. Do sit. The bench is also a form.\"",
+    "\"The King is 'pending',\" says the Lord Chamberlain, not looking up from a huge form. \"So the chair is empty, officially. Take a number. You are 411. We are serving number 9.\"",
+    "\"Welcome to the Chamberlain's Window,\" says the Lord Chamberlain. \"Everything needs Form 11. Form 11 is at the other Window. The other Window is closed for the harvest.\"",
   ],
   claimant_elder: [
-    "\"I am the elder,\" says the Princess, from a chair a very slightly lower than the Vacant one, \"and in Highmark that is a policy. Seniority is the only principle we have ever agreed on, and we agreed on it by seniority. My price is £{price}.\"",
-    "Princess Orla does not rise. \"You are the Society's. Everybody is somebody's. I am my father's, technically, and he has been pending since before I had a haircut. If you would like the chair settled my way, it will cost £{price}.\"",
+    "\"I am the elder,\" says the Princess, \"and in Highmark the eldest rules. We all agreed on that, in order of age. My price is £{price}.\"",
+    "Princess Orla does not look up. \"My father has been 'pending' since I was a girl. If you want the chair settled my way, it will cost £{price}.\"",
   ],
   claimant_younger: [
-    "\"The people love me,\" says the Prince, who is being fanned by somebody with a palm leaf, \"and I have the cheering to prove it. Some of it is paid, but the passion is real. The passion is £{price}.\"",
-    "Prince Dunstan beams, then gestures, and a small band strikes up in the courtyard on cue. \"Acclamation,\" he says, \"is a form of consent that arrives in advance. £{price} for the arrangements, and the band is extra, and the band is also me.\"",
+    "\"The people love me,\" says the Prince, as somebody fans him with a palm leaf. \"Hear them cheer! Some of it is paid, but the passion is real. The passion costs £{price}.\"",
+    "Prince Dunstan waves, and a small band starts to play outside. \"The people choose me, loudly and in advance. £{price} for the arrangements. The band is extra.\"",
   ],
 };
 const ROUND2: Record<LegacyKind, readonly string[]> = {
   ransom: [
-    "\"Fine,\" says the colour-sergeant, scratching a stubble you could strike matches on. \"£{price}, and I will throw in the cage.\"",
-    "\"You drive a hard bargain for a person with no firearm,\" says the colour-sergeant. \"£{price}. Last offer. It is also the first.\"",
+    "\"Fine,\" says the colour-sergeant, scratching his stubble. \"£{price}, and I will throw in the cage for free.\"",
+    "\"You bargain hard for somebody without a gun,\" says the colour-sergeant. \"£{price}. That is my last offer.\"",
   ],
   ward_post: ["\"Go on,\" says the sergeant."],
   surveyor: [
-    "\"Between us,\" says the surveyor, lowering his voice, \"we mean to move Stone No. 4 four yards east on a moonless night, which makes the ford ours, the river ours and the Ward's tea tax, regrettably, also ours. There is an envelope for a person who helps. It is a thick envelope. I measured it.\"",
-    "\"The stone,\" admits the surveyor, \"has been walking east a yard a week, with my encouragement. A friend who pulls it the last four feet would find an envelope in her coat, in the Syndicate's own pocket.\"",
+    "\"Between us,\" says the surveyor quietly, \"we mean to move Stone No. 4 four yards east one dark night. Then the ford is ours. Help us, and there is a thick envelope in it.\"",
+    "\"The stone has been creeping east a yard a week,\" admits the surveyor, \"with my help. Pull it the last four feet for us, and you get a thick envelope of Syndicate money.\"",
   ],
   ford_post: ["\"Go on,\" says the corporal, setting down his tea."],
-  chamberlain: ["\"Order of precedence,\" says the Chamberlain, with relish. \"Myself. The heirs, by seniority. The Assembly, by show of hands. Everybody Else, by arrangement. A cheque from a foreign envoy outranks the lot on a rainy afternoon, but I did not say that, and Form 11 will say I did not.\""],
-  claimant_elder: ["\"I will sign for a regency,\" says Orla, \"if my brother does, which he will not, because he cannot count. Or I will be crowned. Make it official: Form 11 stamped, the Assembly sitting, the barley in. I shall be very gracious about the price.\""],
-  claimant_younger: ["\"The Assembly,\" says Dunstan, lowering his voice, \"likes grain. All farmers do. A delegate who has eaten votes for whoever is standing nearest the buffet. I intend to be standing nearest the buffet. Pledge me, and I shall be.\""],
+  chamberlain: ["\"Who outranks whom?\" says the Chamberlain happily. \"Me first. Then the heirs, oldest first. Then the Assembly, by vote. A foreign cheque beats them all, but I never said that.\""],
+  claimant_elder: ["\"I will agree to a regency if my brother does,\" says Orla. \"He will not. Or crown me properly: Form 11 stamped, the Assembly sitting and the barley harvest in.\""],
+  claimant_younger: ["\"The Assembly likes grain,\" says Dunstan quietly. \"A well-fed delegate votes for whoever stands by the buffet. I plan to stand by the buffet. Pledge me, and I will.\""],
 };
 const FLATTER_HM: Partial<Record<LegacyKind, { ok: readonly string[]; fail: readonly string[] }>> = {
   claimant_elder: {
-    ok: ["\"Seniority,\" says Orla, softening by perhaps a degree, \"is at least noticed. £{price}, and do not tell my brother I cut it.\"", "\"You have read the precedents,\" says the Princess. \"£{price}, then. A reader is a rare thing in this court.\""],
-    fail: ["\"Flattery is not a form,\" says the Princess. \"£{price}, to cover the speech.\"", "\"I was flattered by a better class of courtier,\" says Orla. \"£{price}.\""],
+    ok: ["\"At last, someone who respects age,\" says Orla, softening a little. \"£{price}, then. Do not tell my brother I lowered it.\"", "\"You know the old laws,\" says the Princess. \"£{price}, then. I do like a well-read visitor.\""],
+    fail: ["\"Flattery is not an argument,\" says the Princess. \"Now it is £{price}, to pay for the speech.\"", "\"Better courtiers have flattered me,\" says Orla. \"The price is now £{price}.\""],
   },
   claimant_younger: {
-    ok: ["\"You understand the people!\" says Dunstan, delighted. \"£{price}, then, and I shall mention you from the balcony. Possibly by name.\"", "\"Say that again, louder, for the band,\" says the Prince. \"£{price}, for a friend of the cheering.\""],
-    fail: ["\"Charming,\" says Dunstan, \"and now it costs £{price}, because charm is a service.\"", "\"I have been flattered by experts,\" says the Prince. \"£{price}.\""],
+    ok: ["\"You understand the people!\" says Dunstan, delighted. \"£{price}, then. I will thank you from the balcony, possibly by name.\"", "\"Say that again, louder, so the band hears,\" says the Prince. \"£{price}, for a friend.\""],
+    fail: ["\"Charming,\" says Dunstan. \"Now it costs £{price}. Charm is a service, and services cost.\"", "\"Experts have flattered me before,\" says the Prince. \"The price is now £{price}.\""],
   },
 };
-const FLATTER_OK = ["\"You have a kind way of robbing a man,\" says the colour-sergeant. \"£{price}, then, and I did not say it was a discount.\"", "\"Manners!\" He looks around for witnesses. \"£{price}. Do not tell the lads.\""];
-const FLATTER_FAIL = ["\"That is a very nice speech,\" says the colour-sergeant, \"and now it costs £{price}, to cover the speech.\"", "\"I was flattered by better in a better regiment. £{price}.\""];
+const FLATTER_OK = ["\"You rob a man very politely,\" says the colour-sergeant. \"£{price}, then. Do not call it a discount.\"", "\"Manners!\" He looks around for witnesses. \"Fine, £{price}. Do not tell the lads.\""];
+const FLATTER_FAIL = ["\"Lovely speech,\" says the colour-sergeant. \"Now it costs £{price}, to pay for the speech.\"", "\"Better men flattered me in a better regiment. The price is now £{price}.\""];
 const WALK: Record<LegacyKind, string> = {
-  ransom: "You excuse yourself. The colour-sergeant waves the cage at you as you go, which is not a farewell.",
-  ward_post: "You step back. The sergeant notes the time and your face, in that order.",
+  ransom: "You leave. The colour-sergeant shakes the cage at you as you go. It is not a wave goodbye.",
+  ward_post: "You step back. The sergeant writes down the time and your face, in that order.",
   surveyor: "You step back. The surveyor makes a small mark in a small book.",
-  ford_post: "You excuse yourself. The corporal returns to his tea and the river.",
-  chamberlain: "You withdraw. The Chamberlain records that you withdrew, and at what time, and in which direction.",
-  claimant_elder: "You step back. The Princess notes it, as seniority notes everything.",
+  ford_post: "You leave. The corporal goes back to his tea and his river.",
+  chamberlain: "You leave. The Chamberlain writes down that you left, when, and in which direction.",
+  claimant_elder: "You step back. The Princess notices. She notices everything.",
   claimant_younger: "You step back. The Prince waves, to somebody behind you.",
 };
 const DEAL: Partial<Record<TalkResult, string>> = {
-  ransom: "\"Done,\" says the colour-sergeant, pocketing the money with the care of a man who has never owned any. \"Mr. Quim! You are redeemed.\" The cage door opens. \"Do mind the step.\"",
-  survey: "\"A joint survey,\" the surveyor repeats, as if tasting a pie. \"In triplicate. I shall sign the third copy. Do not let the other side see which one that is.\"",
-  tell: "\"The Syndicate means to move the stone?\" The sergeant is very still. \"Thank you. You have just saved me a night of looking at it. Gentlemen: detain these people, kindly, as witnesses.\"",
-  envelope: "The envelope is thick. It is also, somehow, already in your coat. \"The stone,\" says the surveyor, \"is a quarter-ton, so lift with your knees.\"",
-  tip: "\"A wagon, in the Cut, with the Syndicate's flag on a Ward crate? I did not hear that,\" says the corporal, loudly, standing up. \"Section! The Cut. Ambush stations. And bring the tea.\"",
+  ransom: "\"Done,\" says the colour-sergeant, pocketing the money with great care. \"Mr. Quim! You are free.\" The cage door opens. \"Mind the step.\"",
+  survey: "\"A joint survey,\" the surveyor repeats, as if tasting a strange pie. \"Agreed. Three copies. Do not tell the other side which one I signed.\"",
+  tell: "\"The Syndicate means to move the stone?\" The sergeant goes very still. \"Thank you. Lads: hold these people, politely, as witnesses.\"",
+  envelope: "The thick envelope is somehow already in your coat. \"The stone weighs a quarter of a ton,\" says the surveyor. \"Lift with your knees.\"",
+  tip: "\"A Syndicate wagon in the Cut, carrying Ward crates?\" The corporal stands up. \"Section! To the Cut, ambush positions. And bring the tea.\"",
 };
 const DEAL_BY_SPEAKER: Partial<Record<LegacyKind, Partial<Record<TalkResult, string>>>> = {
   ward_post: {
-    survey: "\"A joint survey,\" the sergeant repeats, without lowering the rifle. \"Both chains on the ground at once, in daylight, witnessed. I can put that in a report without having to lie in it.\"",
+    survey: "\"A joint survey,\" the sergeant repeats, rifle still up. \"Both sides measure at once, in daylight, with a witness. I can report that without lying.\"",
   },
   chamberlain: {
-    survey: "\"Form 11, in triplicate,\" says the Chamberlain, receiving it with both hands and a faint sigh. \"It will be stamped. Stamping takes forty-five seconds, which in Highmark is called prompt.\"",
-    paid: "The envelope disappears into the Window, where envelopes go. \"Form 11,\" says the Chamberlain, stamping it twice, \"is hereby in order, retroactively.\"",
+    survey: "\"Form 11, in three copies,\" says the Chamberlain, taking it with both hands. \"It will be stamped. That takes forty-five seconds, which in Highmark is fast.\"",
+    paid: "The envelope vanishes through the Window. \"Your Form 11,\" says the Chamberlain, stamping it twice, \"was always in order. Officially.\"",
   },
   claimant_elder: {
-    paid: "\"Done,\" says the Princess, pocketing it with the practised ease of a woman who has been owed money by the Treasury since childhood. \"I shall remember this when I am remembering things.\"",
-    survey: "\"A regency,\" says the Princess, as if tasting a pie she suspects. \"Very well. A third of a throne is a third more than I have now.\"",
+    paid: "\"Done,\" says the Princess, pocketing the money with practised ease. \"I will remember this when I sit in that chair.\"",
+    survey: "\"A regency,\" says the Princess, as if tasting a suspicious pie. \"Very well. A third of a throne is more than I have now.\"",
   },
   claimant_younger: {
     paid: "\"Marvellous!\" says the Prince. \"The band will be told. The crowd will be told. The band will tell the crowd.\"",
-    survey: "\"A regency,\" says the Prince. \"A throne with three bottoms. How cosy. Put me down.\"",
+    survey: "\"A regency,\" says the Prince. \"One throne, three bottoms. How cosy. Count me in.\"",
   },
 };
 const HOSTILE: Record<LegacyKind, string> = {
-  ransom: "The colour-sergeant takes this in. The camp takes it in. Everyone reaches for something at the same time.",
-  ward_post: "\"Is that an order?\" asks the sergeant, with great calm. The border wakes up.",
-  surveyor: "The surveyor steps back, and an entourage steps forward. His chain is a lot heavier than it looks.",
+  ransom: "The colour-sergeant takes this in. So does the camp. Everyone reaches for a weapon at once.",
+  ward_post: "\"Is that an order?\" asks the sergeant, very calmly. Rifles come up all along the bank.",
+  surveyor: "The surveyor steps back, and his armed escort steps forward. His chain is heavier than it looks.",
   ford_post: "The corporal puts down his tea. This is a bad sign.",
-  chamberlain: "The Chamberlain raises one finger, and the court's guards, who have been waiting all year, are pleased.",
-  claimant_elder: "The Princess's retinue arrives at once, as if it had been waiting for this one thing.",
+  chamberlain: "The Chamberlain raises one finger. The court guards, who have waited all year for this, are delighted.",
+  claimant_elder: "The Princess's guards arrive at once, as if they had been waiting for this one thing.",
   claimant_younger: "The Prince's supporters, who are loud, become louder, and then armed.",
 };
 
@@ -181,42 +181,42 @@ function legacyOptions(kind: LegacyKind, round: number, p: number): Opt[] {
   switch (kind) {
     case "ransom":
       return round === 1
-        ? [{ key: "pay", label: `Pay £${p}`, hint: "Cash. The cage opens. No shots.", cost: p }, { key: "flatter", label: "Flatter the camp", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
-          { key: "threaten", label: "Threaten them", hint: "Five armed men and a cage. Bold.", cost: 0 }, walk]
-        : [{ key: "pay", label: `Pay £${p}`, hint: "Last offer, and the first.", cost: p }, walk];
+        ? [{ key: "pay", label: `Pay £${p}`, hint: "Cash. The cage opens. No shooting.", cost: p }, { key: "flatter", label: "Flatter the camp", hint: "Compliment them. The price may drop, or it may rise.", cost: 0 },
+          { key: "threaten", label: "Threaten them", hint: "They fight at once. There are five of them, all armed.", cost: 0 }, walk]
+        : [{ key: "pay", label: `Pay £${p}`, hint: "Their last offer. The cage opens.", cost: p }, walk];
     case "ward_post":
       return [
-        { key: "propose", label: "Propose a joint survey", hint: "Both sides measure the same stone, in the same hour, with witnesses.", cost: 0 },
-        { key: "tell", label: "Tell the patrol the Syndicate's plan", hint: "Needs you to know it. Ask the surveyor first.", cost: 0 },
-        { key: "threaten", label: "Order the patrol off the bank", hint: "You are not a Warden. This will be remembered.", cost: 0 }, walk,
+        { key: "propose", label: "Propose a joint survey", hint: "Both sides measure the stone together, with you as the witness.", cost: 0 },
+        { key: "tell", label: "Tell the patrol the Syndicate's plan", hint: "You need to know it first. Ask the surveyor.", cost: 0 },
+        { key: "threaten", label: "Order the patrol off the bank", hint: "They will fight. The Ward will not forget it.", cost: 0 }, walk,
       ];
     case "surveyor":
       return round === 1
-        ? [{ key: "propose", label: "Propose a joint survey", hint: "Both sides measure the same stone, in the same hour, with witnesses.", cost: 0 },
-          { key: "ask", label: "Ask what the chain is really measuring", hint: "He might tell you. He might mention an envelope.", cost: 0 },
-          { key: "threaten", label: "Demand he withdraw", hint: "He has an entourage. You have opinions.", cost: 0 }, walk]
-        : [{ key: "envelope", label: "Take the envelope (and the stone)", hint: "You will be asked to pull Stone No. 4. The Ward will notice.", cost: 0 }, walk];
+        ? [{ key: "propose", label: "Propose a joint survey", hint: "Both sides measure the stone together, with you as the witness.", cost: 0 },
+          { key: "ask", label: "Ask what the chain is really measuring", hint: "He might tell you. He might offer you an envelope.", cost: 0 },
+          { key: "threaten", label: "Demand he withdraw", hint: "His armed men will fight you.", cost: 0 }, walk]
+        : [{ key: "envelope", label: "Take the envelope (and move the stone)", hint: "You must pull up Stone No. 4. The Ward will notice.", cost: 0 }, walk];
     case "ford_post":
-      return [{ key: "tip", label: "Tip the picket off about the wagon", hint: "Two Ward soldiers will meet it at the Cut. You need not fire a shot.", cost: 0 }, walk];
+      return [{ key: "tip", label: "Warn the post about the Syndicate wagon", hint: "Two Ward soldiers will stop it at the Cut. You need not fire a shot.", cost: 0 }, walk];
     case "chamberlain":
       return round === 1
-        ? [{ key: "propose", label: "File Form 11 (stamped in forty-five seconds)", hint: "Free, in triplicate, and slow. Nothing at court happens without it.", cost: 0 },
-          { key: "ask", label: "Ask the order of precedence", hint: "She may tell you. She will enjoy it.", cost: 0 },
-          { key: "pay", label: `Expedite with an envelope (£${p})`, hint: "Immediate. It is not a bribe; it is a handling charge with a nice envelope.", cost: p },
-          { key: "threaten", label: "Demand the chair", hint: "The court has a guard. You have opinions.", cost: 0 }, walk]
-        : [{ key: "propose", label: "File Form 11 (stamped in forty-five seconds)", hint: "Free, in triplicate, and slow.", cost: 0 },
-          { key: "pay", label: `Expedite with an envelope (£${p})`, hint: "Immediate.", cost: p }, walk];
+        ? [{ key: "propose", label: "File Form 11 (stamped in forty-five seconds)", hint: "Free, but slow. Nothing at this court happens without it.", cost: 0 },
+          { key: "ask", label: "Ask who outranks whom", hint: "She may tell you. She will enjoy it.", cost: 0 },
+          { key: "pay", label: `Speed it up with an envelope (£${p})`, hint: "Done at once. It is not a bribe. It is a 'handling charge'.", cost: p },
+          { key: "threaten", label: "Demand the chair", hint: "The court guards will fight you.", cost: 0 }, walk]
+        : [{ key: "propose", label: "File Form 11 (stamped in forty-five seconds)", hint: "Free, but slow.", cost: 0 },
+          { key: "pay", label: `Speed it up with an envelope (£${p})`, hint: "Done at once.", cost: p }, walk];
     case "claimant_elder":
     case "claimant_younger": {
       const her = kind === "claimant_elder";
       return round === 1
-        ? [{ key: "pay", label: `Pledge ${her ? "her" : "him"} the chair (£${p})`, hint: `${her ? "She is" : "He is"} yours at the ratification. One pledge at a time; the Assembly will not vote for two.`, cost: p },
-          { key: "propose", label: "Propose a regency (three signatures)", hint: "Both heirs and the Chamberlain. Nobody sits in the chair, which is the compromise.", cost: 0 },
-          { key: "flatter", label: her ? "Flatter her seniority" : "Flatter his popularity", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
-          { key: "ask", label: "Ask what it would take", hint: "A hint, in the heir's own words.", cost: 0 },
-          { key: "threaten", label: `Remind ${her ? "her" : "him"} who has the rifles`, hint: "The court has a guard of its own. This will be remembered.", cost: 0 }, walk]
-        : [{ key: "pay", label: `Pledge ${her ? "her" : "him"} the chair (£${p})`, hint: "The Assembly votes for one at a time.", cost: p },
-          { key: "propose", label: "Propose a regency (three signatures)", hint: "Both heirs and the Chamberlain.", cost: 0 }, walk];
+        ? [{ key: "pay", label: `Pledge ${her ? "her" : "him"} the chair (£${p})`, hint: `${her ? "She is" : "He is"} your candidate at the vote. You can back only one heir at a time.`, cost: p },
+          { key: "propose", label: "Propose a regency (three signatures)", hint: "Both heirs and the Chamberlain rule together. Nobody gets the chair.", cost: 0 },
+          { key: "flatter", label: her ? "Flatter her seniority" : "Flatter his popularity", hint: "The price may drop, or it may rise.", cost: 0 },
+          { key: "ask", label: "Ask what it would take", hint: "The heir tells you what they need.", cost: 0 },
+          { key: "threaten", label: `Remind ${her ? "her" : "him"} who has the rifles`, hint: "The court guards will fight. Highmark will not forget it.", cost: 0 }, walk]
+        : [{ key: "pay", label: `Pledge ${her ? "her" : "him"} the chair (£${p})`, hint: "You can back only one heir.", cost: p },
+          { key: "propose", label: "Propose a regency (three signatures)", hint: "Both heirs and the Chamberlain rule together.", cost: 0 }, walk];
     }
   }
 }
@@ -250,7 +250,7 @@ function answerScripted(kind: SiteParleyKind, sc: ParleyScript, ctx: SiteParleyC
       if (ctx.purse < p || o.cost !== p || sc.deal.paid === undefined) return again(sc.short);
       return done("paid", p, sc.deal.paid);
     case "flatter": {
-      if (round !== 1 || !sc.flatter) return again("Nobody moves. The offer stands as it was.");
+      if (round !== 1 || !sc.flatter) return again("Nobody moves. The offer has not changed.");
       const lower = roll < 45;
       const np = price(lower ? Math.round((p * 0.8) / 5) * 5 : Math.round((p * 1.1) / 5) * 5);
       const line = fill(pickText(lower ? sc.flatter.ok : sc.flatter.fail, ctx.seed, round * 17 + (lower ? 1 : 2)), np);
@@ -273,7 +273,7 @@ export function answerSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx, v: Pa
   const p = price(clampI(v?.toll, 5, 400, ctx.price));
   const opts = options(kind, round, p);
   const o = Number.isInteger(option) ? opts[option] : undefined;
-  const again = (): SiteStep => ({ view: view(kind, round, p, "Nobody moves. The offer stands as it was."), line: "Nobody moves. The offer stands as it was." });
+  const again = (): SiteStep => ({ view: view(kind, round, p, "Nobody moves. The offer has not changed."), line: "Nobody moves. The offer has not changed." });
   if (!o) return again();
   const roll = hash3(ctx.seed, ctx.day, round, 0x7a2) % 100;
   const script = PARLEY_SCRIPTS[kind];
@@ -284,7 +284,7 @@ export function answerSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx, v: Pa
     case "threaten": return done("hostile", 0, HOSTILE[lk]);
     case "pay": {
       const hm = kind === "chamberlain" || kind === "claimant_elder" || kind === "claimant_younger";
-      if (ctx.purse < p || o.cost !== p) return { view: view(kind, round, p, hm ? "\"You are short,\" says the court, counting what is not there. The price stands." : "\"You are short,\" says the colour-sergeant, counting what is not there. The price stands."), line: "You are short of the price." };
+      if (ctx.purse < p || o.cost !== p) return { view: view(kind, round, p, hm ? "\"You do not have enough,\" says the court. The price stays the same." : "\"You do not have enough,\" says the colour-sergeant. The price stays the same."), line: "You do not have enough money." };
       return hm ? done("paid", p, DEAL_BY_SPEAKER[lk]!.paid!) : done("ransom", p, DEAL.ransom!);
     }
     case "flatter": {

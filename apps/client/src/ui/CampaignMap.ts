@@ -220,10 +220,9 @@ export function drawCampaignOverlay(g: SVGElement, data: CampaignMapData | undef
 
 /**
  * A sailing in the fiction's terms (D-040: the playtest's chart said "6 s by sail"). The voyage is a card of a few seconds, and an expedition is a day; the steam
- * launch halves the crossing. Chart lanes carry the short form, the text panel the long one.
+ * launch halves the crossing. The chart's lanes carry it (D-099: the panel under the chart wrote each one out again).
  */
 export const sailShort = (seconds: number): string => (seconds >= 5 ? "a day" : "half a day");
-export const sailLong = (seconds: number): string => (seconds >= 5 ? "a day's sail" : "half a day by steam launch");
 
 /** The text panel under the chart. `render` replaces its contents; call it whenever the map data changes. */
 /** Where each region's foundation lies, in the words of the shores list (D-056: the regions with a site). */
@@ -255,8 +254,8 @@ export class CampaignMap {
     const t = data.tech;
     // (D-091: the industrial age, only once it has come: a map that lists what nobody has yet is a list of disappointments)
     const age = [t.railway ? "a railway (nine yards, the rest to follow)" : "", t.breech ? "breech-loading rifles for the garrison" : "", t.works ? `the works at ${data.regions.find((r) => r.id === t.works)?.name ?? t.works}` : "", t.crank ? "a crank gun inside every stockade's gate" : ""].filter((x) => x !== "");
-    this.root.append(h("p", { class: "tech" }, `Infrastructure: ${roadWord(t.road)}; ${t.telegraph ? "a telegraph line (news travels, wrongly, faster)" : "no telegraph"}; ${t.launch ? "a steam launch at the landing" : "no steam launch"}${age.length ? `; ${age.join("; ")}` : ""}.`));
-    for (const l of data.lanes) this.root.append(h("p", { class: "lane-note" }, `${data.regions.find((r) => r.id === l.to)?.name ?? l.to}: ${sailLong(l.seconds)}.`));
+    this.root.append(h("p", { class: "tech" }, `Infrastructure: ${roadWord(t.road)}; ${t.telegraph ? "a telegraph line" : "no telegraph"}; ${t.launch ? "a steam launch at the landing" : "no steam launch"}${age.length ? `; ${age.join("; ")}` : ""}.`));
+    // (the sailing times are on the chart's lanes; D-099 stopped writing them out again here, a line per shore)
 
     // the Syndicate
     this.root.append(
@@ -275,10 +274,12 @@ export class CampaignMap {
     for (const p of data.pins) {
       const li = h("li", { class: p.known ? "known" : "unmet" });
       li.append(h("span", { class: "mark", "aria-hidden": "true" }, p.known ? p.name.charAt(0) : "?"));
-      const body = h("span", { class: "who" }, h("strong", {}, p.known ? p.name : "A power you have not met"), p.known ? ` (${p.seat}). Stance: ${p.stance}. ${p.note}` : ` ${p.note}`);
-      li.append(body);
+      // D-100: a power you have not met that asks to see you says so (it read "A power you have not met. Nobody has told you about them yet." beside "Request an audience")
+      const who = p.known ? p.name : p.audience ? "A stranger asks to see you" : "A power you have not met";
+      const note = p.known ? ` (${p.seat}). Stance: ${p.stance}. ${p.note}` : p.audience ? " They have not said who they are." : ` ${p.note}`;
+      li.append(h("span", { class: "who" }, h("strong", {}, who), note));
       if (p.audience) {
-        const b = h("button", { type: "button", class: "audience", "data-power": p.id }, "Request an audience") as HTMLButtonElement;
+        const b = h("button", { type: "button", class: "audience", "data-power": p.id }, "Meet them") as HTMLButtonElement;
         b.setAttribute("aria-label", `Request an audience with ${p.known ? p.name : "the power asking for you"}`);
         b.addEventListener("click", () => cb.audience?.(p.id));
         li.append(b);

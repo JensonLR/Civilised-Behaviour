@@ -11,8 +11,8 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
   honest_measure: {
     piece: { kind: "barrel", surface: "chest", label: "A bushel measure with a third of it sawn away and a brass plate screwed on: HONEST, BY ORDER, WITNESSED." },
     memoryLine: [
-      "I hear the Society weighed the Crown's own bushel in front of the Crown's own Steward at Highmark. I have asked for a copy of the method. For the toll bar's scales, you understand.",
-      "Word from the hill country: the reapers are back in the barley at an honest rate, and a Steward is writing a great many letters. I gather you carried the evidence yourselves. Unusual.",
+      "I hear the Society weighed the Crown's own bushel in front of its own Steward. I have asked for your method. For my toll bar's scales, you understand.",
+      "Word from the hills: the reapers are back at an honest rate, and a Steward is writing many angry letters. I hear you carried the evidence yourselves. Unusual.",
     ],
     headlines: [
       "Royal Bushel Found to Be a Bushel and a Third; Crown Calls It \"Generous Rounding\"",
@@ -21,21 +21,21 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
       "The Bushel Was Larger on the Inside: Granary Fraud Ends in a Brass Plate",
     ],
     standfirsts: [
-      "The Crown's royal bushel was carried down from the granary scale and weighed against the bushel the Crown sells by, in front of witnesses and a Steward who wished there were fewer of them. The Compact went back to work at the old rate. Purse: £{purse}. {spin}",
-      "An honest measure was decreed at Highmark after the Society produced, from the granary, a bushel a third larger than it had any right to be. The Syndicate's grain contract is said to be under review. Purse: £{purse}. {spin}",
-      "The barley is in, the Compact is paid by a bushel that holds a bushel, and the Steward of the Granary has asked for leave to spend more time with his ledgers. Purse: £{purse}. {spin}",
+      "The Crown's royal bushel was weighed against the one it sells by, in front of witnesses and an unhappy Steward. The Compact went back to work. Purse: £{purse}. {spin}",
+      "Highmark has an honest measure, after the Society carried a bushel a third too big out of the granary. The Syndicate's grain contract is 'under review'. Purse: £{purse}. {spin}",
+      "The barley is in, and a bushel now holds a bushel. The Steward of the Granary has asked for time off to be with his ledgers. Purse: £{purse}. {spin}",
     ],
     siteLines: [
-      "The Society \"assisted the Crown in recalibrating its expectations\", with a barrel and two witnesses.",
+      "The Society \"helped the Crown adjust its expectations\", with a barrel and two witnesses.",
       "A royal measure was \"brought into line with the other measures\", which the Steward describes as a reduction.",
     ],
     debrief: "At Highmark the royal bushel was proven a third too large; the Compact went back on an honest measure.",
     news: {
       head: ["{A} Back in the Barley on an Honest Bushel", "{A} Win a Measure; {b} Loses a Contract", "Granary Fraud Weighed and Found Heavy; {a} Pleased"],
       body: [
-        "{A} have returned to the harvest at the old rate, paid by a bushel the Crown has been asked to stop calling royal; {b} describes its grain contract as 'subject to a period of reflection'.",
-        "The Crown's Steward of the Granary has decreed an honest measure, in writing, after a demonstration involving a barrel. {A} have hung the old bushel in their hall, upside down, and {b}, which was not consulted, has noticed.",
-        "{A} report that a bushel now holds a bushel, a development their delegates have described as 'overdue by about forty harvests'; {b} has sent its regrets and its lawyers, in that order.",
+        "{A} are back at the harvest, paid by an honest bushel at last. {b} says its grain contract is now 'subject to reflection'.",
+        "The Crown's Steward has signed an honest measure, after a demonstration with a barrel. {A} have hung the old bushel in their hall, upside down. {b} has noticed.",
+        "{A} report that a bushel now holds a bushel, 'about forty harvests late'. {b} has sent its regrets, and then its lawyers.",
       ],
     },
   },
@@ -51,8 +51,8 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
       "Barley In, Purse Out: The Society Settles a Dispute It Was Not Party To",
     ],
     standfirsts: [
-      "The Reapers' Compact took up its scythes again after the Society paid a harvest bonus out of its own purse, which the Crown's Steward has described as 'a most generous gesture by somebody else'. Purse: £{purse}. {spin}",
-      "Nothing at the granary has changed except the Society's balance, which has. The royal bushel remains royal, and large. Purse: £{purse}. {spin}",
+      "The Compact is back at work after the Society paid a harvest bonus from its own purse. The Steward calls it 'a most generous gesture by somebody else'. Purse: £{purse}. {spin}",
+      "Nothing at the granary has changed except the Society's bank balance. The royal bushel is still royal, and still large. Purse: £{purse}. {spin}",
       "The Compact's Foreperson signed for the bonus with the words NOT A SETTLEMENT, which the Society's clerk has filed under Settlements. Purse: £{purse}. {spin}",
     ],
     siteLines: [
@@ -72,8 +72,8 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
   strike_broken: {
     piece: { kind: "pennant", surface: "wall", label: "A Syndicate armband: SEASONAL OPERATIVE, BONDED. It was found in the barley, by the gate, next to a scythe nobody picked up." },
     memoryLine: [
-      "I hear the Syndicate landed a barge of bonded labour at Highmark and broke a strike with it while the Society watched. The reapers will not forget whose boots were in the barley. Nor whose were not.",
-      "Word from the hill country: the barley was cut by the Syndicate's men and paid by the Crown's crooked bushel. I am sure you had excellent reasons. The reapers are composing a list of them.",
+      "I hear the Syndicate's bonded men broke the strike at Highmark while the Society watched. The reapers will remember whose boots were in the barley. And whose were not.",
+      "Word from the hills: the Syndicate's men cut the barley, paid by the Crown's crooked bushel. I am sure you had good reasons. The reapers are making a list of them.",
     ],
     headlines: [
       "Syndicate Labour Cuts Highmark Barley; Strike \"Concluded by Other Means\"",
@@ -81,7 +81,7 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
       "Barge, Bushel and Barley: The Syndicate Brings In the Harvest, and the Bill",
     ],
     standfirsts: [
-      "A barge of seasonal operatives, bonded, marched up from the quay and into the Crown's barley while the Reapers' Compact stood at its picket line, which is now a line of people standing. Purse: £{purse}. {spin}",
+      "A barge of bonded workers marched from the quay into the Crown's barley. The Compact stood at its picket line, which is now just a line of people. Purse: £{purse}. {spin}",
       "The Syndicate has delivered the Crown's harvest on contract, ahead of the rain and behind the reapers' backs. The royal bushel was used throughout. Purse: £{purse}. {spin}",
       "The strike at Highmark is over in the sense that it no longer has anything to strike against. The Compact's Foreperson declined to comment, at length. Purse: £{purse}. {spin}",
     ],
@@ -93,7 +93,7 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
     news: {
       head: ["{A} Cut Out of Their Own Barley by {b}", "Strike Broken by Barge; {A} Left Holding Their Scythes", "{A} Watch Strangers Reap Their Field"],
       body: [
-        "Bonded operatives hired by {b} reached the Highmark barley before the rain and before any settlement. {A} have returned to their hall, where the scythes are being kept sharp for reasons the Crown would prefer not to hear.",
+        "Workers hired by {b} reached the Highmark barley before the rain and before any deal. {A} are back in their hall, keeping their scythes sharp. The Crown would rather not ask why.",
         "The Crown's harvest is in, cut by labour hired by {b}, on {b}'s terms, by the Crown's own bushel. {A} describe the arrangement as 'complete', which is not a compliment.",
         "{A} report that their strike ended when another man's boots crossed their field; {b} reports a profitable season and asks that its operatives be addressed by number.",
       ],
@@ -111,7 +111,7 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
       "Highmark Harvest Lies Down in the Wet; Grain Imports \"Already Arranged\"",
     ],
     standfirsts: [
-      "The barley at the foot of the Highmark hill was left standing for a bushel nobody would measure and then lay down under the rain. The Brine Houses have announced a shipment of imported grain at a price. Purse: £{purse}. {spin}",
+      "The Highmark barley stood uncut over a bushel nobody would measure, and then the rain flattened it. The Brine Houses are now selling imported grain, at a price. Purse: £{purse}. {spin}",
       "Both sides held firm, and the rain held firmer. The Steward of the Granary has described the harvest as 'deferred'; the Compact has described it as 'gone'. Purse: £{purse}. {spin}",
       "Nobody at Highmark lost the argument. Everybody lost the barley. The Society was in attendance. Purse: £{purse}. {spin}",
     ],
@@ -123,7 +123,7 @@ export const REAPERS_COPY: Record<ReapersEnding, EndingCopy> = {
     news: {
       head: ["Barley Lies Down in the Rain; {A} Stand Firm in It", "Grain From {b} for a Hill That Grew Its Own", "Nobody Wins at Highmark; {b} Invoices Anyway"],
       body: [
-        "{A} stood out and the barley stood in the field until the rain arrived to settle the matter; {b} has opened a grain account at the Highmark quay, at the delta's prices.",
+        "{A} stayed on strike and the barley stayed in the field, until the rain settled it. {b} is now selling grain at the Highmark quay, at delta prices.",
         "The harvest at Highmark is lost. {A} blame the Crown's bushel; the Crown blames the weather; {b} blames nobody, being too busy unloading.",
         "{A} have asked the Crown to reconsider the royal bushel in light of there being nothing left to measure; {b} sends condolences and a price list.",
       ],

@@ -66,7 +66,7 @@ function escalate(s: BorderState): Reduction<BorderState> {
 
 const MEDIATED_FX: ScenarioFx[] = [
   { k: "order", group: "ward", order: { o: "stand_down" } }, { k: "order", group: "rival", order: { o: "stand_down" } }, { k: "war", a: "ward", b: "rival", on: false },
-  say("Both chains come in. Both sides sign. The Ward's copy is the third one; the Syndicate's copy is the other third one. Nobody will ever know who got the stone, which is the best result of the year."),
+  say("Both chains come in, and both sides sign. Nobody will ever know who got the stone. That is the best result all year."),
 ];
 
 function reduce(s: BorderState, e: ScenarioInput): Reduction<BorderState> {
@@ -154,7 +154,7 @@ function reduce(s: BorderState, e: ScenarioInput): Reduction<BorderState> {
           const survey = { ...s.survey, [e.kind === "ward_post" ? "ward" : "rival"]: true };
           const n = fin(relieve({ ...closed, survey }, BORDER.surveyRelief));
           if (survey.ward && survey.rival) {
-            return { s: { ...n, witness: BORDER.witnessS }, fx: [say(`Both sides agree to a joint survey, which is to say both chains go out at once and somebody neutral stands at the Stone while they do. You are, against all precedent, the neutral party. Stand at Marker Stone No. 4 for ${BORDER.witnessS} seconds, and keep everybody's hands where they are.`)] };
+            return { s: { ...n, witness: BORDER.witnessS }, fx: [say(`Both sides agree to a joint survey. For once, the Society is the neutral witness. Stand at Marker Stone No. 4 for ${BORDER.witnessS} seconds, and keep everyone calm.`)] };
           }
           return { s: n, fx: [say(survey.ward ? "The Ward patrol has agreed to a joint survey. Now the Syndicate." : "The Syndicate has agreed to a joint survey. Now the Ward patrol.")] };
         }
@@ -207,7 +207,7 @@ function view(s: BorderState, now: number): ScenarioView {
   if (s.envelope && res === undefined) objectives.push({ id: "stone", text: "Pull Marker Stone No. 4 out of the ford (Use)", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   const HINT: Record<string, string> = {
-    approach: "Marker Stone No. 4 stands in the ford. A Ward patrol is on the north bank and Syndicate surveyors on the south, armed with rifles, rulers and grievances. Wade out to the Stone and Use to talk to either side; both will try to recruit you.",
+    approach: "Marker Stone No. 4 stands in the ford. A Ward patrol holds the north bank, Syndicate surveyors the south. Wade out and Use to talk to either side. Both will try to recruit you.",
     tension: `Both sides are shouting across the water. The tension is ${Math.round(s.tension)} of 100. Talk lowers it. Every shot nearby raises it, and a shot at anyone loses the contract.`,
     parley: "Somebody is listening. Choose your words with a ruler.",
     escalated: "The two sides are shooting at each other. You are not the target. For now.",
@@ -264,7 +264,7 @@ const observe: ObserveSpec = {
   use: [
     { id: "ward_post", npc: "ward-0", r: 2.4, talk: "ward_post", carry: "none" },
     { id: "surveyor", npc: "rival-0", r: 2.4, talk: "surveyor", carry: "none" },
-    { id: "marker", at: KESSAR_SITES.border.marker, r: 3.2, carry: "none" },
+    { id: "marker", at: KESSAR_SITES.border.marker, r: 3.2, carry: "none", prompt: "Pull up the marker stone" },
   ],
   count: [{ group: "ward" }, { group: "rival" }],
   seen: [],
@@ -275,7 +275,7 @@ const observe: ObserveSpec = {
 
 export const borderTemplate: TemplateDef<BorderState> = {
   id: "border_incident", title: "Marker Stone No. 4",
-  brief: "Marker Stone No. 4 stands in a ford that two maps disagree about. A Ward patrol holds the north bank and Syndicate surveyors the south, and each has brought a lawyer with a rifle. Talk both into a joint survey, learn the Syndicate's plan and sell it to the Ward, or take the Syndicate's envelope and move the Stone. Fire one shot, or wait too long, and both banks go to war.",
+  brief: "Two maps disagree about Marker Stone No. 4. Arrange a joint survey, sell the Syndicate's plan to the Ward, or take their bribe and move the Stone. One shot, and both banks go to war.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { marker: KESSAR_SITES.border.marker },
 };

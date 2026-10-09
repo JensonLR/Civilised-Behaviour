@@ -131,7 +131,7 @@ function strike(s: SiegeState, k: number): Reduction<SiegeState> {
   return {
     s: n,
     fx: [order(picketGroup(k), { o: "flee" }), order("sally", { o: "post" }),
-      say(`The sally reaches the ${PICKET_NAMES[k]} picket. The Ward's boy takes one look at them and runs for the fort, pennant and all. The investment is broken: plant it again, or the garrison eats.`)],
+      say(`The sally reaches the ${PICKET_NAMES[k]} picket. The Ward's boy runs for the fort, pennant and all. The siege is broken: plant the picket again, or the garrison eats.`)],
   };
 }
 
@@ -148,7 +148,7 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
         n = { ...n, starve: n.starve + dtOf(e) };
         if (n.starve >= n.storesS) {
           n = { ...n, storesOut: true };
-          fx.push(say("Inside the post, the water butt rings hollow and the factor is seen eating the last biscuit with great dignity. The garrison's stores are out: summon him."));
+          fx.push(say("Inside the post, the factor eats the last biscuit with great dignity. The garrison's stores are out. Summon him to surrender."));
         }
       }
       // a sally, twice, at its time on the stores clock (not in a storm: then the whole garrison is out anyway)
@@ -156,17 +156,17 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
         const k = hash3(n.reliefAt, n.sallies, 0x5a11) % 3;
         n = { ...n, sallies: n.sallies + 1, sallyOut: k, sallyThere: false };
         fx.push(order("sally", { o: "alert" }), order("sally", { o: "march", route: `sally${k}` }),
-          say(`The post's gate opens and a sally goes out for the ${PICKET_NAMES[k]} picket: ${n.sally.alive} men, at the double. Stand on the mark, or stop them before they reach it.`));
+          say(`A sally! ${n.sally.alive} men charge out of the gate for the ${PICKET_NAMES[k]} picket. Stand on the mark, or stop them before they reach it.`));
       }
       // the relief: smoke on the river, then the launch, then the march
       if (!n.warned && !n.reliefLanded && n.t >= n.reliefAt - SIEGE.warnS) {
         n = { ...n, warned: true };
-        fx.push(say("Smoke on the river to the north-west: the Syndicate's relief launch, coming down to the post's bank with its flag up. It will put in on the bank and march for the yard."));
+        fx.push(say("Smoke on the river to the north-west: the Syndicate's relief boat is coming. Its men will land and march on the yard."));
       }
       if (!n.reliefLanded && n.t >= n.reliefAt) {
         n = { ...n, warned: true, reliefLanded: true, marchAt: n.t + SIEGE.formS };
         fx.push({ k: "spawn", group: "late:relief" }, order("late:relief", { o: "guard", x: S.relief[1]!.x, z: S.relief[1]!.z, r: 6 }),
-          say(`The relief launch puts in on the river bank: ${n.relief.total} of the Syndicate's guns, forming up to march on the yard. Two of them in it, and the siege is lifted.`));
+          say(`The relief boat lands ${n.relief.total} armed Syndicate men on the river bank. They form up to march on the yard. If two of them get in, the siege is over.`));
       }
       if (n.reliefLanded && !n.marching && !n.reliefBroken && n.t >= n.marchAt) {
         n = { ...n, marching: true };
@@ -189,9 +189,9 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
       const fx: Fx[] = [s.hired[i] ? order(picketGroup(i), { o: "post" }) : { k: "spawn", group: picketGroup(i) }];
       if (invested(n)) {
         fx.push(say(n.starve > 0
-          ? "The picket stands again and the post is invested on three sides once more. The garrison's stores go back to running down."
-          : "The third picket is planted. The Counting-House is invested on three sides, which the Articles require; the fourth side is the Society's own ground, which the Articles did not foresee. Its stores are now running down."));
-      } else fx.push(say(`A boy from the Ward takes up the ${PICKET_NAMES[i]} picket with the Society's pennant, at a penny an hour, which the Lamp-Warden will invoice.`));
+          ? "The picket is back up and the post is surrounded again. The garrison's stores start running down once more."
+          : "The Counting-House is surrounded on three sides, as the rules require. The fourth side is the Society's own camp, which the rules forgot. Its stores are now running down."));
+      } else fx.push(say(`A boy from the Ward holds the ${PICKET_NAMES[i]} picket with the Society's pennant. A penny an hour, billed by the Lamp-Warden.`));
       return { s: n, fx };
     }
     case "hostile": {
@@ -204,12 +204,12 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
       if (e.near === true && sortie && !truce) return stay(s);
       if (e.at === "garrison" || e.at === "sally" || e.at === "factor") {
         return storm(s, truce
-          ? "Shots at the factor while he is talking under a flag of truce. The Articles have a word for that, and the garrison has a gun for it. The whole post stands to."
-          : "Shots into the post. The garrison stands to behind the tent and the counter, and the factor gets under it. The storm has begun: drop three of its four guns, or send them running.",
+          ? "You shot at the factor under a flag of truce. The rules have a word for that, and the garrison has a gun for it. The whole post takes up arms."
+          : "Shots into the post! The garrison takes cover, and the factor hides under his counter. The storm has begun: drop three of its four guards, or make them run.",
           truce ? { brokePromise: true, parley: undefined } : {});
       }
       if (e.at === "late:relief" && s.reliefLanded && !s.marching && !s.reliefBroken) {
-        return { s: fin({ ...s, marching: true }), fx: [order("late:relief", { o: "alert" }), order("late:relief", { o: "march", route: "relief", join: true }), say("Shots at the relief while it forms up: it comes on at once.")] };
+        return { s: fin({ ...s, marching: true }), fx: [order("late:relief", { o: "alert" }), order("late:relief", { o: "march", route: "relief", join: true }), say("You fired on the relief while it formed up. It marches at once.")] };
       }
       return stay(s);
     }
@@ -228,7 +228,7 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
         }
         if (garrisonLost(n) >= SIEGE.stormed) {
           return resolveWith(n, "siege_stormed", {}, [...fx, order("garrison", { o: "flee" }), order("sally", { o: "flee" }), order("factor", { o: "stand_down" }), order("late:relief", { o: "flee" }),
-            say("The Counting-House falls. Its last guns run for the river, and the factor comes out from under his counter with his hands up and his ledger under one arm, asking for a receipt. The Society's flag goes up on the Syndicate's pole, a little crooked.")]);
+            say("The Counting-House falls! Its last guards run for the river. The factor crawls out from under his counter, asking for a receipt. The Society's flag goes up, a little crooked.")]);
         }
         return { s: fin(n), fx };
       }
@@ -241,8 +241,8 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
         return {
           s: fin({ ...n, reliefBroken: true, reliefIn: [] }),
           fx: [order("late:relief", { o: "flee" }),
-            say(invested(n) ? "The relief breaks and runs for its launch. From the counter, the factor watches it go and closes his ledger. He will hear terms now."
-              : "The relief breaks and runs for its launch. The factor has nobody coming; invest the post on all three sides and he will hear terms.")],
+            say(invested(n) ? "The relief breaks and runs for its boat. The factor watches it go and closes his ledger. He will talk terms now."
+              : "The relief breaks and runs for its boat. Nobody is coming to help the factor now. Surround the post on all three sides and he will talk terms.")],
         };
       }
       return stay(n);
@@ -264,9 +264,9 @@ function reduce(s: SiegeState, e: ScenarioInput): Reduction<SiegeState> {
         if (n.reliefIn.length >= SIEGE.reliefIn) {
           const flee = [0, 1, 2].filter((k) => s.hired[k]).map((k) => order(picketGroup(k), { o: "flee" }));
           return resolveWith(n, "siege_lifted", {}, [...flee, order("garrison", { o: "stand_down" }), order("sally", { o: "stand_down" }), order("late:relief", { o: "stand_down" }),
-            say("The relief marches into the yard and shakes the factor's hand over the counter. The siege is lifted. The Ward's boys go home with their pennies, and the Syndicate's flag stays up.")]);
+            say("The relief marches into the yard and shakes the factor's hand. The siege is over. The Ward's boys go home with their pennies, and the Syndicate's flag stays up.")]);
         }
-        return { s: n, fx: [say("A man of the relief is in the yard. One more, and the siege is lifted.")] };
+        return { s: n, fx: [say("One relief man is in the yard. One more, and the siege is over.")] };
       }
       if (rm && (e.state === "down" || e.state === "left")) return s.reliefIn.includes(e.id) ? stay(fin({ ...s, reliefIn: s.reliefIn.filter((id) => id !== e.id) })) : stay(s);
       if (e.id === "factor" && e.state === "down" && !s.factorDown) return stay(fin({ ...s, factorDown: true, parley: s.parley === "siege_factor" ? undefined : s.parley }));
@@ -292,23 +292,23 @@ function talk(s: SiegeState, result: string, paid: number): Reduction<SiegeState
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
     case "learn": return stay(fin({ ...s, asked: true }));
-    case "hostile": return storm({ ...s, parley: undefined }, "\"Then come and get it,\" says the factor, and gets under his counter. The garrison stands to. The storm has begun.");
+    case "hostile": return storm({ ...s, parley: undefined }, "\"Then come and get it,\" says the factor, and dives under his counter. The garrison takes up arms. The storm has begun.");
     case "survey": {
       const n = fin({ ...s, parley: undefined, asked: true });
       if (!invested(n)) {
-        return { s: n, fx: [say("\"The Articles,\" says the factor, who has read them, \"require that the place be invested. I can see the river from my counter and the fort from my tent. Come back when I cannot.\"")] };
+        return { s: n, fx: [say("\"Your own rules say the place must be invested, surrounded on three sides,\" says the factor, who has read them. \"I can still see the river. Come back when I cannot.\"")] };
       }
       if (!hopeless(n)) {
-        return { s: n, fx: [say("\"My stores are good, my relief is on the river and my men are standing,\" says the factor. \"Surrender is a matter for a man with none of those. Ask me again when I am that man.\"")] };
+        return { s: n, fx: [say("\"My stores are good, my relief is coming and my men are standing,\" says the factor. \"Ask me again when none of that is true.\"")] };
       }
       return resolveWith(n, "siege_honours", {}, [...CEASE, order("garrison", { o: "guard", ...OUT }), order("sally", { o: "guard", ...OUT }), order("factor", { o: "guard", ...OUT }),
-        say("The factor accepts the honours of war. The garrison marches out for the river with its arms reversed and the Syndicate's ledger held up in front of it for colours, the Articles having no clause about ledgers. The Society's flag goes up on the pole.")]);
+        say("The factor surrenders, with the honours of war. His men march out to the river, holding the Syndicate's ledger up like a flag. The Society's flag goes up on the pole.")]);
     }
     case "paid": {
       if (!paidOk(s, paid)) return stay(fin({ ...s, parley: undefined }));
       const n = fin({ ...s, parley: undefined, spent: s.spent + paid, paid: s.paid + paid });
       return resolveWith(n, "siege_bought", {}, [...CEASE, order("garrison", { o: "guard", ...OUT }), order("sally", { o: "guard", ...OUT }), order("factor", { o: "guard", ...OUT }),
-        say(`£${paid} is counted out on the counter. The factor writes a receipt for "one (1) trading post, as a going concern, goodwill included", strikes his flag himself and leads his garrison down to the river. The Committee has bought a siege.`)]);
+        say(`£${paid} is counted out on the counter. The factor writes a receipt for "one (1) trading post", takes down his flag and walks his men to the river. The Committee has bought a siege.`)]);
     }
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -326,16 +326,16 @@ function leave(s: SiegeState): ReturnType<TemplateDef<SiegeState>["leave"]> {
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const DONE: Record<string, string> = {
-  siege_honours: "The Counting-House has surrendered with the honours of war and the Society's flag is on its pole. Take the boat home.",
+  siege_honours: "The Counting-House surrendered with honours, and the Society's flag is on its pole. Take the boat home.",
   siege_stormed: "The Counting-House was taken by storm. The Society's flag is on its pole, a little crooked. Take the boat home.",
-  siege_bought: "The Counting-House was bought, with a receipt. The Committee has its siege. Take the boat home.",
-  siege_lifted: "The relief marched into the yard and the siege is lifted. The Syndicate's flag stays up. Take the boat home.",
+  siege_bought: "You bought the Counting-House, with a receipt. The Committee has its siege, sort of. Take the boat home.",
+  siege_lifted: "The relief reached the yard and the siege is over. The Syndicate's flag stays up. Take the boat home.",
   abandoned: "The expedition is down in front of the Counting-House. Take the boat home and explain.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
-  reinforcements: "The relief is bigger than the Committee's intelligence said.",
-  fog: "Fog on the river: the relief launch is feeling its way, and will be late.",
-  rain: "Rain: the garrison's water butts are filling, and its stores will last longer.",
+  reinforcements: "The relief force is bigger than the Committee's spies said.",
+  fog: "Fog on the river: the relief boat is feeling its way, and will be late.",
+  rain: "Rain: the garrison's water barrels are filling, so its stores will last longer.",
 };
 
 function view(s: SiegeState, now: number): ScenarioView {
@@ -344,27 +344,27 @@ function view(s: SiegeState, now: number): ScenarioView {
   const held = s.pickets.filter((p) => p).length;
   const objectives: ObjectiveView[] = [
     // (the id names the next mark to plant, so the compass strip walks the party round them: compassMarks.ts)
-    { id: invested(s) || won ? "invest" : `picket${s.pickets.indexOf(false)}`, text: invested(s) ? "The post is invested on three sides" : `Plant pickets on the three marks round the post (${held}/3)`, done: invested(s) || won },
-    { id: "take", text: res === "siege_lifted" ? "Lost: the relief reached the yard" : res === "abandoned" ? "Lost: the expedition went down" : "Take the Counting-House: its surrender, or by storm", done: won },
+    { id: invested(s) || won ? "invest" : `picket${s.pickets.indexOf(false)}`, text: invested(s) ? "The post is surrounded on three sides" : `Plant pickets on the three marks around the post (${held}/3)`, done: invested(s) || won },
+    { id: "take", text: res === "siege_lifted" ? "Lost: the relief reached the yard" : res === "abandoned" ? "Lost: the expedition went down" : "Take the Counting-House: by surrender or by storm", done: won },
   ];
   if (res === undefined && !s.factorDown) {
     objectives.push({
       id: "terms", optional: true, done: false,
-      text: invested(s) && hopeless(s) ? "Summon the factor: he will take the honours of war now" : "Summon him once his stores, relief or guns fail",
+      text: invested(s) && hopeless(s) ? "Summon the factor: he will surrender now" : "Summon him once his stores, relief or guards fail",
     });
-    objectives.push({ id: "buy", text: `Or buy the post as a going concern (£${s.price})`, done: false, optional: true });
+    objectives.push({ id: "buy", text: `Or buy the post from the factor (£${s.price})`, done: false, optional: true });
   }
   if (res === undefined && s.sallyOut >= 0) objectives.push({ id: `sally${s.sallyOut}`, text: `Stop the sally on the ${PICKET_NAMES[s.sallyOut]} picket, or stand on it`, done: false, optional: true });
-  if (res === undefined && s.storm) objectives.push({ id: "storm", text: `Storm it: drop ${SIEGE.stormed} of its 4 guns, or rout them (${Math.min(garrisonLost(s), SIEGE.stormed)} so far)`, done: false, optional: true });
+  if (res === undefined && s.storm) objectives.push({ id: "storm", text: `Storm it: drop or scatter ${SIEGE.stormed} of its 4 guards (${Math.min(garrisonLost(s), SIEGE.stormed)} so far)`, done: false, optional: true });
   if (res === undefined && s.reliefLanded && !s.reliefBroken) {
-    objectives.push({ id: "relief", text: `Stop the relief: drop ${reliefNeeded(s)} of ${s.relief.total}, or rout them (${Math.min(lost(s.relief), reliefNeeded(s))} so far)`, done: false, optional: true });
-    if (s.reliefIn.length > 0) objectives.push({ id: "yard", text: "Drop the relief man in the yard: two lift the siege", done: false, optional: true });
+    objectives.push({ id: "relief", text: `Stop the relief: drop or scatter ${reliefNeeded(s)} of its ${s.relief.total} (${Math.min(lost(s.relief), reliefNeeded(s))} so far)`, done: false, optional: true });
+    if (s.reliefIn.length > 0) objectives.push({ id: "yard", text: "Stop the relief man in the yard: two end the siege", done: false, optional: true });
   }
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? ""
-    : s.storm ? "The garrison is fighting from behind the tent and the counter. Drop three of its four guns, or make its case hopeless and summon the factor."
-    : invested(s) ? (s.storesOut ? "The garrison's stores are out. Summon the factor at his counter." : "The post is invested and its stores are running down. Keep the pickets standing: twice the garrison will sally for one.")
-    : "The Syndicate's post stands east of the Society's ground on the south bank. Invest it on three sides: stand on each picket mark and a boy from the Ward takes it up.";
+    : s.storm ? "The garrison fights from behind the tent and the counter. Drop three of its four guards. Or make the factor's case hopeless, then summon him."
+    : invested(s) ? (s.storesOut ? "The garrison's stores are out. Summon the factor at his counter." : "The post is surrounded and its stores are running down. Keep the pickets up. Twice, the garrison will sally out to knock one down.")
+    : "The Syndicate's post is east of the Society's ground. Surround it: stand on each of the three picket marks, and a boy from the Ward will hold it.";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const clock: [string, number] = invested(s) && !s.storesOut && !s.storm ? ["The garrison's stores", s.storesS - s.starve]
@@ -440,7 +440,7 @@ const observe: ObserveSpec = {
 
 export const countingHouseTemplate: TemplateDef<SiegeState> = {
   id: "counting_house", title: "The Siege of the Counting-House",
-  brief: "The Syndicate has a trading post on Kessar's south bank, and the Society's War Committee has resolved, in Whitehall, that it be reduced by regular siege according to the Articles (revised): invested on three sides, summoned, and granted the honours of war. The post is a flagpole, a tent and a counter. Its factor considers the matter one of rent. A relief launch is on the river.",
+  brief: "The War Committee wants the Syndicate's post at Kessar taken by a proper siege. Surround it on three sides, then summon the factor. It is a tent and a counter. A relief boat is coming.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { sally0: S.sallies[0]!, sally1: S.sallies[1]!, sally2: S.sallies[2]!, relief: S.relief },
   sites: { yard: S.yard, landing: S.relief[0]! },

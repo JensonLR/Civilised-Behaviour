@@ -11,36 +11,36 @@ const walk: Opt = { key: "walk", label: "Walk away", hint: "Nothing lost, nothin
 const foreman: ParleyScript = {
   speaker: "Foreman Jedediah Slack-Moreland",
   open: [
-    "\"Lower Gallery,\" says the foreman, from behind a desk that has been carried out of the office so that he can supervise the fall from a respectful distance. \"A schedule variance. Eleven names on the roll, none of them present. The Company's position is that the fall is behind schedule, and so, therefore, is the rescue. The handling charge is £{price}.\"",
-    "The foreman looks at you over his ledger, as a man looks at a possible exception. \"Nobody is permitted at the fall without a Variance Form,\" he says. \"The Variance Form is available from the foreman. I am the foreman. The form is £{price} if you are in a hurry, and free if you are not, and then it is merely very slow.\"",
+    "\"Eleven men trapped, and the gallery behind schedule,\" says the foreman, from a safe distance. \"The Company will seal it, unless you pay the handling charge: £{price}.\"",
+    "The foreman looks up from his ledger. \"Nobody touches the fall without a Variance Form,\" he says. \"Fast costs £{price}. Free is also available. Free is very slow.\"",
   ],
   round2: [
-    "\"The schedule,\" says the foreman, lowering his voice to the level of a man confiding something that is on a notice-board, \"seals the gallery at the end of the hour the Company has set for it. I am not at liberty to say which hour. It is on the board. The board is on the wall. The wall is in my office. My office is locked, for your safety. £{price}.\"",
-    "\"Between us,\" says the foreman, who has never been between anybody, \"the Company does not like a gallery that is behind schedule. A sealed gallery is never behind schedule; it is simply finished. The charge to revise the schedule is £{price}, and it is not, I wish to say, a bribe. It has a receipt.\"",
+    "\"The Company seals the gallery at the hour it has set,\" says the foreman. \"The hour is on a board in my office. My office is locked, for your safety. £{price}.\"",
+    "\"A sealed gallery is never behind schedule,\" says the foreman. \"It is simply finished. To revise the schedule: £{price}. It is not a bribe. It has a receipt.\"",
   ],
-  walk: "You step back. The foreman notes the time, your face, and the direction you left in, in that order, in a column headed ATTENDANCE.",
-  hostile: "The foreman takes a step back from his desk, and the desk, in a way you would not have thought a desk could, takes a step back too. \"Whistle!\" he cries, to nobody, \"someone blow the whistle!\"",
+  walk: "You step back. The foreman writes down the time and your face, in a column headed ATTENDANCE.",
+  hostile: "The foreman backs away from his desk. \"Whistle!\" he cries, to nobody. \"Somebody blow the whistle!\"",
   flatter: {
     ok: [
-      "\"A clean record,\" says the foreman, softening visibly. \"It is the only thing I have ever been proud of, and I did not do it on purpose. £{price}, then, for a friend of the schedule.\"",
-      "\"You have read the Company's report!\" says the foreman. \"Nobody has read the Company's report; it has no pages. £{price}, and I shall tell the board you were pleasant.\"",
+      "\"A clean record!\" says the foreman, softening. \"I did not do it on purpose, but I am proud of it. £{price}, for a friend of the schedule.\"",
+      "\"You read the Company's report!\" says the foreman. \"Nobody reads it. It has no pages. £{price}, and I will tell the board you were pleasant.\"",
     ],
     fail: [
-      "\"Flattery is not a form,\" says the foreman. \"It is, however, billable. £{price}, to cover the speech.\"",
+      "\"Flattery is not a form,\" says the foreman. \"But it is billable. £{price}, to cover the speech.\"",
       "\"I have been flattered by a better class of company,\" says the foreman. \"£{price}.\"",
     ],
   },
   deal: {
-    paid: "The money disappears into the ledger under HANDLING, and the foreman writes REVISED beside a time that has not yet happened. \"The gallery,\" he says, \"is not going to be sealed. I would not like you to think that this has anything to do with the money. It has to do with the money, but I would not like you to think it.\"",
-    survey: "\"A Variance Form,\" says the foreman, receiving it with both hands and a sigh. \"In triplicate. The Stamp will see it in forty-five seconds, which at the Company is called prompt. The seal, I should say, will not wait for the Stamp. But it will, I am told, be sorry.\"",
+    paid: "The foreman files the money under HANDLING. \"The gallery will not be sealed today,\" he says. \"Not because of the money. Well. Because of the money.\"",
+    survey: "\"A Variance Form, in triplicate,\" sighs the foreman. \"It will be stamped in forty-five seconds. The seal will not wait for the stamp, but it will be sorry.\"",
   },
-  short: "\"You are short,\" says the foreman, counting what is not there with his lips. \"The charge stands.\"",
+  short: "\"You are short,\" says the foreman, counting it twice to be sure. \"The charge stands.\"",
   options: (round, p): readonly Opt[] => {
-    const pay: Opt = { key: "pay", label: `Pay the handling charge (£${p})`, hint: "The schedule is revised: the gallery is not sealed. It is not a bribe; it has a receipt.", cost: p };
-    const form: Opt = { key: "propose", label: "File a Variance Form (stamped in forty-five seconds)", hint: "Free, in triplicate, and slow. If the seal comes first the Stamp is wasted; if the Stamp comes first the schedule moves a little.", cost: 0 };
+    const pay: Opt = { key: "pay", label: `Pay the handling charge (£${p})`, hint: "The seal is delayed for a long time. Not a bribe: it has a receipt.", cost: p };
+    const form: Opt = { key: "propose", label: "File a Variance Form (free, stamped in 45 seconds)", hint: "Once stamped, the seal is delayed a little. Useless if the seal comes first.", cost: 0 };
     return round === 1
-      ? [pay, form, { key: "ask", label: "Ask when the schedule seals the gallery", hint: "He may tell you. He will not enjoy it.", cost: 0 }, { key: "flatter", label: "Praise the Company's record", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
-        { key: "threaten", label: "Tell him what you will do to his schedule", hint: "He has a whistle. You have opinions. This will be remembered.", cost: 0 }, walk]
+      ? [pay, form, { key: "ask", label: "Ask when the gallery will be sealed", hint: "He may tell you. He will not enjoy it.", cost: 0 }, { key: "flatter", label: "Praise the Company's record", hint: "The price may drop. Or rise, if he sees through you.", cost: 0 },
+        { key: "threaten", label: "Tell him what you will do to his schedule", hint: "He blows his whistle and the yard turns on you. This will be remembered.", cost: 0 }, walk]
       : [pay, form, walk];
   },
 };
@@ -48,19 +48,19 @@ const foreman: ParleyScript = {
 const dirge_master: ParleyScript = {
   speaker: "Dirge-Master Osric Veil-Mourne",
   open: [
-    "\"We are so very sorry,\" says the Dirge-Master, rising from a bench he appears to have been sitting on since before the fall, \"for your loss. We are sorry in advance, which is cheaper. The Guild's bill for the Lower Gallery is £{price}, payable on delivery, and delivery, as we have always found, is soon.\"",
-    "The Dirge-Master takes your hand in both of his, which are cold, and presses it, which is warm. \"The Low Vesper Lamentation Guild,\" he says, \"attends all outcomes. We have attended this one already; we have simply not been told it has happened. £{price} for the attendance, £{price} for the not being told.\"",
+    "\"We are so sorry for your loss,\" says the Dirge-Master. \"We are sorry in advance, as it is cheaper. The Guild's bill for the Lower Gallery is £{price}.\"",
+    "The Dirge-Master takes your hand in two cold ones. \"We have mourned these men already,\" he says. \"Nobody has told them yet. £{price}.\"",
   ],
   round2: [
-    "\"The air in a pocket like that,\" says the Dirge-Master, consulting a slim black book, \"lasts what the Guild has estimated it will last, which is exactly as long as it takes the choir to walk up the road. We are very punctual. We arrive when the air is spent. We have never once been early, and never once been wrong. £{price}.\"",
-    "\"Sealing a gallery,\" says the Dirge-Master, drawing himself up, \"with customers in it is a restraint of mourning. The Guild would object, if it were asked what it knew. It has, I confess, a great deal of verse on the subject. £{price} for the verse.\"",
+    "\"The air behind the fall lasts until our choir arrives,\" says the Dirge-Master. \"We are never early, and never wrong. £{price}.\"",
+    "\"Sealing a gallery with customers inside?\" says the Dirge-Master. \"The Guild would object, if someone told it. In verse. £{price} for the verse.\"",
   ],
-  walk: "You step back. The Dirge-Master bows, in a way that suggests he is making a note of the angle.",
-  hostile: "The Dirge-Master takes your meaning, and the choir takes his. A bell that was about to be rung is lowered, with great care, to the ground, and then everybody is somewhere else.",
+  walk: "You step back. The Dirge-Master bows, and seems to make a note of the angle.",
+  hostile: "The Dirge-Master takes your meaning, and so does the choir. The bell is put down with great care. Then everybody is somewhere else.",
   flatter: {
     ok: [
-      "\"You have a feeling for the work,\" says the Dirge-Master, thawing by a single degree. \"£{price}, and I shall have the choir learn your name, which they will pronounce, at the funeral, with real conviction.\"",
-      "\"Seldom,\" says the Dirge-Master, \"are we noticed before the event. £{price}, for a patron of the pre-bereaved.\"",
+      "\"You have a feeling for the work,\" says the Dirge-Master, thawing a little. \"£{price}. The choir will learn your name, for your funeral.\"",
+      "\"We are rarely praised before the funeral,\" says the Dirge-Master. \"£{price}, for a friend of the nearly dead.\"",
     ],
     fail: [
       "\"Kind,\" says the Dirge-Master, \"and billable. £{price}.\"",
@@ -68,37 +68,37 @@ const dirge_master: ParleyScript = {
     ],
   },
   deal: {
-    paid: "The money is counted twice, by two people, into a black velvet bag. \"The Guild takes the gallery,\" says the Dirge-Master. \"The foreman will be relieved to learn that it is nobody's schedule now. We shall be along directly, with the lamps.\"",
-    survey: "\"A vigil,\" says the Dirge-Master, as one tasting a pie that is also a hymn. \"We shall sing at the fall, very slowly, and the men behind it will breathe in time. It is a service we are not often asked to render to the living.\"",
-    tell: "\"Sealed?\" says the Dirge-Master, the colour leaving his face and returning, with interest, as indignation. \"With customers in it? Madam, the Guild shall object. In verse. At length. Procedurally, the seal is stayed.\"",
+    paid: "Two people count the money into a black velvet bag. \"The Guild takes the gallery,\" says the Dirge-Master. \"We shall bring the lamps.\"",
+    survey: "\"A vigil,\" says the Dirge-Master. \"We sing at the fall, very slowly, and the men inside breathe in time. We rarely do this for the living.\"",
+    tell: "\"Sealed, with customers inside?\" The Dirge-Master goes white, then red. \"The Guild objects, in verse, at length. The seal must wait.\"",
   },
-  short: "\"You are short,\" says the Dirge-Master, with great delicacy, as one noting a death. \"The bill stands.\"",
+  short: "\"You are short,\" says the Dirge-Master, gently, as if noting a death. \"The bill stands.\"",
   options: (round, p): readonly Opt[] => {
-    const pay: Opt = { key: "pay", label: `Settle the Guild's bill (£${p}): the Guild takes the gallery`, hint: "The funeral for the living, with lamps, a bell and a very long hymn. The gallery becomes the Guild's problem, which was the point.", cost: p };
-    const vigil: Opt = { key: "propose", label: "Propose a vigil: the choir sings at the fall", hint: "The men behind it breathe slower, and the air lasts longer. The Guild bills the families for the atmosphere.", cost: 0 };
+    const pay: Opt = { key: "pay", label: `Settle the Guild's bill (£${p})`, hint: "The Guild takes the gallery and holds the funeral. The men are still alive.", cost: p };
+    const vigil: Opt = { key: "propose", label: "Propose a vigil: the choir sings at the fall", hint: "The men breathe slower, so the air lasts longer. The families get the bill.", cost: 0 };
     return round === 1
-      ? [pay, vigil, { key: "ask", label: "Ask what the Guild knows about the air", hint: "He may tell you, and the Guild's objections come with the knowledge.", cost: 0 }, { key: "flatter", label: "Admire the Guild's punctuality", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
-        { key: "threaten", label: "Tell him to take his choir elsewhere", hint: "A choir takes offence the way a choir sings: as one. This will be remembered.", cost: 0 }, walk]
-      : [pay, { key: "tell", label: "Tell him the Company means to seal the gallery with customers in it", hint: "The Guild objects, in verse. The seal is stayed for a while.", cost: 0 }, vigil, walk];
+      ? [pay, vigil, { key: "ask", label: "Ask what the Guild knows about the air", hint: "He may tell you. Then you can ask the Guild to object to the seal.", cost: 0 }, { key: "flatter", label: "Admire the Guild's punctuality", hint: "The price may drop. Or rise, if he sees through you.", cost: 0 },
+        { key: "threaten", label: "Tell him to take his choir elsewhere", hint: "The whole choir takes offence at once. This will be remembered.", cost: 0 }, walk]
+      : [pay, { key: "tell", label: "Tell him the Company will seal the gallery with men inside", hint: "The Guild objects, in verse. The seal is delayed a while.", cost: 0 }, vigil, walk];
   },
 };
 
 const assayer: ParleyScript = {
   speaker: "Clerk Lemuel Tarn-Ledger (Assay House)",
   open: [
-    "\"Claims,\" says the clerk, without looking up, from behind a counter that has been the same counter for eleven years, \"are registered to whoever arrives first with the right form and the right fee. The form is Form 3. The fee is £{price}. The pegs are the pegs. I do not, as a matter of policy, go out and look at them.\"",
-    "The clerk stamps something that was already stamped. \"Assay House,\" he says. \"We weigh, we measure and we register. We do not judge. I have no views on pegs, claims, surveyors or the Syndicate's brochure, which is very attractive. Registration is £{price}.\"",
+    "\"Claims go to whoever arrives first with the right form,\" says the clerk, not looking up. \"The fee is £{price}. I never go out to look at pegs.\"",
+    "The clerk stamps something that was already stamped. \"We weigh, we measure, we register,\" he says. \"We do not judge. Registration is £{price}.\"",
   ],
   round2: [
-    "\"The Syndicate,\" says the clerk, lowering his voice from nothing to less, \"has filed a survey of the bench with a chain that they were, I observe, kind enough to shorten for the purpose. I have not said so. I have, however, made a note, and when a person tells me why it is unsound, the note becomes a stamp. £{price} to register your own.\"",
-    "\"Their binder,\" says the clerk, \"is a very fine binder. The survey it holds was made with a chain that was, to my eye, a foot short of its marks. If somebody were to say so on the counter, with some degree of evidence, I should be obliged to mark it PROVISIONAL. £{price} for the filing.\"",
+    "\"The Syndicate measured the bench with a shortened chain,\" whispers the clerk. \"If someone reported that, I would have to act. £{price} to file your own.\"",
+    "\"A very fine binder,\" says the clerk. \"But their chain was a foot short. Say so at this counter, and I must stamp their survey PROVISIONAL. £{price}.\"",
   ],
-  walk: "You step back. The clerk writes down that you stepped back, and the direction, and the hour.",
-  hostile: "\"I would ask you,\" says the clerk, to the air, as the surveyors bolt and the road fills with the sound of guards, \"to remember that this counter is not part of the dispute.\" He goes on stamping.",
+  walk: "You step back. The clerk writes down that you stepped back, and the hour.",
+  hostile: "The surveyors run and the guards come. \"This counter is not part of the dispute,\" says the clerk, and goes on stamping.",
   flatter: {
     ok: [
-      "\"A person who admires procedure,\" says the clerk, lowering his stamp by a hair. \"£{price}, and I shall use the good blotter.\"",
-      "\"Seldom noticed,\" says the clerk. \"£{price}, and I shall not tell the Syndicate you were civil.\"",
+      "\"A person who admires procedure!\" says the clerk, lowering his stamp a little. \"£{price}, and I shall use the good blotter.\"",
+      "\"I am seldom noticed,\" says the clerk. \"£{price}, and I shall not tell the Syndicate you were civil.\"",
     ],
     fail: [
       "\"Procedure thanks you,\" says the clerk. \"£{price}.\"",
@@ -106,18 +106,18 @@ const assayer: ParleyScript = {
     ],
   },
   deal: {
-    paid: "The clerk takes the form, reads it twice, finds nothing wrong with it and is visibly disappointed. The stamp comes down. \"Registered,\" he says. \"To the Society, in the order of arrival. Should the Syndicate dispute it, they may do so in writing, at length, in a queue.\"",
-    survey: "\"A joint claim,\" says the clerk, producing from beneath the counter a form that has plainly been waiting for exactly this. \"It is signed by both sides here, at the counter, and sealed by the Guild's seal, which will be here directly.\" It is.",
-    tell: "The clerk takes your information with the face of a man who has waited years for an excuse, and brings a red stamp up from the drawer where it lives. \"PROVISIONAL,\" he says, to the binder, with real tenderness. Their pegs are, as of that stamp, decoration.",
+    paid: "The clerk reads the form twice and sadly finds nothing wrong. The stamp comes down. \"Registered to the Society,\" he says. \"The Syndicate may complain, in a queue.\"",
+    survey: "\"A joint claim,\" says the clerk, pulling out a form made for exactly this. \"Both sides sign, and the Guild seals it.\" The Guild is already here.",
+    tell: "The clerk has waited years for an excuse. He takes out a red stamp. \"PROVISIONAL,\" he tells their binder, tenderly. Their pegs are now decoration.",
   },
   short: "\"You are short,\" says the clerk, without malice. \"I have no form for that.\"",
   options: (round, p): readonly Opt[] => {
-    const file: Opt = { key: "pay", label: `File the claim (£${p})`, hint: "Needs three pegs of yours and none of the Syndicate's standing inside them. First at the counter, with the form.", cost: p };
-    const joint: Opt = { key: "propose", label: "Propose a joint claim (the Guild certifies)", hint: "Needs a peg each and the peace kept. Everybody has half of something.", cost: 0 };
+    const file: Opt = { key: "pay", label: `File the claim (£${p})`, hint: "Needs three of your pegs, with no Syndicate peg inside them.", cost: p };
+    const joint: Opt = { key: "propose", label: "Propose a joint claim with the Syndicate", hint: "Needs one peg each, and no fighting. Everybody gets half of something.", cost: 0 };
     return round === 1
-      ? [file, joint, { key: "ask", label: "Ask what the Syndicate has filed", hint: "He may mention the chain. He will pretend he did not.", cost: 0 }, { key: "flatter", label: "Admire the House's procedures", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
-        { key: "threaten", label: "Demand the Syndicate's pegs be pulled", hint: "He is not a policeman. The guards at the headframe are. This will be remembered.", cost: 0 }, walk]
-      : [file, { key: "tell", label: "Tell him the Syndicate's survey is unsound", hint: "Now that you know why: the clerk stamps it PROVISIONAL, and their pegs come out by hand.", cost: 0 }, joint, walk];
+      ? [file, joint, { key: "ask", label: "Ask what the Syndicate has filed", hint: "He may mention the chain. He will pretend he did not.", cost: 0 }, { key: "flatter", label: "Admire the House's procedures", hint: "The price may drop. Or rise, if he sees through you.", cost: 0 },
+        { key: "threaten", label: "Demand he pull the Syndicate's pegs", hint: "The surveyors run, and their guards come for you. This will be remembered.", cost: 0 }, walk]
+      : [file, { key: "tell", label: "Tell him the Syndicate's chain is short", hint: "He stamps their survey PROVISIONAL. Then you can pull their pegs.", cost: 0 }, joint, walk];
   },
 };
 
@@ -125,23 +125,23 @@ const assayer: ParleyScript = {
 const engineer: ParleyScript = {
   speaker: "Engineer Lucius Brack-Dunmarrow, of the Syndicate",
   open: [
-    "\"Leased,\" says the engineer, patting the winding house as if it were a horse that owed him money, \"from the Company, by the hour, to dig under the Company, by the yard. The cross-cut reaches the vein this afternoon. I am paid to see that nothing happens to her before then. I am also, I should say, paid rather badly. A fault could be found, for £{price}. Faults are expensive to find.\"",
-    "The engineer wipes his hands on a rag that makes them dirtier. \"She is a lovely engine. She will strike the vein by the end of the shift and the Syndicate will own the gorge by tea. Unless,\" he adds, examining the rag, \"an inspection were to find her unsafe. An inspection costs £{price}. I am the inspector.\"",
+    "\"She reaches the vein this afternoon,\" says the engineer, patting his engine. \"I am paid to keep her safe. Badly paid. For £{price}, I could find a fault.\"",
+    "The engineer wipes his hands on a dirty rag. \"She strikes the vein by tea. Unless an inspection finds her unsafe. That costs £{price}. I am the inspector.\"",
   ],
   round2: [
-    "\"Her weakness?\" The engineer lowers his voice to the level of a man selling a horse. \"She drinks whatever is poured into her feed, at the west wall, and she has no stomach for grit. A crate of the gorge's own tailings would finish her, and the tailings heap is just down the road. Not that I said so. The beat-man comes round every forty seconds and he has eyes like a customs officer.\"",
-    "\"Between us,\" says the engineer, \"the Company's powder is in the Company's magazine, down by the fall, and the Company's magazine has a lock the Company has never once fitted. And the feed at the west wall takes anything. I am telling you this as a matter of professional regret.\"",
+    "\"Her feed is at the west wall,\" whispers the engineer, \"and she has no stomach for grit. One crate from the tailings heap would finish her. A guard passes every forty seconds.\"",
+    "\"The Company's powder is in its magazine, by the fall,\" says the engineer, with regret. \"The lock was never fitted. And her feed at the west wall takes anything.\"",
   ],
   walk: "You step back. The engineer goes back to his gauge, which he taps, and which taps back.",
   hostile: "The engineer drops his rag and his manners at once. \"Guards!\" he calls, with real feeling. \"The Society is here to discuss my engine!\"",
   deal: {
-    paid: "The engineer counts it twice, pockets it once and climbs up into the winding house with a spanner and an expression of sincere technical concern. A moment later something in the engine says \"clunk\" in a way that will take a week to put right. \"Cracked flywheel,\" he calls down. \"Tragic. Nobody's fault.\"",
+    paid: "The engineer pockets the money and climbs up with a spanner. Something goes \"clunk\". \"Cracked flywheel,\" he calls down. \"Tragic. Nobody's fault.\"",
   },
-  short: "\"You are short,\" says the engineer. \"Faults do not come cheaper because the customer is poorer. That is the whole of engineering.\"",
+  short: "\"You are short,\" says the engineer. \"Faults do not get cheaper for poorer customers. That is engineering.\"",
   options: (round, p): readonly Opt[] => {
-    const pay: Opt = { key: "pay", label: `Pay for an inspection (£${p})`, hint: "He finds a fault in his own engine. Quiet, certain, and the Syndicate's money stays in the Syndicate's pocket too.", cost: p };
+    const pay: Opt = { key: "pay", label: `Pay for an inspection (£${p})`, hint: "He finds a fault in his own engine, and it stops. No shots fired.", cost: p };
     return round === 1
-      ? [pay, { key: "ask", label: "Ask what the engine cannot stand", hint: "He may tell you. He is not paid enough not to.", cost: 0 },
+      ? [pay, { key: "ask", label: "Ask what the engine cannot stand", hint: "He may tell you. He is not paid enough to keep quiet.", cost: 0 },
         { key: "threaten", label: "Tell him what you will do to his engine", hint: "He will call the guards. Loudly.", cost: 0 }, walk]
       : [pay, walk];
   },
@@ -156,25 +156,25 @@ const needle_names: ParleyScript = {
   speaker: "Dirge-Master Osric Veil-Mourne",
   frame: { heading: "A word at the Long Cloister", asked: "The Guild's fee for its names: £{price} · Round {round} · The Dirge-Master seems {mood}." },
   open: [
-    "\"The needles,\" says the Dirge-Master, opening a ledger older than your Society, \"have names. Seven of them, each somebody's: we bury the name there when we cannot bury the person. The Guild will write them on your chart for £{price}, a fee per name, the dead being expensive. Or you may tell me what your Committee calls them. I am always glad of a laugh at a funeral.\"",
-    "\"Your Committee wishes to name the needles,\" says the Dirge-Master. \"So did the last empire, and the one before. We have kept all their names, in a drawer, for reference. Ours are £{price} for the set, entered in your chart in a good hand. Yours are free, and will be invoiced.\"",
+    "\"Each needle is named for someone we could not bury,\" says the Dirge-Master. \"Our names cost £{price}. Your Committee's names are free. I could use a laugh.\"",
+    "\"Your Committee wants to name the needles?\" says the Dirge-Master. \"So did the last two empires. Ours cost £{price}. Yours are free, and invoiced.\"",
   ],
   round2: [
-    "\"The tall one is the Aunt Who Waited,\" says the Dirge-Master, running a finger down the page. \"The split one is the Two Who Argued; they still do, in a west wind. The small one is Small Ottilie, who was. The others you will learn when you have paid for them. £{price}.\"",
-    "\"Every needle in this gorge,\" says the Dirge-Master, \"marks a debt the Guild could not collect, which is to say a person. Old Tamsey's Debt is the third from the river. He still owes us. £{price} for the set, and his is included.\"",
+    "\"The tall one is the Aunt Who Waited,\" says the Dirge-Master. \"The split one is the Two Who Argued. They still do, in a west wind. The rest cost £{price}.\"",
+    "\"Old Tamsey's Debt is third from the river,\" says the Dirge-Master. \"He still owes us. £{price} for the whole set, his included.\"",
   ],
-  walk: "You step back. The Dirge-Master closes the ledger on a ribbon, at the page with the needles on it.",
-  hostile: "The Dirge-Master closes the ledger with a sound like a lid. \"The Guild,\" he says, \"will see you at your own arrangements.\"",
+  walk: "You step back. The Dirge-Master marks the page with a ribbon and closes the ledger.",
+  hostile: "The Dirge-Master shuts the ledger like a coffin lid. \"The Guild,\" he says, \"will see you at your funeral.\"",
   deal: {
     paid: "The fee is counted twice into a black velvet bag, and the Dirge-Master takes the Society's chart and a pen.",
     tell: "You take out the Committee's list and begin to read it aloud. The Dirge-Master takes out a second ledger and begins to write.",
   },
-  short: "\"You are short,\" says the Dirge-Master. \"Names are the one thing the Guild has never discounted.\"",
+  short: "\"You are short,\" says the Dirge-Master. \"Names are the one thing the Guild never discounts.\"",
   options: (round, p): readonly Opt[] => {
-    const pay: Opt = { key: "pay", label: `Enter the Guild's names on the chart (£${p})`, hint: "The needles keep their own names on the Society's map. The Committee will be furious; the Guild will be civil.", cost: p };
-    const tell: Opt = { key: "tell", label: "Read him the Committee's names", hint: "Mount Fothergill-Pym and six more. The chart is the Committee's; the Guild sends the bill.", cost: 0 };
-    const leave: Opt = { key: "walk", label: "Walk away", hint: "The needles stay unnamed a little longer. The Syndicate's surveyors do not.", cost: 0 };
-    return round === 1 ? [pay, tell, { key: "ask", label: "Ask what the needles are called", hint: "He will tell you some of it. The rest is in the fee.", cost: 0 }, leave] : [pay, tell, leave];
+    const pay: Opt = { key: "pay", label: `Put the Guild's names on the chart (£${p})`, hint: "Close your triangle first. The needles keep their names; the Committee fumes.", cost: p };
+    const tell: Opt = { key: "tell", label: "Read him the Committee's names", hint: "Mount Fothergill-Pym and six more go on the chart. The Guild sends a bill.", cost: 0 };
+    const leave: Opt = { key: "walk", label: "Walk away", hint: "The needles stay unnamed for now. The Syndicate's survey goes on.", cost: 0 };
+    return round === 1 ? [pay, tell, { key: "ask", label: "Ask what the needles are called", hint: "He tells you a few. The rest cost money.", cost: 0 }, leave] : [pay, tell, leave];
   },
 };
 
@@ -183,21 +183,21 @@ const railway_surveyor: ParleyScript = {
   speaker: "Railway Surveyor Ptolemy Gradient-Hythe, of the Syndicate",
   frame: { heading: "A word at the Syndicate's tripod", asked: "His price for your survey: £{price} · Round {round} · The surveyor seems {mood}." },
   open: [
-    "The surveyor does not take his eye from his instrument. \"The Society is measuring the gorge for a map,\" he says. \"The Syndicate is measuring it for a railway. A railway is a map that pays. If you close your triangle, I will buy it, field books and all, for £{price}, and save us both a fortnight.\"",
-    "\"Names,\" says the surveyor, as if the word were a pebble in his boot. \"Your Committee wants names. We want a gradient. Close your triangle and it is worth £{price} to the Syndicate. The needles can be called whatever fits on a timetable.\"",
+    "\"You measure for a map. We measure for a railway,\" says the surveyor. \"A railway is a map that pays. Close your triangle and I will buy it for £{price}.\"",
+    "\"Your Committee wants names,\" says the surveyor. \"We want a railway. Close your triangle and I pay £{price}. The needles can be called whatever fits a timetable.\"",
   ],
   round2: [
-    "\"When do we file?\" The surveyor consults a watch and a barge timetable. \"When the field books are dry and the next ore barge leaves. Soon. Whoever's survey reaches London first is the gorge; the other is a curiosity. £{price} for yours, and you may keep the curiosity.\"",
-    "\"Between ourselves,\" says the surveyor, \"we are behind. You have a better instrument and a worse employer. £{price} for the closed triangle, and the Syndicate's railway will run on the Society's arithmetic, which is the nearest your arithmetic will ever come to a dividend.\"",
+    "\"We file when the next ore barge leaves. Soon,\" says the surveyor. \"The first survey to reach London wins the gorge. £{price} for yours.\"",
+    "\"Between us, we are behind,\" says the surveyor. \"You have a better instrument and a worse employer. £{price} for your closed triangle.\"",
   ],
   walk: "You step back. The surveyor makes a mark in his field book, possibly about you.",
-  hostile: "The surveyor looks at you, then at his chainman, and the chainman looks at the wharf.",
+  hostile: "The surveyor looks at his chainman. The chainman looks at the wharf, ready to run.",
   deal: { survey: "\"Done,\" says the surveyor, taking out a purse. \"Show me the closed triangle.\"" },
   short: "\"I am buying,\" says the surveyor, \"not selling.\"",
   options: (round): readonly Opt[] => {
-    const sell: Opt = { key: "propose", label: "Sell him the closed triangulation", hint: "He pays, and the gorge becomes a railway on your arithmetic. Only a closed triangle will do.", cost: 0 };
+    const sell: Opt = { key: "propose", label: "Sell him your closed triangle", hint: "He pays, and lays a railway on your sums. The triangle must be closed.", cost: 0 };
     const leave: Opt = { key: "walk", label: "Walk away", hint: "His survey goes on.", cost: 0 };
-    return round === 1 ? [sell, { key: "ask", label: "Ask when the Syndicate files", hint: "He will tell you. He is a surveyor: he likes being asked.", cost: 0 }, leave] : [sell, leave];
+    return round === 1 ? [sell, { key: "ask", label: "Ask when the Syndicate files its survey", hint: "He will tell you. He is a surveyor: he likes being asked.", cost: 0 }, leave] : [sell, leave];
   },
 };
 

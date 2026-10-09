@@ -217,7 +217,7 @@ describe("the parleys: the foreman's schedule and the Guild's offers", () => {
   it("asking the foreman reveals the seal time in the hint; asking the Guild reveals the air clock", () => {
     const { f, s } = newRun();
     expect(lastView(f).hint).not.toMatch(/seals at/);
-    pick(f, s, "foreman", /Ask when the schedule/);
+    pick(f, s, "foreman", /Ask when the gallery will be sealed/);
     choose(f, s, /handling charge/);
     // (round two: the price may have moved)
     expect(lastView(f).hint).toMatch(/seals at \d+ seconds/);
@@ -241,9 +241,9 @@ describe("the parleys: the foreman's schedule and the Guild's offers", () => {
     const g = newRun();
     pick(g.f, g.s, "dirge-master", /Ask what the Guild knows/);
     const v = lastParley(g.f, "p1")!.view!;
-    expect(labelIndex(v, /Tell him the Company means to seal/)).toBeGreaterThanOrEqual(0);
-    g.s.onPick("p1", labelIndex(v, /Tell him the Company means to seal/));
-    expect(notices(g.f).join(" ")).toMatch(/restraint of mourning/);
+    expect(labelIndex(v, /Tell him the Company will seal the gallery/)).toBeGreaterThanOrEqual(0);
+    g.s.onPick("p1", labelIndex(v, /Tell him the Company will seal the gallery/));
+    expect(notices(g.f).join(" ")).toMatch(/customers still in it/);
   });
 
   it("a purse too small re-issues the round and charges nothing", () => {

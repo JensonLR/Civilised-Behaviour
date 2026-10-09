@@ -232,7 +232,7 @@ function view(s: HostageState, now: number): ScenarioView {
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
 
   const HINT: Record<string, string> = {
-    planning: "Mr. Percival Quim, junior surveyor and insured, is in a cage at Hangman's Orchard in the north-east scrub. The deserters are carousing. Approach by the ford: the lookout on the south-west rise will hail anyone who walks up, and crouching keeps you out of sight.",
+    planning: "Mr. Quim, a surveyor, is caged at Hangman's Orchard in the north-east scrub. Come by the ford. A lookout on the south-west rise calls out anyone he sees. Crouch to stay hidden.",
     standoff: "You are at the Orchard. The colour-sergeant takes cash. The cage takes patience. The rifles take neither. Anyone who sees you will give you a few seconds to explain.",
     parley: "The colour-sergeant is listening. He has named a price.",
     fighting: "The camp is up. Break three of the four, open the cage, and walk the surveyor to the dock.",
@@ -288,7 +288,7 @@ const observe: ObserveSpec = {
   ],
   use: [
     { id: "ransom", npc: "deserter-0", r: 2.4, talk: "ransom", carry: "none" },
-    { id: "cage", at: KESSAR_SITES.hostage.cage, r: 2.6, carry: "none" },
+    { id: "cage", at: KESSAR_SITES.hostage.cage, r: 2.6, carry: "none", prompt: "Open the cage" },
   ],
   count: [{ group: "deserters" }],
   seen: [{ group: "deserters", sight: HOSTAGE.sightCarousers }, { group: "lookout", sight: HOSTAGE.sightLookout }, { group: "late:reinf", sight: HOSTAGE.sightLookout }],
@@ -299,7 +299,7 @@ const observe: ObserveSpec = {
 
 export const hostageTemplate: TemplateDef<HostageState> = {
   id: "hostage_rescue", title: "The Cartwright's Cage",
-  brief: "Mr. Percival Quim, junior surveyor, sits in a cage wagon at Hangman's Orchard, held by deserters who have read his insurance policy more closely than the Society ever did. They will sell him back; the Syndicate will buy him first if you dawdle. Pay the colour-sergeant, open the cage while the Orchard drinks, or break the camp and walk him home.",
+  brief: "Deserters hold Mr. Percival Quim, a junior surveyor, in a cage at Hangman's Orchard. Pay their price, free him while they drink, or fight. Dawdle, and the Syndicate buys him first.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { cage: KESSAR_SITES.hostage.cage, camp: KESSAR_SITES.hostage.cage },
   opening: () => [],

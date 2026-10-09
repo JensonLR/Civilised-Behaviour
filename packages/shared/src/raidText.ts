@@ -62,7 +62,7 @@ export const RAID_COPY: Record<RaidEnding, EndingCopy> = {
       body: [
         "The Syndicate's raiding party reached the Society's post at Kessar and set its stores alight, then left, slowly; {b} watched from the fort and did not intervene.",
         "The Society's south-bank stores are ash. The Syndicate calls the raid \"a market correction\", and {b} calls it a fire on its bank that it did not start.",
-        "Raiders with Syndicate torches and a Syndicate list burned what was on the list, and {b} notes that the post's flag was left flying, out of politeness or oversight.",
+        "Raiders with Syndicate torches burned everything on a Syndicate list. {b} notes that they left the post's flag flying, out of politeness or by mistake.",
       ],
     },
   },

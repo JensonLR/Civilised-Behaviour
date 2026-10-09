@@ -285,7 +285,7 @@ export const NEWS: Record<string, NewsDef> = {
   // Highmark's chair (D-036): one dispatch per ending, printed from the Reapers' log entry `chair_<ending>`. {a} is the Reapers, {b} the Guild (the Houses at a sale).
   chair_backed_elder: {
     head: ["Assembly Ratifies Princess Orla; Barley Unaffected", "Highmark Seats the Elder, by a Show of Hands", "Reapers Vote Seniority, Then Go Home to the Harvest"],
-    body: ["{A} raised two scythes, then three, and the chair at Highmark has an occupant who would like it noted that she is the elder. The Guild will certify the King's death at a fee, and the King will remain, for administrative purposes, in the building.", "The Assembly carried the vote by a majority of scythes. The Guild has begun drafting a certificate of pendingness, with a black border and a surcharge.", "The new reign began at the harvest bell and is expected to last until the next form. {A} has asked to be thanked in writing, in a large hand."],
+    body: ["{A} voted with three scythes, and the elder princess takes the chair at Highmark. She would like it noted that she is the elder. The Guild will certify the King's death, for a fee.", "The Assembly carried the vote by a majority of scythes. The Guild has begun drafting a certificate of pendingness, with a black border and a surcharge.", "The new reign began at the harvest bell and is expected to last until the next form. {A} has asked to be thanked in writing, in a large hand."],
   },
   chair_backed_younger: {
     head: ["Reapers Acclaim Prince Dunstan, Mostly Aloud", "Highmark Crowns the Young; Seniority Files a Complaint", "The Assembly Votes With Its Ears"],
@@ -309,7 +309,7 @@ export const NEWS: Record<string, NewsDef> = {
   },
   settle_founded_highmark: {
     head: ["Society Plants a Flag in the Barley", "A Post on the Grass; Reapers Count the Customers", "Highmark Foundation Laid, Cattle Rerouted"],
-    body: ["Four crates have been laid on the grass west of the Reed Landing. The Reapers call it a market for the barley. The Syndicate calls it trespass with paperwork. The cattle have been asked to graze elsewhere and have agreed, slowly.", "The Society has a post on the high grass. The Assembly has asked whether it pays rates; the Society has asked what rates are.", "The first crate went down by the landing at dawn; the herd moved off by noon, offended. The Reapers sent bread."],
+    body: ["Four crates have been laid on the grass west of the Reed Landing. The Reapers call it a barley market. The Syndicate calls it trespass with paperwork. The cattle moved off, slowly.", "The Society has a post on the high grass. The Assembly has asked whether it pays rates; the Society has asked what rates are.", "The first crate went down by the landing at dawn; the herd moved off by noon, offended. The Reapers sent bread."],
   },
   // D-091
   settle_railway: {

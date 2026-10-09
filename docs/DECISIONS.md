@@ -531,3 +531,73 @@ The hired hands are the expedition: their shots count for the Hatters and agains
   - Lettering: a short heading over a long line is set at its own size (up to 1.35 times the other line) instead of shrinking to the long line's size.
 - **Looked at.** Software-rendered stills from the bank and from the gorge, the fall at 0.2, 0.6 and 1.0 s, and every sign in every region from both faces.
 - **Not yet.** The pieces are scenery with colliders, not physics bodies: nothing bounces off them as they fall, and a player under the bridge is not struck. Unplayed by a person.
+
+**D-098 Pages that fit, and one tidy line of orders (2026-10-09).** The owner's report: "Theres a lot of scrolling on pages on pc & mobile. pages look clunky wordy & bulky. Mission objective markers & overall layout feel sloppy & rushed". Measured first. A script (content height over box height of everything that scrolls) gave these before numbers:
+- 1920 x 1080: Options › Controls 2,591 px in a 421 px box; Display 696; Accessibility 576; the Field Manual 490 in 438.
+- 1366 x 768: the creator's types 437 in 381.
+- 390 x 844 phone: the whole page 1,984 (the charter with the creator stacked under it); Controls 3,977 in 299; the manual 1,240.
+- 844 x 390 phone sideways: the charter 563 in 288.
+
+What changed:
+- **The front door.**
+  - Each thing is said once. New campaign carries its note as its own second line ("A fresh world on a new seed"). Gore is a select in the row with Options and How to play ("Gore: Full"); its note is in Options and in the tooltip. The mature-content line and the version share the foot.
+  - On a narrow screen (60 rem and below) one panel shows at a time. The charter stands at the foot of the screen; "Appearance" beside the name swaps in the creator, with a Done (Escape and the pad's B also come back).
+  - The figure behind the door stands in whatever band of the picture the panels leave free (`ui/doorFrame.ts`, a pure function with tests): beside the charter on a PC or a phone held sideways, above it on a phone held upright. It used a camera view offset and a narrower lens, so before this it stood hidden behind the phone's charter.
+  - The creator fits a laptop panel (shorter type cards). On a phone its tools, poses and tabs are one line each.
+- **Standing Orders (Options).**
+  - The gamepad has its own page; under Controls it made that page six screens long.
+  - On a wide screen every page is two columns (the sheet is 62 rem by 48 rem at most). The key list is set group by group, each group headed with its column names.
+  - Every note was cut to the one fact it carries, or removed where the label already said it. Aim (hold or toggle) is on Controls too, since it applies to the mouse.
+  - On a phone, the key list and the pad's layout fold away. A switch sits on its label's line. The tab strip scrolls sideways instead of wrapping onto a second line.
+- **The Field Manual.** Three steps, each a line. The touch controls say what each control does in a word or two (the glyph already says how). The device switch says "Keyboard".
+- **The orders on the HUD.**
+  - The distance is said once: on the marker, or on the line when the marker is a bare flag over somebody's name plate. It had been shown on the marker and on the card both.
+  - The marker's name and distance are one slip.
+  - The marker never stands on the Society's bonus slip under the card; the flag used to land on its words.
+  - The contract's rule ("A shot at the Ward, even a miss, ends all talk...") shows while it is news (its first 20 s) and whenever a weapon is out, when it matters. The rest of the time the card is the one line and the clock.
+  - The orientation card's introduction is two sentences instead of five; its steps say what to do in plain words.
+
+After, at the same sizes:
+- 1920 x 1080: nothing scrolls but the Gamepad page (828 in 574).
+- 1366 x 768: Controls 579 in 475; the creator fits.
+- Phone upright: the page fits, Controls fits, the manual 865 in 810.
+- Phone sideways: the charter fits.
+
+Tests: the framing function; the rule's quiet and its return with a weapon; the distance said once; the door's pad order unchanged. Looked at in software-rendered stills at all four sizes, and in play at Kessar, Vesper, Highmark and the Saltmarket.
+
+**D-099 Plain words and small boxes (2026-10-09).** The owner's next report: "shit loads of ugly bulky paragraphs with odd wording that makes it hard for the majority of players to understand / follow. the boxes that pop up look big & bulky & block the view for the player too". Both were true. About 500 strings ran past 190 characters or held a sentence of more than 26 words. A typical talk line was 300 to 450 characters of nested asides, and a contract's hint was a paragraph. The talk sheet sat in the middle of the screen over the person you were talking to. The end-of-contract report was a dozen lines of typewriter type in the corner.
+- **A rule, enforced.** No line of copy runs past 190 characters, and no sentence past 26 words. Two tests scan every prose string literal in the copy: one for the shared package (`packages/shared/src/plainWords.test.ts`) and one for the client's menus, sheets and HUD (`apps/client/src/ui/plainWords.test.ts`). The level audit and the real-world word list are exempt, since players never see them.
+- **The rewrite.** Every talk script, contract brief, objective, hint, rule, line, ending, newspaper head and chart note was rewritten by one style guide:
+  - say what happens first, then one joke;
+  - one idea a sentence, common words ("surround", not "invest"; "bill", not "invoice");
+  - option hints that state the consequence ("This starts a fight", "They leave. The post is safe").
+  The satire and its targets are unchanged: the Empire's vanity, never the peoples abroad.
+- **Talk prompts share one verb.** "Talk to the Warden" (was "Parley with"), "Talk to the Auctioneer" (was "Address"), "Talk to the Tide-Reeve" (was "Declare yourself to"), "Talk to Princess Orla" (was "Hear the elder claimant"). At HQ: "Open the map", "Open the supplies", "Choose where to sail".
+- **Bugs the rewrite found and fixed.**
+  - Filled-in text read "The the Guild...", "A spokesman for The Guild" and "the Brine Houses's Barges".
+  - Lines contradicted the numbers: "forty crates" where the barge carries four; the patrol "a minute" behind where it is 25 s; a regency refusal naming the wrong heir; a cheque objective of 77 characters (the limit is 60).
+- **The boxes.**
+  - A talk is a strip along the foot of the picture (at most half the screen's height, 52 rem wide). The person you are talking to stays in view above it. The heading and the price share one small line, the answers sit two abreast, and each consequence is in the reading face, not small capitals.
+  - The end-of-contract report shows its first three results in the reading face, then "and N more in the pause sheet", whose dispatches keep the report whole.
+  - The pause sheet on a wide screen is two columns (the contract left, the buttons right), so Leave expedition is never below the fold. Its save note is one sentence.
+  - The news plate is smaller and higher (14.5 rem, a quarter of the way down).
+  - The map room puts the chart and the choice side by side on a wide screen. Only the chosen shore shows its paragraph; the others are their names, and a mark on the chart chooses its shore too. The campaign's notes sit under the chart and no longer repeat the sailing times its lanes already carry. The room was 2,212 px in a 686 px sheet; now the choice, the crew and Propose fit without scrolling.
+- **The talk camera.** A talk swings the camera nearly side-on (1.25 rad round from behind you, eased) and slides the picture up a fifth of its height, so you and the speaker stand side by side above the strip. Before, the speaker was hidden behind your own character. The orders card, the line and the marker step aside while the talk is open. Reusing the aim camera was tried first and dropped: at talking distance it jammed the lens against your own head.
+- **The supplies sheet** sets the stores on the left and the load, the purse and the hired hands on the right on a wide screen. **The broadsheet's** masthead and lead headline are a size down.
+- **Not yet.** The newspaper's long-form pieces and the campaign map's lines meet the length rule but were not rewritten line by line. Nobody has read the new copy aloud in play yet.
+
+**D-100 The prompt says what the key will do (2026-10-09).** Found by playing the journey from the toll bar to the paper at HQ, after the owner's "this sort of rushed sloppiness is throughout the full journey".
+- **A talk prompt the server refused.** "Talk to the Warden" showed 2.6 m from her post (the station's ring), but the server takes the press only within 2.2 m of where she stands (`SCENARIO.talkRange`). In that band the key did nothing. Highmark's court had the same 0.2 m gap, and a Vesper or Saltmarket post offered "Talk to the foreman" in contracts where the foreman has nothing to say.
+- **Talkers with no prompt at all.** Fourteen of the contracts' talkers (the ford's corporal, the deserters' sergeant, the Foreperson, the Master of the Hunt, the factor and others), and three of the four House-Heads, had no station, so no prompt. Fifteen use points had none either: the cage, the claim pegs, the dig, the marker stone, the plug and the lantern, the survey peg, the Vacant Chair. A hint said "Use it" and nothing on screen agreed.
+- **One rule, from the contract's table.** `contractUse` (shared, `scenarios/registry.ts`) reads the same table and rules as the runner (`Scenario.onInteract`): in the contract's order, the first point whose place (a fixed spot, its person where they stand now and not down, the wagon) is within its reach, with the right thing in your arms. Every point has words: its own `prompt`, or `TALK_PROMPT` for a talk. A test holds every point to having words, and every talk to being offered where the runner takes it.
+- **The server's order.** The HUD offered "Pick up barrel" before the person standing behind it, but the server sends the press to the person first (the cannon's crew, then the places you use, then a prop on the ground). The HUD now follows the same order.
+- **The talk camera.** It swings to whichever side has the clearer view of the speaker: bodies near either line of sight and a wall the world's ray meets count against a side. At the toll bar the Warden had been behind her own standard with a sentry in the foreground; now she and you stand side by side. Name plates and the key hints step aside while a talk is open, since the strip names the speaker.
+- **Name plates** sit just over each figure's real top, hat included (measured once when the body is built). A fixed 0.55 m over the bare head hung a near figure's plate a metre clear, over whoever stood behind.
+- **Fixed on the way.**
+  - The Butcher's Bill billed the party for "8 kegs (a chain of 8)" from the overturned wagon's accident. The bill and the Ordnance Board's chain now count only powder the party (or its hired hands) set off. Anyone else's is still news.
+  - A quiet commission (the Temperance League's) was paid at the end, but the orders kept saying "so far, so quiet". It is now marked done when it is settled.
+  - The map room opened scrolled to an audience button below the chart. It now opens on the chosen shore. Its crew list showed an empty tick box beside "aboard" outside a vote, which read as a missing letter. A power you have not met that asks to see you says "A stranger asks to see you", where it said "Nobody has told you about them yet" beside its own audience button.
+  - The paper printed "Word From Brine Houses of Ossuary Bay"; every power's name takes "the". Its masthead's second half ("By Appointment to Her Majesty") is a small line under the name, so the broadsheet fits a laptop screen with its button.
+  - The lost-connection card says what happened in plain words. "Return to the door" is "Back to the menu" everywhere.
+- **Tested.** Shared (`contractUse`: reach, the person's place, arms, order, the wagon, settled; every point has words), server (the bill ignores others' powder; a quiet commission shows done), client (the map room's focus and tick boxes; the audience words). Played in a browser at Kessar: no prompt at 2.5 m, the prompt and a working talk at 1.9 m, the toll paid, the boat home, the paper.
+- **Not yet.** The talk camera's side is judged once, as the talk opens. A barrel that is not the royal bushel still shows the bushel's prompt at the Steward (the client cannot tell the barrels apart).

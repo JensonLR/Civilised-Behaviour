@@ -51,6 +51,8 @@ describe("D-035 back-compat", () => {
     // re-recorded again for the ledger's "Fallen: none." (a zero count as the word: the paper's old-style 0 read as a letter o); verified first that the old wording still gave 82698a61 on the new code
     // re-recorded for D-085 (the Empire is London's): the four mastheads now boast of it ("The Imperial Gazette of London & Hollowmere"); verified first that the old
     // mastheads still gave 1ba0f973 on the new code
-    expect(goldenDigest()).toBe("8ab34a6f");
+    // re-recorded for D-100: "Word From the Brine Houses of Ossuary Bay" (every power's name takes "the"; the paper printed "Word From Brine Houses"); verified first that the old
+    // wording still gave 8ab34a6f on the new code
+    expect(goldenDigest()).toBe("1166493");
   });
 });

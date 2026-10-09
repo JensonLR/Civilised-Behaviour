@@ -79,8 +79,10 @@ export function generatePaper(c: CampaignState, worldSeed: number, extras?: Pape
     const site = SITE_LINES[last];
     story("ledger", heads, `${site ? pick(site, 20) : ""} Fallen: ${n(dead)}. Wounded: ${n(t.wounded)}. Limbs: ${n(t.limbsLost)}. Purse: £${c.purse}. ${pick(LEDGER_TAIL, 21)}`, 22);
   } else if (last) {
+    const waived = toll === 0 ? " (waived)" : "";
+    const casual = pick(BRIDGE_CASUAL[c.crossing.bridge], 20);
     story("ledger", STORY_HEADS.ledger,
-      `Toll: £${toll}${toll === 0 ? " (waived)" : ""}. Bridge: ${c.crossing.bridge}. Fallen: ${n(dead)}. Routed: ${n(t.garrisonRouted)}. Purse: £${c.purse}. ${pick(BRIDGE_CASUAL[c.crossing.bridge], 20)} ${pick(LEDGER_TAIL, 21)}`, 22);
+      `Toll: £${toll}${waived}. Bridge: ${c.crossing.bridge}. Fallen: ${n(dead)}. Routed: ${n(t.garrisonRouted)}. Purse: £${c.purse}. ${casual} ${pick(LEDGER_TAIL, 21)}`, 22);
   } else {
     const p = POWERS[0]!;
     story("prospectus", STORY_HEADS.prospectus,
@@ -113,7 +115,7 @@ export function generatePaper(c: CampaignState, worldSeed: number, extras?: Pape
   const other = POWERS.slice(1);
   if (hash3(s, 46, 2) % 2 === 0) {
     const p = pick(other, 47);
-    cands.push({ slug: "colonies", head: cap(`Word From ${p.name}`, PAPER_LIMITS.head), body: cap(`${p.blurb} Motto: \"${p.motto}\"`, PAPER_LIMITS.body) });
+    cands.push({ slug: "colonies", head: cap(`Word From the ${p.name}`, PAPER_LIMITS.head), body: cap(`${p.blurb} Motto: \"${p.motto}\"`, PAPER_LIMITS.body) });
   } else {
     story("filler", STORY_HEADS.filler, pick(FILLER, 48), 49);
   }

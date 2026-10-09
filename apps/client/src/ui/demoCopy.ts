@@ -10,8 +10,8 @@ export const WISHLIST_TITLE = "The Licence Has Expired";
 export const WISHLIST_TAG = "Form 9 (Demonstration, Concluded)";
 export const WISHLIST_BODY = [
   "The Society thanks you for your custom, your cooperation and the three villages you will not be hearing from.",
-  "The full expedition has further shores, a second country with a very long order of precedence, and a Chamberlain who has been waiting six years for somebody to sign something.",
+  "The full game has more shores, a court that has waited six years for a king, and a Chamberlain who wants it in writing.",
 ] as const;
 export const WISHLIST_BUTTON = "Add it to the wish list";
 export const WISHLIST_SOON = "The full game is coming. There is no store page yet, so there is nothing to click: the Society will announce it when it has something to bill.";
-export const WISHLIST_BACK = "Return to the door";
+export const WISHLIST_BACK = "Back to the menu";

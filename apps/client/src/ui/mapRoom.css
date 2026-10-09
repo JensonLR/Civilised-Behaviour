@@ -46,3 +46,39 @@
 @keyframes sailWaves { to { background-position: -44px 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .sailing .waves { animation: none; } }
 :root[data-motion="reduced"] .sailing .waves { animation: none; }
+
+/* D-099: the chosen shore says what it is; the others are their names (five paragraphs under the chart made the room 2,212 px tall) */
+.maproom .dest:not(:has(input:checked)) .blurb, .maproom .dest:not(:has(input:checked)) .note { display: none; }
+.maproom .dest { padding: 0.32rem 0.6rem; }
+.maproom .dest .name { font-size: 1.08rem; }
+.maproom .dest .blurb { font-size: 0.9rem; }
+.maproom .chartwrap .mark { cursor: pointer; }
+.maproom .side h3 { margin-top: 0.7rem; }
+.maproom .campaign { font-size: 0.86rem; }
+@media (min-width: 56rem) {
+  .panel.sheet.maproom { width: min(96vw, 68rem); }
+  .maproom .maprow { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 1fr); column-gap: 1.1rem; align-items: start; }
+  .maproom .maprow .chartwrap { margin-top: 0.5rem; }
+  .maproom .maprow .dests { margin-top: 0.5rem; }
+  .maproom .side .actions { flex-wrap: wrap; }
+  .maproom .campaign .shores { columns: 1; }
+}
+/* D-100: one column (a phone, a narrow window): the choice, the crew and Propose come first, the chart and the campaign's notes after (the room opened 781 px down a phone held sideways, between the notes and the shores) */
+@media (max-width: 55.99rem) {
+  .maproom .maprow { display: flex; flex-direction: column; }
+  .maproom .maprow .side { order: -1; }
+}
+/* a phone held sideways: the shores on the left, the crew and Propose beside them, so the choice and the button share one screen */
+@media (max-width: 55.99rem) and (min-width: 40rem) and (max-height: 30rem) {
+  .maproom .maprow .side { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(12rem, 1fr); grid-template-rows: auto auto auto auto 1fr; column-gap: 1rem; align-items: start; }
+  .maproom .maprow .side > :first-child { grid-row: 1 / span 5; }
+  .maproom .maprow .side .actions { flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem 0.5rem; }
+  .maproom .maprow .side > :not(:first-child) { grid-column: 2; }
+  .maproom .tag { display: none; }
+}
+.maproom .dest .blurb { font-family: var(--serif); letter-spacing: 0; text-transform: none; line-height: 1.3; }
+.maproom .dest .note { font: italic 0.84rem/1.3 var(--serif); letter-spacing: 0; }
+.maproom .side .actions button { white-space: nowrap; }
+.maproom .left .campaign { margin-top: 0.6rem; padding: 0.45rem 0.6rem; }
+.maproom .left .campaign .shores { margin: 0; padding-left: 1rem; }
+.maproom .left .campaign .shores li, .maproom .left .campaign .pins li { margin: 0.1rem 0; line-height: 1.28; }

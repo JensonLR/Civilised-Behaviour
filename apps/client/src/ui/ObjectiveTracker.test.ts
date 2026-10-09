@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { typeset } from "./typeset.ts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScenarioView } from "@cb/shared";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ObjectiveTracker, URGENT_SECONDS, formatTimer, DEFAULT_TITLE, withKeys } from "./ObjectiveTracker.ts";
+import { ObjectiveTracker, RULE_NEWS_MS, URGENT_SECONDS, formatTimer, DEFAULT_TITLE, withKeys } from "./ObjectiveTracker.ts";
 import { promptPlain } from "../input/glyphDom.ts";
 import { newCampaign } from "@cb/shared";
 import { TEMPLATES, TEMPLATE_IDS } from "@cb/shared";
@@ -175,5 +175,36 @@ describe("stylesheet", () => {
       expect(host.querySelector("section")!.dataset.template).toBe(id);
       t.dispose();
     }
+  });
+});
+
+describe("D-098: the contract's rule is on the card while it is news, then while a weapon is out", () => {
+  it("shows a new rule, quiets it after RULE_NEWS_MS, brings it back with a weapon out, and shows a changed rule as news again", () => {
+    let now = 1_000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const t = new ObjectiveTracker(host);
+    const rule = (): HTMLElement => host.querySelector<HTMLElement>(".rule")!;
+    t.update(view({ rule: "A shot at the Ward, even a miss, ends all talk." }));
+    expect(rule().hidden).toBe(false);
+    now += 60_000; // (the world still building: the news has not started)
+    expect(rule().hidden).toBe(false);
+    t.tick(0); // play begins: twenty seconds of news from here
+    now += RULE_NEWS_MS - 1;
+    t.tick(0);
+    expect(rule().hidden).toBe(false);
+    now += 2;
+    t.tick(0);
+    expect(rule().hidden).toBe(true);
+    t.setArmed(true);
+    expect(rule().hidden).toBe(false);
+    t.setArmed(false);
+    expect(rule().hidden).toBe(true);
+    t.update(view({ rule: "Hold your fire at the gate." }));
+    expect(rule().hidden).toBe(false);
+    t.update(view({ rule: undefined }));
+    t.setArmed(true);
+    expect(rule().hidden).toBe(true); // (no rule, nothing to show)
+    t.dispose();
+    clock.mockRestore();
   });
 });

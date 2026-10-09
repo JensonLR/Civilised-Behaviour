@@ -178,7 +178,7 @@ function view(s: ConvoyState, now: number): ScenarioView {
   if (res === undefined && defeated(s)) objectives.push({ id: "take", text: "Search the wagon (Use), or blow a powder keg beside it", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   const HINT: Record<string, string> = {
-    planning: "A Dunmarrow-Vesk wagon will leave its camp shortly and walk the south-bank track to the ford. The Society's powder cart is on the way. So is the Dry Cut, which is a very good place for an accident.",
+    planning: "A Syndicate wagon will soon leave its camp for the ford, along the south-bank track. The Society's powder cart is on the way. So is the Dry Cut: a fine place for an accident.",
     waiting: "The wagon is under way. Stop it at the Cut: shoot the guards, blow a powder keg beside the wagon, or tell the Ward's ford post and let them do the paperwork.",
     fighting: "The ambush is on. Beat the guards, then search the wagon, or blow a powder keg beside it.",
   };
@@ -236,7 +236,7 @@ const observe: ObserveSpec = {
   near: [{ id: "cut", x: KESSAR_SITES.convoy.cut.x, z: KESSAR_SITES.convoy.cut.z, r: 16 }],
   use: [
     { id: "ford_post", npc: "post-0", r: 2.4, talk: "ford_post", carry: "none" },
-    { id: "wagon", mount: true, r: 3.4, carry: "none" },
+    { id: "wagon", mount: true, r: 3.4, carry: "none", prompt: "Seize the wagon" },
   ],
   count: [{ group: "guards" }],
   seen: [{ group: "late:outrider", sight: CONVOY.sightOutrider }, { group: "late:patrol", sight: CONVOY.sightPatrol }],
@@ -246,7 +246,7 @@ const observe: ObserveSpec = {
 
 export const convoyTemplate: TemplateDef<ConvoyState> = {
   id: "convoy_ambush", title: "The Syndicate Wagon",
-  brief: "A Syndicate wagon is walking three crates down the south bank to the ford, with two enforcers and a flag for escort. The Society would like the crates not to arrive, and would like even more not to be seen liking it. Ambush it in the Dry Cut, blow it up with the Society's own powder, or tip off the Ward's ford post and let them do the paperwork. If it reaches the ford, the Syndicate will write to thank you.",
+  brief: "A Syndicate wagon is taking three crates to the ford. Ambush it in the Dry Cut, blow it up with the Society's powder, or tip off the Ward. If it gets through, the Syndicate will thank you.",
   init, reduce, view, outcome, roster, leave, observe,
   routes: { convoy: route, patrol: PATROL_ROUTE },
   wagon: { at: { x: route[0]!.x + 2, z: route[0]!.z, yaw: 0 }, crates: 3, route: "convoy" },

@@ -84,10 +84,10 @@ function reduce(s: HuntState, e: ScenarioInput): Reduction<HuntState> {
       const n: HuntState = { ...s, t: s.t + dtOf(e) };
       if (n.t >= n.bellAt) {
         return resolveWith({ ...n, parley: undefined }, "grey_escaped", {}, [...CALM,
-          say("The harvest bell rings from the capital, the Reapers come down the hill with their scythes, and the Great Grey, who has eaten as much barley as he wanted, walks back up to the high pasture at his own pace. The Committee's wall stays bare.")]);
+          say("The harvest bell rings and the Reapers come down with their scythes. The Great Grey, full of barley, strolls back to the high pasture. The Committee's wall stays bare.")]);
       }
       const fx: ScenarioFx[] = [];
-      if (s.t < s.bellAt - 90 && n.t >= n.bellAt - 90) fx.push(say("A bell rings once from the capital: the harvest is ninety seconds off, and so, as far as the barley is concerned, is the end of this."));
+      if (s.t < s.bellAt - 90 && n.t >= n.bellAt - 90) fx.push(say("A bell rings once from the capital: the harvest starts in ninety seconds. Deal with the Great Grey before then."));
       return { s: fin(n), fx };
     }
     case "near": {
@@ -97,7 +97,7 @@ function reduce(s: HuntState, e: ScenarioInput): Reduction<HuntState> {
       const first = s.near.barley === 0 && n > 0 && s.phase === "approach";
       return {
         s: fin({ ...s, near: { barley: n } }),
-        fx: first ? [say("The Great Grey stands in the barley up to his knees, chewing with the air of a creditor. He is the size of a cart, grey as a church, and his horns are wider than the Society's dining table. He does not like people near him. He likes them less when they shout.")] : [],
+        fx: first ? [say("The Great Grey stands knee-deep in the barley, chewing. He is the size of a cart, with horns wider than the Society's dining table. He does not like people near him.")] : [],
       };
     }
     case "hostile": {
@@ -105,30 +105,30 @@ function reduce(s: HuntState, e: ScenarioInput): Reduction<HuntState> {
       if (s.licence || s.poached) return stay(s);
       return {
         s: fin({ ...s, poached: true, brokePromise: true }),
-        fx: [say("A shot at the Crown's beast, on the Crown's grass, without the Master's licence. Somewhere up the hill a clerk opens a ledger headed POACHING.")],
+        fx: [say("You shot at the Crown's beast without the Master's licence. Up the hill, a clerk opens a ledger headed POACHING.")],
       };
     }
     case "actor": {
       if (e.state === "down" && e.id.startsWith("grey")) {
         return resolveWith({ ...s, parley: undefined }, "grey_trophy", {}, [...CALM, say(s.licence
-          ? "The Great Grey goes down in the barley like a felled oak, slowly and then all at once. The Master of the Royal Hunt enters it in the game book in a fine hand; the Committee will have its head, and the Reapers will have the rest of the barley, and a long memory."
-          : "The Great Grey goes down in the barley. Nobody bought the licence. The Master of the Royal Hunt enters it in the game book under POACHED, in red, and the drovers stand at the edge of the field with their hats off.")]);
+          ? "The Great Grey goes down in the barley like a felled oak. The Master of the Royal Hunt writes it in the game book. The Committee gets its head. The Reapers will remember."
+          : "The Great Grey goes down in the barley. Nobody bought the licence, so the Master writes it in the game book under POACHED, in red. The drovers take off their hats.")]);
       }
       if (e.id === "grey@fold" && e.state === "arrived") {
         return resolveWith({ ...s, parley: undefined }, "grey_driven", {}, [...CALM,
-          say("The Great Grey walks back in among his herd as if it had been his idea, which, by now, he believes it was. The drovers come up from their camp and give the party a cup of something that is mostly smoke. The Committee's wall stays bare; the herds keep their luck.")]);
+          say("The Great Grey walks back into his herd as if it was his idea. The drovers bring the party a cup of something that is mostly smoke. The herds keep their luck.")]);
       }
       if (e.id === "grey@pen" && e.state === "arrived") {
         if (s.deal) {
           return resolveWith({ ...s, parley: undefined }, "grey_sold", { loot: s.price.sale }, [...CALM,
-            say(`The Great Grey walks into the Syndicate's pen and the agent drops the bar behind him before he has noticed. £${s.price.sale} is counted out on a crate, with a receipt for "one (1) sire, grey, as found". The drovers watch from the grass and say nothing at all.`)]);
+            say(`The Great Grey walks into the Syndicate's pen, and the agent drops the bar behind him. £${s.price.sale} is counted out on a crate. The drovers watch and say nothing.`)]);
         }
         if (s.penShut) return stay(s);
-        return { s: fin({ ...s, penShut: true }), fx: [say("The Syndicate's pen is shut: the agent has not agreed a price. The Great Grey looks at the bars, and at you, and goes round.")] };
+        return { s: fin({ ...s, penShut: true }), fx: [say("The Syndicate's pen is shut: the agent has not agreed a price. The Great Grey looks at the bars, then at you, and walks around it.")] };
       }
       if (e.id === "grey@range" && e.state === "left") {
         return resolveWith({ ...s, parley: undefined }, "grey_escaped", {}, [...CALM,
-          say("The Great Grey has had enough of the Society and walks off the edge of the herd ground towards the high pasture, at the steady pace of an animal that has never been hurried in its life. He will not be back this season.")]);
+          say("The Great Grey has had enough of the Society. He walks off the herd ground towards the high pasture, never hurrying. He will not be back this season.")]);
       }
       return stay(s);
     }
@@ -163,7 +163,7 @@ function talkMaster(s: HuntState, result: string, paid: number): Reduction<HuntS
       if (!paidOk(s, p)) return stay(fin({ ...s, parley: undefined }));
       return {
         s: fin({ ...s, parley: undefined, licence: true, spent: s.spent + p, paid: s.paid + p }),
-        fx: [say(`£${p}, and the Master writes out a licence "to take one (1) beast, grey, on the Crown's grass, by the Society's own hand, at the Society's own risk". She adds, unasked, that it charges.`)],
+        fx: [say(`For £${p}, the Master writes a licence "to take one (1) beast, grey, at the Society's own risk". She adds, unasked, that it charges.`)],
       };
     }
     default: return stay(fin({ ...s, parley: undefined }));
@@ -181,7 +181,7 @@ function talkAgent(s: HuntState, result: string): Reduction<HuntState> {
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, agent: true } }));
     case "survey": return {
       s: fin({ ...s, parley: undefined, deal: true }),
-      fx: [say(`The agent shakes on £${s.price.sale} and goes to open his pen by the river. "Alive, mind," he says. "A head is no use to a menagerie. Ask the Club."`)],
+      fx: [say(`The agent shakes hands on £${s.price.sale} and goes to open his pen by the river. "Alive, mind," he says. "A head is no use to a menagerie. Ask the Club."`)],
     };
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -198,14 +198,14 @@ function leave(s: HuntState): ReturnType<TemplateDef<HuntState>["leave"]> {
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const DONE: Record<string, string> = {
-  grey_trophy: "The Great Grey is down and the Committee will have its head. Take the boat home and arrange the carriage.",
+  grey_trophy: "The Great Grey is down and the Committee will have its head. Take the boat home and find a very big crate.",
   grey_driven: "The Great Grey is back with his herd, alive. Take the boat home; the Committee will want to know why.",
   grey_sold: "The Great Grey is in the Syndicate's pen and the money is in your purse. Take the boat home.",
   grey_escaped: "The Great Grey has gone back to the high pasture. Take the boat home and explain the bare wall.",
   abandoned: "The expedition is down in the barley. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
-  rain: "Rain coming: the harvest is hurried, and the bell will be early.",
+  rain: "Rain is coming, so the harvest is hurried and the bell will ring early.",
   fog: "Fog on the grass: the Great Grey is a grey shape in a grey morning.",
 };
 
@@ -220,7 +220,7 @@ function view(s: HuntState, now: number): ScenarioView {
   if (s.deal && !out) objectives.push({ id: "pen", text: "Or drive it into the agent's pen by the river", done: false, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the landing", done: false });
   let hint = res !== undefined ? DONE[res] ?? ""
-    : s.near.barley > 0 ? "It walks away from people: come at it from the side opposite where you want it to go (its herd is west, past the drovers' camp), and walk, do not run. It veers, and left alone it goes back to the barley. A shot sends it bolting; a wound turns it on whoever fired."
+    : s.near.barley > 0 ? "It walks away from people. To drive it west to its herd, walk at it from the east. Don't run. Left alone, it drifts back to the barley. A shot makes it bolt; a wound makes it charge."
     : "The Great Grey is in the Reapers' barley west of the road. The Master of the Royal Hunt waits at the field's east edge with her licences.";
   if (res === undefined && s.asked.agent && !s.deal) hint += ` (The Syndicate's agent pays £${s.price.sale} for it alive, in his pen by the river.)`;
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
@@ -281,7 +281,7 @@ const observe: ObserveSpec = {
 
 export const greatGreyTemplate: TemplateDef<HuntState> = {
   id: "great_grey", title: "The Great Grey",
-  brief: "The old grey sire of Thornfield's herds has come down into the Reapers' barley, and the Crown has asked its guests to see to him before the harvest bell. The Society's Natural History Committee would like his head for the Club's wall in Pall Mall; the drovers would like him back with his herd, alive; the Syndicate's menagerie agent would like him in his pen. He walks away from people, bolts from a shot and charges whoever wounds him. Every beast on the grassland is the Crown's: the Master of the Royal Hunt sells the licence.",
+  brief: "The Great Grey, a huge old bull, is eating the Reapers' barley. Deal with him before the harvest bell. The Club wants his head, the drovers want him home, the Syndicate wants him caged.",
   init, reduce, view, outcome, roster, leave, observe,
   noPowderStore: true, // (D-084: nobody armed is set against you here; a keg in the barley would be the Society's own)
   sites: { barley: HIGHMARK_SITES.strike.barley, fold: H.fold, pen: H.pen },

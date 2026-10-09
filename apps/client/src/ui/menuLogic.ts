@@ -30,4 +30,4 @@ export const isDormantSave = (message: string): boolean => /^No expedition by th
 
 /** The friendly card for an expedition that is not waiting: what it may be, and what can be done. */
 export const dormantCopy = (code: string): string =>
-  `No file under Expedition No. ${code} is waiting for you. The Society keeps files for a limited time, and a server that has been reset keeps none; or the party may still be on the march elsewhere. You can try again in a moment, or strike it off your list and found a new campaign.`;
+  `Expedition No. ${code} is not waiting for you. Its file may have lapsed, or the party may still be out. Try again in a moment, or forget it and start a new campaign.`;

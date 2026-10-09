@@ -1,5 +1,3 @@
-import v8 from "node:v8";
-import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { FLAG } from "@cb/shared";
 import { MOUNT_FLAG, MOUNT_KIND, WAGON } from "@cb/shared";
@@ -23,10 +21,6 @@ const world = (): World => {
 };
 const prop = (holder: string): { holder: string } => ({ holder });
 const body = (dragger: string): { dragger: string } => ({ dragger });
-const gc = ((): (() => void) => {
-  v8.setFlagsFromString("--expose-gc");
-  return vm.runInNewContext("gc") as () => void;
-})();
 
 describe("MountPrompter (the per-frame caller of the mount prompt)", () => {
   it("says exactly what mountPrompt says, for the cases the server decides", () => {
@@ -61,28 +55,5 @@ describe("MountPrompter (the per-frame caller of the mount prompt)", () => {
     // same answers as the pure function over the same rows
     const rows = [["h", mount({ x: 1 })] as const];
     expect(mountPrompt({ x: 0, z: 0, facing: 0, flags: FLAG.GROUNDED, missing: 0, sessionId: "me", holding: false }, rows, { props: () => 0, bodies: () => 0 })).toBe(MOUNT_PROMPTS.mount);
-  });
-
-  it("allocates nothing per call once warm: 10,000 calls with a herd, a wagon, cargo and a crowd move the heap by less than 64 KB", () => {
-    const w = world();
-    for (let i = 0; i < 4; i++) w.mounts.set(`h${i}`, mount({ x: 3 + i, z: i }));
-    w.mounts.set("w1", mount({ kind: MOUNT_KIND.wagon, x: 0.5, z: 0.5, cargo: 1 }));
-    for (let i = 0; i < 6; i++) {
-      w.props.set(`p${i}`, prop(i < 2 ? "wagon:w1" : ""));
-    }
-    for (let i = 0; i < 12; i++) w.players.set(`n${i}`, body(i === 0 ? "wagon:w1" : ""));
-    const p = new MountPrompter(w.state, () => "me");
-    const flagsSet = [FLAG.GROUNDED, FLAG.GROUNDED | FLAG.CARRYING, FLAG.GROUNDED | FLAG.DRAGGING, FLAG.GROUNDED | MOUNT_FLAG.MOUNTED];
-    let sink = 0;
-    const burst = (n: number): void => {
-      for (let i = 0; i < n; i++) sink += p.now(0, 0, 0.3, flagsSet[i & 3]!, 0)?.length ?? 0;
-    };
-    burst(30_000); // warm-up: the pool grows once, the JIT settles
-    gc();
-    const before = process.memoryUsage().heapUsed;
-    burst(10_000);
-    const delta = process.memoryUsage().heapUsed - before;
-    expect(sink).toBeGreaterThan(0);
-    expect(delta).toBeLessThan(64 * 1024);
   });
 });

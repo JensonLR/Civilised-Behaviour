@@ -27,6 +27,11 @@ import { anyModalOpen } from "./modal.ts";
 import { openHowTo, hasSeenHowTo } from "./HowTo.ts";
 import { openSettings } from "./Settings.ts";
 import { GORE_LEVELS, getCampaignLimbLoss, getGore, onSettingChange, setCampaignLimbLoss, setGore } from "../settings.ts";
+import { figureFocus, type FigureFocus } from "./doorFrame.ts";
+
+/** The door's narrow layout (a phone either way up, a small window): one panel at a time, the character creator behind an "Appearance" button. Keep in step with style.css. */
+const NARROW = "(max-width: 60rem)";
+const isNarrow = (): boolean => typeof matchMedia === "function" && matchMedia(NARROW).matches;
 
 declare const __APP_VERSION__: string | undefined;
 /** Shown on the front door and useful in bug reports. */
@@ -76,40 +81,37 @@ export class Menu {
         <div class="rule" aria-hidden="true">${COMPASS}</div>
         <h1 id="title">Civilised Behaviour</h1>
         <p class="tag">By Appointment to Her Majesty: a charter for an expedition into territories not yet improved</p>
-        <label>Name upon the manifest
+        <label for="name" class="namelabel">Name upon the manifest</label>
+        <div class="namerow">
           <input id="name" maxlength="20" autocomplete="off" data-pad-chars="${NAME_DIAL}" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
-        </label>
+          <button id="dress" type="button" aria-controls="creator-host" aria-expanded="false" hidden>Appearance</button>
+        </div>
         <div class="row" id="continue-row" hidden>
           <button id="continue" type="button" class="primary"><span class="cont-title">Continue</span><span class="cont-meta"></span></button>
         </div>
         <div class="row">
-          <button id="create" class="primary">New campaign</button>
+          <button id="create" class="primary"><span class="cont-title">New campaign</span><span id="create-note" class="cont-meta">A fresh world on a new seed</span></button>
         </div>
-        <p id="create-note" class="fine">Founds a fresh world: a new seed and a clean ledger, with the orientation to meet you.</p>
         <label class="check"><input type="checkbox" id="limb-rule"${getCampaignLimbLoss() ? " checked" : ""} /> Limbs may be lost in this campaign</label>
         <section class="expeditions" id="expeditions" aria-labelledby="exp-h" hidden>
           <h2 id="exp-h">Your expeditions</h2>
           <ul></ul>
-          <p class="fine">Kept on this device. The Society's files hold the ledger; where you stood does not come back.</p>
+          <p class="fine">Kept on this device. A resumed expedition begins at HQ.</p>
         </section>
-        <div class="or">or present a code to join a party</div>
+        <div class="or">or join a party with its code</div>
         <div class="row">
-          <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" data-pad-chars="${JOIN_CODE_ALPHABET}" data-pad-send placeholder="CODE" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
+          <input id="code" maxlength="${JOIN_CODE_LENGTH}" autocomplete="off" data-pad-chars="${JOIN_CODE_ALPHABET}" data-pad-send placeholder="CODE" aria-label="Join code" value="${prefill.replace(/[^A-Z0-9]/g, "")}" />
           <button id="join">Join</button>
         </div>
         <p id="dialhint" class="fine dialhint" hidden></p>
         <div class="row aux">
           <button id="options" class="quiet">Options</button>
           <button id="howto" class="quiet${hasSeenHowTo() ? "" : " new"}">How to play</button>
+          <select id="gore" aria-label="Gore" title="Off replaces all blood with bandages and iodine; wounds stay just as readable">${GORE_LEVELS.map((g) => `<option value="${g}"${g === getGore() ? " selected" : ""}>Gore: ${g[0]!.toUpperCase()}${g.slice(1)}</option>`).join("")}</select>
         </div>
-        <label class="opt">Sensibilities: gore
-          <select id="gore" aria-describedby="gore-note">${GORE_LEVELS.map((g) => `<option value="${g}"${g === getGore() ? " selected" : ""}>${g[0]!.toUpperCase()}${g.slice(1)}</option>`).join("")}</select>
-        </label>
-        <p id="gore-note" class="fine">Off replaces all blood with bandages and iodine. Wounds stay just as readable.</p>
         <p id="status" role="status" aria-live="polite"></p>
         <p id="reach" class="fine reach" role="status" aria-live="polite" hidden></p>
-        <p class="fine">Mature content: strong violence, coarse language and dark satire.</p>
-        <p class="fine version">${versionLabel()}</p>
+        <div class="foot"><p class="fine">Mature content: strong violence, coarse language and dark satire.</p><p class="fine version">${versionLabel()}</p></div>
       </div>
       <div class="panel" id="creator-host" aria-label="Character creator"></div>
       <div class="consult" hidden>
@@ -118,7 +120,7 @@ export class Menu {
           <h2 id="consult-head">Consulting the Society...</h2>
           <p id="consult-step" role="status" aria-live="polite"></p>
           <div class="bar" aria-hidden="true"><div class="fill"></div></div>
-          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="forget" hidden>Forget this expedition</button><button type="button" class="back">Return to the door</button></div>
+          <div class="actions" hidden><button type="button" class="primary retry">Try again</button><button type="button" class="resume" hidden>Resume this expedition</button><button type="button" class="forget" hidden>Forget this expedition</button><button type="button" class="back">Back to the menu</button></div>
         </div>
       </div>`;
     // a pad's hint under the door (shown only while a pad is the device in use): the front door is the first thing a pad player sees
@@ -126,7 +128,7 @@ export class Menu {
     hint.className = "hintbar pad-only";
     hint.setAttribute("aria-hidden", "true");
     bindPrompt(hint, () => "{menuUp} {menuDown} Move   {confirm} Choose   {menuLeft} {menuRight} Adjust");
-    root.querySelector(".main .version")?.before(hint);
+    root.querySelector(".main .foot")?.before(hint);
     this.creatorHost = root.querySelector<HTMLElement>("#creator-host")!;
     this.nameInput = root.querySelector<HTMLInputElement>("#name")!;
     this.codeInput = root.querySelector<HTMLInputElement>("#code")!;
@@ -182,7 +184,72 @@ export class Menu {
       if (on) field.closest("label, .row")!.after(dialHint);
       if (on) dialHint.scrollIntoView?.({ block: "nearest" });
     });
+    // D-098: on a narrow screen the creator waits behind "Appearance" (it stacked under the charter, a phone's page three screens long); the figure stands in whatever the panels leave free
+    this.dressBtn = root.querySelector<HTMLButtonElement>("#dress")!;
+    this.dressBtn.addEventListener("click", () => this.setDressing(true));
+    root.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && root.dataset.view === "creator" && this.consult.hidden && !anyModalOpen()) this.setDressing(false);
+    });
+    root.addEventListener("padback", () => root.dataset.view === "creator" && this.consult.hidden && this.setDressing(false));
+    const media = typeof matchMedia === "function" ? matchMedia(NARROW) : undefined;
+    media?.addEventListener?.("change", () => this.layout());
+    window.addEventListener("resize", () => this.reframeSoon());
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(() => this.reframeSoon());
+      for (const p of root.querySelectorAll<HTMLElement>(":scope > .panel")) ro.observe(p);
+    }
+    this.layout();
     startPadNav(root, () => !this.root.hidden && !anyModalOpen());
+  }
+
+  private readonly dressBtn: HTMLButtonElement;
+  private frameFn: ((f: FigureFocus) => void) | undefined;
+  private frameRaf = 0;
+
+  /** Told where the figure behind the door should stand whenever the panels move (boot hands it to the creator's preview). */
+  set onFrame(fn: ((f: FigureFocus) => void) | undefined) {
+    this.frameFn = fn;
+    this.reframeSoon();
+  }
+
+  /** The narrow layout shows one panel at a time: the charter, or (after "Appearance") the creator with a Done to come back. */
+  private layout(): void {
+    const narrow = isNarrow();
+    this.dressBtn.hidden = !narrow;
+    if (!narrow && this.root.dataset.view === "creator") this.setDressing(false);
+    this.reframeSoon();
+  }
+
+  private setDressing(on: boolean): void {
+    const host = this.creatorHost;
+    if (on && !host.querySelector(".creator-done")) {
+      // (the creator draws itself into the host after the door is built, so its way back is added the first time it is opened)
+      const done = document.createElement("button");
+      done.type = "button";
+      done.className = "primary creator-done";
+      done.textContent = "Done";
+      done.addEventListener("click", () => this.setDressing(false));
+      const foot = document.createElement("div");
+      foot.className = "row creator-foot";
+      foot.append(done);
+      host.append(foot);
+    }
+    if (on) this.root.dataset.view = "creator";
+    else delete this.root.dataset.view;
+    this.dressBtn.setAttribute("aria-expanded", String(on));
+    if (on) host.querySelector<HTMLElement>('[role="tab"]')?.focus();
+    else if (!this.dressBtn.hidden) this.dressBtn.focus();
+    this.reframeSoon();
+  }
+
+  private reframeSoon(): void {
+    if (!this.frameFn || this.frameRaf) return;
+    this.frameRaf = requestAnimationFrame(() => {
+      this.frameRaf = 0;
+      if (this.root.hidden || !this.frameFn) return;
+      const boxes = [...this.root.querySelectorAll<HTMLElement>(":scope > .panel")].filter((p) => p.getClientRects().length > 0).map((p) => p.getBoundingClientRect());
+      this.frameFn(figureFocus(window.innerWidth, window.innerHeight, boxes));
+    });
   }
 
   /** Bring a saved expedition back: one click, through the same path as the code box (the server checks that this browser was a member). */
@@ -203,6 +270,7 @@ export class Menu {
     create.classList.toggle("primary", list.length === 0);
     const first = list[0];
     if (first) row.querySelector<HTMLElement>(".cont-meta")!.textContent = expeditionMeta(first, now);
+    this.reframeSoon();
     const ul = section.querySelector("ul")!;
     ul.replaceChildren(
       ...list.map((e) => {

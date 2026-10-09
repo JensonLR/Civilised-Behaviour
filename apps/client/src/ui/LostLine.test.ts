@@ -16,7 +16,7 @@ describe("the line has gone dead (a room left for good)", () => {
     l.show(back);
     l.show(back);
     expect(document.querySelectorAll(".lostline").length).toBe(1);
-    expect(document.querySelector(".lostline")!.textContent).toMatch(/ledger was saved/);
+    expect(document.querySelector(".lostline")!.textContent).toMatch(/progress is saved/);
     document.querySelector<HTMLButtonElement>(".lostline .back")!.click();
     expect(back).toHaveBeenCalledTimes(1);
     l.dispose();

@@ -78,6 +78,19 @@ describe("D-084: the bill as the fight happens", () => {
     expect(m.bill.chain).toBe(3);
   });
 
+  it("powder nobody in the party lit is news, not the party's bill (the wagon's accident, a guard's stray round)", () => {
+    const { m, printed, run } = setup("secure_crossing");
+    for (let i = 0; i < 5; i++) m.onKeg("npc:accident");
+    run(6);
+    m.onKeg("npc:g1");
+    run(GAP + 6);
+    expect(m.bill.kegs).toBe(0);
+    expect(m.bill.chain).toBe(0);
+    expect(printed.some((t) => /kegs/i.test(t))).toBe(true);
+    m.onKeg("npc:hand"); // (a hired hand's is the expedition's)
+    expect(m.bill.kegs).toBe(1);
+  });
+
   it("the party's rounds are counted (the Temperance League listens); nobody else's", () => {
     const { m } = setup();
     m.onShot("npc:s1");
@@ -138,14 +151,28 @@ describe("D-084: the commission", () => {
   });
 
   it("a quiet request is settled at the end: met by a run that fired nothing, not by one abandoned", () => {
-    const { m } = setup("mine_rescue", 5);
-    expect(REQUESTS[m.request].quiet).toBe(true);
+    const run = (): Mayhem => {
+      const { m } = setup("mine_rescue", 5);
+      expect(REQUESTS[m.request].quiet).toBe(true);
+      (m as unknown as { request: string }).request = "temperance";
+      return m;
+    };
+    expect(run().settle({ resolution: "dug_out", seconds: 400 }).met).toBe(true);
+    expect(run().settle({ resolution: "abandoned", seconds: 400 }).met).toBe(false);
+    const shot = run();
+    shot.onShot("ada");
+    expect(shot.settle({ resolution: "dug_out", seconds: 400 }).met).toBe(false);
+    expect(shot.objective().text).toContain("a shot was fired");
+  });
+
+  it("a quiet request met at the end shows as done on the orders (the debrief said it was paid; the orders still said \"so far, so quiet\")", () => {
+    const { m, changed } = setup("mine_rescue", 5);
     (m as unknown as { request: string }).request = "temperance";
+    const before = changed();
+    expect(m.objective().done).toBe(false);
     expect(m.settle({ resolution: "dug_out", seconds: 400 }).met).toBe(true);
-    expect(m.settle({ resolution: "abandoned", seconds: 400 }).met).toBe(false);
-    m.onShot("ada");
-    expect(m.settle({ resolution: "dug_out", seconds: 400 }).met).toBe(false);
-    expect(m.objective().text).toContain("a shot was fired");
+    expect(m.objective().done).toBe(true);
+    expect(changed()).toBeGreaterThan(before);
   });
 
   it("the bill is paid once: a second commit without a new contract pays nothing", () => {

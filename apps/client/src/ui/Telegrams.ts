@@ -1,6 +1,9 @@
 import { TelegramQueue } from "./telegramQueue.ts";
 import { typeset } from "./typeset.ts";
 
+/** How many lines of an ending's debrief the slip shows (the rest are in the pause sheet). */
+export const DEBRIEF_SHOWN = 3;
+
 /**
  * The telegram stack: paper slips down the top of the picture, newest at the bottom, at most three at once, the rest waiting in a queue
  * (telegramQueue.ts). Slips slide in and fade out (not under reduced motion: the stylesheet turns animation off).
@@ -67,7 +70,13 @@ export class Telegrams {
       if (s.text.includes("\n")) el.classList.add("debrief");
       const body = document.createElement("div");
       body.className = "body";
-      body.textContent = typeset(s.text);
+      if (s.text.includes("\n")) {
+        // D-099: a debrief is a short card, not a column of type: its first lines (the pay, the bill, the first change of heart), each on its own row, and the count of the rest,
+        // which the pause sheet's dispatches keep whole (it ran to a dozen lines and covered the corner of the picture for twelve seconds)
+        const lines = s.text.split("\n").filter((l) => l.trim() !== "");
+        for (const l of lines.slice(0, DEBRIEF_SHOWN)) body.appendChild(Object.assign(document.createElement("p"), { textContent: typeset(l) }));
+        if (lines.length > DEBRIEF_SHOWN) body.appendChild(Object.assign(document.createElement("p"), { className: "more", textContent: `and ${lines.length - DEBRIEF_SHOWN} more in the pause sheet` }));
+      } else body.textContent = typeset(s.text);
       el.appendChild(body);
       this.root.appendChild(el);
       this.els.set(s.id, el);

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import v8 from "node:v8";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import {
   PALETTE, SALTMARKET, SALTMARKET_ANCHORS as A, SALTMARKET_CHANNELS, SALTMARKET_SIGNS, SALTMARKET_VIEW_BUDGET, createDayState, createRegionWorld, createSaltmarketWorld, dayState, saltmarketPlan, type ScenarioView,
@@ -19,6 +19,10 @@ import { planSaltmarketScatter } from "./scatter.ts";
 import { SaltmarketView } from "./SaltmarketView.ts";
 import { buildSaltmarketPlanks, buildSaltmarketSolid } from "./structures.ts";
 import { buildSaltmarketWaterGeometry, flowAt } from "./water.ts";
+
+// (CPU-bound: most tests here build the whole region at least once, up to about 2 s each alone; under the full suite's four workers one ran past vitest's 5 s default.
+// A time limit, not a budget: the budgets are the assertions.)
+vi.setConfig({ testTimeout: 30_000 });
 
 // The banner and sign atlas is drawn on a canvas; the unit-test environment has no DOM, so give it a recording stub (as highmark.test does).
 const g = globalThis as unknown as Record<string, unknown>;

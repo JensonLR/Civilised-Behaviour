@@ -63,7 +63,7 @@ export const REGIONS: Record<RegionId, RegionDef> = {
   vesper: {
     id: "vesper",
     name: "Vesper Gorge",
-    blurb: "A dry river's canyon of red-violet strata, an iron headframe and a long cloister cut into the cliff. The Low Vesper Lamentation Guild runs the funerals, the records and, as it turns out, a good deal of the mine.",
+    blurb: "A dry canyon of red-violet rock, with an iron mine headframe and a cloister cut into the cliff. The Low Vesper Lamentation Guild runs the funerals, the records and, quietly, the mine.",
     bounds: V.bounds,
     sailSeconds: SAIL_SECONDS,
     reachable: true,
@@ -116,15 +116,15 @@ export function regionProps(id: RegionId, seed: number, world: CollisionWorld): 
 // ---- stations: the places you can USE (map table, notice board, the dock, the pier, the Warden) ------------------------------------------------------
 
 const HOLLOWMERE_STATIONS: readonly UseStation[] = [
-  { id: "map", kind: "map", x: CAMP.mapTable.x, z: CAMP.mapTable.z, r: 2.4, prompt: "Consult the map room" },
+  { id: "map", kind: "map", x: CAMP.mapTable.x, z: CAMP.mapTable.z, r: 2.4, prompt: "Open the map" },
   { id: "paper", kind: "paper", x: hqPlan().notice.x, z: hqPlan().notice.z, r: 2.4, prompt: "Read the notice board" },
-  { id: "dock", kind: "dock", x: JETTY.x0, z: JETTY.z0, r: 3, prompt: "Take the boat: the map room" },
-  { id: "loadout", kind: "loadout", x: hqPlan().pyramid.tiers[0]!.x, z: hqPlan().pyramid.tiers[0]!.z, r: 2.4, prompt: "Draw up the supply manifest" },
+  { id: "dock", kind: "dock", x: JETTY.x0, z: JETTY.z0, r: 3, prompt: "Choose where to sail" },
+  { id: "loadout", kind: "loadout", x: hqPlan().pyramid.tiers[0]!.x, z: hqPlan().pyramid.tiers[0]!.z, r: 2.4, prompt: "Open the supplies" },
 ];
 
 const KESSAR_STATIONS: readonly UseStation[] = [
   { id: "pier", kind: "pier", x: A.pier.x, z: A.pier.z, r: 2.2, prompt: "Inspect the pier" },
-  { id: "warden", kind: "warden", x: A.wardenPost.x, z: A.wardenPost.z, r: 2.6, prompt: "Parley with the Warden" },
+  { id: "warden", kind: "warden", x: A.wardenPost.x, z: A.wardenPost.z, r: 2.6, prompt: "Talk to the Warden" },
   { id: "dock", kind: "dock", x: A.landing.x, z: A.landing.z, r: 4, prompt: "Take the boat home" },
   // D-035: the foundation of the Society's outpost. Acted on server-side by INTERACT while carrying a prop (no sheet); the client words its prompt from the settlements state.
   { id: "foundation", kind: "foundation", x: OUTPOST_SITES.kessar!.site.x, z: OUTPOST_SITES.kessar!.site.z, r: YARD_R - 1, prompt: "Deliver a crate to the foundation" },
@@ -135,9 +135,9 @@ const HIGHMARK_STATIONS: readonly UseStation[] = [
   { id: "dock", kind: "dock", x: H.landing.x, z: H.landing.z, r: 4, prompt: "Take the barge home" },
   // D-056: the Society's second foundation, on the grass west of the landing (acted on exactly as Kessar's)
   { id: "foundation", kind: "foundation", x: OUTPOST_SITES.highmark!.site.x, z: OUTPOST_SITES.highmark!.site.z, r: YARD_R - 1, prompt: "Deliver a crate to the foundation" },
-  { id: "chamberlain", kind: "court", x: HS.chamberlain.x, z: HS.chamberlain.z, r: 2.6, prompt: "Address the Chamberlain" },
-  { id: "elder", kind: "court", x: HS.claimants.elder.x, z: HS.claimants.elder.z, r: 2.6, prompt: "Hear the elder claimant" },
-  { id: "younger", kind: "court", x: HS.claimants.younger.x, z: HS.claimants.younger.z, r: 2.6, prompt: "Hear the younger claimant" },
+  { id: "chamberlain", kind: "court", x: HS.chamberlain.x, z: HS.chamberlain.z, r: 2.6, prompt: "Talk to the Chamberlain" },
+  { id: "elder", kind: "court", x: HS.claimants.elder.x, z: HS.claimants.elder.z, r: 2.6, prompt: "Talk to Princess Orla" },
+  { id: "younger", kind: "court", x: HS.claimants.younger.x, z: HS.claimants.younger.z, r: 2.6, prompt: "Talk to Prince Dunstan" },
 ];
 
 const stationList = (id: RegionId): readonly UseStation[] =>

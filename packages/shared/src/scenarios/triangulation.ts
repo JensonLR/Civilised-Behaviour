@@ -104,11 +104,11 @@ function reduce(s: TrigState, e: ScenarioInput): Reduction<TrigState> {
       if (!n.surveyorsGone) {
         if (!n.warned && n.t >= n.fileAt - TRIG.warnS) {
           n = { ...n, warned: true };
-          fx.push(say("On the west bench the Syndicate's surveyors are folding their tripod and counting their field books. Their survey goes to London on the next barge: close your triangle and name it first."));
+          fx.push(say("On the West Bench, the Syndicate's surveyors are folding their tripod. Their survey leaves for London on the next barge. Finish yours and name the needles first!"));
         }
         if (n.t >= n.fileAt) {
           return resolveWith(n, "trig_outsurveyed", {}, [...fx,
-            say("The Syndicate's surveyors carry their field books down to the wharf and onto the ore barge. Their survey will be in London a week before yours, and the gorge will be whatever they say it is, which is a railway.")]);
+            say("The Syndicate's surveyors load their field books onto the ore barge. Their survey will reach London first. Officially, the gorge is now a railway.")]);
         }
       }
       // the Guild's vigil at the west bench station: the mourners walk out from the Cloister, keep it, and go home
@@ -116,10 +116,10 @@ function reduce(s: TrigState, e: ScenarioInput): Reduction<TrigState> {
         const st = VESPER_TRIG.stations[VIGIL_STATION]!;
         n = { ...n, vigilBegun: true };
         fx.push({ k: "spawn", group: "late:vigil" }, { k: "order", group: "late:vigil", order: { o: "guard", x: st.x, z: st.z, r: 3 } },
-          say("A bell from the Long Cloister: the Guild's mourners are walking out to the west bench to keep a vigil at the station there. Measuring the dead at their vigil would be noticed."));
+          say("A bell from the Long Cloister. The Guild's mourners are walking to the West Bench station to hold a vigil. Taking angles there during it would be rude, and noticed."));
       } else if (vigilOn(n) && n.t >= n.vigilAt + TRIG.vigilS) {
         n = { ...n, vigilOver: true };
-        fx.push({ k: "order", group: "late:vigil", order: { o: "post" } }, say("The vigil at the west bench is over. The mourners walk home to the Cloister, leaving a candle on the station's cairn."));
+        fx.push({ k: "order", group: "late:vigil", order: { o: "post" } }, say("The vigil at the West Bench is over. The mourners walk home, leaving a candle on the station's cairn."));
       }
       return { s: fin(n), fx };
     }
@@ -136,11 +136,11 @@ function reduce(s: TrigState, e: ScenarioInput): Reduction<TrigState> {
       const fx: Fx[] = [];
       if (k === VIGIL_STATION && vigilOn(s) && !s.rude) {
         n = { ...n, rude: true, brokePromise: true };
-        fx.push(say("You set the instrument up in the middle of the Guild's vigil and begin taking angles over the mourners' heads. The singing stops. The Dirge-Master begins to write."));
+        fx.push(say("You take angles right over the mourners' heads, in the middle of their vigil. The singing stops. The Dirge-Master starts writing."));
       }
       if (done(n, k)) {
         fx.push(say(closed(n)
-          ? "The last round is booked and the triangle closes to within a second of arc. The gorge is measured. Now the needles want names: the Dirge-Master keeps the Guild's at the Long Cloister, and the Committee's list is in your pocket."
+          ? "The last round is done and the gorge is measured. Now the needles need names. The Dirge-Master at the Long Cloister has the Guild's. The Committee's list is in your pocket."
           : `The round of angles at the ${STATION_NAMES[k]} station is booked.`));
       }
       return { s: fin(n), fx };
@@ -148,7 +148,7 @@ function reduce(s: TrigState, e: ScenarioInput): Reduction<TrigState> {
     case "hostile": {
       if (e.at === "surveyors" && !s.surveyorsGone) {
         return { s: fin({ ...s, surveyorsGone: true, brokePromise: true }), fx: [{ k: "order", group: "surveyors", order: { o: "flee" } },
-          say("The Syndicate's surveyors drop their tripod and run for the wharf. Their survey is abandoned in the dust, and the Society's will be filed by a party that shot at surveyors, which the Committee will call a regrettable incident.")] };
+          say("The Syndicate's surveyors drop their tripod and run for the wharf. Their survey is abandoned. The Committee will call the shooting \"a regrettable incident\".")] };
       }
       if ((e.at === "guild" || e.at === "late:vigil") && !s.guildHurt) {
         return { s: fin({ ...s, guildHurt: true, brokePromise: true }), fx: [say("Shots among the Guild's people. Nobody in Vesper Gorge will sell the Society a name now, and the Guild will remember the date.")] };
@@ -181,16 +181,16 @@ function talkNames(s: TrigState, result: string, paid: number): Reduction<TrigSt
     case "close": return stay(n);
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, names: true } }));
     case "paid": {
-      if (!closed(s)) return { s: n, fx: [say("\"Measure them first,\" says the Dirge-Master, pushing your money back. \"Then we will talk about what they are called. The dead do not like to be named twice.\"")] };
-      if (s.rude) return { s: n, fx: [say("\"You measured our dead at their vigil,\" says the Dirge-Master. \"The Guild's names are not for sale to you. Put your Committee's on the map; we will put the invoice on yours.\"")] };
+      if (!closed(s)) return { s: n, fx: [say("\"Measure them first,\" says the Dirge-Master, pushing your money back. \"Then we will talk names. The dead do not like to be named twice.\"")] };
+      if (s.rude) return { s: n, fx: [say("\"You measured our dead at their vigil,\" says the Dirge-Master. \"The Guild's names are not for sale to you. Use your Committee's, and we will send the bill.\"")] };
       if (!paidOk(s, paid)) return stay(n);
       return resolveWith({ ...n, spent: s.spent + paid, paid: s.paid + paid }, "trig_guild", {}, [
-        say(`£${paid} is entered in the Guild's ledger, and seven names go onto the Society's chart in the Dirge-Master's hand: the Aunt Who Waited, Old Tamsey's Debt, Sister Narrow, the Two Who Argued, Pallbearer's Rest, the Unpaid Account and Small Ottilie. The Committee will not know any of them.`)]);
+        say(`£${paid} goes into the Guild's ledger. Seven names go on your chart, like the Aunt Who Waited and Old Tamsey's Debt. The Committee knows none of them.`)]);
     }
     case "tell": {
       if (!closed(s)) return { s: n, fx: [say("\"You cannot name what you have not measured,\" says the Dirge-Master, \"though your Committee has tried.\"")] };
       return resolveWith(n, "trig_committee", {}, [
-        say("You read him the Committee's list. Mount Fothergill-Pym. Snodgrass Pinnacle. The Lesser Bunce. Viscount Dimsdale's Needle. Mount Treasurer. The Hollis-Crumb Aiguille. Point Secretary (Honorary). The Dirge-Master writes each one down, and against each a sum.")]);
+        say("You read out the Committee's list: Mount Fothergill-Pym, the Lesser Bunce, Point Secretary (Honorary) and the rest. The Dirge-Master writes each one down, with a price.")]);
     }
     default: return stay(n);
   }
@@ -207,9 +207,9 @@ function talkRival(s: TrigState, result: string): Reduction<TrigState> {
     case "close": return stay(n);
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, rival: true } }));
     case "survey": {
-      if (!closed(s)) return { s: n, fx: [say("\"Half a triangle,\" says the surveyor, \"is a pair of lines. Close it and we will talk money.\"")] };
+      if (!closed(s)) return { s: n, fx: [say("\"Half a triangle,\" says the surveyor, \"is just two lines. Finish it and we will talk money.\"")] };
       return resolveWith({ ...n, loot: s.price.sale }, "trig_sold", {}, [
-        say(`The surveyor counts out £${s.price.sale} and takes the Society's field books, angles, signals and all. Next season there will be a railway up Vesper Gorge, laid on the Society's arithmetic, and the needles will be called whatever fits on a timetable.`)]);
+        say(`The surveyor counts out £${s.price.sale} and takes your field books. Next season a railway will run up Vesper Gorge. The needles will be named whatever fits on a timetable.`)]);
     }
     default: return stay(n);
   }
@@ -226,16 +226,16 @@ function leave(s: TrigState): ReturnType<TemplateDef<TrigState>["leave"]> {
 // ---- the view ---------------------------------------------------------------------------------------------------------------------------------
 
 const DONE: Record<string, string> = {
-  trig_guild: "The gorge is measured, and its needles carry the Guild's names on the Society's chart. Take the boat home and break it to the Committee.",
-  trig_committee: "The gorge is measured, and its needles carry the Committee's names. The Guild has sent the bill. Take the boat home.",
-  trig_sold: "The triangulation is the Syndicate's, for its railway, and the money is in your purse. Take the boat home.",
-  trig_outsurveyed: "The Syndicate's survey is on its way to London first. Take the boat home and explain the Society's.",
+  trig_guild: "The gorge is measured, and the needles keep the Guild's names. Take the boat home and break the news to the Committee.",
+  trig_committee: "The gorge is measured, and the needles carry the Committee's names. The Guild has sent the bill. Take the boat home.",
+  trig_sold: "You sold the survey to the Syndicate for its railway. The money is in your purse. Take the boat home.",
+  trig_outsurveyed: "The Syndicate's survey will reach London first. Take the boat home and explain why yours is late.",
   abandoned: "The survey party is down in the gorge. Take the boat home and explain.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
-  fog: "Fog in the gorge: the signals come and go, and each round of angles takes longer.",
-  rain: "Rain: the theodolite's glass beads over, and each round of angles takes longer.",
-  rival_bid: "The Syndicate has hurried its survey: it files sooner than the Committee's letter said.",
+  fog: "Fog in the gorge: the signals come and go, so each round of angles takes longer.",
+  rain: "Rain: water beads on the theodolite's glass, so each round of angles takes longer.",
+  rival_bid: "The Syndicate is rushing its survey. It will file sooner than the Committee expected.",
 };
 
 function view(s: TrigState, now: number): ScenarioView {
@@ -244,18 +244,18 @@ function view(s: TrigState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [];
   // (the id names the station, so the compass strip walks the party round the unbooked ones: compassMarks.ts)
   for (let k = 0; k < 3; k++) {
-    objectives.push({ id: `station${k}`, text: done(s, k) ? `The ${STATION_NAMES[k]} station is observed` : `Observe from the ${STATION_NAMES[k]} station (${s.obs[k]}/${s.need})`, done: done(s, k) || won });
+    objectives.push({ id: `station${k}`, text: done(s, k) ? `The ${STATION_NAMES[k]} station is done` : `Take angles at the ${STATION_NAMES[k]} station (${s.obs[k]}/${s.need})`, done: done(s, k) || won });
   }
-  objectives.push({ id: "names", text: res === "trig_outsurveyed" ? "Lost: the Syndicate filed first" : res === "abandoned" ? "Lost: the survey party went down" : "Name the needles at the Dirge-Master's",
+  objectives.push({ id: "names", text: res === "trig_outsurveyed" ? "Lost: the Syndicate filed first" : res === "abandoned" ? "Lost: the survey party went down" : "Name the needles with the Dirge-Master",
     done: res === "trig_guild" || res === "trig_committee" });
-  if (res === undefined && !s.surveyorsGone) objectives.push({ id: "sell", text: `Or sell the triangulation to the Syndicate (£${s.price.sale})`, done: false, optional: true });
+  if (res === undefined && !s.surveyorsGone) objectives.push({ id: "sell", text: `Or sell the survey to the Syndicate (£${s.price.sale})`, done: false, optional: true });
   // (the vigil stays on the list once it is over: its candle is on the station's cairn, and the scenery reads it from here)
   if (res === undefined && vigilOn(s)) objectives.push({ id: "vigil", text: "The Guild keeps a vigil at the West Bench station", done: false, optional: true });
   else if (s.vigilOver) objectives.push({ id: "vigil", text: "The vigil is over; a candle burns at the West Bench", done: true, optional: true });
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the wharf", done: false });
   let hint = res !== undefined ? DONE[res] ?? ""
-    : closed(s) ? "The triangle is closed. The Dirge-Master at the Long Cloister will give you the Guild's names for a fee, or hear the Committee's; the Syndicate's surveyor on the west bench will buy the lot."
-    : "The theodolite is in its case on the wharf. Carry it to each trig station (the signals on the assay bench, the west bench and the headframe terrace) and take a round of angles with it in your arms. Anyone may carry it.";
+    : closed(s) ? "The gorge is measured. At the Long Cloister, buy the Guild's names from the Dirge-Master, or read him the Committee's. Or sell the survey to the Syndicate on the West Bench."
+    : "Pick up the theodolite on the wharf. Carry it to the three trig stations (Assay bench, West Bench, headframe terrace) and take angles at each. Anyone can carry it.";
   if (res === undefined && s.rude) hint += " The Guild saw you measure its vigil.";
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
@@ -315,7 +315,7 @@ const observe: ObserveSpec = {
 
 export const triangulationTemplate: TemplateDef<TrigState> = {
   id: "triangulation", title: "The Triangulation",
-  brief: "The Society's Great Trigonometrical Survey has reached Vesper Gorge, and the Committee in Pall Mall has resolved that it be measured and its seven nameless needles named, after the Committee, by seniority. The Lamentation Guild observes that the needles have had names for nine hundred years. The Syndicate's surveyors are running a line up the gorge for a railway; whichever survey reaches London first is the gorge.",
+  brief: "Survey Vesper Gorge and name its seven rock needles. The Committee wants its own names on them. The Guild says they have had names for 900 years. Beat the Syndicate's railway survey.",
   init, reduce, view, outcome, roster, leave, observe,
   noPowderStore: true, // (D-084: nobody armed is set against you: surveyors and mourners)
   props: [{ id: "theodolite", kind: PropKind.INSTRUMENT, x: VESPER_TRIG.theodolite.x, z: VESPER_TRIG.theodolite.z }],

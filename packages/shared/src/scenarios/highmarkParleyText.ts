@@ -12,26 +12,26 @@ const walk: Opt = { key: "walk", label: "Walk away", hint: "Nothing lost, nothin
 const reaper: ParleyScript = {
   speaker: "Foreperson Agnes Stook, of the Reapers' Compact",
   open: [
-    "\"The Compact is out,\" says the Foreperson, leaning on a scythe she has not put down since dawn, \"and the barley is in the field, and the rain is in the sky, and the Crown is in its granary counting. We are paid by the royal bushel. Ask anybody what a royal bushel holds. Ask the Crown what it sells by. The bonus to bring us back today is £{price}, and it would not fix a thing.\"",
-    "The Foreperson looks you up and down, as a farmer looks at weather. \"You are the Society. You want the barley in, like everybody, and you have a purse, unlike everybody. £{price} as a harvest bonus and we cut today. Or you could find out why we stopped. That is cheaper and takes longer.\"",
+    "\"The Compact is out,\" says the Foreperson. \"The Crown pays us by one bushel and sells by a smaller one. Pay a £{price} bonus and we cut today. It fixes nothing.\"",
+    "The Foreperson looks at you the way a farmer looks at the sky. \"You have a purse. Pay £{price} as a harvest bonus and we cut today. Or ask why we stopped. Cheaper, but slower.\"",
   ],
   round2: [
-    "\"Up the hill,\" says the Foreperson, pointing with the scythe, \"on the granary terrace, by the first granary, there is a scale, and on the scale is the royal bushel: the measure every reaper's day is paid by. It is a third bigger than the bushel the Crown sells by. Everybody knows it. Nobody can prove it. A thing carried down to the Steward and weighed in front of witnesses is proof.\"",
-    "\"We do not want money,\" says the Foreperson, \"or rather we do, but we want the right amount of it. The royal bushel sits on the granary scale up the hill. Put it in front of the Steward next to his own selling measure and see if he can still count. Then talk to me about an honest measure.\"",
+    "\"The royal bushel sits on a scale up the hill, on the granary terrace,\" says the Foreperson. \"It is a third too big. Carry it to the Steward and weigh it. That is proof.\"",
+    "\"We want fair pay, not a bonus,\" says the Foreperson. \"The royal bushel is on the granary scale, up the hill. Set it beside the Steward's own bushel. Then we can talk.\"",
   ],
-  walk: "You step back from the picket line. The Foreperson goes back to watching the sky and the river, in that order.",
-  hostile: "The Foreperson hears you out, and then turns her back on you, and so does every reaper on the line. \"The Compact does not deal with people who threaten it,\" she says, to the barley. \"The Crown can have its harvest when it can cut it.\"",
+  walk: "You step back from the picket line. The Foreperson goes back to watching the sky for rain.",
+  hostile: "The Foreperson turns her back on you, and so does the whole line. \"We do not deal with people who threaten us,\" she says. \"The Crown can cut its own barley.\"",
   deal: {
-    paid: "The Foreperson counts it twice and pockets it once. \"Back to the field,\" she calls, and the line becomes a line of scythes. \"This is a bonus,\" she says to you, \"not a settlement. We will be out again next harvest, on the same bushel. Do bring your purse.\"",
-    survey: "\"An honest measure,\" says the Foreperson, slowly, as if it were a word in a language she used to speak.",
+    paid: "The Foreperson counts it twice. \"Back to the field!\" she calls. Then, to you: \"This is a bonus, not a fix. We strike again next harvest. Bring your purse.\"",
+    survey: "\"An honest measure,\" the Foreperson repeats slowly, like a word from a language she once spoke.",
   },
   short: "\"You are short,\" says the Foreperson, who has been short every harvest for forty years. \"The bonus stands.\"",
   options: (round, p): readonly Opt[] => {
-    const pay: Opt = { key: "pay", label: `Pay the harvest bonus (£${p})`, hint: "They go back to work today. Nothing changes; the grievance stands, and so does the bushel.", cost: p };
-    const propose: Opt = { key: "propose", label: "Propose an honest measure", hint: "Needs the fraud proven to the Steward first, and the Steward's signature as well as hers.", cost: 0 };
+    const pay: Opt = { key: "pay", label: `Pay the harvest bonus (£${p})`, hint: "They cut today. The bushel stays too big.", cost: p };
+    const propose: Opt = { key: "propose", label: "Propose an honest measure", hint: "Prove the fraud to the Steward first. It needs his signature and hers.", cost: 0 };
     return round === 1
-      ? [pay, propose, { key: "ask", label: "Ask why the Compact stopped", hint: "She will tell you. It may tell you where to look.", cost: 0 },
-        { key: "threaten", label: "Tell the Compact to go hang", hint: "They will not deal with the Society again today.", cost: 0 }, walk]
+      ? [pay, propose, { key: "ask", label: "Ask why the Compact stopped", hint: "She tells you why, and where the proof is.", cost: 0 },
+        { key: "threaten", label: "Threaten the Compact", hint: "They will not deal with you again today.", cost: 0 }, walk]
       : [pay, propose, walk];
   },
 };
@@ -39,26 +39,26 @@ const reaper: ParleyScript = {
 const steward: ParleyScript = {
   speaker: "Steward Ambrose Tithe-Wexley, of the Granary",
   open: [
-    "\"The Crown,\" says the Steward of the Granary, dabbing at a ledger with a handkerchief as if it had sneezed on him, \"pays by the royal bushel. Whatever anybody has weighed this afternoon, that is what royal means. If the Society could see its way to persuading the Compact back into the field before the rain, there would be a fee of £{price}. Payable on results. No reforms.\"",
-    "The Steward does not look up from his figures. \"A strike,\" he says, \"is a failure of arithmetic on the part of the strikers. The Syndicate has a barge of bonded labour on the river that has never once been out on strike. I would prefer the Compact, by this afternoon, on the measure we have. £{price}, to whoever arranges it.\"",
+    "\"The Crown pays by the royal bushel,\" says the Steward, dabbing at his ledger. \"Get the Compact back to work before the rain and I pay you £{price}. On results. No reforms.\"",
+    "The Steward does not look up from his figures. \"A strike is bad arithmetic. The Syndicate has a barge of bonded men who never strike. Get the Compact back today and £{price} is yours.\"",
   ],
   round2: [
-    "\"The royal bushel,\" says the Steward, a little too quickly, \"is kept on the granary scale, sealed, by the first granary up the hill, where it is perfectly safe from anybody who might weigh it. It has been the royal bushel since the King was not pending. I have never measured it. One does not measure a measure.\"",
-    "\"There is no fraud,\" says the Steward. \"There is a difference between the bushel the Crown buys by and the bushel the Crown sells by, and the difference is called administration. If somebody were to carry the royal bushel down here and set it beside the selling bushel, in front of the Compact, I should of course be obliged to look at it. I would rather not be obliged.\"",
+    "\"The royal bushel is sealed on the granary scale, up the hill,\" says the Steward, a little too quickly. \"I have never measured it. One does not measure a measure.\"",
+    "\"There is no fraud,\" says the Steward. \"We buy by one bushel and sell by another. That is called administration. If someone brought the royal bushel here, I would have to look.\"",
   ],
-  walk: "You withdraw. The Steward makes a note of your name under a heading you cannot read upside down.",
-  hostile: "The Steward goes white, then red, then up the hill at a pace a man of his figure should not be able to manage. \"The Crown will hear of this!\" he calls back. The Crown, being pending, will not.",
+  walk: "You step back. The Steward writes your name under a heading you cannot read upside down.",
+  hostile: "The Steward goes white, then red, then runs up the hill. \"The Crown will hear of this!\" The Crown has no King just now, so it will not.",
   deal: {
-    survey: "\"An honest measure,\" the Steward repeats, turning the words over as if they might be counterfeit.",
-    tip: "\"Splendid,\" says the Steward, writing your name in a column that already has the Syndicate's in it. \"The fee is on results: the Compact back at work, the bushel untouched. I shall send word down the river that the barge need not dawdle.\"",
+    survey: "\"An honest measure,\" the Steward repeats, as if the words might be forged.",
+    tip: "\"Splendid,\" says the Steward, and writes your name under the Syndicate's. \"You are paid when they are back at work, bushel untouched. I shall tell the barge to hurry.\"",
   },
   short: "\"The Granary does not take money,\" says the Steward. \"It takes grain. By the royal bushel.\"",
   options: (round, p): readonly Opt[] => {
-    const propose: Opt = { key: "propose", label: "Demand an honest measure", hint: "He signs only once the royal bushel from the granary scale has been weighed in front of him.", cost: 0 };
-    const tip: Opt = { key: "tip", label: `Take his fee to talk them back (£${p} on results)`, hint: "Paid if the Compact goes back with nothing reformed. He sends for the Syndicate's barge to hurry it along.", cost: 0 };
+    const propose: Opt = { key: "propose", label: "Demand an honest measure", hint: "He signs only after the royal bushel is weighed in front of him.", cost: 0 };
+    const tip: Opt = { key: "tip", label: `Take his fee to talk them back (£${p} on results)`, hint: "Paid only if they go back with nothing fixed. He tells the barge to hurry.", cost: 0 };
     return round === 1
       ? [propose, { key: "ask", label: "Ask about the royal bushel", hint: "He would rather you did not.", cost: 0 }, tip,
-        { key: "threaten", label: "Threaten to take the granary apart", hint: "He will run up the hill, and he will not sign anything after that.", cost: 0 }, walk]
+        { key: "threaten", label: "Threaten to take the granary apart", hint: "He runs up the hill and will sign nothing after that.", cost: 0 }, walk]
       : [propose, tip, walk];
   },
 };
@@ -72,33 +72,33 @@ const master_of_hunt: ParleyScript = {
   speaker: "Lady Isolde Thrushcote, Master of the Royal Hunt",
   frame: { heading: FIELD, asked: "Licence: £{price} · Round {round} · The Master seems {mood}." },
   open: [
-    "The Master of the Royal Hunt looks up from her game book. \"Every beast on the grassland is the Crown's,\" she says, \"including that one, who does not know it. A licence to take him is £{price}. Without one, it is poaching, and I write poaching in red.\"",
-    "\"You are the Society,\" says the Master, in the tone of one identifying a weed. \"You will want to shoot him. Everybody from the Society wants to shoot something. The licence is £{price}, and I would remind you that he charges.\"",
+    "\"Every beast here is the Crown's,\" says the Master of the Royal Hunt, \"even that one, though he does not know it. A licence to shoot him is £{price}. Without one, it is poaching.\"",
+    "\"You are the Society,\" says the Master, as if naming a weed. \"You will want to shoot him. The licence is £{price}. And do remember that he charges.\"",
   ],
   round2: [
-    "\"The drovers will tell you he is the luck of the herds,\" says the Master, \"and they are right, and the barley is still being eaten. Walk at him from the far side and he will walk away from you, home to their camp. Shoot him and I want the licence fee first. The fee is £{price}.\"",
-    "\"Between ourselves,\" says the Master, \"the Crown would be as happy to see him walked home as shot, and happier than to see him in a Syndicate cage. But if you mean to shoot, it is £{price}, and you will aim for the head, which is where he keeps his opinions.\"",
+    "\"The drovers call him the luck of the herds,\" says the Master. \"Walk at him from the far side and he walks home to their camp. To shoot him, the fee is £{price}.\"",
+    "\"Between ourselves,\" says the Master, \"the Crown likes him walked home as much as shot. It likes a Syndicate cage least. To shoot, it is £{price}. Aim for the head.\"",
   ],
   walk: "You step back. The Master returns to her game book and writes something short.",
-  hostile: "The Master closes her game book on its pencil. \"I have written that down,\" she says, \"and I have written it down in red.\"",
+  hostile: "The Master snaps her game book shut. \"I have written that down,\" she says. \"In red.\"",
   flatter: {
     ok: [
-      "\"The Society has manners, now?\" says the Master. \"Unexpected. £{price}, then, and I will lend you the Crown's best loader's advice: do not stand in front of him.\"",
-      "\"You flatter the Crown's grassland,\" says the Master, \"which is beautiful, and which you are about to shoot on. £{price}.\"",
+      "\"The Society has manners now?\" says the Master. \"Then £{price}. And some free advice: do not stand in front of him.\"",
+      "\"Yes, the Crown's grass is beautiful,\" says the Master. \"You are about to shoot on it. £{price}.\"",
     ],
     fail: [
-      "\"Flattery is not legal tender on the Crown's grass,\" says the Master. \"£{price}.\"",
+      "\"Flattery is not money,\" says the Master. \"Not on the Crown's grass. £{price}.\"",
       "\"I have been flattered by better shots than you,\" says the Master. \"Most of them are buried in the barley. £{price}.\"",
     ],
   },
-  deal: { paid: "The Master writes out the licence and blots it. \"One beast, grey, by the Society's hand. He charges. I have said that twice now. I will not say it at the inquest.\"" },
+  deal: { paid: "The Master writes out the licence. \"One grey beast, for the Society. He charges. That is twice I have told you. There may not be a third time.\"" },
   short: "\"The Crown does not give credit to guests,\" says the Master. \"Least of all guests with rifles.\"",
   options(round, p): readonly Opt[] {
     return round === 1
       ? [
-          { key: "pay", label: `Buy a licence to shoot him (£${p})`, hint: "A shot without one is poaching on the Crown's grass.", cost: p },
-          { key: "ask", label: "Ask what the Crown would rather", hint: "She has opinions about the Society, and about the bull.", cost: 0 },
-          { key: "flatter", label: "Admire the Crown's grassland", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
+          { key: "pay", label: `Buy a licence to shoot him (£${p})`, hint: "Shooting him without one is poaching.", cost: p },
+          { key: "ask", label: "Ask what the Crown wants done", hint: "She has views on the Society, and on the bull.", cost: 0 },
+          { key: "flatter", label: "Admire the Crown's grassland", hint: "The price may drop. Or rise.", cost: 0 },
           walk,
         ]
       : [{ key: "pay", label: `Buy a licence to shoot him (£${p})`, hint: "The licence makes the shot the Crown's business, not a crime.", cost: p }, walk];
@@ -108,22 +108,22 @@ const menagerie_agent: ParleyScript = {
   speaker: "Mr. Barnabas Quill-Ferris, Menagerie Agent to the Syndicate",
   frame: { heading: "A word at the menagerie pen", asked: "Offered: £{price} · Round {round} · The agent seems {mood}." },
   open: [
-    "The agent leans on his pen by the river with a handbill already printed: THE BEAST OF THE HIGH PASTURE. \"Alive,\" he says, \"he is worth £{price} to my principals, delivered into this pen. Dead, he is worth a wall in Pall Mall, which my principals do not have.\"",
-    "\"A bull like that,\" says the agent, \"tours the river towns for three seasons at twopence a look. I can offer £{price} for him alive, in my pen. The drovers will not like it. The drovers do not buy tickets.\"",
+    "The agent waves a handbill: THE BEAST OF THE HIGH PASTURE. \"Alive in my pen, he is worth £{price},\" he says. \"Dead, he is only worth a wall in Pall Mall.\"",
+    "\"A bull like that tours the river towns for years, at twopence a look,\" says the agent. \"£{price} for him alive, in my pen. The drovers will not like it. They do not buy tickets.\"",
   ],
   round2: [
-    "\"Drive him?\" says the agent. \"Walk at him from the far side; he walks away from people. Walk him here, and I drop the bar and count out £{price}. Shoot him and I count out nothing, and so, I suspect, does your Committee.\"",
-    "\"The Master will tell you he is the Crown's,\" says the agent. \"The Crown has sold me three beasts this year already. The price for this one is £{price}, alive, in the pen.\"",
+    "\"Walk at him from the far side; he walks away from people,\" says the agent. \"Walk him into my pen and I pay £{price}. Shoot him and I pay nothing. Nor will your Committee.\"",
+    "\"The Master says he is the Crown's,\" says the agent. \"The Crown has sold me three beasts this year. For this one, £{price}, alive, in the pen.\"",
   ],
   walk: "You step back. The agent goes back to his handbill and adds an exclamation mark.",
-  hostile: "The agent gets behind his pen, which is a pen for a bull and very solid. \"My principals,\" he says, \"will hear of this.\"",
+  hostile: "The agent ducks behind his pen, which is built for a bull and very solid. \"My employers will hear of this,\" he says.",
   deal: { survey: "\"Done,\" says the agent, and goes to open his pen. \"£{price} for the bull, alive, in the pen. Alive is the important word. Write it on your hand.\"" },
   short: "\"I am buying,\" says the agent, \"not selling.\"",
   options(round): readonly Opt[] {
     return round === 1
       ? [
           { key: "propose", label: "Agree to sell him the bull, alive", hint: "He opens his pen by the river. Drive the bull into it and he pays.", cost: 0 },
-          { key: "ask", label: "Ask how one sells a bull", hint: "Slowly, and from behind.", cost: 0 },
+          { key: "ask", label: "Ask how to sell a bull", hint: "Slowly, and from behind.", cost: 0 },
           walk,
         ]
       : [{ key: "propose", label: "Agree to sell him the bull, alive", hint: "Drive it into his pen and he pays.", cost: 0 }, walk];

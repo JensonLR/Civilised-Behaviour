@@ -277,8 +277,8 @@ export const INCIDENT_PAPER: Record<IncidentResult, { head: string; body: string
   turned_away: { head: "VOLUNTEER DECLINED", body: "A man offering his rifle to a Society party in %r was sent on his way. He is believed to be offering it elsewhere." },
   caught: { head: "SOCIETY RETURNS A HORSE", body: "A Society party in %r caught a runaway horse and returned it to its owner, who counted its legs twice before paying." },
   strayed: { head: "HORSE AT LARGE", body: "A horse seen grazing near a Society party in %r remains at large. The party is understood to have been busy." },
-  salvaged: { head: "SOCIETY RESCUES SYNDICATE POWDER", body: "A Syndicate powder wagon overturned in %r was relieved of its cargo by a Society party, who describe the transaction as salvage and the Syndicate as theft." },
+  salvaged: { head: "SOCIETY RESCUES SYNDICATE POWDER", body: "A Syndicate powder wagon overturned in %r, and a Society party took its cargo. The party calls it salvage. The Syndicate calls it theft." },
   went_up: { head: "POWDER WAGON REARRANGES THE ROAD", body: "An overturned powder wagon in %r exploded in the presence of a Society party. The crater is being surveyed; the Society has offered to name it." },
-  repelled: { head: "SYNDICATE COLLECTORS REPULSED", body: "In %r the Syndicate's debt collectors called on a Society party with rifles drawn, and left without the money, and in some cases without the use of their legs." },
+  repelled: { head: "SYNDICATE COLLECTORS REPULSED", body: "In %r the Syndicate's debt collectors came for a Society party with rifles drawn. They left without the money, and some without the use of their legs." },
   collected: { head: "SOCIETY SETTLES DISPUTED ACCOUNT", body: "In %r a Society party paid the Syndicate's collectors, who were armed and therefore, in the accounting sense, correct." },
 };

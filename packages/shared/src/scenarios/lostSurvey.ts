@@ -117,10 +117,10 @@ function reduce(s: SurveyState, e: ScenarioInput): Reduction<SurveyState> {
       const n: SurveyState = { ...s, t: s.t + dtOf(e) };
       if (n.t >= n.tideAt && n.surveyor === "house") {
         return resolveWith({ ...n, parley: undefined }, "survey_lost", {}, [...CALM,
-          say("The tide comes up through the reeds like a rumour, and by the time it has finished the reed-cutter's house is an island and Mr. Pellow-Brane its only resident. He waves, with a theodolite. The Houses will send him home in the spring, with the bill.")]);
+          say("The tide floods the reeds. The reed-cutter's house is now an island, and Mr. Pellow-Brane its only resident. He waves. The Houses will send him home in spring, with the bill.")]);
       }
       const fx: ScenarioFx[] = [];
-      if (s.t < s.tideAt - 90 && n.t >= n.tideAt - 90 && n.surveyor === "house") fx.push(say("The water in the reeds is rising. The paths to the house will be under it in a minute and a half, and so, in a manner of speaking, will the Society's surveyor."));
+      if (s.t < s.tideAt - 90 && n.t >= n.tideAt - 90 && n.surveyor === "house") fx.push(say("The water in the reeds is rising. In a minute and a half the paths to the house will flood, and the surveyor will be cut off."));
       return { s: fin(n), fx };
     }
     case "near": {
@@ -130,38 +130,38 @@ function reduce(s: SurveyState, e: ScenarioInput): Reduction<SurveyState> {
       const first = s.near.house === 0 && n > 0 && s.phase === "approach";
       return {
         s: fin({ ...s, near: { house: n } }),
-        fx: first ? [say("The reed-cutter's house. Mr. Pellow-Brane is on a crate under the stilts in his shirtsleeves with a cup of the Houses' tea, which is on the bill; the Collector of Canal Dues is beside him with a ledger, which is the bill; two wardens with rifles are why nobody has left. Speak to the Collector about the books, or to the surveyor about leaving.")] : [],
+        fx: first ? [say("The reed-cutter's house. Mr. Pellow-Brane is drinking the Houses' tea, and it is on his bill. Two armed wardens guard him. Ask the Collector about his books, or talk him into leaving.")] : [],
       };
     }
     case "use": {
-      if (e.target === "peg" && s.trail < 1) return { s: fin({ ...s, trail: 1 }), fx: [say("A survey peg, painted the Society's red, with a note tied on in a hand that slopes with indignation: \"Day 4. Measured canal to the windpump. Charged for it. Went on to the house to protest. Charged for that.\" The windpump is marked on your strip.")] };
-      if (e.target === "pump" && s.trail < 2) return { s: fin({ ...s, trail: 2 }), fx: [say("Chalk on the windpump's leg, in the same indignant hand: an arrow, a bearing, and \"HOSPITALITY. SEND MONEY.\" The arrow points north, up the reeds; the reed-cutter's house there is marked on your strip.")] };
+      if (e.target === "peg" && s.trail < 1) return { s: fin({ ...s, trail: 1 }), fx: [say("A red Society survey peg with a note: \"Day 4. Measured the canal to the windpump. Charged for it. Went to the house to complain. Charged for that.\" The windpump is on your strip.")] };
+      if (e.target === "pump" && s.trail < 2) return { s: fin({ ...s, trail: 2 }), fx: [say("Chalk on the windpump's leg, in the same angry hand: an arrow pointing north, and \"HOSPITALITY. SEND MONEY.\" The reed-cutter's house up there is now on your strip.")] };
       return stay(s);
     }
     case "hostile": {
       if (e.at !== undefined && e.at !== "wardens" && e.at !== "collector") return stay(s);
-      return raise(s, "A shot at the house, and the Houses' hospitality ends at once: the wardens come off the wall with their rifles and the Collector goes behind the ledger, which is thick enough to stop a ball.", s.parley !== undefined || s.books !== "held");
+      return raise(s, "A shot at the house! The wardens grab their rifles. The Collector hides behind his ledger, which is thick enough to stop a bullet.", s.parley !== undefined || s.books !== "held");
     }
     case "count": {
       if (e.group !== "wardens") return stay(s);
       const w: Count = { alive: int(e.alive, 0, 9), routed: int(e.routed, 0, 9), down: int(e.down, 0, 9), total: Math.max(1, int(e.total, 0, 9, LOST.wardens)) };
       const n = fin({ ...s, wardens: w });
       if (s.hostile && s.books === "held" && broken(w) >= LOST.wardensBroken) {
-        return release(n, "surveyor", "The wardens are done. Mr. Pellow-Brane takes his field books off the Collector's table with the expression of a man repossessing his own umbrella, and is ready to go. The Houses have noted it, in the ledger, in red.", { forced: true, brokePromise: true });
+        return release(n, "surveyor", "The wardens are beaten. Mr. Pellow-Brane takes his field books off the Collector's table like a man taking back his own umbrella. He is ready to go. The Houses note it, in red.", { forced: true, brokePromise: true });
       }
       return stay(n);
     }
     case "actor": {
       if (e.id !== "surveyor") return stay(s);
       if (e.state === "down" && s.surveyor !== "down") {
-        return resolveWith({ ...s, surveyor: "down" }, "survey_lost", {}, [...CALM, say("Mr. Pellow-Brane is down in the reeds, with his books under him. The Society will publish the survey posthumously, in a black border, at a loss.")]);
+        return resolveWith({ ...s, surveyor: "down" }, "survey_lost", {}, [...CALM, say("Mr. Pellow-Brane has fallen in the reeds, on top of his books. The Society will publish his survey with a black border, at a loss.")]);
       }
       if (e.state === "arrived" && s.surveyor === "following") {
         const n = { ...s, surveyor: "home" as const };
-        if (s.books === "ceded") return resolveWith(n, "chart_ceded", {}, [...CALM, say("Mr. Pellow-Brane reaches the quay without his books and stands looking back at the reeds as if they owed him money. They do not: he owes them. The Houses keep the chart of their canals; the Society keeps its surveyor, who has already started a second set of notes, from memory, in the boat.")]);
+        if (s.books === "ceded") return resolveWith(n, "chart_ceded", {}, [...CALM, say("Mr. Pellow-Brane reaches the quay without his books. The Houses keep the chart; the Society keeps its surveyor. He is already rewriting his notes from memory.")]);
         return resolveWith(n, "survey_home", {}, [...CALM, say(s.forced
-          ? "Mr. Pellow-Brane reaches the quay with his field books under his arm and a warden's hat he says he found. The Society has its survey, and the Houses have a grievance with a page number."
-          : "Mr. Pellow-Brane reaches the quay with his field books under his arm and a receipt in his pocket for the dues, which he intends to frame. The Society has its survey; the Houses have their money; the Admiralty will have a map with the delta in it, and the delta's name spelled three ways.")]);
+          ? "Mr. Pellow-Brane reaches the quay with his field books and a warden's hat he says he found. The Society has its survey. The Houses have a grudge."
+          : "Mr. Pellow-Brane reaches the quay with his field books and a receipt for the dues, which he means to frame. The Society has its survey. The Houses have their money.")]);
       }
       return stay(s);
     }
@@ -191,20 +191,20 @@ function talkCollector(s: SurveyState, result: string, paid: number): Reduction<
   switch (result) {
     case "close": return stay(fin({ ...s, parley: undefined }));
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, collector: true } }));
-    case "hostile": return raise({ ...s, parley: undefined }, "You have explained to the Collector, with a weapon, that the Society does not pay dues on its own measurements. The wardens come off the wall to explain the opposite.", true);
+    case "hostile": return raise({ ...s, parley: undefined }, "You pull a weapon on the Collector: the Society will not pay dues on its own measurements. The wardens raise their rifles to disagree.", true);
     case "paid": {
       const p = Number.isFinite(paid) ? Math.round(paid) : 0;
       if (!paidOk(s, p) || s.books !== "held") return stay(fin({ ...s, parley: undefined }));
-      return release({ ...s, parley: undefined, spent: s.spent + p, paid: s.paid + p }, "surveyor", `£${p} goes into the ledger, which closes on it like a clam. The Collector hands Mr. Pellow-Brane his field books with a receipt for the dues, a receipt for the receipt, and the compliments of the Houses. He is ready to go, and he will follow you to the quay.`);
+      return release({ ...s, parley: undefined, spent: s.spent + p, paid: s.paid + p }, "surveyor", `£${p} goes into the ledger, which snaps shut on it. The Collector hands Mr. Pellow-Brane his books, a receipt, and a receipt for the receipt. He follows you to the quay.`);
     }
     case "survey": {
       if (s.books !== "held") return stay(fin({ ...s, parley: undefined }));
-      return release({ ...s, parley: undefined }, "ceded", "The chart is ceded to the Houses, who will keep their canals' secrets and the Society's books, with thanks. Mr. Pellow-Brane takes this badly and his hat well, and follows you to the quay, measuring the distance under his breath.");
+      return release({ ...s, parley: undefined }, "ceded", "The Houses keep the chart and the books, with thanks. Mr. Pellow-Brane takes it badly. He follows you to the quay, counting his steps under his breath.");
     }
     case "tip": {
       if (s.books !== "held") return stay(fin({ ...s, parley: undefined }));
       return resolveWith({ ...s, parley: undefined }, "survey_sold", { loot: s.price.sale }, [...CALM,
-        say(`The Houses buy the survey outright for £${s.price.sale}, books, bearings and the bad temper in the margins. Mr. Pellow-Brane, consulted at last, discovers that the Houses have been meaning to offer him a position as a pilot, at a salary the Society has never mentioned to anyone. He stays. He waves you off from the step, with his tea.`)]);
+        say(`The Houses buy the survey for £${s.price.sale}. Then they offer Mr. Pellow-Brane a job as their pilot, at better pay than the Society's. He stays, and waves you off with his tea.`)]);
     }
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -221,7 +221,7 @@ function talkSurveyor(s: SurveyState, result: string): Reduction<SurveyState> {
     case "learn": return stay(fin({ ...s, asked: { ...s.asked, surveyor: true } }));
     case "survey": {
       if (s.books !== "held") return stay(fin({ ...s, parley: undefined }));
-      return release({ ...s, parley: undefined }, "ceded", "Mr. Pellow-Brane is persuaded, at length and against his principles, that the Society can measure the delta again and that he would rather be in it when it does. He leaves the books on the Collector's table with a look that will be in the minutes. He follows you to the quay.");
+      return release({ ...s, parley: undefined }, "ceded", "Mr. Pellow-Brane agrees, unhappily, that the delta can be measured again. He leaves his books with the Collector, with a dark look, and follows you to the quay.");
     }
     default: return stay(fin({ ...s, parley: undefined }));
   }
@@ -241,12 +241,12 @@ const DONE: Record<string, string> = {
   survey_home: "The surveyor and his books are home. Take the boat and send the Admiralty its map.",
   chart_ceded: "The surveyor is home and the Houses keep the chart. Take the boat home; he will want to talk about it.",
   survey_sold: "The survey is sold and the surveyor is a pilot now. Take the boat home with the Houses' money.",
-  survey_lost: "The survey is lost to the reeds. Take the boat home and write the letter.",
-  abandoned: "The expedition is down. The reeds are unmoved. Take the boat home and explain yourselves.",
+  survey_lost: "The survey is lost to the reeds. Take the boat home and break the news.",
+  abandoned: "Your party is down. The reeds do not care. Take the boat home and explain yourselves.",
 };
 const COMPLICATION_LINE: Partial<Record<ComplicationId, string>> = {
   rain: "Rain on the delta: the tide is early.",
-  fog: "Fog in the reeds: the trail is hard to see, and the tide is late for it.",
+  fog: "Fog in the reeds: the trail is hard to see, but the tide is late.",
 };
 
 function view(s: SurveyState, now: number): ScenarioView {
@@ -263,11 +263,11 @@ function view(s: SurveyState, now: number): ScenarioView {
   const objectives: ObjectiveView[] = [
     { ...search, done: found },
     { id: "books", text: settled ? (s.books === "ceded" ? "The books stay with the Houses" : "The surveyor has his books") : `Settle his books with the Collector (dues £${s.price.dues})`, done: settled || res === "survey_sold" },
-    { id: "quay", text: res === "survey_lost" ? "Lost: the surveyor never reached the quay" : res === "survey_sold" ? "Not needed: the surveyor has taken a post with the Houses" : "Walk the surveyor back to the quay", done: home || res === "survey_sold" },
+    { id: "quay", text: res === "survey_lost" ? "Lost: the surveyor never reached the quay" : res === "survey_sold" ? "Not needed: the surveyor now works for the Houses" : "Walk the surveyor back to the quay", done: home || res === "survey_sold" },
   ];
   if (s.phase === "resolved" && res !== undefined) objectives.push({ id: "home", text: "Take the boat home from the quay", done: false });
-  let hint = res !== undefined ? DONE[res] ?? "" : s.surveyor === "following" ? "Mr. Pellow-Brane is following you. Walk him back to the quay; he walks at the pace of a man who has been charged for every step." : s.near.house > 0 ? "Talk to the Collector about the books (pay the dues, cede the chart, or sell him the survey), or persuade the surveyor to come without them." : "The Society's surveyor is somewhere in the west reeds. His trail starts at a survey peg by the west bridge: Use it.";
-  if (res === undefined && s.asked.collector) hint += ` (The Collector's terms: £${s.price.dues} in dues, or the chart, or £${s.price.sale} for the survey outright.)`;
+  let hint = res !== undefined ? DONE[res] ?? "" : s.surveyor === "following" ? "Mr. Pellow-Brane is following you. Walk him back to the quay. He walks slowly: he has been charged for every step." : s.near.house > 0 ? "Talk to the Collector: pay the dues, give up the chart, or sell him the survey. Or talk the surveyor into leaving without his books." : "The Society's surveyor is lost in the west reeds. His trail starts at a survey peg by the west bridge: Use it.";
+  if (res === undefined && s.asked.collector) hint += ` (The Collector's terms: pay £${s.price.dues} in dues, or give up the chart, or sell him the survey for £${s.price.sale}.)`;
   const cl = COMPLICATION_LINE[s.complication] ?? COMPLICATION_HINT[s.complication];
   if (res === undefined && cl) hint += ` ${cl}`;
   const remain = res !== undefined || s.surveyor !== "house" ? 0 : s.tideAt - s.t;
@@ -307,8 +307,8 @@ function roster(_c: CampaignState, seed: number, _s: SurveyState): NpcSpec[] {
 const observe: ObserveSpec = {
   near: [{ id: "house", x: SALTMARKET_SURVEY.house.x, z: SALTMARKET_SURVEY.house.z, r: LOST.houseR }],
   use: [
-    { id: "peg", at: SALTMARKET_SURVEY.peg, r: LOST.markR },
-    { id: "pump", at: SALTMARKET_SURVEY.pumpMark, r: LOST.markR },
+    { id: "peg", at: SALTMARKET_SURVEY.peg, r: LOST.markR, prompt: "Read the survey peg" },
+    { id: "pump", at: SALTMARKET_SURVEY.pumpMark, r: LOST.markR, prompt: "Read the chalk mark" },
     { id: "surveyor", npc: "surveyor", r: LOST.personR, talk: "lost_surveyor", carry: "none" },
     { id: "collector", npc: "collector", r: LOST.personR, talk: "dues_collector", carry: "none" },
   ],
@@ -320,7 +320,7 @@ const observe: ObserveSpec = {
 
 export const lostSurveyTemplate: TemplateDef<SurveyState> = {
   id: "lost_survey", title: "The Lost Survey",
-  brief: "The Society's Delta Mensuration Party went into the west reeds a week ago to chart the Brine Houses' private canals, and has not come back. Its surveyor, Mr. Pellow-Brane, is the Houses' guest at a reed-cutter's house in the north-west reeds, held with his field books until the harbour dues on every canal he measured are paid. Bring him home with his books: pay the dues, cede the chart, or take them; or sell the Houses the survey. The tide floods the reeds before long.",
+  brief: "The Brine Houses hold the Society's surveyor and his books in the north-west reeds, for unpaid canal dues. Pay, bargain or fight to get him home. The tide floods the reeds soon.",
   init, reduce, view, outcome, roster, leave, observe,
   sites: { house: SALTMARKET_SURVEY.house, quay: SALTMARKET_SURVEY.quay },
 };

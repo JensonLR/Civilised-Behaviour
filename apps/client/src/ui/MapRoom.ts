@@ -82,13 +82,14 @@ export class MapRoom {
       h("p", { class: "society" }, "The Imperial Cartographic & Improvement Society"),
       h("h2", { id: "maproom-title" }, "The Map Room"),
       h("p", { class: "tag" }, "Pick a shore. The Society will do the rest, and invoice you for it."),
-      h("div", { class: "chartwrap" }, this.chart as unknown as Node),
-      this.list,
-      this.campaign.root,
-      h("h3", {}, "Crew"),
-      this.crew,
-      this.status,
-      h("div", { class: "actions" }, this.close, h("div", { class: "acts" }, this.cancel, this.ready, this.propose)),
+      // D-099: the chart and the choice side by side on a wide screen (the shores were a column of paragraphs under the chart, 2,212 px in a 686 px sheet); the chosen
+      // shore alone says what it is, the others are their names
+      h(
+        "div",
+        { class: "maprow" },
+        h("div", { class: "left" }, h("div", { class: "chartwrap" }, this.chart as unknown as Node), this.campaign.root),
+        h("div", { class: "side" }, this.list, h("h3", {}, "Crew"), this.crew, this.status, h("div", { class: "actions" }, this.close, h("div", { class: "acts" }, this.cancel, this.ready, this.propose))),
+      ),
       sheetHints().el,
     );
     this.propose.addEventListener("click", () => {
@@ -172,6 +173,13 @@ export class MapRoom {
       if (!on.has(id)) continue;
       const p = CHART_AT[id];
       const g = svg("g", { class: "mark", "data-region": id, transform: `translate(${p.x} ${p.y})` });
+      // a mark on the chart chooses its shore too (the list is the keyboard's and the pad's way)
+      g.addEventListener("click", () => {
+        const v = this.view;
+        if (!v || v.phase !== 0 || !v.regions.some((r) => r.id === id)) return;
+        this.selected = id;
+        this.render(v);
+      });
       g.append(svg("circle", { r: 9 }), svg("path", { d: "M0 -5 L0 6 M-4 2 Q0 9 4 2 M-3 -2 L3 -2" }));
       const label = svg("text", { x: 0, y: 24, "text-anchor": "middle" });
       label.textContent = CHART_LABEL[id] ?? id;
@@ -200,6 +208,8 @@ export class MapRoom {
       const input = h("input", { type: "radio", name: "maproom-dest", value: r.id, id: `maproom-${r.id}` }) as HTMLInputElement;
       input.checked = r.id === this.selected;
       input.disabled = v.phase === 1 && r.id !== pending;
+      // D-100: the sheet opens on the choice (the modal focused the first control in the page, an audience button below the chart, and scrolled the choice away)
+      if (input.checked) input.dataset.autofocus = "";
       input.addEventListener("change", () => {
         this.selected = r.id;
         this.render(this.view!);
@@ -234,7 +244,8 @@ export class MapRoom {
     if (focusedAudience) this.campaign.root.querySelector<HTMLElement>(`button[data-power="${focusedAudience}"]`)?.focus();
     // the crew
     this.crew.replaceChildren();
-    for (const c of v.ready) this.crew.appendChild(h("li", { class: c.ready ? "yes" : "no" }, h("span", { class: "who" }, c.name), h("span", { class: "state" }, v.phase === 1 ? (c.ready ? "ready" : "waiting") : "aboard")));
+    // (the tick boxes are the vote's: before a sailing is proposed there is nothing to tick, and an empty box beside "aboard" read as a missing letter)
+    for (const c of v.ready) this.crew.appendChild(h("li", { class: v.phase === 1 ? (c.ready ? "yes" : "no") : "aboard" }, h("span", { class: "who" }, c.name), h("span", { class: "state" }, v.phase === 1 ? (c.ready ? "ready" : "waiting") : "aboard")));
     const you = v.you !== undefined ? v.ready.find((c) => c.slot === v.you) : undefined;
     if (you) this.myReady = you.ready;
     if (v.phase === 0) this.myReady = false;

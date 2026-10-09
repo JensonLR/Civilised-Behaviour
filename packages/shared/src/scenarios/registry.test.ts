@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CampaignState, ResolutionId, ScenarioTemplateId } from "../campaignTypes.ts";
+import type { CampaignState, ResolutionId, ScenarioTemplateId, ScenarioView } from "../campaignTypes.ts";
 import { COMPLICATION_HINT, COMPLICATION_POOL, dealComplication } from "../chaos.ts";
 import { newCampaign } from "../factions.ts";
-import { TEMPLATES, TEMPLATE_IDS, isTemplateId, pickTemplate, templateNote } from "./registry.ts";
+import { TALK_PROMPT, TEMPLATES, TEMPLATE_IDS, contractUse, isTemplateId, pickTemplate, templateNote } from "./registry.ts";
+import { CARRY_KIND } from "./types.ts";
+import { PropKind } from "../props.ts";
 
 const withHistory = (list: [ScenarioTemplateId, ResolutionId, number][], patch?: (c: CampaignState) => void): CampaignState => {
   const c = newCampaign(5);
@@ -143,5 +145,60 @@ describe("dealComplication", () => {
     expect(run(50).every((d) => d === "rival_scouts")).toBe(true);
     expect(run(10).some((d) => d === "none")).toBe(true);
     void c;
+  });
+});
+
+describe("D-100: the HUD says what Use will do at every contract point, by the runner's own rule", () => {
+  const viewOf = (id: ScenarioTemplateId, patch?: Partial<ScenarioView>): ScenarioView => ({ phase: "waiting", objectives: [], hint: "", timerLabel: "", endsAtWorldMs: 0, template: id, title: "", ...patch }) as ScenarioView;
+
+  it("contract use points all have words: a short prompt, or a talk's", () => {
+    for (const id of TEMPLATE_IDS) {
+      for (const u of TEMPLATES[id].observe.use) {
+        const words = u.prompt ?? (u.talk !== undefined ? TALK_PROMPT[u.talk] : undefined);
+        expect(words, `${id}:${u.id}`).toBeTruthy();
+        expect(words!.length, `${id}:${u.id}`).toBeLessThanOrEqual(48);
+      }
+    }
+  });
+
+  it("a talk is offered within the talker's own reach of where the talker stands now, and not beyond it (the Warden: 2.2 m, not the 2.6 m of her post)", () => {
+    const u = TEMPLATES.secure_crossing.observe.use.find((p) => p.talk === "warden")!;
+    const her = { x: 10, z: -4 };
+    const places = { person: (npc: string) => (npc === u.npc ? her : undefined) };
+    const v = viewOf("secure_crossing");
+    expect(contractUse(v, her.x + u.r - 0.05, her.z, undefined, places)).toEqual({ prompt: "Talk to the Warden", x: her.x, z: her.z, talk: true });
+    expect(contractUse(v, her.x + u.r + 0.05, her.z, undefined, places)).toBeUndefined();
+    expect(contractUse(v, her.x, her.z, undefined, { person: () => undefined }), "down, or not there").toBeUndefined();
+    expect(contractUse(v, her.x, her.z, PropKind.CRATE, places), "arms full").toBeUndefined();
+    expect(contractUse(viewOf("secure_crossing", { resolution: "paid" }), her.x, her.z, undefined, places), "settled").toBeUndefined();
+  });
+
+  it("every talk in every contract is offered where the runner takes it", () => {
+    for (const id of TEMPLATE_IDS) {
+      for (const u of TEMPLATES[id].observe.use) {
+        if (u.talk === undefined) continue;
+        const at = { x: 100, z: 100 };
+        const got = contractUse(viewOf(id), at.x + u.r * 0.9, at.z, undefined, { person: (npc) => (npc === u.npc ? at : undefined) });
+        expect(got?.prompt, `${id}:${u.id}`).toBe(u.prompt ?? TALK_PROMPT[u.talk]);
+      }
+    }
+  });
+
+  it("a point that takes a carried thing wants that thing; the first point in the contract's order wins, as in the runner", () => {
+    const pier = TEMPLATES.secure_crossing.observe.use.find((p) => p.id === "pier")!;
+    const v = viewOf("secure_crossing");
+    expect(contractUse(v, pier.at!.x, pier.at!.z, CARRY_KIND.barrel)?.prompt).toBe("Light the charge");
+    expect(contractUse(v, pier.at!.x, pier.at!.z, CARRY_KIND.crate)).toBeUndefined();
+    expect(contractUse(v, pier.at!.x, pier.at!.z, undefined)).toBeUndefined();
+    // the succession's people stand where the test puts them: all at one spot, the Chamberlain is first in the list
+    const all = { x: 0, z: 0 };
+    expect(contractUse(viewOf("succession_dispute"), 0.5, 0, undefined, { person: () => all })?.prompt).toBe("Talk to the Chamberlain");
+    expect(contractUse(viewOf("succession_dispute"), 0.5, 0, CARRY_KIND.barrel, { person: () => all })?.prompt).toBe("Give the delegate the barrel");
+  });
+
+  it("the convoy's wagon is where the wagon is", () => {
+    const v = viewOf("convoy_ambush");
+    expect(contractUse(v, 51, 50, undefined, { person: () => undefined, wagon: { x: 50, z: 50 } })?.prompt).toBe("Seize the wagon");
+    expect(contractUse(v, 51, 50, undefined, { person: () => undefined })).toBeUndefined();
   });
 });

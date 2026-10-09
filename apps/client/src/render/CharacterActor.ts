@@ -1,4 +1,4 @@
-import { Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
+import { Box3, Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
 import { FLAG, WEAPONS, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
@@ -89,6 +89,8 @@ export interface ActorCombat {
  * Rebuilds transparently if the look string changes (creator, campaign events like a new scar).
  * Also owns the purely cosmetic reactions to harm: flinch, pain face, and the ragdoll fall when a hit puts the body down.
  */
+const CROWN_BOX = new Box3();
+
 export class CharacterActor {
   private rig!: CharacterRig;
   private anim!: CharacterAnimator;
@@ -163,6 +165,12 @@ export class CharacterActor {
     return this.rig.proportions.totalHeight;
   }
 
+  /** D-100: the height of the figure's top, hat included (metres over its feet, measured at rest when it was built): where a name plate sits. */
+  get crown(): number {
+    return this.crownH;
+  }
+  private crownH = 1.8;
+
   /** True while a physics ragdoll is driving (or blending out of) the pose. */
   get ragdolled(): boolean {
     return this.ragdoll !== undefined;
@@ -180,6 +188,10 @@ export class CharacterActor {
     this.pennant?.dispose();
     this.rig?.dispose();
     this.rig = buildCharacter(spec, { outline: this.outline });
+    // D-100: the figure's real top, hat and all, measured once at rest (a plate set a fixed 0.55 m over the bare head hung a metre clear of a near figure, over whoever stood behind)
+    this.rig.root.position.set(0, 0, 0);
+    this.rig.root.updateMatrixWorld(true);
+    this.crownH = Math.max(this.rig.proportions.totalHeight, CROWN_BOX.setFromObject(this.rig.root).max.y);
     this.torch?.attach(this.rig.joints.wristL);
     this.pennant?.attach(this.rig.joints.wristL);
     this.marks = new BodyMarks(this.rig);

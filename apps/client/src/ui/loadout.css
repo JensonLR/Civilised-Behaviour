@@ -47,3 +47,15 @@
 @media (prefers-reduced-motion: no-preference) {
   .loadout .bar::before { transition: width 0.25s ease-out; }
 }
+
+/* D-099: on a wide screen the stores on the left and the reckoning and the hired hands on the right (the purse and the hands were below the fold of a 686 px sheet) */
+@media (min-width: 60rem) {
+  .panel.sheet.loadout { width: min(96vw, 70rem); }
+  .loadout .body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); column-gap: 1.4rem; align-items: start; grid-auto-flow: row dense; }
+  .loadout .body > h3:first-child { grid-column: 1; grid-row: 1; }
+  .loadout .body > .ledger { grid-column: 1; grid-row: 2 / span 6; }
+  .loadout .body > :not(.ledger):not(h3:first-child) { grid-column: 2; }
+  .loadout .body > .summary { grid-row: 2; margin-top: 0; }
+  .loadout .lrow { padding: 0.26rem 0.2rem; }
+  .loadout button.step { min-height: 1.9rem; }
+}

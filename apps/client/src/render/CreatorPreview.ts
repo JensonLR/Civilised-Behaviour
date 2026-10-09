@@ -5,6 +5,7 @@ import { CharacterAnimator, HandPoser, buildCharacter, type CharacterRig } from 
 import { POSE_EVENT, type PoseId } from "../ui/creatorLogic.ts";
 import { motion } from "./world/atmosphere.ts";
 import type { Stage } from "./Stage.ts";
+import { FIGURE_DEFAULT, type FigureFocus } from "../ui/doorFrame.ts";
 
 /**
  * The scene behind the front door: the creator's character stands in the expedition camp at golden hour while the camera drifts slowly round
@@ -46,6 +47,8 @@ export class CreatorPreview {
   private readonly fill = new DirectionalLight(PALETTE.light.sky, 0.45);
   private readonly shadow: Mesh;
   private height = 1.8;
+  /** Where on screen the figure stands (the door's panels decide: ui/doorFrame.ts). */
+  private focus: FigureFocus = FIGURE_DEFAULT;
   /** Grass is bent away from the figure and the ground in front of it, so the legs are clear of blades (the same push the walkers give in the game). */
   private readonly pushers = [0, 1, 2].map(() => ({ x: 0, z: 0 }));
   private readonly offPose = (e: Event): void => this.setPose((e as CustomEvent<PoseId>).detail);
@@ -94,6 +97,11 @@ export class CreatorPreview {
     this.place();
   }
 
+  /** D-098: stand the figure in the part of the picture the door's panels leave free (above the charter on a phone, beside it on a PC). */
+  setFocus(f: FigureFocus): void {
+    this.focus = f;
+  }
+
   /** Chooses what the figure does (see the class comment). */
   setPose(id: PoseId): void {
     this.pose = id;
@@ -124,8 +132,12 @@ export class CreatorPreview {
     const a = BACKDROP.camAngle + 0.1 * k * Math.sin(t * 0.11);
     const r = 7.4 + h * 0.6 + 0.14 * k * Math.sin(t * 0.07 + 1);
     const cam = this.stage.camera;
-    cam.fov = 30;
-    cam.updateProjectionMatrix();
+    // the figure is two fifths of the screen at 30 degrees; a smaller share widens the view, and the view is slid so the figure's middle lands on the focus
+    const f = this.focus;
+    cam.fov = f.size >= FIGURE_DEFAULT.size ? 30 : Math.min(50, (2 * Math.atan(Math.tan((15 * Math.PI) / 180) * (FIGURE_DEFAULT.size / f.size)) * 180) / Math.PI);
+    const w = this.canvas.clientWidth, hh = this.canvas.clientHeight;
+    if (w > 0 && hh > 0 && (f.cx !== 0.5 || f.cy !== 0.5)) cam.setViewOffset(w, hh, (0.5 - f.cx) * w, (0.5 - f.cy) * hh, w, hh);
+    else cam.clearViewOffset();
     cam.position.set(BACKDROP.x + Math.sin(a) * r, this.groundY + h * 0.82 + 0.05 * k * Math.sin(t * 0.09), BACKDROP.z + Math.cos(a) * r);
     this.target.set(BACKDROP.x, this.groundY + h * 0.47, BACKDROP.z);
     cam.lookAt(this.target);
@@ -179,6 +191,7 @@ export class CreatorPreview {
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.raf);
+    this.stage.camera.clearViewOffset(); // (the game's camera starts from a plain view)
     this.rig?.dispose();
     this.rig = undefined;
     this.anim = undefined;

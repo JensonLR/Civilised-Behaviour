@@ -16,7 +16,7 @@ export type SaveStatus =
   | { readonly kind: "failed"; readonly at: number };
 
 /** What the player is told, honestly: what is saved and what is not. */
-export const SAVE_NOTE = "The ledger (purse, days, outposts, hired hands, the powers' tempers) is saved at every change and when the last player leaves. Where you stand is not: a resumed expedition begins at HQ.";
+export const SAVE_NOTE = "Progress saves as you go. Where you stand is not saved: a resumed expedition begins at HQ.";
 
 /** `short` is the HUD's: the long reasons stay in the tooltip and on the pause sheet. */
 export function saveLabel(s: SaveStatus, fmtTime: (at: number) => string = clock, short = false): string {

@@ -93,8 +93,11 @@ export const ACHIEVEMENT_TEXT: Readonly<Record<AchievementId, { title: string; b
 // ---- the demo's notices (server -> party, over the existing `notice` message; the client banner recognises the warning) ----
 const WARN_RE = /^The Society's demonstration licence expires in (\d{1,3}) minutes?\b/;
 /** The warning the server sends at `minutes` left. */
-export const demoWarnText = (minutes: number): string =>
-  `The Society's demonstration licence expires in ${minutes} ${minutes === 1 ? "minute" : "minutes"}. ${minutes <= DEMO.warnAtMinutes[1] ? "Please conclude your civilising." : "Do finish whatever you are plundering."}`;
+export const demoWarnText = (minutes: number): string => {
+  const unit = minutes === 1 ? "minute" : "minutes";
+  const nudge = minutes <= DEMO.warnAtMinutes[1] ? "Please conclude your civilising." : "Do finish whatever you are plundering.";
+  return `The Society's demonstration licence expires in ${minutes} ${unit}. ${nudge}`;
+};
 /** The minutes a warning notice announces, or undefined for any other text. */
 export function parseDemoWarn(text: unknown): number | undefined {
   if (typeof text !== "string" || text.length > 200) return undefined;

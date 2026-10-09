@@ -66,5 +66,19 @@ describe("the guide's line and marker (D-063)", () => {
     expect(g.markOver).toBe(false);
     g.dispose();
   });
+
+  it("D-098: the distance is said once: on the marker, or on the line when the marker is the flag alone", () => {
+    const { g, mark, line } = make();
+    g.setLine("Walk north to the toll bar", true);
+    g.place(0, 0, false, 78, "Toll bar");
+    expect(mark.textContent).toContain("78 m");
+    expect(line.textContent).not.toContain("78 m");
+    g.quiet(true);
+    expect(line.textContent).toContain("78 m");
+    g.place(0, 0, false, 77, "Toll bar");
+    expect(line.textContent).toContain("77 m");
+    g.quiet(false);
+    expect(line.textContent).not.toMatch(/\d+ m/);
+  });
 });
 
