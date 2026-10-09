@@ -1,4 +1,4 @@
-import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type ReapersEnding, type RegionId, type RivalPresence } from "@cb/shared";
+import { REGIONS, REGION_COPY, isRegionId, reachableRegions, pickTemplate, templateNote, type CampaignMapData, type CampaignState, type HuntEnding, type ReapersEnding, type RegionId, type RivalPresence } from "@cb/shared";
 import type { MapRoomView } from "../ui/MapRoom.ts";
 
 /** What the campaign remembers about a region, written beside it on the chart. Plain text; no markup. */
@@ -35,13 +35,22 @@ const STRIKE_NOTE: Record<ReapersEnding, string> = {
   strike_broken: "The Syndicate's men cut the last harvest, and the Compact remembers.",
   barley_lost: "The last harvest lay down in the rain.",
 };
+/** And what became of the Great Grey (D-094): the ledger's `ends.great_grey`. */
+const HUNT_NOTE: Record<HuntEnding, string> = {
+  grey_trophy: "The Great Grey's head is on the Club's wall; the drovers have not forgotten.",
+  grey_driven: "The Great Grey is back with his herd, and the herds keep their luck.",
+  grey_sold: "The Great Grey tours the river towns in a Syndicate cage.",
+  grey_escaped: "The Great Grey went back to the high pasture of his own accord.",
+};
 function highmarkNote(c: CampaignState, contract: string): string {
   const visited = c.history.some((h) => h.region === "highmark");
   if (!visited) return `Not yet visited. Five terraces, one switchback road and a court that has been waiting six years for a signature.${contract}`;
   const last = [...c.history].reverse().find((h) => h.region === "highmark");
   const strike = c.sites.ends.reapers_strike;
   const harvest = strike !== undefined && strike !== "abandoned" ? ` ${STRIKE_NOTE[strike as ReapersEnding]}` : "";
-  return `${CHAIR_NOTE[c.sites.succession]}${harvest}${last ? ` Last visit: day ${last.day}.` : ""}${contract}`;
+  const grey = c.sites.ends.great_grey;
+  const hunt = grey !== undefined && grey !== "abandoned" ? ` ${HUNT_NOTE[grey as HuntEnding]}` : "";
+  return `${CHAIR_NOTE[c.sites.succession]}${harvest}${hunt}${last ? ` Last visit: day ${last.day}.` : ""}${contract}`;
 }
 
 /** The slice of the room state the map room needs (structural, so tests need no Colyseus). */

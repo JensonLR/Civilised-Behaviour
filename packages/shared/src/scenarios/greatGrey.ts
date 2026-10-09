@@ -14,7 +14,7 @@ import type { BaseState, ObserveSpec, Reduction, TemplateDef } from "./types.ts"
 /**
  * THE GREAT GREY (D-094, Highmark's third contract; the GDD's "hunt"). The old grey sire of Thornfield's herds has come down off the high pasture into the Reapers' barley and is eating
  * the harvest a mouthful at a time. The Crown, as host, has asked its guests the Society to see to it before the harvest bell. The Society's Natural History Committee has asked for
- * its head, for the Club's wall in Pall Mall; the drovers would like it back in their fold, alive, it being the luck of the herds; the Syndicate's menagerie agent would like it in his pen.
+ * its head, for the Club's wall in Pall Mall; the drovers would like it back with its herd, alive, it being the luck of the herds; the Syndicate's menagerie agent would like it in his pen.
  *
  * It is a real animal (`NPC.BEAST`: Cast's `beast` brain, `BEAST_SHAPES` for every hit test): it walks away from anyone near it, trots from anyone close, bolts from a shot and charges
  * whoever wounds it. The party decides nothing from a menu; the ending is what the beast is made to do:
@@ -281,7 +281,7 @@ const observe: ObserveSpec = {
 
 export const greatGreyTemplate: TemplateDef<HuntState> = {
   id: "great_grey", title: "The Great Grey",
-  brief: "The old grey sire of Thornfield's herds has come down into the Reapers' barley, and the Crown has asked its guests to see to him before the harvest bell. The Society's Natural History Committee would like his head for the Club's wall in Pall Mall; the drovers would like him back in their fold alive; the Syndicate's menagerie agent would like him in his pen. He walks away from people, bolts from a shot and charges whoever wounds him. Every beast on the grassland is the Crown's: the Master of the Royal Hunt sells the licence.",
+  brief: "The old grey sire of Thornfield's herds has come down into the Reapers' barley, and the Crown has asked its guests to see to him before the harvest bell. The Society's Natural History Committee would like his head for the Club's wall in Pall Mall; the drovers would like him back with his herd, alive; the Syndicate's menagerie agent would like him in his pen. He walks away from people, bolts from a shot and charges whoever wounds him. Every beast on the grassland is the Crown's: the Master of the Royal Hunt sells the licence.",
   init, reduce, view, outcome, roster, leave, observe,
   noPowderStore: true, // (D-084: nobody armed is set against you here; a keg in the barley would be the Society's own)
   sites: { barley: HIGHMARK_SITES.strike.barley, fold: H.fold, pen: H.pen },

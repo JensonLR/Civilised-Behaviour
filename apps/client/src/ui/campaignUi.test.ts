@@ -156,6 +156,16 @@ describe("what the map room is told", () => {
       h.sites.ends = { reapers_strike: r as never };
       expect(regionNote("highmark", h), r).toMatch(re);
       expect(regionNote("highmark", h), r).toMatch(/vacant in a procedural sense/);
+      // D-094: after the strike, the hunt
+      expect(regionNote("highmark", h, 2), r).toContain("On offer: The Great Grey.");
+    }
+    // D-094: and the chart remembers the Great Grey; after the hunt, the chair again
+    const grey: Record<string, RegExp> = { grey_trophy: /on the Club's wall/, grey_driven: /back with his herd/, grey_sold: /Syndicate cage/, grey_escaped: /high pasture/ };
+    for (const [r, re] of Object.entries(grey)) {
+      const h = newCampaign(1);
+      h.history.push({ seq: 1, region: "highmark", resolution: r as never, day: 5, template: "great_grey" });
+      h.sites.ends = { great_grey: r as never };
+      expect(regionNote("highmark", h), r).toMatch(re);
       expect(regionNote("highmark", h, 2), r).toContain("On offer: The Vacant Chair.");
     }
   });
