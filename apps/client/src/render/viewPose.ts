@@ -24,6 +24,8 @@ export const VM = {
   /** Seconds to lower and raise a weapon when the choice changes. */
   lowerSeconds: 0.14,
   raiseSeconds: 0.24,
+  /** D-101: seconds of empty hands with nothing to do before they lower out of view (a phone's picture was a third hands). */
+  restAfterSeconds: 1.2,
 } as const;
 
 /** The body measurements the arms depend on (from the rig's proportions; `vmBodyFrom`). */
@@ -216,6 +218,9 @@ export interface VmState {
   lastPitch: number;
   primed: boolean;
   time: number;
+  /** D-101: 0..1, how far idle empty hands have lowered out of view, and how long they have been idle. */
+  rest: number;
+  restT: number;
   /** 0..1: how much sway and recoil the player wants, and how much walking bob (settings: reduced motion, head bob). */
   motion: number;
   bob: number;
@@ -224,7 +229,7 @@ export interface VmState {
 export const newVmState = (): VmState => ({
   id: -1, draw: 1, presence: 0, aim: 0, sprint: 0, reload: 0, reloadT: 0, mode: MODE.FREE, modeBlend: 0,
   kick: 0, kickSide: 0, kickRoll: 0, kickSeconds: 0.3, swingT: -1, swingSeconds: 0.5, swingKind: 0, swingCount: 0, bash: false,
-  bobPhase: 0, bobAmp: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, primed: false, time: 0, motion: 1, bob: 1,
+  bobPhase: 0, bobAmp: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, primed: false, time: 0, motion: 1, bob: 1, rest: 0, restT: 0,
 });
 
 /** Seconds a shot's recoil takes to settle, by weapon. */
@@ -284,6 +289,10 @@ export function stepViewmodel(s: VmState, f: VmFrame, dt: number): void {
   s.reloadT = f.reload;
   s.mode = f.mode !== MODE.FREE ? f.mode : s.mode;
   s.modeBlend = damp(s.modeBlend, f.mode !== MODE.FREE ? 1 : 0, 9, dt);
+  // D-101: empty hands with nothing to do lower out of view after a moment (a punch, a load in the arms, a kneel or a drag brings them straight back up)
+  const idleHands = s.id < 0 && f.weapon < 0 && f.mode === MODE.FREE && s.swingT < 0 && s.modeBlend < 0.05;
+  s.restT = idleHands ? s.restT + dt : 0;
+  s.rest = damp(s.rest, s.restT > VM.restAfterSeconds ? 1 : 0, s.restT > 0 ? 4 : 18, dt);
 
   s.kick = Math.max(0, s.kick - dt / s.kickSeconds);
   if (s.swingT >= 0) {
@@ -551,7 +560,7 @@ export function computeViewmodel(s: VmState, body: VmBody, out: VmOut): VmOut {
   }
 
   // ---- drawing and putting away: rises from below, muzzle high ------------------------------------------------------------------------------
-  const d = 1 - smooth(0, 1, s.draw) + (1 - smooth(0, 1, s.presence)) * 0.8;
+  const d = 1 - smooth(0, 1, s.draw) + (1 - smooth(0, 1, s.presence)) * 0.8 + smooth(0, 1, s.rest) * 0.8;
   cur.y -= d * 0.34;
   cur.rx -= d * 0.7;
   cur.z += d * 0.05;

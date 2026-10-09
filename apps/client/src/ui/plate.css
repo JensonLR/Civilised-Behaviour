@@ -272,7 +272,10 @@ body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
 }
 
 /* ---- the line: what to do next, centred under the heading strip ---- */
-#hud .objectives, #hud .guide { position: absolute; left: 50% !important; right: auto !important; top: calc(var(--edge-t) + 3.9rem) !important; transform: translateX(-50%) !important; width: max-content !important; max-width: min(34rem, 76vw); padding: 0.3rem 1.05rem 0.38rem; margin: 0; border: 0; text-align: center; color: var(--ink); pointer-events: none; font-size: 1rem; }
+/* D-101 ("can't see while trying to play", on a phone and on a desktop): the orders were centred under the heading strip, and their bonus slip ran the width of the picture under
+   them, across the middle of the view and the path ahead. They are a compact card in the top-left corner, where a player looks for objectives, clear of the strip and the play area. */
+#hud .objectives, #hud .guide { position: absolute; left: var(--edge-l) !important; right: auto !important; top: calc(var(--edge-t) + 0.4rem) !important; transform: none !important; width: max-content !important; max-width: min(24rem, 30vw); padding: 0.3rem 0.85rem 0.38rem; margin: 0; border: 0; text-align: left; color: var(--ink); pointer-events: none; font-size: 1rem; }
+#hud.welcoming .guide { display: none; } /* (the welcome card has the corner at HQ, and its list of steps says what is next) */
 #hud .guide[hidden], #hud.settled .objectives { display: none; }
 #hud .objectives::before { display: none; }
 #hud .objectives h2, #hud .guide .kicker { display: block; margin: 0 0 0.08rem; padding: 0; border: 0; font: 0.74rem var(--display); letter-spacing: 0.2em; text-transform: uppercase; color: var(--stamp); }
@@ -280,11 +283,11 @@ body.touch-ui #hud .health { top: auto; bottom: calc(var(--edge-b) + 6.5rem); }
 #hud .objectives li { display: none; }
 #hud .objectives li.current { display: inline; font: 1.14rem/1.3 var(--serif); }
 #hud .objectives li .mark, #hud .objectives .hint { display: none; }
-#hud .objectives .rule { display: block; max-width: 30rem; margin: 0.12rem auto 0; font: 0.88rem/1.25 var(--serif); color: var(--stamp-dark); }
+#hud .objectives .rule { display: block; max-width: none; margin: 0.12rem 0 0; font: 0.84rem/1.25 var(--serif); color: var(--stamp-dark); }
 #hud .objectives .rule[hidden] { display: none; }
 #hud .objectives .dist, #hud .guide .dist { margin-left: 0.5em; font: 0.94rem var(--type); color: var(--stamp); white-space: nowrap; }
 #hud .guide .text { font: 1.14rem/1.3 var(--serif); }
-#hud .objectives .timer { display: flex; justify-content: center; align-items: baseline; gap: 0.5em; margin: 0.2rem 0 0; padding: 0.15rem 0 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); font: 0.82rem var(--display); letter-spacing: 0.12em; }
+#hud .objectives .timer { display: flex; justify-content: flex-start; align-items: baseline; gap: 0.5em; margin: 0.2rem 0 0; padding: 0.15rem 0 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); font: 0.82rem var(--display); letter-spacing: 0.12em; }
 #hud .objectives .timer[hidden] { display: none; }
 #hud .objectives .timer .clock { font: 1rem var(--type); }
 
@@ -379,7 +382,7 @@ html .pause .dispatches ol { margin: 0.3rem 0 0; padding-left: 1.1rem; max-heigh
 :root[data-motion="reduced"] #hud .gazette .line { animation: none; transition: none; }
 body.touch-ui #hud .gazette { top: 24%; width: min(18rem, 46vw); }
 body.touch-ui #hud .gazette .line { font-size: 0.82rem; }
-#hud .objectives li.request { display: block; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); width: max-content; max-width: min(36rem, 86vw); margin-top: 0.3rem; padding: 0.16rem 0.75rem 0.2rem; font: 0.9rem/1.25 var(--serif); color: var(--ink); background: var(--slip); box-shadow: var(--slip-edge); border-radius: 2px; } /* (its own slip under the card: the line, its distance and the clock stay together) */
+#hud .objectives li.request { display: block; position: absolute; left: 0; top: 100%; transform: none; width: max-content; max-width: min(24rem, 30vw); margin-top: 0.3rem; padding: 0.14rem 0.65rem 0.18rem; font: 0.82rem/1.25 var(--serif); color: var(--ink); background: var(--slip); box-shadow: var(--slip-edge); border-radius: 2px; } /* (its own slip under the card: the line, its distance and the clock stay together) */
 #hud .objectives li.request .text { font-style: normal; }
 #hud .objectives li.request.done .text { text-decoration: none; opacity: 1; }
 #hud .objectives li.request.done .text::after { content: " \2014\00a0met"; font-style: normal; } /* (a hex escape eats the space after it) */
@@ -419,14 +422,14 @@ html .pause .orders, html .sheet.parley { font-family: var(--serif); } /* (a fon
 
 /* ---- D-086: a short screen (a phone on its side): the orders slip keeps every line, at a size that leaves the picture its middle ---- */
 @media (max-height: 520px) {
-  #hud .objectives, #hud .guide { padding: 0.16rem 0.7rem 0.2rem; max-width: min(30rem, 66vw); }
+  #hud .objectives, #hud .guide { padding: 0.16rem 0.6rem 0.2rem; max-width: min(17rem, 34vw); }
   #hud .objectives h2, #hud .guide .kicker { font-size: 0.58rem; margin-bottom: 0; }
-  #hud .objectives li.current, #hud .guide .text { font-size: 0.9rem; line-height: 1.22; }
+  #hud .objectives li.current, #hud .guide .text { font-size: 0.82rem; line-height: 1.2; }
   #hud .objectives .dist, #hud .guide .dist { font-size: 0.76rem; }
-  #hud .objectives .rule { font-size: 0.72rem; line-height: 1.2; margin-top: 0.05rem; }
+  #hud .objectives .rule { font-size: 0.66rem; line-height: 1.18; margin-top: 0.05rem; }
   #hud .objectives .timer { font-size: 0.62rem; margin-top: 0.1rem; padding-top: 0.08rem; }
   #hud .objectives .timer .clock { font-size: 0.78rem; }
-  #hud .objectives li.request { font-size: 0.72rem; padding: 0.08rem 0.55rem 0.1rem; margin-top: 0.2rem; max-width: min(30rem, 72vw); }
+  #hud .objectives li.request { font-size: 0.68rem; padding: 0.06rem 0.5rem 0.08rem; margin-top: 0.2rem; max-width: min(17rem, 34vw); }
   #hud .gazette .line { font-size: 0.76rem; padding: 0.1rem 0.45rem; }
 }
 

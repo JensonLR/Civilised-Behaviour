@@ -227,6 +227,8 @@ export class Game {
   private guideClock = 0;
   private readonly bornAt = performance.now();
   private guideTop = 0;
+  private guideCardR = 0;
+  private guideCardB = 0;
   private landingRegion = "";
   private wentAshore = false;
   private campaignRev = -1;
@@ -1381,8 +1383,13 @@ export class Game {
       const lineEl = document.querySelector<HTMLElement>(ordersAreTheLine ? "#hud .objectives" : "#hud .guide");
       // (D-098: and below the Society's commission, the slip that hangs under the card: the flag stood on its words)
       const slip = ordersAreTheLine ? document.querySelector<HTMLElement>("#hud .objectives li.request") : null;
-      const slipBottom = slip && slip.getClientRects().length > 0 ? slip.getBoundingClientRect().bottom : 0;
-      this.guideTop = lineEl && !lineEl.hidden ? Math.max(lineEl.getBoundingClientRect().bottom, slipBottom) + 44 : 0;
+      const slipRect = slip && slip.getClientRects().length > 0 ? slip.getBoundingClientRect() : undefined;
+      // D-101: the card is in the top-left corner now: the marker keeps off it (and off the heading strip), not below it everywhere (it was pushed down onto the player)
+      const card = lineEl && !lineEl.hidden && lineEl.getClientRects().length > 0 ? lineEl.getBoundingClientRect() : undefined;
+      this.guideCardR = card ? Math.max(card.right, slipRect?.right ?? 0) : 0;
+      this.guideCardB = card ? Math.max(card.bottom, slipRect?.bottom ?? 0) : 0;
+      const strip = document.querySelector<HTMLElement>("#hud .compass");
+      this.guideTop = strip && strip.getClientRects().length > 0 ? strip.getBoundingClientRect().bottom + 6 : 0;
       // the HUD's quiet rules (plate.css): the invite code only at camp, where friends are invited; the key hints only for the first minute and a half
       const root = document.getElementById("hud");
       if (root) {
@@ -1403,7 +1410,7 @@ export class Game {
     const mz = this.session.value(me, "z");
     const dist = Math.hypot(g.x - mx, g.z - mz);
     tmp.set(g.x, this.session.world.terrainHeight(g.x, g.z) + 2.6, g.z).project(this.stage.camera);
-    this.guide.place(tmp.x, tmp.y, tmp.z > 1, dist, g.label ?? "", 4, this.guideTop);
+    this.guide.place(tmp.x, tmp.y, tmp.z > 1, dist, g.label ?? "", 4, this.guideTop, this.guideCardR, this.guideCardB);
     // D-074: the marker and the name plates keep off each other: over somebody whose plate is up it is the flag alone, and the plates climb above whatever it covers
     const g2 = this.guide;
     const quiet = g2.markOver && this.tags.plateNear(g2.markX, g2.markY, 70);
