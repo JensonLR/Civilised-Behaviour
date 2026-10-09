@@ -149,6 +149,14 @@ export function setOrientProgress(code: string, orient: OrientProgress, now: num
   save([{ ...old, orient: parseOrient(orient) ?? { done: 0, skipped: false } }, ...list.filter((e) => e.code !== old.code)]);
 }
 
+/**
+ * D-101: a player who JOINED somebody else's running expedition is not put through the welcome card (the owner: a fresh player gets the tutorial when they start a game, "if they
+ * don't join another lobby someone already started"). Marks it skipped for this campaign unless this browser already has progress there; "Replay tutorial" still brings it back.
+ */
+export function quietOrientationForJoiner(code: string): void {
+  if (getOrientProgress(code) === undefined) setOrientProgress(code, { done: 0, skipped: true });
+}
+
 /** Forgets the orientation progress of a campaign (the replay): the card starts again from nothing. */
 export function clearOrientProgress(code: string): void {
   const list = listExpeditions();

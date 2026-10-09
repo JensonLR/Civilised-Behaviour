@@ -22,7 +22,7 @@ import { anyModalOpen, onInputBlocked } from "../ui/modal.ts";
 import { Pause } from "../ui/Pause.ts";
 import { buildHudChrome } from "../ui/hudChrome.ts";
 import { Menu } from "../ui/Menu.ts";
-import { listExpeditions, noteExpedition } from "../ui/expeditions.ts";
+import { listExpeditions, noteExpedition, quietOrientationForJoiner } from "../ui/expeditions.ts";
 import { isDormantSave } from "../ui/menuLogic.ts";
 import type { SaveStatus } from "../net/saveStatus.ts";
 import { SoundPlaque } from "../ui/SoundPlaque.ts";
@@ -213,7 +213,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   window.addEventListener("pagehide", () => (leavingPage = true));
   window.addEventListener("beforeunload", () => (leavingPage = true));
 
-  async function enter(s: Session, name = ""): Promise<void> {
+  async function enter(s: Session, name = "", how: "create" | "join" | "resume" = "create"): Promise<void> {
     backdropWanted = false;
     // (a demo that ran out while the world was still being built: the close has already happened, so the card is shown the moment the game exists)
     let demoClosed = false;
@@ -227,6 +227,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     preview.stop();
     session = s;
     rememberExpedition(s, name); // (before the Game: its orientation card reads this campaign's entry)
+    if (how === "join") quietOrientationForJoiner(s.code); // (D-101: the welcome card is for the expedition you start, not one somebody else is already running)
     game = new Game(stage, s, controls, hud, debugEl, link);
     settingsSheet().inGame = true; // (the records cannot be erased under a room that would save them straight back)
     if (demoClosed) game.endDemo();
@@ -269,7 +270,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
       const done = patient(progress, "Presenting your code...");
       const s = await Session.join(code, name, look).finally(done);
       progress("Reply received. Packing the trunks...");
-      await enter(s, name);
+      await enter(s, name, "join");
     },
     // a dormant campaign comes back by its code, for a former member only (D-035): the expedition resumes at HQ with its ledger
     // (a demo saves nothing, so there is nothing to resume: the handler is absent and the door never offers it)
@@ -294,7 +295,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
             }
             done();
             progress("The file is found. Packing the trunks...");
-            await enter(s, name);
+            await enter(s, name, "resume");
           },
         }),
   });

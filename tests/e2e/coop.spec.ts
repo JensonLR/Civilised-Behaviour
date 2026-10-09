@@ -49,6 +49,9 @@ test("two players share a campaign, move with prediction, see each other", async
   b.on("pageerror", (e) => errors.push(e.message));
   await start(b, "Bertram", code);
   await expect.poll(async () => (await hook(a)).players, { timeout: 30_000 }).toBe(2);
+  // D-101: the welcome card is for the expedition you start: Ada, who founded it, is shown it; Bertram, who joined it running, is not
+  await expect(a.locator("#hud .orientation")).toBeVisible({ timeout: 30_000 });
+  await expect(b.locator("#hud .orientation")).toBeHidden();
 
   // Player A holds W until they have travelled 3 m. Polling the displacement (not the clock)
   // keeps this valid on software-rendered CI where frames take ~100 ms.

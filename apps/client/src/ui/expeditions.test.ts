@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EXPEDITIONS_KEY, MAX_EXPEDITIONS, ageText, cleanName, clearOrientProgress, expeditionMeta, forgetExpedition, getOrientProgress, listExpeditions, mostRecentExpedition, noteExpedition,
-  parseExpeditions, serializeExpeditions, setOrientProgress, upsertExpedition, withoutExpedition, type Expedition,
+  parseExpeditions, quietOrientationForJoiner, serializeExpeditions, setOrientProgress, upsertExpedition, withoutExpedition, type Expedition,
 } from "./expeditions.ts";
 
 /** The local "Your expeditions" record (D-039): validated on read, versioned, capped, and safe against corrupt or hostile storage. */
@@ -131,6 +131,16 @@ describe("the stored record", () => {
     expect(listExpeditions(NOW).map((e) => e.code)).toEqual(["K7M2Q"]);
     forgetExpedition("K7M2Q");
     expect(localStorage.getItem(EXPEDITIONS_KEY)).toBeNull(); // an empty list leaves no key behind
+  });
+
+  it("D-101: a joiner of a running expedition is not put through the welcome card; progress already kept there is left alone", () => {
+    noteExpedition("W4X7Z", {}, NOW);
+    quietOrientationForJoiner("W4X7Z");
+    expect(getOrientProgress("W4X7Z")).toEqual({ done: 0, skipped: true });
+    noteExpedition("K7M2Q", {}, NOW);
+    setOrientProgress("K7M2Q", { done: 5, skipped: false });
+    quietOrientationForJoiner("K7M2Q");
+    expect(getOrientProgress("K7M2Q")).toEqual({ done: 5, skipped: false });
   });
 
   it("orientation progress is per code, leaves lastPlayed alone, and is not created for an unknown campaign", () => {
