@@ -1209,6 +1209,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         cs.crew = 0;
         cs.shells = CANNON.shells;
         cs.fired = 0;
+        cs.kind = 0;   // (D-092: an unset schema field is undefined, not 0)
         this.state.cannons.set(String(i), cs);
       });
     }

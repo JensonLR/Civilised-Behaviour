@@ -310,7 +310,7 @@ export class Combat {
         return;
       }
       const rest = st.kind === 1 ? st.yaw : CANNON_SPOTS[k0 - 1]?.yaw ?? st.yaw;
-      next.push({ id: `cannon:${id}`, kind: st.kind, gun: st.kind === 1 ? 0 : k0 - 1, st, x: st.x, y: st.y, z: st.z, restYaw: rest, load: 0, fuse: 0, lighter: "", operating: new Set(), shotNo: 0, crank: 0, rounds: st.kind === 1 ? st.progress : 0 });
+      next.push({ id: `cannon:${id}`, kind: st.kind === 1 ? 1 : 0, gun: st.kind === 1 ? 0 : k0 - 1, st, x: st.x, y: st.y, z: st.z, restYaw: rest, load: 0, fuse: 0, lighter: "", operating: new Set(), shotNo: 0, crank: 0, rounds: st.kind === 1 ? st.progress : 0 });
     });
     for (const c of had.values()) for (const id of c.operating) { const p = this.host.players.get(id); if (p) p.flags &= ~FLAG.OPERATING; }
     this.cannons.length = 0;
