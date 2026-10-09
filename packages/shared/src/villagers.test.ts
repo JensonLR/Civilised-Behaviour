@@ -211,6 +211,38 @@ describe("Hollowmere's folk: where they are", () => {
     expect(visibleWet).toBeLessThan(visibleDry);
   });
 
+  it("nobody stands in anybody: two people at work, idling or sheltering are never in one place, and only a seat is sat on (a bench's overflow stands)", () => {
+    // (two gossips stood on one paving stone, two readers sat in one body on one bench seat, a crowd sheltered in one body under the hall's porch)
+    for (const seed of [7, 42]) {
+      const f = buildFolk(createArena(seed), seed);
+      const poses = f.roster.map(() => createVillagerPose());
+      for (const rain of [0, 1]) {
+        let closest = Infinity;
+        let where = "";
+        for (let ms = 0; ms < (24 * 3600 * 1000) / 30; ms += 4000) {
+          const c = clockAt(seed, (ms / 3_600_000) * 48, ms, rain);
+          poses.forEach((p, i) => villagerAt(f, i, c, p));
+          for (let i = 0; i < poses.length; i++) {
+            const a = poses[i]!;
+            if (!a.visible) continue;
+            if (a.seated) expect(f.nav.stations[a.station]!.seat, `${f.roster[i]!.name} sits off a seat`).toBe(true);
+            if (a.act === "walk") continue;
+            for (let j = i + 1; j < poses.length; j++) {
+              const b = poses[j]!;
+              if (!b.visible || b.act === "walk") continue;
+              const d = Math.hypot(a.x - b.x, a.z - b.z);
+              if (d < closest) {
+                closest = d;
+                where = `${f.roster[i]!.name} (${a.act} at ${f.nav.stations[a.station]!.key}) and ${f.roster[j]!.name} (${b.act} at ${f.nav.stations[b.station]!.key}), ${d.toFixed(2)} m apart`;
+              }
+            }
+          }
+        }
+        expect(closest, `seed ${seed} rain ${rain}: ${where}`).toBeGreaterThanOrEqual(0.6);
+      }
+    }
+  }, 240_000);
+
   it("friends who meet face each other, close enough to talk", () => {
     const f = buildFolk(createArena(7), 7);
     const p = createVillagerPose();
