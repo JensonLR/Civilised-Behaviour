@@ -63,7 +63,76 @@ const steward: ParleyScript = {
   },
 };
 
+/**
+ * D-094, the Great Grey: the Crown's Master of the Royal Hunt (who sells the licence to shoot it: `pay`) and the Syndicate's menagerie agent (who will buy it alive: `propose` agrees the
+ * price and opens his pen). The template (scenarios/greatGrey.ts) reads what each result MEANS. Satire aimed at the Society's trophy-hunting and the Syndicate's commerce, not at the drovers.
+ */
+const FIELD = "A word at the barley's edge";
+const master_of_hunt: ParleyScript = {
+  speaker: "Lady Isolde Thrushcote, Master of the Royal Hunt",
+  frame: { heading: FIELD, asked: "Licence: £{price} · Round {round} · The Master seems {mood}." },
+  open: [
+    "The Master of the Royal Hunt looks up from her game book. \"Every beast on the grassland is the Crown's,\" she says, \"including that one, who does not know it. A licence to take him is £{price}. Without one, it is poaching, and I write poaching in red.\"",
+    "\"You are the Society,\" says the Master, in the tone of one identifying a weed. \"You will want to shoot him. Everybody from the Society wants to shoot something. The licence is £{price}, and I would remind you that he charges.\"",
+  ],
+  round2: [
+    "\"The drovers will tell you he is the luck of the herds,\" says the Master, \"and they are right, and the barley is still being eaten. Walk at him from the far side and he will walk away from you, home to their camp. Shoot him and I want the licence fee first. The fee is £{price}.\"",
+    "\"Between ourselves,\" says the Master, \"the Crown would be as happy to see him walked home as shot, and happier than to see him in a Syndicate cage. But if you mean to shoot, it is £{price}, and you will aim for the head, which is where he keeps his opinions.\"",
+  ],
+  walk: "You step back. The Master returns to her game book and writes something short.",
+  hostile: "The Master closes her game book on its pencil. \"I have written that down,\" she says, \"and I have written it down in red.\"",
+  flatter: {
+    ok: [
+      "\"The Society has manners, now?\" says the Master. \"Unexpected. £{price}, then, and I will lend you the Crown's best loader's advice: do not stand in front of him.\"",
+      "\"You flatter the Crown's grassland,\" says the Master, \"which is beautiful, and which you are about to shoot on. £{price}.\"",
+    ],
+    fail: [
+      "\"Flattery is not legal tender on the Crown's grass,\" says the Master. \"£{price}.\"",
+      "\"I have been flattered by better shots than you,\" says the Master. \"Most of them are buried in the barley. £{price}.\"",
+    ],
+  },
+  deal: { paid: "The Master writes out the licence and blots it. \"One beast, grey, by the Society's hand. He charges. I have said that twice now. I will not say it at the inquest.\"" },
+  short: "\"The Crown does not give credit to guests,\" says the Master. \"Least of all guests with rifles.\"",
+  options(round, p): readonly Opt[] {
+    return round === 1
+      ? [
+          { key: "pay", label: `Buy a licence to shoot him (£${p})`, hint: "A shot without one is poaching on the Crown's grass.", cost: p },
+          { key: "ask", label: "Ask what the Crown would rather", hint: "She has opinions about the Society, and about the bull.", cost: 0 },
+          { key: "flatter", label: "Admire the Crown's grassland", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
+          walk,
+        ]
+      : [{ key: "pay", label: `Buy a licence to shoot him (£${p})`, hint: "The licence makes the shot the Crown's business, not a crime.", cost: p }, walk];
+  },
+};
+const menagerie_agent: ParleyScript = {
+  speaker: "Mr. Barnabas Quill-Ferris, Menagerie Agent to the Syndicate",
+  frame: { heading: "A word at the menagerie pen", asked: "Offered: £{price} · Round {round} · The agent seems {mood}." },
+  open: [
+    "The agent leans on his pen by the river with a handbill already printed: THE BEAST OF THE HIGH PASTURE. \"Alive,\" he says, \"he is worth £{price} to my principals, delivered into this pen. Dead, he is worth a wall in Pall Mall, which my principals do not have.\"",
+    "\"A bull like that,\" says the agent, \"tours the river towns for three seasons at twopence a look. I can offer £{price} for him alive, in my pen. The drovers will not like it. The drovers do not buy tickets.\"",
+  ],
+  round2: [
+    "\"Drive him?\" says the agent. \"Walk at him from the far side; he walks away from people. Walk him here, and I drop the bar and count out £{price}. Shoot him and I count out nothing, and so, I suspect, does your Committee.\"",
+    "\"The Master will tell you he is the Crown's,\" says the agent. \"The Crown has sold me three beasts this year already. The price for this one is £{price}, alive, in the pen.\"",
+  ],
+  walk: "You step back. The agent goes back to his handbill and adds an exclamation mark.",
+  hostile: "The agent gets behind his pen, which is a pen for a bull and very solid. \"My principals,\" he says, \"will hear of this.\"",
+  deal: { survey: "\"Done,\" says the agent, and goes to open his pen. \"£{price} for the bull, alive, in the pen. Alive is the important word. Write it on your hand.\"" },
+  short: "\"I am buying,\" says the agent, \"not selling.\"",
+  options(round): readonly Opt[] {
+    return round === 1
+      ? [
+          { key: "propose", label: "Agree to sell him the bull, alive", hint: "He opens his pen by the river. Drive the bull into it and he pays.", cost: 0 },
+          { key: "ask", label: "Ask how one sells a bull", hint: "Slowly, and from behind.", cost: 0 },
+          walk,
+        ]
+      : [{ key: "propose", label: "Agree to sell him the bull, alive", hint: "Drive it into his pen and he pays.", cost: 0 }, walk];
+  },
+};
+
 export const REAPERS_PARLEYS = {
   reaper,
   steward,
-} as const satisfies Partial<Record<"reaper" | "steward", ParleyScript>>;
+  master_of_hunt,   // D-094
+  menagerie_agent,
+} as const satisfies Partial<Record<"reaper" | "steward" | "master_of_hunt" | "menagerie_agent", ParleyScript>>;

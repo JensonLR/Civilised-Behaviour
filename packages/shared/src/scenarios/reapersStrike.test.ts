@@ -237,21 +237,22 @@ describe("the Reapers' Strike (D-042): the reducer", () => {
   });
 });
 
-describe("Highmark offers both contracts (D-042)", () => {
+describe("Highmark offers all its contracts (D-042, D-094)", () => {
   const outcome = (r: string, t: ScenarioTemplateId) => ({ scenario: t, resolution: r as never, toll: 0, paid: 0, bridge: "intact" as const, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 }, brokePromise: false, seconds: 60, complication: "none" as const, region: "highmark" as const });
-  it("the chair on the first visit (as every save before D-042 was offered), then the two alternate; other regions' history does not count", () => {
+  it("the chair on the first visit (as every save before D-042 was offered), then round the three (the strike, the hunt, the chair); other regions' history does not count", () => {
     let c = newCampaign(9);
     expect(pickHighmarkContract(c)).toBe("succession_dispute");
     expect(pickTemplate(c, "highmark", 4)).toBe("succession_dispute");
     c = applyOutcome(c, { ...outcome("paid", "secure_crossing"), region: "kessar" });
     expect(pickTemplate(c, "highmark", 4)).toBe("succession_dispute");
     const seen: string[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       const t = pickTemplate(c, "highmark", 5 + i)!;
       seen.push(t);
-      c = applyOutcome(c, outcome(t === "succession_dispute" ? "regency" : "barley_lost", t));
+      c = applyOutcome(c, outcome(t === "succession_dispute" ? "regency" : t === "great_grey" ? "grey_driven" : "barley_lost", t));
     }
-    expect(seen).toEqual(["succession_dispute", "reapers_strike", "succession_dispute", "reapers_strike"]);
+    expect(seen).toEqual(["succession_dispute", "reapers_strike", "great_grey", "succession_dispute", "reapers_strike"]);
     expect(c.sites.ends.reapers_strike).toBe("barley_lost");
+    expect(c.sites.ends.great_grey).toBe("grey_driven");
   });
 });

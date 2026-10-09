@@ -31,6 +31,7 @@ import { GameAudio } from "./GameAudio.ts";
 import { ContentAudio } from "./ContentAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
 import { MountView, type RiderPoseLike } from "../render/mounts/MountView.ts";
+import { BeastView } from "../render/BeastView.ts";
 import { Orientation } from "../ui/Orientation.ts";
 import type { SheetKind } from "../ui/orientationLogic.ts";
 import { PlateCache } from "./plates.ts";
@@ -104,6 +105,8 @@ export class Game {
   private readonly tags: NameTags;
   /** Horses and wagons: drawn from `WorldState.mounts`, a ridden horse from its rider's predicted state. */
   private readonly mountView: MountView;
+  /** D-094: beasts (rows with FLAG.BEAST) are drawn here, never as people. */
+  private readonly beasts: BeastView;
   private readonly mountPrompter: MountPrompter;
   /** The first-run orientation card (D-035, R): completed from state the frame already has, never modal. */
   private readonly orientation: Orientation;
@@ -249,6 +252,7 @@ export class Game {
     this.props = new PropViews(stage.scene, stage.outlines);
     this.tags = new NameTags(this.tagLayer);
     this.mountView = new MountView(stage.scene, { outline: stage.outlines });
+    this.beasts = new BeastView(stage.scene, stage.outlines);
     this.rig.occluders = this.mountView; // (a wagon or a horse between the lens and the wearer pulls the follow camera in front of it, as a wall does)
     this.mountPrompter = new MountPrompter(session.room.state, () => session.sessionId);
     this.hud = new Hud(hud);
@@ -313,7 +317,9 @@ export class Game {
     session.room.onMessage("bark", (e: BarkEvent) => this.onBark(e?.id, e?.k, e?.salt));
     session.room.onMessage("cry", (e: CryEvent) => {
       const p = typeof e?.id === "string" ? this.session.room.state.players.get(e.id) : undefined;
-      if (p) this.audio.panic(this.session.value(p, "x"), this.session.value(p, "y") + 1.5, this.session.value(p, "z"), p.look);
+      // (D-094: a beast's cry is a bellow)
+      if (p && BeastView.is(p)) playSfx("bellow", { x: this.session.value(p, "x"), y: this.session.value(p, "y") + 1.3, z: this.session.value(p, "z") });
+      else if (p) this.audio.panic(this.session.value(p, "x"), this.session.value(p, "y") + 1.5, this.session.value(p, "z"), p.look);
       this.actors.get(e.id)?.body.cue("fear", 3.5); // (D-084: the face says it too)
     });
 
@@ -822,6 +828,7 @@ export class Game {
     this.barks.dispose();
     this.tagLayer.remove();
     this.mountView.dispose();
+    this.beasts.dispose();
     this.demoBanner?.dispose();
     this.wishlist?.dispose();
     this.controls.onCommand = undefined;
@@ -865,6 +872,7 @@ export class Game {
     this.mountView.cameraRider = this.session.sessionId; // (your own horse is the one the camera rides over)
     this.mountView.update(dt, this.session.room.state.mounts, this.riderPose);
     this.syncActors(dt);
+    this.beasts.update(dt, this.session.room.state.players, (p, k) => this.session.value(p, k));
     this.hitFx.update(dt);
     this.debris.update(dt);
     this.aftermath.update(dt);
@@ -1113,7 +1121,7 @@ export class Game {
         : heldKind === PropKind.BARREL ? `${use}  Drop     ${throwKey}  Throw     {reload}  Light the fuse` : `${use}  Drop     ${throwKey}  Throw`;
     } else if ((flags & FLAG.DOWNED) === 0) {
       const downedId = findDownedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
-        players.forEach((o, id) => id !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+        players.forEach((o, id) => id !== this.session.sessionId && (o.flags & (FLAG.DRAGGED | FLAG.BEAST)) === 0 && cb(id, o)),   // (D-094: nobody revives a beast)
       );
       if (downedId !== undefined) {
         prompt = `Hold ${use}  Revive ${players.get(downedId)?.name ?? "comrade"}      ${grab}  Drag`;
@@ -1122,7 +1130,7 @@ export class Game {
       } else {
         const id = findInteractTarget<string>(me, (cb) => this.session.room.state.props.forEach((p, k) => cb(k, p)));
         const woundedId = findWoundedTarget<string>(me, CASUALTY.reviveRange, (cb) =>
-          players.forEach((o, pid) => pid !== this.session.sessionId && (o.flags & FLAG.DRAGGED) === 0 && cb(pid, o)),
+          players.forEach((o, pid) => pid !== this.session.sessionId && (o.flags & (FLAG.DRAGGED | FLAG.BEAST)) === 0 && cb(pid, o)),
         );
         if (id !== undefined) {
           const kind = this.session.room.state.props.get(id)?.kind as PropKindId | undefined;
@@ -1333,6 +1341,7 @@ export class Game {
     this.combat?.setPreset();
     for (const a of this.actors.values()) a.body.setOutline(this.stage.outlines);
     this.mountView?.setOutline(this.stage.outlines);
+    this.beasts?.setOutline(this.stage.outlines);
   }
 
   private syncActors(dt: number): void {
@@ -1342,6 +1351,7 @@ export class Game {
     this.plateClock += dt;
     this.plates.beginFrame();
     players.forEach((p: PlayerStateType, id: string) => {
+      if (BeastView.is(p)) return; // (D-094: drawn by the BeastView)
       seen.add(id);
       let a = this.actors.get(id);
       if (!a) {
@@ -1429,6 +1439,20 @@ export class Game {
   private onHit(e: HitEvent): void {
     const a = this.actors.get(e.id);
     const p = this.session.room.state.players.get(e.id);
+    if (p && BeastView.is(p)) {
+      // D-094: a beast: blood where its body is (the gore setting decides what it is), a flinch, a bellow when it goes down, and a pool where it falls
+      const c = this.beasts.centre(e.id);
+      const gore = getGore();
+      if (c) {
+        this.hitFx.burst(c.x, e.zone === ZONE.HEAD ? c.y + 0.1 : c.y, c.z, e.dx, e.dz, e.power, gore);
+        if (gore === "off") this.combat.fx.bodyDust(c.x, c.y, c.z, e.dx, e.dz, e.power);
+        if (e.down) this.hitFx.bleedOut(c.x + e.dx * 0.8, c.z + e.dz * 0.8, 1);
+      }
+      this.beasts.onHit(e.id);
+      if (e.down) playSfx("bellow", { x: this.session.value(p, "x"), y: this.session.value(p, "y") + 1.3, z: this.session.value(p, "z") });
+      this.combat.onHit(e);
+      return;
+    }
     if (!a || !p) return;
     const h = a.body.height;
     const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;

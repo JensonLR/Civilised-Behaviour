@@ -59,6 +59,7 @@ export * from "./raidAftermath.ts";
 export * from "./regions.ts";
 export * from "./travel.ts";
 export * from "./scenario.ts";
+export * from "./beast.ts";
 export * from "./garrison.ts";
 // ---- D-034 expedition slice ----
 export * from "./expeditionTypes.ts";

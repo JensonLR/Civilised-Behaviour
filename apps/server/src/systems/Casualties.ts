@@ -142,7 +142,8 @@ export class Casualties {
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
     // so unrelated hits never consume randomness.
     const target = zoneLimb(zone);
-    if (target !== undefined && this.host.dismemberment() && (p.missing & target) === 0) {
+    // (D-094: a beast's "limbs" are its legs; it is shot down, never taken apart)
+    if (target !== undefined && (p.flags & FLAG.BEAST) === 0 && this.host.dismemberment() && (p.missing & target) === 0) {
       const chance = severChance(amount * Math.max(0, hit.severBias ?? 1), levelBefore);
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
@@ -171,7 +172,7 @@ export class Casualties {
     const pw = Math.min(1, power);
     this.host.emitHit({ id: sessionId, zone, dx, dz, power: pw, down: true, lift: Math.max(0, Math.min(1, lift)) });
     const target = zoneLimb(zone);
-    if (p.npc === 0 || target === undefined || !this.host.dismemberment() || (p.missing & target) !== 0) return;
+    if (p.npc === 0 || (p.flags & FLAG.BEAST) !== 0 || target === undefined || !this.host.dismemberment() || (p.missing & target) !== 0) return;
     const chance = severChance(severDamage * Math.max(0, severBias), woundLevel(p.wounds, zone));
     if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx, dz, pw);
   }

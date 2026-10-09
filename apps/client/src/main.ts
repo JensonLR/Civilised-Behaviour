@@ -53,6 +53,10 @@ if (showcase === "lineup") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runWorld } = await import("./showcase/World.ts");
   runWorld(canvas, params);
+} else if (showcase === "beast") {
+  document.querySelector<HTMLElement>("#menu")!.hidden = true;
+  const { runBeast } = await import("./showcase/Beast.ts");
+  runBeast(canvas, params);
 } else if (showcase === "horses") {
   document.querySelector<HTMLElement>("#menu")!.hidden = true;
   const { runHorses } = await import("./showcase/Horses.ts");

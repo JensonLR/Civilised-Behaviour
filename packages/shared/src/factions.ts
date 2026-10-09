@@ -10,7 +10,9 @@ import { FLAG_FX } from "./powersText.ts";
 import { NEW_RESOLUTIONS, NEW_TEMPLATE_IDS, NEW_TEMPLATE_RESOLUTIONS, isNewTemplate, pluck } from "./regionEndings.ts";
 import { ENGINE_ENDINGS } from "./engineLedger.ts";
 import { RAID_ENDINGS } from "./raidLedger.ts";
+import { HUNT_ENDINGS } from "./huntLedger.ts";
 import { RAID_COPY } from "./raidText.ts";
+import { HUNT_COPY } from "./huntText.ts";
 import { ENGINE_COPY } from "./engineText.ts";
 import { REAPERS_ENDINGS } from "./reapersLedger.ts";
 import { REAPERS_COPY } from "./reapersText.ts";
@@ -259,7 +261,7 @@ export function askingToll(c: CampaignState, p?: { flags: readonly string[] }): 
 
 /** What each past resolution left in the Ward's memory (before decay). */
 const MEMORY: Record<ResolutionId, { gratitude: number; resentment: number; contempt: number }> = {
-  ...pluck(VESPER_ENDINGS, "memory"), ...pluck(SALTMARKET_ENDINGS, "memory"), ...pluck(REAPERS_ENDINGS, "memory"), ...pluck(ENGINE_ENDINGS, "memory"), ...pluck(RAID_ENDINGS, "memory"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "memory"), ...pluck(SALTMARKET_ENDINGS, "memory"), ...pluck(REAPERS_ENDINGS, "memory"), ...pluck(ENGINE_ENDINGS, "memory"), ...pluck(RAID_ENDINGS, "memory"), ...pluck(HUNT_ENDINGS, "memory"),   // D-037 (regionEndings.ts)
   paid: { gratitude: 20, resentment: 0, contempt: 5 },
   bargained: { gratitude: 12, resentment: 0, contempt: 0 },
   bribed: { gratitude: 0, resentment: 10, contempt: 30 },
@@ -330,7 +332,7 @@ export interface Rule {
 }
 
 const RULES: Record<ResolutionId, Rule> = {
-  ...pluck(VESPER_ENDINGS, "rule"), ...pluck(SALTMARKET_ENDINGS, "rule"), ...pluck(REAPERS_ENDINGS, "rule"), ...pluck(ENGINE_ENDINGS, "rule"), ...pluck(RAID_ENDINGS, "rule"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "rule"), ...pluck(SALTMARKET_ENDINGS, "rule"), ...pluck(REAPERS_ENDINGS, "rule"), ...pluck(ENGINE_ENDINGS, "rule"), ...pluck(RAID_ENDINGS, "rule"), ...pluck(HUNT_ENDINGS, "rule"),   // D-037 (regionEndings.ts)
   //                                                     trust fear grievance prosperity playerInf rivalInf
   paid:          { control: "ward",      toll: "asked", ward: { trust: 8,   fear: -3, grievance: -4, prosperity: 6,   playerInfluence: 5,  rivalInfluence: -2 }, need: "arms",      lies: 0, rivalProsperity: 0, rivalGrievance: 0 },
   bargained:     { control: "ward",      toll: "paid",  ward: { trust: 12,  fear: -3, grievance: -8, prosperity: 3,   playerInfluence: 8,  rivalInfluence: -4 }, need: "coin",      lies: 0, rivalProsperity: 0, rivalGrievance: 0 },
@@ -450,7 +452,7 @@ const SUCCESSION_TEXT: Record<Exclude<SiteLedger["succession"], "open">, string>
   sold: "Highmark's Crown has sold its concession to the Syndicate, and kept the hat.",
 };
 /** D-037: the debrief card's line for each ending of the newer regions (authored in `<region>Text.ts`). */
-const END_LINE = { ...pluck(VESPER_COPY, "debrief"), ...pluck(SALTMARKET_COPY, "debrief"), ...pluck(REAPERS_COPY, "debrief"), ...pluck(ENGINE_COPY, "debrief"), ...pluck(RAID_COPY, "debrief") };
+const END_LINE = { ...pluck(VESPER_COPY, "debrief"), ...pluck(SALTMARKET_COPY, "debrief"), ...pluck(REAPERS_COPY, "debrief"), ...pluck(ENGINE_COPY, "debrief"), ...pluck(RAID_COPY, "debrief"), ...pluck(HUNT_COPY, "debrief") };
 const CONTROL_TEXT: Record<CrossingControl, string> = {
   ward: "The Ward holds the crossing.", society: "The Society holds the crossing, which the Ward will remember.",
   rival: "The Syndicate holds the crossing and has put up a sign about it.", contested: "Nobody holds the crossing; there is nothing left to hold.",

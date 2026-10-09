@@ -281,14 +281,16 @@ export class Scenario {
   /** A hit landed (Casualties.damage). `down` = this hit put the victim down. Tallies and first blood are counted from here. */
   onDamage(victim: string, attacker: string, _zone: number, down: boolean): void {
     if (!this.started || this.s.phase === "resolved") return;
+    // D-094: a beast is not a casualty (nobody's wounded, no civilian harmed): its fall reaches the template as an actor's (`observeActors`); a shot at it is still a shot
+    const beast = ((this.host.players.get(victim)?.flags ?? 0) & FLAG.BEAST) !== 0;
     const add: Partial<CasualtyTally> = {};
-    if (!this.woundedSeen.has(victim)) {
+    if (!beast && !this.woundedSeen.has(victim)) {
       this.woundedSeen.add(victim);
       add.wounded = 1;
     }
-    if (down) add.downed = 1;
+    if (down && !beast) add.downed = 1;
     const sp = this.bySpecKey.get(victim);
-    if (sp && down) {
+    if (sp && down && !beast) {
       if (sp.side === "ward") add.garrisonKilled = 1;
       else if (sp.side === "rival") add.rivalKilled = 1;
       else if (sp.side === "neutral") add.civiliansHarmed = 1;
@@ -348,13 +350,14 @@ export class Scenario {
   /** An escort (`boards`) standing near a standing member of the party when it sails gets into the boat with them: it has arrived. */
   private board(): void {
     for (const a of this.def.observe.actors) {
-      if (!a.boards || this.actorDone.has(`${a.id}:arrived`) || this.actorDone.has(`${a.id}:down`)) continue;
+      const name = a.as ?? a.id;
+      if (!a.boards || this.actorDone.has(`${name}:arrived`) || this.actorDone.has(`${name}:down`)) continue;
       const row = this.host.cast.row(a.id);
       if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
       const near = this.real.some((p) => p.connected && (p.flags & FLAG.DOWNED) === 0 && Math.hypot(p.x - row.x, p.z - row.z) <= BOARD_R);
       if (!near) continue;
-      this.actorDone.add(`${a.id}:arrived`);
-      this.apply({ t: "actor", id: a.id, state: "arrived" });
+      this.actorDone.add(`${name}:arrived`);
+      this.apply({ t: "actor", id: name, state: "arrived" });
     }
   }
 
@@ -575,6 +578,7 @@ export class Scenario {
 
   private observeActors(): void {
     for (const a of this.def.observe.actors) {
+      const name = a.as ?? a.id;
       let pos: { x: number; z: number } | undefined;
       let isDown = false;
       if (a.id === "wagon") pos = this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : undefined;
@@ -584,21 +588,21 @@ export class Scenario {
       }
       if (!pos) continue;
       if (isDown) {
-        if (!this.actorDone.has(`${a.id}:down`)) {
-          this.actorDone.add(`${a.id}:down`);
-          this.apply({ t: "actor", id: a.id, state: "down" });
+        if (!this.actorDone.has(`${name}:down`)) {
+          this.actorDone.add(`${name}:down`);
+          this.apply({ t: "actor", id: name, state: "down" });
         }
         continue;
       }
       if (!a.goal) continue;
       const d = Math.hypot(pos.x - a.goal.x, pos.z - a.goal.z);
-      if (!this.actorDone.has(`${a.id}:arrived`) && d <= a.goal.r) {
-        this.actorDone.add(`${a.id}:arrived`);
-        this.apply({ t: "actor", id: a.id, state: "arrived" });
-      } else if (a.leaves && this.actorDone.has(`${a.id}:arrived`) && d > a.goal.r + LEAVE_MARGIN) {
+      if (!this.actorDone.has(`${name}:arrived`) && d <= a.goal.r) {
+        this.actorDone.add(`${name}:arrived`);
+        this.apply({ t: "actor", id: name, state: "arrived" });
+      } else if (a.leaves && this.actorDone.has(`${name}:arrived`) && d > a.goal.r + LEAVE_MARGIN) {
         // (D-086: out past a margin, so a man on the line does not flicker in and out)
-        this.actorDone.delete(`${a.id}:arrived`);
-        this.apply({ t: "actor", id: a.id, state: "left" });
+        this.actorDone.delete(`${name}:arrived`);
+        this.apply({ t: "actor", id: name, state: "left" });
       }
     }
   }

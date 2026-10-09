@@ -1,9 +1,20 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-09 (D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-09 (D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-094 (2026-10-09): the Great Grey.** The GDD's "hunt", as Highmark's third contract, and the game's first animal you can hunt. Fourteen templates now.
+  - **The job.** The herds' old grey sire is in the Reapers' barley. You can:
+    - shoot him for the Club's wall (lawfully, with the Master of the Royal Hunt's licence, or as poaching without it);
+    - drive him back to his herd on the west grass; he walks away from people, jinks, and drifts back to the barley if left;
+    - sell him alive to the Syndicate's menagerie agent, by driving him into the agent's pen.
+    The harvest bell is the clock. Wounded, he charges and gores.
+  - **Endings.** Trophy (won), driven home (won), sold (partial), escaped (lost), abandoned.
+  - **How it is built.** A beast is an NPC row with `FLAG.BEAST`: its own hit shapes for every shot and blast, its own health, never a limb lost or a revive, not a casualty, and a brain that grazes, shies, bolts and charges. The client draws it as an animal (`BeastView`) with a bellow. One actor can be watched under several names.
+  - **Tested.** Shared (hit shapes, reducer, spots), server (a real room: a real rifle ball, the charge and the horns, two endings) and bots (driven in 42 s; licensed shot in 24 s).
+  - **Looked at.** Software-rendered stills of the beast grazing, walking, running and down.
+  - **Limits.** Unplayed by a person; a horse is not yet more frightening to him than a walker.
 - **D-093 (2026-10-09): the Lost Survey.** The GDD's "missing expedition", as the Saltmarket's third contract. Thirteen templates now.
   - **The job.** The Society's surveyor is held with his field books at a stilt hut in the north-west reeds until the Houses' harbour dues are paid. Follow his trail (a ranging rod by the bridge, chalk on the windpump) or just find the hut; pay the Collector, cede the chart, sell the Houses the survey, talk the surveyor into leaving his books, or break the two wardens and take them. Then walk him to the quay before the tide comes into the reeds.
   - **Endings.** Home with his books (won), home without them (partial), sold with his survey (partial), lost to the tide or on the way (lost), abandoned.

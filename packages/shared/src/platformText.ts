@@ -83,6 +83,7 @@ export const ACHIEVEMENT_TEXT: Readonly<Record<AchievementId, { title: string; b
   not_today_gentlemen: { title: "Not Today, Gentlemen", blurb: "See off the Syndicate's armed debt collectors and keep their collection bag." },
   perseverance: { title: "Perseverance", blurb: "Run a railway to a town at Kessar. The engine is called Perseverance and frequently is." },
   dividend_day: { title: "Dividend Day", blurb: "Open a works beside an outpost. Its chimney is the tallest thing for miles; its neighbours have noticed." },
+  luck_of_the_herds: { title: "The Luck of the Herds", blurb: "Walk the Great Grey home to his herd without firing a shot. The Club's wall can wait." },
   nineteen_canals: { title: "Nineteen Canals, Two Twice", blurb: "Walk the Society's surveyor out of the delta with his field books. The Houses will remember the page numbers." },
   mind_the_handle: { title: "Mind the Handle", blurb: "Have the works cast a crank gun for the Society's stockades. It jams only at the moment of greatest interest." },
 };

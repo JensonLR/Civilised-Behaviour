@@ -63,7 +63,9 @@ export interface ObserveSpec {
    * with it standing near one of them, it has arrived (D-041: a rescuer who ran to the boat with the hostage ten metres behind had brought him home). `leaves` (D-086): it can
    * walk back out: `left` once it is a few metres outside `goal`, and `arrived` again if it comes back (a raider who reached the yard and then fled is no longer in it).
    */
-  actors: { id: string; goal?: { x: number; z: number; r: number }; boards?: boolean; leaves?: boolean }[];
+  actors: { id: string; goal?: { x: number; z: number; r: number }; boards?: boolean; leaves?: boolean;
+    /** D-094: the name this watch reports under (default `id`): one NPC watched for two goals is two entries, `beast@fold` and `beast@pen`, each with its own name. */
+    as?: string }[];
   /** Groups whose members the runner may name in `hostile`/tally (everything else is the party's side). */
   hostileGroups: string[];
 }

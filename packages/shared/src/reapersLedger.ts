@@ -45,14 +45,14 @@ export const REAPERS_ENDINGS: Record<ReapersEnding, EndingNumbers> = {
 export const REAPERS_FAVOUR: FavourExtra = { reapers: ["honest_measure"] };
 
 /**
- * Which of Highmark's two contracts the campaign offers next (called by `pickTemplate(c, "highmark", ...)`; pure and deterministic). The first visit is the chair (the contract every Highmark save
- * before D-042 was offered, so an old campaign's first trip is the one it would have had); after that the region alternates, so a party that keeps coming back sees both and never the same twice
- * running. Kessar's weights are untouched (backcompat.test.ts hashes them).
+ * Which of Highmark's three contracts the campaign offers next (called by `pickTemplate(c, "highmark", ...)`; pure and deterministic). The first visit is the chair (the contract every Highmark save
+ * before D-042 was offered, so an old campaign's first trip is the one it would have had); after that the region goes round, the chair, the strike, the hunt (D-094), so a party that keeps coming
+ * back sees all three and never the same twice running. Kessar's weights are untouched (backcompat.test.ts hashes them).
  */
 export function pickHighmarkContract(c: CampaignState): ScenarioTemplateId {
   let last: ScenarioTemplateId | undefined;
   for (const h of c.history) if (h.region === "highmark") last = h.template;
-  return last === "succession_dispute" ? "reapers_strike" : "succession_dispute";
+  return last === "succession_dispute" ? "reapers_strike" : last === "reapers_strike" ? "great_grey" : "succession_dispute";
 }
 
 /** The complications the strike may be dealt (existing `ComplicationId`s only; the chaos director spreads this into `COMPLICATION_POOL`): rain brings the rain forward, outriders the strike-breakers' barge, fog delays both. */

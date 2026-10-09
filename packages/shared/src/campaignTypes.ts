@@ -20,7 +20,8 @@ export type ScenarioTemplateId = "secure_crossing" | "hostage_rescue" | "convoy_
   | "reapers_strike"
   | "winding_engine"   // D-044: Vesper's third
   | "outpost_raid"   // D-045: Kessar's fifth (only while the Syndicate means to raid the party's outpost)
-  | "lost_survey";   // D-093: the Saltmarket's third (the GDD's missing expedition)
+  | "lost_survey"   // D-093: the Saltmarket's third (the GDD's missing expedition)
+  | "great_grey";   // D-094: Highmark's third (the GDD's hunt)
 export type ResolutionId =
   | "paid" | "bargained" | "bribed" | "forced" | "sabotaged" | "rival_secured" | "abandoned"
   | "ransomed" | "rescued" | "slipped_away" | "hostage_lost" | "seized" | "tipped_off" | "burned" | "passed" | "mediated" | "sided_ward" | "sided_syndicate" | "provoked" | "escalated"
@@ -37,7 +38,9 @@ export type ResolutionId =
   // D-045, Kessar: the Raid on the Post (outpost_raid)
   | "post_held" | "post_burned" | "protection_paid"
   // D-093, the Saltmarket Delta: the Lost Survey (lost_survey)
-  | "survey_home" | "chart_ceded" | "survey_sold" | "survey_lost";
+  | "survey_home" | "chart_ceded" | "survey_sold" | "survey_lost"
+  // D-094, Highmark: the Great Grey (great_grey)
+  | "grey_trophy" | "grey_driven" | "grey_sold" | "grey_escaped";
 export type ComplicationId = "none" | "rival_scouts" | "rain" | "reinforcements" | "rival_bid" | "outriders" | "ward_patrol" | "fog" | "stray_shot";
 export interface CrossingState { bridge: BridgeState; control: CrossingControl; toll: number; tollPaidTotal: number; bribed: boolean; exposed: boolean }  // toll in pounds per crossing (0 = free)
 export interface CasualtyTally { wounded: number; downed: number; limbsLost: number; garrisonKilled: number; garrisonRouted: number; civiliansHarmed: number; rivalKilled: number }
@@ -105,7 +108,8 @@ export type ParleyKind = "warden" | "ransom" | "ward_post" | "surveyor" | "ford_
   | "reaper" | "steward"   // D-042: the Reapers' Strike (the Compact's Foreperson, the Steward of the Granary)
   | "engineer"   // D-044: the Winding Engine (the Syndicate's engineer at the headframe)
   | "raid_captain"   // D-045: the Raid on the Post (the Syndicate's raiding captain)
-  | "dues_collector" | "lost_surveyor";   // D-093: the Lost Survey (the Houses' Collector of Canal Dues, the Society's surveyor)
+  | "dues_collector" | "lost_surveyor"   // D-093: the Lost Survey (the Houses' Collector of Canal Dues, the Society's surveyor)
+  | "master_of_hunt" | "menagerie_agent";   // D-094: the Great Grey (the Crown's Master of the Royal Hunt, the Syndicate's menagerie agent)
 export type TalkResult = "open" | "close" | "hostile" | "paid" | "bargained" | "bribed" | "ransom" | "survey" | "learn" | "tell" | "envelope" | "tip";
 export type ScenarioEffect = "garrison_alert" | "garrison_stand_down" | "gate_open" | "arm_charge" | "rival_advance" | "commit";
 /** What a template asks the server to DO (the runner turns each into Cast / Mounts / host calls). Sites are named in KESSAR_SITES / KESSAR_ANCHORS. */
@@ -118,7 +122,7 @@ export type ScenarioFx =
 export type StationKind = "map" | "paper" | "dock" | "pier" | "warden" | "loadout" | "foundation" | "court" | "post";   // D-036: "court" = a person of Highmark's court (the chamberlain, a claimant), acted on through the scenario; D-037: "post" = the same for any later region (a foreman, a clerk, a customs shed)
 export interface UseStation { id: string; kind: StationKind; x: number; z: number; r: number; prompt: string }
 export const NPC = { NONE: 0, SENTRY: 1, WARDEN: 2, RIVAL_GUARD: 3, RIVAL_SURVEYOR: 4, DESERTER: 5, HOSTAGE: 6, DRIVER: 7, PORTER: 8, HIRED_RIFLE: 9, SURGEON: 10, CHAMBERLAIN: 11, CLAIMANT: 12, COURT_GUARD: 13, HERDER: 14,
-  FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20, RAIDER: 21 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three; D-047: the Syndicate's torch-bearing raiders)
+  FOREMAN: 15, MINER: 16, MOURNER: 17, CUSTOMS: 18, BARGEMAN: 19, FACTOR: 20, RAIDER: 21, BEAST: 22 } as const;   // PlayerState.npc (append-only; D-034, D-036, D-037: Vesper's three, then the Saltmarket's three; D-047: the Syndicate's torch-bearing raiders; D-094: a beast, the hunt's quarry, not a person)
 export const NPC_CAP = 24, FOLLOWER_CAP = 4, SETTLED_DAYS = 3, HOSTAGE_DEADLINE_S = 480, CONVOY_DEPART_S = 60, BORDER_ESCALATE_S = 240, NAME_TAG_RANGE = 30, SAIL_SECONDS = 6, ARRIVE_TIMEOUT_S = 30, PROPOSE_TIMEOUT_S = 20, RIVAL_ARRIVES_S = 420, RIVAL_PARLEY_S = 60, RESOLVED_LINGER_S = 45;
 /** D-070: how far up the shore (metres, toward the interior: -z on every abroad map) the party's arrival ring stands from its landing, so the first frame is the land and not the jetty. */
 export const ARRIVAL_INLAND = 4;
