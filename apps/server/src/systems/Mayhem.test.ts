@@ -78,6 +78,19 @@ describe("D-084: the bill as the fight happens", () => {
     expect(m.bill.chain).toBe(3);
   });
 
+  it("powder nobody in the party lit is news, not the party's bill (the wagon's accident, a guard's stray round)", () => {
+    const { m, printed, run } = setup("secure_crossing");
+    for (let i = 0; i < 5; i++) m.onKeg("npc:accident");
+    run(6);
+    m.onKeg("npc:g1");
+    run(GAP + 6);
+    expect(m.bill.kegs).toBe(0);
+    expect(m.bill.chain).toBe(0);
+    expect(printed.some((t) => /kegs/i.test(t))).toBe(true);
+    m.onKeg("npc:hand"); // (a hired hand's is the expedition's)
+    expect(m.bill.kegs).toBe(1);
+  });
+
   it("the party's rounds are counted (the Temperance League listens); nobody else's", () => {
     const { m } = setup();
     m.onShot("npc:s1");

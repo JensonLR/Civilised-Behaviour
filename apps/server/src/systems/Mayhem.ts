@@ -194,13 +194,17 @@ export class Mayhem {
   /** A keg went up (`owner`: whoever set off the first of its chain; "" or an accident's owner for nobody's hand). */
   onKeg(owner: string): void {
     const b = this.bill;
-    b.kegs++;
+    const ours = this.side(owner) === "party";
     this.runChain = this.t - this.lastKegAt <= CHAIN_S ? this.runChain + 1 : 1;
     this.lastKegAt = this.t;
-    if (this.runChain > b.chain) b.chain = this.runChain;
-    if (this.runChain === 3 && this.side(owner) === "party") this.bark(owner, "chain");
+    // (the bill and the Ordnance Board count the party's powder only: an accident's chain, or a guard's stray round in his own store, is news, not the party's spectacle)
+    if (ours) {
+      b.kegs++;
+      if (this.runChain > b.chain) b.chain = this.runChain;
+    }
+    if (this.runChain === 3 && ours) this.bark(owner, "chain");
     if (this.runChain >= 2) {
-      const by = this.side(owner) === "party" ? this.name(owner) : "";
+      const by = ours ? this.name(owner) : "";
       // (one line per chain: a later, longer one replaces the queued shorter one)
       this.queue = this.queue.filter((q) => q.f.k !== "chain");
       this.say({ k: "chain", kegs: this.runChain, by });
