@@ -71,7 +71,7 @@ describe("D-086: the contracts' terms, held to the code", () => {
 describe("D-086: the Society asks for nothing the contract forbids, or cannot give", () => {
   it("where fighting loses the contract (and at the mine) only the quiet commissions are dealt", () => {
     for (const id of TEMPLATE_IDS) {
-      expect(quietOnly(id), id).toBe(TERMS[id].fighting === "forbidden" || id === "mine_rescue");
+      expect(quietOnly(id), id).toBe(TERMS[id].fighting === "forbidden" || id === "mine_rescue" || id === "triangulation");
       if (!quietOnly(id)) continue;
       for (let seed = 1; seed < 40; seed++) for (let day = 1; day < 8; day++) expect(REQUESTS[dealRequest(seed, day, id)].quiet, `${id} ${seed}/${day}`).toBe(true);
     }

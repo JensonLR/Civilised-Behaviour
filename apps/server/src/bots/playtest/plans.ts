@@ -1,4 +1,4 @@
-import { BUTTON, FLAG, OUTPOST_SITES, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, SALTMARKET_SURVEY as SU, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
+import { BUTTON, FLAG, OUTPOST_SITES, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, SALTMARKET_SURVEY as SU, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, VESPER_TRIG as VT, TRIG, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
 import type { Pilot } from "./pilot.ts";
 
 export interface Plan {
@@ -109,6 +109,33 @@ async function carry(p: Pilot, kind: number, fx: number, fz: number, tx: number,
   return true;
 }
 
+
+/**
+ * D-096: the Triangulation's legwork. The theodolite in its case from the wharf to each trig station, a round of angles at each with it in hand (one press per cooldown), the west bench while the
+ * Guild keeps no vigil there (it waits its turn), and the terrace by its east ramp (a laden walker cannot jump the side bank). Sets the crate down after; true when the triangle closed.
+ */
+async function triangulate(p: Pilot): Promise<boolean> {
+  if (!(await pickUp(p, PropKind.INSTRUMENT, VT.theodolite.x, VT.theodolite.z))) return false;
+  const booked = (k: number): boolean => p.view?.objectives.find((o) => o.id === `station${k}`)?.done === true;
+  const todo = [1, 0, 2];
+  for (let pass = 0; pass < 4 && todo.length; pass++) {
+    for (const k of [...todo]) {
+      if (k === 1 && p.view?.objectives.some((o) => o.id === "vigil" && !o.done)) { p.note("the vigil is on at the west bench: later"); continue; }
+      const st = VT.stations[k]!;
+      if (k === 2) await p.goTo(24, -38, { within: 2, label: "the foot of the terrace ramp", ms: 90_000 });
+      await p.goTo(st.x + 1, st.z, { within: 1.6, sprint: false, label: `station ${k}`, ms: 120_000 });
+      for (let i = 0; i < TRIG.foulPresses + 3 && !booked(k); i++) {
+        await p.use(`angles at station ${k}`);
+        await p.sleep(TRIG.coolS * 1000 + 150);
+      }
+      p.note(`station ${k} ${booked(k) ? "BOOKED" : "NOT booked"} at ${p.secs.toFixed(0)} s`);
+      if (booked(k)) todo.splice(todo.indexOf(k), 1);
+    }
+    if (todo.length) await p.sleep(5000);
+  }
+  await p.use("set the crate down");
+  return todo.length === 0;
+}
 
 /**
  * D-052 in play: the incident `id` happens now (QA lever: the real deal waits a minute or two and for calm, and is random), and the pilot meets it as a person would:
@@ -717,6 +744,27 @@ export const PLANS: Plan[] = [
       await fight(p, "garrison-", 120_000);
       await fight(p, "sally-", 120_000);
       await p.until(() => p.view?.resolution !== undefined, 20_000, "resolution");
+    },
+  },
+  // D-096: the Triangulation. The crate to the three stations, then the names: the Guild's for its fee at the Cloister, or the whole survey sold to the Syndicate's surveyor.
+  {
+    name: "trig-guild",
+    join: { region: "vesper", scenario: "triangulation", seed: SEED },
+    expect: ["trig_guild"],
+    async run(p) {
+      if (!(await triangulate(p))) return;
+      if (await talkTo(p, "dirge", 2)) await p.pick(/Guild's names/);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
+    },
+  },
+  {
+    name: "trig-sold",
+    join: { region: "vesper", scenario: "triangulation", seed: SEED },
+    expect: ["trig_sold"],
+    async run(p) {
+      if (!(await triangulate(p))) return;
+      if (await talkTo(p, "surveyor-0", 2)) await p.pick(/Sell him/);
+      await p.until(() => p.view?.resolution !== undefined, 8000, "resolution");
     },
   },
 ];

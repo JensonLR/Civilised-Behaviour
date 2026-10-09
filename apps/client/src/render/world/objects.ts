@@ -172,6 +172,40 @@ export function chairGeometry(lod: Lod): BufferGeometry {
   return k.build()!;
 }
 
+/**
+ * D-096: the Society's theodolite in its case, the Triangulation's instrument: a French-polished mahogany box with brass corners and a brass plate, a leather strap over the lid, and the
+ * folded tripod strapped down one side (three ash legs, brass feet), so it never reads as one more ore crate on the wharf. Inside the physics half-extents.
+ */
+export function instrumentGeometry(lod: Lod): BufferGeometry {
+  const [hx, hy, hz] = PROP_DEFS[PropKind.INSTRUMENT].half;
+  const k = new Kit();
+  const w = hx * 2 - 0.08, h = hy * 2 - 0.12, d = hz * 2 - 0.02;
+  const y0 = -hy + h / 2;   // (the box sits on the floor; the strap's loop takes the last few centimetres)
+  const x0 = -0.02;          // (and leans away from the tripod side)
+  const grain: ColourFn = (p, _n, out) => blend(out, P.caseWood, P.caseWoodDark, 0.25 + 0.25 * Math.sin(p.x * 31 + p.y * 7));
+  box(k, [w, h, d], [x0, y0, 0], grain);
+  // the lid's seam, a little below the top, and its brass corners and the maker's plate
+  box(k, [w + 0.006, 0.012, d + 0.006], [x0, y0 + h / 2 - 0.07, 0], P.caseWoodDark);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    if (!lod && sz < 0) continue;
+    box(k, [0.045, 0.045, 0.045], [x0 + sx * (w / 2 - 0.018), y0 + sy * (h / 2 - 0.018), sz * (d / 2 - 0.018)], P.caseBrass);
+  }
+  box(k, [0.12, 0.06, 0.006], [x0, y0 + 0.02, d / 2 + 0.002], P.caseBrass);
+  // the strap: over the lid, down both faces, a loop to carry it by
+  box(k, [0.05, 0.008, d + 0.012], [x0, y0 + h / 2 + 0.004, 0], P.caseStrap);
+  for (const sz of [-1, 1]) box(k, [0.05, h * 0.7, 0.008], [x0, y0 + h * 0.15, sz * (d / 2 + 0.004)], P.caseStrap);
+  k.add(new TorusGeometry(0.06, 0.012, 4, lod ? 10 : 6, Math.PI), { at: [x0, y0 + h / 2 + 0.006, 0], rot: [0, Math.PI / 2, 0], colour: P.caseStrap });
+  // the folded tripod down the open side: three legs, a head and brass feet
+  const tx = x0 + w / 2 + 0.03;
+  for (let i = 0; i < 3; i++) {
+    const z = (i - 1) * 0.045;
+    k.limb([tx, -hy + 0.03, z], [tx, hy - 0.04, z * 0.6], 0.012, 0.014, P.tripod, lod ? 5 : 4);
+    k.add(new CylinderGeometry(0.014, 0.008, 0.03, 5), { at: [tx, -hy + 0.015, z], colour: P.caseBrass });
+  }
+  k.add(new CylinderGeometry(0.03, 0.03, 0.035, lod ? 8 : 6), { at: [tx, hy - 0.03, 0], colour: P.caseBrass });
+  return k.build()!;
+}
+
 /** One geometry pair (visible, hull) per prop kind. */
 export function propGeometry(kind: PropKindId, lod: Lod): BufferGeometry {
   switch (kind) {
@@ -181,6 +215,8 @@ export function propGeometry(kind: PropKindId, lod: Lod): BufferGeometry {
       return bottleGeometry(lod);
     case PropKind.CHAIR:
       return chairGeometry(lod);
+    case PropKind.INSTRUMENT:
+      return instrumentGeometry(lod);
     default:
       return crateGeometry(lod);
   }

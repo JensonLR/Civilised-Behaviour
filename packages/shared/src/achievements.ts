@@ -48,6 +48,7 @@ export const ACHIEVEMENT_RULES: Readonly<Record<AchievementId, Rule>> = {
   nineteen_canals: (c) => ended(c, "survey_home"),   // D-093
   luck_of_the_herds: (c) => ended(c, "grey_driven"),   // D-094
   honours_of_war: (c) => ended(c, "siege_honours"),   // D-095
+  the_aunt_who_waited: (c) => ended(c, "trig_guild"),   // D-096
   /** D-052/D-071: the last incident (it is printed in the next paper, and the client evaluates when it is written). */
   good_samaritan: (c) => c.sites.lastIncident?.result === "helped",
   powder_salvaged: (c) => c.sites.lastIncident?.result === "salvaged",

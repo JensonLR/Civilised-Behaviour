@@ -32,6 +32,7 @@ export const PRESS_GRADE: Readonly<Record<ResolutionId, PressGrade>> = {
   survey_home: "triumph", chart_ceded: "story", survey_sold: "embarrassment", survey_lost: "embarrassment",   // D-093
   grey_trophy: "triumph", grey_driven: "story", grey_sold: "embarrassment", grey_escaped: "embarrassment",   // D-094
   siege_honours: "triumph", siege_stormed: "story", siege_bought: "embarrassment", siege_lifted: "embarrassment",   // D-095
+  trig_guild: "story", trig_committee: "triumph", trig_sold: "embarrassment", trig_outsurveyed: "embarrassment",   // D-096 (the Committee's own names are, to the Committee, the triumph)
   // Highmark's strike (D-042)
   honest_measure: "triumph", bought_back: "story", strike_broken: "embarrassment", barley_lost: "embarrassment",
   // Vesper's engine (D-044)

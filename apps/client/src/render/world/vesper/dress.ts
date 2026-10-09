@@ -1,5 +1,5 @@
 import { BoxGeometry, Color, Float32BufferAttribute, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, SphereGeometry, type BufferGeometry, type Object3D } from "three";
-import { PALETTE, VESPER_STOCK, vesperPlan, type CollisionWorld, type ResolutionId, type ScenarioView } from "./shared.ts";
+import { PALETTE, VESPER_STOCK, VESPER_TRIG, vesperPlan, type CollisionWorld, type ResolutionId, type ScenarioView } from "./shared.ts";
 import { Kit, blend, type ColourFn } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { makeSolid, toonMaterial } from "../toon.ts";
@@ -10,23 +10,35 @@ import { box, planks } from "./structures.ts";
  * into as it digs, and finally an opening (`dug_out`: timber sets and lamps), a breach (`blasted_through`: a black crater and flung rock), a seal (`sealed`: planks, iron and the Company's red plate) or a
  * Guild service (`consecrated`: plum drapes, candles and a bell). The Claim Race's four pegs fly a gilt flag when the party holds them and a green one when the Syndicate does. Every state is one small
  * merged mesh, hidden until the contract asks for it. The state is read from the view's objectives: `timber` ("(n of 3)"), `dig` ("(NN%)"), `peg-0..3` (done = the party's; a text naming the Syndicate = theirs).
+ * D-096, the Triangulation: each trig signal flies the Society's red once its round of angles is booked (`station0..2` done), the Guild's plum on all three when the Guild's names go on the
+ * chart, the Syndicate's green when the survey is sold; and once the Guild's vigil is over (`vigil` done) its candle burns on the west bench signal's cairn.
  */
 
 const P = PALETTE.vesper;
 
+export type TrigFlag = "none" | "party" | "guild" | "rival";
 export interface DressState {
   timber: number;
   dig: number;
   resolution: ResolutionId | undefined;
   pegs: ("none" | "party" | "rival")[];
+  /** D-096: the flag on each trig signal, and the vigil's candle. */
+  trig: TrigFlag[];
+  candle: boolean;
 }
 
-export const NO_DRESS: DressState = { timber: 0, dig: 0, resolution: undefined, pegs: ["none", "none", "none", "none"] };
+export const NO_DRESS: DressState = { timber: 0, dig: 0, resolution: undefined, pegs: ["none", "none", "none", "none"], trig: ["none", "none", "none"], candle: false };
 
 /** Reads the dress off a published view (pure). `undefined` (no contract) dresses nothing. */
 export function dressOf(v: ScenarioView | undefined): DressState {
+  if (v?.template === "triangulation") {
+    const r = v.resolution;
+    const all: TrigFlag | undefined = r === "trig_guild" ? "guild" : r === "trig_sold" ? "rival" : undefined;
+    const trig = [0, 1, 2].map((k): TrigFlag => all ?? (v.objectives.some((o) => o.id === `station${k}` && o.done) ? "party" : "none"));
+    return { ...NO_DRESS, resolution: r, trig, candle: v.objectives.some((o) => o.id === "vigil" && o.done) };
+  }
   if (!v || (v.template !== "mine_rescue" && v.template !== "claim_race")) return NO_DRESS;
-  const out: DressState = { timber: 0, dig: 0, resolution: v.resolution, pegs: ["none", "none", "none", "none"] };
+  const out: DressState = { ...NO_DRESS, timber: 0, dig: 0, resolution: v.resolution, pegs: ["none", "none", "none", "none"] };
   for (const o of v.objectives) {
     if (o.id === "timber") {
       const m = /\((\d+) of \d+\)/.exec(o.text);
@@ -148,11 +160,29 @@ const FLAG_AT = (world: CollisionWorld, i: number): { x: number; y: number; z: n
   return { x: p.x, y: world.terrainHeight(p.x, p.z) + 1.18, z: p.z };
 };
 
+/** D-096: where each trig signal's flag flies (its hoist on the pole, under the vanes) and where the vigil's candle stands (on the west bench cairn's upper ring, beside the pole). */
+const TRIG_FLAG_AT = (world: CollisionWorld, i: number): { x: number; y: number; z: number } => {
+  const s = VESPER_TRIG.signals[i]!;
+  return { x: s.x + 0.05, y: world.terrainHeight(s.x, s.z) + VESPER_TRIG.signalH - 0.95, z: s.z };
+};
+function buildCandle(world: CollisionWorld): BufferGeometry {
+  const s = VESPER_TRIG.signals[1]!;   // (the vigil is at the west bench: VIGIL_STATION)
+  const y = world.terrainHeight(s.x, s.z);
+  const cx = s.x + Math.cos(0.6) * (VESPER_TRIG.signalR - 0.27), cz = s.z + Math.sin(0.6) * (VESPER_TRIG.signalR - 0.27);
+  const k = new Kit();
+  // (bedded in the stone it stands on, the upper ring's top at about y + 0.49: its foot starts well inside)
+  k.limb([cx, y + 0.4, cz], [cx, y + 0.66, cz], 0.032, 0.03, P.companyCream, 6);
+  k.add(new SphereGeometry(0.035, 6, 4), { at: [cx, y + 0.7, cz], scale: [1, 1.5, 1], colour: P.glowLamp });
+  return k.build()!;
+}
+
 export class VesperDress {
   private readonly work: Mesh[] = [];
   private cut!: Mesh;
   private readonly states = new Map<string, Mesh>();
   private flags!: InstancedMesh;
+  private trigFlags!: InstancedMesh;
+  private candle!: Mesh;
   private readonly m4 = new Matrix4();
   private readonly colour = new Color();
   private last = "";
@@ -183,6 +213,16 @@ export class VesperDress {
     }
     this.flags.frustumCulled = false;
     root.add(this.flags);
+    // D-096: the trig signals' flags (one instanced mesh, three slots) and the vigil's candle
+    this.trigFlags = new InstancedMesh(geo, this.flags.material, 3);
+    this.trigFlags.name = "trig_flags";
+    for (let i = 0; i < 3; i++) {
+      this.trigFlags.setMatrixAt(i, this.m4.makeScale(0, 0, 0));
+      this.trigFlags.setColorAt(i, this.colour.set(PALETTE.camp.flagCloth));
+    }
+    this.trigFlags.frustumCulled = false;
+    root.add(this.trigFlags);
+    this.candle = add("trig_candle", buildCandle(world));
     void this.world;
   }
 
@@ -209,12 +249,33 @@ export class VesperDress {
     }
     this.flags.instanceMatrix.needsUpdate = true;
     if (this.flags.instanceColor) this.flags.instanceColor.needsUpdate = true;
+    for (let i = 0; i < 3; i++) {
+      const at = TRIG_FLAG_AT(this.world, i);
+      const f = d.trig[i]!;
+      const s = f === "none" ? 0 : 0.8;
+      this.m4.makeScale(s, s, s).setPosition(at.x, at.y, at.z);
+      this.trigFlags.setMatrixAt(i, this.m4);
+      this.trigFlags.setColorAt(i, this.colour.set(f === "guild" ? P.guildPlum : f === "rival" ? P.synGreen : PALETTE.camp.flagCloth));
+    }
+    this.trigFlags.instanceMatrix.needsUpdate = true;
+    if (this.trigFlags.instanceColor) this.trigFlags.instanceColor.needsUpdate = true;
+    this.candle.visible = d.candle;
+  }
+
+  /** (The tests ask which trig flags fly, by slot.) */
+  trigShown(): boolean[] {
+    const out: boolean[] = [];
+    for (let i = 0; i < 3; i++) {
+      this.trigFlags.getMatrixAt(i, this.m4);
+      out.push(this.m4.elements[0]! > 0);
+    }
+    return out;
   }
 
   /** What is visible now (for the tests): the names of the shown meshes. */
   shown(): string[] {
     const out: string[] = [];
-    for (const m of [...this.work, this.cut, ...this.states.values()]) if (m.visible) out.push(m.name);
+    for (const m of [...this.work, this.cut, ...this.states.values(), this.candle]) if (m.visible) out.push(m.name);
     return out;
   }
 }

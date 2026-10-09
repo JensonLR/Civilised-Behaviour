@@ -218,15 +218,16 @@ describe("Vesper's ledger: the eight endings", () => {
     let c = before;
     let last: ScenarioTemplateId | undefined;
     const seen = new Set<ScenarioTemplateId>();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 16; i++) {   // (D-096: four contracts now; sixteen visits show them all)
       const t = pickTemplate(c, "vesper", 20 + i)!;
       expect(REGION_TEMPLATES.vesper).toContain(t);
       expect(t, "never twice running").not.toBe(last);
       seen.add(t);
       last = t;
-      c = applyOutcome(c, t === "winding_engine" ? { ...OUTCOMES.staked, scenario: "winding_engine", resolution: "engine_fouled", paid: 0 } : OUTCOMES[t === "mine_rescue" ? "sealed" : "staked"]);
+      c = applyOutcome(c, t === "winding_engine" ? { ...OUTCOMES.staked, scenario: "winding_engine", resolution: "engine_fouled", paid: 0 }
+        : t === "triangulation" ? { ...OUTCOMES.staked, scenario: "triangulation", resolution: "trig_guild", paid: 0 } : OUTCOMES[t === "mine_rescue" ? "sealed" : "staked"]);
     }
-    expect(seen.size, "all three of Vesper's contracts come up (D-044: the engine is the third)").toBe(3);
+    expect(seen.size, "all four of Vesper's contracts come up (D-044: the engine is the third; D-096: the survey the fourth)").toBe(4);
     // the same ledger always offers the same thing
     expect(pickVesperContract(c, 5)).toBe(pickVesperContract(c, 5));
     // Kessar's weights and Highmark's single contract are untouched

@@ -6,7 +6,7 @@ import { Rng } from "./rng.ts";
 import type { Terrain } from "./terrain.ts";
 
 /** Prop kinds are numeric on the wire (uint8). Add new kinds at the END only. */
-export const PropKind = { CRATE: 0, BARREL: 1, BOTTLE: 2, CHAIR: 3 } as const;
+export const PropKind = { CRATE: 0, BARREL: 1, BOTTLE: 2, CHAIR: 3, INSTRUMENT: 4 } as const;   // (D-096: the Society's theodolite in its case, the Triangulation's instrument)
 export type PropKindId = (typeof PropKind)[keyof typeof PropKind];
 
 export interface PropDef {
@@ -23,6 +23,7 @@ export const PROP_DEFS: Record<PropKindId, PropDef> = {
   [PropKind.BARREL]: { name: "barrel", shape: "cylinder", half: [0.32, 0.45, 0], mass: 20, carryable: true },
   [PropKind.BOTTLE]: { name: "bottle", shape: "capsule", half: [0.05, 0.1, 0], mass: 0.6, carryable: true },
   [PropKind.CHAIR]: { name: "chair", shape: "box", half: [0.25, 0.4, 0.25], mass: 5, carryable: true },
+  [PropKind.INSTRUMENT]: { name: "theodolite", shape: "box", half: [0.26, 0.3, 0.2], mass: 9, carryable: true },
 };
 
 /**

@@ -7,6 +7,7 @@ import { HILL, JETTY } from "./landscape.ts";
 import { KESSAR_OUTPOST, OUTPOST_SITES } from "./outpost.ts";
 import { RAID_SITES } from "./scenarios/outpostRaid.ts";
 import { SIEGE_SITES } from "./scenarios/countingHouse.ts";
+import { VESPER_TRIG } from "./vesper.ts";
 import { SALTMARKET_ANCHORS, SALTMARKET_SITES, SALTMARKET_SPOTS, SALTMARKET_SURVEY } from "./saltmarket.ts";
 import { SITES } from "./village.ts";
 import { VESPER_ANCHORS, VESPER_SITES, VESPER_STOCK } from "./vesper.ts";
@@ -178,6 +179,10 @@ export const OBJECTIVE_SPOTS: Readonly<Record<ScenarioTemplateId, Readonly<Recor
     take: at("The Counting-House", SIEGE_SITES.factor), terms: at("The factor's counter", SIEGE_SITES.factor), buy: at("The factor's counter", SIEGE_SITES.factor),
     sally0: at("North picket", SIEGE_SITES.pickets[0]!), sally1: at("East picket", SIEGE_SITES.pickets[1]!), sally2: at("South picket", SIEGE_SITES.pickets[2]!),
     storm: at("The Counting-House", SIEGE_SITES.yard), relief: at("The relief", SIEGE_SITES.relief[1]!), yard: at("The Counting-House yard", SIEGE_SITES.yard), home: "home",
+  },
+  triangulation: {   // D-096: the strip walks the unbooked stations in order, then the Dirge-Master (the names), the Syndicate's surveyor (a sale)
+    station0: at("Assay trig station", VESPER_TRIG.stations[0]!), station1: at("West Bench trig station", VESPER_TRIG.stations[1]!), station2: at("Terrace trig station", VESPER_TRIG.stations[2]!),
+    names: at("The Dirge-Master", VESPER_SITES.dirgeMaster), sell: at("Syndicate surveyor", VESPER_TRIG.surveyors[0]!), vigil: at("West Bench trig station", VESPER_TRIG.stations[1]!), home: "home",
   },
   great_grey: {   // D-094: the barley (where the beast is found), its herd (where it is driven), the Master (the licence), the agent's pen (once agreed)
     barley: at("Reapers' barley", HIGHMARK_SITES.strike.barley), out: at("The herd", HIGHMARK_SITES.hunt.fold), licence: at("Master of the Hunt", HIGHMARK_SITES.hunt.master),

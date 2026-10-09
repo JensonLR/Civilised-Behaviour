@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
-import { CLOISTER, PALETTE, hash3, vesperLevel, type CollisionWorld } from "./shared.ts";
+import { CLOISTER, PALETTE, VESPER_TRIG, hash3, vesperLevel, type CollisionWorld } from "./shared.ts";
 import { pane, type LitPane } from "../litWindows.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
@@ -508,6 +508,8 @@ export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, par
     k.limb([b.x, y - 0.2, b.z], [b.x, y + b.top + 0.4, b.z], 0.1, 0.075, P.timber, 6);
     k.add(new SphereGeometry(0.14, 5, 4), { at: [b.x, y + b.top + 0.5, b.z], colour: P.glowLamp });
   }
+  // D-096: the trig signals (their cairns are solid: VESPER_TRIG.signalR)
+  VESPER_TRIG.signals.forEach((s, i) => trigSignal(k, s.x, g(s.x, s.z), s.z, 470 + i * 11, lod));
   // a sign is a board on a post (there was only the post, run up between the two lettered sheets and through their middles): the post stops under the board, braced out to it
   for (const s of plan.signs) {
     const y = g(s.x, s.z);
@@ -516,5 +518,33 @@ export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, par
     for (const sz of [-1, 1]) k.limb([0, 0.95, 0], [0, 1.6, sz * 0.75], 0.03, 0.03, P.timber, 3);
     box(k, [0.09, 0.52, 2.5], [0, 1.85, 0], P.timber);   // (centred on the decal: cloth.ts letters it at 1.85, 5.5 cm out: 1 cm proud of each face)
     k.clearBase();
+  }
+}
+
+/**
+ * D-096: a trig signal, as the Society's advance party raised it: a dry-stone cairn (inside `VESPER_TRIG.signalR`, the collider), an ash pole bedded in it, and at the head a pair of crossed vanes,
+ * whitewashed with a red band, so a surveyor three hundred yards off can lay the cross-hairs on it. The flags the contract flies on it are the dress's (dress.ts).
+ */
+function trigSignal(k: Kit, x: number, y: number, z: number, seed: number, lod: Lod): void {
+  const R = VESPER_TRIG.signalR, H = VESPER_TRIG.signalH;
+  // (pale bench stone, whitewashed on top where the surveyors' lime ran: it has to read from across the gorge, as the cairn did for them)
+  const rock: ColourFn = (p, n, out) => blend(out, P.strataBuff, P.strataBone, 0.35 + Math.max(0, n.y) * 0.5 + 0.1 * Math.sin(p.x * 13 + p.z * 7));
+  // the cairn: a ring of big stones bedded in the ground, a smaller ring on them, a cap stone (each inside the round)
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + h01(seed, i) * 0.5;
+    k.add(new IcosahedronGeometry(0.2, 0), { at: [x + Math.cos(a) * (R - 0.2), y + 0.1, z + Math.sin(a) * (R - 0.2)], scale: [1, 0.8, 1], colour: rock, flat: true, jitter: 0.05, seed: seed + i });
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.6;
+    k.add(new IcosahedronGeometry(0.16, 0), { at: [x + Math.cos(a) * (R - 0.27), y + 0.36, z + Math.sin(a) * (R - 0.27)], scale: [1, 0.8, 1], colour: rock, flat: true, jitter: 0.05, seed: seed + 7 + i });
+  }
+  k.add(new IcosahedronGeometry(0.2, lod ? 1 : 0), { at: [x, y + 0.24, z], scale: [1.1, 1.3, 1.1], colour: rock, flat: true, jitter: 0.04, seed: seed + 13 });
+  k.add(new IcosahedronGeometry(0.14, 0), { at: [x, y + 0.56, z], scale: [1, 0.7, 1], colour: rock, flat: true, jitter: 0.04, seed: seed + 14 });
+  // the pole, and the vanes at its head (two boards, crossed, each with its red band)
+  k.limb([x, y + 0.2, z], [x, y + H - 0.05, z], 0.05, 0.04, P.timberLight, 6);
+  const red = PALETTE.camp.flagCloth;
+  for (const yaw of [0, Math.PI / 2]) {
+    // (three rows of faces, coloured face by face in the board's own frame: the middle row is the band)
+    k.add(new BoxGeometry(0.62, 0.42, 0.025, 1, 3, 1), { at: [x, y + H - 0.32, z], rot: [0, yaw, 0], colour: (p, _n, out) => out.set(Math.abs(p.y) < 0.07 ? red : P.chalk), flat: true, perFace: true });
   }
 }

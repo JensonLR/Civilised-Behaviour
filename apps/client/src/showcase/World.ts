@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { OUTPOST_STAGES, isRegionId, TEMPLATE_RESOLUTIONS, PropKind, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, newTech, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
+import { OUTPOST_STAGES, isRegionId, TEMPLATE_RESOLUTIONS, PropKind, PROP_DEFS, VESPER_TRIG, type PropKindId, applyOutcome, deliverTo, historyPieces, newCampaign, newSettlements, newTech, type OutpostStage, type ScenarioTemplateId, standingHeight, CAMP, FLAG, HILL, JETTY, MILL, PEN, WELL, classifyObstacle, createArena, getBridge, getWayposts, ruinPlan, scatterProps, spawnPoint, villagePlan } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
@@ -98,7 +98,13 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
 
   const props = new PropViews(stage.scene, stage.outlines);
   const line = params.get("propline") === "1"; // one of each kind in a row, for reviewing the props
-  const fake = params.get("props") === "0" ? [] : (line ? [0, 1, 2, 3].map((k, i) => ({ kind: k as 0 | 1 | 2 | 3, x: -0.9 + i * 0.6, z: -3, yaw: 0.6 })) : region !== "hollowmere" ? regionProps(region, seed, world) : scatterProps(seed, world.terrain, 14)).map((s, i) => ({ id: String(i), kind: s.kind, x: s.x, y: world.terrainHeight(s.x, s.z) + 0.4, z: s.z, yaw: s.yaw }));
+  const kinds = Object.keys(PROP_DEFS).map(Number) as PropKindId[];
+  const spawns = params.get("props") === "0" ? [] : line ? kinds.map((k, i) => ({ kind: k, x: -0.3 * (kinds.length - 1) + i * 0.6, z: -3, yaw: 0.6 })) : region !== "hollowmere" ? regionProps(region, seed, world) : scatterProps(seed, world.terrain, 14);
+  // D-096: with the Triangulation's dress asked for (`trig=`), the theodolite in its case where the contract puts it, beside the landing's ore crates
+  if (region === "vesper" && params.has("trig") && params.get("props") !== "0") spawns.push({ kind: PropKind.INSTRUMENT, x: VESPER_TRIG.theodolite.x, z: VESPER_TRIG.theodolite.z, yaw: 0.5 });
+  // (each rests on its own half-height: a capsule's is its cylinder's plus its cap)
+  const rest = (k: PropKindId): number => (PROP_DEFS[k].shape === "capsule" ? PROP_DEFS[k].half[1] + PROP_DEFS[k].half[0] : PROP_DEFS[k].half[1]);
+  const fake = spawns.map((s, i) => ({ id: String(i), kind: s.kind, x: s.x, y: world.terrainHeight(s.x, s.z) + rest(s.kind as PropKindId), z: s.z, yaw: s.yaw }));
   const byId = new Map(fake.map((p) => [p.id, p]));
   const syncProps = (): void =>
     props.sync({ forEach: (cb) => fake.forEach((p) => cb({ kind: p.kind, id: p.id } as never, p.id)) }, (p, f) => {

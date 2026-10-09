@@ -1,4 +1,4 @@
-import type { CampaignState, RegionId, ScenarioTemplateId } from "../campaignTypes.ts";
+import type { CampaignState, RegionId, ScenarioTemplateId, ScenarioView } from "../campaignTypes.ts";
 import { hash3 } from "../rng.ts";
 import { pickHighmarkContract } from "../reapersLedger.ts";
 import { pickSaltmarketContract } from "../saltmarketLedger.ts";
@@ -17,9 +17,10 @@ import { outpostRaidTemplate } from "./outpostRaid.ts";
 import { lostSurveyTemplate } from "./lostSurvey.ts";
 import { greatGreyTemplate } from "./greatGrey.ts";
 import { countingHouseTemplate } from "./countingHouse.ts";
+import { triangulationTemplate } from "./triangulation.ts";
 import { smugglingRunTemplate } from "./smugglingRun.ts";
 import { successionTemplate } from "./succession.ts";
-import type { AnyTemplate } from "./types.ts";
+import { CARRY_KIND, type AnyTemplate } from "./types.ts";
 
 export * from "./types.ts";
 export { crossingSettled, settledDaysLeft } from "./crossing.ts";
@@ -32,6 +33,8 @@ export { RAID, RAID_SITES } from "./outpostRaid.ts";
 export { LOST } from "./lostSurvey.ts";
 export { HUNT } from "./greatGrey.ts";
 export { SIEGE } from "./countingHouse.ts";
+export { TRIG } from "./triangulation.ts";
+export { CARRY_KIND, type CarryKind } from "./types.ts";
 
 /** Every template, by id. The runner (server `Scenario`) is generic over this table. */
 export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
@@ -50,19 +53,34 @@ export const TEMPLATES: Readonly<Record<ScenarioTemplateId, AnyTemplate>> = {
   lost_survey: lostSurveyTemplate as unknown as AnyTemplate,   // D-093: the Saltmarket's third
   great_grey: greatGreyTemplate as unknown as AnyTemplate,   // D-094: Highmark's third
   counting_house: countingHouseTemplate as unknown as AnyTemplate,   // D-095: Kessar's sixth
+  triangulation: triangulationTemplate as unknown as AnyTemplate,   // D-096: Vesper's fourth
 };
-export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike", "winding_engine", "outpost_raid", "lost_survey", "great_grey", "counting_house"];
+export const TEMPLATE_IDS: readonly ScenarioTemplateId[] = ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "succession_dispute", "mine_rescue", "claim_race", "smuggling_run", "flooded_market", "reapers_strike", "winding_engine", "outpost_raid", "lost_survey", "great_grey", "counting_house", "triangulation"];
 /** D-036: the contracts each region offers (the ledger weights WITHIN a region's list; Kessar's four are unchanged). D-042: Highmark has two. */
 export const REGION_TEMPLATES: Readonly<Record<RegionId, readonly ScenarioTemplateId[]>> = {
   hollowmere: [],
   kessar: ["secure_crossing", "hostage_rescue", "convoy_ambush", "border_incident", "outpost_raid", "counting_house"],   // D-045: the raid only while one is due; D-095: the siege only while the Syndicate keeps a post
   highmark: ["succession_dispute", "reapers_strike", "great_grey"],
-  vesper: ["mine_rescue", "claim_race", "winding_engine"],   // D-037; D-044 the engine
+  vesper: ["mine_rescue", "claim_race", "winding_engine", "triangulation"],   // D-037; D-044 the engine; D-096 the survey
   saltmarket: ["smuggling_run", "flooded_market", "lost_survey"],
 };
 export const isTemplateId = (v: unknown): v is ScenarioTemplateId => typeof v === "string" && (TEMPLATE_IDS as readonly string[]).includes(v);
 
 /** What the map room shows as the region's note: the offered contract. */
+/**
+ * D-096: what INTERACT does at a contract's fixed use point with `held` (a prop kind) in your arms, for the HUD, read off the published view (its template, its objectives); `undefined` where
+ * it does nothing there, or no longer (the HUD then says Drop, and the runner lets the press fall through to the room, which drops it). The same ranges and kinds the runner checks
+ * (Scenario.onInteract); the server still decides.
+ */
+export function carryUsePrompt(view: ScenarioView | undefined, x: number, z: number, held: number | undefined): string | undefined {
+  if (view === undefined || held === undefined || view.resolution !== undefined) return undefined;
+  for (const u of TEMPLATES[view.template]?.observe.use ?? []) {
+    if (!u.prompt || !u.at || u.carry === undefined || u.carry === "none" || CARRY_KIND[u.carry] !== held) continue;
+    if (u.until !== undefined && view.objectives.some((o) => o.id === u.until && o.done)) continue;
+    if (Math.hypot(x - u.at.x, z - u.at.z) <= u.r) return u.prompt;
+  }
+  return undefined;
+}
 export const templateNote = (id: ScenarioTemplateId): { title: string; brief: string } => ({ title: TEMPLATES[id].title, brief: TEMPLATES[id].brief });
 
 /** How many recent expeditions a grudge, a weakness or a debt is remembered for when weighting the next contract. */
@@ -96,7 +114,7 @@ export function pickTemplate(c: CampaignState, region: RegionId, seed: number, p
     // the party's own post is due: the post is defended before the Syndicate's is besieged
     counting_house: presence !== undefined && presence.postStage > 0 && !presence.raidDue ? 5 : 0,
     succession_dispute: 0,   // never offered at Kessar
-    mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0, reapers_strike: 0, winding_engine: 0, lost_survey: 0, great_grey: 0,   // (D-037, D-042, D-093, D-094: nor are the later regions' contracts)
+    mine_rescue: 0, claim_race: 0, smuggling_run: 0, flooded_market: 0, reapers_strike: 0, winding_engine: 0, lost_survey: 0, great_grey: 0, triangulation: 0,   // (D-037, D-042, D-093, D-094, D-096: nor are the later regions' contracts)
   };
   const last = c.history[c.history.length - 1]!.template;
   const ids = TEMPLATE_IDS.filter((id) => weights[id] > 0);

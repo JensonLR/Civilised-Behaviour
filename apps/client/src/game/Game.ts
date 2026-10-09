@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, TAG_RANGE, WEAPON, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, TAG_RANGE, WEAPON, carryUsePrompt, WEAPONS, npcKey, seedFromString, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -1115,7 +1115,9 @@ export class Game {
       const spot = this.builtRegion !== "hollowmere" ? findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
       const heldKind = this.heldKind();
       const fuse = this.heldFuse();
-      prompt = spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw`
+      // D-096: a contract's own use point for what is in your arms (a trig station and the theodolite: the same table and ranges the runner checks)
+      const usePrompt = carryUsePrompt(this.scenarioView, this.session.value(me, "x"), this.session.value(me, "z"), heldKind);
+      prompt = usePrompt !== undefined ? `${use}  ${usePrompt}     ${throwKey}  Throw` : spot?.kind === "pier" && heldKind === PropKind.BARREL ? `${use}  Light the charge     ${throwKey}  Throw` : spot?.kind === "foundation" ? `${use}  ${this.foundationText(heldKind as PropKindId | undefined)}     ${throwKey}  Throw`
         // D-054: a keg in your arms can be lit (reload), and a lit one wants throwing (the seconds left are on the prompt: the fuse does not wait for a decision)
         : heldKind === PropKind.BARREL && fuse > 0 ? `${throwKey}  Throw it!  (${Math.ceil(fuse / 10)})     ${use}  Drop`
         : heldKind === PropKind.BARREL ? `${use}  Drop     ${throwKey}  Throw     {reload}  Light the fuse` : `${use}  Drop     ${throwKey}  Throw`;
@@ -1297,7 +1299,7 @@ export class Game {
     const name = this.settlements?.posts[here]?.name ?? "the outpost";
     if (f.standing) {
       if (held === undefined) return `${name}: ${STAGE_LABEL[this.settlements!.posts[here]!.stage]}. Carry crates, barrels and chairs here to keep it alive.`;
-      return held === PropKind.BOTTLE ? "A bottle does not found anything" : `Deliver the ${PROP_DEFS[held].name} to ${name}`;
+      return held === PropKind.BOTTLE || held === PropKind.INSTRUMENT ? `A ${PROP_DEFS[held].name} does not found anything` : `Deliver the ${PROP_DEFS[held].name} to ${name}`;   // (the same kinds settlement.ts refuses)
     }
     const n = Math.min(FOUNDATION_CRATES, f.crates + 1);
     if (held === undefined) return `The foundation: ${f.crates} of ${FOUNDATION_CRATES} crates down${f.ruined ? " (a ruin to raise again)" : ""}. Carry a crate here.`;

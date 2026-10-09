@@ -3,6 +3,7 @@ import { pluck } from "./regionEndings.ts";
 import { ENGINE_ENDINGS } from "./engineLedger.ts";
 import { RAID_ENDINGS } from "./raidLedger.ts";
 import { SIEGE_ENDINGS } from "./siegeLedger.ts";
+import { TRIG_ENDINGS } from "./trigLedger.ts";
 import { HUNT_ENDINGS } from "./huntLedger.ts";
 import { REAPERS_ENDINGS } from "./reapersLedger.ts";
 import { SALTMARKET_ENDINGS } from "./saltmarketLedger.ts";
@@ -33,7 +34,7 @@ export const pairEnds = (k: PairKey): [PowerId, PowerId] => {
 
 /** What each ending does to the powers' opinion of one another (before the day's drift). Every entry nudges a different shape of the map, so no two endings read alike. */
 export const RELATION_FX: Record<ResolutionId, Partial<Record<PairKey, number>>> = {
-  ...pluck(VESPER_ENDINGS, "relations"), ...pluck(SALTMARKET_ENDINGS, "relations"), ...pluck(REAPERS_ENDINGS, "relations"), ...pluck(ENGINE_ENDINGS, "relations"), ...pluck(RAID_ENDINGS, "relations"), ...pluck(HUNT_ENDINGS, "relations"), ...pluck(SIEGE_ENDINGS, "relations"),   // D-037 (regionEndings.ts)
+  ...pluck(VESPER_ENDINGS, "relations"), ...pluck(SALTMARKET_ENDINGS, "relations"), ...pluck(REAPERS_ENDINGS, "relations"), ...pluck(ENGINE_ENDINGS, "relations"), ...pluck(RAID_ENDINGS, "relations"), ...pluck(HUNT_ENDINGS, "relations"), ...pluck(SIEGE_ENDINGS, "relations"), ...pluck(TRIG_ENDINGS, "relations"),   // D-037 (regionEndings.ts)
   // the crossing
   paid:            { "ward|rival": -2, "ward|brine": 2, "ward|choir": 2 },
   bargained:       { "ward|rival": -3, "ward|reapers": 3, "ward|brine": -2, "reapers|choir": 2 },

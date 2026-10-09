@@ -280,6 +280,8 @@ export const VESPER_REGION: RegionCopy = {
     if (claim) parts.push(`the west bench was ${NAME_CLAIM[claim] ?? claim}`);
     const engine = c.sites.ends.winding_engine;   // D-044
     if (engine) parts.push(engine === "engine_fouled" ? "the Syndicate's engine choked on grit" : engine === "engine_blown" ? "the Syndicate's engine was blown up" : engine === "engine_bought" ? "the Syndicate's engineer found a fault, for a fee" : engine === "vein_struck" ? "the Syndicate struck the vein" : "the engine was left running");
+    const trig = c.sites.ends.triangulation;   // D-096
+    if (trig && trig !== "abandoned") parts.push(trig === "trig_guild" ? "the needles kept the Guild's names" : trig === "trig_committee" ? "the needles took the Committee's names, billed" : trig === "trig_sold" ? "the survey was sold for a railway" : "the Syndicate filed its survey first");
     return `Last time: ${parts.length ? parts.join("; ") : "an expedition that left no mark"}.`;
   },
   presence: ["Day {day}: {party} in Vesper Gorge, billed per outcome", "Day {day} in Vesper Gorge, {party}, in the Guild's books"],

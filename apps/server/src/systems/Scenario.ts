@@ -7,7 +7,7 @@ import {
 import type { CastApi, MountApi, NpcSpec, PlayersView } from "@cb/shared";
 import { lingerDone } from "../../../../packages/shared/src/scenarios/common.ts";
 import { answerSiteParley, openSiteParley, type SiteParleyKind } from "@cb/shared";
-import { TEMPLATES } from "@cb/shared";
+import { CARRY_KIND, TEMPLATES } from "@cb/shared";
 import type { AnyTemplate, BaseState, UseSpec } from "@cb/shared";
 
 /**
@@ -206,8 +206,8 @@ export class Scenario {
     for (const u of this.def.observe.use) {
       const at = this.locate(u);
       if (!at || Math.hypot(p.x - at.x, p.z - at.z) > u.r) continue;
-      if (u.carry === "barrel" || u.carry === "crate") {
-        if (!carrying || carriedProp === undefined || this.host.propKind(carriedProp) !== (u.carry === "barrel" ? PropKind.BARREL : PropKind.CRATE)) continue;
+      if (u.carry !== undefined && u.carry !== "none") {
+        if (!carrying || carriedProp === undefined || this.host.propKind(carriedProp) !== CARRY_KIND[u.carry]) continue;
         if (u.prop !== undefined && this.props.get(u.prop)?.id !== carriedProp) continue;
       } else if (u.carry === "none" && carrying) continue;
       this.actor = sid;
@@ -218,7 +218,10 @@ export class Scenario {
           this.observeNear();
           const before = this.s;
           this.apply({ t: "use", target: u.id, slot: Number.isInteger(p.slot) ? p.slot : 0 });
-          if (this.s !== before && u.consume && carriedProp !== undefined) this.host.consumeProp(carriedProp);
+          // a carried thing's press is taken only when the machine accepts it (D-096): refused (a booked trig station, a charge already set), it falls through to the room, which
+          // drops or throws what is in your arms, as the HUD said it would
+          if (this.s === before && u.carry !== undefined && u.carry !== "none") continue;
+          if (u.consume && carriedProp !== undefined) this.host.consumeProp(carriedProp);
         }
       } finally {
         this.audience = undefined;
