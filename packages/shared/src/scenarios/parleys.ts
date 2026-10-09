@@ -15,7 +15,7 @@ import { VESPER_PARLEYS } from "./vesperParleyText.ts";
 
 export type SiteParleyKind = Exclude<ParleyKind, "warden">;
 /** D-037: the six parley kinds of Vesper Gorge and the Saltmarket Delta are SCRIPTS (data: `ParleyScript`, authored in `scenarios/<region>ParleyText.ts`), not branches of the code below; D-042: so are the strike's two. */
-export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head" | "reaper" | "steward" | "engineer" | "raid_captain";
+export type ScriptKind = "foreman" | "dirge_master" | "assayer" | "tide_reeve" | "auctioneer" | "house_head" | "reaper" | "steward" | "engineer" | "raid_captain" | "dues_collector" | "lost_surveyor";
 type LegacyKind = Exclude<SiteParleyKind, ScriptKind>;
 export type Key = "pay" | "flatter" | "threaten" | "walk" | "propose" | "ask" | "tell" | "envelope" | "tip";
 const WIRE: Record<Key, ParleyOption["id"]> = {
@@ -43,6 +43,8 @@ export interface ParleyScript {
   short: string;
   /** The options of round 1, 2 and 3 for a price `p` (>= 1 of them; always includes a `walk`). */
   options(round: number, p: number): readonly Opt[];
+  /** D-093: talks held somewhere other than the region's usual place name it (the sheet's heading and asked line, as `ParleyView.frame`); absent, the region's own. */
+  frame?: { heading: string; asked: string };
 }
 const PARLEY_SCRIPTS: Readonly<Partial<Record<ParleyKind, ParleyScript>>> = { ...VESPER_PARLEYS, ...SALTMARKET_PARLEYS, ...REAPERS_PARLEYS, ...KESSAR_PARLEYS };
 /** The scripted kinds only (exported for the tests that prove every script is complete). */
@@ -220,11 +222,14 @@ function legacyOptions(kind: LegacyKind, round: number, p: number): Opt[] {
 }
 
 function view(kind: SiteParleyKind, round: number, p: number, line: string): ParleyView {
-  return {
+  const v: ParleyView = {
     round, speaker: PARLEY_SCRIPTS[kind]?.speaker ?? SPEAKER[kind as LegacyKind], line, toll: p,
     options: options(kind, round, p).map((o): ParleyOption => ({ id: WIRE[o.key], label: o.label, cost: o.cost, hint: o.hint })),
     mood: "neutral",
   };
+  const frame = PARLEY_SCRIPTS[kind]?.frame;
+  if (frame) v.frame = { ...frame };
+  return v;
 }
 
 export function openSiteParley(kind: SiteParleyKind, ctx: SiteParleyCtx): ParleyView {

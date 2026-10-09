@@ -149,8 +149,97 @@ const HOUSE_HEAD: ParleyScript = {
   },
 };
 
+
+/**
+ * D-093, the Lost Survey: the Houses' Collector of Canal Dues (pay the dues, cede the chart, or sell them the survey outright) and the Society's own surveyor, who will not
+ * leave without his books unless he is persuaded that the Society can measure the delta again. The template (scenarios/lostSurvey.ts) reads what each result MEANS:
+ * paid = the dues, survey = the chart ceded (the collector) or left (the surveyor), tip = the survey sold.
+ */
+const HOUSE = "A word at the reed-cutter's house";
+const DUES_COLLECTOR: ParleyScript = {
+  speaker: "Mr. Silas Tench-Varley, Collector of Canal Dues to the Brine Houses",
+  frame: { heading: HOUSE, asked: "Dues owing: £{price} · Round {round} · The Collector seems {mood}." },
+  open: [
+    "The Collector opens a ledger the size of a door. \"Your surveyor,\" he says, \"measured nineteen of the Houses' canals, two of them twice, and the pond, which is not a canal, which is why it costs more. Dues are charged on every chain measured, and on every chain he meant to measure. The sum owing is £{price}. He has been our guest while it is owed. The tea is included. The biscuits are not.\"",
+    "\"The Houses,\" says the Collector, without looking up, \"do not detain anybody. They extend hospitality until a sum is settled. Mr. Pellow-Brane's hospitality has been extended a week, at £{price} in harbour dues on his measurements. His books stay on this table until it is paid. Or until the chart is ours. We are not particular. We are thorough.\"",
+  ],
+  round2: [
+    "\"Between ourselves,\" says the Collector, which is a phrase he charges for, \"the Houses would rather have the chart than the money. A map of their canals in the Admiralty's hands is a map in everybody's. Cede it, and the books stay here and the gentleman goes home. Or sell it to us outright, and the Houses pay you; they have also been meaning to offer him a position. The dues stand at £{price}.\"",
+    "\"I will tell you what I tell everybody,\" says the Collector, \"which is the price, and then the price of the alternatives. £{price} in dues. Nothing, if you cede the chart: the Houses keep it and you keep your man. Or the Houses buy the survey from you and keep him too: he reads a tide like a hymn-book, and the pilots are short.\"",
+  ],
+  walk: "You step back. The Collector enters the conversation in the ledger, under 'consultations', at the usual rate.",
+  hostile: "The Collector closes the ledger on his own thumb, which is how the wardens know. \"Gentlemen,\" he says, getting behind it, \"the account is in dispute.\"",
+  flatter: {
+    ok: [
+      "\"Nobody admires the ledger,\" says the Collector, softening by a column. \"£{price}, then, and I shall waive the biscuits.\"",
+      "\"A person who appreciates a well-kept account,\" says the Collector, and rounds down, with visible pain. \"£{price}.\"",
+    ],
+    fail: [
+      "\"Compliments are a service,\" says the Collector, \"and services are dues. £{price}.\"",
+      "\"I was complimented by a House-Head once,\" says the Collector. \"He billed me for it. £{price}.\"",
+    ],
+  },
+  deal: {
+    paid: "The dues go into the ledger. The Collector hands the field books across with a receipt for the dues, a receipt for the receipt, and the compliments of the Houses.",
+    survey: "\"The chart is ceded,\" says the Collector, and stamps it twice for luck. \"The books remain the Houses'. The gentleman is free to go, and to complain about it, which is also free.\"",
+    tip: "\"Sold,\" says the Collector, writing it down before you can change your mind. \"The Houses buy the survey, the books and the bad temper in the margins. As for the gentleman, the Houses have been meaning to offer him a post. You may leave him with us. He will be very happy, eventually.\"",
+  },
+  short: "\"You are short,\" says the Collector, adding up what is not there. \"The Houses extend hospitality, not credit. The tea, however, continues.\"",
+  options(round, p): readonly Opt[] {
+    return round === 1
+      ? [
+          { key: "pay", label: `Pay the harbour dues (£${p})`, hint: "The surveyor gets his books back and follows you to the quay.", cost: p },
+          { key: "propose", label: "Cede the chart to the Houses", hint: "Free. The Houses keep the books; the surveyor comes home without them.", cost: 0 },
+          { key: "tip", label: "Sell the Houses the survey outright", hint: "The Houses pay you, and keep the books, and the surveyor. The contract ends here.", cost: 0 },
+          { key: "ask", label: "Ask what the Houses really want", hint: "He might tell you. He will certainly invoice you for it.", cost: 0 },
+          { key: "flatter", label: "Admire the ledger", hint: "A gentleman never haggles. He remarks, graciously.", cost: 0 },
+          { key: "threaten", label: "Point out that you are armed and he is not", hint: "The wardens are. They are standing behind him for that reason.", cost: 0 },
+          walk,
+        ]
+      : [
+          { key: "pay", label: `Pay the harbour dues (£${p})`, hint: "The surveyor gets his books back.", cost: p },
+          { key: "propose", label: "Cede the chart to the Houses", hint: "Free. The books stay; the surveyor goes.", cost: 0 },
+          { key: "tip", label: "Sell the Houses the survey outright", hint: "They pay you; they keep him.", cost: 0 },
+          walk,
+        ];
+  },
+};
+
+const LOST_SURVEYOR: ParleyScript = {
+  speaker: "Mr. Augustus Pellow-Brane, Surveyor to the Society",
+  frame: { heading: HOUSE, asked: "Round {round} · The surveyor seems {mood}, and indignant." },
+  open: [
+    "\"At last,\" says Mr. Pellow-Brane, putting down a teacup with the care of a man who has been charged for the saucer. \"I have been the Houses' guest for a week, which is six days longer than I have ever been anybody's. I am not leaving without my field books. They are on that man's table. Nineteen canals, two of them twice, and a pond.\"",
+    "Mr. Pellow-Brane rises, and keeps rising, as tall men do when they are indignant. \"The Society,\" he says, \"sent me to measure the delta. I have measured it. The delta has measured me back, and sent the bill. I will go home with my books or not at all, and the Houses have the books.\"",
+  ],
+  round2: [
+    "\"The Collector,\" says Mr. Pellow-Brane, lowering his voice to a register that carries across water, \"would rather have my chart than your money. He will let me go if the Houses keep it. He would pay you for it, I suspect, and keep me as well: they are short of pilots, and they have been very nice about my reading of the tides. I find that I am flattered, and I resent it.\"",
+    "\"I will tell you the Houses' game,\" says the surveyor. \"Dues if you have money; the chart if you have none; and me, if they can get me. They have offered me a position. I said I would consider it, which is what one says. I have not. Mostly.\"",
+  ],
+  walk: "You step back. Mr. Pellow-Brane returns to his tea with the air of a man who will be minuting this.",
+  hostile: "Mr. Pellow-Brane looks at the weapon, then at you, with exactly the expression he uses for a bad theodolite. \"I am the person you came for,\" he says. \"I believe that is in my letter of appointment.\"",
+  deal: {
+    survey: "Mr. Pellow-Brane is persuaded, at length and against his principles, that the Society can measure the delta again. He leaves his books on the Collector's table with a look that will be in the minutes.",
+  },
+  short: "\"I do not want your money,\" says Mr. Pellow-Brane. \"I want my books.\"",
+  options(round): readonly Opt[] {
+    return round === 1
+      ? [
+          { key: "ask", label: "Ask what the Houses want", hint: "He has had a week to find out.", cost: 0 },
+          { key: "propose", label: "Persuade him to leave without his books", hint: "Free. The Houses keep the chart; he comes home.", cost: 0 },
+          walk,
+        ]
+      : [
+          { key: "propose", label: "Persuade him to leave without his books", hint: "Free. The Houses keep the chart.", cost: 0 },
+          walk,
+        ];
+  },
+};
+
 export const SALTMARKET_PARLEYS = {
   tide_reeve: TIDE_REEVE,
   auctioneer: AUCTIONEER,
   house_head: HOUSE_HEAD,
-} as const satisfies Partial<Record<"tide_reeve" | "auctioneer" | "house_head", ParleyScript>>;
+  dues_collector: DUES_COLLECTOR,   // D-093
+  lost_surveyor: LOST_SURVEYOR,
+} as const satisfies Partial<Record<"tide_reeve" | "auctioneer" | "house_head" | "dues_collector" | "lost_surveyor", ParleyScript>>;

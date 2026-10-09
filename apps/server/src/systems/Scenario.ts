@@ -415,6 +415,8 @@ export class Scenario {
       case "open":
         if (f.what === "cage") cast.order("hostage", { o: "follow", target: this.actor });
         break;
+      // D-093: whoever settled it leads (no one yet, as when a fight settled it: the nearest standing member, Cast's own fallback)
+      case "follow": cast.order(f.group, { o: "follow", target: this.actor }); break;
       case "explode": {
         const at = f.at === "wagon" && this.wagonId !== undefined ? this.host.mounts?.pos(this.wagonId) : this.def.sites?.[f.at];
         if (at) this.host.explode(at.x, this.host.groundY(at.x, at.z), at.z, f.at === "pier" ? SCENARIO.chargeRadius : 6, this.actor);

@@ -3,7 +3,7 @@ import { Vector3 } from "three";
 /**
  * The Saltmarket Delta's named vantage points for `?showcase=world&region=saltmarket&view=<name>` (D-037, package D4; `ky(x, z)` is the ground height there). A view is [camera position, look-at]. The names
  * docs/_notes/regions34.md section 4 asks for: landing, quay, boardwalk, channel, stilts, customs, berth, cove, drop, exchange, flood (inside the hall, at high water: `time` and the scenario clock decide how high),
- * horizon (the whole delta from the quay: the silhouette shot), `top`; and a few more the art review wants: walk3 (the skyline's own viewpoint), lanterns, crane, campanile, windpump, reeds, rim, bridge.
+ * horizon (the whole delta from the quay: the silhouette shot), `top`; and a few more the art review wants: walk3 (the skyline's own viewpoint), lanterns, crane, campanile, windpump, reeds, rim, bridge; D-093's peg, chalk and survey.
  */
 export const SALTMARKET_DEFAULT_VIEW = "horizon";
 export function saltmarketViews(ky: (x: number, z: number) => number): Record<string, [Vector3, Vector3]> {
@@ -29,6 +29,10 @@ export function saltmarketViews(ky: (x: number, z: number) => number): Record<st
     campanile: v(22, 2.4, -12, 21, 6, -35),
     windpump: v(-78, 2.4, 2, -90, 6, -11),
     reeds: v(-70, 1.6, 14, -78, 0.9, 4),
+    // D-093, the Lost Survey: the ranging rod by the west bridge, the chalk on the windpump's leg, the reed-cutter's hut in the north-west reeds from the dry bank south of it
+    peg: v(-65, 1.5, -18.6, -67.5, 0.9, -21.4),
+    chalk: v(-86.8, 1.7, -7.6, -89.35, 1.6, -9.77),
+    survey: v(-77, 2.0, -107, -80, 1.8, -93),
     top: [new Vector3(0, 190, 10), new Vector3(0, 0, 10)],
   };
 }

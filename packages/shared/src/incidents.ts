@@ -57,7 +57,7 @@ export const HOME_POWER: Readonly<Record<RegionId, "ward" | MinorPowerId | undef
 /** A local of each region (their own people come with the role: peoples.ts `peopleForNpc`). */
 const LOCAL_ROLE: Readonly<Record<RegionId, number>> = { hollowmere: NPC.DRIVER, kessar: NPC.DRIVER, highmark: NPC.HERDER, vesper: NPC.MINER, saltmarket: NPC.BARGEMAN };
 
-const TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10, winding_engine: 11, outpost_raid: 12 };
+const TAG: Record<ScenarioTemplateId, number> = { secure_crossing: 1, hostage_rescue: 2, convoy_ambush: 3, border_incident: 4, succession_dispute: 5, mine_rescue: 6, claim_race: 7, smuggling_run: 8, flooded_market: 9, reapers_strike: 10, winding_engine: 11, outpost_raid: 12, lost_survey: 13 };
 
 /** The incident this run will carry ("none": a quiet run). Deterministic from the campaign seed, the day and the template; the last one is never dealt again. */
 export function dealIncident(c: CampaignState, template: ScenarioTemplateId, region: RegionId, seed: number): IncidentId {

@@ -17,8 +17,10 @@ import type { MinorPowerId, PairKey, PowerId, PowerState } from "./worldTypes.ts
 
 /** Vesper Gorge (the arid canyon, mineral frontier). Two templates; `abandoned` is shared and is not listed. */
 export const VESPER_RESOLUTIONS = ["dug_out", "blasted_through", "sealed", "consecrated", "staked", "jumped", "partnered", "outpaced"] as const satisfies readonly ResolutionId[];
-/** The Saltmarket Delta (the wetland trading region). Two templates. */
-export const SALTMARKET_RESOLUTIONS = ["landed", "impounded", "scuttled", "informed", "lot_won", "consortium", "shorted", "washed_out"] as const satisfies readonly ResolutionId[];
+/** The Saltmarket Delta (the wetland trading region). Three templates (D-093: the Lost Survey's four are the last four). */
+export const SALTMARKET_RESOLUTIONS = [
+  "landed", "impounded", "scuttled", "informed", "lot_won", "consortium", "shorted", "washed_out", "survey_home", "chart_ceded", "survey_sold", "survey_lost",
+] as const satisfies readonly ResolutionId[];
 export type VesperEnding = (typeof VESPER_RESOLUTIONS)[number];
 /** D-042: Highmark's second contract, the Reapers' Strike (its endings follow this file's shape; the succession's five keep their older literal rows). */
 export const REAPERS_RESOLUTIONS = ["honest_measure", "bought_back", "strike_broken", "barley_lost"] as const satisfies readonly ResolutionId[];
@@ -30,7 +32,7 @@ export type EngineEnding = (typeof ENGINE_RESOLUTIONS)[number];
 export const RAID_RESOLUTIONS = ["post_held", "post_burned", "protection_paid"] as const satisfies readonly ResolutionId[];
 export type RaidEnding = (typeof RAID_RESOLUTIONS)[number];
 export type SaltmarketEnding = (typeof SALTMARKET_RESOLUTIONS)[number];
-/** Every ending in the D-037 shape (27: Vesper's and the Saltmarket's sixteen, the strike's four, the engine's four, the raid's three). Tests that script Kessar's twenty or Highmark's chair exclude these. */
+/** Every ending in the D-037 shape (31: Vesper's eight and the Saltmarket's twelve, the strike's four, the engine's four, the raid's three). Tests that script Kessar's twenty or Highmark's chair exclude these. */
 export const NEW_RESOLUTIONS = [...VESPER_RESOLUTIONS, ...SALTMARKET_RESOLUTIONS, ...REAPERS_RESOLUTIONS, ...ENGINE_RESOLUTIONS, ...RAID_RESOLUTIONS] as const;
 export type NewEnding = (typeof NEW_RESOLUTIONS)[number];
 
@@ -43,10 +45,11 @@ export const NEW_TEMPLATE_RESOLUTIONS = {
   reapers_strike: ["honest_measure", "bought_back", "strike_broken", "barley_lost", "abandoned"],   // D-042 (Highmark)
   winding_engine: ["engine_fouled", "engine_blown", "engine_bought", "vein_struck", "abandoned"],   // D-044 (Vesper)
   outpost_raid: ["post_held", "post_burned", "protection_paid", "abandoned"],   // D-045 (Kessar)
+  lost_survey: ["survey_home", "chart_ceded", "survey_sold", "survey_lost", "abandoned"],   // D-093 (the Saltmarket)
 } as const satisfies Partial<Record<ScenarioTemplateId, readonly ResolutionId[]>>;
 export type NewTemplateId = keyof typeof NEW_TEMPLATE_RESOLUTIONS;
 export type VesperTemplate = "mine_rescue" | "claim_race" | "winding_engine";
-export type SaltmarketTemplate = "smuggling_run" | "flooded_market";
+export type SaltmarketTemplate = "smuggling_run" | "flooded_market" | "lost_survey";
 export const NEW_TEMPLATE_IDS = Object.keys(NEW_TEMPLATE_RESOLUTIONS) as NewTemplateId[];
 export const isNewTemplate = (t: unknown): t is NewTemplateId => typeof t === "string" && (NEW_TEMPLATE_IDS as readonly string[]).includes(t);
 
@@ -54,6 +57,7 @@ export const isNewTemplate = (t: unknown): t is NewTemplateId => typeof t === "s
 export const TEMPLATE_REGION: Readonly<Record<ScenarioTemplateId, RegionId>> = {
   secure_crossing: "kessar", hostage_rescue: "kessar", convoy_ambush: "kessar", border_incident: "kessar", succession_dispute: "highmark",
   mine_rescue: "vesper", claim_race: "vesper", smuggling_run: "saltmarket", flooded_market: "saltmarket", reapers_strike: "highmark", winding_engine: "vesper", outpost_raid: "kessar",
+  lost_survey: "saltmarket",
 };
 
 /** What one ending does to a minor power's mood (integer deltas, applied after the day's drift, clamped 0..100). */

@@ -25,6 +25,7 @@ export const OUTCOME_KIND: Readonly<Record<ResolutionId, OutcomeKind>> = {
   honest_measure: "won", bought_back: "partial", strike_broken: "lost", barley_lost: "lost",
   engine_fouled: "won", engine_blown: "won", engine_bought: "won", vein_struck: "lost",
   post_held: "won", protection_paid: "partial", post_burned: "lost",
+  survey_home: "won", chart_ceded: "partial", survey_sold: "partial", survey_lost: "lost",
 };
 
 /** An ending's kind, from what was committed: the Crown sold for the party's cheque is a sale; the Crown sold because nobody settled anything is a loss. */
@@ -134,6 +135,13 @@ export const TERMS: Readonly<Record<ScenarioTemplateId, ContractTerms>> = {
     lose: ["Two raiders stand in the yard together long enough to torch the stores", DOWN],
     fighting: "expected",
     rule: "Drop any raider who reaches the yard: two in it together set the stores alight.",
+  },
+  lost_survey: {
+    win: ["Walk the surveyor to the quay with his field books: pay the Collector's dues, or break both wardens and take them"],
+    partial: ["Walk him home without the books (cede the chart, or talk him into leaving them)", "Sell the Houses the survey: they pay, and he stays"],
+    lose: ["The tide floods the reeds while he is still at the house", "The surveyor goes down on the way", DOWN],
+    fighting: "costly",
+    rule: "A shot at the house, even a miss, ends all talk with the Collector: then the books come only by breaking both wardens.",
   },
 };
 

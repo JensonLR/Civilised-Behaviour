@@ -58,6 +58,28 @@ export const SALTMARKET_ENDINGS: Record<SaltmarketEnding, EndingNumbers> = {
     minors: { brine: { trust: -1, grievance: 2, prosperity: 2 }, reapers: none, choir: none },
     rule: { rivalProsperity: 3 },
   }),
+  // D-093, the Lost Survey. The Houses lose a chart they meant to keep (survey_home), keep it for the price of a man (chart_ceded), buy it and the man together (survey_sold), or bill the
+  // tide for him (survey_lost). The Syndicate wanted the chart too: it is sorry to see it reach London and glad to see it stay in the delta, where it can be bought again.
+  survey_home: row("brine", "rival", {
+    memory: { gratitude: 5, resentment: 2, contempt: 4 }, relations: { "ward|brine": -2, "rival|brine": 3, "brine|choir": -2 }, grudge: 4,
+    minors: { brine: { trust: -4, grievance: 6, prosperity: -2, playerInfluence: 3 }, reapers: none, choir: none },
+    rule: { rivalProsperity: -3, rivalGrievance: 4 },
+  }),
+  chart_ceded: row("brine", "ward", {
+    memory: { gratitude: 1, resentment: 0, contempt: 11 }, relations: { "ward|brine": 3, "brine|reapers": 2, "rival|brine": -2 }, grudge: -1,
+    minors: { brine: { trust: 6, grievance: -3, prosperity: 4, playerInfluence: 2 }, reapers: none, choir: none },
+    rule: { rivalProsperity: 1 },
+  }),
+  survey_sold: row("brine", "rival", {
+    memory: { gratitude: 0, resentment: 3, contempt: 19 }, relations: { "rival|brine": -5, "brine|reapers": 3, "brine|choir": 2, "ward|brine": 1 }, grudge: 3,
+    minors: { brine: { trust: 8, grievance: -4, prosperity: 6, playerInfluence: 5 }, reapers: none, choir: { trust: -2 } },
+    rule: { rivalProsperity: -2, rivalGrievance: 3, lies: 1 },
+  }),
+  survey_lost: row("brine", undefined, {
+    memory: { gratitude: 0, resentment: 1, contempt: 16 }, relations: { "rival|brine": 4, "brine|choir": -1, "ward|brine": 2 }, grudge: -2,
+    minors: { brine: { trust: -1, grievance: 1, prosperity: 3 }, reapers: none, choir: none },
+    rule: { rivalProsperity: 2 },
+  }),
 };
 
 /** Resolutions that satisfy a minor power's pledged favour beyond the ones authored in powersText `HOOKS` (the Houses' "a Syndicate wagon, misplaced" is pleased by a scuttled barge, and by a barge informed upon). */
@@ -66,10 +88,11 @@ export const SALTMARKET_FAVOUR: FavourExtra = { brine: ["scuttled", "informed"] 
 const HERE = (c: CampaignState): CampaignState["history"] => c.history.filter((h) => h.region === "saltmarket");
 
 /**
- * Which of Saltmarket's two contracts the campaign offers next (called by `pickTemplate(c, "saltmarket", seed, presence)`; pure and deterministic; never the same template twice running while both are eligible).
+ * Which of Saltmarket's three contracts the campaign offers next (called by `pickTemplate(c, "saltmarket", seed, presence)`; pure and deterministic; never the same template twice running while another is eligible).
  * The Quiet Barge is offered more while the Syndicate has goods to move (a wagon at large, or influence of 50 and up) and after a sale that went to the Houses; the Auction at High Water more once the party
  * has a name at the Exchange (the last barge was informed upon or landed) and while the Syndicate is out arming the Houses. Ties are broken by hash3(seed, day), so the same ledger always offers the same thing.
- * Kessar's weights are untouched (backcompat.test.ts hashes them).
+ * D-093: the Lost Survey is never the first contract here (the Society sends its surveyor in once it has a name in the delta) and is offered more once the Houses have a grievance to collect
+ * on (they hold him for dues): a barge landed past their customs, a lot won or shorted at their Exchange. Kessar's weights are untouched (backcompat.test.ts hashes them).
  */
 export function pickSaltmarketContract(c: CampaignState, seed: number, presence?: RivalPresence): ScenarioTemplateId {
   const here = HERE(c);
@@ -79,11 +102,12 @@ export function pickSaltmarketContract(c: CampaignState, seed: number, presence?
   const weights = {
     smuggling_run: 3 + (run ? 3 : 0) + (ends.flooded_market === "washed_out" || ends.flooded_market === "shorted" ? 2 : 0),
     flooded_market: 3 + (presence?.goal === "arm_brine" ? 3 : 0) + (ends.smuggling_run === "informed" || ends.smuggling_run === "landed" ? 2 : 0) + (c.factions.ward.rivalInfluence <= 20 ? 1 : 0),
+    lost_survey: here.length === 0 ? 0 : 3 + (ends.smuggling_run === "landed" ? 2 : 0) + (ends.flooded_market === "lot_won" || ends.flooded_market === "shorted" ? 2 : 0),
   } as const;
   type Id = SaltmarketTemplate;
-  const both: readonly Id[] = ["smuggling_run", "flooded_market"];
-  const ids = both.filter((id) => id !== last);
-  const pool = ids.length > 0 ? ids : both;
+  const all: readonly Id[] = (["smuggling_run", "flooded_market", "lost_survey"] as const).filter((id) => weights[id] > 0);
+  const ids = all.filter((id) => id !== last);
+  const pool = ids.length > 0 ? ids : all;
   const total = pool.reduce((n, id) => n + weights[id], 0);
   let roll = hash3(seed >>> 0, Math.max(0, Math.round(c.day)), 0x5a1e) % total;
   for (const id of pool) {
@@ -97,4 +121,5 @@ export function pickSaltmarketContract(c: CampaignState, seed: number, presence?
 export const SALTMARKET_COMPLICATIONS: Record<SaltmarketTemplate, readonly ComplicationId[]> = {
   smuggling_run: ["fog", "ward_patrol", "rain"],
   flooded_market: ["rain", "fog"],
+  lost_survey: ["rain", "fog"],   // D-093: rain brings the tide on sooner, fog later (and hides the wardens' wall)
 };

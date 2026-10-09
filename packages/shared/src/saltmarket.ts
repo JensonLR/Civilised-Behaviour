@@ -83,6 +83,22 @@ export const SALTMARKET_SPOTS = {
   factor: { x: 12, z: -52 },
 } as const;
 
+/**
+ * D-093, the Lost Survey: the reed-cutter's hut in the north-west reeds (`HOUSES[7]`, at -80, -92, a stilt hut with no door, its north half over the water) is where the Houses keep the
+ * Society's surveyor. The people stand on the dry bank south of it (every seed's creeks leave that bank dry: saltmarket.test.ts); the trail's two marks are the survey peg at the west end of
+ * the drop's bridge and the chalk on the windpump's leg, out in the west pond (shallow: it is waded); the surveyor has come home when he is inside the quay's circle (8 m round a point 6 m inland
+ * of the landing: he walks a few metres behind his leader, and a party standing at the flag must not leave him outside it).
+ */
+export const SALTMARKET_SURVEY = {
+  house: { x: -80, z: -92 },
+  surveyor: { x: -79, z: -97 },
+  collector: { x: -76.4, z: -96.6 },
+  wardens: [{ x: -84, z: -97.6 }, { x: -73, z: -95 }],
+  peg: { x: -67.5, z: -21.4 },
+  pumpMark: { x: -88.4, z: -9.6 },
+  quay: { x: 0, z: 112 },
+} as const;
+
 // ---- the plan -------------------------------------------------------------------------------------------------------------------------
 
 export const SALTMARKET = {
@@ -601,6 +617,9 @@ export function saltmarketSitePoints(): { id: string; x: number; z: number }[] {
     ...S.customs.map((p, i) => ({ id: `customs${i}`, ...p })), ...S.bargemen.map((p, i) => ({ id: `bargeman${i}`, ...p })), ...S.houseHeads.map((p, i) => ({ id: `houseHead${i}`, ...p })),
     { id: "dropDoor", ...P.dropDoor }, { id: "plug", ...P.plug }, { id: "lantern", ...P.lantern }, { id: "factor", ...P.factor },
     ...A.walk.map((p, i) => ({ id: `walk${i}`, ...p })),
+    // D-093: the Lost Survey's people and marks (the house itself is a solid hut: its people stand on its east side)
+    { id: "surveyor", ...SALTMARKET_SURVEY.surveyor }, { id: "collector", ...SALTMARKET_SURVEY.collector }, ...SALTMARKET_SURVEY.wardens.map((p, i) => ({ id: `surveyWarden${i}`, ...p })),
+    { id: "surveyPeg", ...SALTMARKET_SURVEY.peg }, { id: "surveyQuay", ...SALTMARKET_SURVEY.quay },   // (the chalk is on the windpump's leg, in the pond: waded to, not stood on)
   ];
 }
 

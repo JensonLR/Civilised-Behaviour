@@ -1,4 +1,4 @@
-import { BUTTON, FLAG, OUTPOST_SITES, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
+import { BUTTON, FLAG, OUTPOST_SITES, HIGHMARK_ANCHORS as H, KESSAR_OUTPOST as KO, RAID_SITES as RS, HIGHMARK_SITES as HS, KESSAR_ANCHORS as A, KESSAR_SITES as KS, PropKind, SALTMARKET_ANCHORS as SA, SALTMARKET_SITES as SS, SALTMARKET_SPOTS as SP, SALTMARKET_SURVEY as SU, VESPER_ANCHORS as V, VESPER_SITES as VS, VESPER_STOCK as VK, WEAPON, type JoinOptions, type ResolutionId } from "@cb/shared";
 import type { Pilot } from "./pilot.ts";
 
 export interface Plan {
@@ -595,6 +595,35 @@ export const PLANS: Plan[] = [
         if (p.view?.resolution) break;
       }
       await p.until(() => p.view?.resolution !== undefined, 30_000, "resolution");
+    },
+  },
+  // D-093: the Lost Survey. The trail from the bridge, the hut in the north-west reeds, the dues paid, and the surveyor walked home behind the payer.
+  {
+    name: "survey-dues-home",
+    join: { region: "saltmarket", scenario: "lost_survey", seed: SEED },
+    expect: ["survey_home"],
+    async run(p) {
+      await useAt(p, SU.peg.x + 1, SU.peg.z, "the survey peg", 1.6);
+      await useAt(p, SU.pumpMark.x + 1, SU.pumpMark.z, "the chalk on the windpump", 1.8);
+      if (await talkTo(p, "collector")) await p.pick(/Pay the harbour dues/);
+      const him = (): string => { const n = p.npc("surveyor"); return n ? `${n.x.toFixed(1)},${n.z.toFixed(1)}` : "gone"; };
+      p.note(`surveyor at ${him()}`);
+      // home by the way the trail came, at a walk he can keep up with, checking he is still behind
+      for (const [x, z, label] of [[SU.pumpMark.x + 8, SU.pumpMark.z, "past the windpump"], [SU.peg.x + 2, SU.peg.z, "the west bridge"], [SA.landing.x, SA.landing.z - 2, "the boat"]] as const) {
+        await p.goTo(x, z, { within: 2.5, sprint: false, label: `${label} with the surveyor`, ms: 150_000 });
+        p.note(`surveyor at ${him()}`);
+      }
+      await p.until(() => p.view?.resolution !== undefined, 60_000, "resolution");
+      p.note(`surveyor at ${him()}`);
+    },
+  },
+  {
+    name: "survey-sold",
+    join: { region: "saltmarket", scenario: "lost_survey", seed: SEED },
+    expect: ["survey_sold"],
+    async run(p) {
+      if (await talkTo(p, "collector")) await p.pick(/Sell the Houses the survey/);
+      await p.until(() => p.view?.resolution !== undefined, 10_000, "resolution");
     },
   },
 ];

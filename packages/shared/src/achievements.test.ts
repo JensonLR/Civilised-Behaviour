@@ -71,6 +71,7 @@ const SCRIPT: Record<AchievementId, () => { c: CampaignState; p: PowersState; s:
   cargo_landed: () => ({ ...fresh(), c: play(newCampaign(SEED), "smuggling_run", "landed", { region: "saltmarket" }) }),
   lot_won: () => ({ ...fresh(), c: play(newCampaign(SEED), "flooded_market", "lot_won", { region: "saltmarket" }) }),
   post_held: () => ({ ...fresh(), c: play(newCampaign(SEED), "outpost_raid", "post_held") }),
+  nineteen_canals: () => ({ ...fresh(), c: play(newCampaign(SEED), "lost_survey", "survey_home", { region: "saltmarket" }) }),
   good_samaritan: () => {
     const f = fresh();
     return { ...f, c: { ...f.c, sites: { ...f.c.sites, lastIncident: { id: "wounded_traveller", result: "helped", day: 1, region: "kessar" } } } };
@@ -118,7 +119,7 @@ describe("achievements", () => {
   });
 
   it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084; one for D-088's collectors; two for D-091's industry)", () => {
-    expect(ACHIEVEMENTS).toHaveLength(29);
+    expect(ACHIEVEMENTS).toHaveLength(30);
     expect(ACHIEVEMENTS.slice(0, 12)).toEqual(["first_crossing", "paid_in_full", "bridge_down", "rescued_quim", "wagon_taken", "border_mediated", "outpost_founded", "town_by_neglect", "steam_launch", "all_powers_met", "chair_settled", "four_at_once"]); // (append-only: a stored id never moves)
     for (const id of ACHIEVEMENTS) {
       const { c, p, s } = SCRIPT[id]();
