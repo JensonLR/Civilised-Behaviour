@@ -94,6 +94,12 @@ const SCRIPT: Record<AchievementId, () => { c: CampaignState; p: PowersState; s:
     const s = { ...f.s, posts: { kessar: { ...f.s.posts.kessar!, stage: "settlement" as const, priority: "extraction" as const } } };
     return { ...f, s: { ...s, tech: techOf(s, f.c, GOOD) } };
   },
+  // D-092: the works and the breech-loaders, and a stockade to stand the gun in
+  mind_the_handle: () => {
+    const f = steamTown();
+    const s = { ...f.s, posts: { kessar: { ...f.s.posts.kessar!, stage: "settlement" as const, priority: "extraction" as const } }, tech: { ...f.s.tech, breech: true } };
+    return { ...f, s: { ...s, tech: techOf(s, f.c, GOOD) } };
+  },
   learned_society: () => withBill({}, true),
   unscheduled_flight: () => withBill({ flings: 1, longest: 21, longestWho: "Carter Obadiah Plume" }),
   museum_piece: () => withBill({ limbs: 5 }),
@@ -112,7 +118,7 @@ describe("achievements", () => {
   });
 
   it("every id is reachable in a scripted campaign, and has text (twelve at D-036; thirteen more for the later contracts, incidents and D-084; one for D-088's collectors; two for D-091's industry)", () => {
-    expect(ACHIEVEMENTS).toHaveLength(28);
+    expect(ACHIEVEMENTS).toHaveLength(29);
     expect(ACHIEVEMENTS.slice(0, 12)).toEqual(["first_crossing", "paid_in_full", "bridge_down", "rescued_quim", "wagon_taken", "border_mediated", "outpost_founded", "town_by_neglect", "steam_launch", "all_powers_met", "chair_settled", "four_at_once"]); // (append-only: a stored id never moves)
     for (const id of ACHIEVEMENTS) {
       const { c, p, s } = SCRIPT[id]();

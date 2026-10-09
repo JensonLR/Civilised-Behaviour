@@ -77,7 +77,7 @@ function piece(k: Kit, p: HqHistoryPiece, gy: number, lod: number): void {
       break;
     case "pennant": {
       // (D-091: the industrial age's three in the engine's green, the buffer beam's red and the works' brick)
-      const col = p.tech === "launch" ? K.wardBlue : p.tech === "telegraph" ? O.pennantRival : p.tech === "railway" ? O.engine : p.tech === "breech" ? O.engineRed : p.tech === "works" ? O.brick : O.pennantSociety;
+      const col = p.tech === "launch" ? K.wardBlue : p.tech === "telegraph" ? O.pennantRival : p.tech === "railway" ? O.engine : p.tech === "breech" ? O.engineRed : p.tech === "works" ? O.brick : p.tech === "crank" ? PALETTE.weapons.brass : O.pennantSociety;
       k.limb([0, 0, -w / 2], [0, h, -w / 2], 0.008, 0.008, O.pole, 4);
       box(k, [d, h * 0.8, w * 0.9], [0, h * 0.55, 0.02], col);
       if (lod) box(k, [d + 0.003, h * 0.14, w * 0.9], [0.002, h * 0.4, 0.02], O.string);

@@ -123,6 +123,15 @@ export const SETTLEMENT_NEWS: Record<SettlementEventKind, { head: readonly strin
       "Extraction has begun at {name}. Shareholders on Threadneedle Street are delighted; the neighbours were invited to be delighted and declined in writing.",
     ],
   },
+  // D-092: the crank gun (no {name}: the works casts one for every stockade)
+  crank: {
+    head: ["The Works Casts a Crank Gun", "A Crank Gun for Every Gate", "Progress Arrives, Eight Rounds a Second"],
+    body: [
+      "The works has cast a crank gun for every stockade the Society holds. It fires eight rounds a second for as long as somebody turns the handle, and jams, the armourers say, 'only at the moment of greatest interest'.",
+      "A crank gun now stands inside the gate of every Society post. The Committee calls it 'a persuasive argument'; its crews call it the coffee grinder, and keep a spare hopper and a hammer beside it.",
+      "The Society's crank gun has been demonstrated to the Committee, who applauded the noise and asked whether it came in a smaller size for the drawing room. It does not. The Syndicate has been sent a photograph.",
+    ],
+  },
 
 };
 
@@ -169,11 +178,12 @@ export const HISTORY_PIECE: Record<ResolutionId, { kind: HqPieceKind; surface: H
   crown_sold: { kind: "envelope", surface: "chest", label: "A counterfoil from the Syndicate's cheque for a crown. It cleared; the Society wishes it knew how." },
 };
 export const MODEL_LABEL = "A scale model of the outpost, to the scale of a prospectus.";
-export const PENNANT_LABEL: Record<"road" | "telegraph" | "launch" | "railway" | "breech" | "works", string> = {
+export const PENNANT_LABEL: Record<"road" | "telegraph" | "launch" | "railway" | "breech" | "works" | "crank", string> = {
   road: "A pennant for the road, which is the first thing the Committee will take credit for.",
   telegraph: "A pennant for the telegraph, tied to a very small pole.",
   launch: "A pennant for the steam launch, which is smaller than the launch.",
   railway: "A pennant for the railway, with a timetable pinned to it that nobody has kept.",
   breech: "A pennant for the breech-loaders, presented by the armourers with their compliments and an invoice.",
   works: "A pennant for the works. It arrived slightly sooty.",
+  crank: "A pennant for the crank gun, with a small brass handle that turns and does nothing.",
 };

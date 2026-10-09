@@ -497,7 +497,7 @@ export function highmarkLevel(): RegionLevel {
 // ---- colliders ----------------------------------------------------------------------------------------------------------------------------
 
 /** Everything solid in Highmark: the walls, the ramps' sides, the buildings, the gatehouse, the court's furniture, the milestones, the camp, the quay, then the seeded scrub on its own Rng stream. */
-export function highmarkObstacles(terrain: Terrain, seed: number, opts?: { outpost?: OutpostStage; telegraph?: boolean; works?: boolean }): Obstacle[] {
+export function highmarkObstacles(terrain: Terrain, seed: number, opts?: { outpost?: OutpostStage; telegraph?: boolean; works?: boolean; crank?: boolean }): Obstacle[] {
   const plan = highmarkPlan();
   const g = (x: number, z: number): number => terrain.height(x, z);
   const out: Obstacle[] = [];
@@ -596,7 +596,7 @@ export function highmarkObstacles(terrain: Terrain, seed: number, opts?: { outpo
 
 const A_BOUNDS = HIGHMARK_ANCHORS.bounds;
 
-export function createHighmarkWorld(seed: number, opts?: { outpost?: OutpostStage; telegraph?: boolean; works?: boolean }): CollisionWorld {
+export function createHighmarkWorld(seed: number, opts?: { outpost?: OutpostStage; telegraph?: boolean; works?: boolean; crank?: boolean }): CollisionWorld {
   const terrain = createHighmarkTerrain(seed);
   return new CollisionWorld(terrain, highmarkObstacles(terrain, seed, opts), HIGHMARK_ANCHORS.bounds);
 }

@@ -5,7 +5,8 @@ import { CharacterAnimator, buildCharacter } from "@cb/procedural/three";
 import { PropViews } from "../render/PropViews.ts";
 import { PRESETS, Stage } from "../render/Stage.ts";
 import { createRegionView, type RegionView } from "../render/world/regionView.ts";
-import { KESSAR_OUTPOST as KO } from "@cb/shared";
+import { KESSAR_OUTPOST as KO, crankSpot } from "@cb/shared";
+import { CrankGunView } from "../render/weapons/CrankGunView.ts";
 import { KESSAR_ANCHORS as KA, createRegionWorld, regionProps, regionSpawn, type RegionId } from "../render/world/kessar/shared.ts";
 import { folkHints } from "../render/world/villagers.ts";
 import { SALTMARKET_DEFAULT_VIEW, saltmarketViews } from "./saltmarket.ts";
@@ -54,8 +55,15 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   const telegraph = params.get("telegraph") === "1" && outpost !== "none";
   const railway = params.get("railway") === "1" && outpost !== "none" && region === "kessar";
   const worksOn = params.get("works") === "1" && outpost !== "none";
-  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph, railway, works: worksOn })
-    : region === "hollowmere" ? createArena(seed) : region === "highmark" ? createRegionWorld(region, seed, { outpost, works: worksOn }) : createRegionWorld(region, seed);
+  // (D-092: crank=1 the crank gun inside a fortified post's gate, drawn as the game draws the replicated fixture, its barrels on the gate)
+  const crankOn = params.get("crank") === "1" && (OUTPOST_STAGES as readonly string[]).indexOf(outpost) >= OUTPOST_STAGES.indexOf("fortified_outpost") && (region === "kessar" || region === "highmark");
+  const world = region === "kessar" ? createRegionWorld("kessar", seed, { bridge: params.get("bridge") === "collapsed" ? "collapsed" : "intact", outpost, telegraph, railway, works: worksOn, crank: crankOn })
+    : region === "hollowmere" ? createArena(seed) : region === "highmark" ? createRegionWorld(region, seed, { outpost, works: worksOn, crank: crankOn }) : createRegionWorld(region, seed);
+  const crankAt = crankOn ? crankSpot(region as RegionId) : undefined;
+  if (crankAt) {
+    const gun = new CrankGunView(stage.scene, stage.outlines);
+    gun.update(0, { x: crankAt.x, y: world.terrainHeight(crankAt.x, crankAt.z), z: crankAt.z, yaw: crankAt.yaw + Number(params.get("traverse") ?? 0), elev: 0.08, phase: 2, progress: 40, crew: 0, shells: 3, fired: 0, kind: 1 } as never);
+  }
   if (region === "highmark" || region === "vesper" || region === "saltmarket") {
     const inner = stage as unknown as { worldView?: RegionView; builtFor?: typeof world; lightDir: Vector3 };
     inner.builtFor = world;

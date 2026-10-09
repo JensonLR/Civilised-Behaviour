@@ -58,6 +58,7 @@ export const ACHIEVEMENT_RULES: Readonly<Record<AchievementId, Rule>> = {
   /** D-091: the railway reaches Kessar's town; the works opens beside an extraction post. */
   perseverance: (_c, _p, s) => s.tech.railway,
   dividend_day: (_c, _p, s) => s.tech.works !== "",
+  mind_the_handle: (_c, _p, s) => s.tech.crank,
 };
 
 /** Ids the campaign has earned and `already` does not hold, in table order. Never throws on a hostile or partial state (an unreadable campaign earns nothing). */

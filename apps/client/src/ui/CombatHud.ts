@@ -1,4 +1,4 @@
-import { CARRIED, WEAPON, WEAPONS, type WeaponId } from "@cb/shared";
+import { CARRIED, CRANK_PHASE, WEAPON, WEAPONS, type WeaponId } from "@cb/shared";
 import { deviceTracker } from "../input/devices.ts";
 import { fillPrompt, onPromptChange } from "../input/glyphDom.ts";
 
@@ -59,7 +59,9 @@ export interface CrosshairView {
 }
 
 export interface CannonHud {
-  /** 0 empty, 1 loading, 2 loaded, 3 fuse lit. */
+  /** 0 the field cannon, 1 the post's crank gun (D-092; absent: the cannon). */
+  kind?: number;
+  /** The cannon: 0 empty, 1 loading, 2 loaded, 3 fuse lit. The crank gun: 0 dry, 1 changing the hopper, 2 ready (progress = rounds), 4 jammed. */
   phase: number;
   progress: number;
   crew: number;
@@ -252,6 +254,7 @@ export class CombatHud {
       return;
     }
     this.cannon.hidden = false;
+    if (v.kind === 1) return this.updateCrank(v);
     const state = v.phase === 0 ? (v.shells > 0 ? "Empty – hold {interact} to load" : "Out of shot") : v.phase === 1 ? `Loading – ${v.progress}%` : v.phase === 2 ? "Loaded – {fire} lights the fuse" : "Fuse lit – stand clear!";
     const pace = v.phase === 1 ? (v.crew >= 2 ? "full crew: quick" : "one hand: slow") : "";
     const ckey = `${state}|${v.progress}|${v.crew}|${v.shells}|${v.phase}|${deviceTracker.effective}`;
@@ -261,6 +264,21 @@ export class CombatHud {
     this.cannon.innerHTML = `<div class="ct">Field Cannon</div><div class="cs"></div>
       <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v.progress}"><div class="fill" style="width:${v.phase === 2 ? 100 : v.progress}%"></div></div>
       <div class="cc">Crew ${v.crew}${pace ? ` · ${pace}` : ""} · Shot in the limber: ${v.shells}</div>`;
+    fillPrompt(this.cannon.querySelector<HTMLElement>(".cs")!, state);
+  }
+
+  /** D-092: the crank gun's card: rounds in the hopper, a jam or a hopper being changed, the crew and the hoppers left in the limber. */
+  private updateCrank(v: CannonHud): void {
+    const full = WEAPONS[WEAPON.CRANK].ranged!.magazine;
+    const state = v.phase === CRANK_PHASE.READY ? `${v.progress} rounds – hold {interact} and {fire} to crank` : v.phase === CRANK_PHASE.CHANGING ? `Changing the hopper – ${v.progress}%` : v.phase === CRANK_PHASE.JAMMED ? `Jammed! – hold {interact}, trigger off – ${v.progress}%` : "Out of rounds";
+    const fill = v.phase === CRANK_PHASE.READY ? Math.round((v.progress / full) * 100) : v.phase === CRANK_PHASE.DRY ? 0 : v.progress;
+    const ckey = `crank|${state}|${v.crew}|${v.shells}|${v.phase}|${deviceTracker.effective}`;
+    if (ckey === this.cannonShown) return;
+    this.cannonShown = ckey;
+    this.cannon.dataset.phase = String(v.phase);
+    this.cannon.innerHTML = `<div class="ct">Crank Gun</div><div class="cs"></div>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${fill}"><div class="fill" style="width:${fill}%"></div></div>
+      <div class="cc">Crew ${v.crew} · Hoppers in the limber: ${v.shells}</div>`;
     fillPrompt(this.cannon.querySelector<HTMLElement>(".cs")!, state);
   }
 

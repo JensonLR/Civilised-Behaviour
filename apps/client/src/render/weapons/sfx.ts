@@ -26,6 +26,7 @@ export const REPORT: Record<number, string> = {
   1: "musket_shot",
   2: "blunderbuss_shot",
   5: "cannon_shot",
+  7: "crank_shot",
 };
 
 /** Impact sound by SURFACE id. */

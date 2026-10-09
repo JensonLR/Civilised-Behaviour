@@ -2,6 +2,8 @@ import { Vector3 } from "three";
 import {
   BUTTON,
   CANNON,
+  CRANK,
+  CRANK_PHASE,
   CARRIED,
   COMBAT,
   FLAG,
@@ -38,6 +40,7 @@ import type { ActorCombat, CharacterActor } from "../render/CharacterActor.ts";
 import { Projectiles } from "../render/Projectiles.ts";
 import type { Stage } from "../render/Stage.ts";
 import { CannonView } from "../render/weapons/CannonView.ts";
+import { CrankGunView } from "../render/weapons/CrankGunView.ts";
 import { ShotFx } from "../render/weapons/ShotFx.ts";
 import { IMPACT_SOUND, REPORT, fx as sfx } from "../render/weapons/sfx.ts";
 import { aimSolve, crosshairDistance, reticleRadiusPx } from "../input/aim.ts";
@@ -103,7 +106,7 @@ export class CombatView {
   onBlast: ((x: number, z: number, radius: number) => void) | undefined;
   private readonly projectiles: Projectiles;
   private readonly hud: CombatHud;
-  private readonly cannons = new Map<string, CannonView>();
+  private readonly cannons = new Map<string, CannonView | CrankGunView>();
   private readonly elevSmooth = new Map<string, number>();
   private prevButtons = 0;
   /** Predicted shots and blows the server has not confirmed yet: its `shot` event for them is a duplicate of what is already on screen. */
@@ -273,7 +276,8 @@ export class CombatView {
       if (drawn) this.localReadyAt = Math.max(this.localReadyAt, now + Math.max(drawn.drawSeconds, COMBAT.switchSeconds) * 1000 * 0.94);
       this.triggerPending = false;
     }
-    if (w < 0 || (me.flags & BUSY) !== 0) {
+    // (D-092: Use held at the crank gun makes the trigger the gun's from the first frame, before the server's OPERATING comes back: the hand weapon is never predicted)
+    if (w < 0 || (me.flags & BUSY) !== 0 || ((it.buttons & BUTTON.INTERACT) !== 0 && this.lastPromptCannon?.kind === 1)) {
       this.triggerPending = false;
       return;
     }
@@ -396,7 +400,7 @@ export class CombatView {
 
   private onShot(e: ShotEvent): void {
     const isMe = e.id === this.session.sessionId;
-    if (e.id.startsWith("cannon:")) return this.onCannonShot(e);
+    if (e.id.startsWith("cannon:")) return e.w === WEAPON.CRANK ? this.onCrankShot(e) : this.onCannonShot(e);
     const actor = this.actors().get(e.id)?.body;
     actor?.cue("angry", 0.8); // (D-084: teeth set as the shot goes)
     if (e.m) {
@@ -432,6 +436,27 @@ export class CombatView {
     const d = Math.hypot(e.x - this.stage.camera.position.x, e.z - this.stage.camera.position.z);
     this.rig.addShake(Math.max(0, 1 - d / 70) * 0.9);
     this.controls.rumble("blast", Math.max(0, 1 - d / 70));
+  }
+
+  /**
+   * D-092: a round from the crank gun: a small flash at the barrels' mouths, a tracer along the round's own line (the server's spread, from the event's seed, as
+   * every hitscan is drawn), the report, and a little shake if it is close. Eight of these a second while the handle turns.
+   */
+  private onCrankShot(e: ShotEvent): void {
+    const view = this.cannons.get(e.id.slice(7));
+    if (view) view.muzzle(muzzle, mdir);
+    else muzzle.set(e.x, e.y, e.z), mdir.set(e.dx, e.dy, e.dz);
+    this.fx.muzzle(WEAPON.CRANK, muzzle.x, muzzle.y, muzzle.z, mdir.x, mdir.y, mdir.z);
+    sfx.sound(REPORT[WEAPON.CRANK] ?? "pistol_shot", { x: muzzle.x, y: muzzle.y, z: muzzle.z });
+    const r = WEAPONS[WEAPON.CRANK].ranged!;
+    const yaw = Math.atan2(-e.dx, -e.dz);
+    const elev = Math.asin(Math.max(-1, Math.min(1, e.dy)));
+    shotDirection(yaw, elev, e.spread, e.seed, 0, shotV);
+    let t = r.range;
+    if (rayWorld(this.session.world, e.x, e.y, e.z, shotV.x, shotV.y, shotV.z, r.range, worldHit)) t = worldHit.t;
+    this.fx.tracer(muzzle.x, muzzle.y, muzzle.z, e.x + shotV.x * t, e.y + shotV.y * t, e.z + shotV.z * t, WEAPON.CRANK);
+    const d = Math.hypot(e.x - this.stage.camera.position.x, e.z - this.stage.camera.position.z);
+    this.rig.addShake(Math.max(0, 1 - d / 25) * 0.08);
   }
 
   private onImpact(e: ImpactEvent): void {
@@ -489,7 +514,7 @@ export class CombatView {
     this.session.room.state.cannons?.forEach((st, id) => {
       let v = this.cannons.get(id);
       if (!v) {
-        v = new CannonView(this.stage.scene, this.fx, this.stage.outlines);
+        v = st.kind === 1 ? new CrankGunView(this.stage.scene, this.stage.outlines) : new CannonView(this.stage.scene, this.fx, this.stage.outlines);
         this.cannons.set(id, v);
       }
       v.update(dt, st);
@@ -555,7 +580,7 @@ export class CombatView {
     // the cannon card: when standing at a gun
     const c = this.cannonInReach(me);
     this.lastPromptCannon = c;
-    this.hud.updateCannon(c ? { phase: c.phase, progress: c.progress, crew: c.crew, shells: c.shells, mine: (me.flags & FLAG.OPERATING) !== 0 } : undefined);
+    this.hud.updateCannon(c ? { kind: c.kind, phase: c.phase, progress: c.progress, crew: c.crew, shells: c.shells, mine: (me.flags & FLAG.OPERATING) !== 0 } : undefined);
   }
 
   /** A firearm (not a blade, not bare hands) is wanted in hand and the body can use it: the follow camera takes its "ready" view (D-040). */
@@ -577,7 +602,7 @@ export class CombatView {
   private cannonInReach(me: PlayerStateType): CannonStateType | undefined {
     let found: CannonStateType | undefined;
     this.session.room.state.cannons?.forEach((c) => {
-      if (Math.hypot(this.session.value(me, "x") - c.x, this.session.value(me, "z") - c.z) <= CANNON.crewRange + 0.6) found = c;
+      if (Math.hypot(this.session.value(me, "x") - c.x, this.session.value(me, "z") - c.z) <= (c.kind === 1 ? CRANK.crewRange : CANNON.crewRange) + 0.6) found = c;
     });
     return found;
   }
@@ -586,6 +611,13 @@ export class CombatView {
   cannonPrompt(use: string): string {
     const c = this.lastPromptCannon;
     if (!c || (this.predicted && (this.predicted.flags & (FLAG.CARRYING | FLAG.DOWNED)) !== 0)) return "";
+    if (c.kind === 1) {
+      // D-092: the crank gun
+      if (c.phase === CRANK_PHASE.READY) return `Hold ${use} and {fire}  Turn the crank gun's handle`;
+      if (c.phase === CRANK_PHASE.CHANGING) return `Hold ${use}  Change the hopper (let go of {fire})`;
+      if (c.phase === CRANK_PHASE.JAMMED) return `Hold ${use}  Clear the jam (let go of {fire})`;
+      return "The crank gun is out of rounds";
+    }
     if (c.phase === 0) return c.shells > 0 ? `Hold ${use}  Load the cannon` : "The limber is empty";
     if (c.phase === 1) return `Hold ${use}  Ram the charge home`;
     if (c.phase === 2) return `Hold ${use} and press {fire}  Light the fuse`;

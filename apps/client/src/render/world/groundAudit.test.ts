@@ -6,6 +6,7 @@ import { horseFromSeed } from "@cb/procedural";
 import { buildHorse, buildWagon } from "@cb/procedural/three";
 import { PRESETS } from "../Stage.ts";
 import { CannonView } from "../weapons/CannonView.ts";
+import { CrankGunView } from "../weapons/CrankGunView.ts";
 import { createRegionView } from "./regionView.ts";
 import { floatingPieces, type Floater } from "./groundAudit.ts";
 import { propGeometry } from "./objects.ts";
@@ -109,7 +110,7 @@ describe("D-076: nothing on a prop, a mount, a wagon or the cannon floats", () =
       }
     }
   });
-  it("horses saddled and in harness, the wagon with every load, the field cannon", () => {
+  it("horses saddled and in harness, the wagon with every load, the field cannon, the crank gun (D-092) with its spare hoppers", () => {
     for (let s = 0; s < 6; s++) for (const harness of [false, true]) {
       const fl = audit(buildHorse(horseFromSeed(s, { harness }), { outline: false }).root);
       expect(fl.length, `horse ${s} ${harness}\n${describeFloaters(fl)}`).toBe(0);
@@ -121,6 +122,10 @@ describe("D-076: nothing on a prop, a mount, a wagon or the cannon floats", () =
     const fx = new Proxy({}, { get: () => (): undefined => undefined }) as never;
     const fl = audit(new CannonView(new Scene(), fx, false).root);
     expect(fl.length, describeFloaters(fl)).toBe(0);
+    const crank = new CrankGunView(new Scene(), false);
+    crank.update(1 / 30, { x: 0, y: 0, z: 0, yaw: 0, elev: 0, phase: 2, progress: 40, crew: 0, shells: 3, fired: 0, kind: 1 } as never);
+    const cf = audit(crank.root);
+    expect(cf.length, describeFloaters(cf)).toBe(0);
   });
 });
 

@@ -1,9 +1,16 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-09 (D-091, the industrial age, heads "Now"; D-050 to D-090 are under it. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-09 (D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-092 (2026-10-09): the crank gun.** This is the GDD's fourth and last late technology (early machine weapons).
+  - **When it comes.** Once the works and the breech-loaders both exist, every fortified post gets a five-barrelled crank gun inside its gate, aimed at the gate.
+  - **Working it.** Hold Use at the gun to crew it and add the trigger to turn the handle: eight rounds a second from a 40-round hopper. There are four hoppers per visit. Changing a hopper or clearing a jam (one round in 34) means holding Use with the trigger let go.
+  - **How it is built.** It is a server-run fixture like the camp's cannon, with its own model, flash, tracer, report sound, HUD card, paper stories, pennant and achievement.
+  - **Tested.** Shared, server (a real room: it fires, hits a raider, jams on a fixed schedule, changes hoppers) and client tests.
+  - **Looked at.** A software-rendered still at the post.
+  - **Limits.** Players only: the watch does not crew it and raiders ignore it. Unplayed; the balance is a first pass.
 - **D-091 (2026-10-09): the industrial age.** Three of the GDD's four late technologies now exist, latched like the road, the wire and the launch (no menu). The fourth, early machine weapons, is not built yet.
   - **The railway.** It comes once Kessar's post has been a town for three days with the level-2 road and the wire. It adds 20 kg of carrying capacity, and the post loses 1 supply a day instead of 3. In the world it is a siding east of the stockade: nine yards of track, a green tank engine, buffer stops and a water tank. The paper calls the line "to follow".
   - **Breech-loaders.** They come once a post is held as a garrison for four days, or with any town. A player's rifle and pistol then reload in 0.6 of the time, set by the server.

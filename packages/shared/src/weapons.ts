@@ -16,11 +16,11 @@ import type { Terrain } from "./terrain.ts";
  */
 
 /** Weapon ids are wire format (uint8 in messages, bit index in `PlayerState.weapons`): append only. */
-export const WEAPON = { PISTOL: 0, RIFLE: 1, BLUNDERBUSS: 2, SABRE: 3, UMBRELLA: 4, CANNON: 5, FISTS: 6 } as const;
+export const WEAPON = { PISTOL: 0, RIFLE: 1, BLUNDERBUSS: 2, SABRE: 3, UMBRELLA: 4, CANNON: 5, FISTS: 6, CRANK: 7 } as const;
 export type WeaponId = (typeof WEAPON)[keyof typeof WEAPON];
-export const WEAPON_COUNT = 7;
+export const WEAPON_COUNT = 8;
 
-/** What a player can carry, in hotbar order (keys 1..5). The cannon is furniture, fists are what you have when nothing is drawn. */
+/** What a player can carry, in hotbar order (keys 1..5). The cannon and the crank gun are furniture, fists are what you have when nothing is drawn. */
 export const CARRIED: readonly WeaponId[] = [WEAPON.PISTOL, WEAPON.RIFLE, WEAPON.BLUNDERBUSS, WEAPON.SABRE, WEAPON.UMBRELLA];
 export const CARRIED_MASK: number = CARRIED.reduce<number>((m, w) => m | (1 << w), 0);
 
@@ -214,6 +214,23 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     melee: { damage: 7, zoneMul: zones(1.4, 1, 0.8, 0.8), reach: 1.25, arcHalf: 0.5, windup: 0.12, cooldown: 0.5, knock: 2, stumble: 0.3, cleave: 1 },
     drawSeconds: 0, ffScale: 0.5, severBias: 0, noise: 4, weight: 0, hands: 1,
   },
+  // D-092: the post's crank gun (furniture, like the cannon: worked, never carried). A rifle's ball at a third of the weight, eight a second, from a wandering
+  // cluster of barrels; `magazine` is its hopper. Never drawn by a player: the crew's lead fires it through `CRANK`.
+  [WEAPON.CRANK]: {
+    id: WEAPON.CRANK,
+    name: "crank gun",
+    label: "Crank Gun",
+    kind: "artillery",
+    fire: "hitscan",
+    ranged: {
+      damage: 24, pellets: 1, zoneMul: zones(2, 1, 0.75, 0.75),
+      falloffStart: 35, falloffEnd: 90, falloffMin: 0.5, range: 110,
+      cooldown: 0.125, reload: 3.5, magazine: 40, reserveMax: 0, startReserve: 0,
+      spread: 0.03, spreadAimed: 0.03, spreadMove: 0,
+      speed: 0, gravity: 0, radius: 0.02, knock: 1.2, stumble: 0.12, propImpulse: 3, recoil: 0.02,
+    },
+    drawSeconds: 0, ffScale: 0.6, severBias: 0.8, noise: 160, weight: 160, hands: 2,
+  },
 };
 
 export const weaponDef = (id: number): WeaponDef | undefined => (isWeapon(id) ? WEAPONS[id] : undefined);
@@ -314,6 +331,36 @@ export function cannonObstacles(terrain: Terrain): Obstacle[] {
     return { kind: "circle", tag: "cannon", x: c.x, z: c.z, r: 0.8, y0: y - 0.5, y1: y + 1.05 } satisfies Obstacle;
   });
 }
+
+/**
+ * D-092, the crank gun: emplaced inside a fortified post's gate once the works has cast it (`TechState.crank`). Worked like the cannon (hold Use within
+ * `crewRange`; the first of the crew lays it), and fired by holding the trigger as well: a round every `ranged.cooldown` while the hopper lasts. An empty
+ * hopper is changed from the limber (`hoppers` of them) by holding Use; a jam (one round in `jamOneIn`, decided by the gun's own shot count, so the
+ * server alone knows it and replays it the same) is cleared by holding Use with the trigger let go. Replicated in `CannonState` with `kind` 1:
+ * phase 2 ready (progress = rounds in the hopper), 1 changing the hopper (progress %), 4 jammed (progress = % cleared), 0 dry; shells = hoppers left.
+ */
+export const CRANK = {
+  crewRange: 1.9,
+  hoppers: 4,
+  /** Seconds to change a hopper alone; a second pair of hands halves it. */
+  changeSeconds: 3.5,
+  clearSeconds: 1.6,
+  jamOneIn: 34,
+  /** Barrel slew (rad/s, one rate: it is light) and how far it traverses either side of its rest heading. */
+  slew: 1.5,
+  traverse: 1.1,
+  elevMin: -0.12,
+  elevMax: 0.32,
+  /** Height of the barrels' axis above the ground and their length ahead of it. */
+  trunnion: 1.05,
+  barrel: 1.05,
+} as const;
+
+/** Phases of a crank gun (`CannonState.phase` when `kind` is 1). */
+export const CRANK_PHASE = { DRY: 0, CHANGING: 1, READY: 2, JAMMED: 4 } as const;
+
+/** Does the crank gun's `shotNo`-th round jam it? Deterministic per world, gun and round. */
+export const crankJams = (worldSeed: number, gun: number, shotNo: number): boolean => hash3(worldSeed ^ 0x6c7a11d3, 300 + gun, shotNo) % CRANK.jamOneIn === 0;
 
 export function cannonLoadRate(crew: number): number {
   if (crew <= 0) return 0;

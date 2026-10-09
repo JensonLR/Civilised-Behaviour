@@ -28,7 +28,7 @@ const SEEDS = [1, 7, 42, 1234, 99999];
 const scatterKey = (w: CollisionWorld): string[] => w.obstacles.filter((o) => (o.tag === "tree" || o.tag === "rock") && Math.hypot(o.x - KESSAR_OUTPOST.site.x, o.z - KESSAR_OUTPOST.site.z) < RING_R + 3).map((o) => `${o.tag}:${o.x.toFixed(2)}:${o.z.toFixed(2)}`);
 const isOutpostObstacle = (o: Obstacle, plan: ReturnType<typeof outpostPlan>): boolean => plan.pieces.some((p) => p.solid && p.x === o.x && p.z === o.z);
 /** D-091: every piece the industrial age can add (the plan stands each only at its stage). */
-const ALL_TECH = { railway: true, works: true } as const;
+const ALL_TECH = { railway: true, works: true, crank: true } as const;
 
 // ---- footprints: convex outlines on the ground, tested by separating axes (a centre-in-shape test let a hut's corner sit in a tower) ----------------------
 type Poly = [number, number][];

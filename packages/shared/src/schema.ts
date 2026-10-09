@@ -116,6 +116,8 @@ export const CannonState = schema({
   shells: t.uint8(),
   /** Times fired (wraps): the recoil and the flash are keyed to it. */
   fired: t.uint8(),
+  /** D-092: 0 the field cannon, 1 the post's crank gun (whose phases and counters read as `CRANK` says). */
+  kind: t.uint8(),
 });
 export type CannonStateType = SchemaType<typeof CannonState>;
 

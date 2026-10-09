@@ -47,6 +47,9 @@ import {
   ZONE,
   CANNON,
   CANNON_SPOTS,
+  CRANK,
+  CRANK_PHASE,
+  crankSpot,
   COMBAT,
   CannonState,
   WEAPON,
@@ -1206,9 +1209,36 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         cs.crew = 0;
         cs.shells = CANNON.shells;
         cs.fired = 0;
+        cs.kind = 0;   // (D-092: an unset schema field is undefined, not 0)
         this.state.cannons.set(String(i), cs);
       });
     }
+    this.syncCrankGun();
+  }
+
+  /**
+   * D-092: the crank gun stands inside this region's post's gate while the post is fortified or better and the works has cast one (`regionWorldOpts().crank`, the same
+   * test that makes its carriage solid). A new one is trained on the gate with a full hopper and the rest of the visit's in its limber; a post that falls below a
+   * stockade loses it. Combat re-reads the fixtures either way (a gun still standing keeps its crew and its counters).
+   */
+  private syncCrankGun(): void {
+    const at = this.worldOpts().crank === true ? crankSpot(this.state.region as RegionId) : undefined;
+    const has = this.state.cannons.get("crank");
+    if (at && !has) {
+      const cs = new CannonState();
+      cs.kind = 1;
+      cs.x = at.x;
+      cs.z = at.z;
+      cs.y = this.world.terrainHeight(at.x, at.z);
+      cs.yaw = at.yaw;
+      cs.elev = 0;
+      cs.phase = CRANK_PHASE.READY;
+      cs.progress = WEAPONS[WEAPON.CRANK].ranged!.magazine;
+      cs.crew = 0;
+      cs.shells = CRANK.hoppers - 1;
+      cs.fired = 0;
+      this.state.cannons.set("crank", cs);
+    } else if (!at && has) this.state.cannons.delete("crank");
     this.combat?.rebuildCannons();
   }
 
@@ -1320,7 +1350,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (this.worldOpts().rivalPost !== synBefore) this.rebuildWorld();
     // D-040: what the ending did arrives as ONE debrief telegram, a line each (the playtest's bribe sent six slips in a row and buried the field under paper)
     const debrief = [pay.line, ...[billLine(m.bill), m.spectacleLine, m.requestLine].filter((l) => l !== ""), ...consequenceLines(before, this.campaign).slice(0, 3)];
-    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch" || e.kind === "railway" || e.kind === "breech" || e.kind === "works") debrief.push(this.settlementLine(e));
+    for (const e of events) if (e.kind === "promoted" || e.kind === "demoted" || e.kind === "abandoned" || e.kind === "raided" || e.kind === "telegraph" || e.kind === "launch" || e.kind === "railway" || e.kind === "breech" || e.kind === "works" || e.kind === "crank") debrief.push(this.settlementLine(e));
     if (works.paid > 0) debrief.push(`The works at ${this.settlements.posts[this.settlements.tech.works as RegionId]?.name ?? "the post"} paid £${works.paid} into the purse. The river did not thank it.`);
     // Wages, wounds and desertions of the hired hands, AFTER the outcome (a reward is in the purse before it is spent).
     debrief.push(...this.followers.settle(o).slice(0, 4));
@@ -1367,6 +1397,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       case "railway": return `Nine yards of railway open at ${e.name}, the rest to follow. Freight moves; the Syndicate has written.`;
       case "breech": return "The armourers have rifled the Society's barrels: rifles and pistols now load at the breech, much faster.";
       case "works": return `A works has opened beside ${e.name}. It pays; it smokes.`;
+      case "crank": return "The works has cast a crank gun for every stockade: hold Use at it to work it, and the trigger to turn the handle.";
       default: return `${e.name}: ${e.kind}.`;
     }
   }
@@ -1477,6 +1508,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         m.z = pos.z;
       }
     });
+    this.syncCrankGun();
   }
 
   /**

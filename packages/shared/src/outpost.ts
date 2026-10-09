@@ -34,10 +34,10 @@ export const KESSAR_OUTPOST = OUTPOST_SITES.kessar!;
 
 export type OutpostPieceKind =
   | "tent" | "fire" | "hut" | "stall" | "rail" | "well" | "palisade" | "post" | "tower" | "house" | "mill" | "hall" | "bell" | "clock" | "wall" | "stakes" | "sign"
-  | "siding" | "engine" | "buffer" | "tank" | "works" | "spoil";
+  | "siding" | "engine" | "buffer" | "tank" | "works" | "spoil" | "crank";
 
 /** D-091: the pieces the industrial age adds, standing only while the post has the tech (the railway at Kessar; the works in its one region). */
-export type OutpostTech = "railway" | "works";
+export type OutpostTech = "railway" | "works" | "crank";
 
 export interface OutpostPiece {
   kind: OutpostPieceKind;
@@ -114,7 +114,22 @@ function localPieces(): OutpostPiece[] {
   out.push(BOX("works", "trading_post", "house", -5.5, -22.5, 0, 2.2, 1.6, 4.2), CIRCLE("spoil", "trading_post", "ruin", -11, -21, 1.4, 1.2));
   for (const p of out) if (p.kind === "siding" || p.kind === "engine" || p.kind === "buffer" || p.kind === "tank") p.tech = "railway";
   for (const p of out) if (p.kind === "works" || p.kind === "spoil") p.tech = "works";
+  // D-092, the crank gun: inside the stockade, north-east of the yard, its barrels trained on the gate (the carriage is the collider; the gun itself is a
+  // replicated fixture, drawn and worked like the camp's cannon)
+  const gun = CIRCLE("crank", "fortified_outpost", "cannon", CRANK_AT.x, CRANK_AT.z, 1.0, 1.4);   // (round its pivot: the wheels, the short trail and the spare hoppers)
+  gun.tech = "crank";
+  out.push(gun);
   return out;
+}
+
+/** Where the crank gun stands, relative to the site (the gate is at 0, -17). */
+const CRANK_AT = { x: 5.5, z: -11.5 } as const;
+
+/** The crank gun's place in `region` and its rest heading (0 = -Z), trained on the middle of the gate. Undefined where the region has no site. */
+export function crankSpot(region: RegionId): { x: number; z: number; yaw: number } | undefined {
+  const at = OUTPOST_SITES[region];
+  if (!at) return undefined;
+  return { x: at.site.x + CRANK_AT.x, z: at.site.z + CRANK_AT.z, yaw: Math.atan2(CRANK_AT.x - 0, CRANK_AT.z - -17) };
 }
 
 /** The siding's track: the rails stand `gauge` either side of its centre line, on sleepers `half` wide (the piece's hx). */
@@ -194,11 +209,11 @@ export function rivalPostObstacles(stage: number, terrain: Terrain, region: Regi
  * A region's obstacles with its outpost: the seeded scatter (`scatterTags`) is cleared out of the ring and the stage's colliders appended (the same set cleared at every stage
  * above "none", so a stage change moves nothing else). "none" returns `out` untouched: the plain world, byte for byte. Shared by every region with a site (D-056).
  */
-export function withOutpost(out: Obstacle[], terrain: Terrain, region: RegionId, opts: { outpost?: OutpostStage; telegraph?: boolean; railway?: boolean; works?: boolean } | undefined, scatterTags: readonly ObstacleTag[]): Obstacle[] {
+export function withOutpost(out: Obstacle[], terrain: Terrain, region: RegionId, opts: { outpost?: OutpostStage; telegraph?: boolean; railway?: boolean; works?: boolean; crank?: boolean } | undefined, scatterTags: readonly ObstacleTag[]): Obstacle[] {
   const stage = opts?.outpost ?? "none";
   if (stage === "none" || !OUTPOST_SITES[region]) return out;
   const kept = out.filter((o) => !((o.tag !== undefined && scatterTags.includes(o.tag)) && inOutpostRing(o.x, o.z, 0, region)));
-  return [...kept, ...outpostObstacles(stage, opts?.telegraph === true, terrain, region, { railway: opts?.railway === true, works: opts?.works === true })];
+  return [...kept, ...outpostObstacles(stage, opts?.telegraph === true, terrain, region, { railway: opts?.railway === true, works: opts?.works === true, crank: opts?.crank === true })];
 }
 
 /**
