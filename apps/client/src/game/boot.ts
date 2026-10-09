@@ -13,7 +13,7 @@ import { REACH_CHECKING } from "../platform/reachCopy.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
 import { Stage } from "../render/Stage.ts";
 import { DEMO, createArena, isRegionId, isTemplateId, parseCampaign, type RegionId, type ScenarioTemplateId } from "@cb/shared";
-import { decodeSpec, encodeSpec, generateCharacter } from "@cb/procedural";
+import { decodeSpec, encodeSpec } from "@cb/procedural";
 import { CreatorPreview } from "../render/CreatorPreview.ts";
 import { Captions } from "../ui/Captions.ts";
 import { CharacterCreator } from "../ui/CharacterCreator.ts";
@@ -83,29 +83,33 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   link.presence({ where: "menu", party: 1, day: 0 });
   window.addEventListener("pagehide", () => link.dispose());
 
-  // ---- character look: remembered per browser, random for first-time players ----
-  const loadLook = (): string => {
-    try {
-      const saved = localStorage.getItem("cb.look");
-      if (saved && decodeSpec(saved)) return saved;
-    } catch {
-      /* storage unavailable */
-    }
-    return encodeSpec(generateCharacter(Math.floor(Math.random() * 1e9)));
-  };
-  const saveLook = (look: string): void => {
-    try {
-      localStorage.setItem("cb.look", look);
-    } catch {
-      /* ignore */
-    }
-  };
   // `?region=kessar` founds the expedition already at that shore (dev, tests, screenshots); in play the party sails from the map room
   // Dev and test builds only: a production build never sends the levers (the server ignores them without debug commands anyway).
   const devBuild = import.meta.env.MODE !== "production";
   const startRegion: RegionId | undefined = devBuild && isRegionId(params.get("region")) ? (params.get("region") as RegionId) : undefined;
   // `&scenario=<template id>` picks the contract offered at Kessar (dev, tests): in play the campaign ledger decides (shared/scenarios/registry.ts)
   const startScenario: ScenarioTemplateId | undefined = devBuild && isTemplateId(params.get("scenario")) ? (params.get("scenario") as ScenarioTemplateId) : undefined;
+  /**
+   * D-102: ask the browser to keep this site's storage (the identity, the characters, the expeditions) rather than clear it when space runs short or the site has not been visited
+   * for a while. Asked once a game is entered (after a click; Firefox shows its own question then), and only while it is not already kept. Never throws.
+   */
+  const keepStorage = (): void => {
+    try {
+      const st = navigator.storage;
+      if (!st?.persisted || !st.persist) return;
+      void st.persisted().then((kept) => (kept ? undefined : st.persist())).catch(() => undefined);
+    } catch {
+      /* no storage manager: nothing to ask */
+    }
+  };
+  /** D-102: the others in the room by the names they use (a save then reads "with Bram, Cecily": the group it was played with). */
+  const partyNames = (s: Session): string[] => {
+    const out: string[] = [];
+    s.room.state.players.forEach((p, id) => {
+      if (!p.npc && id !== s.room.sessionId && p.name) out.push(p.name);
+    });
+    return out;
+  };
   const realPlayers = (s: Session): number => {
     let n = 0;
     s.room.state.players.forEach((p) => {
@@ -113,9 +117,10 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     });
     return n;
   };
-  let look = loadLook();
-  saveLook(look);
+  // D-102: the look a new, joined or resumed expedition is entered in is the chosen character's (the door keeps the device's characters: ui/characters.ts)
+  const look = (): string => menu.look;
 
+  let onCharacter: ((look: string) => void) | undefined;
   let backdropWanted = true;
   let removeChrome: (() => void) | undefined;
   function showHud(s: Session): void {
@@ -131,9 +136,10 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
    */
   function rememberExpedition(s: Session, name: string): void {
     if (isDemo()) return;
+    const who = menu.characterId; // (D-102: who played it, fixed at the door; the save brings them back)
     const sync = (): void => {
       const day = parseCampaign(s.room.state.campaign)?.day;
-      noteExpedition(s.code, { name: s.local?.name || name, region: s.room.state.region, ...(day === undefined ? {} : { day }) });
+      noteExpedition(s.code, { name: s.local?.name || name, region: s.room.state.region, who, party: partyNames(s), ...(day === undefined ? {} : { day }) });
     };
     sync();
     s.saves.subscribe(() => sync());
@@ -182,12 +188,18 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     });
     preview = new CreatorPreview(stage, canvas);
     menu.onFrame = (f) => preview.setFocus(f); // (D-098: the figure stands where the door's panels leave the picture free)
-    const initial = decodeSpec(look)!;
-    new CharacterCreator(menu.creatorHost, initial, (spec) => {
-      look = encodeSpec(spec);
-      saveLook(look);
+    const initial = decodeSpec(look())!;
+    const creator = new CharacterCreator(menu.creatorHost, initial, (spec) => {
+      menu.setLook(encodeSpec(spec));
       preview.setSpec(spec);
     });
+    // (another character chosen at the door: the creator and the figure take their look)
+    onCharacter = (code) => {
+      const spec = decodeSpec(code);
+      if (!spec) return;
+      creator.load(spec);
+      preview.setSpec(spec);
+    };
     preview.setSpec(initial);
     preview.start();
   });
@@ -227,6 +239,7 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     preview.stop();
     session = s;
     rememberExpedition(s, name); // (before the Game: its orientation card reads this campaign's entry)
+    if (!isDemo()) keepStorage();
     if (how === "join") quietOrientationForJoiner(s.code); // (D-101: the welcome card is for the expedition you start, not one somebody else is already running)
     game = new Game(stage, s, controls, hud, debugEl, link);
     settingsSheet().inGame = true; // (the records cannot be erased under a room that would save them straight back)
@@ -258,17 +271,18 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
   const patient = patientProgress;
 
   const menu: Menu = new Menu(menuEl, {
+    onCharacter: (code) => onCharacter?.(code),
     onCreate: async (name, rules, progress) => {
       backdropWanted = false; // (from the click, not from the session: the camp behind the door is not worth building now)
       const done = patient(progress, "Posting the telegram...");
-      const s = await retryBusy(() => Session.create(name, look, { ...rules, ...(startRegion ? { region: startRegion } : {}), ...(startScenario ? { scenario: startScenario } : {}) }), progress).finally(done);
+      const s = await retryBusy(() => Session.create(name, look(), { ...rules, ...(startRegion ? { region: startRegion } : {}), ...(startScenario ? { scenario: startScenario } : {}) }), progress).finally(done);
       progress("Reply received. Packing the trunks...");
       await enter(s, name);
     },
     onJoin: async (code, name, progress) => {
       backdropWanted = false;
       const done = patient(progress, "Presenting your code...");
-      const s = await Session.join(code, name, look).finally(done);
+      const s = await Session.join(code, name, look()).finally(done);
       progress("Reply received. Packing the trunks...");
       await enter(s, name, "join");
     },
@@ -283,19 +297,29 @@ export function bootGame(canvas: HTMLCanvasElement, params: URLSearchParams): vo
             // (a campaign left a moment ago may still be putting its last save away: for an expedition played in the last half minute, ask again a few times before giving up)
             const recent = (listExpeditions().find((e) => e.code === code)?.lastPlayed ?? 0) > Date.now() - 30_000;
             let s: Session | undefined;
+            let joined = false;
             for (let attempt = 0; !s; attempt++) {
               try {
-                s = await retryBusy(() => Session.create(name, look, { resume: code }), progress);
+                s = await retryBusy(() => Session.create(name, look(), { resume: code }), progress);
               } catch (e) {
                 done();
-                if (!recent || attempt >= 4 || !isDormantSave(e instanceof Error ? e.message : "")) throw e;
+                const dormant = isDormantSave(e instanceof Error ? e.message : "");
+                // D-102: the group may already be out on it (a friend resumed the save, or a dropped player's seat is still held): join them instead of being refused
+                if (dormant && attempt === 0) {
+                  s = await Session.join(code, name, look()).catch(() => undefined);
+                  if (s) {
+                    joined = true;
+                    break;
+                  }
+                }
+                if (!recent || attempt >= 4 || !dormant) throw e;
                 progress("The file is being put away. Asking again...");
                 await idleFor(700);
               }
             }
             done();
-            progress("The file is found. Packing the trunks...");
-            await enter(s, name, "resume");
+            progress(joined ? "The party is already out. Joining them..." : "The file is found. Packing the trunks...");
+            await enter(s, name, joined ? "join" : "resume");
           },
         }),
   });

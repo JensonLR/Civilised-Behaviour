@@ -46,7 +46,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
  */
 export class CharacterCreator {
   private spec: CharacterSpec;
-  private readonly history: SpecHistory;
+  private history: SpecHistory;
   private tab: Tab = "types";
   private pose: PoseId = "turntable";
   private readonly body: HTMLElement;
@@ -170,6 +170,14 @@ export class CharacterCreator {
     this.spec = { ...spec };
     this.history.record(this.spec);
     this.refresh();
+  }
+
+  /** D-102: another character's look (the door chose someone else): shown with a fresh history, since stepping back into a different person is not an undo. */
+  load(spec: CharacterSpec): void {
+    this.spec = { ...spec };
+    this.history = new SpecHistory(this.spec);
+    this.refresh();
+    this.refreshTools();
   }
 
   // ---- state changes ------------------------------------------------------------------------------------------------------------------------------

@@ -67,6 +67,8 @@ describe("gamepad only, title to field", () => {
     });
     tap(13); // down: the name
     expect(focusedId()).toBe("name");
+    tap(13); // (D-102: then "+ New", the device's characters)
+    expect(focusedId()).toBe("who-new");
     tap(13);
     expect(focusedId()).toBe("create");
     tap(0); // A

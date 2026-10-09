@@ -9,6 +9,8 @@ export interface MenuHandlers {
    * Continue and no list (D-039).
    */
   onResume?(code: string, name: string, progress: (step: string) => void): Promise<void>;
+  /** D-102: the door chose another of this device's characters (or made one): the creator and the figure behind the door take its look. */
+  onCharacter?(look: string): void;
 }
 
 /** The letters the pad's dial turns through for a name (lower case first, as most of a name is; down from "a" wraps straight to the capitals). */
@@ -19,6 +21,7 @@ export const isNoLiveCampaign = (message: string): boolean => /^No campaign with
 
 import { dormantCopy, describeError, isDormantSave, stepAt } from "./menuLogic.ts";
 import { expeditionMeta, forgetExpedition, listExpeditions, type Expedition } from "./expeditions.ts";
+import { MAX_CHARACTERS, addCharacter, currentCharacter, freshCharacter, loadRoster, removeCharacter, saveRoster, selectCharacter, updateCharacter, type Roster } from "./characters.ts";
 import "./expeditions.css";
 import { bindPrompt } from "../input/glyphDom.ts";
 import { startPadNav } from "./PadNav.ts";
@@ -63,28 +66,35 @@ export class Menu {
   private lastWasJoin = false;
   /** The code of the expedition the action in hand is resuming, if it is one (a failure then gets the friendly "file not found" card, D-039). */
   private lastResumeCode: string | undefined;
+  /** D-102: this device's characters, one of them chosen (characters.ts). The name box edits the chosen one's name; the creator its look. */
+  private roster: Roster;
 
   constructor(
     private readonly root: HTMLElement,
     private readonly handlers: MenuHandlers,
   ) {
     const prefill = new URLSearchParams(location.search).get("join")?.toUpperCase() ?? "";
-    let savedName = "";
-    try {
-      savedName = localStorage.getItem("cb.name") ?? "";
-    } catch {
-      /* storage unavailable; fine */
-    }
+    this.roster = loadRoster();
+    const savedName = currentCharacter(this.roster).name;
     root.innerHTML = `
       <div class="panel main" role="dialog" aria-labelledby="title">
         <p class="society">The Imperial Cartographic &amp; Improvement Society</p>
         <div class="rule" aria-hidden="true">${COMPASS}</div>
         <h1 id="title">Civilised Behaviour</h1>
         <p class="tag">By Appointment to Her Majesty: a charter for an expedition into territories not yet improved</p>
-        <label for="name" class="namelabel">Name upon the manifest</label>
-        <div class="namerow">
-          <input id="name" maxlength="20" autocomplete="off" data-pad-chars="${NAME_DIAL}" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
-          <button id="dress" type="button" aria-controls="creator-host" aria-expanded="false" hidden>Appearance</button>
+        <div class="namebox">
+          <label for="name" class="namelabel">Name upon the manifest</label>
+          <div class="namerow">
+            <input id="name" maxlength="20" autocomplete="off" data-pad-chars="${NAME_DIAL}" placeholder="Sir Reginald Blunt" value="${savedName.replace(/[&<>"]/g, "")}" />
+            <button id="dress" type="button" aria-controls="creator-host" aria-expanded="false" hidden>Appearance</button>
+          </div>
+          <span class="who">
+            <label for="who" class="playing" hidden>Playing as</label>
+            <select id="who" hidden></select>
+            <span class="grow"></span>
+            <button id="who-new" type="button" class="quiet tiny">+ New</button>
+            <button id="who-drop" type="button" class="quiet tiny" hidden>Retire</button>
+          </span>
         </div>
         <div class="row" id="continue-row" hidden>
           <button id="continue" type="button" class="primary"><span class="cont-title">Continue</span><span class="cont-meta"></span></button>
@@ -96,7 +106,7 @@ export class Menu {
         <section class="expeditions" id="expeditions" aria-labelledby="exp-h" hidden>
           <h2 id="exp-h">Your expeditions</h2>
           <ul></ul>
-          <p class="fine">Kept on this device. A resumed expedition begins at HQ.</p>
+          <p class="fine">Kept on this device: copy them under Options, Profile. Resuming starts at HQ.</p>
         </section>
         <div class="or">or join a party with its code</div>
         <div class="row">
@@ -198,8 +208,107 @@ export class Menu {
       const ro = new ResizeObserver(() => this.reframeSoon());
       for (const p of root.querySelectorAll<HTMLElement>(":scope > .panel")) ro.observe(p);
     }
+    this.bindCharacters();
     this.layout();
     startPadNav(root, () => !this.root.hidden && !anyModalOpen());
+  }
+
+  /** The chosen character's look (what a new, joined or resumed expedition is entered in). */
+  get look(): string {
+    return currentCharacter(this.roster).look;
+  }
+
+  /** The chosen character's id (each saved expedition remembers who played it). */
+  get characterId(): string {
+    return this.roster.current;
+  }
+
+  /** The creator changed the chosen character's look. */
+  setLook(look: string): void {
+    this.roster = updateCharacter(this.roster, this.roster.current, { look });
+    saveRoster(this.roster);
+  }
+
+  /**
+   * D-102, the owner: "profile persistence so people can keep their characters & campaign saves". The door keeps several characters: a list to choose from (shown once there is
+   * more than one), "+ New" to start another with a random look, and a two-press Retire. The name box always edits the chosen one; resuming a save brings back the one who played it.
+   */
+  private bindCharacters(): void {
+    const sel = this.root.querySelector<HTMLSelectElement>("#who")!;
+    const add = this.root.querySelector<HTMLButtonElement>("#who-new")!;
+    const drop = this.root.querySelector<HTMLButtonElement>("#who-drop")!;
+    sel.addEventListener("change", () => this.chooseCharacter(sel.value));
+    add.addEventListener("click", () => {
+      const before = this.roster;
+      this.roster = addCharacter(this.roster, freshCharacter(""));
+      if (this.roster === before) return;
+      this.afterCharacterChange();
+      this.nameInput.focus();
+      this.setStatus("A new character: give them a name and a look.", false);
+    });
+    const disarm = (): void => {
+      delete drop.dataset.armed;
+      drop.textContent = "Retire";
+    };
+    drop.addEventListener("click", () => {
+      if (drop.dataset.armed !== "1") {
+        drop.dataset.armed = "1";
+        drop.textContent = "Sure?";
+        return;
+      }
+      disarm();
+      const gone = currentCharacter(this.roster).name || "The unnamed one";
+      this.roster = removeCharacter(this.roster, this.roster.current);
+      this.afterCharacterChange();
+      this.setStatus(`${gone} has retired.`, false);
+    });
+    drop.addEventListener("blur", disarm);
+    this.nameInput.addEventListener("input", () => {
+      this.roster = updateCharacter(this.roster, this.roster.current, { name: this.nameInput.value });
+      saveRoster(this.roster);
+      this.renderCharacters();
+    });
+    this.renderCharacters();
+  }
+
+  /** Chooses one of the device's characters (an unknown id changes nothing). */
+  private chooseCharacter(id: string): void {
+    if (id === this.roster.current) return;
+    const before = this.roster;
+    this.roster = selectCharacter(this.roster, id);
+    if (this.roster !== before) this.afterCharacterChange();
+  }
+
+  private afterCharacterChange(): void {
+    saveRoster(this.roster);
+    const c = currentCharacter(this.roster);
+    this.nameInput.value = c.name;
+    this.renderCharacters();
+    this.handlers.onCharacter?.(c.look);
+  }
+
+  private renderCharacters(): void {
+    const sel = this.root.querySelector<HTMLSelectElement>("#who")!;
+    const add = this.root.querySelector<HTMLButtonElement>("#who-new")!;
+    const drop = this.root.querySelector<HTMLButtonElement>("#who-drop")!;
+    const many = this.roster.list.length > 1;
+    sel.hidden = !many;
+    drop.hidden = !many;
+    this.root.querySelector<HTMLElement>(".who .playing")!.hidden = !many;
+    // (with two or more, the line reads "Playing as [Cecily]  + New  Retire" and the name box's own label is kept for screen readers only: the line stays one line on a phone)
+    this.root.querySelector<HTMLElement>(".namebox")!.classList.toggle("many", many);
+    add.disabled = this.roster.list.length >= MAX_CHARACTERS;
+    add.title = add.disabled ? `A device keeps ${MAX_CHARACTERS} characters at most: retire one first` : "Start another character";
+    add.setAttribute("aria-label", "New character");
+    sel.replaceChildren(
+      ...this.roster.list.map((c, i) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = c.name || `Unnamed ${i + 1}`;
+        o.selected = c.id === this.roster.current;
+        return o;
+      }),
+    );
   }
 
   private readonly dressBtn: HTMLButtonElement;
@@ -255,6 +364,8 @@ export class Menu {
   /** Bring a saved expedition back: one click, through the same path as the code box (the server checks that this browser was a member). */
   private resume(code: string): void {
     if (!this.handlers.onResume) return;
+    const who = listExpeditions().find((e) => e.code === code)?.who;
+    if (who) this.chooseCharacter(who); // (D-102: the save comes back with the character who played it, when this device still keeps them)
     void this.run(() => this.handlers.onResume!(code, this.name(), (t) => this.progress(t)), false, code);
   }
 
@@ -322,11 +433,8 @@ export class Menu {
 
   private name(): string {
     const n = this.nameInput.value.trim();
-    try {
-      localStorage.setItem("cb.name", n);
-    } catch {
-      /* ignore */
-    }
+    this.roster = updateCharacter(this.roster, this.roster.current, { name: n });
+    saveRoster(this.roster);
     return n;
   }
 

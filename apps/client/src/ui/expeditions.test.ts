@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { JOIN_CODE_ALPHABET } from "@cb/shared";
 import {
   EXPEDITIONS_KEY, MAX_EXPEDITIONS, ageText, cleanName, clearOrientProgress, expeditionMeta, forgetExpedition, getOrientProgress, listExpeditions, mostRecentExpedition, noteExpedition,
-  parseExpeditions, quietOrientationForJoiner, serializeExpeditions, setOrientProgress, upsertExpedition, withoutExpedition, type Expedition,
+  parseExpeditions, PARTY_MAX, quietOrientationForJoiner, serializeExpeditions, setOrientProgress, upsertExpedition, withoutExpedition, type Expedition,
 } from "./expeditions.ts";
 
 /** The local "Your expeditions" record (D-039): validated on read, versioned, capped, and safe against corrupt or hostile storage. */
@@ -10,7 +11,11 @@ import {
 const NOW = Date.now();
 const ex = (code: string, extra: Partial<Expedition> = {}): Expedition => ({ code, name: "Ada", region: "hollowmere", day: 0, lastPlayed: NOW - 1000, ...extra });
 const raw = (list: unknown, v: unknown = 1): string => JSON.stringify({ v, list });
-const CODES = ["K7M2Q", "R4T9W", "H3N6P", "B8D5F", "C2G7J", "M9X4V", "T6Y3Z", "W5Q8K", "D2F4H", "J7L9N", "P3R6T", "V8X2B", "Z4C7M", "F9G5S"];
+const CODES = [
+  "K7M2Q", "R4T9W", "H3N6P", "B8D5F", "C2G7J", "M9X4V", "T6Y3Z", "W5Q8K", "D2F4H", "J7L9N", "P3R6T", "V8X2B", "Z4C7M", "F9G5S",
+  // (D-102: the cap is 24; enough more valid codes to pass it)
+  ...Array.from({ length: 16 }, (_, i) => `${JOIN_CODE_ALPHABET[i % JOIN_CODE_ALPHABET.length]}${JOIN_CODE_ALPHABET[(i * 7 + 3) % JOIN_CODE_ALPHABET.length]}Q${JOIN_CODE_ALPHABET[(i * 5 + 1) % JOIN_CODE_ALPHABET.length]}N`),
+];
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {
@@ -104,7 +109,7 @@ describe("upsert / forget (pure)", () => {
     expect(upsertExpedition(list, "K7M2Q", { day: Number.NaN }, NOW)[0]!.day).toBe(3);
   });
 
-  it("is capped: the oldest goes when a thirteenth arrives", () => {
+  it("is capped: the oldest goes when one past the cap arrives", () => {
     let list: Expedition[] = [];
     CODES.slice(0, MAX_EXPEDITIONS + 1).forEach((c, i) => (list = upsertExpedition(list, c, {}, NOW - 100_000 + i * 1000)));
     expect(list).toHaveLength(MAX_EXPEDITIONS);
@@ -126,7 +131,7 @@ describe("the stored record", () => {
     expect(stored.v).toBe(1);
     expect(Object.keys(stored).sort()).toEqual(["list", "v"]);
     // nothing but the door's own fields: no seed, no token, no member key
-    for (const e of stored.list) expect(Object.keys(e).every((k) => ["code", "name", "region", "day", "lastPlayed", "orient"].includes(k))).toBe(true);
+    for (const e of stored.list) expect(Object.keys(e).every((k) => ["code", "name", "region", "day", "lastPlayed", "orient", "who", "party"].includes(k))).toBe(true);
     forgetExpedition("r4t9w");
     expect(listExpeditions(NOW).map((e) => e.code)).toEqual(["K7M2Q"]);
     forgetExpedition("K7M2Q");
@@ -197,7 +202,24 @@ describe("words", () => {
   });
 
   it("the meta line names the code, the last region, the day (when known) and the age", () => {
-    expect(expeditionMeta(ex("K7M2Q", { region: "kessar", day: 4, lastPlayed: NOW - 3 * 3_600_000 }), NOW)).toBe("No. K7M2Q · last at Kessar Reach · Day 4 · 3 h ago");
-    expect(expeditionMeta(ex("K7M2Q"), NOW)).toBe("No. K7M2Q · last at Hollowmere Depot · just now");
+    expect(expeditionMeta(ex("K7M2Q", { region: "kessar", day: 4, lastPlayed: NOW - 3 * 3_600_000 }), NOW)).toBe("No. K7M2Q · Kessar Reach · Day 4 · 3 h ago");
+    expect(expeditionMeta(ex("K7M2Q"), NOW)).toBe("No. K7M2Q · Hollowmere Depot · just now");
   });
 });
+
+describe("D-102: a save remembers its character and its group", () => {
+  it("who and party are kept, checked, and the party gathers (newest names first, no repeats, never your own name, capped)", () => {
+    noteExpedition("K7M2Q", { name: "Ada", who: "abcd1234", party: ["Bram"] }, NOW - 2000);
+    noteExpedition("K7M2Q", { party: ["Cecily", "Bram", "Ada", "<b>Dot</b>", "Edmund"] }, NOW);
+    const e = listExpeditions(NOW)[0]!;
+    expect(e.who).toBe("abcd1234");
+    expect(e.party).toEqual(["Cecily", "Bram", "bDot/b"].slice(0, PARTY_MAX));
+    expect(expeditionMeta(e, NOW)).toMatch(/^with Cecily, Bram, bDot\/b · Hollowmere/);
+    // hostile values are dropped field by field
+    const bad = parseExpeditions(JSON.stringify({ v: 1, list: [{ code: "R4T9W", lastPlayed: NOW, who: "../x", party: "Bram" }] }), NOW)[0]!;
+    expect(bad.who).toBeUndefined();
+    expect(bad.party).toBeUndefined();
+    expect(expeditionMeta(bad, NOW)).toMatch(/^No\. R4T9W/);
+  });
+});
+

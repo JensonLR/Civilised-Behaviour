@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Menu, type MenuHandlers } from "./Menu.ts";
 import { EXPEDITIONS_KEY, listExpeditions, noteExpedition } from "./expeditions.ts";
 import { dormantCopy, isDormantSave } from "./menuLogic.ts";
+import { CHARACTERS_KEY, MAX_CHARACTERS, parseRoster } from "./characters.ts";
 
 /** The front door's Continue button, "Your expeditions" list, fresh-world New campaign and the friendly card for a save that is not there (D-039). */
 
@@ -233,6 +234,86 @@ describe("a save that is not there", () => {
     expect(isDormantSave("  No expedition by that code is waiting for you. ")).toBe(true);
     expect(isDormantSave("Failed to fetch")).toBe(false);
     expect(isDormantSave("")).toBe(false);
+  });
+});
+
+describe("D-102: the characters this device keeps", () => {
+  const stored = () => parseRoster(localStorage.getItem(CHARACTERS_KEY))!;
+  const who = (): HTMLSelectElement => q<HTMLSelectElement>("#who");
+
+  it("a first visit has one character (the old name kept): no list, no Retire, only + New", () => {
+    localStorage.setItem("cb.name", "Ada");
+    make();
+    expect(q<HTMLInputElement>("#name").value).toBe("Ada");
+    expect(who().hidden).toBe(true);
+    expect(q("#who-drop").hidden).toBe(true);
+    expect(q("#who-new").hidden).toBe(false);
+    expect(stored().list.map((c) => c.name)).toEqual(["Ada"]);
+  });
+
+  it("+ New starts another with a fresh look and an empty name; the name box names whoever is chosen; the list switches between them", () => {
+    localStorage.setItem("cb.name", "Ada");
+    const looks: string[] = [];
+    const { menu } = make({ onCharacter: (l) => void looks.push(l) });
+    const adaLook = menu.look;
+    q<HTMLButtonElement>("#who-new").click();
+    expect(who().hidden).toBe(false);
+    expect(q("#who-drop").hidden).toBe(false);
+    expect(q<HTMLInputElement>("#name").value).toBe("");
+    expect(looks).toHaveLength(1);
+    expect(menu.look).toBe(looks[0]);
+    const name = q<HTMLInputElement>("#name");
+    name.value = "Bram";
+    name.dispatchEvent(new Event("input"));
+    expect([...who().options].map((o) => o.textContent)).toEqual(["Ada", "Bram"]);
+    expect(stored().list.map((c) => c.name)).toEqual(["Ada", "Bram"]);
+    expect(localStorage.getItem("cb.name")).toBe("Bram");
+    who().value = stored().list[0]!.id;
+    who().dispatchEvent(new Event("change"));
+    expect(name.value).toBe("Ada");
+    expect(menu.look).toBe(adaLook);
+    expect(looks.at(-1)).toBe(adaLook);
+    menu.setLook(looks[0]!);
+    expect(stored().list[0]!.look).toBe(looks[0]);
+  });
+
+  it("Retire takes two presses and never the last one; + New stops at the cap", () => {
+    localStorage.setItem("cb.name", "Ada");
+    make();
+    q<HTMLButtonElement>("#who-new").click();
+    const drop = q<HTMLButtonElement>("#who-drop");
+    drop.click();
+    expect(stored().list).toHaveLength(2);
+    drop.click();
+    expect(stored().list.map((c) => c.name)).toEqual(["Ada"]);
+    expect(drop.hidden).toBe(true);
+    expect(q<HTMLInputElement>("#name").value).toBe("Ada");
+    for (let i = 0; i < MAX_CHARACTERS + 2; i++) q<HTMLButtonElement>("#who-new").click();
+    expect(stored().list).toHaveLength(MAX_CHARACTERS);
+    expect(q<HTMLButtonElement>("#who-new").disabled).toBe(true);
+  });
+
+  it("resuming a save brings back the character who played it, name and look", async () => {
+    localStorage.setItem("cb.name", "Ada");
+    const looks: string[] = [];
+    const { menu, calls } = make({ onCharacter: (l) => void looks.push(l) });
+    const ada = menu.characterId;
+    q<HTMLButtonElement>("#who-new").click();
+    const name = q<HTMLInputElement>("#name");
+    name.value = "Bram";
+    name.dispatchEvent(new Event("input"));
+    noteExpedition("K7M2Q", { name: "Ada", who: ada, party: ["Cecily"] }, NOW);
+    root().innerHTML = ""; // (the next visit: Bram is the chosen one when the door opens)
+    const again = make({ onCharacter: (l) => void looks.push(l) });
+    expect(q<HTMLInputElement>("#name").value).toBe("Bram");
+    expect(q("#continue .cont-meta").textContent).toContain("with Cecily");
+    q<HTMLButtonElement>("#continue").click();
+    await flush();
+    expect(calls.resume).toEqual([]);
+    expect(again.calls.resume).toEqual([{ code: "K7M2Q", name: "Ada" }]);
+    expect(again.menu.characterId).toBe(ada);
+    expect(again.menu.look).toBe(stored().list.find((c) => c.id === ada)!.look);
+    expect(looks.at(-1)).toBe(again.menu.look);
   });
 });
 

@@ -20,7 +20,7 @@ describe("erase my records", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, campaigns: 2 }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     const sheet = settingsSheet();
-    sheet.open(null, "access");
+    sheet.open(null, "profile");
     const b = button();
     expect(b.disabled).toBe(false);
     b.click();
@@ -43,7 +43,7 @@ describe("erase my records", () => {
     localStorage.setItem("cb.identity", TOKEN);
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
     const sheet = settingsSheet();
-    sheet.open(null, "access");
+    sheet.open(null, "profile");
     const b = button();
     b.click();
     b.click();
