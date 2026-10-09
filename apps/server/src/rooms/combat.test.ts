@@ -943,8 +943,9 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       expect(cannon.crew).toBe(2);
       frame(a, { buttons: BUTTON.INTERACT | BUTTON.FIRE, yaw: cannon.yaw });
       await until(() => cannon.phase === 3, 1500, "fuse lit");
-      await until(() => cannon.phase === 0, 3000, "fired");
-      expect(cannon.fired).toBe(1);
+      // (wait on the shot count, not on phase 0: with both hands still on the gun the next tick starts loading again, so phase 0 lasts one tick, and two late ticks
+      // run back to back on a busy runner can pass it between two polls; the test then waited for a phase that had come and gone)
+      await until(() => cannon.fired === 1, 3000, "fired");
       const t1 = sim;
       await until(() => cannon.phase === 2, CANNON.loadSeconds * 3000, "loaded by two");
       const pair = sim - t1;
