@@ -89,7 +89,7 @@ const OPEN: Record<LegacyKind, readonly string[]> = {
   ],
   claimant_elder: [
     "\"I am the elder,\" says the Princess, \"and in Highmark the eldest rules. We all agreed on that, in order of age. My price is £{price}.\"",
-    "Princess Orla does not stand up. \"My father has been 'pending' since I was a girl. If you want the chair settled my way, it will cost £{price}.\"",
+    "Princess Orla does not look up. \"My father has been 'pending' since I was a girl. If you want the chair settled my way, it will cost £{price}.\"",
   ],
   claimant_younger: [
     "\"The people love me,\" says the Prince, as somebody fans him with a palm leaf. \"Hear them cheer! Some of it is paid, but the passion is real. The passion costs £{price}.\"",

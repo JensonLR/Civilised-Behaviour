@@ -447,11 +447,11 @@ html #sheet-parley .parley > * { grid-column: 1 / -1; }
 html #sheet-parley .parley .society { grid-column: 1; grid-row: 1; text-align: left; font-size: 0.68rem; letter-spacing: 0.18em; }
 html #sheet-parley .parley .meta { grid-column: 2; grid-row: 1; margin: 0; text-align: right; font-size: 0.78rem; white-space: nowrap; align-self: baseline; }
 html #sheet-parley .parley h2 { margin: 0.05rem 0 0.25rem; text-align: left; font-size: 1.2rem; }
-html #sheet-parley .sheet.parley .line { margin: 0 0 0.45rem; padding: 0.1rem 0 0.1rem 0.8rem; font-size: 1.05rem; line-height: 1.35; }
+html #sheet-parley .sheet.parley .line { margin: 0 0 0.3rem; padding: 0.1rem 0 0.1rem 0.8rem; font-size: 1.05rem; line-height: 1.3; }
 html #sheet-parley .sheet.parley .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); column-gap: 1rem; }
-html #sheet-parley .sheet.parley .opt { padding: 0.35rem 0.5rem 0.38rem 1.5rem; row-gap: 0; }
-html #sheet-parley .parley .opt .label { font-size: 1rem; }
-html #sheet-parley .parley .opt .hint { font-size: 0.82rem; line-height: 1.25; }
+html #sheet-parley .sheet.parley .opt { padding: 0.22rem 0.5rem 0.24rem 1.5rem; row-gap: 0; }   /* (D-100: six answers fit the half-screen strip at 720 px; the last was cut off) */
+html #sheet-parley .parley .opt .label { font-size: 0.94rem; line-height: 1.2; }
+html #sheet-parley .parley .opt .hint { font-size: 0.8rem; line-height: 1.2; }
 @media (max-height: 34rem) { html #sheet-parley .panel.sheet.parley { max-height: 74vh; padding: 0.5rem 0.9rem 0.4rem; } html #sheet-parley .sheet.parley .line { font-size: 0.95rem; } }
 html #sheet-parley .parley .opt .hint { font-family: var(--serif); font-style: italic; letter-spacing: 0.01em; text-transform: none; } /* (the consequence in the reading face: small capitals were hard work at this size) */
 /* the debrief card: a row per result in the reading face, the first one set a little stronger, and the count of the rest in the stamp's red */
