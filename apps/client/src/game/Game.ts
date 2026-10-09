@@ -75,6 +75,10 @@ interface Actor {
   bledAt: number;
 }
 
+/** D-099: how far (radians) the camera swings round from behind you during a talk: nearly side-on, so you and the speaker stand side by side in the picture (a small turn left them one behind the other). */
+const TALK_TURN = 1.25;
+/** D-099: the share of the picture's height it slides up during a talk. */
+const TALK_LIFT = 0.2;
 const tmp = new Vector3();
 /** D-063: the key hints along the foot show for this long after the game starts (they are in the pause sheet's "How to play" for good). */
 const HINTS_FOR_MS = 90_000;
@@ -187,6 +191,10 @@ export class Game {
   private readonly mapRoom: MapRoom;
   private readonly sailing: Sailing;
   private readonly parley: Parley;
+  /** D-099: where the person you are talking to stands (the station the talk was opened at); the camera turns so they stand beside you, not behind your own back. */
+  private talkFocus: { x: number; z: number } | undefined;
+  /** 0..1, eased: how far the picture is slid up while a talk is open (the strip covers the foot of the screen; the two of you stand in the part above it). */
+  private talkLift = 0;
   private readonly paper: NewspaperView;
   private readonly tracker: ObjectiveTracker;
   private builtRegion: RegionId;
@@ -643,7 +651,12 @@ export class Game {
       this.audio.babble(String(m.view.speaker ?? ""), babbleKeyFor(m.view.line));
     }
     if (this.parley.isOpen) this.parley.update(m.view);
-    else this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion, this.scenarioView?.template);
+    else {
+      const me = this.session.predicted;
+      const st = me ? findStation(this.builtRegion, this.session.value(me, "x"), this.session.value(me, "z"), me.facing) : undefined;
+      this.talkFocus = st && (st.kind === "warden" || st.kind === "post" || st.kind === "court") ? { x: st.x, z: st.z } : undefined;
+    }
+    if (!this.parley.isOpen) this.parley.open(m.view, (i) => room.send("parleyPick", { option: i }), () => room.send("parleyClose", {}), this.builtRegion, this.scenarioView?.template);
   }
 
   /** Follows the room's campaign fields: the sailing card, a new region or a fallen bridge (rebuild the world), the orders of the day, the map room. */
@@ -925,7 +938,14 @@ export class Game {
       this.rig.mountSpeed01 = pf ? Math.hypot(this.session.value(pf, "vx"), this.session.value(pf, "vz")) / MOUNT.gallop : 0;
       const mine = this.rig.wantsEye ? this.actors.get(this.session.sessionId) : undefined;
       this.rig.ready = this.combat.firearmReady;
+      if (this.parley.isOpen && this.talkFocus) {
+        // the lens turns a little left of the speaker, so they stand to the right of your own figure above the talk strip (eased; the mouse is held off while the sheet is up)
+        const want = Math.atan2(-(this.talkFocus.x - tmp.x), -(this.talkFocus.z - tmp.z)) + TALK_TURN;
+        const d = ((want - this.rig.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        this.rig.yaw += d * (1 - Math.exp(-4 * dt));
+      }
       this.rig.update(tmp, dt, this.controls.aiming, mine?.body.sampleEye(eyeSample), ((this.session.predicted?.flags ?? 0) & FLAG.DOWNED) !== 0);
+      this.liftForTalk(dt);
       this.stage.followShadow(tmp);
     }
     this.updateViewmodel(dt, me !== undefined);
@@ -1238,6 +1258,19 @@ export class Game {
       // D-086: the how-to paragraph the HUD keeps off the picture, the rule, and the contract (its terms are printed from the shared table)
       hint: typeof v.hint === "string" ? v.hint : undefined, rule: typeof v.rule === "string" ? v.rule : undefined, template: isTemplateId(v.template) ? v.template : undefined,
     };
+  }
+
+  /** D-099: while a talk is open the picture slides up by a fifth of its height (eased), so the speaker and you stand above the talk strip, not behind it. */
+  private liftForTalk(dt: number): void {
+    const want = this.parley.isOpen && this.talkFocus ? 1 : 0;
+    if (want === 0 && this.talkLift === 0) return;
+    this.talkLift += (want - this.talkLift) * (1 - Math.exp(-5 * dt));
+    if (want === 0 && this.talkLift < 0.01) this.talkLift = 0;
+    const cam = this.stage.camera;
+    const el = this.stage.renderer.domElement;
+    const w = el.clientWidth || 1, h = el.clientHeight || 1;
+    if (this.talkLift === 0) cam.clearViewOffset();
+    else cam.setViewOffset(w, h, 0, this.talkLift * TALK_LIFT * h, w, h);
   }
 
   /** D-063: the telegrams lately received, newest last (the pause sheet lists them). */
