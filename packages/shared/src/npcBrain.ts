@@ -25,12 +25,12 @@ export const NPC_TUNING = {
   /** Reaction to a NEW target (not seen for `forget` seconds): base + (1 - skill/100) * perSkill + jitter * hash, seconds; the turn rate in the meantime is `turnFactor` of the walker's. */
   react: { base: 0.35, perSkill: 0.9, jitter: 0.3, forget: 2, turnFactor: 0.5 },
   /** Aim error sigma (radians) at the muzzle for each weapon id, before range, motion and skill scaling. */
-  aimBase: { [WEAPON.PISTOL]: 0.026, [WEAPON.RIFLE]: 0.017, [WEAPON.BLUNDERBUSS]: 0.02, [WEAPON.SABRE]: 0, [WEAPON.UMBRELLA]: 0, [WEAPON.CANNON]: 0, [WEAPON.FISTS]: 0 } as Record<WeaponId, number>,
+  aimBase: { [WEAPON.PISTOL]: 0.026, [WEAPON.RIFLE]: 0.017, [WEAPON.BLUNDERBUSS]: 0.02, [WEAPON.SABRE]: 0, [WEAPON.UMBRELLA]: 0, [WEAPON.CANNON]: 0, [WEAPON.FISTS]: 0, [WEAPON.CRANK]: 0 } as Record<WeaponId, number>,
   /** sigma *= (1 + dist / aimRange) * (moving ? movingMul : 1) * (skillBase - skill/100); then * rangeShrink^(consecutive shots at a still target). */
   aimRange: 20, movingMul: 1.4, skillBase: 1.6, rangeShrink: 0.72, rangedMax: 6, aimElev: 0.02,
   /** Where each weapon wants to fight from (metres), and the farthest it will shoot. The blunderbuss only inside 14. */
-  effRange: { [WEAPON.PISTOL]: 16, [WEAPON.RIFLE]: 28, [WEAPON.BLUNDERBUSS]: 14, [WEAPON.SABRE]: 1.6, [WEAPON.UMBRELLA]: 1.6, [WEAPON.CANNON]: 0, [WEAPON.FISTS]: 1.2 } as Record<WeaponId, number>,
-  maxShot: { [WEAPON.PISTOL]: 30, [WEAPON.RIFLE]: 40, [WEAPON.BLUNDERBUSS]: 14, [WEAPON.SABRE]: 0, [WEAPON.UMBRELLA]: 0, [WEAPON.CANNON]: 0, [WEAPON.FISTS]: 0 } as Record<WeaponId, number>,
+  effRange: { [WEAPON.PISTOL]: 16, [WEAPON.RIFLE]: 28, [WEAPON.BLUNDERBUSS]: 14, [WEAPON.SABRE]: 1.6, [WEAPON.UMBRELLA]: 1.6, [WEAPON.CANNON]: 0, [WEAPON.FISTS]: 1.2, [WEAPON.CRANK]: 0 } as Record<WeaponId, number>,
+  maxShot: { [WEAPON.PISTOL]: 30, [WEAPON.RIFLE]: 40, [WEAPON.BLUNDERBUSS]: 14, [WEAPON.SABRE]: 0, [WEAPON.UMBRELLA]: 0, [WEAPON.CANNON]: 0, [WEAPON.FISTS]: 0, [WEAPON.CRANK]: 0 } as Record<WeaponId, number>,
   /** Seconds of think between rifle shots (on top of the weapon's own cooldown), pistol burst length and pause, melee pad. */
   rifleThink: [0.3, 1.2], pistolBurst: 2, pistolPause: [1.0, 2.2], pistolGap: 0.12, meleePad: 0.4, scatterThink: [0.2, 0.7],
   hold: 0.15, retreatSoft: 0.4, fleeSeconds: 8, fleeClear: 25, rally: MORALE.rallyAt,

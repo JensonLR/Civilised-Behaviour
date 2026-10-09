@@ -55,6 +55,20 @@ const blunderbuss = def({
   },
 });
 
+/**
+ * D-092: one round of the crank gun: a short, dry crack, lighter than the pistol's, with the mechanism's clack behind it. Eight a second while the handle turns,
+ * so it is quick to die away, quiet in its tail and allowed to overlap itself (the run of them is the rattle).
+ */
+const crankShot = def({
+  group: "weapon", peakDb: -5, ref: 12, max: 220, reverb: 0.25, prio: 3, cap: 8, gap: 0.04, duck: 0.08, drive: 0.35, jitter: 0.05, variants: 3,
+  layers: (p) => [
+    N({ dec: 0.025, peak: 1.1, f: [hp(3000)] }),
+    N({ atk: 0.001, dec: 0.11, peak: 0.7, f: [lp(4200 * jit(p, 0.1), 700, 0.1)] }),
+    T({ hz: 190 * jit(p, 0.08), to: 80, over: 0.05, atk: 0.001, dec: 0.09, peak: 0.35 }),
+    N({ at: 0.03, dec: 0.012, peak: 0.35, f: [bp(2400 * jit(p, 0.05), 4)] }),
+  ],
+});
+
 const cannon = def({
   group: "weapon", peakDb: -0.3, ref: 45, max: 520, reverb: 0.7, prio: 4, cap: 3, gap: 0.1, duck: 0.8, drive: 1.2, jitter: 0.03, variants: 2,
   layers: (p) => [
@@ -697,6 +711,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   pistol_shot: pistol,
   blunderbuss_shot: blunderbuss,
   cannon_shot: cannon,
+  crank_shot: crankShot,
   explosion,
   sabre_swing: sabreSwing,
   sabre_hit: sabreHit,

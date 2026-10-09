@@ -395,7 +395,7 @@ const ROCK_TAG = "rock" as const;
  * (whoever stood on it falls to the bed) but keeps the pier stumps, and rubble lies in the water. Appended with its own random streams so a
  * collapsed world differs from an intact one ONLY at the bridge.
  */
-export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeState, opts?: { outpost?: OutpostStage; telegraph?: boolean; rivalPost?: number; railway?: boolean; works?: boolean }): Obstacle[] {
+export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeState, opts?: { outpost?: OutpostStage; telegraph?: boolean; rivalPost?: number; railway?: boolean; works?: boolean; crank?: boolean }): Obstacle[] {
   const plan = kessarPlan();
   const g = (x: number, z: number): number => terrain.height(x, z);
   const out: Obstacle[] = [];
@@ -540,7 +540,7 @@ export function kessarSitePoints(): { id: string; x: number; z: number }[] {
 }
 
 /** Kessar's collision world. `bridge: "collapsed"` rebuilds it without the deck (the integrator swaps worlds after the charge goes off). */
-export function createKessarWorld(seed: number, bridge: BridgeState = "intact", opts?: { outpost?: OutpostStage; telegraph?: boolean; rivalPost?: number; railway?: boolean; works?: boolean }): CollisionWorld {
+export function createKessarWorld(seed: number, bridge: BridgeState = "intact", opts?: { outpost?: OutpostStage; telegraph?: boolean; rivalPost?: number; railway?: boolean; works?: boolean; crank?: boolean }): CollisionWorld {
   const terrain = createKessarTerrain(seed);
   return new CollisionWorld(terrain, kessarObstacles(terrain, seed, bridge, opts), A.bounds);
 }

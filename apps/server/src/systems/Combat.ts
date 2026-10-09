@@ -3,6 +3,9 @@ import {
   BUTTON,
   CANNON,
   CANNON_SPOTS,
+  CRANK,
+  CRANK_PHASE,
+  crankJams,
   CARRIED_MASK,
   COMBAT,
   FLAG,
@@ -113,6 +116,8 @@ const CREW_VERTICAL = 1.6;
 /** Who cannot work a gun: the downed, anyone whose arms or body are otherwise taken, and a rider (his INTERACT is the saddle's: it must dismount him, not join a crew). */
 const CREW_BLOCKED = FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED | FLAG.MOUNTED;
 const BUSY = FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.DRAGGED | FLAG.REVIVING | FLAG.OPERATING;
+/** How near a gun its crew must stand (D-092: the crank gun is worked from right behind it). */
+const crewRangeOf = (c: { kind: number }): number => (c.kind === 1 ? CRANK.crewRange : CANNON.crewRange);
 
 interface Swing {
   /** Seconds until the blow lands. */
@@ -166,6 +171,10 @@ interface Pending {
 
 interface Cannon {
   id: string;
+  /** 0 the field cannon, 1 the post's crank gun (D-092: `CRANK`). */
+  kind: number;
+  /** Which gun of its kind (the crank gun's jams are seeded by it). */
+  gun: number;
   st: CannonStateType;
   x: number;
   y: number;
@@ -177,6 +186,9 @@ interface Cannon {
   lighter: string;
   operating: Set<string>;
   shotNo: number;
+  /** The crank gun: seconds of turning banked towards the next round, and the rounds in its hopper (the replicated `progress` while it is ready). */
+  crank: number;
+  rounds: number;
 }
 
 /** Struct-of-arrays pool of live rounds: nothing is allocated when a shot is fired or a ball flies. */
@@ -281,16 +293,28 @@ export class Combat {
     this.rebuildCannons();
   }
 
-  /** Re-reads the room's cannon fixtures (the room swaps regions: Hollowmere has a field gun, Kessar Reach none this slice). */
+  /**
+   * Re-reads the room's gun fixtures: the camp's field cannon at Hollowmere, and (D-092) the crank gun of a fortified post once the works has cast one. A gun still
+   * standing keeps its crew and its counters; one that has gone lets its crew go. A new crank gun rests where the room set its barrels (trained on the gate).
+   */
   rebuildCannons(): void {
-    for (const c of this.cannons) for (const id of c.operating) { const p = this.host.players.get(id); if (p) p.flags &= ~FLAG.OPERATING; }
-    this.cannons.length = 0;
-    let i = 0;
-    this.host.cannons.forEach((st) => {
-      const spot = CANNON_SPOTS[i]!;
-      this.cannons.push({ id: `cannon:${i}`, st, x: st.x, y: st.y, z: st.z, restYaw: spot.yaw, load: 0, fuse: 0, lighter: "", operating: new Set(), shotNo: 0 });
-      i++;
+    const had = new Map(this.cannons.map((c) => [c.st, c]));
+    const next: Cannon[] = [];
+    let k0 = 0;
+    this.host.cannons.forEach((st, id) => {
+      const kept = had.get(st);
+      if (st.kind !== 1) k0++;
+      if (kept) {
+        had.delete(st);
+        next.push(kept);
+        return;
+      }
+      const rest = st.kind === 1 ? st.yaw : CANNON_SPOTS[k0 - 1]?.yaw ?? st.yaw;
+      next.push({ id: `cannon:${id}`, kind: st.kind, gun: st.kind === 1 ? 0 : k0 - 1, st, x: st.x, y: st.y, z: st.z, restYaw: rest, load: 0, fuse: 0, lighter: "", operating: new Set(), shotNo: 0, crank: 0, rounds: st.kind === 1 ? st.progress : 0 });
     });
+    for (const c of had.values()) for (const id of c.operating) { const p = this.host.players.get(id); if (p) p.flags &= ~FLAG.OPERATING; }
+    this.cannons.length = 0;
+    this.cannons.push(...next);
   }
 
   /** The party's side: people, and the hired hands (who share its purse and its friendly-fire rule). */
@@ -441,10 +465,14 @@ export class Combat {
       const c = this.cannonNear(p);
       if (c && c.st.phase !== 3) consumed = true;
     }
-    // Lighting the fuse: FIRE while working a loaded gun.
+    // Lighting the fuse: FIRE while working a loaded gun. (D-092: at the crank gun the trigger turns the handle, read while held by `tickCrank`; the press is the gun's, never the hand weapon's.)
     if ((pressed & BUTTON.FIRE) !== 0 && (cmd.buttons & BUTTON.INTERACT) !== 0) {
       const c = this.cannonNear(p);
-      if (c && c.st.phase === 2 && (p.flags & (FLAG.DOWNED | FLAG.MOUNTED)) === 0) {
+      if (c && c.kind === 1 && (p.flags & CREW_BLOCKED) === 0) {
+        this.sync(p, pc);
+        return true;
+      }
+      if (c && c.kind === 0 && c.st.phase === 2 && (p.flags & (FLAG.DOWNED | FLAG.MOUNTED)) === 0) {
         c.st.phase = 3;
         c.fuse = CANNON.fuseSeconds;
         c.lighter = sessionId;
@@ -991,7 +1019,7 @@ export class Combat {
 
   private cannonNear(p: PlayerStateType): Cannon | undefined {
     for (const c of this.cannons) {
-      if (Math.hypot(p.x - c.x, p.z - c.z) <= CANNON.crewRange && Math.abs(p.y - c.y) <= CREW_VERTICAL) return c;
+      if (Math.hypot(p.x - c.x, p.z - c.z) <= crewRangeOf(c) && Math.abs(p.y - c.y) <= CREW_VERTICAL) return c;
     }
     return undefined;
   }
@@ -1006,9 +1034,9 @@ export class Combat {
         const pc = this.pcs.get(id);
         if (!pc || !p.connected) return;
         if ((p.flags & CREW_BLOCKED) !== 0) return;
-        if (Math.hypot(p.x - c.x, p.z - c.z) > CANNON.crewRange + 0.3 || Math.abs(p.y - c.y) > CREW_VERTICAL) return;
+        if (Math.hypot(p.x - c.x, p.z - c.z) > crewRangeOf(c) + 0.3 || Math.abs(p.y - c.y) > CREW_VERTICAL) return;
         if ((pc.held & BUTTON.INTERACT) === 0 || now - pc.heldAt > HOLD_STALE_MS) return;
-        if (c.st.phase === 3) return; // once the fuse is lit, everybody get clear
+        if (c.kind === 0 && c.st.phase === 3) return; // once the fuse is lit, everybody get clear
         workers.push(id);
       });
       // OPERATING flag: on for the crew, off for whoever stopped.
@@ -1026,6 +1054,10 @@ export class Combat {
       }
       const crew = workers.length;
       if (c.st.crew !== crew) c.st.crew = crew;
+      if (c.kind === 1) {
+        this.tickCrank(c, workers, dt);
+        continue;
+      }
       const st = c.st;
       if (st.phase === 0 && crew > 0 && st.shells > 0) {
         st.phase = 1;
@@ -1076,6 +1108,88 @@ export class Combat {
     st.fired = (st.fired + 1) & 255;
     this.stats.shots++;
     metrics.shotsFired++;
+  }
+
+  /**
+   * D-092, the crank gun, worked by whoever holds Use at it (the first of them lays it, as at the cannon, but quickly: it is light). Holding the trigger too turns the
+   * handle: a round every `ranged.cooldown`, from the barrels, judged as the lead saw the world (their rounds, their kills, their friendly-fire rule). An empty hopper is
+   * changed, and a jam cleared, by holding Use with the trigger let go; a second pair of hands is quicker. Nothing happens to a gun nobody is at.
+   */
+  private tickCrank(c: Cannon, workers: readonly string[], dt: number): void {
+    const st = c.st;
+    if (workers.length === 0) {
+      c.crank = 0;
+      return;
+    }
+    const lead = workers[0]!;
+    const pc = this.pcs.get(lead)!;
+    const rate = CRANK.slew * dt;
+    const wantYaw = c.restYaw + clamp(angleDelta(c.restYaw, pc.aimYaw), -CRANK.traverse, CRANK.traverse);
+    const nYaw = st.yaw + clamp(angleDelta(st.yaw, wantYaw), -rate, rate);
+    const nElev = st.elev + clamp(clamp(pc.aimElev, CRANK.elevMin, CRANK.elevMax) - st.elev, -rate, rate);
+    if (nYaw !== st.yaw) st.yaw = nYaw;
+    if (nElev !== st.elev) st.elev = nElev;
+    const turning = (pc.held & BUTTON.FIRE) !== 0;
+    const hands = workers.length >= 2 ? 2 : 1;
+    const interval = WEAPONS[WEAPON.CRANK].ranged!.cooldown;
+    if (st.phase === CRANK_PHASE.READY) {
+      if (!turning) {
+        c.crank = interval; // (the first turn of the handle fires at once)
+        return;
+      }
+      c.crank += dt;
+      while (c.crank >= interval && c.rounds > 0 && st.phase === CRANK_PHASE.READY) {
+        c.crank -= interval;
+        this.crankRound(c, lead);
+      }
+      if (c.rounds <= 0 && st.phase === CRANK_PHASE.READY) {
+        st.phase = st.shells > 0 ? CRANK_PHASE.CHANGING : CRANK_PHASE.DRY;
+        st.progress = 0;
+        c.load = 0;
+      }
+    } else if ((st.phase === CRANK_PHASE.CHANGING || st.phase === CRANK_PHASE.JAMMED) && !turning) {
+      const changing = st.phase === CRANK_PHASE.CHANGING;
+      c.load = Math.min(1, c.load + (dt * hands) / (changing ? CRANK.changeSeconds : CRANK.clearSeconds));
+      const pct = Math.floor(c.load * 100);
+      if (st.progress !== pct) st.progress = pct;
+      if (c.load >= 1) {
+        if (changing) {
+          st.shells = Math.max(0, st.shells - 1);
+          c.rounds = WEAPONS[WEAPON.CRANK].ranged!.magazine;
+        }
+        st.phase = CRANK_PHASE.READY;
+        st.progress = c.rounds;
+        c.load = 0;
+        c.crank = 0;
+      }
+    }
+  }
+
+  /** One round from the crank gun: from the muzzle along the barrels with the gun's spread, as a hitscan from the lead's view. Jams on the rounds `crankJams` names. */
+  private crankRound(c: Cannon, lead: string): void {
+    const st = c.st;
+    const def = WEAPONS[WEAPON.CRANK];
+    const r = def.ranged!;
+    const seed = shotSeed(this.host.worldSeed, 200 + c.gun, c.shotNo & 255);
+    aimDirection(st.yaw, st.elev, aimDir);
+    const ox = c.x + aimDir.x * CRANK.barrel;
+    const oy = c.y + CRANK.trunnion + aimDir.y * CRANK.barrel;
+    const oz = c.z + aimDir.z * CRANK.barrel;
+    this.host.emitShot({ id: c.id, w: WEAPON.CRANK, x: ox, y: oy, z: oz, dx: aimDir.x, dy: aimDir.y, dz: aimDir.z, seed, spread: r.spread });
+    this.host.noise?.(c.x, c.z, def.noise, lead);
+    shotDirection(st.yaw, st.elev, r.spread, seed, 0, shotDir);
+    this.hitscan(lead, def, r, ox, oy, oz, shotDir.x, shotDir.y, shotDir.z, this.viewOf(lead), this.shotCounter++ >>> 0);
+    c.rounds--;
+    const jam = crankJams(this.host.worldSeed, c.gun, c.shotNo);
+    c.shotNo++;
+    st.fired = (st.fired + 1) & 255;
+    this.stats.shots++;
+    metrics.shotsFired++;
+    if (jam) {
+      st.phase = CRANK_PHASE.JAMMED;
+      st.progress = 0;
+      c.load = 0;
+    } else st.progress = c.rounds;
   }
 
   // ---- per tick -----------------------------------------------------------------------------------------------------------------

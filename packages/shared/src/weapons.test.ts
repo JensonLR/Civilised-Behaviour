@@ -6,6 +6,8 @@ import {
   CANNON_SPOTS,
   CARRIED,
   CARRIED_MASK,
+  CRANK,
+  crankJams,
   COMBAT,
   WEAPON,
   WEAPONS,
@@ -35,8 +37,8 @@ const dot = (a: { x: number; y: number; z: number }, b: { x: number; y: number; 
 
 describe("weapon table", () => {
   it("wire ids are frozen (they are the wire format and the bit index of PlayerState.weapons)", () => {
-    expect(WEAPON).toEqual({ PISTOL: 0, RIFLE: 1, BLUNDERBUSS: 2, SABRE: 3, UMBRELLA: 4, CANNON: 5, FISTS: 6 });
-    expect(WEAPON_COUNT).toBe(7);
+    expect(WEAPON).toEqual({ PISTOL: 0, RIFLE: 1, BLUNDERBUSS: 2, SABRE: 3, UMBRELLA: 4, CANNON: 5, FISTS: 6, CRANK: 7 });
+    expect(WEAPON_COUNT).toBe(8);
     for (let i = 0; i < WEAPON_COUNT; i++) expect(WEAPONS[i as WeaponId].id).toBe(i);
     expect(CARRIED).toEqual([0, 1, 2, 3, 4]);
     expect(CARRIED_MASK).toBe(0b11111);
@@ -64,7 +66,7 @@ describe("weapon table", () => {
         expect(r.spreadAimed).toBeLessThanOrEqual(r.spread);
         expect(d.fire === "hitscan").toBe(r.speed === 0);
         expect(d.fire === "projectile").toBe(r.speed > 0);
-        if (d.id !== WEAPON.CANNON) {
+        if (d.id !== WEAPON.CANNON && d.id !== WEAPON.CRANK) {   // (furniture: no reserve in anybody's pouch)
           expect(r.startReserve).toBeLessThanOrEqual(r.reserveMax);
           expect(r.startReserve).toBeGreaterThan(0);
         }
@@ -83,7 +85,27 @@ describe("weapon table", () => {
     for (const id of CARRIED) expect(isCarried(id)).toBe(true);
     expect(isCarried(WEAPON.CANNON)).toBe(false);
     expect(isCarried(WEAPON.FISTS)).toBe(false);
-    for (const junk of [-1, 7, 99, 1.5, NaN, Infinity, "0", null, undefined]) expect(isWeapon(junk)).toBe(false);
+    expect(isCarried(WEAPON.CRANK)).toBe(false);
+    for (const junk of [-1, 8, 99, 1.5, NaN, Infinity, "0", null, undefined]) expect(isWeapon(junk)).toBe(false);
+  });
+
+  it("D-092: the crank gun is a light, fast hitscan with a hopper, traverses less than the cannon, and jams about one round in CRANK.jamOneIn, the same rounds every time", () => {
+    const r = WEAPONS[WEAPON.CRANK].ranged!;
+    const rifle = WEAPONS[WEAPON.RIFLE].ranged!;
+    expect(WEAPONS[WEAPON.CRANK].fire).toBe("hitscan");
+    expect(r.damage).toBeLessThan(rifle.damage / 2);
+    expect(1 / r.cooldown).toBeGreaterThanOrEqual(7);
+    expect(r.magazine).toBe(40);
+    expect(CRANK.traverse).toBeLessThan(CANNON.traverse);
+    expect(CRANK.elevMin).toBeLessThan(0);
+    let jams = 0;
+    for (let i = 0; i < 6800; i++) if (crankJams(7, 0, i)) jams++;
+    expect(jams / 6800).toBeGreaterThan(0.6 / CRANK.jamOneIn);
+    expect(jams / 6800).toBeLessThan(1.5 / CRANK.jamOneIn);
+    const a = Array.from({ length: 200 }, (_, i) => crankJams(42, 0, i));
+    expect(Array.from({ length: 200 }, (_, i) => crankJams(42, 0, i))).toEqual(a);
+    expect(a.some(Boolean)).toBe(true);
+    expect(Array.from({ length: 200 }, (_, i) => crankJams(43, 0, i))).not.toEqual(a);
   });
 
   it("the roster reads as intended: a rifle head shot downs a healthy man, a pistol needs several torso hits, a sabre does not one-shot, the umbrella never severs", () => {
@@ -249,7 +271,7 @@ describe("wire helpers", () => {
     expect(weaponToWire(-1)).toBe(0);
     expect(weaponFromWire(0)).toBe(-1);
     for (let i = 0; i < WEAPON_COUNT; i++) expect(weaponFromWire(weaponToWire(i as WeaponId))).toBe(i);
-    for (const junk of [8, 200, 255, -3, 1.5, NaN]) expect(weaponFromWire(junk)).toBe(-1);
+    for (const junk of [9, 200, 255, -3, 1.5, NaN]) expect(weaponFromWire(junk)).toBe(-1);
   });
 });
 

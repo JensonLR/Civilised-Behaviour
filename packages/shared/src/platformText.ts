@@ -83,6 +83,7 @@ export const ACHIEVEMENT_TEXT: Readonly<Record<AchievementId, { title: string; b
   not_today_gentlemen: { title: "Not Today, Gentlemen", blurb: "See off the Syndicate's armed debt collectors and keep their collection bag." },
   perseverance: { title: "Perseverance", blurb: "Run a railway to a town at Kessar. The engine is called Perseverance and frequently is." },
   dividend_day: { title: "Dividend Day", blurb: "Open a works beside an outpost. Its chimney is the tallest thing for miles; its neighbours have noticed." },
+  mind_the_handle: { title: "Mind the Handle", blurb: "Have the works cast a crank gun for the Society's stockades. It jams only at the moment of greatest interest." },
 };
 
 // ---- the demo's notices (server -> party, over the existing `notice` message; the client banner recognises the warning) ----

@@ -7,6 +7,10 @@ import {
   settlementNews, techEffects, techOf, worksDay,
 } from "./settlement.ts";
 import type { CampaignState } from "./campaignTypes.ts";
+import { serializeCampaign } from "./factions.ts";
+import { OUTPOST_REGIONS, OUTPOST_SITES, YARD_R, crankSpot, outpostPlan } from "./outpost.ts";
+import { regionWorldOpts } from "./settlement.ts";
+import { aimDirection } from "./weapons.ts";
 import type { OutpostState, RegionClimate, SettlementsState } from "./worldTypes.ts";
 
 /**
@@ -132,5 +136,60 @@ describe("D-091: the industrial age", () => {
     expect(regionDressOf(gone, rival, "kessar").works).toBeUndefined();
     // a dress without them keeps its old shape (the view's cache key)
     expect(Object.keys(regionDressOf(newSettlements(), rival, "kessar"))).not.toContain("railway");
+  });
+});
+
+describe("D-092: the crank gun", () => {
+  it("the works casts one once the breech-loaders have come and a post is fortified or better; never without the works, the rifles or a stockade; latched", () => {
+    const fort = postAt("highmark", "fortified_outpost", 1);
+    const both = { ...fort, tech: { ...fort.tech, breech: true, works: "highmark" as const } };
+    expect(techOf(both, c0(9), GOOD).crank).toBe(true);
+    expect(techOf(both, c0(9), GOOD).since.crank).toBe(9);
+    expect(techOf({ ...fort, tech: { ...fort.tech, breech: true } }, c0(9), GOOD).crank).toBe(false);   // no works
+    expect(techOf({ ...postAt("highmark", "fortified_outpost", 8, { priority: "trade" }), tech: { ...newTech(), works: "highmark" as const } }, c0(9), GOOD).crank).toBe(false);   // no rifles
+    const camp = postAt("highmark", "trading_post", 1);
+    expect(techOf({ ...camp, tech: { ...camp.tech, breech: true, works: "highmark" as const } }, c0(9), GOOD).crank).toBe(false);   // no stockade to stand it in
+    const latched = { ...camp, tech: { ...camp.tech, breech: true, works: "highmark" as const, crank: true, since: { ...camp.tech.since, crank: 4 } } };
+    expect(techOf(latched, c0(20), GOOD)).toMatchObject({ crank: true, since: { crank: 4 } });
+  });
+
+  it("it stands, solid, in every fortified post of a campaign that has it, trained on the gate from inside the stockade, clear of the yard", () => {
+    const fort = postAt("kessar", "fortified_outpost", 1);
+    const s = { ...fort, tech: { ...fort.tech, breech: true, works: "kessar" as const, crank: true } };
+    const c = serializeCampaign(c0(5));
+    expect(regionWorldOpts(c, serializeSettlements(s), "kessar").crank).toBe(true);
+    expect(regionWorldOpts(c, serializeSettlements(s), "highmark").crank).toBeUndefined();   // (no post there)
+    expect(regionWorldOpts(c, serializeSettlements({ ...s, tech: { ...s.tech, crank: false } }), "kessar").crank).toBeUndefined();
+    for (const region of OUTPOST_REGIONS) {
+      const at = crankSpot(region)!;
+      const site = OUTPOST_SITES[region]!.site;
+      const d = Math.hypot(at.x - site.x, at.z - site.z);
+      expect(d).toBeGreaterThan(YARD_R + 1);
+      expect(d).toBeLessThan(17 - 2);   // (inside the stockade's ring, R = 17)
+      // its rest heading points at the middle of the gate (site + (0, -17))
+      const dir = aimDirection(at.yaw, 0, { x: 0, y: 0, z: 0 });
+      const gx = site.x - at.x, gz = site.z - 17 - at.z;
+      expect((dir.x * gx + dir.z * gz) / Math.hypot(gx, gz)).toBeCloseTo(1, 6);
+      const plan = outpostPlan("fortified_outpost", region, { crank: true }).pieces.find((p) => p.kind === "crank")!;
+      expect(plan).toMatchObject({ x: at.x, z: at.z, solid: true });
+      expect(outpostPlan("trading_post", region, { crank: true }).pieces.some((p) => p.kind === "crank")).toBe(false);
+    }
+  });
+
+  it("is news once, with its own copy; parsed, kept, and an old save reads as none", () => {
+    const fort = postAt("kessar", "fortified_outpost", 1);
+    const s = { ...fort, tech: { ...fort.tech, breech: true, works: "kessar" as const } };
+    const ev = evolveSettlements(s, c0(6), GOOD, 6).events.filter((e) => e.kind === "crank");
+    expect(ev).toHaveLength(1);
+    const paper = settlementDispatches(s, ev, 7);
+    expect(paper[0]!.head.length).toBeGreaterThan(8);
+    expect(paper[0]!.body).not.toMatch(/\{|\}/);
+    const after = evolveSettlements(s, c0(6), GOOD, 6).s;
+    expect(settlementNews(after).some((e) => e.kind === "crank")).toBe(true);
+    expect(parseSettlements(serializeSettlements(after))!.tech.crank).toBe(true);
+    const old = JSON.parse(serializeSettlements(after)) as { tech: Record<string, unknown> };
+    delete old.tech.crank;
+    expect(parseSettlements(JSON.stringify(old))!.tech.crank).toBe(false);
+    expect(parseSettlements(JSON.stringify({ ...old, tech: { ...old.tech, crank: "yes" } }))!.tech.crank).toBe(false);
   });
 });

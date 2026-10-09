@@ -41,7 +41,7 @@ const rank = (s: OutpostStage): number => OUTPOST_STAGES.indexOf(s);
 const pct = (v: number): number => Math.min(100, Math.max(0, Math.round(v)));
 const toward = (v: number, target: number, step: number): number => (v < target ? Math.min(target, v + step) : Math.max(target, v - step));
 
-export const newTech = (): TechState => ({ road: 0, telegraph: false, launch: false, railway: false, breech: false, works: "", since: { road: 0, telegraph: 0, launch: 0, railway: 0, breech: 0, works: 0 } });
+export const newTech = (): TechState => ({ road: 0, telegraph: false, launch: false, railway: false, breech: false, works: "", crank: false, since: { road: 0, telegraph: 0, launch: 0, railway: 0, breech: 0, works: 0, crank: 0 } });
 
 /** D-091: the industrial age's figures (first passes nobody has played). */
 export const INDUSTRY = {
@@ -107,10 +107,10 @@ export function parseSettlements(json: string): SettlementsState | undefined {
   const since = isObj(t.since) ? t.since : {};
   const tech: TechState = {
     road: clampI(t.road, 0, 2, 0) as 0 | 1 | 2, telegraph: t.telegraph === true, launch: t.launch === true, railway: t.railway === true, breech: t.breech === true,
-    works: isRegionId(t.works) && OUTPOST_SITES[t.works] !== undefined ? t.works : "",
+    works: isRegionId(t.works) && OUTPOST_SITES[t.works] !== undefined ? t.works : "", crank: t.crank === true,
     since: {
       road: clampI(since.road, 0, 9999, 0), telegraph: clampI(since.telegraph, 0, 9999, 0), launch: clampI(since.launch, 0, 9999, 0),
-      railway: clampI(since.railway, 0, 9999, 0), breech: clampI(since.breech, 0, 9999, 0), works: clampI(since.works, 0, 9999, 0),
+      railway: clampI(since.railway, 0, 9999, 0), breech: clampI(since.breech, 0, 9999, 0), works: clampI(since.works, 0, 9999, 0), crank: clampI(since.crank, 0, 9999, 0),
     },
   };
   return { v: 1, posts, tech };
@@ -124,8 +124,8 @@ export function serializeSettlements(s: SettlementsState): string {
     if (p) posts[id] = { region: p.region, name: p.name, stage: p.stage, priority: p.priority, foundedDay: p.foundedDay, stageSince: p.stageSince, crates: p.crates, supply: p.supply, security: p.security, trade: p.trade, growth: p.growth, raidedDay: p.raidedDay, ruined: p.ruined, raids: p.raids };
   }
   const t = s.tech;
-  const since = { road: t.since.road, telegraph: t.since.telegraph, launch: t.since.launch, railway: t.since.railway, breech: t.since.breech, works: t.since.works };
-  return JSON.stringify({ v: 1, posts, tech: { road: t.road, telegraph: t.telegraph, launch: t.launch, railway: t.railway, breech: t.breech, works: t.works, since } });
+  const since = { road: t.since.road, telegraph: t.since.telegraph, launch: t.since.launch, railway: t.since.railway, breech: t.since.breech, works: t.since.works, crank: t.since.crank };
+  return JSON.stringify({ v: 1, posts, tech: { road: t.road, telegraph: t.telegraph, launch: t.launch, railway: t.railway, breech: t.breech, works: t.works, crank: t.crank, since } });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -222,11 +222,12 @@ export function raidOutpost(s: SettlementsState, region: RegionId, day: number):
  * launch = a settlement whose priority is transport, or any town. `since` records the campaign day each was first earned.
  * D-091, the industrial age: the railway = a Kessar town with its road (2) and its wire, three days a town; breech-loaders = any post held as a garrison (fortified or
  * better, its priority military) for four days, or any town; the works = beside the first post that is a settlement or better with extraction its priority.
+ * D-092: the crank gun = the works and the breech-loaders both, and a post fortified or better to stand it in (it then stands in every such post).
  */
 export function techOf(s: SettlementsState, c: CampaignState, _climate: RegionClimate): TechState {
   const old = s.tech;
   const p = s.posts.kessar;
-  let road = old.road, telegraph = old.telegraph, launch = old.launch, railway = old.railway, breech = old.breech, works = old.works;
+  let road = old.road, telegraph = old.telegraph, launch = old.launch, railway = old.railway, breech = old.breech, works = old.works, crank = old.crank;
   const since = { ...old.since };
   if (p && p.stage !== "none") {
     const r = rank(p.stage);
@@ -265,7 +266,11 @@ export function techOf(s: SettlementsState, c: CampaignState, _climate: RegionCl
       since.works = c.day;
     }
   }
-  return { road: road as 0 | 1 | 2, telegraph, launch, railway, breech, works, since };
+  if (!crank && works !== "" && breech && REGION_IDS.some((id) => rank(s.posts[id]?.stage ?? "none") >= rank("fortified_outpost"))) {
+    crank = true;
+    since.crank = c.day;
+  }
+  return { road: road as 0 | 1 | 2, telegraph, launch, railway, breech, works, crank, since };
 }
 
 /**
@@ -387,6 +392,7 @@ export function evolveSettlements(s: SettlementsState, c: CampaignState, climate
   if (tech.launch && !s.tech.launch) events.push({ kind: "launch", day, region: "kessar", stage: kp?.stage ?? "none", name: kp?.name ?? "" });
   if (tech.railway && !s.tech.railway) events.push({ kind: "railway", day, region: "kessar", stage: kp?.stage ?? "none", name: kp?.name ?? "" });
   if (tech.breech && !s.tech.breech) events.push({ kind: "breech", day, region: "hollowmere", stage: "none", name: "" });   // (the armoury's, at HQ: every rifle in the party)
+  if (tech.crank && !s.tech.crank) events.push({ kind: "crank", day, region: "hollowmere", stage: "none", name: "" });   // (the works casts one for every fortified post)
   if (tech.works !== "" && s.tech.works === "") events.push({ kind: "works", day, region: tech.works, stage: posts[tech.works]?.stage ?? "none", name: posts[tech.works]?.name ?? "" });
   return { s: { v: 1, posts, tech }, events };
 }
@@ -420,12 +426,13 @@ export function regionWorldOpts(campaignJson: string, settlementsJson: string, r
   // (D-091: as `regionDressOf` draws them; the plan stands each only at its stage, so a railway latched by a town that has since fallen back is not built)
   if (s && stage !== "none" && region === "kessar" && s.tech.railway) out.railway = true;
   if (s && stage !== "none" && s.tech.works === region) out.works = true;
+  if (s && stage !== "none" && s.tech.crank) out.crank = true;
   return out;
 }
 
 /** The world's identity: rebuild the collision world only when this changes. A rigged bridge and an intact one are the same world. */
 export function worldKey(o: RegionWorldOpts): string {
-  return `${o.bridge === "collapsed" ? "collapsed" : "standing"}|${o.outpost ?? "none"}|${o.telegraph === true ? "wire" : "-"}${o.rivalPost ? `|syn${o.rivalPost}` : ""}${o.railway === true ? "|rail" : ""}${o.works === true ? "|works" : ""}`;
+  return `${o.bridge === "collapsed" ? "collapsed" : "standing"}|${o.outpost ?? "none"}|${o.telegraph === true ? "wire" : "-"}${o.rivalPost ? `|syn${o.rivalPost}` : ""}${o.railway === true ? "|rail" : ""}${o.works === true ? "|works" : ""}${o.crank === true ? "|crank" : ""}`;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -465,6 +472,7 @@ export function settlementNews(s: SettlementsState): SettlementEvent[] {
   if (s.tech.since.launch > 0) out.push({ kind: "launch", day: s.tech.since.launch, region: "kessar", stage: st, name: nm });
   if (s.tech.since.railway > 0) out.push({ kind: "railway", day: s.tech.since.railway, region: "kessar", stage: st, name: nm });
   if (s.tech.since.breech > 0) out.push({ kind: "breech", day: s.tech.since.breech, region: "hollowmere", stage: "none", name: "" });
+  if (s.tech.since.crank > 0) out.push({ kind: "crank", day: s.tech.since.crank, region: "hollowmere", stage: "none", name: "" });
   const w = s.tech.works;
   if (w !== "" && s.tech.since.works > 0) out.push({ kind: "works", day: s.tech.since.works, region: w, stage: s.posts[w]?.stage ?? "none", name: s.posts[w]?.name ?? "" });
   return out.sort((a, b) => b.day - a.day);

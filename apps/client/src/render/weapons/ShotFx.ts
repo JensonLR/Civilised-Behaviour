@@ -528,16 +528,17 @@ export class ShotFx {
 
   /** The report of a weapon: flash, a thrown wad, and smoke that hangs and drifts. `dir` is the barrel's unit direction. */
   muzzle(weapon: number, x: number, y: number, z: number, dx: number, dy: number, dz: number): void {
-    const big = weapon === WEAPON.BLUNDERBUSS ? 1.5 : weapon === WEAPON.RIFLE ? 1.05 : weapon === WEAPON.CANNON ? 4 : 0.8;
+    const crank = weapon === WEAPON.CRANK; // (D-092: eight a second: a small flash and a thin breath of smoke each, or the gate is lost in fog)
+    const big = weapon === WEAPON.BLUNDERBUSS ? 1.5 : weapon === WEAPON.RIFLE ? 1.05 : weapon === WEAPON.CANNON ? 4 : crank ? 0.6 : 0.8;
     this.flashAt(x + dx * 0.05, y + dy * 0.05, z + dz * 0.05, 0.62 * big, 0.06 + big * 0.012, FX.flashMid);
     this.flashAt(x + dx * 0.12, y + dy * 0.12, z + dz * 0.12, 0.34 * big, 0.05, FX.flashCore);
     // a jet of smoke along the barrel, then a cloud that hangs
-    const jets = this.n(weapon === WEAPON.BLUNDERBUSS ? 5 : 3);
+    const jets = this.n(weapon === WEAPON.BLUNDERBUSS ? 5 : crank ? 1 : 3);
     for (let k = 0; k < jets; k++) {
       const sp = rnd(3.5, 7.5) * (weapon === WEAPON.RIFLE ? 1.15 : 1);
       this.puff(x + dx * 0.1, y + dy * 0.1, z + dz * 0.1, dx * sp + rnd(-0.5, 0.5), dy * sp + rnd(-0.2, 0.5), dz * sp + rnd(-0.5, 0.5), 0.18 * big, 0.8 * big, rnd(0.9, 1.4), FX.smokeLight, FX.smokeLight, 0.7, 2.6, 0.15);
     }
-    const cloud = this.n(weapon === WEAPON.BLUNDERBUSS ? 7 : weapon === WEAPON.RIFLE ? 5 : 3);
+    const cloud = this.n(weapon === WEAPON.BLUNDERBUSS ? 7 : weapon === WEAPON.RIFLE ? 5 : crank ? 1 : 3);
     for (let k = 0; k < cloud; k++) {
       this.puff(x + rnd(-0.06, 0.06), y + rnd(-0.04, 0.08), z + rnd(-0.06, 0.06), dx * rnd(0.3, 1.2) + rnd(-0.25, 0.25), rnd(0.15, 0.5), dz * rnd(0.3, 1.2) + rnd(-0.25, 0.25), 0.22 * big, 0.95 * big, rnd(2.0, 3.4), FX.smokeLight, FX.smokeDark, 0.62, 0.7, 0.3);
     }
@@ -547,7 +548,12 @@ export class ShotFx {
       this.puff(x + dx * rnd(0.2, 0.6) + rnd(-0.1, 0.1), y + rnd(-0.05, 0.2), z + dz * rnd(0.2, 0.6) + rnd(-0.1, 0.1), dx * rnd(0.2, 0.8), rnd(0.1, 0.35), dz * rnd(0.2, 0.8), 0.5 * big, 1.9 * big, rnd(3.5, 5.5), FX.smokeLight, FX.smokeLight, 0.34, 0.6, 0.22);
     }
     // the percussion cap leaves the lock sideways and back (a flintlock has none, but the picture is the same small brass fleck), the wad and a few sparks fly on
-    if (weapon !== WEAPON.CANNON) {
+    if (crank) {
+      // the spent case, out of the breech to the right
+      const rx = -dz;
+      const rz = dx;
+      this.debris(x - dx * 1.2 + rx * 0.1, y + 0.05, z - dz * 1.2 + rz * 0.1, rx * rnd(1.4, 2.6), rnd(1.2, 2.2), rz * rnd(1.4, 2.6), 0.012, 0.012, 0.03, PALETTE.weapons.brass, 1.4);
+    } else if (weapon !== WEAPON.CANNON) {
       const back = LOCK_BACK[weapon] ?? 0.4;
       const rx = -dz;
       const rz = dx;

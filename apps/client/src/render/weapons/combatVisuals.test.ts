@@ -1,9 +1,10 @@
 import { Box3, Mesh, Scene, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { CollisionWorld, PALETTE, SURFACE, WEAPON, WEAPONS, type SurfaceId } from "@cb/shared";
+import { CRANK, CRANK_PHASE, CollisionWorld, PALETTE, SURFACE, WEAPON, WEAPONS, type SurfaceId } from "@cb/shared";
 import { SOUND_NAMES } from "../../audio/sounds.ts";
 import { Projectiles, PROJECTILES } from "../Projectiles.ts";
 import { CannonView } from "./CannonView.ts";
+import { CrankGunView } from "./CrankGunView.ts";
 import { IMPACT_SOUND, REPORT } from "./sfx.ts";
 import { ShotFx, SHOTFX, windAt } from "./ShotFx.ts";
 import { WeaponModel, disposeWeaponModels, weaponTriangles } from "./WeaponModels.ts";
@@ -70,6 +71,32 @@ describe("weapon models", () => {
     expect(Math.hypot(view.root.position.x - 16.4, view.root.position.z - 4.4)).toBeLessThan(0.01);
     view.dispose();
     fx.dispose();
+  });
+
+  it("D-092: the crank gun builds inside its collider, follows the state, turns its barrels a fifth a round, shows a spare hopper per one in the limber, and its muzzle is the barrels' mouth", () => {
+    const scene = new Scene();
+    const view = new CrankGunView(scene, true);
+    const st = { x: 35.5, y: 0.2, z: 60.5, yaw: Math.PI / 4, elev: 0, phase: CRANK_PHASE.READY, progress: 40, crew: 0, shells: 3, fired: 0, kind: 1 };
+    view.update(1 / 30, st as never);
+    const box = new Box3().setFromObject(view.root);
+    const half = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
+    expect(half).toBeLessThan(1.6);
+    expect(box.min.y).toBeGreaterThan(st.y - 0.1);   // (the iron tyres bed a few centimetres into the ground)
+    expect(box.max.y - st.y).toBeLessThan(1.8);
+    const pos = new Vector3(), dir = new Vector3();
+    view.muzzle(pos, dir);
+    expect(Math.hypot(pos.x - st.x, pos.z - st.z)).toBeCloseTo(CRANK.barrel, 2);
+    expect(pos.y - st.y).toBeCloseTo(CRANK.trunnion, 2);
+    expect(dir.x).toBeCloseTo(-Math.sin(st.yaw), 3);
+    expect(dir.z).toBeCloseTo(-Math.cos(st.yaw), 3);
+    const spun = (): number => (view as unknown as { turning: { rotation: { z: number } } }).turning.rotation.z;
+    const before = spun();
+    view.update(1 / 30, { ...st, fired: 3 } as never);
+    expect(spun() - before).toBeCloseTo((3 * Math.PI * 2) / 5, 5);
+    const spares = (view as unknown as { spares: { visible: boolean }[] }).spares;
+    view.update(1 / 30, { ...st, fired: 3, shells: 1 } as never);
+    expect(spares.map((s) => s.visible)).toEqual([true, false, false]);
+    view.dispose();
   });
 });
 

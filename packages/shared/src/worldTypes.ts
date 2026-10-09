@@ -45,16 +45,20 @@ export interface OutpostState { region: RegionId; name: string; stage: OutpostSt
  */
 export interface TechState {
   road: 0 | 1 | 2; telegraph: boolean; launch: boolean; railway: boolean; breech: boolean; works: RegionId | "";
-  since: { road: number; telegraph: number; launch: number; railway: number; breech: number; works: number };
+  /** D-092: the works has cast a crank gun for every fortified post. */
+  crank: boolean;
+  since: { road: number; telegraph: number; launch: number; railway: number; breech: number; works: number; crank: number };
 }
 export interface SettlementsState { v: 1; posts: Partial<Record<RegionId, OutpostState>>; tech: TechState }
-export type SettlementEventKind = "founded" | "delivered" | "promoted" | "demoted" | "raided" | "abandoned" | "road" | "telegraph" | "launch" | "railway" | "breech" | "works";
+export type SettlementEventKind = "founded" | "delivered" | "promoted" | "demoted" | "raided" | "abandoned" | "road" | "telegraph" | "launch" | "railway" | "breech" | "works" | "crank";
 export interface SettlementEvent { kind: SettlementEventKind; day: number; region: RegionId; stage: OutpostStage; name: string }
 /** What the COLLISION world depends on (both sides build the same world from these). */
 export interface RegionWorldOpts {
   bridge?: BridgeState; outpost?: OutpostStage; telegraph?: boolean; /** The Syndicate's own post at Kessar (absent: none; never 0, so a world without it keeps its old key). */ rivalPost?: 1 | 2;
   /** D-091: the railhead at Kessar's post and the works beside an extraction post are solid (absent: none, so a world without them keeps its old key). */
   railway?: boolean; works?: boolean;
+  /** D-092: the crank gun inside a fortified post's gate is solid (absent: none). */
+  crank?: boolean;
 }
 /** What the VIEW draws (no collision). */
 export interface RegionDress {

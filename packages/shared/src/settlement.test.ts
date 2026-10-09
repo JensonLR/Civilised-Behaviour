@@ -278,7 +278,7 @@ describe("settlements: what the world and the view read", () => {
     const c = applyOutcome(newCampaign(1), { scenario: "secure_crossing", resolution: "sabotaged", toll: 40, paid: 0, bridge: "collapsed", brokePromise: false, seconds: 1, tally: { wounded: 0, downed: 0, limbsLost: 0, garrisonKilled: 0, garrisonRouted: 0, civiliansHarmed: 0, rivalKilled: 0 } });
     const r = haul(60, GOOD, camp(1)).s;
     // (D-091: sixty good days make a town that has its railway, and its extraction priority built the works beside it)
-    expect(regionWorldOpts(serializeCampaign(c), serializeSettlements(r))).toEqual({ bridge: "collapsed", outpost: "town", telegraph: true, railway: true, works: true });
+    expect(regionWorldOpts(serializeCampaign(c), serializeSettlements(r))).toEqual({ bridge: "collapsed", outpost: "town", telegraph: true, railway: true, works: true, crank: true });
     expect(regionWorldOpts(serializeCampaign(c), serializeSettlements(r), "highmark")).toEqual({ bridge: "collapsed", outpost: "none", telegraph: false });
     expect(regionWorldOpts("nope", "nope")).toEqual({ bridge: "intact", outpost: "none", telegraph: false });
     expect(regionWorldOpts(serializeCampaign(newCampaign(1)), serializeSettlements(newSettlements()))).toEqual({ bridge: "intact", outpost: "none", telegraph: false });
@@ -295,7 +295,7 @@ describe("settlements: what the world and the view read", () => {
 describe("settlements: the paper", () => {
   it("every event kind has at least three authored variants and prints deterministically, filled in", () => {
     const kinds = Object.keys(SETTLEMENT_NEWS) as SettlementEventKind[];
-    expect(kinds.length).toBe(12); // (D-091 added the railway, the breech-loaders and the works)
+    expect(kinds.length).toBe(13); // (D-091 added the railway, the breech-loaders and the works; D-092 the crank gun)
     for (const k of kinds) {
       expect(SETTLEMENT_NEWS[k].head.length, k).toBeGreaterThanOrEqual(3);
       expect(SETTLEMENT_NEWS[k].body.length, k).toBeGreaterThanOrEqual(3);

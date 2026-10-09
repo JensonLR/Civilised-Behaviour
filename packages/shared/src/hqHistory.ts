@@ -31,7 +31,7 @@ export interface HqHistoryPiece {
   /** A model only: the stage it shows. */
   stage?: OutpostStage;
   /** A pennant only: which infrastructure it flags. */
-  tech?: "road" | "telegraph" | "launch" | "railway" | "breech" | "works";
+  tech?: "road" | "telegraph" | "launch" | "railway" | "breech" | "works" | "crank";
 }
 
 const T = CAMP.mapTable;
@@ -57,7 +57,7 @@ export function historyPieces(c: CampaignState, s: SettlementsState): HqHistoryP
   }
   const post = s.posts.kessar;
   const model = post && post.stage !== "none" ? post.stage : undefined;
-  for (const t of ["road", "telegraph", "launch", "railway", "breech", "works"] as const) {
+  for (const t of ["road", "telegraph", "launch", "railway", "breech", "works", "crank"] as const) {
     const on = t === "road" ? s.tech.road > 0 : t === "works" ? s.tech.works !== "" : s.tech[t];
     if (on) want.push({ id: `tech:${t}`, kind: "pennant", surface: "wall", label: PENNANT_LABEL[t], tech: t });
   }
