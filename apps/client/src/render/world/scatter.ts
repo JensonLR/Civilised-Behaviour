@@ -12,16 +12,26 @@ import {
   inCampFootprint,
   inMeadow,
   villageKeepOut,
+  villagePlan,
   nearTrail,
   reedDensity,
   riverCentre,
   riverHalfWidth,
   treeSpecies,
   waterEdgeDistance,
+  fieldCover,
+  orchardCover,
+  HIVE_STAND,
+  HOLLOWMERE_FIELDS,
+  HOLLOWMERE_ORCHARD,
+  ORCHARD_TREE,
   type CollisionWorld,
+  type FieldPlot,
   type Obstacle,
+  type Orchard,
 } from "@cb/shared";
 import { TREE_BASE_RADIUS } from "./flora.ts";
+import { planFieldScatter, type FieldScatter } from "./fieldScatter.ts";
 import { visualHeight } from "./terrain.ts";
 
 /**
@@ -83,7 +93,21 @@ export interface ScatterPlan {
   flagstones: Item[];
   /** Flower positions the butterflies circle. */
   butterflies: { x: number; y: number; z: number }[];
+  /** D-117: the village's worked land (`WorkedLand`): what the fields grow and hold, the orchard's trees (`sx` its scale), the hive stand (`cls` its skeps), the windfalls (`cls` 1 a gold one). */
+  fields: FieldScatter;
+  orchard: Item[];
+  hives: Item[];
+  windfalls: Item[];
 }
+
+/** D-117: a region's fields and orchard. Nothing wild grows on them; the scatter plants them instead. */
+export interface WorkedLand {
+  plots: readonly FieldPlot[];
+  orchard?: Orchard;
+}
+
+/** Hollowmere's (shared `hollowmereFields.ts`); Kessar, which borrows this scatter for its trees and grass, has none. */
+export const HOLLOWMERE_LAND: WorkedLand = { plots: HOLLOWMERE_FIELDS, orchard: HOLLOWMERE_ORCHARD };
 
 /** Number of bloom hues (index into the renderer's palette list). */
 export const BLOOM_HUES = 5;
@@ -95,7 +119,10 @@ export const GRASS_MEADOW = 2;
 const h01 = (seed: number, a: number, b = 0): number => hash3(seed, Math.round(a * 100), Math.round(b * 100)) / 4294967296;
 
 export function emptyPlan(): ScatterPlan {
-  return { broadleaf: [], acacia: [], birch: [], pine: [], snag: [], lilies: [], bushes: [], berries: [], rocks: [], slabs: [], cliffs: [], pebbles: [], stumps: [], logs: [], grass: [], daisies: [], cups: [], ferns: [], mushrooms: [], reeds: [], flagstones: [], butterflies: [] };
+  return {
+    broadleaf: [], acacia: [], birch: [], pine: [], snag: [], lilies: [], bushes: [], berries: [], rocks: [], slabs: [], cliffs: [], pebbles: [], stumps: [], logs: [], grass: [], daisies: [], cups: [], ferns: [], mushrooms: [], reeds: [], flagstones: [], butterflies: [],
+    fields: { barley: [], stooks: [], haycocks: [], scarecrows: [], furrows: [], drills: [] }, orchard: [], hives: [], windfalls: [],
+  };
 }
 
 const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: number, sz: number, cls = 0, v = 0, tiltX = 0, tiltZ = 0): Item => ({ x, y, z, yaw, sx, sy, sz, cls, v, tiltX, tiltZ });
@@ -112,8 +139,11 @@ export const MENU_STAND = { x: 1.2, z: 1.6, r: 1.6 } as const;
 /** How far a far tree's crown spreads from its trunk, per unit of its scale (the acacia's flat crown is the widest: 6.3 m across at 1.2). */
 const FAR_CROWN = 2.6;
 
-export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY: (h: number, x: number, z: number) => number = visualHeight): ScatterPlan {
+export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY: (h: number, x: number, z: number) => number = visualHeight, worked?: WorkedLand): ScatterPlan {
   const plan = emptyPlan();
+  /** How much (x, z) is a field (no wild grass or flowers), and whether it is worked land at all (no shrub, fern or toadstool ring either). */
+  const fieldK = (x: number, z: number): number => (worked ? fieldCover(worked.plots, x, z) : 0);
+  const inWorked = (x: number, z: number): boolean => !!worked && (fieldK(x, z) > 0 || (!!worked.orchard && orchardCover(worked.orchard, x, z) > 0));
   const h = (x: number, z: number): number => world.terrainHeight(x, z);
   const blocked = (x: number, z: number, margin: number): boolean => {
     let hit = false;
@@ -124,7 +154,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
     return hit || inCampFootprint(x, z, margin) || villageKeepOut(x, z, 0);
   };
   /** Free ground for a plant: no obstacle, no bare path, not in the water. */
-  const freeGround = (x: number, z: number, margin: number): boolean => !blocked(x, z, margin) && !nearTrail(x, z, 0.25) && waterEdgeDistance(x, z) > 0.25;
+  const freeGround = (x: number, z: number, margin: number): boolean => !blocked(x, z, margin) && !nearTrail(x, z, 0.25) && waterEdgeDistance(x, z) > 0.25 && !inWorked(x, z);
   const rng = new Rng(0xb05e);
   const treeDensity = detail.treeDensity ?? 1;
   const trees: { x: number; z: number; r: number; kind: TreeKind }[] = [];
@@ -188,7 +218,10 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
 
   // ---- rocks, slabs, pebbles, timber --------------------------------------------------------------------------------------------
   const rr = new Rng(0x70c5);
+  // (the mill leat's stepping stones are walked on, so they have no collider and no keep-out: a pebble keeps off them too)
+  const leat = world.obstacles.length > 0 ? villagePlan(world.terrain).stones : [];
   const pebble = (x: number, z: number, s: number): void => {
+    for (const st of leat) if (Math.hypot(st.x - x, st.z - z) < st.r + s * 1.5) return;
     plan.pebbles.push(item(x, h(x, z) - s * 0.15, z, rr.next() * 6.28, s * (0.9 + rr.next() * 0.5), s * (0.6 + rr.next() * 0.4), s * (0.9 + rr.next() * 0.4), 0, rr.next()));
   };
   for (const o of world.obstacles) {
@@ -266,7 +299,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
     const x = Math.cos(a) * d;
     const z = Math.sin(a) * d;
     const hh = h(x, z);
-    if (gr.next() > coverDensity(x, z, slopeAt(x, z, hh))) continue;
+    if (gr.next() > coverDensity(x, z, slopeAt(x, z, hh)) * (1 - fieldK(x, z))) continue;
     if (blocked(x, z, 0.35) || nearTrail(x, z, -0.05) || trodden(x, z)) continue; // (a faded far path still has no grass on its bare middle)
     const s = 0.6 + gr.next() * 0.6;
     const cls = inMeadow(x, z) ? GRASS_MEADOW : hh > 1.4 && gr.chance(0.7) ? GRASS_DRY : gr.chance(0.12) ? GRASS_DRY : autumnAt(x, z).amount > 0.5 && h01(50, x, z) < 0.65 ? GRASS_DRY : GRASS_NORMAL; // (a turned hillside dries its grass too)
@@ -290,7 +323,7 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
       const x = cx + Math.cos(t) * rad;
       const z = cz + Math.sin(t) * rad;
       const hh = h(x, z);
-      if (coverDensity(x, z, slopeAt(x, z, hh)) < 0.55 || blocked(x, z, 0.3) || trodden(x, z)) continue;
+      if (coverDensity(x, z, slopeAt(x, z, hh)) * (1 - fieldK(x, z)) < 0.55 || blocked(x, z, 0.3) || trodden(x, z)) continue;
       const hue = fr.next() < 0.78 ? dominant : Math.floor(fr.next() * BLOOM_HUES);
       const s = 0.8 + fr.next() * 0.8;
       const it = item(x, hh - 0.02, z, fr.next() * 6.28, s, s, s, hue, fr.next());
@@ -474,6 +507,34 @@ export function planScatter(world: CollisionWorld, detail: ScatterDetail, drawnY
     const r = 0.28 + h01(38, i) * 0.14;
     if (blocked(x, z, r + 0.05)) continue;
     plan.flagstones.push(item(x, h(x, z) - 0.09, z, h01(39, i) * 6.28, r, 1, r * 0.9, 0, h01(40, i)));
+  }
+
+  // ---- D-117: the worked land: the crops, the stooks and haycocks, the plough's ridges (fieldScatter.ts, as at Highmark), and the orchard ---------------------
+  if (worked) {
+    plan.fields = planFieldScatter({ plots: worked.plots, h, blocked, sow: (x, z) => !nearTrail(x, z, 0.3) && waterEdgeDistance(x, z) > 0.5, barleySeed: 0x40b1, barleyStep: [0.75] }, detail);
+    // the orchard's trees, its hive stand and the stumps where trees died are the world's own obstacles (arena.ts): what you see is what you bump into
+    for (const o of world.obstacles) {
+      if (o.tag === "orchard" && o.kind === "circle") {
+        const s = o.r / ORCHARD_TREE.r;
+        const v = h01(61, o.x, o.z);
+        plan.orchard.push(item(o.x, h(o.x, o.z) - 0.04, o.z, h01(62, o.x, o.z) * Math.PI * 2, s, s, s, 0, v));
+        // windfalls in the grass under its crown
+        const n = 2 + Math.floor(h01(65, o.x, o.z) * 4);
+        for (let i = 0; i < n; i++) {
+          const a = h01(66 + i, o.x, o.z) * Math.PI * 2;
+          const d = (0.55 + h01(72 + i, o.x, o.z) * 1.5) * s;
+          const x = o.x + Math.cos(a) * d, z = o.z + Math.sin(a) * d;
+          if (blocked(x, z, 0.08) || nearTrail(x, z, 0.2)) continue;
+          plan.windfalls.push(item(x, h(x, z), z, a, 1, 1, 1, h01(78 + i, o.x, o.z) < 0.2 ? 1 : 0, 0));
+        }
+      } else if (o.tag === "hive" && o.kind === "box") {
+        // level on the lower of the ground under its two legs (the higher leg stands a little into the bank)
+        const c = Math.cos(o.yaw), sn = Math.sin(o.yaw);
+        const e = o.hz - 0.22;
+        const y = Math.min(h(o.x - sn * e, o.z + c * e), h(o.x + sn * e, o.z - c * e));
+        plan.hives.push(item(o.x, y, o.z, -o.yaw, 1, 1, 1, Math.round((o.hz * 2) / HIVE_STAND.pitch), 0));
+      }
+    }
   }
   return plan;
 }

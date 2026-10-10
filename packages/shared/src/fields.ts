@@ -7,7 +7,8 @@ import { hashFloat } from "./rng.ts";
  * follows from that one list: the ground's paint (the furrows and the rows), the planted clumps, the stooks on the stubble, the haycocks on the mown hay, a scarecrow in the
  * standing crop, where the grass and the scrub do not grow, and what the fire finds to burn (the barley, the stubble and the hay go up; a ploughed field is a firebreak).
  *
- * Generic and pure: the plots are the region's (`HIGHMARK_FIELDS`), the furniture is a function of the plot (and a hash of its place, never a clock or `Math.random`).
+ * Generic and pure: the plots are the region's (`HIGHMARK_FIELDS`; Hollowmere's `HOLLOWMERE_FIELDS` and its orchard, D-117), the furniture is a function of the plot (and a hash of
+ * its place, never a clock or `Math.random`).
  */
 
 export type Crop = "barley" | "green" | "stubble" | "hay" | "fallow";
@@ -113,4 +114,66 @@ export function fieldThings(p: FieldPlot): FieldThing[] {
     out.push({ kind: "scarecrow", x, z, r: FIELD_THING.scarecrow.r, height: FIELD_THING.scarecrow.height, yaw: Math.PI / 2 + jit(x, z, 4) * 0.4 });
   }
   return out;
+}
+
+// ---- D-117: the orchard -------------------------------------------------------------------------------------------------------------------
+
+/** An orchard: fruit trees in columns `pitch` apart along x, each column half a pitch down from the last (the old quincunx), and a stand of hives in it. */
+export interface Orchard {
+  id: string;
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  pitch: number;
+  /** Skeps on the hive stand. */
+  hives: number;
+}
+
+/** A fruit tree at scale 1: its trunk's collision radius, its height to the top of the crown, the crown's reach from the trunk (m). */
+export const ORCHARD_TREE = { r: 0.2, height: 4.3, crown: 2.3 } as const;
+/** The hive stand: a plank on two legs, the skeps along it `pitch` apart; its half-depth and its height to the top of a skep (m). */
+export const HIVE_STAND = { hx: 0.32, pitch: 1.05, height: 1.12, plank: 0.42 } as const;
+
+export interface OrchardPlan {
+  /** Each tree's scale, 0.9..1.15 (a crown is never lower than a person's head: ORCHARD_TREE's crown starts 2.1 m up at scale 1). */
+  trees: { x: number; z: number; s: number }[];
+  /** Where one died and was cut down: its stump. */
+  stumps: { x: number; z: number; r: number }[];
+  /** The hive stand: its middle, the way its skeps' mouths face (collision-convention yaw), how many skeps. */
+  stand: { x: number; z: number; yaw: number; n: number };
+}
+
+/**
+ * What stands in an orchard: its trees, a stump where one died (about one in ten), and the hive stand in the west column's middle (where that tree would be), its
+ * skeps' mouths turned east into the trees. Each tree a hand off its line and its own size by a hash of its place: an orchard someone planted, not one printed.
+ */
+export function orchardPlan(o: Orchard): OrchardPlan {
+  const plan: OrchardPlan = { trees: [], stumps: [], stand: { x: 0, z: 0, yaw: 0, n: o.hives } };
+  const jit = (x: number, z: number, k: number): number => hashFloat(Math.round(x * 10), Math.round(z * 10), k, 0x0c4a5d) - 0.5;
+  const nx = Math.max(1, Math.floor((o.x1 - o.x0) / o.pitch));
+  const nz = Math.max(1, Math.floor((o.z1 - o.z0) / o.pitch));
+  const standRow = Math.floor((nz - 1) / 2);
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      const bx = o.x0 + o.pitch * (i + 0.5);
+      const bz = o.z0 + o.pitch * (j + 0.5) + (i % 2) * o.pitch * 0.5;
+      if (bz > o.z1 - o.pitch * 0.4) continue;
+      if (i === 0 && j === standRow) {
+        plan.stand = { x: bx, z: bz, yaw: 0, n: o.hives };
+        continue;
+      }
+      const x = bx + jit(bx, bz, 1) * 0.5;
+      const z = bz + jit(bx, bz, 2) * 0.5;
+      if (jit(bx, bz, 3) < -0.4) plan.stumps.push({ x, z, r: 0.3 });
+      else plan.trees.push({ x, z, s: 0.9 + (jit(bx, bz, 4) + 0.5) * 0.25 });
+    }
+  }
+  return plan;
+}
+
+/** 0..1: how much (x, z) is the orchard's mown ground (easing out over a metre past its edge). */
+export function orchardCover(o: Orchard, x: number, z: number): number {
+  const out = Math.max(o.x0 - x, x - o.x1, o.z0 - z, z - o.z1, 0);
+  return 1 - smoothstep(0, 1, out);
 }

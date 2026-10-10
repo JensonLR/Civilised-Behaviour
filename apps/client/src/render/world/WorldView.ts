@@ -24,6 +24,7 @@ import { createAtlasTexture, createGlowTexture } from "./atlas.ts";
 import { createAmbientUniforms, buildBirds, buildButterflies, buildLanternGlow, buildMotes, buildSmoke, type AmbientUniforms, type SmokeSource } from "./ambient.ts";
 import {
   acaciaGeometry,
+  barleyGeometry,
   berryBushGeometry,
   boulderGeometry,
   cliffGeometry,
@@ -58,11 +59,12 @@ import { buildHqHistoryGeometry } from "./hqHistory.ts";
 import { WINDMILL } from "./windmill.ts";
 import { buildAnimals, setAnimalGround, type Flock } from "./animals.ts";
 import { buildClearing } from "./clearing.ts";
+import { buildWorkedLand } from "./worked.ts";
 import { buildVillage } from "./village.ts";
 import { cullPlants } from "./plantCull.ts";
 import { InteriorFill, RoofSet, doorGroups, type DoorMark, type RoofSource } from "./rooms.ts";
 import { Villagers, folkBudget } from "./villagers.ts";
-import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
+import { BLOOM_HUES, GRASS_DRY, GRASS_MEADOW, HOLLOWMERE_LAND, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 import { setRgb } from "./sky.ts";
 import { buildTerrain, groundDetailTexture, trailMaskTexture, trailOverlayPatch } from "./terrain.ts";
 import { buildFalls, buildWaterMesh, type WaterUniforms } from "./water.ts";
@@ -166,11 +168,12 @@ export class WorldView {
     this.hillU = createHillUniforms(sun);
     this.addTerrain();
     if (world.obstacles.length > 0) {
-      const plan = planScatter(world, detail);
+      const plan = planScatter(world, detail, undefined, HOLLOWMERE_LAND);
       this.addTrees(plan);
       this.addRocks(plan);
       this.addTimber(plan);
       this.addGroundCover(plan);
+      this.addWorkedLand(plan);
       this.addVillage(); // (before the camp: its lit windows join the lantern glass)
       this.addCamp();
       this.track(new HqRouteView(this.root, this.world)); // the finger-posts of the way round HQ (D-035; the colliders are in arena.ts)
@@ -438,6 +441,17 @@ export class WorldView {
   }
 
   // ---- the well, the pen, the signposts, the footbridge, the flagstones ---------------------------------------------------------------
+
+  /** D-117: the village's fields and orchard (hollowmereFields.ts): the barley in its rows (instanced, it bends with the grass), and everything else that stands there as one solid. */
+  private addWorkedLand(p: ScatterPlan): void {
+    this.instanced("barley", () => barleyGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.fields.barley, p.fields.barley.map((i) => this.varied(i.v, 0.1)), { noCull: true });
+    const geo = buildWorkedLand(p, this.detail.treeLod); // (low builds it coarse, as its trees)
+    if (!geo) return;
+    const hull = this.detail.outlines ? buildWorkedLand(p, 0, true) : undefined;
+    this.track(geo);
+    if (hull) this.track(hull);
+    makeSolid(this.root, geo, this.track(toonMaterial({ wind: "village" })), { name: "fields", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true, wind: "village" });
+  }
 
   private addClearing(p: ScatterPlan): void {
     const geo = buildClearing(this.world, 1);

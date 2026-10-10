@@ -33,7 +33,9 @@ describe("WorldView budget", () => {
       // the swallows (birds).)
       // (2026-10-01, D-035: the finger-posts of the HQ route are 2 draws (the posts and boards, the lettering): 28 / 37 / 66 -> 30 / 39 / 68. HQ's history pieces are 1-2 more
       // when the campaign has any: asserted separately below.)
-      expect(view.stats.meshes).toBeLessThanOrEqual(name === "test" ? 30 : name === "low" ? 39 : 68);
+      // (2026-10-10, D-117: the village's fields and orchard are 3 draws on medium and high (the barley, instanced because it bends with the grass, and one merged solid
+      // with its hull for every stook, haycock, scarecrow, ridge, fruit tree, hive and windfall), 2 on low (no hull), 1 on test (no barley): 30 / 39 / 68 -> 31 / 41 / 71.)
+      expect(view.stats.meshes).toBeLessThanOrEqual(name === "test" ? 31 : name === "low" ? 41 : 71);
       // (2026-09-30: 150k / 300k / 380k -> 160k / 330k / 440k. The Observatory is now a walk-in ruin of real stone courses with a ribbed copper dome
       // (+8k), the hill tree line has proper lumpy crowns instead of paper hexagons (+~15k medium), the camp cloth is its own mesh, and rain is one
       // pooled quad set (+4k medium, 7k high, vertex-culled when it is dry). See docs/PERFORMANCE.md.)
@@ -42,7 +44,9 @@ describe("WorldView budget", () => {
       // triangles. See docs/PERFORMANCE.md.)
       // (2026-09-30, performance pass: low's trees are built at the coarse level of detail (20-face crown lobes: half the triangles, in the shadow pass too), 195k -> 160k
       // (measured 153k); the test preset (software rasteriser) has no ground cover, tree line or bushes and thinner trees: measured 106k.)
-      expect(view.stats.triangles).toBeLessThan(name === "test" ? 115_000 : name === "low" ? 160_000 : name === "medium" ? 430_000 : 540_000);
+      // (2026-10-10, D-117: the fields and orchard measured +8k low (coarse solid 5.9k, barley 6.9k, less the dressing they cleared), +16k medium and high (barley 15.5k,
+      // solid 10.3k + 4k hull): 160k / 430k / 540k -> 170k / 445k / 550k. Measured 163k / 439k / 544k.)
+      expect(view.stats.triangles).toBeLessThan(name === "test" ? 115_000 : name === "low" ? 170_000 : name === "medium" ? 445_000 : 550_000);
       expect(view.stats.meshes).toBeGreaterThan(12);
       view.update(1.5); // animates without throwing or allocating scene objects
       view.dispose();
@@ -179,7 +183,7 @@ describe("three.js warnings", () => {
       if (o.name.startsWith("hq-history") && (o as { isMesh?: boolean }).isMesh) left++;
     });
     expect(left).toBe(0);
-    expect(before).toBeLessThanOrEqual(68);
+    expect(before).toBeLessThanOrEqual(71);
     view.dispose();
   });
 });

@@ -350,7 +350,9 @@ describe("every stage stays walkable", () => {
 // (re-recorded for the overlap audit: two trees whose crowns reached into a cottage's roof and a garden (a tree stands a crown's reach, 4.8 m, from every building) and one crag whose drawn capstone ran into the aqueduct's span are no longer there: 472 -> 469. Nothing else moved: they are filtered out after generation, as the furniture clashes are.)
 // (re-recorded for D-097: one dock finger-post moved three metres along the route (at 52 -> 55), its "camp" board having run into the stilt house; the count is unchanged.)
 // (D-115: one finger-post fewer, the map room's second, which stood in front of the spawn; nothing else moved, proven on eight seeds)
-const HOLLOWMERE_ARENA_7 = "468:2085501491";
+// (D-117: the village's fields and orchard, appended after everything: the dressing that stood in them is not there (on eight seeds every obstacle that went was within
+//  6 m of a field or the orchard; nothing else moved) and their stooks, haycocks, scarecrows, fruit trees, stumps and hive stand are added before the finger-posts, which stay last: 468 -> 474 on seed 7.)
+const HOLLOWMERE_ARENA_7 = "474:3973209010";
 
 // ---- D-056: the Society's second post, at Highmark; none in the gorge or the free port -----------------------------------------------------------------------
 

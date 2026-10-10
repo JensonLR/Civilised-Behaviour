@@ -79,6 +79,13 @@ pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennan
 
 **Where it will hurt on a real GPU (unmeasured).** The ground shader gained a second texture read and, in the mud, a hashed print pattern; the clay region runs a 3x3 voronoi loop per fragment (only where the clay channel is non-zero); every toon material carries the mist chunk (a few ALU per fragment). Animals: 2 x ~700 vertices x 12-20 instances of vertex work with the species collapse. If a profile shows the ground pass hot, the first thing to try is dropping the cracks on medium.
 
+## Hollowmere's worked land (D-117, 2026-10-10)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-10 | Five fields and an orchard in Hollowmere's south: barley instanced, everything else (stooks, haycocks, scarecrows, ridges, drills, 15 fruit trees, the hive stand, windfalls) one merged solid + hull | Node, no GPU, `WORLD_STATS=1` | Main-pass draws **test 31 / low 41 / medium 71 / high 71** (were 30 / 39 / 68 / 68); triangles **88k / 163k / 439k / 544k** (barley 6.9k low, 15.5k medium and high; the solid 5.9k coarse on low, 10.3k + 4k hull on medium and high; less the forest dressing the fields cleared). Ceilings 31 / 41 / 71 draws and 115k / 170k / 445k / 550k triangles. |
+
+**Why the ceilings moved.** The hub's south was empty; filling it is content, not waste. Seven instanced sets with four hulls became one merged solid (3 draws, not 14), the apples and windfalls are octahedra, low builds the solid coarse. The barley is the bulk and the thing to thin first (its step) if a profile shows the hub's grass pass hot.
+
 ## Hollowmere's folk (2026-09-30)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

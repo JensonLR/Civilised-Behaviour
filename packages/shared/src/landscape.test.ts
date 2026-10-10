@@ -360,7 +360,7 @@ describe("ground dressing fields", () => {
     const green: Rgb = { r: 0, g: 0, b: 0 };
     groundColour(HILL.x + 2, HILL.z + 2, 10, 0, stone);
     groundColour(11.6, 0.2, 0, 0, earth); // on the Observatory path by the sign
-    groundColour(-55, 45, 0, 0, green);
+    groundColour(-66, 45, 0, 0, green); // (west of the young barley: -55, 45 is in that field since D-117)
     expect(stone.r).toBeGreaterThan(stone.g * 0.95); // warm pale stone, not grass
     expect(earth.r).toBeGreaterThan(earth.g);
     expect(green.g).toBeGreaterThan(green.r);

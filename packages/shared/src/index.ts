@@ -75,6 +75,7 @@ export * from "./holdup.ts";
 export * from "./stampede.ts";
 export * from "./stores.ts";
 export * from "./fields.ts";
+export * from "./hollowmereFields.ts";
 export * from "./loadout.ts";
 export * from "./followers.ts";
 export * from "./command.ts";

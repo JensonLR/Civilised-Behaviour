@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { RIVER, createArena, inCampFootprint, nearTrail, villageKeepOut, waterEdgeDistance, type CollisionWorld, type Obstacle } from "@cb/shared";
+import { HIVE_STAND, HOLLOWMERE_FIELDS, HOLLOWMERE_ORCHARD, RIVER, createArena, fieldCover, fieldThings, inCampFootprint, nearTrail, orchardCover, villageKeepOut, waterEdgeDistance, type CollisionWorld, type Obstacle } from "@cb/shared";
 import { PRESETS } from "../Stage.ts";
-import { BLOOM_HUES, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
+import { BLOOM_HUES, HOLLOWMERE_LAND, planScatter, type Item, type ScatterPlan } from "./scatter.ts";
 
 const detail = (name: "test" | "low" | "medium" | "high") => PRESETS[name];
-const all = (p: ScatterPlan): [string, Item[]][] => Object.entries(p).filter(([k]) => k !== "butterflies") as [string, Item[]][];
+const all = (p: ScatterPlan): [string, Item[]][] => [
+  ...(Object.entries(p).filter(([k]) => k !== "butterflies" && k !== "fields") as [string, Item[]][]),
+  ...(Object.entries(p.fields).map(([k, v]) => [`fields.${k}`, v]) as [string, Item[]][]),
+];
 const inside = (o: Obstacle, x: number, z: number, margin: number): boolean => (o.kind === "circle" ? Math.hypot(o.x - x, o.z - z) < o.r + margin : Math.hypot(o.x - x, o.z - z) < Math.hypot(o.hx, o.hz) * 0.7 + margin);
 
 describe("where things grow", () => {
@@ -148,6 +151,59 @@ describe("where things grow", () => {
     // a cliff is a hard obstacle in the shared world: what the client draws, the server collides with
     const obstacles = world.obstacles.filter((o) => o.tag === "cliff");
     expect(obstacles.length).toBe(plan.cliffs.length);
+  });
+});
+
+describe("D-117: Hollowmere's worked land", () => {
+  const world = createArena(7);
+  const plan = planScatter(world, detail("medium"), undefined, HOLLOWMERE_LAND);
+  const bare = planScatter(world, detail("medium"));
+  const inField = (x: number, z: number): boolean => fieldCover(HOLLOWMERE_FIELDS, x, z) >= 0.999;
+  const worked = (x: number, z: number): boolean => fieldCover(HOLLOWMERE_FIELDS, x, z) > 0 || orchardCover(HOLLOWMERE_ORCHARD, x, z) > 0;
+
+  it("is planted: barley in its rows, the stooks, haycocks and scarecrows where the world has them, ridges and drills, the orchard's trees, its hives and windfalls", () => {
+    const f = plan.fields;
+    expect(f.barley.length).toBeGreaterThan(300);
+    const things = HOLLOWMERE_FIELDS.flatMap(fieldThings);
+    expect(f.stooks).toHaveLength(things.filter((t) => t.kind === "stook").length);
+    expect(f.haycocks).toHaveLength(things.filter((t) => t.kind === "haycock").length);
+    expect(f.scarecrows).toHaveLength(things.filter((t) => t.kind === "scarecrow").length);
+    expect(f.furrows.length).toBeGreaterThan(50);
+    expect(f.drills.length).toBeGreaterThan(100);
+    // the orchard is drawn from the world's own obstacles: a tree on every fruit tree, the stand on the hive stand with its skeps
+    const trees = world.obstacles.filter((o) => o.tag === "orchard");
+    expect(plan.orchard).toHaveLength(trees.length);
+    for (const t of plan.orchard) expect(trees.some((o) => o.x === t.x && o.z === t.z)).toBe(true);
+    expect(plan.hives).toHaveLength(1);
+    expect(plan.hives[0]!.cls).toBe(HOLLOWMERE_ORCHARD.hives);
+    expect(plan.windfalls.length).toBeGreaterThan(30);
+    for (const [name, list] of all(plan)) {
+      if (!name.startsWith("fields.") && !["orchard", "hives", "windfalls"].includes(name)) continue;
+      for (const it of list) {
+        for (const v of [it.x, it.y, it.z, it.yaw, it.sx, it.sy, it.sz]) expect(Number.isFinite(v), name).toBe(true);
+        expect(Math.abs(it.y - world.terrainHeight(it.x, it.z)), `${name} at ${it.x.toFixed(1)},${it.z.toFixed(1)}`).toBeLessThan(0.3);
+      }
+    }
+    // a barley clump or a windfall stands in nothing solid, on no path and in no water
+    for (const it of [...f.barley, ...plan.windfalls]) {
+      world.forEachNear(it.x, it.z, (o) => expect(inside(o, it.x, it.z, 0), `inside a ${o.tag} at ${it.x.toFixed(1)},${it.z.toFixed(1)}`).toBe(false));
+      expect(nearTrail(it.x, it.z, 0)).toBe(false);
+      expect(waterEdgeDistance(it.x, it.z)).toBeGreaterThan(0);
+    }
+  });
+
+  it("nothing wild grows on it: no grass or flower in a field, no shrub, fern or toadstool ring anywhere in the worked land", () => {
+    for (const k of ["grass", "daisies", "cups"] as const) for (const it of plan[k]) expect(inField(it.x, it.z), `${k} in a field at ${it.x.toFixed(1)},${it.z.toFixed(1)}`).toBe(false);
+    for (const k of ["bushes", "berries", "ferns"] as const) for (const it of plan[k]) expect(worked(it.x, it.z), `${k} in the worked land at ${it.x.toFixed(1)},${it.z.toFixed(1)}`).toBe(false);
+    // and the hive stand is solid where it is drawn
+    const st = plan.hives[0]!;
+    const box = world.obstacles.find((o) => o.tag === "hive")!;
+    expect(box.kind === "box" && Math.abs(box.hz * 2 - st.cls * HIVE_STAND.pitch) < 1e-9).toBe(true);
+  });
+
+  it("is Hollowmere's alone: without it (Kessar borrows this scatter) nothing is planted and the grass grows where the fields would be", () => {
+    expect(all(bare).filter(([k]) => k.startsWith("fields.") || ["orchard", "hives", "windfalls"].includes(k)).every(([, l]) => l.length === 0)).toBe(true);
+    expect(bare.grass.filter((g) => inField(g.x, g.z)).length).toBeGreaterThan(50);
   });
 });
 
