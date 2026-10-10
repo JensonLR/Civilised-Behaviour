@@ -1,6 +1,7 @@
 import type { RegionId } from "./campaignTypes.ts";
 import type { CollisionWorld } from "./collision.ts";
-import { HIGHMARK, HIGHMARK_SITES, highmarkRoadness } from "./highmark.ts";
+import { HIGHMARK, HIGHMARK_FIELDS, HIGHMARK_SITES, highmarkRoadness } from "./highmark.ts";
+import { fieldCover, fieldFuel } from "./fields.ts";
 import { KESSAR, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun } from "./kessar.ts";
 import { smoothstep } from "./math.ts";
 import { SALTMARKET } from "./saltmarket.ts";
@@ -45,7 +46,7 @@ export function highmarkCover(x: number, z: number, h: number, slope: number, wa
   const road = highmarkRoadness(x, z);
   const hill = 1 - smoothstep(HIGHMARK.radii[0]! + HIGHMARK.rampRun + 3, HIGHMARK.radii[0]! + HIGHMARK.rampRun + 10, Math.hypot(x - HIGHMARK.centre.x, z - HIGHMARK.centre.z));
   const bank = smoothstep(HIGHMARK.river.z - HIGHMARK.river.half - HIGHMARK.river.bank - 2, HIGHMARK.river.z - HIGHMARK.river.half - 4, z);
-  const v = patch * (1 - road * 1.4) * (1 - hill) * (1 - bank) * (1 - smoothstep(0.35, 0.7, slope)) * (water > 0 ? 0 : 1) * (1 - highmarkFieldMask(x, z));   // (the field grows barley, not wild grass)
+  const v = patch * (1 - road * 1.4) * (1 - hill) * (1 - bank) * (1 - smoothstep(0.35, 0.7, slope)) * (water > 0 ? 0 : 1) * (1 - fieldCover(HIGHMARK_FIELDS, x, z));   // (a field grows its crop, not wild grass: D-046's barley and D-116's fields)
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
@@ -78,6 +79,11 @@ const SLOPE_E = 0.6;
  * D-103: a region's plant cover at (x, z), measured as its scatter measures it (the slope over 0.6 m, the standing water, Vesper's canyon floor). Hollowmere's adds its meadow
  * rule (`coverDensity`). Highmark's barley field counts as cover here (the scatter plants it as its own crop): it burns like the rest.
  */
+/** D-116: what a region's fields give the fire at (x, z) (0 off them, or in a region without fields). */
+export function regionFieldFuel(region: RegionId, x: number, z: number): number {
+  return region === "highmark" ? fieldFuel(HIGHMARK_FIELDS, x, z) : 0;
+}
+
 export function regionCover(region: RegionId, world: CollisionWorld, x: number, z: number): number {
   const t = world.terrain as { height(x: number, z: number): number; waterDepth?: (x: number, z: number) => number; floor?: (x: number, z: number) => number };
   const h = t.height(x, z);
@@ -87,7 +93,8 @@ export function regionCover(region: RegionId, world: CollisionWorld, x: number, 
     case "kessar":
       return kessarCover(x, z, h, slope);
     case "highmark":
-      return water > 0 ? 0 : Math.max(highmarkCover(x, z, h, slope, water), highmarkFieldMask(x, z));
+      // (D-116: the crops are the fuel in the fields: the barley, stubble and hay burn, the green barely, a ploughed field not at all)
+      return water > 0 ? 0 : Math.max(highmarkCover(x, z, h, slope, water), fieldFuel(HIGHMARK_FIELDS, x, z));
     case "saltmarket":
       return saltmarketCover(x, z, h, slope, water);
     case "vesper":

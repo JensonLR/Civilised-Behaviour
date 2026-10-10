@@ -1,6 +1,6 @@
 import type { RegionId } from "./campaignTypes.ts";
 import { insideFootprint, type CollisionWorld } from "./collision.ts";
-import { regionCover } from "./groundCover.ts";
+import { regionCover, regionFieldFuel } from "./groundCover.ts";
 import { hash3 } from "./rng.ts";
 
 /**
@@ -207,13 +207,15 @@ export class FireGrid {
     const ground = t.height(x, z);
     let solid = false;
     this.world.forEachNear(x, z, (o) => {
-      if (!solid && o.y1 > ground + FIRE.solidAbove && insideFootprint(o, x, z, 0)) solid = true;
+      if (!solid && o.tag !== "hay" && o.y1 > ground + FIRE.solidAbove && insideFootprint(o, x, z, 0)) solid = true;   // (D-116: a stook or a haycock is fuel, not a wall)
     });
     if (solid) return 0;
     const cut = FIRE.green[this.region] ?? 0.5;
     const dry = smoothstep(cut, cut + 0.08, valueNoise((this.seed ^ 0x6e3e) >>> 0, x / 9, z / 9));
-    if (dry <= 0) return 0;
-    const f = regionCover(this.region, this.world, x, z) * (FIRE.dryness[this.region] ?? 1) * (0.6 + 0.4 * dry);
+    // D-116: a field's crop burns as the crop does, whatever the patch of country it is in (ripe barley, stubble and hay are dry where the grass beside them is green)
+    const crop = regionFieldFuel(this.region, x, z) * (FIRE.dryness[this.region] ?? 1);
+    if (dry <= 0 && crop <= 0) return 0;
+    const f = Math.max(dry > 0 ? regionCover(this.region, this.world, x, z) * (FIRE.dryness[this.region] ?? 1) * (0.6 + 0.4 * dry) : 0, crop);
     return f < FIRE.minFuel ? 0 : f > 1 ? 1 : f;
   }
 

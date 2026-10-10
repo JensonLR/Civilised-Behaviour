@@ -2,7 +2,7 @@ import { BoxGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMa
 import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type ScenarioView } from "@cb/shared";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
-import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, type Lod } from "../flora.ts";
+import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, haycockGeometry, pebbleGeometry, reedGeometry, ridgeGeometry, scarecrowGeometry, stookGeometry, type Lod } from "../flora.ts";
 import { HORIZON, buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
 import { disposeTree } from "../kit.ts";
 import { buildRain } from "../rain.ts";
@@ -211,6 +211,15 @@ export class HighmarkView implements RegionView {
     this.instanced("grass", () => grassTuftGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.grass, p.grass.map((i) => this.varied(i.v, 0.22).multiply(i.cls === 1 ? new Color(1.1, 1.0, 0.8) : dry)), { noCull: true });
     // D-046: the barley field (its own straw-and-pale-gold clumps; the instance colour only varies them a little)
     this.instanced("barley", () => barleyGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.barley, p.barley.map((i) => this.varied(i.v, 0.1)), { noCull: true });
+    // D-116: what stands in the Grange's fields (full size: the geometry is the collision's size), with a little variation in the straw
+    const strawMat = this.track(toonMaterial({}));
+    this.instanced("stooks", stookGeometry, strawMat, p.stooks, p.stooks.map((i) => this.varied(i.v, 0.12)), { shadow: true, ink: "medium" });
+    this.instanced("haycocks", haycockGeometry, strawMat, p.haycocks, p.haycocks.map((i) => this.varied(i.v, 0.1)), { shadow: true, ink: "large" });
+    this.instanced("scarecrows", scarecrowGeometry, strawMat, p.scarecrows, undefined, { shadow: true, ink: "medium" });
+    // the plough's ridges (earth, the furrows between them the ground's own darker paint) and the young crop's drills (green along the crest)
+    const G = PALETTE.highmark;
+    this.instanced("furrows", () => ridgeGeometry(G.earth, G.earthDark), strawMat, p.furrows, p.furrows.map((i) => this.varied(i.v, 0.08)));
+    this.instanced("drills", () => ridgeGeometry(G.grassGreen, G.earth, 0.3, 0.16), strawMat, p.drills, p.drills.map((i) => this.varied(i.v, 0.1)));
     this.instanced("reeds", () => reedGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.reeds, p.reeds.map((i) => this.varied(i.v, 0.2)), { noCull: true });
   }
 
