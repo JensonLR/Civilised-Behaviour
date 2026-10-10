@@ -16,6 +16,7 @@ describe("D-109: what he becomes", () => {
     expect(epithet(man({ burnt: true, cause: "fire" }))).toBe("Smoky");
     expect(epithet(man({ cause: "boot" }))).toBe("Bootprint");
     expect(epithet(man({ cause: "rope" }))).toBe("Tether");
+    expect(epithet(man({ cause: "hoof" }))).toBe("Hoofprint"); // (D-111: ridden down)
     expect(grudgeName("Sentry Tamsin Cray", "Hook")).toBe('Sentry Tamsin "Hook" Cray');
     expect(grudgeName("Picket Corporal Dunstan Aldous", "Peg")).toBe('Picket Corporal Dunstan "Peg" Aldous');
     expect(grudgeName('Sentry Tamsin "Hook" Cray', "Peg")).toBe('Sentry Tamsin "Hook" Cray'); // (one nickname is plenty)
@@ -28,6 +29,7 @@ describe("D-109: what he becomes", () => {
     expect(grudgeLoss(man({ missing: LIMB.ARM_L | LIMB.LEG_L }))).toBe("rather more than one limb");
     expect(grudgeLoss(man({ cause: "fire", burnt: true }))).toBe("his eyebrows");
     expect(grudgeLoss(man({ cause: "rope" }))).toBe("his liberty");
+    expect(grudgeLoss(man({ cause: "hoof" }))).toBe("his hat");
   });
 });
 
@@ -60,6 +62,8 @@ describe("D-109: kept in the save", () => {
     const saved = JSON.stringify({ ...c, sites: { ...c.sites, grudges: [g, { ...g, lookSeed: 9, region: "atlantis" }, { name: 3 }, { ...g, lookSeed: 10, cause: "boredom" }] } });
     const back = parseCampaign(saved)!;
     expect(back.sites.grudges).toEqual([g]);
+    const h = man({ lookSeed: 11, cause: "hoof" }); // (D-111: ridden down)
+    expect(parseCampaign(JSON.stringify({ ...c, sites: { ...c.sites, grudges: [h] } }))!.sites.grudges).toEqual([h]);
     expect(parseCampaign(JSON.stringify(c))!.sites.grudges).toBeUndefined();
     expect(parseCampaign(JSON.stringify({ ...c, sites: { ...c.sites, grudges: "lots" } }))!.sites.grudges).toBeUndefined();
   });

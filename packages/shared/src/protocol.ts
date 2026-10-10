@@ -198,6 +198,8 @@ export interface HitEvent {
   boot?: boolean;
   /** D-108: a thrown body met a wall or the ground from a height (the clients hear the crunch). Absent: an ordinary blow. */
   splat?: boolean;
+  /** D-111: a horse went through him (`boot` is set too, so he is laid flat; the clients hear the hooves). Absent: an ordinary blow. */
+  trample?: boolean;
 }
 
 /** D-106: a lariat thrown, from the thrower's hand to where it is aimed (a man, or a point at the rope's reach). `hit`: it will land on him. Cosmetic: the clients fly the loop. */

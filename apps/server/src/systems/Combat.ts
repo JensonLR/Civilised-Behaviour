@@ -40,6 +40,11 @@ import {
   FINISHER,
   BOOT,
   isBoot,
+  TRAMPLE,
+  ZONE,
+  trampleDamage,
+  trampleDir,
+  trampleLift,
   stepBallistic,
   weaponFromWire,
   yawFromWire,
@@ -182,6 +187,9 @@ interface Pending {
   boot: boolean;
 }
 
+/** D-111: the way a trampled man is thrown (scratch). */
+const tdir = { x: 0, z: 0 };
+
 interface Cannon {
   id: string;
   /** 0 the field cannon, 1 the post's crank gun (D-092: `CRANK`). */
@@ -298,7 +306,7 @@ export class Combat {
   private impactCount = 0;
   private workers: string[] = [];
   /** Counters for tests and /metrics. */
-  readonly stats = { shots: 0, swings: 0, hits: 0, blasts: 0, refused: 0, projectilesDropped: 0, finishers: 0, boots: 0 };
+  readonly stats = { shots: 0, swings: 0, hits: 0, blasts: 0, refused: 0, projectilesDropped: 0, finishers: 0, boots: 0, tramples: 0 };
   /** The rewind (ms) applied to the last shots, newest last (diagnostics: tests compare it with the RTT the client is under). */
   readonly lagLog: number[] = [];
 
@@ -839,6 +847,31 @@ export class Combat {
       if (!self) this.host.sendTo(h.shooter, h.fin ? { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before, fin: true } : { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before });
     }
     this.pending.clear();
+  }
+
+  /**
+   * D-111: ridden down. `rider`'s horse, at `speed` m/s heading (`fx`, `fz`), went through `target`, who stood (`ox`, `oz`) from its chest. The hooves' harm lands on a
+   * leg or the body (never a limb off: a horse is blunt), and he goes ahead and off the line, lifted with the pace, floored as by a boot, and watched for what he
+   * meets. A man it puts down is thrown all the same (a ragdoll). The room has already decided he may be ridden down.
+   */
+  trample(rider: string, target: string, speed: number, fx: number, fz: number, ox: number, oz: number): void {
+    const t = this.host.players.get(target);
+    if (!t || (t.flags & FLAG.DOWNED) !== 0) return;
+    const dmg = trampleDamage(speed);
+    if (!(dmg > 0)) return;
+    trampleDir(fx, fz, ox, oz, tdir);
+    const r = this.host.rng.next();
+    const zone = r < 0.4 ? ZONE.TORSO : r < 0.7 ? ZONE.LEG_L : ZONE.LEG_R;
+    this.host.damage(target, dmg, { zone, dirX: tdir.x, dirZ: tdir.z, severBias: 0, by: rider, trample: true });
+    this.stats.tramples++;
+    const carry = speed * TRAMPLE.carry;
+    const lift = trampleLift(speed);
+    if ((t.flags & FLAG.DOWNED) !== 0) {
+      this.host.toss?.(target, tdir.x, tdir.z, Math.min(1, carry / COMBAT.maxKnock), lift / TRAMPLE.lift, 0, 0, rider);
+      return;
+    }
+    this.knock(t, tdir.x, tdir.z, carry, TRAMPLE.stumble, lift);
+    this.host.flung?.(target, rider);
   }
 
   /** Adds velocity to a person (bounded) and takes some of their control for a moment. The predicted state simply adopts it. */

@@ -16,6 +16,7 @@ import {
   BOLT_SECONDS,
   CARGO_POUNDS,
   FIRE_PANIC,
+  TRAMPLE,
   MOUNT,
   MOUNT_CAP,
   MOUNT_FLAG,
@@ -109,6 +110,11 @@ export interface MountsHost {
   routePoints(name: string): readonly { x: number; z: number }[] | undefined;
   /** D-110: the burning ground nearest (x, z) within `r` (into `out`); false when none. Optional: no fire, no panic. */
   fireNear?(x: number, z: number, r: number, out: { x: number; z: number }): boolean;
+  /**
+   * D-111: `rider`'s horse, at `speed` m/s heading (`fx`, `fz`), has met the NPC row `key` standing (`ox`, `oz`) from its chest. The room rides him down (Combat's
+   * `trample`) and says true, or says false for someone the horse steps round (the party's own hands). Optional: absent, nobody is ridden down.
+   */
+  trample?(rider: string, key: string, speed: number, fx: number, fz: number, ox: number, oz: number): boolean;
 }
 
 /** Authored one-liners (pending developer review: AI_CONTENT_REGISTER). */
@@ -162,8 +168,14 @@ export class Mounts {
   /** After an unhitch the same press cannot hitch again for a moment (so INTERACT beside the tongue can unhitch, then dismount). */
   private readonly noHitchUntil = new Map<string, number>();
 
-  /** D-110: horses that bolted from fire, and riders put down by one. */
-  readonly stats = { firePanics: 0, fireThrows: 0 };
+  /** D-110: horses that bolted from fire, and riders put down by one. D-111: men ridden down. */
+  readonly stats = { firePanics: 0, fireThrows: 0, tramples: 0 };
+  /** Seconds since the room began (the trample's cooldowns). */
+  private simT = 0;
+  /** D-111: when each man may next be struck (by any horse: one under a horse is struck once a pass, not every tick). */
+  private readonly struckUntil = new Map<string, number>();
+  /** D-111: the horse being looked ahead of (scratch for `trampleEach`, so the scan allocates nothing). */
+  private readonly tr = { rider: "", x: 0, y: 0, z: 0, fx: 0, fz: 0, speed: 0, hit: 0 };
   /** The burning ground a horse is shying from (scratch for `panicAtFire`). */
   private readonly fireAt = { x: 0, z: 0 };
 
@@ -331,11 +343,13 @@ export class Mounts {
     this.host.players.forEach((p) => (p.flags &= ~(MOUNT_FLAG.MOUNTED | MOUNT_FLAG.HITCHED | MOUNT_FLAG.GALLOPING)));
     this.lastSpeed.clear();
     this.noHitchUntil.clear();
+    this.struckUntil.clear();
   }
 
   /** Once per room tick, after the players have stepped and before the physics step. */
   tick(dt: number): void {
     this.tickNo++;
+    this.simT += dt;
     this.panicAtFire(); // (D-110)
     const world = this.host.world();
     // riders: the horse copies the rider; a wall at speed unseats them
@@ -379,8 +393,42 @@ export class Mounts {
       return;
     }
     this.copyFromRider(e, row, p);
+    if (this.host.trample && row.speed >= TRAMPLE.minSpeed) this.trampleAhead(row.rider, p);
     void dt;
   }
+
+  /** D-111: anyone on foot at the horse's chest is ridden down; each one costs the horse some of its pace. */
+  private trampleAhead(sid: string, p: PlayerStateType): void {
+    const speed = Math.hypot(p.vx, p.vz);
+    if (!(speed > 0)) return;
+    const s = this.tr;
+    s.rider = sid;
+    s.speed = speed;
+    s.fx = p.vx / speed;
+    s.fz = p.vz / speed;
+    s.x = p.x + s.fx * TRAMPLE.ahead;
+    s.z = p.z + s.fz * TRAMPLE.ahead;
+    s.y = p.y;
+    s.hit = 0;
+    this.host.players.forEach(this.trampleEach);
+    for (let i = 0; i < s.hit; i++) {
+      p.vx *= TRAMPLE.keep;
+      p.vz *= TRAMPLE.keep;
+    }
+  }
+
+  private readonly trampleEach = (q: PlayerStateType, key: string): void => {
+    const s = this.tr;
+    if (q.npc === 0 || key === s.rider || (q.flags & (FLAG.DOWNED | FLAG.DRAGGED | FLAG.BEAST | MOUNT_FLAG.MOUNTED)) !== 0) return;
+    const ox = q.x - s.x;
+    const oz = q.z - s.z;
+    if (ox * ox + oz * oz > TRAMPLE.reach * TRAMPLE.reach || Math.abs(q.y - s.y) > TRAMPLE.dy) return;
+    if (this.simT < (this.struckUntil.get(key) ?? 0)) return;
+    if (!this.host.trample!(s.rider, key, s.speed, s.fx, s.fz, ox, oz)) return;
+    this.struckUntil.set(key, this.simT + TRAMPLE.cooldownS);
+    s.hit++;
+    this.stats.tramples++;
+  };
 
   private copyFromRider(e: Entity, row: MountRow, p: PlayerStateType): void {
     row.x = p.x;

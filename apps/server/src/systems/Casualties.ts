@@ -109,6 +109,8 @@ export interface HitInfo {
   finisher?: boolean;
   /** D-108: a boot (he goes over on his back, wherever it landed; the hit event says so: the clients lay him flat). */
   boot?: boolean;
+  /** D-111: a horse went through him (floored as by a boot; the hit event says both, so the clients lay him flat and hear the hooves). */
+  trample?: boolean;
   /** D-108: what a thrown body met (a wall at speed, the ground from a height; the hit event says so: the clients hear the crunch). */
   splat?: boolean;
 }
@@ -183,7 +185,8 @@ export class Casualties {
     const ev: HitEvent = lift > 0 ? { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down, lift } : { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down };
     if (hit.burn) ev.burn = true;
     if (hit.finisher) ev.fin = true;
-    if (hit.boot) ev.boot = true;
+    if (hit.boot || hit.trample) ev.boot = true;
+    if (hit.trample) ev.trample = true;
     if (hit.splat) ev.splat = true;
     this.host.emitHit(ev);
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
@@ -195,7 +198,7 @@ export class Casualties {
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
     if (down) this.down(sessionId, p);
-    else if (!hit.burn) this.react(sessionId, p, zone, amount, dx / len, dz / len, hit.boot === true);
+    else if (!hit.burn) this.react(sessionId, p, zone, amount, dx / len, dz / len, hit.boot === true || hit.trample === true);
   }
 
   /**

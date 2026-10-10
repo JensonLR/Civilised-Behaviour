@@ -57,9 +57,11 @@ export interface Bill {
   /** D-108: men the party booted off their feet, and men the party threw (a boot, a blast) into a wall or off a height hard enough to hurt. */
   boots: number;
   splats: number;
+  /** D-111: men the party rode down. */
+  trampled: number;
 }
 
-export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0, ropes: 0, boots: 0, splats: 0 });
+export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0, ropes: 0, boots: 0, splats: 0, trampled: 0 });
 
 /** A blast that throws a body this far (yards) makes the column and counts as a flight. */
 export const FLING_YARDS = 7;
@@ -98,12 +100,13 @@ export type MayhemFact =
   | { k: "finisher"; victim: string; by: string }
   | { k: "rope"; victim: string; by: string }
   | { k: "splat"; victim: string; by: string }
+  | { k: "trample"; victim: string; by: string }
   | { k: "grudge"; victim: string; by: string; what: string }
   | { k: "grudge_down"; victim: string; by: string }
   | { k: "request"; id: RequestId };
 
 /** When several land at once (a blast), the best is printed: a commission met, a chain, a limb, a flight... */
-export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
+export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, trample: 6, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
 
 const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" | "severOwn" | "flingOwn", readonly string[]>> = {
   sever: [
@@ -181,6 +184,12 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{by} has seen off {victim} again. The Society suggests a standing arrangement.",
     "{victim} came back for {by} and has been sent back. Correspondence is not expected.",
     "{by} and {victim} have met again. The result was the same.",
+  ],
+  trample: [
+    "{by} has ridden down {victim}. The horse was not consulted and seems pleased.",
+    "{victim} stood in the way of {by}'s horse, briefly.",
+    "{by} gave {victim} the full benefit of the cavalry.",
+    "{victim} has been trodden into the record by {by}, at the gallop.",
   ],
   splat: [
     "{victim} has met the scenery at speed. {by} is credited with the introduction.",
@@ -325,7 +334,7 @@ export const SPECTACLE_CAP = 30;
 
 /** What the Committee for Remittances adds for the spectacle (pounds, capped) and the line it sends; 0 and "" for a dull run. */
 export function spectacle(b: Bill): { pay: number; line: string } {
-  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0) + (b.ropes ?? 0) + 2 * (b.splats ?? 0);
+  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0) + (b.ropes ?? 0) + 2 * (b.splats ?? 0) + 2 * (b.trampled ?? 0);
   const pay = Math.min(SPECTACLE_CAP, raw);
   if (pay <= 0) return { pay: 0, line: "" };
   return { pay, line: `The Committee adds £${pay} for spectacle${pay === SPECTACLE_CAP ? ", the most it will pay for anything it has to print with a warning" : ""}. London wants more of this.` };
@@ -345,6 +354,7 @@ export function billLine(b: Bill): string {
   if ((b.ropes ?? 0) > 0) parts.push(plural(b.ropes, "lasso landed", "lassos landed"));
   if ((b.boots ?? 0) > 0) parts.push(plural(b.boots, "boot delivered", "boots delivered"));
   if ((b.splats ?? 0) > 0) parts.push(plural(b.splats, "man introduced to the scenery", "men introduced to the scenery"));
+  if ((b.trampled ?? 0) > 0) parts.push(plural(b.trampled, "man ridden down", "men ridden down"));
   if (b.friendly > 0) parts.push(plural(b.friendly, "colleague shot", "colleagues shot"));
   if (b.civilians > 0) parts.push(plural(b.civilians, "bystander", "bystanders"));
   if (b.ownLimbs > 0) parts.push(`${plural(b.ownLimbs, "limb", "limbs")} of our own`);

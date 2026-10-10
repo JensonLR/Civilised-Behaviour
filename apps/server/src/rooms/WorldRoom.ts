@@ -599,6 +599,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       seed,
       rowOf: (key) => this.state.players.get(key),
       fireNear: (x, z, r, out) => this.fire.nearestBurning(x, z, r, out), // (D-110: horses shy from the flames)
+      trample: (rider, key, speed, fx, fz, ox, oz) => this.rideDown(rider, key, speed, fx, fz, ox, oz), // (D-111)
       takeHeld: (sid) => {
         const held = this.carrying.get(sid);
         const p = this.state.players.get(sid);
@@ -1993,6 +1994,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.refreshProsthetic(client.sessionId);
   }
 
+  /** D-111: a ridden horse met an NPC on foot. The party's own hands are stepped round; anyone else is ridden down (Combat's `trample`). */
+  private rideDown(rider: string, key: string, speed: number, fx: number, fz: number, ox: number, oz: number): boolean {
+    const t = this.state.players.get(key);
+    if (!t || t.npc === 0 || NPC_SIDE[t.npc] === "party") return false;
+    this.combat.trample(rider, key, speed, fx, fz, ox, oz);
+    return true;
+  }
+
   /** The single entry point for harm (weapons, explosions, friendly fire, debug). Health 0 puts a player down, never out. */
   damagePlayer(sessionId: string, amount: number, hit?: HitInfo): void {
     const p = this.state.players.get(sessionId);
@@ -2006,10 +2015,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (p.npc !== 0) {
         if (lost) this.grudges.onMaimed(sessionId, lost, hit?.by ?? "");
         if (hit?.boot) this.grudges.onInsult(sessionId, "boot", hit.by ?? "");
+        if (hit?.trample) this.grudges.onInsult(sessionId, "hoof", hit.by ?? ""); // (D-111)
         if (down) this.grudges.onDown(sessionId, hit?.by ?? "");
       }
       if (this.scenario?.live) {
         if (hit?.boot) this.mayhem.onBoot(sessionId, hit.by ?? ""); // (D-108)
+        if (hit?.trample) this.mayhem.onTrample(sessionId, hit.by ?? ""); // (D-111)
         const off = lost;
         this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
       }

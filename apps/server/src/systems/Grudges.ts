@@ -130,8 +130,8 @@ export class Grudges {
     this.raise(a, "fire", "", GRUDGE.weight.fire);
   }
 
-  /** `key` was booted or roped by `by`. */
-  onInsult(key: string, cause: "boot" | "rope", by: string): void {
+  /** `key` was booted, roped or ridden down (D-111) by `by`. */
+  onInsult(key: string, cause: "boot" | "rope" | "hoof", by: string): void {
     const a = this.account(key);
     if (a) this.raise(a, cause, by, GRUDGE.weight[cause]);
   }

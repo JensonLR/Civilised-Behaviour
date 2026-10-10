@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMB, NPC, REQUESTS, WEAPON, ZONE, type ScenarioTemplateId } from "@cb/shared";
+import { LIMB, NPC, REQUESTS, WEAPON, ZONE, billLine, spectacle, type ScenarioTemplateId } from "@cb/shared";
 import { GAP, Mayhem, type HitFact } from "./Mayhem.ts";
 
 /** A room with a party of two (Ada, Bram), a hired rifle, two Ward sentries, a Syndicate guard and a carter (a bystander). */
@@ -324,3 +324,25 @@ describe("D-108: the boot in the bill", () => {
     expect(printed.some((p) => p.k === "splat" && p.t.includes("Ada") && p.t.includes("Dunstan"))).toBe(true);
   });
 });
+
+describe("D-111: ridden down, in the bill", () => {
+  it("a man the party rides down is billed, shouted and printed; one of our own, or by the enemy, is not; the debrief and the Committee count it", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: string[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (_id, kind) => barks.push(kind) });
+    m.begin(99, 2, "secure_crossing");
+    m.onTrample("npc:s1", "ada");
+    m.onTrample("bram", "ada");
+    m.onTrample("ada", "npc:s1");
+    expect(m.bill.trampled).toBe(1);
+    expect(barks).toEqual(["trample"]);
+    for (let i = 0; i < 60; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "trample" && p.t.includes("Ada") && p.t.includes("Dunstan"))).toBe(true);
+    expect(billLine(m.bill)).toContain("1 man ridden down");
+    expect(spectacle(m.bill).pay).toBe(2);
+  });
+});
+

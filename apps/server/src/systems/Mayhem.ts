@@ -193,6 +193,16 @@ export class Mayhem {
     this.touch();
   }
 
+  /** D-111: `by` rode `victim` down. Billed when the party did it to anyone not of the party; the rider says so and the column prints it. */
+  onTrample(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.trampled++;
+    this.bark(by, "trample");
+    this.say({ k: "trample", victim: this.name(victim), by: this.name(by) });
+    this.touch();
+  }
+
   /** D-108: `victim`, thrown by `by` (a boot, a blast), was hurt by the wall he met or the drop he fell. The column prints it when the party threw him. */
   onSplat(victim: string, by: string): void {
     const vs = this.side(victim);

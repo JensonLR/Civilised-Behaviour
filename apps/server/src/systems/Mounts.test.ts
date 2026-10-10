@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUTTON, CollisionWorld, FLAG, Rng, STEP_DT, setWound, ZONE, type Obstacle } from "@cb/shared";
-import { BOLT_SECONDS, CARGO_POUNDS, FIRE_PANIC, MOUNT, MOUNT_CAP, MOUNT_FLAG, MOUNT_PHASE, WAGON, wagonToWorld } from "@cb/shared";
+import { BOLT_SECONDS, CARGO_POUNDS, FIRE_PANIC, MOUNT, MOUNT_CAP, MOUNT_FLAG, MOUNT_PHASE, TRAMPLE, WAGON, wagonToWorld } from "@cb/shared";
 import { MountRoom, frame, type FakePlayer } from "../bots/mount.ts";
 import { MOUNT_LINES } from "./Mounts.ts";
 
@@ -354,6 +354,57 @@ describe("D-110: horses and fire", () => {
     expect(horse.phase).toBe(MOUNT_PHASE.led);
     for (let i = 0; i < 90 * 30 && !room.mounts.routeDone(w); i++) room.tick();
     expect(room.mounts.routeDone(w)).toBe(true);
+  });
+});
+
+describe("D-111: ridden down", () => {
+  /** Ada mounted and moving north at `buttons`' pace; a man (an NPC row) stands in her path 15 m ahead. */
+  const charge = (f: number, buttons: number) => {
+    const { room, a } = stable();
+    press(room, "a");
+    const man = room.addPlayer("npc:s1", a.x, a.z - 15);
+    man.npc = 1;
+    run(room, "a", 0.8, f, buttons);
+    return { room, a, man };
+  };
+
+  it("a galloping horse rides down the man in its path, once, heading his way, and loses some pace for it", () => {
+    const { room, a, man } = charge(1, BUTTON.SPRINT);
+    let before = 0;
+    for (let i = 0; i < 120 && room.trampled.length === 0; i++) {
+      before = speedOf(a);
+      room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    }
+    expect(room.trampled).toHaveLength(1);
+    const t = room.trampled[0]!;
+    expect(t).toMatchObject({ rider: "a", key: "npc:s1" });
+    expect(t.speed).toBeGreaterThan(TRAMPLE.minSpeed);
+    expect(t.fz).toBeLessThan(-0.9); // (north)
+    expect(speedOf(a)).toBeLessThan(before * 0.95);
+    expect(room.mounts.stats.tramples).toBe(1);
+    // she rides on through him (the hook does not move him here): struck once a pass, not every tick he is under the horse
+    for (let i = 0; i < 10; i++) room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(room.trampled).toHaveLength(1);
+    void man;
+  });
+
+  it("at a walk nobody is ridden down; nor, at a gallop, a man already down, a hand of the party or a player", () => {
+    const walk = charge(0.35, 0);
+    for (let i = 0; i < 300; i++) walk.room.tick({ a: frame(0.35, 0, 0) });
+    expect(walk.room.trampled).toHaveLength(0);
+    const down = charge(1, BUTTON.SPRINT);
+    down.man.flags |= FLAG.DOWNED;
+    for (let i = 0; i < 120; i++) down.room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(down.room.trampled).toHaveLength(0);
+    const hand = charge(1, BUTTON.SPRINT);
+    hand.room.spared.add("npc:s1");
+    for (let i = 0; i < 120; i++) hand.room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(hand.room.trampled).toHaveLength(0);
+    expect(hand.room.mounts.stats.tramples).toBe(0);
+    const friend = charge(1, BUTTON.SPRINT);
+    friend.man.npc = 0;
+    for (let i = 0; i < 120; i++) friend.room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(friend.room.trampled).toHaveLength(0);
   });
 });
 
