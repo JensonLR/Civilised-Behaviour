@@ -709,3 +709,29 @@ Tests: the framing function; the rule's quiet and its return with a weapon; the 
   - The first shove moved him 1.35 m; with the boot's lost footing it carries him about 5 m.
   - At 0.62 m the holder's forearm sits inside his back, so it does not show from the front.
 - **Not yet.** Unplayed by a human; NPCs never seize anyone; no special sound for the grab.
+
+**D-113 The hold-up (2026-10-10).** The tenth of the AAA mechanics (ideas, never code; D-103): the western's "hands up". A gun is also a way of not using a gun. The Society calls it the civilised method, and bills it.
+- **Covered** (`server/systems/HoldUps.ts`, `shared/holdup.ts`). Each tick, for every member of the party aiming a firearm, the man in the sights is found: within 14 m, inside a cone of about 8 degrees, the line open, the nearest. The time he has been covered by that member is kept; it starts again if he leaves the sights. Never a hand of the party, a man down, held (rope, collar) or already given in, a beast, a rider, a man at a crank gun. The scan allocates nothing.
+- **Whose nerve goes** (Cast `yields`). After 0.9 s covered, a man gives in if he is broken or wavering, or shaken and alone or below 60 health. A steady man never does, nor a man of bravery 85 or more. Morale is the existing model, so fire, wounds, fallen friends and fear all bring a man to it.
+- **Hands up** (the room's `surrender`).
+  - His weapon is taken (every client throws it to the ground from a `yield` message) and `PlayerState.roped` becomes 3. Clients draw his hands up, open and shaking, with a frightened face.
+  - He says so ("I yield!"), and the holder of the gun barks ("You are hereby civilised!").
+  - He stands where he gave in for the rest of the run: the Cast skips his brain entirely, and no group order lifts it.
+  - He counts as routed for the contract (`Cast.count`), so a garrison can be broken without being shot down.
+  - His side within 16 m takes a fright (a morale shock of 22), so one surrender can bring on another.
+  - He cannot then be roped or seized: one hold at a time.
+- **The bill.** "men held up at gunpoint" and 1 spectacle each. Shooting a man with his hands up is billed and printed once a man: "The Society notes that he had his hands up at the time." It pays nothing; the Committee is writing.
+- **Rejected.**
+  - A prompt or a meter (the moment is his face and his hands, not a bar).
+  - Taking prisoners back to the boat (the wagon's rack already carries bodies; a prisoner economy is a contract of its own).
+  - NPCs holding the party up (players are never staggered or disarmed by design, D-104).
+  - Surrender by speech alone (the parley is its own system).
+- **Tested.**
+  - Shared: who yields at each band; the sights (range, cone, the nearest, a wall, behind).
+  - Server unit: one surrender once covered long enough, to the one holding the gun; nothing for a man not aimed at, a sabre, out of the cone, past a wall, his nerve holding, a hand, a man already held; the time starts again.
+  - Cast: yields by band; once given in, he stands, never fires, counts as routed, frightens his comrades but not those out of earshot; no order lifts it. Mutation-checked: the brain skipped.
+  - A real room: Ada aims at a wavering sentry, he drops his rifle (every client told), puts his hands up, stays put, is billed; shot afterwards, unsporting. Mutation-checked: the room unwired.
+  - The bill and the column; the animator's hands up.
+- **Found by the tests.** An NPC row's `roped` starts unset, not 0, so "not already held" read as held for every NPC (and would have stopped the shield's seize as well). The checks now read the field as falsy, and the unit test's rows leave it unset as the real ones do.
+- **Looked at.** The hands-up pose in a line-up of four peoples.
+- **Not yet.** Unplayed by a human and not seen in a live game. No prompt says that a man is wavering; whether players find it without one is the open question.

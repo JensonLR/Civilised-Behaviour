@@ -424,6 +424,37 @@ describe("D-112: a comrade held up as a shield", () => {
   });
 });
 
+describe("D-113: at gunpoint", () => {
+  it("a wavering man yields, a steady one does not; once he has, he stands still, never fires, counts as routed, and his side nearby takes a fright", () => {
+    const r = rig();
+    r.human("p1", 0, -12);
+    r.cast.spawn([spec("s1", { lookSeed: 701 }), spec("s2", { post: { x: 3, z: 0 }, lookSeed: 702 }), spec("far", { post: { x: 60, z: 0 }, lookSeed: 703 })]);
+    r.cast.order("ward", { o: "alert" });
+    r.tick(5);
+    const rec = (k: string) => (r.cast as unknown as { byKey: Map<string, { brain: { morale: { v: number; shock: number } } }> }).byKey.get(npcKey(k))!;
+    rec("s1").brain.morale.v = 80;
+    expect(r.cast.yields(npcKey("s1"))).toBe(false);
+    rec("s1").brain.morale.v = 40;
+    expect(r.cast.yields(npcKey("s1"))).toBe(true);
+    const shock2 = rec("s2").brain.morale.shock;
+    const shockFar = rec("far").brain.morale.shock;
+    r.cast.surrender(npcKey("s1"));
+    expect(r.cast.hasYielded(npcKey("s1"))).toBe(true);
+    expect(r.cast.yields(npcKey("s1"))).toBe(false); // (once is enough)
+    expect(rec("s2").brain.morale.shock).toBeGreaterThan(shock2); // (his comrade beside him)
+    expect(rec("far").brain.morale.shock).toBe(shockFar); // (out of earshot)
+    expect(r.cast.count("ward").routed).toBeGreaterThanOrEqual(1);
+    const at = { x: r.rows.get(npcKey("s1"))!.x, z: r.rows.get(npcKey("s1"))!.z };
+    const shots = fired(r, npcKey("s1"));
+    r.cast.order("ward", { o: "post" }); // (no order lifts it: back to their posts, then roused again)
+    r.cast.order("ward", { o: "alert" });
+    r.tick(200);
+    expect(fired(r, npcKey("s2"))).toBeGreaterThan(0); // (his comrade fights on)
+    expect(fired(r, npcKey("s1"))).toBe(shots);
+    expect(Math.hypot(r.rows.get(npcKey("s1"))!.x - at.x, r.rows.get(npcKey("s1"))!.z - at.z)).toBeLessThan(0.2);
+  });
+});
+
 describe("Cast: orders", () => {
   it("stand_down is inert (and the stand-down latches), post lifts it", () => {
     const r = rig();

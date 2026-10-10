@@ -388,3 +388,19 @@ describe("D-112: the human shield", () => {
     expect(Math.abs(h.rig.joints.shoulderL.rotation.x - gunL)).toBeGreaterThan(0.05);
   });
 });
+
+describe("D-113: hands up", () => {
+  it("both arms go up over the head, a little apart, and come down when it is over", () => {
+    const { rig, anim } = make(9);
+    anim.autoBlink = false;
+    run(anim, 1, { speed: 0, flags: G, vy: 0 });
+    const rest = rig.joints.shoulderR.rotation.x;
+    run(anim, 1, { speed: 0, flags: G, vy: 0, surrender: true });
+    expect(rig.joints.shoulderL.rotation.x).toBeGreaterThan(2.4);
+    expect(rig.joints.shoulderR.rotation.x).toBeGreaterThan(2.4);
+    expect(rig.joints.elbowR.rotation.x).toBeLessThan(0.8);
+    run(anim, 1, { speed: 0, flags: G, vy: 0 });
+    expect(Math.abs(rig.joints.shoulderR.rotation.x - rest)).toBeLessThan(0.15);
+  });
+});
+

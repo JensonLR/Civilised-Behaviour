@@ -67,6 +67,8 @@ export class Mayhem {
   private readonly streak = new Map<string, { at: number; n: number }>();
   /** D-112: shields whose own side has already shot them this run (billed once a man). */
   private readonly shotComrades = new Set<string>();
+  /** D-113: surrendered men the party has shot this run (billed once a man). */
+  private readonly shotSurrendered = new Set<string>();
   private progress = "";
   private salt = 0;
 
@@ -83,6 +85,7 @@ export class Mayhem {
     this.runChain = 0;
     this.streak.clear();
     this.shotComrades.clear();
+    this.shotSurrendered.clear();
     this.barked.clear();
     this.partyBarked = -Infinity;
     this.salt = (seed ^ (day * 7919)) >>> 0;
@@ -193,6 +196,25 @@ export class Mayhem {
     if (!vs || vs === "party" || this.side(by) !== "party") return;
     this.bill.boots++;
     this.bark(by, "boot");
+    this.touch();
+  }
+
+  /** D-113: `victim` put his hands up for `by`. Billed when the party did it; the one holding the gun says so and the column prints it. */
+  onHoldUp(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.holdups++;
+    this.bark(by, "holdup");
+    this.say({ k: "holdup", victim: this.name(victim), by: this.name(by) });
+    this.touch();
+  }
+
+  /** D-113: the party shot `victim`, who had his hands up. Billed and printed once a man. */
+  onUnsporting(victim: string, by: string): void {
+    if (this.shotSurrendered.has(victim) || this.side(by) !== "party") return;
+    this.shotSurrendered.add(victim);
+    this.bill.unsporting++;
+    this.say({ k: "unsporting", victim: this.name(victim), by: this.name(by) });
     this.touch();
   }
 

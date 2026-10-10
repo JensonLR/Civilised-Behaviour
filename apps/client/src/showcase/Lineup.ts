@@ -16,7 +16,7 @@ import { LabStage } from "./LabStage.ts";
  *   expr=pain     expression for everyone (neutral|pain|fear|triumph|drunk|angry|smug|disgust|surprise|laugh|sleep); hideface=lid,lowerLid,glint,core,pupil,brow,mouth switches face parts off
  *   pose=walk     walk|idle|carry|crouch|air|down|run|sprint|kneel|haul|aim|pistol|sabre|cannon (aim/pistol/sabre/cannon pose the arms for a weapon and draw it; sw=0.4 sets a blow's progress);
  *   wield=rifle   rifle|blunderbuss|pistol|sabre|umbrella in the hands (any pose), aimw=1 aiming it, sw=0.4 a blow in flight
- *   held=1 / clutch=1   D-112: held up as a shield (arms pinned behind) / holding one (the off arm across)
+ *   held=1 / clutch=1   D-112: held up as a shield (arms pinned behind) / holding one (the off arm across); surrender=1 hands up (D-113)
  *                 steps=N settles the animator for N frames (default 90) so different gait phases can be reviewed
  *   acts=0        no idle acts, but the bearing's resting stance (D-066)
  *   act=0         no idle acts / ambient life (a plain standing pose; the idle acts move the arms and make fit stills differ from figure to figure)
@@ -261,6 +261,7 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
   // D-112: held=1 holds everyone up as a shield (arms pinned behind); clutch=1 has everyone holding one (the off arm across)
   const held = params.get("held") === "1";
   const clutch = params.get("clutch") === "1";
+  const surrender = params.get("surrender") === "1"; // (D-113: hands up)
   // Step the animation to a settled, deterministic frame for stills, then keep animating for live viewing.
   const steps = Number(params.get("steps") ?? 90);
   for (let i = 0; i < steps; i++) {
@@ -270,7 +271,7 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
         wr.update(1 / 30, { weapon: weaponId, aiming: aimW > 0, elev: 0, reload: 0, hidden: false, crew: 0, fp: 0 });
         wr.input.swing = swingW;
       }
-      anim.update(1 / 30, { speed, flags, vy: pose === "air" ? 2 : 0, weapon: wr ? wr.input : weapon, react, held, clutch });
+      anim.update(1 / 30, { speed, flags, vy: pose === "air" ? 2 : 0, weapon: wr ? wr.input : weapon, react, held, clutch, surrender });
     });
   }
   rigs.forEach(({ rig, anim }, k) => {

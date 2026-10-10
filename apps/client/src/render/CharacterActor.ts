@@ -71,6 +71,8 @@ export interface ActorPose {
   held?: boolean;
   /** D-112: holding a man up as a shield: the off arm round him, the gun still in hand. Absent = not. */
   clutch?: boolean;
+  /** D-113: hands up at gunpoint (`PlayerState.roped` is `HOLDUP.held`): empty hands raised. Absent = not. */
+  surrender?: boolean;
   /** D-095: the Society's pennant in the off hand (the siege's picket boys: a planted picket reads from across the field). Absent = none. */
   pennant?: boolean;
   /** D-104: PlayerState.react (hitReaction.ts): down on a knee, doubled over, or just disarmed. Absent or 0 = none. */
@@ -381,6 +383,11 @@ export class CharacterActor {
     this.lastArmed = -1;
   }
 
+  /** D-113: he gave in at gunpoint: whatever he held goes to the ground (from the right hand, as a disarming blow throws it), then the hands go up. */
+  yieldWeapon(): void {
+    this.dropWeapon(true, this.visFacing);
+  }
+
   hit(e: HitEvent, facing: number): void {
     const cos = Math.cos(facing);
     const sin = Math.sin(facing);
@@ -441,7 +448,7 @@ export class CharacterActor {
     this.lookTimer = Math.max(0, this.lookTimer - dt);
     // D-084: the face in play. Pain wins; then a passing mood (a scream of panic, a grin over a fallen enemy, the start at a blast); a raised sight narrows the eyes.
     if (downed || this.painTimer > 0) this.anim.setExpression("pain");
-    else if (pose.held) this.anim.setExpression("fear"); // (D-112: held up in front of the guns)
+    else if (pose.held || pose.surrender) this.anim.setExpression("fear"); // (D-112: held up in front of the guns; D-113: at gunpoint)
     else if (this.moodTimer > 0) this.anim.setExpression(this.mood, Math.min(1, 0.4 + this.moodTimer));
     else if ((pose.flags & FLAG.AIMING) !== 0) this.anim.setExpression("angry", 0.55);
     else this.anim.setExpression("neutral");
@@ -467,7 +474,7 @@ export class CharacterActor {
     if (pose.held) flags &= ~FLAG.DRAGGED;
     if (pose.clutch) flags &= ~FLAG.DRAGGING;
     // Hands that are busy (carrying, dragging, kneeling, lying, held by the collar) put the weapon away; a fall too.
-    const busy = (flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DOWNED | FLAG.DRAGGED)) !== 0 || pose.held === true || this.ragdoll !== undefined;
+    const busy = (flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DOWNED | FLAG.DRAGGED)) !== 0 || pose.held === true || pose.surrender === true || this.ragdoll !== undefined;
     const wi = this.weapons.update(dt, {
       weapon: weaponId,
       aiming: (pose.flags & FLAG.AIMING) !== 0,
@@ -479,7 +486,7 @@ export class CharacterActor {
       carried: c?.carried,
     });
     this.anim.motion = getReduceMotion() ? 0.3 : 1;   // hair sway only (D-037): 30% under "reduce motion"
-    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride, react: this.sprawl > 0 ? 0 : pose.react, held: pose.held, clutch: pose.clutch });
+    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride, react: this.sprawl > 0 ? 0 : pose.react, held: pose.held, clutch: pose.clutch, surrender: pose.surrender });
     this.weapons.apply(this.anim.hold);
     // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).
     const h = this.anim.hold;

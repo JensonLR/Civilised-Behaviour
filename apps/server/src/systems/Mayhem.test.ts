@@ -369,3 +369,26 @@ describe("D-112: the human shield, in the bill", () => {
   });
 });
 
+describe("D-113: the hold-up, in the bill", () => {
+  it("a man held up at gunpoint is billed, shouted and printed; shooting him afterwards is billed and printed once; none of it for our own", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: string[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (_id, kind) => barks.push(kind) });
+    m.begin(99, 2, "secure_crossing");
+    m.onHoldUp("npc:s1", "ada");
+    m.onHoldUp("bram", "ada");
+    expect(m.bill.holdups).toBe(1);
+    expect(barks).toEqual(["holdup"]);
+    m.onUnsporting("npc:s1", "ada");
+    m.onUnsporting("npc:s1", "bram");
+    expect(m.bill.unsporting).toBe(1);
+    for (let i = 0; i < 80; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "unsporting" && p.t.includes("Dunstan"))).toBe(true);
+    expect(billLine(m.bill)).toContain("1 man held up at gunpoint");
+    expect(billLine(m.bill)).toContain("1 man shot with his hands up");
+  });
+});
+

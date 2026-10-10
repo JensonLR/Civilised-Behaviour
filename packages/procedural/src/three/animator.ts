@@ -41,6 +41,8 @@ export interface PoseInput {
   held?: boolean;
   /** D-112: holding a man up as a shield: the off arm locked across his chest, whatever the weapon wanted of it. Absent = not. */
   clutch?: boolean;
+  /** D-113: hands up at gunpoint: both arms raised, open-handed, leaning back from the gun. Absent = not. */
+  surrender?: boolean;
 }
 
 const damp = (current: number, target: number, rate: number, dt: number): number => current + (target - current) * (1 - Math.exp(-rate * dt));
@@ -93,6 +95,8 @@ export class CharacterAnimator {
   /** D-112: held up as a shield, and holding one (eased weights). */
   private heldW = 0;
   private clutchW = 0;
+  /** D-113: hands up (eased weight). */
+  private surrW = 0;
   private breath = 0;
   /** Ambient life (idle blinking, weight shift, glances, idle actions). Disable for stills (photo mode) and deterministic tests. */
   autoBlink = true;
@@ -282,6 +286,7 @@ export class CharacterAnimator {
     this.haul = damp(this.haul, dragging ? 1 : 0, 8, dt);
     this.heldW = damp(this.heldW, pose.held === true && !downed ? 1 : 0, 10, dt);
     this.clutchW = damp(this.clutchW, pose.clutch === true ? 1 : 0, 10, dt);
+    this.surrW = damp(this.surrW, pose.surrender === true && !downed ? 1 : 0, 9, dt);
     this.pegBlend = damp(this.pegBlend, peg ? 1 : 0, 8, dt);
     this.updateMood(dt);
     const m = this.mood;
@@ -487,7 +492,7 @@ export class CharacterAnimator {
     j.pelvis.position.x = 0.022 * c * move * (1 + runW * 0.4) + m.drunk * 0.05 * Math.sin(this.time * 1.9) * (0.4 + move);
 
     // Torso: leans into speed and the turn, twists against the pelvis, breathes, and takes the mood.
-    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) + this.floorW * (0.4 - 0.15 * bc) + this.doubleW * (1.0 - 0.3 * bc) - this.haul * 0.3 - this.kickW * 0.35 - this.heldW * 0.16 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
+    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) + this.floorW * (0.4 - 0.15 * bc) + this.doubleW * (1.0 - 0.3 * bc) - this.haul * 0.3 - this.kickW * 0.35 - this.heldW * 0.16 - this.surrW * 0.1 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
     this.lean = damp(this.lean, leanTarget, 8, dt);
     const moodLean = m.pain * 0.3 + m.angry * 0.14 + m.fear * -0.1 - m.triumph * 0.16 + m.drunk * 0.06;
     j.torso.rotation.x = -(P.lean + this.lean + moodLean * (1 - this.air)) - this.down * 0.15 + this.jolt[0]! * 0.6 + this.limp * 0.06 + m.drunk * 0.12 * Math.sin(this.time * 1.3) + nb.chest + nb.heave;
@@ -764,6 +769,19 @@ export class CharacterAnimator {
       }
     } else this.idleAmt = damp(this.idleAmt, 0, 12, dt);
 
+    // D-113: hands up: both arms high and a little apart, elbows soft, a small shake in them
+    const uw = this.surrW;
+    if (uw > 0.001) {
+      const quiver = Math.sin(this.time * 23) * 0.04;
+      shL = lerp(shL, 2.75 + quiver, uw);
+      shR = lerp(shR, 2.75 - quiver, uw);
+      elL = lerp(elL, 0.45, uw);
+      elR = lerp(elR, 0.45, uw);
+      szL = lerp(szL, -0.38, uw);
+      szR = lerp(szR, 0.38, uw);
+      twL = lerp(twL, 0, uw);
+      twR = lerp(twR, 0, uw);
+    }
     // D-112: held up as a shield: the arms are pinned behind the back, wrists together, and he looks at his boots
     const hw = this.heldW;
     if (hw > 0.001) {

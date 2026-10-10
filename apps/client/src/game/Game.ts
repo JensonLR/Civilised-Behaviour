@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, MOUNT_KIND, SHIELD, TAG_RANGE, WEAPON, carryUsePrompt, contractUse, WEAPONS, npcKey, seedFromString, type UsePlaces, type WeaponId } from "@cb/shared";
+import { HOLDUP, INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, MOUNT_KIND, SHIELD, TAG_RANGE, WEAPON, carryUsePrompt, contractUse, WEAPONS, npcKey, seedFromString, type UsePlaces, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -364,6 +364,10 @@ export class Game {
     });
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
     session.room.onMessage("bark", (e: BarkEvent) => this.onBark(e?.id, e?.k, e?.salt));
+    // D-113: a man gave in at gunpoint: his gun goes to the ground (his hands go up from the state)
+    session.room.onMessage("yield", (e: { id?: string }) => {
+      if (typeof e?.id === "string") this.actors.get(e.id)?.body.yieldWeapon();
+    });
     session.room.onMessage("cry", (e: CryEvent) => {
       const p = typeof e?.id === "string" ? this.session.room.state.players.get(e.id) : undefined;
       // (D-094: a beast's cry is a bellow)
@@ -1584,7 +1588,7 @@ export class Game {
       }
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER, pennant: p.npc === NPC.PICKET, react: p.react, held: p.roped === SHIELD.held, clutch: (flags & FLAG.DRAGGING) !== 0 && this.shieldHeldBy(id) !== undefined },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER, pennant: p.npc === NPC.PICKET, react: p.react, held: p.roped === SHIELD.held, surrender: p.roped === HOLDUP.held, clutch: (flags & FLAG.DRAGGING) !== 0 && this.shieldHeldBy(id) !== undefined },
         getGore(),
         getShowLimbs(),
       );

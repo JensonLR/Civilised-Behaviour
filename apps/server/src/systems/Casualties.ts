@@ -439,7 +439,8 @@ export class Casualties {
   private seize(id: string, p: PlayerStateType): boolean {
     const rows = this.host.rows;
     if (!rows || p.npc !== 0 || (p.flags & (FLAG.CARRYING | FLAG.REVIVING | FLAG.DRAGGING | FLAG.OPERATING | FLAG.MOUNTED)) !== 0) return false;
-    const targetId = findFinisherTarget<string>(p, (cb) => rows.forEach((o, k) => k !== id && NPC_SIDE[o.npc] !== "party" && cb(k, o)), Casualties.UNSEIZABLE);
+    // (a man already held some other way, on a rope or with his hands up (D-113), is not taken by the collar too)
+    const targetId = findFinisherTarget<string>(p, (cb) => rows.forEach((o, k) => k !== id && NPC_SIDE[o.npc] !== "party" && !o.roped && cb(k, o)), Casualties.UNSEIZABLE);
     const t = targetId !== undefined ? this.host.players.get(targetId) : undefined;
     if (targetId === undefined || !t) return false;
     this.drags.set(id, targetId);
@@ -488,7 +489,7 @@ export class Casualties {
     const rows = this.host.rows;
     if (!rows || (p.flags & (FLAG.CARRYING | FLAG.REVIVING | FLAG.DRAGGING | FLAG.OPERATING)) !== 0 || this.throws.has(id) || this.simT < (this.ropeReady.get(id) ?? 0)) return;
     this.ropeReady.set(id, this.simT + LASSO.cooldown);
-    const target = findRopeTarget<string>(p, (cb) => rows.forEach((o, k) => k !== id && cb(k, o)), Casualties.UNROPEABLE);
+    const target = findRopeTarget<string>(p, (cb) => rows.forEach((o, k) => k !== id && !o.roped && cb(k, o)), Casualties.UNROPEABLE); // (D-113: never a man with his hands up)
     const t = target !== undefined ? this.host.players.get(target) : undefined;
     const hy = p.y + 1.3;
     let tx: number;

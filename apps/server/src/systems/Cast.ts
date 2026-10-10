@@ -3,7 +3,7 @@ import {
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
-import { BEAST, NAV, NPC_SIDE, SHIELD, hash3, shieldBetween } from "@cb/shared";
+import { BEAST, HOLDUP, NAV, NPC_SIDE, SHIELD, hash3, shieldBetween, yieldsAtGunpoint } from "@cb/shared";
 import type {
   BrainFn, BrainId, CastApi, CastCount, CastOrder, NavApi, NavPath, NpcBody, NpcBrain, NpcSenses, NpcSide, NpcSpec, PlayersView,
 } from "@cb/shared";
@@ -82,6 +82,8 @@ interface Rec {
   fleeZ: number;
   /** D-109: the party member he wants (a display name; "" for nobody): he picks her over a nearer stranger. */
   hates: string;
+  /** D-113: he has put his hands up (at gunpoint): out of the fight for the run, whatever his group is told. */
+  yielded: boolean;
   /** D-073: the morale band after the last think (a soldier whose nerve goes cries out once), and when this row last cried out. */
   lastBand: MoraleBand;
   lastCry: number;
@@ -184,7 +186,7 @@ export class Cast implements CastApi {
         spec, key: npcKey(spec.id), side, group: spec.group, brain: npcBrainNew(spec), civil, beast,
         lastShooter: "", chargeTarget: "", chargeUntil: -1, hornAt: -1, gx: spec.post.x, gz: spec.post.z, grazeUntil: -1,
         fn: civil ? undefined : this.host.brains[spec.brain] ?? this.host.brains.garrison ?? npcThink,
-        gone: false, wasDown: false, lastHp: 100, lastWounds: 0, lastMissing: 0, token: false, tokenHeld: false, tokenTarget: "", follow: "", fleeUntil: -1, fleeX: 0, fleeZ: 0, lastBand: "steady", lastCry: -Infinity,
+        gone: false, wasDown: false, lastHp: 100, lastWounds: 0, lastMissing: 0, token: false, tokenHeld: false, tokenTarget: "", follow: "", fleeUntil: -1, fleeX: 0, fleeZ: 0, yielded: false, lastBand: "steady", lastCry: -Infinity,
         tx: "", td: Infinity, hasEnemy: false, ex: 0, ez: 0, ev: 0, earmed: false, allies: 0, alliesDown: 0, hates: spec.hates ?? "",
       };
       if (civil) rec.brain.mode = "civil";
@@ -318,7 +320,7 @@ export class Cast implements CastApi {
       total++;
       const row = r.gone ? undefined : this.host.players.get(r.key);
       if (!row || (row.flags & FLAG.DOWNED) !== 0) down++;
-      else if (r.brain.mode === "flee") routed++;
+      else if (r.brain.mode === "flee" || r.yielded) routed++; // (D-113: a man with his hands up is out of the fight)
       else alive++;
     }
     return { alive, routed, down, total };
@@ -766,6 +768,38 @@ export class Cast implements CastApi {
     this.host.cry?.(r.key);
   }
 
+  /**
+   * D-113: whether the man `key` gives in at gunpoint now (his nerve, whether he is alone, whether he is hurt): never a civilian, a beast, a hand of the party, a man
+   * already down or already given in.
+   */
+  yields(key: string): boolean {
+    const r = this.byKey.get(key);
+    if (!r || r.gone || r.civil || r.beast || r.yielded || r.side === "party") return false;
+    const row = this.host.players.get(key);
+    if (!row || (row.flags & FLAG.DOWNED) !== 0) return false;
+    return yieldsAtGunpoint(moraleBand(r.brain.morale.v), r.allies === 0, row.health, r.spec.bravery);
+  }
+
+  /** D-113: `key` has given in: he stands with his hands up for the rest of the run, counted as routed; his side within earshot takes a fright. */
+  surrender(key: string): void {
+    const r = this.byKey.get(key);
+    const row = this.host.players.get(key);
+    if (!r || r.yielded || !row) return;
+    r.yielded = true;
+    r.brain.mode = "stand_down";
+    r.brain.weapon = weaponToWire(WEAPON.FISTS);
+    for (const o of this.recs) {
+      if (o === r || o.gone || o.side !== r.side || o.yielded) continue;
+      const orow = this.host.players.get(o.key);
+      if (orow && (orow.flags & FLAG.DOWNED) === 0 && Math.hypot(orow.x - row.x, orow.z - row.z) <= HOLDUP.frightR) o.brain.morale.shock = Math.min(60, o.brain.morale.shock + HOLDUP.fright);
+    }
+  }
+
+  /** D-113: whether `key` has his hands up. */
+  hasYielded(key: string): boolean {
+    return this.byKey.get(key)?.yielded === true;
+  }
+
   /** A row went down: its friends nearby are shaken. */
   private witnessFall(fallen: Rec, row: PlayerStateType): void {
     for (const o of this.recs) {
@@ -846,6 +880,16 @@ export class Cast implements CastApi {
   private readonly tried: boolean[] = [];
 
   private think(r: Rec, row: PlayerStateType, dt: number, now: number, fear: number): void {
+    if (r.yielded) {
+      // D-113: hands up: he stands where he gave in and does nothing with them (no order lifts it)
+      const c = this.cmd;
+      c.moveF = 0;
+      c.moveR = 0;
+      c.buttons = 0;
+      c.yaw = yawToWire(row.facing);
+      this.host.stepNpc(r.key, c);
+      return;
+    }
     const g = this.groupOf(r.group);
     const me = this.body;
     me.x = row.x; me.z = row.z; me.facing = row.facing; me.health = row.health; me.weapon = row.weapon; me.ammo = row.ammo; me.flags = row.flags; me.vx = row.vx; me.vz = row.vz;
