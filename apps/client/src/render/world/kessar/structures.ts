@@ -1,5 +1,5 @@
-import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Shape, SphereGeometry } from "three";
-import { PALETTE, hash3, kessarLevel, type CollisionWorld } from "@cb/shared";
+import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Shape, SphereGeometry, Vector3 } from "three";
+import { LAMPSIDE, PALETTE, hash3, kessarLevel, lampsidePlan, type CollisionWorld, type LampsideHouse, type LampsideStall, type LampsideWall } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
@@ -558,6 +558,225 @@ function camps(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number,
   k.add(new SphereGeometry(0.2, 6, 4), { at: [f.x, fy + 6.15, f.z], colour: gold });
 }
 
+// ---- Lampside (D-119): the Ward's lower town -----------------------------------------------------------------------------------------
+
+/** Lime-wash over the stone: cream in broad patches, the stone showing where it has flaked, an ochre dado splashed up from the street. `cy`: the piece's centre above the ground. */
+const limewash = (seed: number, cy: number): ColourFn => (p, n, out) => {
+  if (n.y > 0.6) return void out.set(K.stoneCap);
+  if (n.y < -0.6) return void out.set(K.stoneDark);
+  const y = p.y + cy;
+  if (y < 0.6) return void blend(out, K.ochre, K.stoneShade, h01(seed, Math.floor((p.x + p.z) * 1.5)) * 0.6);
+  if (h01(seed + 5, Math.floor(y / 0.7), Math.floor((p.x + p.z) / 1.6)) > 0.9) return void blend(out, K.stone, K.stoneShade, 0.4);
+  blend(out, K.wardCream, K.stoneCap, h01(seed + 3, Math.floor(y / 1.4), Math.floor((p.x + p.z) / 2.4)) * 0.8);
+};
+
+/** Mud brick in courses (a hand of ochre, a hand of clay), on the garden walls. */
+const mudBrick = (seed: number): ColourFn => (p, n, out) => {
+  if (n.y > 0.6) return void out.set(K.sandPale);
+  const row = Math.floor((p.y + 5) / 0.3);
+  const col = Math.floor((p.x + p.z + 50) / 0.6 + (row & 1) * 0.5);
+  blend(out, K.ochre, K.clay, h01(seed, row, col) * 0.55);
+};
+
+const stripes = (i: number): ColourFn => (p, _n, out) => void out.set((Math.floor((p.z + 10) * 2.6) + i) & 1 ? K.wardRed : K.wardCream);
+
+/** A small iron lantern hung from a bracket (the Ward's lamp at every door): its arm from the wall at local (x, y, z) along +z, the lamp `reach` out. Its flame joins `lamps` (lit at night). */
+function bracketLamp(k: Kit, x: number, y: number, z: number, reach: number, out: KessarOut): void {
+  k.limb([x, y, z], [x, y + 0.05, z + reach], 0.025, 0.025, K.iron, 4);
+  k.limb([x, y - 0.35, z], [x, y - 0.02, z + reach * 0.55], 0.018, 0.018, K.iron, 3);
+  box(k, [0.18, 0.26, 0.18], [x, y - 0.17, z + reach], K.iron);
+  box(k, [0.13, 0.17, 0.2], [x, y - 0.17, z + reach], gold);
+  box(k, [0.13, 0.2, 0.13], [x, y - 0.17, z + reach], gold);
+  k.add(new ConeGeometry(0.14, 0.12, 4, 1), { at: [x, y + 0.02, z + reach], rot: [0, Math.PI / 4, 0], colour: K.iron, flat: true });
+  const f = k.worldPoint(x, y - 0.17, z + reach);
+  out.lamps.push({ x: f[0], y: f[1], z: f[2] });
+}
+
+/**
+ * A house of Lampside by its plan: walls of lime-wash or coursed sandstone; a flat roof behind a parapet (water spouts, jars on the roof) or a red-tile hip with a gilt finial; two
+ * storeys with a string course and a timber balcony over the door; shuttered windows below and lit ones above (D-089); the door SEALED with the Ward's paper seal (its notice is
+ * the cloth's plaque) and a lamp on a bracket beside it; an awning over some. Drawn in the house's front frame: local z out of the street face, local x along the street.
+ */
+function lampsideHouse(k: Kit, h: LampsideHouse, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut, seed: number): void {
+  const lb = kessarLevel().buildings.find((b) => b.id === `lampside.${h.id}`)!;
+  const gy = terrain(h.x, h.z);
+  // (the town's ground is levelled, but the walls reach under the lowest corner all the same)
+  let lo = gy;
+  k.setBase(h.x, gy, h.z, h.yaw);
+  for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
+    const c = k.worldPoint(sx * h.hx, 0, sz * h.hz);
+    lo = Math.min(lo, terrain(c[0], c[2]));
+  }
+  const drop = gy - lo + 0.4;
+  const W = h.hz;   // half the frontage
+  const D = h.hx;   // half the depth
+  const H = h.height;
+  const flat = h.roof === "flat";
+  const body = flat ? H - 0.45 : H;
+  k.setBase(h.x, gy, h.z, h.yaw - Math.PI / 2);
+  const wall = h.lime ? limewash(seed, (body - drop) / 2) : masonry(seed);
+  slab(k, [W * 2, body + drop, D * 2], [0, (body - drop) / 2, 0], wall, lod);
+  if (flat) {
+    // the parapet round the roof, its cornice, and (detailed) a notch at each corner, two timber spouts out of the street face, jars on the roof
+    const t = 0.24;
+    const pc = h.lime ? limewash(seed + 1, body + 0.225) : masonry(seed + 1);
+    box(k, [W * 2, 0.45, t], [0, body + 0.225, D - t / 2], pc);
+    box(k, [W * 2, 0.45, t], [0, body + 0.225, -D + t / 2], pc);
+    for (const s of [-1, 1]) box(k, [t, 0.45, D * 2 - t * 2], [s * (W - t / 2), body + 0.225, 0], pc);
+    box(k, [W * 2 + 0.16, 0.1, D * 2 + 0.16], [0, body - 0.05, 0], K.stoneCap);
+    if (lod) {
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(k, [0.42, 0.22, 0.42], [sx * (W - 0.21), H + 0.11, sz * (D - 0.21)], K.stoneCap);
+      for (const s of [-1, 1]) box(k, [0.13, 0.13, 0.55], [s * (W - 0.7), body + 0.04, D + 0.26], K.timber);
+      for (let j = 0; j < 3; j++) {
+        const jx = -W * 0.5 + j * 0.55, jz = -D * 0.4 + (j % 2) * 0.35;
+        k.add(new SphereGeometry(0.24, 7, 5), { at: [jx, body + 0.22, jz], scale: [1, 1.15, 1], colour: K.clay, flat: true });
+        k.add(new CylinderGeometry(0.09, 0.12, 0.12, 6), { at: [jx, body + 0.5, jz], colour: K.clay, flat: true });
+      }
+    }
+  } else {
+    // the eaves course and the red-tile hip, a gilt finial at its peak
+    box(k, [W * 2 + 0.24, 0.2, D * 2 + 0.24], [0, H - 0.08, 0], K.stoneCap);
+    const rise = LAMPSIDE.roofRise;
+    const hip = new ConeGeometry(Math.SQRT2, rise, 4, 1);
+    hip.rotateY(Math.PI / 4);
+    k.add(hip, { at: [0, H + rise / 2, 0], scale: [W + 0.45, 1, D + 0.45], colour: (p, n, o) => blend(o, K.roofDark, K.roof, Math.max(0, n.y) * 0.6 + (Math.floor((p.y + 5) * 4) & 1) * 0.22), flat: true });
+    hip.dispose();
+    k.add(new SphereGeometry(0.13, 6, 4), { at: [0, H + rise + 0.08, 0], colour: gold });
+  }
+  const up = h.storeys === 2;
+  const floor2 = H * 0.5;
+  if (up && lod) box(k, [W * 2 + 0.1, 0.16, D * 2 + 0.1], [0, floor2 - 0.1, 0], K.stoneCap);
+  // the street face: shuttered windows either side of the door (closed: ward-blue boards on a stone sill), lit glass above (or one high window on a single storey)
+  const winX = W - 0.75;
+  for (const s of [-1, 1]) {
+    box(k, [0.66, 0.84, 0.08], [s * winX, 1.45, D + 0.03], K.wardBlue);
+    if (lod) box(k, [0.04, 0.8, 0.1], [s * winX, 1.45, D + 0.05], K.timber);
+    box(k, [0.84, 0.1, 0.22], [s * winX, 0.98, D + 0.06], K.stoneCap);
+  }
+  const lit = (x: number, y: number, z: number, side: 1 | -1, w: number, hh: number, sd: number): void => {
+    box(k, [w + 0.16, hh + 0.16, 0.1], [x, y, z], K.timber);
+    pane(out.panes, k, x, y, z + side * 0.04, side, w, hh, sd);
+    box(k, [w + 0.3, 0.1, 0.2], [x, y - hh / 2 - 0.1, z], K.stoneCap);
+  };
+  if (up) {
+    for (const s of [-1, 1]) lit(s * winX, floor2 + 1.25, D + 0.02, 1, 0.6, 0.9, seed * 7 + s);
+    lit(0, floor2 + 1.25, -D - 0.02, -1, 0.6, 0.9, seed * 7 + 5);
+    // the balcony over the door: a plank floor on two brackets, a rail, a tall shuttered door behind it
+    if (lod) {
+      const bw = 2.4, bd = 0.85;
+      box(k, [bw, 0.12, bd], [0, floor2 + 0.06, D + bd / 2], K.timberLight);
+      for (const s of [-1, 1]) k.limb([s * (bw / 2 - 0.2), floor2 - 0.65, D + 0.02], [s * (bw / 2 - 0.2), floor2, D + bd - 0.1], 0.05, 0.05, K.timber, 4);
+      for (let j = 0; j <= 6; j++) k.limb([-bw / 2 + 0.06 + (j * (bw - 0.12)) / 6, floor2 + 0.12, D + bd - 0.06], [-bw / 2 + 0.06 + (j * (bw - 0.12)) / 6, floor2 + 0.95, D + bd - 0.06], 0.025, 0.025, K.timber, 4);
+      for (const s of [-1, 1]) k.limb([s * (bw / 2 - 0.06), floor2 + 0.12, D + 0.02], [s * (bw / 2 - 0.06), floor2 + 0.95, D + bd - 0.06], 0.03, 0.03, K.timber, 4);
+      box(k, [bw, 0.08, 0.08], [0, floor2 + 0.98, D + bd - 0.06], K.timber);
+      for (const s of [-1, 1]) box(k, [0.08, 0.08, bd - 0.06], [s * (bw / 2 - 0.06), floor2 + 0.98, D + bd / 2], K.timber);
+      box(k, [1.0, 1.9, 0.08], [0, floor2 + 1.1, D + 0.03], K.wardBlue);
+      box(k, [0.05, 1.86, 0.1], [0, floor2 + 1.1, D + 0.05], K.timber);
+    }
+  } else lit(0, 1.65, -D - 0.02, -1, 0.6, 0.7, seed * 7);   // (a single storey's lit window looks onto its garden: the street face is shuttered)
+  // the lamp beside the door, and (some houses) an awning of the Ward's stripes over it
+  const dw = LAMPSIDE.door.width;
+  bracketLamp(k, -(dw / 2 + 0.55), 2.45, D + 0.02, 0.42, out);
+  if (h.awning) {
+    k.add(new BoxGeometry(dw + 0.6, 0.07, 1.0, 1, 1, lod ? 4 : 1), { at: [0, LAMPSIDE.door.height + 0.45, D + 0.48], rot: [0.28, 0, 0], colour: (p, n, o) => stripes(seed)(new Vector3(p.z, p.y, p.x), n, o), flat: true, perFace: true });
+    for (const s of [-1, 1]) k.limb([s * (dw / 2 + 0.25), LAMPSIDE.door.height + 0.62, D + 0.02], [s * (dw / 2 + 0.25), LAMPSIDE.door.height + 0.3, D + 0.95], 0.02, 0.02, K.iron, 3);
+  }
+  k.clearBase();
+  // the sealed door, in the house's own frame (its local +x is the street face)
+  k.setBase(h.x, gy, h.z, h.yaw);
+  sealedDoor(k, `${lb.id}.door`, h.hx, 0, lb.door, lb.doorH, SEAL, lod, out.marks, { x: h.x, y: gy, z: h.z, yaw: h.yaw });
+  k.clearBase();
+}
+
+/** A market stall: a counter on the customer's side, a backboard, four posts and an awning in the Ward's stripes falling toward the front, the goods (lamps, jars, a bolt of ward-blue cloth), and its lamp. */
+function lampsideStall(k: Kit, st: LampsideStall, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut, i: number): void {
+  const gy = terrain(st.x, st.z);
+  k.setBase(st.x, gy, st.z, st.yaw - Math.PI / 2);
+  const W = st.hz, D = st.hx, H = st.height;
+  box(k, [W * 2 - 0.1, 0.95, 0.5], [0, 0.475, D - 0.3], K.timberLight);
+  box(k, [W * 2, 0.06, 0.62], [0, 0.98, D - 0.3], K.timber);
+  box(k, [W * 2 - 0.1, 1.7, 0.08], [0, 0.85, -D + 0.04], K.timber);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (W - 0.07), -0.2, sz * (D - 0.07)], [sx * (W - 0.07), sz > 0 ? H + 0.07 : H + 0.45, sz * (D - 0.07)], 0.05, 0.045, K.timber, 5);
+  const tilt = Math.atan2(0.45, D * 2);
+  k.add(new BoxGeometry(W * 2 + 0.4, 0.06, D * 2 + 0.5, lod ? 6 : 1, 1, 1), { at: [0, H + 0.24, 0.05], rot: [tilt, 0, 0], colour: (p, n, o) => stripes(i)(new Vector3(p.z, p.y, p.x), n, o), flat: true, perFace: true });
+  box(k, [W * 2 + 0.4, 0.2, 0.04], [0, H - 0.08, D + 0.29], (p, n, o) => stripes(i + 1)(new Vector3(p.z, p.y, p.x), n, o));
+  if (lod) {
+    // the goods: brass lamps (the town's trade), clay jars, a bolt of ward-blue cloth
+    for (let g = 0; g < 3; g++) {
+      const gx = -W + 0.45 + g * 0.42;
+      k.add(new CylinderGeometry(0.07, 0.1, 0.2, 6), { at: [gx, 1.11, D - 0.3], colour: gold, flat: true });
+      k.add(new CylinderGeometry(0.02, 0.02, 0.12, 4), { at: [gx + 0.08, 1.15, D - 0.3], rot: [0, 0, 1.1], colour: gold, flat: true });
+    }
+    for (let g = 0; g < 2; g++) k.add(new SphereGeometry(0.17, 7, 5), { at: [W - 0.45 - g * 0.4, 1.17, D - 0.32], scale: [1, 1.2, 1], colour: K.clay, flat: true });
+    k.add(new CylinderGeometry(0.12, 0.12, 0.7, 8), { at: [0.1, 1.13, D - 0.28], rot: [0, 0, Math.PI / 2], colour: K.wardBlue, flat: true });
+  }
+  bracketLamp(k, W - 0.07, H - 0.12, D - 0.07, 0.25, out);
+  k.clearBase();
+}
+
+/** The town's well: a stone head with a dark shaft, a timber frame, its pulley, the rope and a bucket on the rim. */
+function lampsideWell(k: Kit, w: { x: number; z: number; r: number; height: number }, terrain: (x: number, z: number) => number, lod: Lod): void {
+  const gy = terrain(w.x, w.z);
+  k.setBase(w.x, gy, w.z, 0.4);
+  const radial = lod ? 14 : 8;
+  k.add(new CylinderGeometry(w.r, w.r + 0.06, w.height + 0.3, radial, lod ? 2 : 1), { at: [0, (w.height - 0.3) / 2, 0], colour: masonry(470), flat: true, perFace: true });
+  k.add(new CylinderGeometry(w.r + 0.06, w.r + 0.06, 0.12, radial), { at: [0, w.height + 0.06, 0], colour: K.stoneCap, flat: true });
+  k.add(new CylinderGeometry(w.r - 0.16, w.r - 0.16, 0.02, radial), { at: [0, w.height + 0.13, 0], colour: K.stoneDark, flat: true });
+  for (const s of [-1, 1]) k.limb([s * (w.r - 0.08), w.height, 0], [s * (w.r - 0.08), w.height + 1.55, 0], 0.07, 0.06, K.timber, 5);
+  k.limb([-(w.r + 0.02), w.height + 1.5, 0], [w.r + 0.02, w.height + 1.5, 0], 0.06, 0.06, K.timber, 5);
+  k.add(new CylinderGeometry(0.13, 0.13, 0.1, 8), { at: [0, w.height + 1.38, 0], rot: [Math.PI / 2, 0, 0], colour: K.timberLight, flat: true });
+  // the rope from the pulley down to the bucket standing on the rim
+  k.limb([0.12, w.height + 1.36, 0], [w.r - 0.12, w.height + 0.4, 0.2], 0.012, 0.012, K.timber, 3);
+  k.add(new CylinderGeometry(0.15, 0.12, 0.26, 8), { at: [w.r - 0.12, w.height + 0.25, 0.2], colour: K.timber, flat: true });
+  k.clearBase();
+}
+
+/** A lamp post where the street begins: an iron post on a stone foot, a bracket and the lamp. */
+function lampsidePost(k: Kit, p: { x: number; z: number }, terrain: (x: number, z: number) => number, out: KessarOut, toward: number): void {
+  const gy = terrain(p.x, p.z);
+  k.setBase(p.x, gy, p.z, toward);
+  box(k, [0.34, 0.3, 0.34], [0, 0.1, 0], K.stoneShade);
+  k.limb([0, 0.2, 0], [0, 3.05, 0], 0.07, 0.05, K.iron, 6);
+  k.add(new SphereGeometry(0.08, 6, 4), { at: [0, 3.1, 0], colour: gold });
+  bracketLamp(k, 0, 2.95, 0, 0.42, out);
+  k.clearBase();
+}
+
+/**
+ * The garden walls: mud brick on a stone footing under a pale cap, one run at a time on its own ground; a square pier with a cap where a run meets a gate. Each run is drawn 3 cm
+ * past both its ends and every other run 6 mm proud (thicker and taller): neighbours overlap without sharing a vertex or a face, so no seam shows, nothing flickers, and a
+ * garden's ring of walls is a ring of runs (as one welded piece its box would hold the whole garden).
+ */
+function lampsideWalls(k: Kit, walls: readonly LampsideWall[], terrain: (x: number, z: number) => number, lod: Lod): void {
+  const Wl = LAMPSIDE.wall;
+  walls.forEach((w, i) => {
+    const gy = terrain(w.x, w.z);
+    k.setBase(w.x, gy, w.z, w.yaw);
+    const len = w.hx * 2 + 0.06;
+    const e = (i & 1) * 0.006;
+    box(k, [len, 0.42 + e, Wl.half * 2 + 0.1 + e], [0, e / 2, 0], K.stoneShade);
+    k.add(new BoxGeometry(len, Wl.height - 0.2, Wl.half * 2 + e, lod ? Math.max(1, Math.round(len / 0.6)) : 1, lod ? 4 : 1, 1), { at: [0, 0.1 + (Wl.height - 0.2) / 2, 0], colour: mudBrick(500 + i), flat: true, perFace: true });
+    box(k, [len, 0.1 + e, Wl.half * 2 + 0.08 + e], [0, Wl.height - 0.05 + e / 2, 0], K.sandPale);
+    for (const e of w.piers) {
+      const px = e * (w.hx - Wl.pierHalf + 0.03);   // (3 cm past the run's end, so the run's end face is inside the pier, not flush with its face)
+      box(k, [Wl.pierHalf * 2, Wl.pier, Wl.pierHalf * 2], [px, Wl.pier / 2 - 0.1, 0], masonry(520 + i));
+      box(k, [Wl.pierHalf * 2 + 0.12, 0.1, Wl.pierHalf * 2 + 0.12], [px, Wl.pier - 0.05, 0], K.stoneCap);
+    }
+  });
+  k.clearBase();
+}
+
+/** Lampside, everything solid: the houses, the stalls, the well, the street's two lamp posts, the garden walls. */
+function lampside(k: Kit, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut): void {
+  const plan = lampsidePlan();
+  plan.houses.forEach((h, i) => lampsideHouse(k, h, terrain, lod, out, 600 + i * 11));
+  plan.stalls.forEach((st, i) => lampsideStall(k, st, terrain, lod, out, i));
+  lampsideWell(k, plan.well, terrain, lod);
+  // (each post's bracket reaches over the street)
+  for (const p of plan.posts) lampsidePost(k, p, terrain, out, p.x < 0 ? -Math.PI / 2 : Math.PI / 2);
+  lampsideWalls(k, plan.walls, terrain, lod);
+}
+
 /** Everything solid, merged. `collapsed` swaps the bridge for its stumps; `lod` 0 is the cheap shape the ink hull and the low preset use. */
 export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; collapsed: boolean; marks: DoorMark[]; lamps: { x: number; y: number; z: number; lit?: number }[]; roofs: RoofSource | undefined; panes: LitPane[] } {
   const plan = kessarPlan();
@@ -582,6 +801,7 @@ export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: B
   banners(k, plan, terrain);
   pier(k, plan, lod);
   camps(k, plan, terrain, lod);
+  lampside(k, terrain, lod, out);
   k.clearBase();
   return { geometry: k.build(), collapsed: !intact, marks: out.marks, lamps: out.lamps, roofs: out.roofs.finish(), panes: out.panes };
 }

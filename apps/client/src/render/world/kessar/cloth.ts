@@ -1,6 +1,7 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshToonMaterial, SRGBColorSpace } from "three";
 import { letterSign } from "../signLettering.ts";
-import { PALETTE, cssHex, type Terrain } from "@cb/shared";
+import { LAMPSIDE_SIGNS, PALETTE, cssHex, kessarLevel, type Terrain } from "@cb/shared";
+import { pushPlaques } from "../plaques.ts";
 import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
 import { worldTime } from "../toon.ts";
@@ -18,7 +19,9 @@ const BANNER_H = 448;
 const SOCIETY_H = 320;
 const SIGN_H = 96;
 const SIGN_Y = BANNER_H + SOCIETY_H;
-export const ATLAS_H = SIGN_Y + SIGN_H * KESSAR_SIGNS.length;
+/** D-119: after the signboards, one strip per notice on Lampside's sealed doors (the plaques). */
+const PLAQUE_Y = SIGN_Y + SIGN_H * KESSAR_SIGNS.length;
+export const ATLAS_H = PLAQUE_Y + SIGN_H * LAMPSIDE_SIGNS.length;
 
 type Rect = readonly [number, number, number, number];
 const uvRect = (x: number, y: number, w: number, h: number): Rect => [x / ATLAS_W, 1 - (y + h) / ATLAS_H, (x + w) / ATLAS_W, 1 - y / ATLAS_H];
@@ -28,6 +31,7 @@ export const BANNER_UV: Record<KessarBanner["kind"], Rect> = {
   society: uvRect(0, BANNER_H, 256, SOCIETY_H),
 };
 export const signUv = (i: number): Rect => uvRect(0, SIGN_Y + i * SIGN_H, ATLAS_W, SIGN_H);
+export const plaqueUv = (i: number): Rect => uvRect(0, PLAQUE_Y + i * SIGN_H, ATLAS_W, SIGN_H);
 
 const c = cssHex;
 const K = PALETTE.kessar;
@@ -155,7 +159,7 @@ export function drawAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.restore();
   }
   // ---- the signboards: cream strips, brown lettering
-  KESSAR_SIGNS.forEach((text, i) => {
+  [...KESSAR_SIGNS, ...LAMPSIDE_SIGNS].forEach((text, i) => {
     const y = SIGN_Y + i * SIGN_H;
     ctx.fillStyle = c(K.wardCream);
     ctx.fillRect(0, y, ATLAS_W, SIGN_H);
@@ -265,6 +269,11 @@ export function buildKessarCloth(terrain: Terrain): BufferGeometry | undefined {
       push(c3, u0, v1);
     }
   }
+  // D-119: the notices pinned across Lampside's sealed doors (the fort's gate has its own signboard)
+  pushPlaques(kessarLevel().buildings, (x, z) => terrain.height(x, z), (b) => {
+    const i = LAMPSIDE_SIGNS.indexOf(b.sign as (typeof LAMPSIDE_SIGNS)[number]);
+    return i < 0 ? undefined : plaqueUv(i);
+  }, { pos, nor, uv, wave });
   if (pos.length === 0) return undefined;
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));

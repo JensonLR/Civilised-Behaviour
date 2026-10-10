@@ -25,7 +25,7 @@ import { VESPER_DEFAULT_VIEW, vesperViews } from "./vesper.ts";
  *   drift=1    keep the clock running after ?time=
  *   push=x,z;x,z   up to four invisible walkers the grass bends away from (the figures are pushers too)
  *   i=N        which tree/rock/snag for view=tree|rock|snag
- *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat, bridge=collapsed (the span down)
+ *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat|town|square|garden|grove|towntop|townback, bridge=collapsed (the span down)
  *   region=highmark HIGHMARK (D-036; the savannah and its hill-capital): view=landing|road|grass|herds|waiting|foot|terraces|granary|market|ramp|gate|window|court|throne|palace|capital|capitalfar|plateau|top|quay|camp
  *     (time=dusk is the harvest bell hour: the lamps burn); herds are a function of seed and the world clock (wms=N sits it)
  *   region=vesper   VESPER GORGE (D-037; the canyon and its mine): the vantage points are package C3's (showcase/vesper.ts)
@@ -267,6 +267,13 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     powder: [new Vector3(6, 2.0, 37), new Vector3(10.5, 0.9, 42)],
     rim: [new Vector3(-30, 3.2, 38), new Vector3(-40, 0.4, 8)],
     top: [new Vector3(0, 150, 20), new Vector3(0, 0, 20)],
+    // D-119: Lampside, the Ward's lower town (the street from the toll bar, the square, the west garden through its gate, the date grove, from above, and at the gate looking back)
+    town: [new Vector3(1.2, ky(0, 1) + 1.75, 1), new Vector3(0, ky(0, -26) + 3.2, -26)],
+    square: [new Vector3(3, ky(3, -14) + 2.2, -14), new Vector3(12, ky(12, -24) + 1.2, -24)],
+    garden: [new Vector3(-14.5, ky(-14.5, -11.7) + 1.8, -11.7), new Vector3(-30, ky(-30, -16) + 1, -16)],
+    grove: [new Vector3(16, ky(16, -2) + 2.4, -2), new Vector3(28, ky(28, -16) + 1.5, -16)],
+    towntop: [new Vector3(-2, 55, 18), new Vector3(-2, 0, -15)],
+    townback: [new Vector3(-1.5, ky(0, -27) + 1.8, -27), new Vector3(0, ky(0, 2) + 1.6, 2)],
   };
   // Highmark: named vantage points (the quay you arrive at, the road across the grass, the herds, the foot of the hill and its five terraces, the gate and its Window, the court)
   const hviews: Record<string, [Vector3, Vector3]> = {

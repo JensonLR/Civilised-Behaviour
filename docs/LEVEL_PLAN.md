@@ -153,6 +153,13 @@ Hero interiors (one per region, the reward zone): Hollowmere the hall; Kessar th
 | orchard.tent0 | 63,-20 | 4.0 x 3.2 | 2.4 | solid | tent: flap tied shut (sealed) | - |
 | orchard.tent1 | 81,-22 | 4.0 x 3.2 | 2.4 | solid | tent: flap tied shut (sealed) | - |
 | orchard.tent2 | 72,-31 | 4.0 x 3.2 | 2.4 | solid | tent: flap tied shut (sealed) | - |
+| lampside.w1 (D-119) | -9,-7.4 | 6.8 x 5.6 | 3.6 | built: one storey, flat roof, lime-wash, awning | sealed: the Ward's paper seal, "GONE TO TRIM THE LAMPS. BACK AT DUSK"; a lamp on a bracket | sealed 1.4, facing the street (E) |
+| lampside.w2 (D-119) | -9.6,-16.2 | 7.6 x 6 | 8.1 | built: two storeys, red-tile hip, a balcony over the door | sealed, "NO CALLERS WITHOUT A WARDEN'S CHIT" | sealed 1.4, facing the street (E) |
+| lampside.w3 (D-119) | -8.8,-24.4 | 6 x 4.8 | 3.4 | built: one storey, flat roof | sealed, "SOCIETY FORMS ACCEPTED AS KINDLING" | sealed 1.4, facing the street (E) |
+| lampside.e1 (D-119) | 9.4,-7 | 6.4 x 5.2 | 7.9 | built: two storeys, red-tile hip, lime-wash, balcony | sealed, "ASSESSED, STAMPED AND STILL NOT IN" | sealed 1.4, facing the street (W) |
+| lampside.e2 (D-119) | 9,-15.4 | 5.6 x 6.4 | 3.4 | built: one storey, flat roof, awning | sealed, "THE OCCUPANT IS UNSURPRISED" | sealed 1.4, facing the street (W) |
+| lampside stalls, well, posts (D-119) | 14.4,-21.6 / 9.8,-27.4 / 10.6,-23.2 / -4.3,-3.4 and 4.7,-3.4 | 1.4 x 2.6 each / r 0.95 / r 0.12 | 2.6 / 0.85 / 3.2 | built | solid (open counters, the town's well, the street's lamp posts) | - |
+| lampside gardens (D-119) | west -40..-16.5 x -27..-6; east 17.5..35 x -25..-6 | mud-brick walls 1.15 high, in runs | 1.45 at the gate piers | built | walls with five gates, the inside of each garden a must-reach point (`lampside.west`, `lampside.east`, `lampside.square`) | - |
 | pier | 0,102 | 3.2 x 20 | deck | walkable deck | keep; 3.2 m wide is a street (min 2.4) | - |
 | bridge | 0,20 | 5.5 x 22 | deck | walkable deck, parapets | keep (road, 5.5 wide) | - |
 
@@ -231,6 +238,7 @@ Deviations that apply to a whole region:
 - Highmark: the plan's `gate.towerW/E` are `gate.tower0/1` in code; the gate is a `passage` with a 3.6 m lintel clearance. Halls 1-6 are rotated a quarter turn so the sealed door is on the long outward face. The granaries sit at radius 66 and are `solid` with a hatch and ladder.
 - Vesper: the cloister is `open-front` with a gallery `rect` and a separate `records` interior (7.2 x 3.1, floor 0.25: a 0.35 floor was unreachable on some seeds). The office moved to (-15,-81) and the tipple to (-38,-63.2) (a hopper, no door-like mouth); tent2 to (22.5,-84.5).
 - Saltmarket: warehouses 0 and 1 are 5.1 and 5.3 high, warehouse1 faces west (yaw pi); the Customs House faces east (yaw pi/2, 6.0 x 8.4); three new boardwalk spurs (`customsDoor`, `shedW`, `shedE`) reach the three interiors. Sealed warehouses carry plaques: "CLOSED FOR TIDE", "BONDED. CHAIN BY ORDER.", "LOT WITHDRAWN".
+- Kessar (D-119): Lampside's five houses face the fort road, every door `sealed` with a plaque: "GONE TO TRIM THE LAMPS. BACK AT DUSK", "NO CALLERS WITHOUT A WARDEN'S CHIT", "SOCIETY FORMS ACCEPTED AS KINDLING", "ASSESSED, STAMPED AND STILL NOT IN", "THE OCCUPANT IS UNSURPRISED". The region's one interior is still the toll booth.
 
 | region | id | kind | at x,z | yaw | W x D | h | floor | door (w / h) | steps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -258,6 +266,11 @@ Deviations that apply to a whole region:
 | Kessar | orchard.tent0 | tent | 62.5,-20.5 | 0.35 | 4.0x3.2 | 2.4 | 0 | - | 0 |
 | Kessar | orchard.tent1 | tent | 81.0,-22.5 | -0.30 | 4.0x3.2 | 2.4 | 0 | - | 0 |
 | Kessar | orchard.tent2 | tent | 72.0,-31.5 | 0.10 | 4.0x3.2 | 2.4 | 0 | - | 0 |
+| Kessar | lampside.w1 | sealed | -9.0,-7.4 | 0.00 | 6.8x5.6 | 3.6 | 0 | 1.4 / 2.25 | 0 |
+| Kessar | lampside.w2 | sealed | -9.6,-16.2 | 0.00 | 7.6x6.0 | 8.1 | 0 | 1.4 / 2.25 | 0 |
+| Kessar | lampside.w3 | sealed | -8.8,-24.4 | 0.00 | 6.0x4.8 | 3.4 | 0 | 1.4 / 2.25 | 0 |
+| Kessar | lampside.e1 | sealed | 9.4,-7.0 | 3.14 | 6.4x5.2 | 7.9 | 0 | 1.4 / 2.25 | 0 |
+| Kessar | lampside.e2 | sealed | 9.0,-15.4 | 3.14 | 5.6x6.4 | 3.4 | 0 | 1.4 / 2.25 | 0 |
 | Highmark | hall0 | interior | 29.6,-63.2 | -0.73 | 13.0x6.8 | 6.5 | 0.3 | 2.4 / 3 | 0 |
 | Highmark | hall1 | sealed | -41.0,-79.4 | 2.76 | 6.0x11.0 | 5.5 | 0 | 1.5 / 2.4 | 0 |
 | Highmark | hall2 | sealed | -12.3,-69.7 | 2.01 | 5.2x9.0 | 5 | 0 | 1.5 / 2.4 | 0 |

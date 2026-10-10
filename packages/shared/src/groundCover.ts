@@ -3,6 +3,7 @@ import type { CollisionWorld } from "./collision.ts";
 import { HIGHMARK, HIGHMARK_FIELDS, HIGHMARK_SITES, highmarkRoadness } from "./highmark.ts";
 import { fieldCover, fieldFuel } from "./fields.ts";
 import { HOLLOWMERE_FIELDS } from "./hollowmereFields.ts";
+import { LAMPSIDE_GARDENS, lampsideStreet } from "./lampside.ts";
 import { KESSAR, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun } from "./kessar.ts";
 import { smoothstep } from "./math.ts";
 import { SALTMARKET } from "./saltmarket.ts";
@@ -28,7 +29,9 @@ export function kessarCover(x: number, z: number, h: number, slope: number): num
   const road = kessarRoad(x, z);
   const yard = 1 - smoothstep(9, 15, Math.hypot(x, z - 6));
   const gorge = 1 - smoothstep(0, 4.5, Math.abs(z - kessarRiverZ(x)) - kessarRiverHalf(x) - kessarWallRun(x) + 4.5);
-  const v = patch * (1 - beach) * (1 - road * 1.4) * (1 - yard) * (1 - gorge) * (1 - smoothstep(0.3, 0.6, slope)) * (1 - smoothstep(KESSAR.level + 2, KESSAR.level + 4, h));
+  // (D-119: Lampside's street and square are packed earth, and its gardens grow what is sown in them, not scrub)
+  const town = Math.max(lampsideStreet(x, z), fieldCover(LAMPSIDE_GARDENS, x, z));
+  const v = patch * (1 - beach) * (1 - road * 1.4) * (1 - yard) * (1 - gorge) * (1 - town) * (1 - smoothstep(0.3, 0.6, slope)) * (1 - smoothstep(KESSAR.level + 2, KESSAR.level + 4, h));
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
@@ -82,7 +85,7 @@ const SLOPE_E = 0.6;
  */
 /** D-116: what a region's fields give the fire at (x, z) (0 off them, or in a region without fields). */
 export function regionFieldFuel(region: RegionId, x: number, z: number): number {
-  return region === "highmark" ? fieldFuel(HIGHMARK_FIELDS, x, z) : region === "hollowmere" ? fieldFuel(HOLLOWMERE_FIELDS, x, z) : 0;
+  return region === "highmark" ? fieldFuel(HIGHMARK_FIELDS, x, z) : region === "hollowmere" ? fieldFuel(HOLLOWMERE_FIELDS, x, z) : region === "kessar" ? fieldFuel(LAMPSIDE_GARDENS, x, z) : 0;
 }
 
 export function regionCover(region: RegionId, world: CollisionWorld, x: number, z: number): number {
@@ -92,7 +95,8 @@ export function regionCover(region: RegionId, world: CollisionWorld, x: number, 
   const water = t.waterDepth?.(x, z) ?? 0;
   switch (region) {
     case "kessar":
-      return kessarCover(x, z, h, slope);
+      // (D-119: Lampside's barley burns, its young green barely)
+      return Math.max(kessarCover(x, z, h, slope), fieldFuel(LAMPSIDE_GARDENS, x, z));
     case "highmark":
       // (D-116: the crops are the fuel in the fields: the barley, stubble and hay burn, the green barely, a ploughed field not at all)
       return water > 0 ? 0 : Math.max(highmarkCover(x, z, h, slope, water), fieldFuel(HIGHMARK_FIELDS, x, z));

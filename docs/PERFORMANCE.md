@@ -86,6 +86,11 @@ pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennan
 
 **Why the ceilings moved.** The hub's south was empty; filling it is content, not waste. Seven instanced sets with four hulls became one merged solid (3 draws, not 14), the apples and windfalls are octahedra, low builds the solid coarse. The barley is the bulk and the thing to thin first (its step) if a profile shows the hub's grass pass hot.
 
+## Lampside (D-119, 2026-10-10)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-10 | Kessar's lower town: five houses, two stalls, a well, two lamp posts and the garden walls in Kessar's merged solid; fifteen date palms in its palm set; the gardens' barley instanced and the drills and scarecrows one merged solid + hull | Node, no GPU, `WORLD_STATS=1` (`kessar.test.ts` budgets) | Main-pass draws **test 15 / low 19 / medium 29 / high 29** (were 13 / 16 / 26 / 26); triangles **67k / 105k / 283k / 356k** (were 59k / 95k / 253k / 327k). Kessar's ceilings (20 / 26 / 40 / 40 draws, 110k / 150k / 400k / 500k) unchanged. |
+
 ## Hollowmere's folk (2026-09-30)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|
