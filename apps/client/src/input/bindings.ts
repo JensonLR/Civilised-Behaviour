@@ -40,7 +40,7 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: "jump", label: "Jump", group: "Movement", defaults: ["Space", ""], button: BUTTON.JUMP, tap: true },
   { id: "interact", label: "Use / pick up / revive", group: "Actions", defaults: ["KeyE", ""], button: BUTTON.INTERACT, tap: true },
   { id: "reload", label: "Reload", group: "Actions", defaults: ["KeyR", ""], button: BUTTON.RELOAD, tap: true },
-  { id: "melee", label: "Melee", group: "Actions", defaults: ["KeyV", ""], button: BUTTON.MELEE, tap: true },
+  { id: "melee", label: "Kick or melee", group: "Actions", defaults: ["KeyV", ""], button: BUTTON.MELEE, tap: true },
   { id: "throw", label: "Throw", group: "Actions", defaults: ["KeyG", ""], button: BUTTON.THROW, tap: true },
   { id: "grab", label: "Grab / drag", group: "Actions", defaults: ["KeyF", ""], button: BUTTON.GRAB, tap: true },
   /** HOLD to open the command wheel for the hired hands, release to send (no wire button: the order is its own message). */

@@ -23,6 +23,7 @@ import {
   findRopeTarget,
   newWorldHit,
   packReact,
+  BOOT,
   rayWorld,
   reactKind,
   reactOverrides,
@@ -106,6 +107,10 @@ export interface HitInfo {
   burn?: boolean;
   /** D-105: a coup de grace (the hit event says so: the clients throw more blood). */
   finisher?: boolean;
+  /** D-108: a boot (he goes over on his back, wherever it landed; the hit event says so: the clients lay him flat). */
+  boot?: boolean;
+  /** D-108: what a thrown body met (a wall at speed, the ground from a height; the hit event says so: the clients hear the crunch). */
+  splat?: boolean;
 }
 
 interface Revive {
@@ -178,6 +183,8 @@ export class Casualties {
     const ev: HitEvent = lift > 0 ? { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down, lift } : { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down };
     if (hit.burn) ev.burn = true;
     if (hit.finisher) ev.fin = true;
+    if (hit.boot) ev.boot = true;
+    if (hit.splat) ev.splat = true;
     this.host.emitHit(ev);
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
     // so unrelated hits never consume randomness.
@@ -188,17 +195,18 @@ export class Casualties {
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
     if (down) this.down(sessionId, p);
-    else if (!hit.burn) this.react(sessionId, p, zone, amount, dx / len, dz / len);
+    else if (!hit.burn) this.react(sessionId, p, zone, amount, dx / len, dz / len, hit.boot === true);
   }
 
   /**
    * D-104: where it landed decides what the blow does to the body (hitReaction.ts): down on that knee, doubled over, or the weapon knocked away. NPC rows only, never a
    * beast or a rider or a man at a crank gun (see the header of hitReaction.ts for why the players do not).
    */
-  private react(id: string, p: PlayerStateType, zone: ZoneId, amount: number, dx: number, dz: number): void {
+  private react(id: string, p: PlayerStateType, zone: ZoneId, amount: number, dx: number, dz: number, boot = false): void {
     if (p.npc === 0 || (p.flags & (FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING | FLAG.DRAGGED)) !== 0) return;
     const armed = p.weapon !== 0 && p.weapon !== WEAPON.FISTS + 1;
-    const next = reactionFor(zone, amount, armed);
+    // (D-108: a boot puts him on the ground wherever it lands)
+    const next = boot ? packReact(REACT.FLOORED, false, BOOT.floorS) : reactionFor(zone, amount, armed);
     if (!reactOverrides(next, p.react)) return;
     p.react = next;
     this.reacts.set(id, reactSeconds(next));

@@ -302,3 +302,25 @@ describe("D-106: the lariat in the bill", () => {
     expect(printed.some((p) => p.k === "rope" && p.t.includes("Ada"))).toBe(true);
   });
 });
+
+describe("D-108: the boot in the bill", () => {
+  it("a boot the party lands on a stranger is billed and shouted; a man it throws into the scenery is billed and printed; our own and the enemy's are not", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: string[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (_id, kind) => barks.push(kind) });
+    m.begin(99, 2, "secure_crossing");
+    m.onBoot("npc:s1", "ada");
+    m.onBoot("bram", "ada");
+    m.onBoot("ada", "npc:s1");
+    expect(m.bill.boots).toBe(1);
+    expect(barks).toContain("boot");
+    m.onSplat("npc:s1", "ada");
+    m.onSplat("bram", "npc:s1");
+    expect(m.bill.splats).toBe(1);
+    for (let i = 0; i < 60; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "splat" && p.t.includes("Ada") && p.t.includes("Dunstan"))).toBe(true);
+  });
+});

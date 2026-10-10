@@ -1,7 +1,7 @@
 import { Object3D, Scene } from "three";
 import { describe, expect, it } from "vitest";
 import { encodeSpec, generateCharacter } from "@cb/procedural";
-import { FLAG } from "@cb/shared";
+import { BOOT, FLAG, REACT, packReact } from "@cb/shared";
 import { CharacterActor, type ActorPose } from "./CharacterActor.ts";
 import { newEyeSample } from "./firstPerson.ts";
 
@@ -245,5 +245,26 @@ describe("D-084: faces in play", () => {
     a.lookAt(0, 8, 2); // directly behind
     settle(a, p, 30);
     expect(Math.abs(anim(a).look)).toBeLessThan(0.05);
+  });
+});
+
+describe("D-108: booted", () => {
+  it("a booted man lies flat on his back (not on one knee) while the floored reaction holds, and stands when it ends", () => {
+    const scene = new Scene();
+    const a = new CharacterActor(scene, look(6), 1, true);
+    const j = (a as unknown as { rig: { joints: Record<string, Object3D> } }).rig.joints;
+    const floored = pose(FLAG.GROUNDED, { react: packReact(REACT.FLOORED, false, BOOT.floorS) });
+    settle(a, pose());
+    a.hit({ id: "npc:s", zone: 1, dx: 0, dz: -1, power: 0.1, down: false, boot: true }, 0);
+    settle(a, floored, 60);
+    expect(j.root!.rotation.x).toBeGreaterThan(1.2); // (flat on his back)
+    // a leg shot's floor, with no boot, is the knee
+    const b = new CharacterActor(scene, look(6), 1, true);
+    const jb = (b as unknown as { rig: { joints: Record<string, Object3D> } }).rig.joints;
+    settle(b, floored, 60);
+    expect(jb.root!.rotation.x).toBeLessThan(0.5);
+    // the server lets him up (the reaction ends): he stands, though the boot's own clock had time left
+    settle(a, pose(), 90);
+    expect(j.root!.rotation.x).toBeLessThan(0.3);
   });
 });

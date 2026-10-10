@@ -370,6 +370,12 @@ type Kind = "pistol" | "long" | "blade" | "stick" | "hands";
 const kindOf = (id: number): Kind =>
   id === WEAPON.PISTOL ? "pistol" : id === WEAPON.RIFLE || id === WEAPON.BLUNDERBUSS ? "long" : id === WEAPON.SABRE ? "blade" : id === WEAPON.UMBRELLA ? "stick" : "hands";
 
+/** D-108: a blow with a firearm in hand is the boot: the hands bring the piece in to the chest and the right leg does the work (the animator's kick). */
+export const kicksWith = (id: number): boolean => {
+  const k = kindOf(id);
+  return k === "long" || k === "pistol";
+};
+
 const tmp = { x: 0, y: 0, z: 0 };
 const tmp2 = { x: 0, y: 0, z: 0 };
 
@@ -743,7 +749,7 @@ function fistBlow(input: WeaponPoseInput, body: HoldBody, out: HoldOut): void {
 /**
  * A blow with the weapon in hand, written into `alt` as the blow's own weapon pose (the caller blends it over the base by `blend.swing`).
  * Timeline: 0..0.36 wind-up, 0.36..0.62 the stroke, the rest recovery. Variants: 0 slash right to left, 1 backhand left to right, 2 overhead
- * chop, 3 the butt-stroke of a firearm (and a thrust for a stick).
+ * chop, 3 a thrust for a stick; with a firearm in hand, the brace for the boot (D-108: the leg is the animator's).
  */
 function blow(input: WeaponPoseInput, blend: HoldBlend, body: HoldBody, id: number, kind: Kind, out: HoldOut): void {
   const s = input.swing;
@@ -783,15 +789,24 @@ function blow(input: WeaponPoseInput, blend: HoldBlend, body: HoldBody, id: numb
     alt.ry = 0.05;
     alt.rz = 0;
     out.twist = 0.12 * wind - 0.28 * stroke;
+  } else if (kind === "long" || kind === "pistol") {
+    // D-108: the boot. The piece comes in to the chest, muzzle up, out of the leg's way, and the body leans back from the kick
+    const brace = Math.max(wind, stroke) * (1 - back);
+    alt.x = shX * 0.35;
+    alt.y = shY - 0.22 * A + 0.06 * brace;
+    alt.z = -0.24 * A + 0.06 * brace;
+    alt.rx = kind === "long" ? 0.9 * brace + 0.2 : 0.6 * brace + 0.2;
+    alt.ry = 0.35 * brace;
+    alt.rz = 0;
+    out.twist = 0.1 * brace;
   } else {
-    // butt-stroke / thrust: the piece turns end for end and drives forward
-    const flip = kind === "long" ? smooth(0, 0.3, s) * (1 - smooth(0.7, 1, s)) : 0;
+    // thrust (a stick): drives forward
     const drive = stroke * (1 - back);
     alt.x = shX * 0.75;
     alt.y = shY - 0.3 * A + 0.05 * drive;
     alt.z = -0.28 * A - 0.42 * drive + 0.1 * wind * (1 - stroke);
-    alt.rx = kind === "long" ? 0.35 * (1 - flip) : kind === "pistol" ? 0.2 : -0.1;
-    alt.ry = flip * Math.PI * 0.92;
+    alt.rx = -0.1;
+    alt.ry = 0;
     alt.rz = 0;
     out.twist = -0.25 * drive + 0.18 * wind * (1 - stroke);
   }

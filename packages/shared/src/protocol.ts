@@ -194,6 +194,10 @@ export interface HitEvent {
   burn?: boolean;
   /** D-105: a coup de grace (the clients throw more blood and the body sprawls). Absent: an ordinary blow. */
   fin?: boolean;
+  /** D-108: a boot (the clients lay him flat on his back while the floored reaction lasts). Absent: an ordinary blow. */
+  boot?: boolean;
+  /** D-108: a thrown body met a wall or the ground from a height (the clients hear the crunch). Absent: an ordinary blow. */
+  splat?: boolean;
 }
 
 /** D-106: a lariat thrown, from the thrower's hand to where it is aimed (a man, or a point at the rope's reach). `hit`: it will land on him. Cosmetic: the clients fly the loop. */

@@ -97,7 +97,7 @@ export const PAD_ACTIONS: readonly { id: PadAction; label: string }[] = [
   { id: "jump", label: "Jump" },
   { id: "crouch", label: "Crouch" },
   { id: "interact", label: "Use / reload" },
-  { id: "melee", label: "Melee" },
+  { id: "melee", label: "Kick or melee" },
   { id: "throw", label: "Throw" },
   { id: "grab", label: "Grab / drag" },
   { id: "aim", label: "Aim" },

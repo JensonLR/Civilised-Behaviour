@@ -170,6 +170,7 @@ import { Combat } from "../systems/Combat.ts";
 import { Followers } from "../systems/Followers.ts";
 import { Incidents } from "../systems/Incidents.ts";
 import { Pacing } from "../systems/Pacing.ts";
+import { Flung } from "../systems/Flung.ts";
 import { Fire } from "../systems/Fire.ts";
 import { Mayhem } from "../systems/Mayhem.ts";
 import { Mounts } from "../systems/Mounts.ts";
@@ -306,6 +307,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private pacing!: Pacing;
   /** D-103: fire that spreads (shared/fire.ts; systems/Fire.ts). */
   private fire!: Fire;
+  /** D-108: bodies thrown by a boot or a blast, watched for the wall they meet and the drop they fall. */
+  private readonly flung = new Flung({
+    players: { forEach: (cb) => this.state.players.forEach(cb), get: (id) => this.state.players.get(id) },
+    damage: (id, amount, hit) => this.damagePlayer(id, amount, hit),
+    struck: (id, by) => {
+      if (this.scenario?.live) this.mayhem.onSplat(id, by);
+    },
+  });
   /** D-084: the run's spectacle (the gazette, the Butcher's Bill, the Society's request). */
   private readonly mayhem = new Mayhem({
     row: (id) => {
@@ -494,6 +503,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.cast.shotFrom(target, shooter);
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
+      flung: (id, by) => this.flung.track(id, by), // (D-108)
       // D-105: a coup de grace pays: the one who struck gets a second wind, the fallen man's friends nearby lose their nerve, the Society takes note
       finished: (by, target, weapon) => {
         const who = this.state.players.get(by);
@@ -794,6 +804,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.audience.tick();
         tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
+        this.flung.tick(ctx.dt); // (D-108: after the rows have stepped)
         tickProbe.lap("cast");
         this.followers.tick(ctx.dt);
         tickProbe.lap("followers");
@@ -1340,6 +1351,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.scenario?.dispose();
     this.scenario = undefined;
     this.incidents.reset();
+    this.flung.clear();
     this.followers.endExpedition();
     this.cast.despawn();
     this.mounts.dispose();
@@ -1964,6 +1976,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
       if (this.scenario?.live) {
+        if (hit?.boot) this.mayhem.onBoot(sessionId, hit.by ?? ""); // (D-108)
         const off = p.missing & ~limbsBefore;
         this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
       }

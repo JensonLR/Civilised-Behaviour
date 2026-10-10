@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
 import {
   BODY_SHAPES,
+  BOOT,
   BUTTON,
   CANNON,
   COMBAT,
@@ -757,7 +758,7 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       expect(swings).toBeLessThanOrEqual(Math.ceil(2.1 / cd) + 1);
     }, 30000);
 
-    it("the butt of a rifle (V) is a real blow with a shove; bare hands work when nothing is drawn; a wall stops a swing", async () => {
+    it("V with a rifle in hand is the boot (D-108): a light blow and a big shove; bare hands work when nothing is drawn; a wall stops a swing", async () => {
       const { ps } = await setup(3);
       const [a, b, c] = ps as [Player, Player, Player];
       place(a.p, 0, 0);
@@ -767,8 +768,9 @@ describe("combat: weapons, projectiles, melee, explosions, the cannon (server au
       frame(a, { buttons: BUTTON.MELEE, yaw: 0, aimYaw: 0, aimElev: 0 });
       await sleep(60);
       frame(a, {});
-      await until(() => b.p.health < 100, 2000, "butt strike");
-      expect(100 - b.p.health).toBeGreaterThanOrEqual(8);
+      await until(() => b.p.health < 100, 2000, "the boot");
+      expect(100 - b.p.health).toBeLessThanOrEqual(BOOT.blow.damage); // (a boot barely hurts: what he lands in does)
+      await until(() => b.p.z < -2.3, 2000, "him shoved a metre back and more");
       // bare hands
       frame(a, { weapon: -1 });
       await sleep(500);

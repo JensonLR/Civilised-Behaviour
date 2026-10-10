@@ -7,8 +7,8 @@ import { hash3 } from "./rng.ts";
  * `bark` event); the client picks the line. The joke is the Empire's own bluster (D-085): never a people abroad.
  */
 
-export type BarkKind = "triumph" | "headshot" | "brolly" | "limb" | "chain" | "down" | "flung" | "friendly" | "commission" | "finisher" | "rope";
-export const BARK_KINDS: readonly BarkKind[] = ["triumph", "headshot", "brolly", "limb", "chain", "down", "flung", "friendly", "commission", "finisher", "rope"];
+export type BarkKind = "triumph" | "headshot" | "brolly" | "limb" | "chain" | "down" | "flung" | "friendly" | "commission" | "finisher" | "rope" | "boot";
+export const BARK_KINDS: readonly BarkKind[] = ["triumph", "headshot", "brolly", "limb", "chain", "down", "flung", "friendly", "commission", "finisher", "rope", "boot"];
 export const isBarkKind = (k: unknown): k is BarkKind => typeof k === "string" && (BARK_KINDS as readonly string[]).includes(k);
 
 /** The shape of the babble that carries a line: a boast rises and swoops, an exclamation is short and high, a mutter is low, a harrumph is a harrumph. */
@@ -26,6 +26,7 @@ export const BARK_LINES: Readonly<Record<BarkKind, { key: BabbleKey; lines: read
   friendly: { key: "mutter", lines: ["Terribly sorry, old chap!", "My mistake, frightfully sorry!", "He moved!", "We'll tell the Gazette it was the weather."] },
   commission: { key: "boast", lines: ["Hear, hear!", "The Society is grateful!", "Pall Mall will be in raptures!", "Put it on the account!"] },
   rope: { key: "exclaim", lines: ["Got you, sir!", "Come along quietly!", "Mind the rope, it's new!", "In the name of the Society!", "Hold still, there's a good chap!"] },
+  boot: { key: "boast", lines: ["This is Pall Mall!", "Off you pop!", "Mind the step!", "Manners!", "Make way for the Society!"] },
   finisher: { key: "boast", lines: ["And stay down!", "Fair and square, old chap!", "My compliments to your mother!", "That's quite enough of that!", "Do mind the boots!"] },
 };
 

@@ -330,3 +330,32 @@ describe("D-106: on the end of a rope", () => {
     expect(rig.joints.root.rotation.x).toBeGreaterThan(1.2);
   });
 });
+
+describe("D-108: the boot", () => {
+  it("a blow with a firearm in hand is a kick: the right knee comes up, then the leg drives out straight and high while the left stands; a sabre's blow moves no leg", () => {
+    const { rig, anim } = make(5);
+    anim.autoBlink = false;
+    const weapon = { ...newWeaponPoseInput(), id: WEAPON.RIFLE };
+    run(anim, 1, { speed: 0, flags: G, vy: 0, weapon });
+    const restHip = rig.joints.hipR.rotation.x;
+    const at = (s: number): { hipR: number; kneeR: number; hipL: number; kick: number } => {
+      run(anim, 1 / 30, { speed: 0, flags: G, vy: 0, weapon: { ...weapon, swing: s } });
+      return { hipR: rig.joints.hipR.rotation.x, kneeR: -rig.joints.kneeR.rotation.x, hipL: rig.joints.hipL.rotation.x, kick: anim.kickW };
+    };
+    const chamber = at(0.3);
+    expect(chamber.hipR).toBeGreaterThan(restHip + 0.8); // (the knee up)
+    expect(chamber.kneeR).toBeGreaterThan(0.8); // (folded, as far as this leg folds: a stout thigh stops the calf sooner)
+    const strike = at(0.58);
+    expect(strike.hipR).toBeGreaterThan(1.3); // (the leg out, high)
+    expect(strike.kneeR).toBeLessThan(0.4); // (straight)
+    expect(Math.abs(strike.hipL)).toBeLessThan(0.25); // (standing on the other)
+    expect(strike.kick).toBeGreaterThan(0.9);
+    const done = at(1);
+    expect(done.kick).toBe(0);
+    // a sabre: the arms swing, the legs do not kick
+    const sabre = { ...newWeaponPoseInput(), id: WEAPON.SABRE, swing: 0.58 };
+    run(anim, 1, { speed: 0, flags: G, vy: 0, weapon: sabre });
+    expect(anim.kickW).toBe(0);
+    expect(rig.joints.hipR.rotation.x).toBeLessThan(restHip + 0.3);
+  });
+});

@@ -1,7 +1,7 @@
 import { Box3, Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
-import { FLAG, REACT, WEAPON, WEAPONS, reactKind, reactRight, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
+import { BOOT, FLAG, REACT, WEAPON, WEAPONS, reactKind, reactRight, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
@@ -103,6 +103,8 @@ export class CharacterActor {
   heldGrip: { L?: number | undefined; R?: number | undefined } = {};
   private currentLook = "";
   private painTimer = 0;
+  /** D-108: seconds left lying flat on his back after a boot (while the floored reaction holds; the server says when he is up). */
+  private sprawl = 0;
   /** D-084: a passing mood (fear, triumph, surprise, a gritted shot) and how long it holds; where the head is looking, and for how long. */
   private mood: ExpressionId = "neutral";
   private moodTimer = 0;
@@ -365,6 +367,7 @@ export class CharacterActor {
     const sin = Math.sin(facing);
     this.anim.flinch(e.dx * cos - e.dz * sin, e.dx * sin + e.dz * cos, e.power);
     this.painTimer = 0.5 + e.power * 0.7;
+    if (e.boot) this.sprawl = BOOT.floorS;
     if (!e.down) return;
     const lift = e.lift ?? 0;
     // D-064: a blast finding a body still in the air throws it on; a body already lying (or easing back into the pose) is picked up and thrown again
@@ -447,8 +450,11 @@ export class CharacterActor {
       this.lastArmed = -1;
     } else if (weaponId >= 0 && weaponId !== WEAPON.FISTS && rk !== REACT.DISARMED) this.lastArmed = weaponId as WeaponId;
     this.lastReact = rk;
+    // D-108: booted, he lies flat on his back (the lying pose the rope uses, D-106) until the floored reaction lets him up, not on one knee
+    if (this.sprawl > 0) this.sprawl = rk === REACT.FLOORED ? this.sprawl - dt : 0;
+    const flags = this.sprawl > 0 ? pose.flags | FLAG.DRAGGED : pose.flags;
     // Hands that are busy (carrying, dragging, kneeling, lying) put the weapon away; a fall too.
-    const busy = (pose.flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DOWNED | FLAG.DRAGGED)) !== 0 || this.ragdoll !== undefined;
+    const busy = (flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DOWNED | FLAG.DRAGGED)) !== 0 || this.ragdoll !== undefined;
     const wi = this.weapons.update(dt, {
       weapon: weaponId,
       aiming: (pose.flags & FLAG.AIMING) !== 0,
@@ -460,7 +466,7 @@ export class CharacterActor {
       carried: c?.carried,
     });
     this.anim.motion = getReduceMotion() ? 0.3 : 1;   // hair sway only (D-037): 30% under "reduce motion"
-    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride, react: pose.react });
+    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride, react: this.sprawl > 0 ? 0 : pose.react });
     this.weapons.apply(this.anim.hold);
     // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).
     const h = this.anim.hold;

@@ -170,6 +170,24 @@ export class Mayhem {
     this.touch();
   }
 
+  /** D-108: `by` booted `victim` off his feet. The Society counts a boot the party lands on anyone not of the party; the one who did it says so. */
+  onBoot(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.boots++;
+    this.bark(by, "boot");
+    this.touch();
+  }
+
+  /** D-108: `victim`, thrown by `by` (a boot, a blast), was hurt by the wall he met or the drop he fell. The column prints it when the party threw him. */
+  onSplat(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.splats++;
+    this.say({ k: "splat", victim: this.name(victim), by: this.name(by) });
+    this.touch();
+  }
+
   /** A blast threw somebody already down (Casualties.toss), maybe taking a limb. */
   onToss(victim: string, by: string, power: number, lift: number, severed: LimbId | undefined, dirX: number, dirZ: number): void {
     const vs = this.side(victim);
