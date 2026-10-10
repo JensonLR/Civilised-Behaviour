@@ -202,5 +202,8 @@ export const WorldState = schema({
   fire: t.string(),
   /** The scorched ground (FireGrid.encodeBurnt), for anyone who joins after it burnt (refreshed at most every two seconds while it changes). */
   scorch: t.string(),
+  // --- the stampede (append-only, D-114: stampede.ts) ---
+  /** Each herd's latest run (encodeHerdRuns: a few dozen characters; changes only when a herd starts to run). */
+  herds: t.string(),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

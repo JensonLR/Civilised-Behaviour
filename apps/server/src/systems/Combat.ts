@@ -865,7 +865,7 @@ export class Combat {
    * leg or the body (never a limb off: a horse is blunt), and he goes ahead and off the line, lifted with the pace, floored as by a boot, and watched for what he
    * meets. A man it puts down is thrown all the same (a ragdoll). The room has already decided he may be ridden down.
    */
-  trample(rider: string, target: string, speed: number, fx: number, fz: number, ox: number, oz: number): void {
+  trample(rider: string, target: string, speed: number, fx: number, fz: number, ox: number, oz: number, stampede = false): void {
     const t = this.host.players.get(target);
     if (!t || (t.flags & FLAG.DOWNED) !== 0) return;
     const dmg = trampleDamage(speed);
@@ -873,7 +873,7 @@ export class Combat {
     trampleDir(fx, fz, ox, oz, tdir);
     const r = this.host.rng.next();
     const zone = r < 0.4 ? ZONE.TORSO : r < 0.7 ? ZONE.LEG_L : ZONE.LEG_R;
-    this.host.damage(target, dmg, { zone, dirX: tdir.x, dirZ: tdir.z, severBias: 0, by: rider, trample: true });
+    this.host.damage(target, dmg, stampede ? { zone, dirX: tdir.x, dirZ: tdir.z, severBias: 0, by: rider, trample: true, stampede: true } : { zone, dirX: tdir.x, dirZ: tdir.z, severBias: 0, by: rider, trample: true });
     this.stats.tramples++;
     const carry = speed * TRAMPLE.carry;
     const lift = trampleLift(speed);

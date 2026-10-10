@@ -65,9 +65,11 @@ export interface Bill {
   /** D-113: men the party held up at gunpoint (hands up), and men it shot with their hands up. */
   holdups: number;
   unsporting: number;
+  /** D-114: men trampled by a herd the party set running. */
+  stampeded: number;
 }
 
-export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0, ropes: 0, boots: 0, splats: 0, trampled: 0, shields: 0, comrades: 0, holdups: 0, unsporting: 0 });
+export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0, ropes: 0, boots: 0, splats: 0, trampled: 0, shields: 0, comrades: 0, holdups: 0, unsporting: 0, stampeded: 0 });
 
 /** A blast that throws a body this far (yards) makes the column and counts as a flight. */
 export const FLING_YARDS = 7;
@@ -109,6 +111,7 @@ export type MayhemFact =
   | { k: "trample"; victim: string; by: string }
   | { k: "shield"; victim: string; by: string }
   | { k: "holdup"; victim: string; by: string }
+  | { k: "stampede"; victim: string; by: string }
   | { k: "unsporting"; victim: string; by: string }
   | { k: "shield_shot"; victim: string; by: string }
   | { k: "grudge"; victim: string; by: string; what: string }
@@ -116,7 +119,7 @@ export type MayhemFact =
   | { k: "request"; id: RequestId };
 
 /** When several land at once (a blast), the best is printed: a commission met, a chain, a limb, a flight... */
-export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, trample: 6, shield: 5, shield_shot: 7, holdup: 5, unsporting: 8, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
+export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, trample: 6, shield: 5, shield_shot: 7, holdup: 5, unsporting: 8, stampede: 7, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
 
 const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" | "severOwn" | "flingOwn", readonly string[]>> = {
   sever: [
@@ -194,6 +197,11 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{by} has seen off {victim} again. The Society suggests a standing arrangement.",
     "{victim} came back for {by} and has been sent back. Correspondence is not expected.",
     "{by} and {victim} have met again. The result was the same.",
+  ],
+  stampede: [
+    "{victim} has been trampled by a herd {by} alarmed. The herd has not apologised.",
+    "{by} fired into the air near the grazing; {victim} is now part of the grazing.",
+    "The Highmark herds stampeded across {victim}. {by} says they were going that way anyway.",
   ],
   holdup: [
     "{victim} has put up his hands for {by}, who accepted them on behalf of the Society.",
@@ -364,7 +372,7 @@ export const SPECTACLE_CAP = 30;
 
 /** What the Committee for Remittances adds for the spectacle (pounds, capped) and the line it sends; 0 and "" for a dull run. */
 export function spectacle(b: Bill): { pay: number; line: string } {
-  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0) + (b.ropes ?? 0) + 2 * (b.splats ?? 0) + 2 * (b.trampled ?? 0) + (b.shields ?? 0) + 3 * (b.comrades ?? 0) + (b.holdups ?? 0);
+  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0) + (b.ropes ?? 0) + 2 * (b.splats ?? 0) + 2 * (b.trampled ?? 0) + (b.shields ?? 0) + 3 * (b.comrades ?? 0) + (b.holdups ?? 0) + 2 * (b.stampeded ?? 0);
   const pay = Math.min(SPECTACLE_CAP, raw);
   if (pay <= 0) return { pay: 0, line: "" };
   return { pay, line: `The Committee adds £${pay} for spectacle${pay === SPECTACLE_CAP ? ", the most it will pay for anything it has to print with a warning" : ""}. London wants more of this.` };
@@ -385,6 +393,7 @@ export function billLine(b: Bill): string {
   if ((b.boots ?? 0) > 0) parts.push(plural(b.boots, "boot delivered", "boots delivered"));
   if ((b.splats ?? 0) > 0) parts.push(plural(b.splats, "man introduced to the scenery", "men introduced to the scenery"));
   if ((b.trampled ?? 0) > 0) parts.push(plural(b.trampled, "man ridden down", "men ridden down"));
+  if ((b.stampeded ?? 0) > 0) parts.push(plural(b.stampeded, "man trampled by the herds", "men trampled by the herds"));
   if ((b.holdups ?? 0) > 0) parts.push(plural(b.holdups, "man held up at gunpoint", "men held up at gunpoint"));
   if ((b.unsporting ?? 0) > 0) parts.push(plural(b.unsporting, "man shot with his hands up (the Committee is writing)", "men shot with their hands up (the Committee is writing)"));
   if ((b.shields ?? 0) > 0) parts.push(`${plural(b.shields, "man held up as a shield", "men held up as shields")}${(b.comrades ?? 0) > 0 ? ` (${plural(b.comrades, "shot by his own side", "shot by their own side")})` : ""}`);

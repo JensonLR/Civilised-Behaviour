@@ -1,5 +1,5 @@
 import { Color, CylinderGeometry, Matrix4, Sphere, SphereGeometry, Vector3, type BufferGeometry, type Object3D } from "three";
-import { PALETTE, HERD_CAP, herdAt, herdCount, herdPlan, herdVariety, separateCapsules, type CollisionWorld, type HerdPlan } from "./shared.ts";
+import { PALETTE, HERD_CAP, decodeHerdRuns, herdAnimalAt, herdAt, herdCount, herdPlan, herdVariety, separateCapsules, type CollisionWorld, type HerdPlan, type HerdRun } from "./shared.ts";
 import { Kit, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { composeInstance, makeInstances, toonMaterial, type InstanceSet } from "../toon.ts";
@@ -38,7 +38,7 @@ const m4 = new Matrix4();
 const BEAST_BACK = 1.0;
 const BEAST_FRONT = 1.4;
 const BEAST_R = 0.48;
-const pos = { x: 0, z: 0, yaw: 0 };
+const pos = { x: 0, z: 0, yaw: 0, speed: 0 };
 
 export class Herds {
   readonly plan: HerdPlan;
@@ -49,6 +49,12 @@ export class Herds {
   private readonly px: Float64Array;
   private readonly pz: Float64Array;
   private readonly yaw: Float64Array;
+  /** D-114: each herd's latest run (from the room state), and each animal's pace this frame. */
+  private runs: (HerdRun | undefined)[] = [];
+  private runsKey = "";
+  private readonly pace: Float32Array;
+  /** D-114: the middle of the running animals this frame (the thunder of the hooves comes from there), and how many are running. */
+  readonly runningAt = { x: 0, z: 0, n: 0 };
 
   constructor(root: Object3D, private readonly world: CollisionWorld, seed: number, outlines: boolean, lod: Lod, private readonly track: (x: { dispose(): void }) => void, enabled = true) {
     this.plan = herdPlan(seed);
@@ -57,6 +63,7 @@ export class Herds {
     this.px = new Float64Array(this.count);
     this.pz = new Float64Array(this.count);
     this.yaw = new Float64Array(this.count);
+    this.pace = new Float32Array(this.count);
     if (!enabled || this.count === 0) return;
     const mats: Matrix4[] = [];
     const cols: Color[] = [];
@@ -82,21 +89,46 @@ export class Herds {
     this.update(0); // (the first frame is parted like every other: the matrices above are the bare formula)
   }
 
-  /** Writes every animal's matrix for `worldSec` (allocation-free). */
+  /** D-114: the herds' runs as the room state carries them (`encodeHerdRuns`); decoded only when they change. */
+  setRuns(encoded: string): void {
+    if (encoded === this.runsKey) return;
+    this.runsKey = encoded;
+    this.runs = decodeHerdRuns(encoded, this.plan.herds.length);
+  }
+
+  /** Writes every animal's matrix for `worldSec` (allocation-free once the runs are decoded). A running animal gallops: it bounds and rocks, head down. */
   update(worldSec: number): void {
     const set = this.set;
     if (!set) return;
+    let rx = 0, rz = 0, rn = 0;
     for (let i = 0; i < this.count; i++) {
-      herdAt(this.plan, i, worldSec, pos);
+      herdAnimalAt(this.plan, i, worldSec, this.runs, pos);
       this.px[i] = pos.x;
       this.pz[i] = pos.z;
       this.yaw[i] = pos.yaw;
+      this.pace[i] = pos.speed;
+      if (pos.speed > 2) {
+        rx += pos.x;
+        rz += pos.z;
+        rn++;
+      }
+    }
+    this.runningAt.n = rn;
+    if (rn > 0) {
+      this.runningAt.x = rx / rn;
+      this.runningAt.z = rz / rn;
     }
     separateCapsules(this.px, this.pz, this.yaw, BEAST_BACK, BEAST_FRONT, BEAST_R, this.count);
     for (let i = 0; i < this.count; i++) {
       const x = this.px[i]!, z = this.pz[i]!;
-      const sway = 0.05 * Math.sin(worldSec * 1.3 + this.bob[i]!);
-      composeInstance(m4, x, this.world.terrainHeight(x, z), z, -this.yaw[i]!, 1, 1, 1, 0, sway);
+      const v = this.pace[i]!;
+      // (grazing: a slow sway; running: a bound three times a second and a rock fore and aft, both growing with the pace)
+      const gallop = Math.min(1, v / 7);
+      const stride = worldSec * 9.5 + this.bob[i]!;
+      const lift = gallop * 0.22 * Math.abs(Math.sin(stride));
+      const rock = gallop * 0.14 * Math.sin(stride);
+      const sway = (1 - gallop) * 0.05 * Math.sin(worldSec * 1.3 + this.bob[i]!);
+      composeInstance(m4, x, this.world.terrainHeight(x, z) + lift, z, -this.yaw[i]!, 1, 1, 1, 0, sway + rock);
       set.mesh.setMatrixAt(i, m4);
     }
     set.mesh.instanceMatrix.needsUpdate = true;

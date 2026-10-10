@@ -32,6 +32,9 @@ export interface RegionView {
    * a ceiling) and puts it back when they leave. The integrator calls it from Game.ts with the local player's x and z.
    */
   setViewer?(x: number, z: number): void;
+  /** D-114: the herds' runs as the room state carries them (Highmark draws its herds stampeding from them); where a herd is running now (into `out`, false when none is). */
+  setHerdRuns?(encoded: string): void;
+  herdRunning?(out: { x: number; z: number }): boolean;
   /** D-035: what HQ keeps of the campaign, on the planning table, the strongbox and the marquee's back wall (Hollowmere). */
   applyHistory?(pieces: readonly HqHistoryPiece[]): void;
   /**

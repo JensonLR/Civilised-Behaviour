@@ -199,6 +199,22 @@ export class Mayhem {
     this.touch();
   }
 
+  /** D-114: `by` set a herd running (the shout). */
+  onStampedeStart(by: string): void {
+    if (this.side(by) !== "party") return;
+    this.bark(by, "stampede");
+    this.touch();
+  }
+
+  /** D-114: a herd `by` set running trampled `victim`. Billed and printed when it was the party's doing and he is not of the party. */
+  onStampede(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.stampeded++;
+    this.say({ k: "stampede", victim: this.name(victim), by: this.name(by) });
+    this.touch();
+  }
+
   /** D-113: `victim` put his hands up for `by`. Billed when the party did it; the one holding the gun says so and the column prints it. */
   onHoldUp(victim: string, by: string): void {
     const vs = this.side(victim);
