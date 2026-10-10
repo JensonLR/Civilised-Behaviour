@@ -73,6 +73,9 @@ export const PlayerState = schema({
   cmd: t.uint8(),
   /** A hired hand's morale 0..100 (plates only). */
   morale: t.uint8(),
+  // --- fire (append-only, D-103) ---
+  /** On fire: tenths of a second left burning (0 = not alight). Server-owned; the clients draw the flames on the body and the scream. */
+  burn: t.uint8(),
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 
@@ -188,5 +191,10 @@ export const WorldState = schema({
   /** SettlementsState JSON (the outposts and the latched tech; < 2 KB; parseSettlements) and its revision. */
   settlements: t.string(),
   settlementsRev: t.uint16(),
+  // --- fire (append-only, D-103: fire.ts) ---
+  /** The cells burning now (FireGrid.encodeBurning: a few hundred characters at most; refreshed at most twice a second while it changes). */
+  fire: t.string(),
+  /** The scorched ground (FireGrid.encodeBurnt), for anyone who joins after it burnt (refreshed at most every two seconds while it changes). */
+  scorch: t.string(),
 });
 export type WorldStateType = SchemaType<typeof WorldState>;

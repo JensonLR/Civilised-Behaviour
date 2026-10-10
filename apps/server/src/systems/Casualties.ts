@@ -77,6 +77,8 @@ export interface HitInfo {
   lift?: number;
   /** D-084: what dealt it (the gazette and the Society's requests tell a sabre from an umbrella). */
   weapon?: WeaponId;
+  /** D-103: the flames (the hit event says so: the clients draw no blood for it). */
+  burn?: boolean;
 }
 
 interface Revive {
@@ -138,7 +140,9 @@ export class Casualties {
     const down = p.health === 0;
     const power = Math.min(1, amount / 60);
     const lift = hit.lift !== undefined && hit.lift > 0 ? Math.min(1, hit.lift) : 0;
-    this.host.emitHit(lift > 0 ? { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down, lift } : { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down });
+    const ev: HitEvent = lift > 0 ? { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down, lift } : { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down };
+    if (hit.burn) ev.burn = true;
+    this.host.emitHit(ev);
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
     // so unrelated hits never consume randomness.
     const target = zoneLimb(zone);

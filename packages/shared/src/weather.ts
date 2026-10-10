@@ -147,6 +147,25 @@ export function weatherAt(seed: number, timeMs: number, out: Weather = createWea
   return out;
 }
 
+/**
+ * D-103: where the wind blows TOWARDS, as a unit vector in the ground plane (it drives the fire's spread and the smoke's drift). Pure in (seed, timeMs): each world has a
+ * prevailing direction, each weather slot veers from it by up to 60 degrees, the change blends in with the slot's other weather, and it wanders a little within a slot.
+ */
+export function windAt(seed: number, timeMs: number, out: { x: number; z: number } = { x: 0, z: 0 }): { x: number; z: number } {
+  const t = Number.isFinite(timeMs) ? Math.max(0, timeMs) : 0;
+  const slot = Math.max(0, Math.floor(t / WEATHER.slotMs));
+  const into = t - slot * WEATHER.slotMs;
+  const blend = WEATHER.blendMinMs + (WEATHER.blendMaxMs - WEATHER.blendMinMs) * hashFloat(seed >>> 0, slot, 0x9c3);
+  const u = slot === 0 ? 1 : smoothstep(0, 1, clamp(into / blend, 0, 1));
+  const prevailing = hashFloat(seed >>> 0, 0x77d, 0x1d) * Math.PI * 2;
+  const veer = (s: number): number => (hashFloat(seed >>> 0, s, 0x1de) - 0.5) * 2.1;
+  let d = veer(slot - 1) + (veer(slot) - veer(slot - 1)) * u;
+  d += Math.sin(t / 23_000 + seed * 0.001) * 0.15;
+  out.x = Math.sin(prevailing + d);
+  out.z = Math.cos(prevailing + d);
+  return out;
+}
+
 /** A state at full strength (review scenes, `?weather=`). */
 export function weatherPreset(kind: WeatherKind, out: Weather = createWeather()): Weather {
   const p = TABLE[kind];

@@ -58,6 +58,8 @@ import {
   isCarried,
   NPC_CAP,
   NPC_SIDE,
+  NPC,
+  windAt,
   WEAPONS,
   applyOutcome,
   applyIncident,
@@ -165,6 +167,7 @@ import { Cast } from "../systems/Cast.ts";
 import { Combat } from "../systems/Combat.ts";
 import { Followers } from "../systems/Followers.ts";
 import { Incidents } from "../systems/Incidents.ts";
+import { Fire } from "../systems/Fire.ts";
 import { Mayhem } from "../systems/Mayhem.ts";
 import { Mounts } from "../systems/Mounts.ts";
 import { Scenario } from "../systems/Scenario.ts";
@@ -296,6 +299,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private mounts!: Mounts;
   private followers!: Followers;
   private incidents!: Incidents;
+  /** D-103: fire that spreads (shared/fire.ts; systems/Fire.ts). */
+  private fire!: Fire;
   /** D-084: the run's spectacle (the gazette, the Butcher's Bill, the Society's request). */
   private readonly mayhem = new Mayhem({
     row: (id) => {
@@ -376,6 +381,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.powers = serializePowers(this.powers);
     this.state.powersRev = 0;
     this.state.settlements = serializeSettlements(this.settlements);
+    this.state.fire = ""; // (D-103: nothing burning, nothing scorched)
+    this.state.scorch = "";
     this.state.settlementsRev = 0;
     const demoCfg = cfg.demo;
     if (demoCfg?.enabled) {
@@ -480,7 +487,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         const off = (this.state.players.get(id)?.missing ?? 0) & ~before;
         if (this.scenario?.live) this.mayhem.onToss(id, by ?? "", power, lift, off ? (off as LimbId) : undefined, dx, dz);
       },
-      blastAt: (owner, x, y, z, radius) => this.powderCatches(owner, x, y, z, radius),
+      blastAt: (owner, x, y, z, radius) => {
+        this.powderCatches(owner, x, y, z, radius);
+        this.fire.blast(x, z, radius); // (D-103: and the grass round it catches)
+      },
     });
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
     this.cast = new Cast({
@@ -577,6 +587,28 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       seed,
     });
     // D-052: chaos during play (one incident per contract at most, dealt when it starts; the room only routes and commits)
+    // D-103: fire that spreads. The room lights it (blasts, a fallen raider's torch) and routes what it does (damage, cooked-off kegs, panic) to the systems that own those.
+    this.fire = new Fire({
+      players: this.state.players,
+      props: this.state.props,
+      seed,
+      worldMs: () => performance.now() - this.bornAt, // (the weather's clock: the rain the clients see is the rain that chokes it)
+      world: () => this.world,
+      region: () => this.state.region as RegionId,
+      damage: (id, amount) => this.casualties.damage(id, amount, { burn: true }),
+      cookOff: (id) => this.cookOff(id),
+      panic: (id, x, z) => {
+        const w = windAt(seed, performance.now() - this.bornAt);
+        this.cast.onFire(id, x - w.x * 4, z - w.z * 4); // (they run with the wind, away from where the fire comes from)
+      },
+      scare: (x, z, radius) => this.cast.noise(x, z, radius, ""),
+      writeBurning: (v) => {
+        if (this.state.fire !== v) this.state.fire = v;
+      },
+      writeScorch: (v) => {
+        if (this.state.scorch !== v) this.state.scorch = v;
+      },
+    });
     this.incidents = new Incidents({
       party: this.party,
       cast: this.cast,
@@ -738,6 +770,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       tickProbe.lap("combat");
       this.physics.step(ctx.dt);
       this.burnFuses(ctx.dt);
+      if (!sailing) this.fire.tick(ctx.dt);
       tickProbe.lap("physics");
       for (const [id, pb] of this.physics.props) if (pb.holder !== "" || !pb.body.isSleeping()) this.writeProp(id, false);
       tickProbe.lap("props");
@@ -1290,6 +1323,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     metrics.physicsBodies -= old.props.size;
     old.dispose();
     this.lit.clear(); // (a fuse does not cross the water: the next region's props may reuse the ids)
+    this.fire.reset(); // (D-103: nor does a fire; nobody lands alight)
     this.state.region = to;
     this.buildRegion(to);
     this.startScenario(to);
@@ -1503,6 +1537,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const opts = this.worldOpts();
     this.world = createRegionWorld(this.state.region as RegionId, this.state.seed, bridge ? { ...opts, bridge } : opts);
     this.physics.replaceStatic(this.world);
+    this.fire?.setWorld(this.world);
     const pos = { x: 0, z: 0 };
     this.state.players.forEach((p) => {
       pos.x = p.x;
@@ -1618,6 +1653,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
 
   /** D-055: somebody went down: a member counts it against themselves, and a member who put down an enemy counts it for themselves. */
   private noteDown(victim: string, p: PlayerStateType, by: string): void {
+    if (p.npc === NPC.RAIDER) this.fire.ignite(p.x, p.z, 1.2); // (D-103: a raider's torch falls with him, into the grass)
     if (!p.npc) {
       const d = this.deedsOf(victim);
       if (d) d.downed++;
@@ -1653,6 +1689,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const d = this.deedsOf(by);
     if (d) d.kegs++;
     ps.fuse = fuseTenths(KEG_FUSE.seconds);
+  }
+
+  /** D-103: a keg in the flames (on burning ground, or in the arms of somebody alight) cooks off: a short fuse, nobody's deed, everybody's problem. */
+  private cookOff(id: string): void {
+    const ps = this.state.props.get(id);
+    if (!ps || this.lit.has(id)) return;
+    this.lit.set(id, { left: KEG_CHAIN.base + 1.2, owner: ACCIDENT_OWNER });
+    ps.fuse = fuseTenths(KEG_CHAIN.base + 1.2);
   }
 
   /** Burns the lit fuses down; a fuse that reaches the powder sets the keg off where it is. */
@@ -1806,6 +1850,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (held) this.dropHeld(key, p);
     this.casualties.onLeave(key);
     this.combat.onLeave(key);
+    this.fire.onLeave(key);
     this.physics.removePlayer(key);
     this.prevButtons.delete(key);
     this.npcDownedAt.delete(key);
@@ -1904,6 +1949,11 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     else if (cmd === "down") this.damagePlayer(client.sessionId, 1000, { zone: ZONE.TORSO }); // (a random zone at 1000 damage would take a limb)
     else if (cmd?.startsWith("sever:")) this.casualties.sever(client.sessionId, Number(cmd.slice(6)) as LimbId, -Math.sin(player.facing), -Math.cos(player.facing));
     else if (cmd === "restore") this.casualties.restoreLimbs(client.sessionId);
+    else if (cmd === "fire") {
+      // D-103, QA and the screenshots: the nearest grass that will burn, four metres ahead or as near to it as there is (the notice says where)
+      const at = this.fire.igniteNear(player.x - Math.sin(player.facing) * 4, player.z - Math.cos(player.facing) * 4, 24);
+      client.send("notice", { text: at ? `Fire lit at ${at.x.toFixed(0)}, ${at.z.toFixed(0)}.` : "Nothing near here will burn." });
+    }
     else if (cmd?.startsWith("give:")) {
       // give:all | give:<weapon id> : owns it and refills its ammunition (QA; the campaign layer will grant weapons and crates of shot)
       const arg = cmd.slice(5);

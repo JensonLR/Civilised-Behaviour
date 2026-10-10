@@ -1,6 +1,9 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
 import { PALETTE, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
 import { KESSAR, KESSAR_ANCHORS, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun, type KessarTerrain } from "./shared.ts";
+import { kessarCover } from "@cb/shared";
+// (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
+export { kessarCover };
 
 /**
  * The ground of Kessar Reach as vertex colour: ochre swells with patches of scrub, a pale beach shelving into wet sand, the packed customs yard and
@@ -25,18 +28,6 @@ function mix(out: Rgb, c: Triple, t: number): void {
   out.b += (c[2] - out.b) * k;
 }
 
-/** Plant cover 0..1 (grass tufts, bushes): scrub patches on the swells, none on roads, sand, in the gorge or on the fort's hill. Mirrors the paint. */
-export function kessarCover(x: number, z: number, h: number, slope: number): number {
-  const n1 = valueNoise(211, x / 13, z / 13);
-  const n2 = valueNoise(223, x / 4, z / 4);
-  const patch = smoothstep(0.42, 0.62, n1 + (n2 - 0.5) * 0.25);
-  const beach = smoothstep(84, 94, z);
-  const road = kessarRoad(x, z);
-  const yard = 1 - smoothstep(9, 15, Math.hypot(x, z - 6));
-  const gorge = 1 - smoothstep(0, 4.5, Math.abs(z - kessarRiverZ(x)) - kessarRiverHalf(x) - kessarWallRun(x) + 4.5);
-  const v = patch * (1 - beach) * (1 - road * 1.4) * (1 - yard) * (1 - gorge) * (1 - smoothstep(0.3, 0.6, slope)) * (1 - smoothstep(KESSAR.level + 2, KESSAR.level + 4, h));
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}
 
 export function kessarGroundColour(x: number, z: number, h: number, slope: number, out: Rgb): Rgb {
   const n1 = valueNoise(201, x / 11, z / 11);

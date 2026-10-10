@@ -1,5 +1,8 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
 import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, smoothstep, valueNoise, type Rgb, type SaltmarketTerrain, type Terrain } from "./shared.ts";
+import { saltmarketCover } from "@cb/shared";
+// (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
+export { saltmarketCover };
 
 /**
  * The ground of the Saltmarket Delta as vertex colour: grey-fawn silt in broad pale and dark patches, wet mud darkening toward every water's edge, a crust of salt (small amounts, on the driest ground),
@@ -23,15 +26,6 @@ function mix(out: Rgb, c: Triple, t: number): void {
   out.b += (c[2] - out.b) * k;
 }
 
-/** Plant cover 0..1 (reeds, sedge): thick at the water's edge and in the shallows, thinning on the dry plain; none on the planks' ground, the quay's apron, deep water or the sites. Mirrors the paint. */
-export function saltmarketCover(x: number, z: number, h: number, slope: number, water = 0): number {
-  const n1 = valueNoise(411, x / 17, z / 17);
-  const n2 = valueNoise(423, x / 5.1, z / 5.1);
-  const wet = 1 - smoothstep(0.05, 0.5, Math.abs(h - SALTMARKET.waterY - 0.15));   // near the waterline, either side
-  const patch = 0.3 + 0.7 * smoothstep(0.3, 0.6, n1 + (n2 - 0.5) * 0.3);
-  const v = (0.18 + 0.82 * wet) * patch * (1 - smoothstep(0.35, 0.7, slope)) * (water > 0.55 ? 0 : 1);
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}
 
 export function saltmarketGroundColour(x: number, z: number, h: number, slope: number, out: Rgb, water = 0): Rgb {
   const n1 = valueNoise(401, x / 13, z / 13);

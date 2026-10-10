@@ -23,6 +23,7 @@ import { regionSurfaceAt } from "../audio/surface.ts";
 import { newSignals, type MusicSignals } from "../audio/musicLayers.ts";
 import { getAtmosphere } from "../render/world/atmosphere.ts";
 import { Aftermath, planAftermath, type AftermathItem, type AftermathSite } from "../render/world/aftermath.ts";
+import { FireView, type BurningPerson } from "../render/FireView.ts";
 import { GroundTorches } from "../render/torch.ts";
 import { BattleLedger } from "./battleLedger.ts";
 import { MusicSignaller } from "./musicSignals.ts";
@@ -73,6 +74,8 @@ interface Actor {
   groundIn: number;
   /** performance.now() of the last pool this body bled where it fell (D-064): one pool per fall, not one per blow on a body already down. */
   bledAt: number;
+  /** D-103: performance.now() of this body's last cry while burning (the fire bites twice a second; they cry out now and then). */
+  burnCryAt: number;
 }
 
 /** D-099: how far (radians) the camera swings round from behind you during a talk: nearly side-on, so you and the speaker stand side by side in the picture (a small turn left them one behind the other). */
@@ -152,6 +155,7 @@ export class Game {
   /** The field remembers what a fight cost (game/battleLedger.ts) and the aftermath draws it (crows, hats, craters, crates, smoke): re-planned only when the ledger, the gore setting or the region changes. */
   private readonly ledger = new BattleLedger();
   private readonly aftermath: Aftermath;
+  private readonly fire: FireView;
   /** Torches lying where the raiders who carried them fell, burning down (scenery). */
   private readonly groundTorches: GroundTorches;
   /** What the last plan was made from (three scalars, compared every frame: no string is built in the frame loop). */
@@ -306,6 +310,10 @@ export class Game {
       if (Math.hypot(cam.x - x, cam.z - z) < 45) this.newsPlates.armCapture(performance.now()); // (D-085: a blast in view, photographed a moment later: the fireball up, the bodies in the air)
     };
     this.aftermath = new Aftermath(stage.scene, this.combat.fx, stage.decals, stage.outlines);
+    // D-103: fire that spreads (the server's grid, drawn; the plants on scorched ground burn to stubble)
+    this.fire = new FireView(stage.scene);
+    this.fire.onScorch = (burnt) => stage.setScorch(burnt);
+    this.fire.setRegion(session.region, session.world, session.room.state.seed);
     this.groundTorches = new GroundTorches(stage.scene);
     controls.canInteract = () => this.usable;
     controls.touchContext = () => this.touchCtx;
@@ -790,6 +798,7 @@ export class Game {
       this.rig.setWorld(world);
       this.combat.setWorld();
       this.stage.buildWorld(world, region, st.seed);
+      this.fire.setRegion(region, world, st.seed);
       if (hadSpan && !hasSpan(world)) {
         const B = KESSAR_ANCHORS.bridge;
         this.combat.bridgeFell(B.x, KESSAR.level - 1.5, B.z, B.width + 2, B.length, this.stage.bridgeFell());
@@ -846,6 +855,7 @@ export class Game {
     this.hitFx.dispose();
     this.debris.dispose();
     this.aftermath.dispose();
+    this.fire.dispose();
     this.groundTorches.dispose();
     this.controls.canInteract = () => true;
     this.controls.holdInteract = () => false;
@@ -916,6 +926,7 @@ export class Game {
     this.hitFx.update(dt);
     this.debris.update(dt);
     this.aftermath.update(dt);
+    this.updateFire(dt);
     this.groundTorches.update(dt);
     this.ledger.note(this.session.room.state.players);
     this.syncAftermath(dt);
@@ -973,6 +984,37 @@ export class Game {
     this.barks.frame(performance.now(), this.feetOf);
     this.overlay.frame(rawDt);
   }
+
+  /**
+   * D-103: the fire as the server has it (two strings), the people alight (their rows' `burn`, drawn where the interpolation has them), the crackle at the nearest flames, and the
+   * plain word to the one who is burning: crouch to roll it out.
+   */
+  private updateFire(dt: number): void {
+    const st = this.session.room.state;
+    this.fire.sync(st.fire ?? "", st.scorch ?? "");
+    let n = 0;
+    let mine = 0;
+    st.players.forEach((p, id) => {
+      if (!(p.burn > 0)) return;
+      if (id === this.session.sessionId) mine = p.burn;
+      if (n >= this.burners.length) return;
+      const b = this.burners[n++]!;
+      b.x = this.session.value(p, "x");
+      b.y = this.session.value(p, "y");
+      b.z = this.session.value(p, "z");
+      b.left = p.burn / 10;
+      b.seed = p.slot * 31 + p.npc;
+    });
+    this.fire.setPeople(this.burners, n);
+    this.fire.update(dt, this.stage.worldMs, this.stage.camera.position);
+    const me = this.session.predicted;
+    const near = me ? this.fire.nearest(this.session.value(me, "x"), this.session.value(me, "z")) : undefined;
+    this.audio.fire(near ? near.d : Infinity, near ? near.n : 0, mine > 0);
+    if (mine > 0 && !this.wasAlight) this.hud.showNotice("You're on fire! Crouch to roll it out, or get into water.");
+    this.wasAlight = mine > 0;
+  }
+  private readonly burners: BurningPerson[] = Array.from({ length: 12 }, () => ({ x: 0, y: 0, z: 0, left: 0, seed: 0 }));
+  private wasAlight = false;
 
   /** Which full-screen sheet is open, for the orientation card (it ticks the notice board, the supply manifest and the map room off from this). */
   private orientationSample(): SheetKind {
@@ -1589,6 +1631,18 @@ export class Game {
     }
     if (!a || !p) return;
     const h = a.body.height;
+    if (e.burn) {
+      // D-103: the flames on the body are the effect: no blood, no flinch; a cry now and then (the fire bites twice a second), and the jolt if it was me
+      const now = performance.now();
+      if (now - a.burnCryAt > 1400 || e.down) {
+        a.burnCryAt = now;
+        this.audio.hurt(this.session.value(p, "x"), this.session.value(p, "y") + h * 0.8, this.session.value(p, "z"), p.look, 0.6, e.id === this.session.sessionId);
+      }
+      if (e.down) a.body.hit(e, a.body.facing);
+      if (e.id === this.session.sessionId) this.rig.addShake(0.15);
+      this.combat.onHit(e);
+      return;
+    }
     const frac = e.zone === ZONE.HEAD ? 0.92 : e.zone === ZONE.TORSO ? 0.62 : e.zone === ZONE.ARM_L || e.zone === ZONE.ARM_R ? 0.6 : 0.3;
     const gore = getGore();
     const x = this.session.value(p, "x");
@@ -1647,7 +1701,7 @@ export class Game {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
     body.onTorchDropped = (x, y, z, yaw, seed) => this.groundTorches.drop(x, y, z, yaw, seed);
     const key = seedFromString(`${p.slot}:${p.name}:${p.npc}`) & 0xffff;
-    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015, bledAt: -Infinity };
+    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015, bledAt: -Infinity, burnCryAt: -Infinity };
   }
 
   private removeActor(a: Actor): void {

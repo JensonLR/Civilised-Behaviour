@@ -152,7 +152,8 @@ export class CollisionWorld {
   }
 }
 
-function insideFootprint(o: Obstacle, x: number, z: number, margin: number): boolean {
+/** Whether (x, z) lies inside an obstacle's footprint grown by `margin` (D-103: the fire's fuel map asks it too). */
+export function insideFootprint(o: Obstacle, x: number, z: number, margin: number): boolean {
   if (o.kind === "circle") {
     const dx = x - o.x;
     const dz = z - o.z;

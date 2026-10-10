@@ -290,6 +290,11 @@ export const PALETTE = {
     flameCore: 0xf6d685,
     ember: 0xb8502c,
     glow: 0xf0a04a,
+    // D-103, fire that spreads: the tongues' deep red tips, the ash on the scorched ground (the ground itself is \`charred\`), and the smoke of burning grass (darker and browner than a gun's)
+    flameRed: 0xb8452a,
+    scorchAsh: 0x5a5148,
+    fireSmoke: 0x4a433d,
+    fireSmokeLight: 0x8c847a,
   },
 
   /** Everyday materials shared by clothing, props and hats. */

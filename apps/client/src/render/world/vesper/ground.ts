@@ -1,6 +1,9 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
 import { PALETTE, smoothstep, valueNoise, vesperRoadX, vesperRoadness, VESPER_ANCHORS, type Rgb, type Terrain } from "./shared.ts";
 import type { VesperTerrain } from "./shared.ts";
+import { vesperCover, VESPER_POOL } from "@cb/shared";
+// (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
+export { vesperCover };
 
 /**
  * The ground of Vesper Gorge. Two layers: the VERTEX paint (the floor: packed dust, the pale gravel of the dry bed, the ore road, scree at the cliffs' feet, the green seep at the wharf, the plateau's
@@ -27,21 +30,9 @@ function mix(out: Rgb, c: Triple, t: number): void {
 }
 
 /** The seep's pool at the wharf (matches the plan's basin) and a second, small seep at the head. */
-const POOL = { x: 0, z: 134, r: 7 };
+const POOL = VESPER_POOL;
 const HEAD_SEEP = { x: -9, z: -90, r: 3.4 };
 
-/** Plant cover 0..1 (dry tufts, thorn scrub, snags): sparse, on the floor and the benches, never on the road, the bed, the cliffs or the scree. Mirrors the paint. */
-export function vesperCover(x: number, z: number, h: number, slope: number, floorY: number): number {
-  const n1 = valueNoise(411, x / 14, z / 14);
-  const n2 = valueNoise(413, x / 4.1, z / 4.1);
-  const patch = 0.25 + 0.75 * smoothstep(0.42, 0.7, n1 + (n2 - 0.5) * 0.3);
-  const road = vesperRoadness(x, z);
-  const bedU = 4.5 * Math.sin(z * 0.045 + 0.7);
-  const bed = 1 - smoothstep(1.6, 4.6, Math.abs(x - vesperRoadX(z) - bedU));
-  const rel = h - floorY;
-  const v = patch * (1 - road * 1.4) * (1 - bed * 0.85) * (1 - smoothstep(0.2, 0.55, slope)) * (rel > 14 ? 0 : 1) * (Math.hypot(x - POOL.x, z - POOL.z) < POOL.r + 2 ? 0 : 1);
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}
 
 export function vesperGroundColour(x: number, z: number, h: number, slope: number, floorY: number, out: Rgb): Rgb {
   const n1 = valueNoise(401, x / 11, z / 11);

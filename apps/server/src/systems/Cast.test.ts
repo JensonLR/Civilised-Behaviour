@@ -545,6 +545,26 @@ describe("Cast: voices of panic (D-073)", () => {
   });
 });
 
+describe("Cast: on fire (D-103)", () => {
+  it("a civilian alight bolts away from where the fire came from, crying out; a soldier alight loses his nerve and screams", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.cast.spawn([spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: 0, z: 0 } }), spec("s1", { post: { x: 20, z: 0 } })]);
+    r.tick(3);
+    r.cast.onFire("npc:h1", -4, 0); // (the fire came from the west)
+    r.tick(60);
+    const h = r.rows.get("npc:h1")!;
+    expect(h.x).toBeGreaterThan(2); // (she ran east, away from it)
+    expect(cries).toContain("npc:h1");
+    const b = (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get("npc:s1")!.brain;
+    r.cast.onFire("npc:s1", 16, 0);
+    expect(b.morale.shock).toBe(60);
+    expect(cries).toContain("npc:s1");
+    expect(() => r.cast.onFire("npc:nobody", 0, 0)).not.toThrow();
+  });
+});
+
 describe("Cast: budgets", () => {
   it("at most NAV.queriesPerTick paths per tick, and every brain gets a turn (round robin)", () => {
     const perTick: number[] = [];

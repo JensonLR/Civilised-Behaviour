@@ -1,6 +1,9 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
 import { PALETTE, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
 import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, highmarkRoadness, type HighmarkTerrain } from "./shared.ts";
+import { highmarkFieldMask, highmarkCover } from "@cb/shared";
+// (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
+export { highmarkFieldMask, highmarkCover };
 
 /**
  * The ground of Highmark as vertex colour: a golden savannah (patches of deeper gold and green, termite earth), the chalk road, a river bank of shingle and mud, and the five
@@ -38,24 +41,7 @@ export function tierOf(x: number, z: number): number {
   return j;
 }
 
-/** D-046: 1 inside the barley field (HIGHMARK_SITES.strike.field), easing to 0 over a metre and a half outside it. */
-export function highmarkFieldMask(x: number, z: number): number {
-  const f = HIGHMARK_SITES.strike.field;
-  const out = Math.max(f.x0 - x, x - f.x1, f.z0 - z, z - f.z1, 0);
-  return 1 - smoothstep(0, 1.5, out);
-}
 
-/** Plant cover 0..1 (grass tufts, bushes): the savannah, in patches; none on the road, the hill, the bank or in the water. Mirrors the paint. */
-export function highmarkCover(x: number, z: number, h: number, slope: number, water = 0): number {
-  const n1 = valueNoise(311, x / 15, z / 15);
-  const n2 = valueNoise(323, x / 4.2, z / 4.2);
-  const patch = 0.45 + 0.55 * smoothstep(0.22, 0.52, n1 + (n2 - 0.5) * 0.3);
-  const road = highmarkRoadness(x, z);
-  const hill = 1 - smoothstep(R[0]! + RUN + 3, R[0]! + RUN + 10, Math.hypot(x - C.x, z - C.z));
-  const bank = smoothstep(HIGHMARK.river.z - HIGHMARK.river.half - HIGHMARK.river.bank - 2, HIGHMARK.river.z - HIGHMARK.river.half - 4, z);
-  const v = patch * (1 - road * 1.4) * (1 - hill) * (1 - bank) * (1 - smoothstep(0.35, 0.7, slope)) * (water > 0 ? 0 : 1) * (1 - highmarkFieldMask(x, z));   // (the field grows barley, not wild grass)
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}
 
 export function highmarkGroundColour(x: number, z: number, h: number, slope: number, out: Rgb, water = 0): Rgb {
   const n1 = valueNoise(301, x / 11, z / 11);
