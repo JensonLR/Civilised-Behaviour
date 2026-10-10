@@ -118,6 +118,8 @@ export interface HitInfo {
   boot?: boolean;
   /** D-111: a horse went through him (floored as by a boot; the hit event says both, so the clients lay him flat and hear the hooves). */
   trample?: boolean;
+  /** D-114: and it was a stampeding herd, not a rider (the bill and the column say so). */
+  stampede?: boolean;
   /** D-108: what a thrown body met (a wall at speed, the ground from a height; the hit event says so: the clients hear the crunch). */
   splat?: boolean;
 }

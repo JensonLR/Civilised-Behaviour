@@ -980,6 +980,13 @@ export class Game {
       tmp.set(this.session.value(me, "x"), this.session.value(me, "y"), this.session.value(me, "z"));
       setListener(tmp, this.rig.yaw);
       this.stage.setViewer(tmp.x, tmp.z); // a room's roof lifts while you are inside it (docs/LEVEL_PLAN.md section 4, rule 7)
+      // D-114: the herds' runs, and the thunder of a running herd (hoofbeats from the middle of it, fast and loud, while it runs)
+      this.stage.setHerdRuns(this.session.room.state.herds ?? "");
+      this.herdBeat -= dt;
+      if (this.herdBeat <= 0 && this.stage.herdRunning(this.herdAt)) {
+        this.herdBeat = 0.09;
+        playSfx("hoof", { x: this.herdAt.x, y: this.session.world.terrainHeight(this.herdAt.x, this.herdAt.z), z: this.herdAt.z, volume: 1, key: "gallop" });
+      }
       const pf = this.session.predicted;
       this.rig.mounted = pf !== undefined && (pf.flags & FLAG.MOUNTED) !== 0;
       this.rig.mountSpeed01 = pf ? Math.hypot(this.session.value(pf, "vx"), this.session.value(pf, "vz")) / MOUNT.gallop : 0;
@@ -1791,6 +1798,9 @@ export class Game {
     return found;
   }
   private readonly finAt = { x: 0, z: 0, facing: 0 };
+  /** D-114: the next hoofbeat of a running herd, and where it is. */
+  private herdBeat = 0;
+  private readonly herdAt = { x: 0, z: 0 };
   private readonly ropeA = new Vector3();
   private readonly ropeB = new Vector3();
 

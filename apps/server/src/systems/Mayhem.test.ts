@@ -392,3 +392,25 @@ describe("D-113: the hold-up, in the bill", () => {
   });
 });
 
+describe("D-114: the stampede, in the bill", () => {
+  it("the one who set the herd running shouts; a stranger it tramples is billed and printed; our own, or the enemy's doing, are not", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: string[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (_id, kind) => barks.push(kind) });
+    m.begin(99, 2, "secure_crossing");
+    m.onStampedeStart("ada");
+    m.onStampedeStart("npc:s1");
+    expect(barks).toEqual(["stampede"]);
+    m.onStampede("npc:s1", "ada");
+    m.onStampede("bram", "ada");
+    m.onStampede("npc:s1", "npc:accident");
+    expect(m.bill.stampeded).toBe(1);
+    for (let i = 0; i < 80; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "stampede" && p.t.includes("Ada") && p.t.includes("Dunstan"))).toBe(true);
+    expect(billLine(m.bill)).toContain("1 man trampled by the herds");
+  });
+});
+

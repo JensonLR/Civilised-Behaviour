@@ -72,6 +72,7 @@ export * from "./mount.ts";
 export * from "./trample.ts";
 export * from "./shield.ts";
 export * from "./holdup.ts";
+export * from "./stampede.ts";
 export * from "./loadout.ts";
 export * from "./followers.ts";
 export * from "./command.ts";

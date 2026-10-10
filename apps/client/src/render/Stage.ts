@@ -207,6 +207,16 @@ export class Stage {
     this.decals.setGore(level);
   }
 
+  /** D-114: the herds' runs (the room state's `herds`): Highmark draws its herds stampeding from them. Once a frame; decoded only when they change. */
+  setHerdRuns(encoded: string): void {
+    this.worldView?.setHerdRuns?.(encoded);
+  }
+
+  /** D-114: where a herd is running now (into `out`); false when none is. */
+  herdRunning(out: { x: number; z: number }): boolean {
+    return this.worldView?.herdRunning?.(out) ?? false;
+  }
+
   /** Where the local player stands, once a frame: a region with walkable interiors lifts the roof over the room the viewer is in (docs/LEVEL_PLAN.md section 4, rule 7). */
   setViewer(x: number, z: number): void {
     this.worldView?.setViewer?.(x, z);

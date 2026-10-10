@@ -735,3 +735,25 @@ Tests: the framing function; the rule's quiet and its return with a weapon; the 
 - **Found by the tests.** An NPC row's `roped` starts unset, not 0, so "not already held" read as held for every NPC (and would have stopped the shield's seize as well). The checks now read the field as falsy, and the unit test's rows leave it unset as the real ones do.
 - **Looked at.** The hands-up pose in a line-up of four peoples.
 - **Not yet.** Unplayed by a human and not seen in a live game. No prompt says that a man is wavering; whether players find it without one is the open question.
+
+**D-114 The stampede (2026-10-10).** The eleventh of the AAA mechanics (ideas, never code; D-103): the open-world games' animal stampedes. Highmark's 92 grazers were scenery drawn from the seed and the clock (`herdAt`); now a careless shot sets four hundredweight of beef running at the nearest Englishman.
+- **The run** (`shared/stampede.ts`). A herd runs as one: away from what frightened it, up to flat out (9 m/s) in 0.7 s, as far as the way is open (up to 55 m), then it pulls up and draws back together over a few seconds where it ended up. Each animal keeps its own pace (±12%) and its own side of the fan (up to a third of the distance run), so it spreads like a herd and not a block. A run is seven numbers (the herd, when, the way, how far, where it stood before), so the whole stampede is one short string on the room state (`WorldState.herds`, appended), and every client and the server work out every animal's place and pace from it and the clock. Pure and allocation-free.
+- **What sets it off** (`server/systems/Stampedes.ts`).
+  - A report (the same noise the Cast hears: a pistol carries 90 m, a rifle 150 m, a blast more) within 45 m of a herd's middle and within the report's own reach.
+  - Burning ground within 14 m of a herd's middle (checked every 10 ticks, D-103's fire grid); nobody's hand, so nobody is credited.
+  - A herd that has just stopped will not run again for 8 s.
+- **Where it goes.** Straight away from the fright, else turned a quarter either way, whichever is more open; it stops short of water, a bank too steep, anything built or a rock, and the map's edge. Penned in (under 12 m open every way) it mills about and nobody is hurt.
+- **In the way.** Every animal at a run is a horse at a gallop (D-111): whoever stands at its chest (1.1 m, on the ground) is ridden down by the same trample, flung the way it runs, once in 1.5 s at most. Players, hands and foes alike; never a man down, held, a beast or a rider. Credited to whoever's report set it running (an accident's key when nobody did), so the grudges, the bill and the mayhem all follow.
+- **The noise.** The one who set it off shouts ("Not the cattle!"); a man of another side trampled by a herd the party alarmed goes on the Butcher's Bill ("men trampled by the herds", 2 spectacle each) and into the column. The herd gallops (a stride's lift and rock on the instanced grazers) and its hooves thunder where it runs (the horse's hoof sound, from the herd's middle).
+- **Rejected.**
+  - Herds on the ground as physics bodies (92 more bodies on the server for scenery; the run is a formula instead).
+  - Other animals running (Highmark's herds are the only open-ground grazers; elsewhere a dozen sheep and goats keep to set walks about a village, and a stampede of sheep is a different joke).
+  - Steering a stampede at the enemy by riding at it (the fright is the report; aiming it is the player's job).
+  - Animals hurt by the trample or the fire (they stay scenery; the joke is the men).
+- **Tested.**
+  - Shared: the run's speed profile (up, flat out, pulled up, never faster), an animal before, during and after a run, and the codec (malformed parts dropped).
+  - Server unit: a report near a herd runs it the right way and publishes it, a far one or one during the rest does not; a man in the way is struck once, credited to the shooter, the downed and riders spared; water stops it on the bank; burning grass sets it running.
+  - A real room: Ada fires her pistol beside the west herd, the run is on the state, and Bram beyond it is trampled and loses health. Mutation-checked: the noise hook unwired.
+  - The client draws the herd where the server says it is, at a gallop while it runs; the bill and the column.
+- **Looked at.** In a live Highmark game: the debug fire lit beside the west herd, and the herd bolting away from it, fanned and at a gallop.
+- **Not yet.** Unplayed by a human. The trample uses the riders' numbers; whether a stampede is too deadly or too easy to stand clear of is a question for play.

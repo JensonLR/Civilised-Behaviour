@@ -62,6 +62,7 @@ import {
   NPC_SIDE,
   SHIELD,
   HOLDUP,
+  herdPlan,
   rayWorld,
   newWorldHit,
   NPC,
@@ -180,6 +181,7 @@ import { Incidents } from "../systems/Incidents.ts";
 import { Pacing } from "../systems/Pacing.ts";
 import { Flung } from "../systems/Flung.ts";
 import { HoldUps } from "../systems/HoldUps.ts";
+import { Stampedes } from "../systems/Stampedes.ts";
 import { Grudges } from "../systems/Grudges.ts";
 import { Fire } from "../systems/Fire.ts";
 import { Mayhem } from "../systems/Mayhem.ts";
@@ -339,6 +341,20 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     surrender: (key, by) => this.surrender(key, by),
   });
   private readonly sightHit = newWorldHit();
+  /** D-114: Highmark's herds, which run from reports and fire and trample whoever is in the way. */
+  private readonly stampedes = new Stampedes({
+    players: { forEach: (cb) => this.state.players.forEach(cb) },
+    world: () => this.world,
+    nowSec: () => (performance.now() - this.bornAt) / 1000,
+    trample: (by, key, speed, fx, fz, ox, oz) => this.combat.trample(by || ACCIDENT_OWNER, key, speed, fx, fz, ox, oz, true),
+    publish: (s) => {
+      this.state.herds = s;
+    },
+    started: (_k, by) => {
+      if (by && this.scenario?.live) this.mayhem.onStampedeStart(by);
+    },
+    fireNear: (x, z, r, out) => this.fire.nearestBurning(x, z, r, out),
+  });
   /** D-109: the men the party maimed, remembered; one may come back. */
   private readonly grudges = new Grudges({
     players: { forEach: (cb) => this.state.players.forEach(cb), get: (id) => this.state.players.get(id) },
@@ -535,6 +551,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       // A report is heard by the cast (civilians bolt, soldiers start) and by the site (the noise meter).
       noise: (x, z, radius, src) => {
         this.cast.noise(x, z, radius, src);
+        this.stampedes.onNoise(x, z, radius, src); // (D-114: and the herds hear it)
         this.scenario?.onNoise(x, z, radius, src);
       },
       hostile: (shooter, target) => shooter === ACCIDENT_OWNER || this.cast.hostileTo(shooter, target), // (D-071: an accident's powder respects no side)
@@ -855,6 +872,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.cast.tick(ctx.dt);
         this.flung.tick(ctx.dt); // (D-108: after the rows have stepped)
         this.holdUps.tick(ctx.dt); // (D-113: who is in whose sights)
+        this.stampedes.tick(); // (D-114: the herds that are running, and who is in their way)
         this.grudges.tick(); // (D-109: the returning man says his piece when the party comes near)
         tickProbe.lap("cast");
         this.followers.tick(ctx.dt);
@@ -1322,6 +1340,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private buildRegion(id: RegionId): void {
     const seed = this.state.seed;
     this.world = createRegionWorld(id, seed, this.worldOpts());
+    this.stampedes.begin(id === "highmark" ? herdPlan(seed) : undefined); // (D-114: the clients draw the same herds from the same seed)
     this.physics = new PhysicsWorld(this.world);
     this.state.props.clear();
     for (const spawn of regionProps(id, seed, this.world)) {
@@ -2074,7 +2093,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       }
       if (this.scenario?.live) {
         if (hit?.boot) this.mayhem.onBoot(sessionId, hit.by ?? ""); // (D-108)
-        if (hit?.trample) this.mayhem.onTrample(sessionId, hit.by ?? ""); // (D-111)
+        if (hit?.stampede) this.mayhem.onStampede(sessionId, hit.by ?? ""); // (D-114: a herd the party set running)
+        else if (hit?.trample) this.mayhem.onTrample(sessionId, hit.by ?? ""); // (D-111)
         const off = lost;
         this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
       }

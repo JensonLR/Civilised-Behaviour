@@ -1,8 +1,8 @@
 import vm from "node:vm";
 import v8 from "node:v8";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
-import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
+import { BufferGeometry, Matrix4, Mesh, Scene, Vector3, type Material } from "three";
+import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, encodeHerdRuns, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildHighmarkCloth } from "./cloth.ts";
@@ -369,3 +369,29 @@ describe("Highmark view: the strike's props (D-046)", () => {
     view.dispose();
   });
 });
+
+describe("D-114: the herds stampede", () => {
+  it("a run on the state sets a herd galloping the run's way, bounding as it goes; the others graze on; nothing is retained per frame", () => {
+    const scene = new Scene();
+    const h = new Herds(scene, world, 7, false, 0, () => {});
+    const mesh = scene.getObjectByName("herds") as unknown as { getMatrixAt(i: number, m: Matrix4): void };
+    const at = (i: number): Vector3 => {
+      const m = new Matrix4();
+      mesh.getMatrixAt(i, m);
+      return new Vector3().setFromMatrixPosition(m);
+    };
+    h.update(20);
+    const still = at(1);
+    const other = at(h.plan.herds[0]!.n + 1);
+    h.setRuns(encodeHerdRuns([{ k: 0, t0: 20, fx: 1, fz: 0, dist: 40, ox: 0, oz: 0 }]));
+    h.update(22.5);
+    expect(h.runningAt.n).toBeGreaterThan(0);
+    const run = at(1);
+    expect(run.x - still.x).toBeGreaterThan(10); // (east, at a gallop: the grazing drift moves it a few centimetres)
+    const otherNow = at(h.plan.herds[0]!.n + 1);
+    expect(Math.hypot(otherNow.x - other.x, otherNow.z - other.z)).toBeLessThan(3); // (another herd grazes on)
+    h.update(60);
+    expect(h.runningAt.n).toBe(0);
+  });
+});
+

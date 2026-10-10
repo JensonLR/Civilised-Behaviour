@@ -378,6 +378,20 @@ export class HighmarkView implements RegionView {
     }
   }
 
+  /** D-114: the herds' runs (the room state's `herds`). */
+  setHerdRuns(encoded: string): void {
+    this.herds?.setRuns(encoded);
+  }
+
+  /** D-114: where the running animals are now (into `out`); false when no herd is running. */
+  herdRunning(out: { x: number; z: number }): boolean {
+    const r = this.herds?.runningAt;
+    if (!r || r.n === 0) return false;
+    out.x = r.x;
+    out.z = r.z;
+    return true;
+  }
+
   update(t: number, camera?: { x: number; y?: number; z: number }, worldSec?: number): void {
     worldTime.value = t;
     this.hillU.uSailAngle.value = t * 0.32;
