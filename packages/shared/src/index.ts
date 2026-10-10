@@ -116,3 +116,4 @@ export * from "./groundCover.ts";
 export * from "./fire.ts";
 export * from "./hitReaction.ts"; // D-104: where a blow lands decides what it does
 export * from "./lasso.ts"; // D-106: the lariat
+export * from "./pacing.ts"; // D-107: the pacing director

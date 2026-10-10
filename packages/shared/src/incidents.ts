@@ -1,6 +1,7 @@
 import type { CampaignState, IncidentId, IncidentRecord, IncidentResult, RegionId, ScenarioTemplateId } from "./campaignTypes.ts";
 import { NPC } from "./campaignTypes.ts";
 import type { NpcSpec } from "./expeditionTypes.ts";
+import { PACING } from "./pacing.ts";
 import { hash3 } from "./rng.ts";
 import { WEAPON } from "./weapons.ts";
 import { TERMS } from "./scenarios/terms.ts";
@@ -81,6 +82,15 @@ export const collectorsWelcome = (template: ScenarioTemplateId): boolean => TERM
 /** Seconds into the run it may fire (it then also waits for calm). */
 export const incidentDelayS = (c: CampaignState, template: ScenarioTemplateId, seed: number): number =>
   INCIDENT.delayMinS + (hash3(seed >>> 0, Math.max(0, Math.round(c.day)), 0xde1a, TAG[template]) % (INCIDENT.delayMaxS - INCIDENT.delayMinS + 1));
+
+/**
+ * Is the run's incident due? `t` seconds into the run, its dealt `delay`, `calm` seconds without hostilities. D-107: a party the pacing director finds COASTING meets it
+ * from `PACING.incidentMinS` instead of waiting out the delay, and none starts while the run is PRESSED (at its height or easing off).
+ */
+export function incidentDue(t: number, delay: number, calm: number, coasting: boolean, pressed: boolean): boolean {
+  if (pressed || !(calm >= INCIDENT.calmS)) return false;
+  return t >= delay || (coasting && t >= PACING.incidentMinS);
+}
 
 /**
  * Where it happens: on one of eight bearings from the party's centre, 22..32 m out, the first open spot in the bounds; of those, the one farthest from every hostile
