@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FIRE, FireGrid, decodeBurning, decodeBurnt, type FireWeather } from "./fire.ts";
+import { FIRE, FireGrid, decodeBurning, decodeBurnt, fireRoll, type FireWeather } from "./fire.ts";
+import { hash3 } from "./rng.ts";
 import { createRegionWorld } from "./regions.ts";
 import { highmarkRoadDistance, HIGHMARK } from "./highmark.ts";
 import { windAt } from "./weather.ts";
@@ -201,3 +202,17 @@ describe("D-103: the wind", () => {
     expect(headings.size).toBeGreaterThan(3);
   });
 });
+
+describe("D-103: the step's rolls", () => {
+  it("are hash3 in its top 30 bits, exactly (a small integer the engine never boxes; the fires burn as hash3 made them)", () => {
+    for (let i = 0; i < 2000; i++) {
+      const a = (i * 2654435761) | 0;
+      const b = i * 7919;
+      const c = i >> 2;
+      const d = i % 13;
+      expect(fireRoll(a, b, c, d)).toBe(hash3(a, b, c, d) >>> 2);
+      expect(fireRoll(a, b, c, d)).toBeLessThan(2 ** 30);
+    }
+  });
+});
+
