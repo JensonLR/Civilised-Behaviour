@@ -2,7 +2,7 @@ import vm from "node:vm";
 import v8 from "node:v8";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Matrix4, Mesh, Scene, Vector3, type Material } from "three";
-import { HIGHMARK_ANCHORS as A, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, encodeHerdRuns, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
+import { HIGHMARK_ANCHORS as A, HIGHMARK_FIELDS, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, encodeHerdRuns, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildHighmarkCloth } from "./cloth.ts";
@@ -293,12 +293,16 @@ describe("Highmark view: scatter", () => {
   it("D-046: the barley is a field: hundreds of clumps in north-south rows inside the strike's field, where the rules count the barley; no wild grass or scrub in it; none on the test preset", () => {
     const a = planHighmarkScatter(world, PRESETS.medium);
     const f = HIGHMARK_SITES.strike.field, B = HIGHMARK_SITES.strike.barley;
-    expect(a.barley.length).toBeGreaterThan(400);
-    const rows = new Set(a.barley.map((b) => Math.round((b.x - f.x0 - f.row / 2) / f.row)));
+    const inPlot = (b: { x: number; z: number }, p: { x0: number; x1: number; z0: number; z1: number }): boolean => b.x >= p.x0 - 0.2 && b.x <= p.x1 + 0.2 && b.z >= p.z0 - 0.2 && b.z <= p.z1 + 0.2;
+    const strike = a.barley.filter((b) => inPlot(b, f));
+    expect(strike.length).toBeGreaterThan(400);
+    const rows = new Set(strike.map((b) => Math.round((b.x - f.x0 - f.row / 2) / f.row)));
     expect(rows.size).toBeGreaterThanOrEqual(Math.floor((f.x1 - f.x0) / f.row) - 1);
+    for (const b of strike) expect(Math.hypot(b.x - B.x, b.z - B.z), "inside the rules' barley").toBeLessThan(B.r + 0.5);
+    // (D-116: and every clump anywhere stands in one of the Grange's barley plots)
+    const plots = HIGHMARK_FIELDS.filter((p) => p.crop === "barley");
     for (const b of a.barley) {
-      expect(b.x >= f.x0 - 0.2 && b.x <= f.x1 + 0.2 && b.z >= f.z0 - 0.2 && b.z <= f.z1 + 0.2, `${b.x},${b.z} in the field`).toBe(true);
-      expect(Math.hypot(b.x - B.x, b.z - B.z), "inside the rules' barley").toBeLessThan(B.r + 0.5);
+      expect(plots.some((p) => inPlot(b, p)), `${b.x},${b.z} in a barley plot`).toBe(true);
       expect(Number.isFinite(b.y + b.sy)).toBe(true);
     }
     // (the field's edge thins the wild grass over a metre and a half; none grows in the field itself, and no scrub at all where it shows)

@@ -1,6 +1,7 @@
-import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, Rng, hash3, highmarkRoadDistance, type CollisionWorld, type Obstacle } from "./shared.ts";
+import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_FIELDS, Rng, fieldCover, hash3, highmarkRoadDistance, type CollisionWorld, type Obstacle } from "./shared.ts";
 import type { Item, ScatterDetail } from "../scatter.ts";
-import { highmarkCover, highmarkFieldMask, visualY } from "./ground.ts";
+import { highmarkCover, visualY } from "./ground.ts";
+import { planFieldScatter } from "../fieldScatter.ts";
 
 /**
  * Where Highmark's plants and stones go, as plain data (no three.js: placement is unit-tested in Node): the acacia flats and the termite mounds are the world's own `tree` and `rock`
@@ -16,15 +17,22 @@ export interface HighmarkScatter {
   grass: Item[];
   pebbles: Item[];
   reeds: Item[];
-  /** D-046: the barley field's planted clumps, in rows (HIGHMARK_SITES.strike.field). */
+  /** D-046: the barley field's planted clumps, in rows (HIGHMARK_SITES.strike.field); D-116: every barley plot of the Grange's (HIGHMARK_FIELDS). */
   barley: Item[];
+  /** D-116: what stands in the fields (the world's `hay` and `scarecrow` obstacles, from `fieldThings`): stooks on the stubble, haycocks on the hay, scarecrows in the crop. */
+  stooks: Item[];
+  haycocks: Item[];
+  scarecrows: Item[];
+  /** D-116: the plough's ridges on the fallow and the drills of the young green, in short lengths that follow the ground (`sz` is the length, `tiltX` the slope along it). */
+  furrows: Item[];
+  drills: Item[];
 }
 
 const h01 = (seed: number, a: number, b = 0): number => hash3(seed, Math.round(a * 100), Math.round(b * 100)) / 4294967296;
 const item = (x: number, y: number, z: number, yaw: number, sx: number, sy: number, sz: number, cls = 0, v = 0, tiltX = 0, tiltZ = 0): Item => ({ x, y, z, yaw, sx, sy, sz, cls, v, tiltX, tiltZ });
 
 export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail): HighmarkScatter {
-  const out: HighmarkScatter = { acacia: [], mounds: [], bushes: [], grass: [], pebbles: [], reeds: [], barley: [] };
+  const out: HighmarkScatter = { acacia: [], mounds: [], bushes: [], grass: [], pebbles: [], reeds: [], barley: [], stooks: [], haycocks: [], scarecrows: [], furrows: [], drills: [] };
   const h = (x: number, z: number): number => world.terrainHeight(x, z);
   const water = (x: number, z: number): number => (world.terrain as { waterDepth?: (x: number, z: number) => number }).waterDepth?.(x, z) ?? 0;
   const blocked = (x: number, z: number, margin: number): boolean => {
@@ -77,7 +85,7 @@ export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail
   for (let i = 0, placed = 0; placed < detail.bushes && i < detail.bushes * 8; i++) {
     const x = rng.range(-145, 145);
     const z = rng.range(-120, 112);
-    if (!free(x, z, 0.8) || highmarkFieldMask(x, z) > 0) continue;   // (no thorn scrub in the barley)
+    if (!free(x, z, 0.8) || fieldCover(HIGHMARK_FIELDS, x, z) > 0) continue;   // (no thorn scrub in the fields)
     const s = 0.8 + rng.next() * 0.9;
     out.bushes.push(item(x, h(x, z) - 0.05, z, rng.next() * 6.28, s * (0.9 + rng.next() * 0.3), s * (0.7 + rng.next() * 0.5), s, 0, rng.next()));
     placed++;
@@ -107,20 +115,13 @@ export function planHighmarkScatter(world: CollisionWorld, detail: ScatterDetail
     const s = 0.7 + gr.next() * 0.9;
     out.grass.push(item(x, hh - 0.03, z, gr.next() * 6.28, s * (0.9 + gr.next() * 0.3), s * (1.0 + gr.next() * 0.9), s * (0.9 + gr.next() * 0.3), gr.chance(0.35) ? 1 : 0, gr.next()));
   }
-  // D-046: the barley field, planted in north-south rows a clump every ~0.55 m (thinned with the grass budget; none at all where the preset draws no grass), round any obstacle
-  if (detail.grassTufts > 0) {
-    const f = HIGHMARK_SITES.strike.field;
-    const step = 0.55 / Math.min(1, Math.max(0.45, detail.grassTufts / 5000));
-    const br = new Rng(0xba41);
-    for (let x = f.x0 + f.row / 2; x < f.x1; x += f.row) {
-      for (let z = f.z0 + step / 2; z < f.z1; z += step) {
-        const px = x + br.range(-0.1, 0.1), pz = z + br.range(-0.15, 0.15);
-        if (blocked(px, pz, 0.35) || water(px, pz) > 0 || highmarkRoadDistance(px, pz) < HIGHMARK.roadHalf + 1) continue;
-        const sc = 0.92 + br.next() * 0.22;
-        out.barley.push(item(px, h(px, pz) - 0.02, pz, br.next() * 6.28, sc, sc * (0.95 + br.next() * 0.15), sc, 0, br.next()));
-      }
-    }
-  }
+  // D-046 / D-116: the Grange's fields (`fieldScatter.ts`, shared with Hollowmere): the barley in its rows (the strike's field first, sown thick on the stream it always had; the
+  // Grange's other barley a little thinner, which reads the same from the road and keeps to the budget), the stooks, haycocks and scarecrows, the plough's ridges and the drills
+  const fields = planFieldScatter(
+    { plots: HIGHMARK_FIELDS, h, blocked, sow: (x, z) => water(x, z) === 0 && highmarkRoadDistance(x, z) >= HIGHMARK.roadHalf + 1, barleySeed: 0xba41, barleyStep: [0.55, 0.75] },
+    detail,
+  );
+  Object.assign(out, fields);
   // reeds on the river's banks (and the water's edge beside the quay)
   const rr = new Rng(0x5e3d);
   const rz = HIGHMARK.river.z;

@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
 import { PALETTE, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
-import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_SITES, highmarkRoadness, type HighmarkTerrain } from "./shared.ts";
+import { HIGHMARK, HIGHMARK_ANCHORS, HIGHMARK_FIELDS, highmarkRoadness, plotAt, type HighmarkTerrain } from "./shared.ts";
 import { highmarkFieldMask, highmarkCover } from "@cb/shared";
 // (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
 export { highmarkFieldMask, highmarkCover };
@@ -43,6 +43,8 @@ export function tierOf(x: number, z: number): number {
 
 
 
+const plotHit = { m: 0 };
+
 export function highmarkGroundColour(x: number, z: number, h: number, slope: number, out: Rgb, water = 0): Rgb {
   const n1 = valueNoise(301, x / 11, z / 11);
   const n2 = valueNoise(303, x / 3.3, z / 3.3);
@@ -56,11 +58,29 @@ export function highmarkGroundColour(x: number, z: number, h: number, slope: num
   mix(out, G.green, (1 - smoothstep(0.28, 0.5, valueNoise(313, x / 21, z / 21))) * 0.55 * (1 - smoothstep(-0.6, 0.6, h - HIGHMARK.level)));
   mix(out, G.greenDeep, smoothstep(0.7, 0.85, n3) * 0.18);
   mix(out, G.earth, smoothstep(0.78, 0.9, n2) * 0.3);
-  // D-046: the barley field, worked: earth between the rows and straw along them (the rows run north-south, a row every HIGHMARK_SITES.strike.field.row metres)
-  const field = highmarkFieldMask(x, z);
-  if (field > 0) {
-    mix(out, G.earth, field * 0.55);
-    mix(out, G.pale, field * (0.5 + 0.5 * Math.cos((x * Math.PI * 2) / HIGHMARK_SITES.strike.field.row)) * 0.45);
+  // D-046 / D-116: the Grange's fields, worked (the rows run north-south, a row every `plot.row` metres), each crop its own ground: the barley's earth between straw rows,
+  // the young green in drills on bare earth, the stubble's pale straw with the drills showing, the mown hay's sward and windrows, the plough's ridge and furrow
+  const fi = plotAt(HIGHMARK_FIELDS, x, z, plotHit);
+  if (fi >= 0) {
+    const p = HIGHMARK_FIELDS[fi]!;
+    const m = plotHit.m;
+    const rowK = 0.5 + 0.5 * Math.cos((x * Math.PI * 2) / p.row);
+    if (p.crop === "barley") {
+      mix(out, G.earth, m * 0.55);
+      mix(out, G.pale, m * rowK * 0.45);
+    } else if (p.crop === "green") {
+      mix(out, G.earth, m * 0.7);
+      mix(out, G.green, m * rowK * 0.8);
+    } else if (p.crop === "stubble") {
+      mix(out, G.pale, m * 0.72);
+      mix(out, G.earth, m * (1 - rowK) * 0.3);
+    } else if (p.crop === "hay") {
+      mix(out, G.green, m * 0.3);
+      mix(out, G.pale, m * rowK * 0.4);
+    } else {
+      mix(out, G.earth, m * 0.85);
+      mix(out, G.earthDark, m * rowK * 0.55);
+    }
   }
   // the river's bank and bed: mud at the edge, shingle under the water, reed-green on the south bank
   const rz = HIGHMARK.river.z;

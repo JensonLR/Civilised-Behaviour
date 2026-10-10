@@ -777,3 +777,24 @@ What changed:
 - **Found by the tests.** Three room tests leaned on the old strew: the injury tests wanted a lone crate near the spawn (they now set out their own, alone in the cleared ring), the resume test walked into a crate's neighbour in a stack (it now stands on the open side and delivers whichever crate it lifted), and the aim test's open-bearing check looked along a level line while the crosshair's ray slants down to the chest, which a low camp crate could meet once the finger-post that had ruled that bearing out was gone (it now checks the ray the camera casts). The pinned hash of Hollowmere's world is one obstacle lighter.
 - **Looked at.** Every arrival in a live game, from the arrival view and four headings: Hollowmere's opening view is the map room with nothing in the foreground; Highmark's is the road and the capital with the clerk's desk by the sign; Kessar's, Vesper's and Saltmarket's are clean.
 - **Not yet.** The other half of the owner's note, the sparse land between the landing and the objective, is the next pass (D-116).
+
+**D-116 The Grange's fields (2026-10-10).** The other half of the owner's note on D-115: the world "feels very sparse". The emptiest stretch was Highmark's plain: from the quay to the foot of the hill, 130 m of road through grass with five milestones, 38 acacias and 16 termite mounds over some 60,000 m². It is now worked land.
+- **One list** (`HIGHMARK_FIELDS`, generic rules in `shared/fields.ts`): eight plots, axis-aligned, a crop each, rows a set distance apart along z. The Reapers' barley (D-046, where the strike's rules count it) is the first; then hay and young green crop west of the road, stubble, barley and a ploughed fallow east of it, and stubble and green further out. They keep off the road, every story point, the herds' grazing grounds, the drovers' track and the ground the Society's outpost grows into (its town reaches x = -28: the hay field was moved east of it when the outpost test caught a haycock in a house).
+- **Everything reads that list.**
+  - The ground's paint, per crop: earth and straw rows for the barley, drills on bare earth for the green, pale stubble, the mown sward and windrows of the hay, ridge and furrow on the plough.
+  - The planted barley (every barley plot; the Grange's a little thinner than the strike's, which reads the same from the road and keeps the high preset inside its triangle ceiling).
+  - The plough's ridges and the young crop's drills as low prisms in 2.5 m lengths that each sit on the ground under them (a vertex a metre apart cannot paint rows a metre apart: the first look showed bare patches).
+  - What stands in a field (`fieldThings`): stooks in rows on the stubble, haycocks on the hay, and in each standing crop a scarecrow, which the Grange has dressed as a gentleman of the Society in a red coat and a pith helmet over a sack face. All are solid (what you see is what you bump into) and placed after the dressing, so no acacia or mound moved; a mound in a field has been dug out, an acacia elsewhere in one stays (the plough goes round it).
+  - The grass and the scrub do not grow in the fields.
+  - **The fire** (D-103): a field burns as its crop does, whatever the patch of country (ripe barley, stubble and hay go up; the young green barely; a ploughed field is a firebreak), and a stook or a haycock is fuel, not a wall. The stampede (D-114) runs through the crops and stops at a haycock.
+- **Rejected.**
+  - Hedges or walls round the fields (an open field system; the herds still run across them).
+  - A farmstead this pass (buildings bring doors, rooms and the level audit: the next pass on the plain, if it is still wanted).
+  - Fields in the other regions (Hollowmere's empty south is next, in its own idiom; Kessar's dry coast is not farmland).
+  - Raising the triangle ceiling (the new barley is sown thinner and the stooks are lighter instead).
+- **Tested.**
+  - The field rules: the mask, the strongest plot, the crops' fuel, things inside their plot and apart, deterministic.
+  - Highmark's plots: no overlap; clear of the road, the herds' middles, the outpost's ground and every story point; the things solid in the world; a haycock is fuel and the plough is a firebreak (mutation-checked: a haycock counted as a wall fails it).
+  - The client: the barley in barley plots only, the strike's field still sown thick where the rules count it; no plant, stone or tree through anything (the overlap audit caught a drill through a scarecrow's post); nothing floating; every preset inside `HIGHMARK_VIEW_BUDGET`.
+- **Looked at.** From the road at the landing, from above, and up close at each crop (the hay with its haycocks, the stooks, the barley with its scarecrow, the drills, the plough).
+- **Not yet.** Unplayed. Hollowmere's empty south is the next pass.

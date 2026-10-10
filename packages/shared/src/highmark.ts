@@ -7,6 +7,7 @@ import type { NavOptions } from "./nav.ts";
 import { distToPaths, levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import type { AuditDoor } from "./levelAudit.ts";
 import { PropKind, type PropKindId, type PropSpawn } from "./props.ts";
+import { fieldCover, fieldThings, type FieldPlot } from "./fields.ts";
 import { ARRIVAL_TOWARD, arrivalCentre, barrelHuddle, bottles, chairCircle, chairRow, compose, crateStack, desk, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng, hash3, hashFloat } from "./rng.ts";
 import { withOutpost } from "./outpost.ts";
@@ -104,6 +105,22 @@ export const HIGHMARK_SITES = {
     range: 112,
   },
 } as const;
+
+/**
+ * D-116: the Grange's fields, worked land on both sides of the Processional Road from the quay to the hill (the owner: "the world feels very sparse"; the plain was 130 m
+ * of grass). The Reapers' barley (the strike's, D-046) is the first; the rest keep clear of the road, the story points, the herds' grazing grounds, the drovers' track
+ * and the Society's outpost. The paint, the planted barley, the stooks and haycocks, a scarecrow, the grass round them and the fire's fuel all read this one list (`fields.ts`).
+ */
+export const HIGHMARK_FIELDS: readonly FieldPlot[] = [
+  { id: "strike", ...HIGHMARK_SITES.strike.field, crop: "barley" },
+  { id: "hay.west", x0: -24, x1: -11, z0: 66, z1: 96, row: 1.4, crop: "hay" },   // (east of where the outpost's town grows, x <= -25)
+  { id: "green.west", x0: -31, x1: -13, z0: 3, z1: 21, row: 0.8, crop: "green" },
+  { id: "stubble.east", x0: 9, x1: 30, z0: 58, z1: 79, row: 1.1, crop: "stubble" },
+  { id: "barley.east", x0: 11, x1: 28, z0: 19, z1: 37, row: 0.9, crop: "barley" },
+  { id: "fallow.east", x0: 13, x1: 33, z0: -5, z1: 10, row: 1.2, crop: "fallow" },
+  { id: "stubble.far", x0: 40, x1: 62, z0: 6, z1: 28, row: 1.1, crop: "stubble" },
+  { id: "green.far", x0: -88, x1: -68, z0: 8, z1: 28, row: 0.8, crop: "green" },
+];
 
 // ---- the plan ---------------------------------------------------------------------------------------------------------------------------
 
@@ -604,6 +621,15 @@ export function highmarkObstacles(terrain: Terrain, seed: number, opts?: { outpo
     out.push({ kind: "circle", tag: "rock", x, z, r, y0: y - 1.2, y1: y + r * 1.5 });   // a termite mound
     k++;
   }
+  // D-116: what stands in the Grange's fields, after the dressing (so no acacia or mound has moved): the stooks, the haycocks, the scarecrows. A mound in a field has been
+  // dug out by the Grange; an acacia standing where a haycock is built is not there (an acacia elsewhere in a field stays: the plough goes round it).
+  const things = HIGHMARK_FIELDS.flatMap(fieldThings);
+  for (let i = out.length - 1; i >= 0; i--) {
+    const o = out[i]!;
+    if (o.kind !== "circle" || (o.tag !== "tree" && o.tag !== "rock")) continue;
+    if ((o.tag === "rock" && fieldCover(HIGHMARK_FIELDS, o.x, o.z) > 0.2) || things.some((t) => Math.hypot(t.x - o.x, t.z - o.z) < t.r + o.r + 0.8)) out.splice(i, 1);
+  }
+  for (const t of things) circle(t.kind === "scarecrow" ? "scarecrow" : "hay", t.x, t.z, t.r, t.height);
   // D-056: the Society's outpost on the grass west of the landing (the dressing above is the same at every stage; a stage clears it out of the ring and adds its own)
   return withOutpost(out, terrain, "highmark", opts, ["tree", "rock"]);
 }

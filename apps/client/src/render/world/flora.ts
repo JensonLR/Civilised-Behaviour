@@ -774,3 +774,81 @@ export function berryBushGeometry(lod: Lod): BufferGeometry {
   }
   return k.build()!;
 }
+
+// ---- D-116: what stands in a worked field (shared/fields.ts: FIELD_THING sizes; the scale is 1, so these are the collision's sizes) ----------------------
+
+/** A stook: six sheaves of straw leaning together to dry, each bound at the waist, their ears bunched at the top. About 1.25 m tall and a metre across. */
+export function stookGeometry(lod: Lod): BufferGeometry {
+  const H = PALETTE.highmark;
+  const k = new Kit();
+  const radial = lod ? 5 : 3;
+  const straw: ColourFn = (p, _n, out) => blend(out, H.grassGoldDeep, H.grangeWheat, Math.min(1, 0.35 + p.y * 0.7));
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    const foot: V3 = [Math.cos(a) * 0.36, 0, Math.sin(a) * 0.36];
+    const head: V3 = [Math.cos(a) * 0.1, 1.05, Math.sin(a) * 0.1];
+    k.limb(foot, head, 0.13, 0.08, straw, radial);
+    // the ears: a pale tuft over the head of each sheaf
+    k.add(new ConeGeometry(0.13, 0.26, lod ? 4 : 3), { at: [head[0] * 1.3, 1.16, head[2] * 1.3], colour: H.grassGoldPale });
+  }
+  return k.build()!;
+}
+
+/** A haycock: a mown field's hay built into a tall dome round a pole, its top capped and the pole's end standing out of it. About 2.3 m tall, 2.7 m across. */
+export function haycockGeometry(lod: Lod): BufferGeometry {
+  const H = PALETTE.highmark;
+  const k = new Kit();
+  const hay: ColourFn = (p, _n, out) => blend(out, H.grassGoldDeep, H.grangeWheat, Math.min(1, 0.3 + p.y * 0.4));
+  k.add(new SphereGeometry(1.32, lod ? 12 : 7, lod ? 6 : 4, 0, Math.PI * 2, 0, Math.PI / 2), { at: [0, 0, 0], scale: [1, 1.55, 1], colour: hay });
+  k.add(new ConeGeometry(0.42, 0.36, lod ? 8 : 5), { at: [0, 2.12, 0], colour: H.grassGoldDeep });
+  k.limb([0, 1.9, 0], [0.04, 2.55, 0.02], 0.045, 0.035, H.timber, lod ? 5 : 4);
+  return k.build()!;
+}
+
+/**
+ * A scarecrow, Highmark's own joke on its visitors: the Grange has dressed it as a gentleman of the Society, in a red coat and a pith helmet over a sack face, its arms
+ * spread on a crossbar and straw at its cuffs and hem. About 2.35 m to the top of the helmet; the post is its collision.
+ */
+export function scarecrowGeometry(lod: Lod): BufferGeometry {
+  const H = PALETTE.highmark;
+  const C = PALETTE.camp;
+  const k = new Kit();
+  const box = (): BoxGeometry => new BoxGeometry(1, 1, 1);
+  k.add(box(), { at: [0, 1.0, 0], scale: [0.09, 2.0, 0.09], colour: H.timber });
+  k.add(box(), { at: [0, 1.62, 0], scale: [1.5, 0.07, 0.07], colour: H.timber });
+  // the coat: body and sleeves along the crossbar, the Society's red
+  k.add(box(), { at: [0, 1.3, 0], scale: [0.52, 0.72, 0.26], colour: C.flagCloth });
+  k.add(box(), { at: [0, 1.62, 0], scale: [1.18, 0.17, 0.17], colour: C.flagCloth });
+  // straw at the cuffs and the hem
+  for (const x of [-0.66, 0.66]) k.add(new ConeGeometry(0.09, 0.22, lod ? 6 : 4), { at: [x * 1.06, 1.6, 0], rot: [0, 0, x > 0 ? -Math.PI / 2 : Math.PI / 2], colour: H.grassGoldPale });
+  for (const x of [-0.16, 0, 0.16]) k.add(new ConeGeometry(0.06, 0.2, lod ? 5 : 4), { at: [x, 0.86, 0.02], rot: [Math.PI, 0, 0], colour: H.grassGoldPale });
+  // the sack face and the helmet (dome and brim, the Society's canvas)
+  k.add(new SphereGeometry(0.17, lod ? 10 : 6, lod ? 7 : 4), { at: [0, 1.95, 0], colour: C.sack });
+  k.add(new SphereGeometry(0.21, lod ? 10 : 6, lod ? 5 : 3, 0, Math.PI * 2, 0, Math.PI / 2), { at: [0, 2.04, 0], scale: [1, 0.95, 1.08], colour: C.canvas });
+  k.add(new CylinderGeometry(0.3, 0.3, 0.025, lod ? 14 : 8), { at: [0, 2.05, 0], colour: C.canvasShade });
+  return k.build()!;
+}
+
+/**
+ * D-116: one length of a ploughed ridge or a sown drill, a metre long along z (the instance stretches it), a low triangular prism: `top` along its crest, `side` down its
+ * flanks. Laid in rows these read as a worked field from the road, where the ground's paint alone (a vertex every metre or so) cannot draw rows a metre apart.
+ */
+export function ridgeGeometry(top: number, side: number, halfWidth = 0.34, height = 0.13): BufferGeometry {
+  const s = new Soup();
+  const t = new Color(top);
+  const sd = new Color(side);
+  const w = halfWidth, h = height;
+  for (const sx of [-1, 1]) {
+    const n: V3 = [sx * h, w, 0];
+    const a: V3 = [sx * w, 0, -0.5], b: V3 = [sx * w, 0, 0.5], c: V3 = [0, h, 0.5], d: V3 = [0, h, -0.5];
+    if (sx < 0) {
+      s.tri(a, b, c, sd, n, 0, sd, t);
+      s.tri(a, c, d, sd, n, 0, t, t);
+    } else {
+      s.tri(a, c, b, sd, n, 0, t, sd);
+      s.tri(a, d, c, sd, n, 0, t, t);
+    }
+  }
+  for (const z of [-0.5, 0.5]) s.tri([-w, 0, z], [w, 0, z], [0, h, z], sd, [0, 0, z * 2], 0, sd, t);
+  return s.build();
+}
