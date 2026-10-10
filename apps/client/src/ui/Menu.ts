@@ -197,6 +197,7 @@ export class Menu {
     // D-098: on a narrow screen the creator waits behind "Appearance" (it stacked under the charter, a phone's page three screens long); the figure stands in whatever the panels leave free
     this.dressBtn = root.querySelector<HTMLButtonElement>("#dress")!;
     this.dressBtn.addEventListener("click", () => this.setDressing(true));
+    this.watchCreatorHost();
     root.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && root.dataset.view === "creator" && this.consult.hidden && !anyModalOpen()) this.setDressing(false);
     });
@@ -329,20 +330,37 @@ export class Menu {
     this.reframeSoon();
   }
 
+  /** The creator's way back ("Done"), at the foot of the host. Idempotent. */
+  private ensureCreatorFoot(): void {
+    const host = this.creatorHost;
+    if (host.querySelector(".creator-done")) return;
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "primary creator-done";
+    done.textContent = "Done";
+    done.addEventListener("click", () => this.setDressing(false));
+    const foot = document.createElement("div");
+    foot.className = "row creator-foot";
+    foot.append(done);
+    host.append(foot);
+  }
+
+  /**
+   * The creator draws itself into the host once the GPU is up, which can be after a quick tap on "Appearance"; its build clears the host. While the creator is showing, the way
+   * back is put back, and focus goes into the creator (it was on what was cleared). Found by CI: a phone player who tapped first had no Done.
+   */
+  private watchCreatorHost(): void {
+    if (typeof MutationObserver !== "function") return;
+    new MutationObserver(() => {
+      if (this.root.dataset.view !== "creator") return;
+      this.ensureCreatorFoot();
+      if (!this.creatorHost.contains(document.activeElement)) this.creatorHost.querySelector<HTMLElement>('[role="tab"]')?.focus();
+    }).observe(this.creatorHost, { childList: true });
+  }
+
   private setDressing(on: boolean): void {
     const host = this.creatorHost;
-    if (on && !host.querySelector(".creator-done")) {
-      // (the creator draws itself into the host after the door is built, so its way back is added the first time it is opened)
-      const done = document.createElement("button");
-      done.type = "button";
-      done.className = "primary creator-done";
-      done.textContent = "Done";
-      done.addEventListener("click", () => this.setDressing(false));
-      const foot = document.createElement("div");
-      foot.className = "row creator-foot";
-      foot.append(done);
-      host.append(foot);
-    }
+    if (on) this.ensureCreatorFoot(); // (the creator draws itself into the host after the door is built, so its way back is added the first time it is opened)
     if (on) this.root.dataset.view = "creator";
     else delete this.root.dataset.view;
     this.dressBtn.setAttribute("aria-expanded", String(on));

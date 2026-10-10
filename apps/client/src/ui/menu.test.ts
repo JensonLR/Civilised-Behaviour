@@ -4,6 +4,8 @@ import { Menu, type MenuHandlers } from "./Menu.ts";
 import { EXPEDITIONS_KEY, listExpeditions, noteExpedition } from "./expeditions.ts";
 import { dormantCopy, isDormantSave } from "./menuLogic.ts";
 import { CHARACTERS_KEY, MAX_CHARACTERS, parseRoster } from "./characters.ts";
+import { CharacterCreator } from "./CharacterCreator.ts";
+import { generateCharacter } from "@cb/procedural";
 
 /** The front door's Continue button, "Your expeditions" list, fresh-world New campaign and the friendly card for a save that is not there (D-039). */
 
@@ -334,5 +336,21 @@ describe("hostile storage", () => {
     make();
     expect(q("#continue-row").hidden).toBe(true);
     expect(q("#create").classList.contains("primary")).toBe(true);
+  });
+});
+
+describe("Appearance before the creator is built (a quick tap on a phone)", () => {
+  it("keeps a way back: the creator's build does not take the Done button with it", async () => {
+    const { menu } = make();
+    q<HTMLButtonElement>("#dress").click(); // (the door is up; the creator is drawn only once the GPU is ready)
+    expect(root().dataset.view).toBe("creator");
+    new CharacterCreator(menu.creatorHost, generateCharacter(4), () => undefined);
+    await flush();
+    const done = q<HTMLButtonElement>(".creator-done");
+    expect(done).not.toBeNull();
+    expect(menu.creatorHost.lastElementChild?.contains(done)).toBe(true); // (at the foot, under the creator)
+    expect(menu.creatorHost.contains(document.activeElement)).toBe(true); // (focus is in the creator, not lost with the old content)
+    done.click();
+    expect(root().dataset.view).toBeUndefined();
   });
 });
