@@ -252,7 +252,8 @@ export class CharacterAnimator {
     this.speedKnown = true;
     const grounded = (pose.flags & FLAG.GROUNDED) !== 0;
     const crouching = (pose.flags & FLAG.CROUCHING) !== 0;
-    const downed = (pose.flags & FLAG.DOWNED) !== 0;
+    // (D-106: a man hauled on a rope lies on his back as a downed one does, though he is not down)
+    const downed = (pose.flags & (FLAG.DOWNED | FLAG.DRAGGED)) !== 0;
     const carrying = (pose.flags & FLAG.CARRYING) !== 0;
     const sprinting = (pose.flags & FLAG.SPRINTING) !== 0;
     const reviving = (pose.flags & FLAG.REVIVING) !== 0;

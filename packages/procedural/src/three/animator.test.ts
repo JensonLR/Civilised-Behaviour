@@ -321,3 +321,12 @@ describe("D-104: hit reactions in the pose", () => {
     expect(r2.joints.torso.rotation.x).toBeLessThan(-0.5);
   });
 });
+
+describe("D-106: on the end of a rope", () => {
+  it("a man hauled on a rope (dragged, not down) lies on his back as the downed do", () => {
+    const { rig, anim } = make(5);
+    anim.autoBlink = false;
+    run(anim, 2, { speed: 2, flags: G | FLAG.DRAGGED, vy: 0 });
+    expect(rig.joints.root.rotation.x).toBeGreaterThan(1.2);
+  });
+});

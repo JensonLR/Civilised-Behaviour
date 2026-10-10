@@ -1,7 +1,7 @@
 import { FLAG, type PlayerStateType } from "@cb/shared";
 import { npcKey, type CampaignState, type CastApi, type NpcSpec, type PlayersView, type RegionId, type ScenarioTemplateId } from "@cb/shared";
 import {
-  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, bandName, dealIncident, horseName, incidentDelayS, incidentRoster, incidentStep, placeIncident, ringOpen, wagonName,
+  INCIDENT, INCIDENT_DONE, INCIDENT_OPEN, bandName, dealIncident, horseName, incidentDelayS, incidentDue, incidentRoster, incidentStep, placeIncident, ringOpen, wagonName,
   type IncidentEvent, type IncidentId, type IncidentRecord, type IncidentResult,
 } from "@cb/shared";
 
@@ -37,6 +37,9 @@ export interface IncidentsHost {
   /** Whether prop `id` is still in the world (a keg that went off is gone), and whether a fuse burns on it. */
   propLive?(id: string): boolean;
   propLit?(id: string): boolean;
+  /** D-107: the pacing director: the party is coasting (the incident may come early), or the run is pressed (it waits). Optional: test hosts need not. */
+  coasting?(): boolean;
+  pressed?(): boolean;
   /** D-055: `sid` settled an incident kindly by their own hand (the honours list counts it). Optional. */
   kind?(sid: string): void;
   hasRoom(): boolean;
@@ -106,7 +109,7 @@ export class Incidents {
     this.t += dt;
     this.calm = this.host.fighting() ? 0 : this.calm + dt;
     if (!this.live) {
-      if (this.forced || (this.t >= this.delay && this.calm >= INCIDENT.calmS)) this.fire();
+      if (this.forced || incidentDue(this.t, this.delay, this.calm, this.host.coasting?.() ?? false, this.host.pressed?.() ?? false)) this.fire();
       return;
     }
     if (this.id === "powder_wagon") {

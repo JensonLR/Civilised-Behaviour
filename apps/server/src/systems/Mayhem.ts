@@ -160,6 +160,16 @@ export class Mayhem {
     this.touch();
   }
 
+  /** D-106: `by` roped `victim`. The Society bills a loop landed on an enemy or a bystander by the party; the column prints it; the one with the rope says so. */
+  onRoped(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.ropes++;
+    this.say({ k: "rope", victim: this.name(victim), by: this.name(by) });
+    this.bark(by, "rope");
+    this.touch();
+  }
+
   /** A blast threw somebody already down (Casualties.toss), maybe taking a limb. */
   onToss(victim: string, by: string, power: number, lift: number, severed: LimbId | undefined, dirX: number, dirZ: number): void {
     const vs = this.side(victim);

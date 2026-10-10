@@ -6,7 +6,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent, findFinisherTarget } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent, findFinisherTarget, findRopeTarget, type LassoEvent } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { TouchContext } from "../input/touchLogic.ts";
@@ -32,6 +32,7 @@ import { GameAudio } from "./GameAudio.ts";
 import { ContentAudio } from "./ContentAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
 import { TRAIL, trailGap, trailStep } from "../render/bloodTrail.ts";
+import { RopeView } from "../render/RopeView.ts";
 import { WeaponModel } from "../render/weapons/WeaponModels.ts";
 import { MountView, type RiderPoseLike } from "../render/mounts/MountView.ts";
 import { BeastView } from "../render/BeastView.ts";
@@ -183,6 +184,8 @@ export class Game {
   /** Weapons, shots, projectiles, impacts, the cannon and the gunnery interface (game/CombatView.ts). */
   private readonly combat: CombatView;
   private readonly debris: LimbDebris;
+  /** D-106: ropes held and loops thrown. */
+  private readonly ropes: RopeView;
   /** The first-person hands and weapon, drawn as a second pass over the world (render/ViewModel.ts). */
   private readonly viewmodel: ViewModel;
   private readonly vmFrame: ViewModelFrame = {
@@ -298,6 +301,7 @@ export class Game {
     this.hitFx = new HitFx(stage.scene, (x, z) => session.world.terrainHeight(x, z));
     this.hitFx.attachDecals(stage.decals); // blood stays, spreads and dries (render/decals), at the player's Gore level
     this.debris = new LimbDebris(stage.scene, (x, z) => session.world.terrainHeight(x, z));
+    this.ropes = new RopeView(stage.scene);
     this.debris.onLand = (x, z, vx, vz) => {
       stage.decals.bloodPool(x, z, 0.28, 0.7);
       stage.decals.spatterAt(x, z, vx, vz, 0.32);
@@ -354,6 +358,10 @@ export class Game {
     });
     session.room.onMessage("parley", (m: { view?: ParleyView; line?: string; closed?: boolean }) => this.onParley(m));
     session.room.onMessage("hit", (e: HitEvent) => this.onHit(e));
+    session.room.onMessage("lasso", (e: LassoEvent) => {
+      this.ropes.thrown(e);
+      this.audio.lasso(e.x, e.y, e.z);
+    });
     session.room.onMessage("sever", (e: SeverEvent) => this.onSever(e));
     session.room.onMessage("bark", (e: BarkEvent) => this.onBark(e?.id, e?.k, e?.salt));
     session.room.onMessage("cry", (e: CryEvent) => {
@@ -860,6 +868,7 @@ export class Game {
     this.viewmodel.dispose();
     this.hitFx.dispose();
     this.debris.dispose();
+    this.ropes.dispose();
     this.aftermath.dispose();
     this.fire.dispose();
     this.groundTorches.dispose();
@@ -1226,6 +1235,8 @@ export class Game {
         prompt = `${use}  ${mp}`;
       } else if ((prompt = this.finisherPrompt(me, mine)) !== "") {
         // D-105: a man down on a knee or doubled over in front of you, and something in your hand: the blow will finish him (the server decides it from the swing)
+      } else if ((prompt = this.ropePrompt(me)) !== "") {
+        // D-106: a man on his feet within a throw, in front of you: the lariat
       } else {
         // D-100: the press goes where the server sends it, in its order (WorldRoom: the cannon's crew, then the places you can USE, then a prop on the ground), so the
         // prompt names what will happen: a person you can talk to wins over a barrel at their feet
@@ -1594,6 +1605,18 @@ export class Game {
       if (!isMe) this.plate(id, p, a, x, y, z);
     });
     this.plates.endFrame();
+    // D-106: each rope held, from the hand holding it to the man on the end (both as just drawn)
+    this.ropes.begin();
+    players.forEach((p, id) => {
+      if (p.roped !== 1 || p.dragger === "") return;
+      const held = this.actors.get(id);
+      const by = this.actors.get(p.dragger);
+      if (!held || !by) return;
+      const h = by.body.handAt(this.ropeA);
+      const c = held.body.chestAt(this.ropeB);
+      this.ropes.rope(h.x, h.y, h.z, c.x, c.y, c.z);
+    });
+    this.ropes.update(dt);
     this.tags.sweep(seen);
     this.stage.setPushers(walkers, walkerCount);
     this.audio.sweep();
@@ -1738,6 +1761,23 @@ export class Game {
     return name ? `{melee}  Finish off ${name}` : "{melee}  Finish off";
   }
   private readonly finAt = { x: 0, z: 0, facing: 0 };
+  private readonly ropeA = new Vector3();
+  private readonly ropeB = new Vector3();
+
+  /** D-106: "{grab}  Rope <name>" when a loop thrown now would be aimed at a man on his feet within reach; "" otherwise (the server checks the line of sight). */
+  private ropePrompt(me: PlayerStateType): string {
+    if ((me.flags & (FLAG.CARRYING | FLAG.REVIVING | FLAG.DRAGGING | FLAG.OPERATING)) !== 0) return "";
+    const players = this.session.room.state.players;
+    const self = this.session.sessionId;
+    const at = this.finAt;
+    at.x = this.session.value(me, "x");
+    at.z = this.session.value(me, "z");
+    at.facing = this.session.value(me, "facing");
+    const id = findRopeTarget<string>(at, (cb) => players.forEach((o, k) => k !== self && cb(k, o)), FLAG.DOWNED | FLAG.DRAGGED | FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING);
+    if (id === undefined) return "";
+    const name = players.get(id)?.name;
+    return name ? `{grab}  Rope ${name}` : "{grab}  Rope";
+  }
 
   private addActor(p: PlayerStateType): Actor {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);

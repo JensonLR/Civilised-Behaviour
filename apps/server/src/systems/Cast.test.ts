@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
+  BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, LASSO, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
   CollisionWorld, type MoveCommand, type PlayerStateType, type WeaponId,
 } from "@cb/shared";
 import { NAV, NPC_SIDE, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
@@ -320,6 +320,61 @@ describe("Cast: attack tokens", () => {
     r.rows.get("npc:s0")!.ammo = 0;
     r.tick(3);
     expect(tokens.at(-1)).toBe(false);
+  });
+});
+
+describe("D-107: the pacing director's levers in the Cast", () => {
+  it("the host says how many may fire at a member of the party: one, or three; the plain two when it has no say", () => {
+    for (const cap of [1, 3, undefined]) {
+      let maxHolders = 0;
+      const holders = new Map<string, number>();
+      const spy: BrainFn = (b, me, sn, dt, out) => {
+        if (sn.enemy && sn.token) holders.set(sn.enemy.id, (holders.get(sn.enemy.id) ?? 0) + 1);
+        npcThink(b, me, sn, dt, out);
+      };
+      const r = rig({ brains: { garrison: spy } });
+      r.host.tokensFor = (t) => (t === "p1" ? cap : undefined);
+      r.human("p1", 0, -20);
+      r.cast.spawn([0, 1, 2, 3, 4, 5].map((i) => spec(`s${i}`, { post: { x: -5 + i * 2, z: 0 }, lookSeed: 100 + i })));
+      r.cast.order("ward", { o: "alert" });
+      let counted = 0;
+      for (let i = 0; i < 300; i++) {
+        holders.clear();
+        r.tick();
+        maxHolders = Math.max(maxHolders, holders.get("p1") ?? 0);
+        counted = Math.max(counted, r.cast.shootersOn("p1"));
+      }
+      expect(maxHolders, String(cap)).toBe(cap ?? CAST.tokens);
+      expect(counted, String(cap)).toBe(cap ?? CAST.tokens); // (and the director reads the same count back)
+    }
+  });
+
+  it("a hunt sends the nearest roused soldiers to look, up to n and within range; never a garrison unprovoked, a man already fighting, a hand or a civilian", () => {
+    const r = rig();
+    r.human("p1", 0, -70); // (far off: out of everybody's sight)
+    r.cast.spawn([
+      spec("near", { post: { x: 0, z: 0 }, lookSeed: 1 }),
+      spec("mid", { post: { x: 4, z: 0 }, lookSeed: 2 }),
+      spec("far", { post: { x: 8, z: 4 }, lookSeed: 3 }),
+      spec("away", { post: { x: 0, z: 120 }, lookSeed: 4 }), // (beyond the range)
+      spec("calm", { group: "calm", post: { x: -2, z: -2 }, lookSeed: 5 }), // (his group never roused)
+      spec("folk", { group: "folk", side: "neutral", brain: "civil", post: { x: 1, z: -3 }, lookSeed: 6 }),
+    ]);
+    r.cast.order("ward", { o: "alert" });
+    r.tick(10);
+    expect(r.cast.hunt(0, -70, 2, 90)).toBe(2);
+    r.tick(90);
+    const z = (id: string): number => r.rows.get(npcKey(id))!.z;
+    expect(z("near")).toBeLessThan(-1.5); // (the two nearest walk toward her)
+    expect(z("mid")).toBeLessThan(-1.5);
+    expect(Math.abs(z("far") - 4)).toBeLessThan(1); // (the third stays: two were asked for)
+    expect(Math.abs(z("calm") + 2)).toBeLessThan(1);
+    expect(Math.abs(z("away") - 120)).toBeLessThan(1);
+    // asked for everybody: only the roused ward within range answer
+    expect(r.cast.hunt(0, -70, 10, 90)).toBe(3);
+    // stood down, nobody goes
+    r.cast.order("ward", { o: "stand_down" });
+    expect(r.cast.hunt(0, -70, 10, 90)).toBe(0);
   });
 });
 
@@ -715,5 +770,22 @@ describe("Cast: the fright of a coup de grace (D-105)", () => {
     r.tick(60);
     expect(r.rows.get(npcKey("carter"))!.x).toBeLessThan(-6); // (ran west, away from it)
     expect(() => r.cast.terror("npc:nobody", 0, 0)).not.toThrow();
+  });
+});
+
+describe("Cast: on the end of a rope (D-106)", () => {
+  it("a roped soldier's nerve takes the shock and he cries out; a roped civilian cries out", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.cast.spawn([spec("s1", { post: { x: 0, z: 0 } }), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: 9, z: 0 } })]);
+    r.tick(3);
+    const b = (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get("npc:s1")!.brain;
+    const shock = b.morale.shock;
+    r.cast.onRoped("npc:s1");
+    r.cast.onRoped("npc:h1");
+    expect(b.morale.shock).toBe(Math.min(60, shock + LASSO.shock));
+    expect(cries).toEqual(expect.arrayContaining(["npc:s1", "npc:h1"]));
+    expect(() => r.cast.onRoped("npc:nobody")).not.toThrow();
   });
 });

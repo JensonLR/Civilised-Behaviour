@@ -1,5 +1,5 @@
 import {
-  BUTTON, FINISHER, FLAG, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
+  BUTTON, FINISHER, FLAG, LASSO, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
@@ -40,6 +40,8 @@ export interface CastHost {
   sendTo?(sid: string, type: string, msg: unknown): void;
   /** D-094: a beast's horns struck `target` (a person within its reach): the room deals the blow (thrown, a hard wound) as from `key`. Optional: test hosts need not. */
   gore?(key: string, target: string): void;
+  /** D-107: how many may shoot at `target` at once (the pacing director's say for a member of the party); undefined = `CAST.tokens`. Optional. */
+  tokensFor?(target: string): number | undefined;
 }
 
 interface Group { alert: boolean; standDown: boolean; holdFire: boolean; attack: NpcSide | "any" | undefined }
@@ -374,6 +376,48 @@ export class Cast implements CastApi {
     npcHeardShot(r.brain, from.x, from.z, now);
   }
 
+  /** D-107: how many rows hold an attack token on `target` now (the pacing director reads it as how hard that member is being pressed). */
+  shootersOn(target: string): number {
+    let n = 0;
+    for (const r of this.recs) if (r.token && !r.gone && r.tokenTarget === target) n++;
+    return n;
+  }
+
+  /**
+   * D-107: the pacing director's hunt. Up to `n` soldiers within `range` of (x, z), nearest first, go and look there (as after a shot they could not place: `npcHeardShot`).
+   * Only men already roused against the party: a garrison brain whose group is alert and fights the party, at its post or keeping watch, nobody in its sight, not running,
+   * not ordered to march, guard, follow or hold fire. A garrison never provoked is never sent; nor a hired hand, a civilian or a beast. Returns how many went.
+   */
+  hunt(x: number, z: number, n: number, range: number): number {
+    if (!Number.isFinite(x + z + range) || !(n > 0)) return 0;
+    const now = this.host.worldMs() / 1000;
+    const picked = this.picked;
+    picked.length = 0;
+    while (picked.length < n) {
+      let best: Rec | undefined;
+      let bestD = range;
+      for (const r of this.recs) {
+        if (r.gone || r.civil || r.spec.brain !== "garrison" || r.hasEnemy || r.brain.fled || picked.includes(r)) continue;
+        const m = r.brain.mode;
+        if (m !== "post" && m !== "alert") continue;
+        const g = this.groupOf(r.group);
+        if (!g.alert || g.standDown || g.holdFire || !this.hostile(r, g, "party", false)) continue;
+        const row = this.host.players.get(r.key);
+        if (!row || (row.flags & FLAG.DOWNED) !== 0) continue;
+        const d = Math.hypot(row.x - x, row.z - z);
+        if (d <= bestD) {
+          bestD = d;
+          best = r;
+        }
+      }
+      if (!best) break;
+      picked.push(best);
+      npcHeardShot(best.brain, x, z, now);
+    }
+    return picked.length;
+  }
+  private readonly picked: Rec[] = [];
+
   /** A report carried `radius` metres from (x, z), fired by `src` (a session id or an NPC key): nearby people start; civilians bolt. */
   noise(x: number, z: number, radius: number, src: string): void {
     if (!Number.isFinite(x + z + radius) || radius <= 0) return;
@@ -416,6 +460,18 @@ export class Cast implements CastApi {
     }
     r.brain.morale.shock = 60;
     r.brain.hurtAt = now;
+    this.cry(r, now);
+  }
+
+  /** D-106: row `key` is on the end of somebody's rope: a soldier's nerve takes the humiliation, and he cries out. */
+  onRoped(key: string): void {
+    const r = this.byKey.get(key);
+    if (!r || r.gone) return;
+    const now = this.host.worldMs() / 1000;
+    if (!r.civil) {
+      r.brain.morale.shock = Math.min(60, r.brain.morale.shock + LASSO.shock);
+      r.brain.hurtAt = Math.max(r.brain.hurtAt, now);
+    }
     this.cry(r, now);
   }
 
@@ -705,13 +761,15 @@ export class Cast implements CastApi {
   }
 
   private claim(target: string): boolean {
+    const cap = this.host.tokensFor?.(target) ?? CAST.tokens;
     for (let k = 0; k < this.tokN; k++) {
       if (this.tokTarget[k] === target) {
-        if (this.tokCount[k]! >= CAST.tokens) return false;
+        if (this.tokCount[k]! >= cap) return false;
         this.tokCount[k]!++;
         return true;
       }
     }
+    if (cap <= 0) return false;
     this.tokTarget[this.tokN] = target;
     this.tokCount[this.tokN] = 1;
     this.tokN++;
@@ -727,7 +785,7 @@ export class Cast implements CastApi {
     return row.ammo > 0 || !(w === WEAPON.PISTOL || w === WEAPON.RIFLE || w === WEAPON.BLUNDERBUSS);
   }
 
-  /** At most two shooters per target. Holders keep their token while they can still fire; the rest go nearest first. */
+  /** At most two shooters per target (D-107: or what the host says for a member of the party). Holders keep their token while they can still fire; the rest go nearest first. */
   private grantTokens(n: number): void {
     this.tokN = 0;
     const tried = this.tried;

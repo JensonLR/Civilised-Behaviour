@@ -70,6 +70,8 @@ export interface ServerMessages {
   sever: SeverEvent;
   /** Someone fired (cosmetic: flash, smoke, tracers, sound). Direction is the aim; pellets and spread come from `seed` via weapons.ts. */
   shot: ShotEvent;
+  /** D-106: a lariat was thrown (cosmetic: the loop flies; the catch itself is PlayerState.roped). */
+  lasso: LassoEvent;
   /** A projectile or ray struck the world (cosmetic: dust, splinters, sparks, ricochet). */
   impact: ImpactEvent;
   /** An explosion (cosmetic: fireball, smoke column, shake). Damage and impulses were already applied by the server. */
@@ -192,6 +194,18 @@ export interface HitEvent {
   burn?: boolean;
   /** D-105: a coup de grace (the clients throw more blood and the body sprawls). Absent: an ordinary blow. */
   fin?: boolean;
+}
+
+/** D-106: a lariat thrown, from the thrower's hand to where it is aimed (a man, or a point at the rope's reach). `hit`: it will land on him. Cosmetic: the clients fly the loop. */
+export interface LassoEvent {
+  by: string;
+  x: number;
+  y: number;
+  z: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  hit: boolean;
 }
 
 export const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

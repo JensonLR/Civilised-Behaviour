@@ -282,3 +282,23 @@ describe("D-105: the coup de grace", () => {
     expect(m.bill.finishers).toBe(2);
   });
 });
+
+describe("D-106: the lariat in the bill", () => {
+  it("a loop the party lands on an enemy or a bystander is billed, printed and shouted; one on our own, or by the enemy, is not", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY }, "npc:carter": { name: "Carter Obadiah Plume", npc: NPC.DRIVER },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: string[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (_id, kind) => barks.push(kind) });
+    m.begin(99, 2, "secure_crossing");
+    m.onRoped("npc:s1", "ada");
+    m.onRoped("npc:carter", "ada");
+    m.onRoped("bram", "ada");
+    m.onRoped("npc:carter", "npc:s1");
+    expect(m.bill.ropes).toBe(2);
+    expect(barks.filter((k) => k === "rope").length).toBeGreaterThanOrEqual(1);
+    for (let i = 0; i < 60; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "rope" && p.t.includes("Ada"))).toBe(true);
+  });
+});

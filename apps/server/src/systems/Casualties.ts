@@ -18,6 +18,12 @@ import {
   isZone,
   limbZone,
   pickZone,
+  LASSO,
+  dragHurt,
+  findRopeTarget,
+  newWorldHit,
+  packReact,
+  rayWorld,
   reactKind,
   reactOverrides,
   reactRight,
@@ -30,6 +36,7 @@ import {
   zoneLimb,
   wrapAngle,
   type HitEvent,
+  type LassoEvent,
   type LimbId,
   type SeverEvent,
   type WeaponId,
@@ -70,6 +77,12 @@ export interface CasualtyHost {
    * the fists (Combat, Cast). Optional: test hosts need not.
    */
   disarm?(id: string, right: boolean, dx: number, dz: number): void;
+  /** D-106: every row (the party AND the NPCs: a lariat is thrown at anyone on his feet). Absent: no lariat. */
+  rows?: { forEach(cb: (p: PlayerStateType, id: string) => void): void };
+  /** D-106: a loop was thrown (cosmetic: the clients fly it). */
+  emitLasso?(e: LassoEvent): void;
+  /** D-106: `by` roped `target` (Cast: the fright; Mayhem: the bill). */
+  roped?(by: string, target: string): void;
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -125,6 +138,12 @@ export class Casualties {
   private routTimer = 0;
   /** D-104: seconds left of each body's hit reaction (PlayerState.react tells its kind; this times it). */
   private readonly reacts = new Map<string, number>();
+  /** D-106: men held on a rope (by row): seconds before one on his feet works loose, and damage owed for being hauled too fast. */
+  private readonly ropes = new Map<string, { left: number; owed: number }>();
+  /** D-106: loops in the air (by thrower): at whom, and seconds until they land. And when each thrower may throw again (sim seconds). */
+  private readonly throws = new Map<string, { target: string; left: number }>();
+  private readonly ropeReady = new Map<string, number>();
+  private simT = 0;
 
   constructor(
     private readonly host: CasualtyHost,
@@ -278,7 +297,7 @@ export class Casualties {
 
     if (pressed & BUTTON.GRAB) {
       if (this.drags.has(sessionId)) this.releaseDrag(sessionId);
-      else this.startDrag(sessionId, p);
+      else if (!this.startDrag(sessionId, p)) this.throwRope(sessionId, p); // (D-106: nobody down in reach: the lariat, at whoever it is aimed at)
     }
     if (pressed & BUTTON.INTERACT && (p.flags & (FLAG.CARRYING | FLAG.DRAGGING)) === 0 && !this.revives.has(sessionId)) {
       return this.startRevive(sessionId, p);
@@ -366,17 +385,77 @@ export class Casualties {
 
   // ---- drag ---------------------------------------------------------------------------------------------------------
 
-  private startDrag(draggerId: string, dragger: PlayerStateType): void {
-    if ((dragger.flags & (FLAG.CARRYING | FLAG.REVIVING)) !== 0) return;
+  private startDrag(draggerId: string, dragger: PlayerStateType): boolean {
+    if ((dragger.flags & (FLAG.CARRYING | FLAG.REVIVING)) !== 0) return false;
     const targetId = findDownedTarget<string>(dragger, CASUALTY.dragRange, (cb) =>
       this.scan().forEach((o, id) => id !== draggerId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
     );
-    if (targetId === undefined) return;
+    if (targetId === undefined) return false;
     const target = this.host.players.get(targetId)!;
     this.drags.set(draggerId, targetId);
     dragger.flags |= FLAG.DRAGGING;
     target.flags |= FLAG.DRAGGED;
     target.dragger = draggerId;
+    return true;
+  }
+
+  // ---- D-106: the lariat -------------------------------------------------------------------------------------------------------------
+
+  /** Rows a loop cannot take: down, held, a beast, a rider, a man at a crank gun. */
+  private static readonly UNROPEABLE = FLAG.DOWNED | FLAG.DRAGGED | FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING;
+
+  /** Throws a loop at the man the thrower faces (lasso.ts `findRopeTarget`), if there is one in reach and nothing between; it lands `LASSO.throwS` later. */
+  private throwRope(id: string, p: PlayerStateType): void {
+    const rows = this.host.rows;
+    if (!rows || (p.flags & (FLAG.CARRYING | FLAG.REVIVING | FLAG.DRAGGING | FLAG.OPERATING)) !== 0 || this.throws.has(id) || this.simT < (this.ropeReady.get(id) ?? 0)) return;
+    this.ropeReady.set(id, this.simT + LASSO.cooldown);
+    const target = findRopeTarget<string>(p, (cb) => rows.forEach((o, k) => k !== id && cb(k, o)), Casualties.UNROPEABLE);
+    const t = target !== undefined ? this.host.players.get(target) : undefined;
+    const hy = p.y + 1.3;
+    let tx: number;
+    let ty: number;
+    let tz: number;
+    let hit = false;
+    if (t) {
+      tx = t.x;
+      ty = t.y + 1.1;
+      tz = t.z;
+      const dx = tx - p.x;
+      const dy = ty - hy;
+      const dz = tz - p.z;
+      const d = Math.hypot(dx, dy, dz) || 1;
+      hit = !rayWorld(this.host.world, p.x, hy, p.z, dx / d, dy / d, dz / d, d, this.ropeHit); // (a wall between stops the loop)
+    } else {
+      // thrown at nobody: the loop sails out to its reach and falls
+      tx = p.x - Math.sin(p.facing) * LASSO.range * 0.7;
+      tz = p.z - Math.cos(p.facing) * LASSO.range * 0.7;
+      ty = this.host.world.terrainHeight(tx, tz);
+    }
+    this.host.emitLasso?.({ by: id, x: p.x, y: hy, z: p.z, tx, ty, tz, hit });
+    if (hit && target !== undefined) this.throws.set(id, { target, left: LASSO.throwS });
+  }
+  private readonly ropeHit = newWorldHit();
+
+  /** The loop lands: if he is still there to be caught (on his feet, free, within reach), he is roped and hauled from now on. */
+  private landRope(byId: string, targetId: string): void {
+    const by = this.host.players.get(byId);
+    const t = this.host.players.get(targetId);
+    if (!by || !t || (by.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING)) !== 0 || (t.flags & Casualties.UNROPEABLE) !== 0) return;
+    if (horizontal(by, t) > LASSO.range * 1.25) return;
+    this.drags.set(byId, targetId);
+    by.flags |= FLAG.DRAGGING;
+    t.flags |= FLAG.DRAGGED;
+    t.dragger = byId;
+    t.roped = 1;
+    t.react = 0; // (the rope's pose takes over from a stagger)
+    this.reacts.delete(targetId);
+    this.ropes.set(targetId, { left: LASSO.holdS, owed: 0 });
+    this.host.roped?.(byId, targetId);
+  }
+
+  /** D-106: whether `id` is held on a rope now. */
+  isRoped(id: string): boolean {
+    return this.ropes.has(id);
   }
 
   /** Public so the mount system can free a body before loading it onto a wagon. */
@@ -392,6 +471,14 @@ export class Casualties {
       target.dragger = "";
       target.vx = 0;
       target.vz = 0;
+      if (this.ropes.delete(targetId)) {
+        // D-106: off the rope. A man on his feet lies a moment, then gets up (the floored pose, as a leg shot leaves him)
+        if (target.roped !== 0) target.roped = 0;
+        if ((target.flags & FLAG.DOWNED) === 0) {
+          target.react = packReact(REACT.FLOORED, false, LASSO.getUpS);
+          this.reacts.set(targetId, LASSO.getUpS);
+        }
+      }
     }
   }
 
@@ -403,6 +490,14 @@ export class Casualties {
   // ---- per-tick simulation --------------------------------------------------------------------------------------------------------
 
   tick(dt: number): void {
+    this.simT += dt;
+    // D-106: loops in the air land
+    for (const [by, th] of this.throws) {
+      th.left -= dt;
+      if (th.left > 0) continue;
+      this.throws.delete(by);
+      this.landRope(by, th.target);
+    }
     // D-104: hit reactions run out (a row that left takes its timer with it)
     for (const [id, left] of this.reacts) {
       const p = this.host.players.get(id);
@@ -451,27 +546,58 @@ export class Casualties {
       }
     }
 
-    // Drags: steer each body toward a spot behind its dragger, or let go if the bond is broken.
+    // Drags: steer each body toward a spot behind its dragger, or let go if the bond is broken. (D-106: a rope is a longer, stronger drag, on a man who need not be down.)
     for (const [draggerId, targetId] of [...this.drags]) {
       const dragger = this.host.players.get(draggerId);
       const target = this.host.players.get(targetId);
-      if (!dragger || !target || (dragger.flags & FLAG.DOWNED) !== 0 || (target.flags & FLAG.DOWNED) === 0 || horizontal(dragger, target) > CASUALTY.dragBreakRange) {
+      const rope = this.ropes.get(targetId);
+      if (!dragger || !target || (dragger.flags & FLAG.DOWNED) !== 0 || (rope === undefined && (target.flags & FLAG.DOWNED) === 0) || horizontal(dragger, target) > (rope ? LASSO.breakRange : CASUALTY.dragBreakRange)) {
         this.releaseDrag(draggerId);
         continue;
       }
-      const wantX = dragger.x + Math.sin(dragger.facing) * CASUALTY.dragDistance;
-      const wantZ = dragger.z + Math.cos(dragger.facing) * CASUALTY.dragDistance;
-      let vx = dragger.vx + (wantX - target.x) * 8;
-      let vz = dragger.vz + (wantZ - target.z) * 8;
-      const m = Math.hypot(vx, vz);
-      if (m > 8) {
-        vx = (vx / m) * 8;
-        vz = (vz / m) * 8;
+      if (rope && (target.flags & FLAG.DOWNED) === 0) {
+        rope.left -= dt;
+        if (rope.left <= 0) {
+          this.releaseDrag(draggerId); // (he has worked the loop loose)
+          continue;
+        }
+      }
+      let vx: number;
+      let vz: number;
+      if (rope) {
+        // a rope pulls only when it is taut: along the line to the one holding it, as far as he is past its length; slack, he lies where he is
+        // (a hand on the collar instead holds the body at a spot behind the dragger, below)
+        const dx = dragger.x - target.x;
+        const dz = dragger.z - target.z;
+        const d = Math.hypot(dx, dz) || 1;
+        const pull = Math.min(LASSO.pullSpeed, Math.max(0, (d - LASSO.length) * 6));
+        vx = (dx / d) * pull;
+        vz = (dz / d) * pull;
+      } else {
+        const wantX = dragger.x + Math.sin(dragger.facing) * CASUALTY.dragDistance;
+        const wantZ = dragger.z + Math.cos(dragger.facing) * CASUALTY.dragDistance;
+        vx = dragger.vx + (wantX - target.x) * 8;
+        vz = dragger.vz + (wantZ - target.z) * 8;
+        const m = Math.hypot(vx, vz);
+        if (m > 8) {
+          vx = (vx / m) * 8;
+          vz = (vz / m) * 8;
+        }
+      }
+      // D-106: hauled faster than a run, the ground takes its toll, in bites (the hit events throw the blood; the drag leaves the trail)
+      if (rope && (target.flags & FLAG.DOWNED) === 0) {
+        rope.owed += dragHurt(Math.hypot(dragger.vx, dragger.vz)) * dt; // (the pace of the one hauling: the jerk of the catch itself is not a gallop)
+        if (rope.owed >= 4) {
+          const bite = Math.floor(rope.owed);
+          rope.owed -= bite;
+          this.damage(targetId, bite, { zone: ZONE.TORSO, dirX: vx, dirZ: vz, by: draggerId });
+          if (!this.drags.has(draggerId)) continue; // (the bite put him down and something let go)
+        }
       }
       target.vx = vx;
       target.vz = vz;
-      // Head toward the dragger: the body lies on its back, so it faces away from them.
-      target.facing = wrapAngle(dragger.facing + Math.PI);
+      // Head toward the dragger: the body lies on its back, so it faces away from them. (On a rope: away from the one holding it, along the rope.)
+      target.facing = rope ? Math.atan2(dragger.x - target.x, dragger.z - target.z) : wrapAngle(dragger.facing + Math.PI); // (forward is (-sin, -cos): away from her)
     }
 
     this.tickRout(dt);

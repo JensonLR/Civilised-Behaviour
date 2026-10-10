@@ -79,6 +79,9 @@ export const PlayerState = schema({
   // --- hit reactions (append-only, D-104) ---
   /** Down on a knee, doubled over or just disarmed (hitReaction.ts packs kind, side and length). Server-owned, NPC rows only; 0 = none. */
   react: t.uint8(),
+  // --- the lariat (append-only, D-106) ---
+  /** 1 while this row is held on a rope (`dragger` holds the other end; with DRAGGED alone it is a hand on the collar). Server-owned. */
+  roped: t.uint8(),
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 

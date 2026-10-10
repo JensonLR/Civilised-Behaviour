@@ -165,10 +165,11 @@ import { tickProbe } from "../tickProbe.ts";
 import { getRoomConfig } from "../roomConfig.ts";
 import { PhysicsWorld, initRapier } from "../physics.ts";
 import { Casualties, type HitInfo } from "../systems/Casualties.ts";
-import { Cast } from "../systems/Cast.ts";
+import { CAST, Cast } from "../systems/Cast.ts";
 import { Combat } from "../systems/Combat.ts";
 import { Followers } from "../systems/Followers.ts";
 import { Incidents } from "../systems/Incidents.ts";
+import { Pacing } from "../systems/Pacing.ts";
 import { Fire } from "../systems/Fire.ts";
 import { Mayhem } from "../systems/Mayhem.ts";
 import { Mounts } from "../systems/Mounts.ts";
@@ -301,6 +302,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
   private mounts!: Mounts;
   private followers!: Followers;
   private incidents!: Incidents;
+  /** D-107: the pacing director (shared/pacing.ts; systems/Pacing.ts): eases the fire on a hard-pressed party, hunts a quiet one, times the incident. */
+  private pacing!: Pacing;
   /** D-103: fire that spreads (shared/fire.ts; systems/Fire.ts). */
   private fire!: Fire;
   /** D-084: the run's spectacle (the gazette, the Butcher's Bill, the Society's request). */
@@ -441,6 +444,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         disarm: (id) => {
           if (this.combat.disarm(id) >= 0) this.cast.disarm(id);
         },
+        // D-106: the lariat is thrown at anyone on his feet, the loop flies on every client, and a catch frightens him and is billed
+        rows: this.state.players,
+        emitLasso: (e) => this.broadcast("lasso", e),
+        roped: (by, target) => {
+          this.cast.onRoped(target);
+          if (this.scenario?.live) this.mayhem.onRoped(target, by);
+        },
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -504,6 +514,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       blastAt: (owner, x, y, z, radius) => {
         this.powderCatches(owner, x, y, z, radius);
         this.fire.blast(x, z, radius); // (D-103: and the grass round it catches)
+        this.pacing.blast(x, z, radius); // (D-107: a blast close by is a blow, hurt or not)
       },
     });
     // The cast runs every NPC row (garrison, rivals, deserters, hostages, hired hands) through the same step a player takes; the brains plug in here.
@@ -528,6 +539,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       fear: () => this.campaign.factions.ward.fear,
       brains: { garrison: npcThink, follower: followerThink },
       navOptions: (w) => regionNavOptions(this.state.region as RegionId, w),
+      tokensFor: (target) => this.pacing?.tokens(target), // (D-107: the director's say on how many may fire at a member of the party)
+    });
+    this.pacing = new Pacing({
+      party: this.party,
+      shootersOn: (sid) => this.cast.shootersOn(sid),
+      hunt: (x, z, n, range) => this.cast.hunt(x, z, n, range),
+      seed,
     });
     this.mounts = new Mounts({
       players: this.state.players,
@@ -641,6 +659,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       land: (x, z) => this.dryOpen(x, z),
       fighting: () => this.simT - this.lastShotT < INCIDENT.calmS || this.scenario?.phase === "fighting" || this.scenario?.phase === "escalated",
+      coasting: () => this.pacing.coasting,
+      pressed: () => !this.pacing.calm,
       join: (name, lookSeed, at) => this.followers.join(name, lookSeed, at),
       looseHorse: (at) => this.mounts.spawnHorse({ x: at.x, z: at.z, yaw: 0 }, { coat: (this.state.seed ^ 0x40) >>> 0 }),
       riderOf: (id) => this.state.mounts.get(id)?.rider ?? "",
@@ -768,6 +788,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       tickProbe.lap("other");
       if (!sailing) {
         this.scenario?.tick(ctx.dt);
+        this.pacing.tick(ctx.dt, this.scenario?.live === true); // (before the incident and the cast: both read it)
         this.incidents.tick(ctx.dt);
         this.mayhem.tick(ctx.dt);
         this.audience.tick();
@@ -1960,6 +1981,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     if (cmd === "hurt") this.damagePlayer(client.sessionId, 40);
+    else if (cmd === "pace" || cmd === "pace:quiet") {
+      // D-107, QA: the director's state in a notice; `pace:quiet` makes the party coast at once (the hunts and an early incident, without waiting it out)
+      const pc = this.pacing;
+      if (cmd === "pace:quiet") pc.coastNow();
+      const phase = ["build", "peak", "fade", "relax"][pc.state.phase];
+      client.send("notice", { text: pc.awake ? `Pace: ${phase} ${pc.state.t.toFixed(0)} s, worst ${pc.state.worst.toFixed(0)}, you ${pc.intensity(client.sessionId).toFixed(0)} (${pc.tokens(client.sessionId) ?? CAST.tokens} may fire), peaks ${pc.stats.peaks}, hunts ${pc.stats.hunts} (${pc.stats.sent} sent).` : "Pace: asleep (no contract running)." });
+    }
     else if (cmd === "down") this.damagePlayer(client.sessionId, 1000, { zone: ZONE.TORSO }); // (a random zone at 1000 damage would take a limb)
     else if (cmd?.startsWith("sever:")) this.casualties.sever(client.sessionId, Number(cmd.slice(6)) as LimbId, -Math.sin(player.facing), -Math.cos(player.facing));
     else if (cmd === "restore") this.casualties.restoreLimbs(client.sessionId);
