@@ -76,6 +76,9 @@ export const PlayerState = schema({
   // --- fire (append-only, D-103) ---
   /** On fire: tenths of a second left burning (0 = not alight). Server-owned; the clients draw the flames on the body and the scream. */
   burn: t.uint8(),
+  // --- hit reactions (append-only, D-104) ---
+  /** Down on a knee, doubled over or just disarmed (hitReaction.ts packs kind, side and length). Server-owned, NPC rows only; 0 = none. */
+  react: t.uint8(),
 });
 export type PlayerStateType = SchemaType<typeof PlayerState>;
 

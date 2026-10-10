@@ -18,6 +18,7 @@ import {
   shotDirection,
   shotSeed,
   spreadFor,
+  aimShake,
   wrapAngle,
   weaponToWire,
   yawToWire,
@@ -326,7 +327,7 @@ export class CombatView {
     const a = this.actors().get(this.session.sessionId);
     if (!a) return;
     const speed = Math.hypot(this.session.value(me, "vx"), this.session.value(me, "vz"));
-    const spread = spreadFor(r, { aiming: (me.flags & FLAG.AIMING) !== 0, speed, crouching: (me.flags & FLAG.CROUCHING) !== 0 });
+    const spread = spreadFor(r, { aiming: (me.flags & FLAG.AIMING) !== 0, speed, crouching: (me.flags & FLAG.CROUCHING) !== 0, shake: aimShake(me.wounds, me.missing) });
     const seed = shotSeed(this.session.room.state.seed, mine.slot, ((mine.shots ?? 0) + this.pendingShots) & 255);
     this.pendingShots++;
     this.localReadyAt = performance.now() + r.cooldown * 1000 * 0.94;
@@ -599,7 +600,8 @@ export class CombatView {
     let gap = 8;
     if (armed && r) {
       const speed = Math.hypot(this.session.value(me, "vx"), this.session.value(me, "vz"));
-      const spread = spreadFor(r, { aiming: (me.flags & FLAG.AIMING) !== 0, speed, crouching: (me.flags & FLAG.CROUCHING) !== 0 }) + this.bloom;
+      // (D-104: a wounded arm's tremble widens the circle exactly as it widens the server's cone)
+      const spread = spreadFor(r, { aiming: (me.flags & FLAG.AIMING) !== 0, speed, crouching: (me.flags & FLAG.CROUCHING) !== 0, shake: aimShake(me.wounds, me.missing) }) + this.bloom;
       gap = reticleRadiusPx(spread, this.stage.camera.fov, window.innerHeight, (me.flags & FLAG.AIMING) !== 0); // the circle IS the spread cone, projected (and a dot when aimed and still)
     }
     this.hud.updateSight({ visible: armed || (!!def && def.fire === "melee" && !busy), gap: armed ? gap : 6, aiming: (me.flags & FLAG.AIMING) !== 0 });

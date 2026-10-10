@@ -35,6 +35,8 @@ import {
   shotDirection,
   shotSeed,
   spreadFor,
+  aimShake,
+  reactHolds,
   stepBallistic,
   weaponFromWire,
   yawFromWire,
@@ -426,6 +428,24 @@ export class Combat {
     return pc && { owned: pc.owned, current: pc.current, mag: [...pc.mags], reserve: [...pc.reserve], ready: pc.ready, reloadLeft: pc.reloadLeft, reloadTotal: pc.reloadTotal, shots: pc.shots };
   }
 
+  /**
+   * D-104: a blow to the arm knocked the weapon in hand away. It is gone from the kit and the fists come up (after a moment: the hand is smarting). Returns the weapon that
+   * fell, or -1 when nothing but fists was in the hand.
+   */
+  disarm(sessionId: string): WeaponId | -1 {
+    const pc = this.pcs.get(sessionId);
+    if (!pc || pc.current < 0 || pc.current === WEAPON.FISTS) return -1;
+    const lost = pc.current as WeaponId;
+    pc.owned &= ~(1 << lost);
+    this.cancelActions(pc);
+    pc.current = WEAPON.FISTS;
+    pc.ready = Math.max(pc.ready, WEAPONS[WEAPON.FISTS].drawSeconds, COMBAT.switchSeconds);
+    pc.switchLock = COMBAT.switchSeconds;
+    const p = this.host.players.get(sessionId);
+    if (p) this.sync(p, pc);
+    return lost;
+  }
+
   /** Test hook: removes a weapon from a player's kit (the server owns the kit; clients can only ask). */
   takeAway(sessionId: string, id: WeaponId): void {
     const pc = this.pcs.get(sessionId);
@@ -481,7 +501,8 @@ export class Combat {
       }
     }
 
-    if ((p.flags & BUSY) !== 0) {
+    // (D-104: down on a knee or doubled over from a hit, an NPC can do nothing with its hands until it gets up)
+    if ((p.flags & BUSY) !== 0 || reactHolds(p.react)) {
       this.cancelActions(pc);
       return consumed;
     }
@@ -581,7 +602,7 @@ export class Combat {
     p.shots = pc.shots & 255;
     const seed = shotSeed(this.host.worldSeed, p.slot, shotNo & 255); // (the client only ever sees the counter's low byte: PlayerState.shots)
     const speed = Math.hypot(p.vx, p.vz);
-    const spread = spreadFor(r, { aiming: (p.flags & FLAG.AIMING) !== 0, speed, crouching: (p.flags & FLAG.CROUCHING) !== 0 });
+    const spread = spreadFor(r, { aiming: (p.flags & FLAG.AIMING) !== 0, speed, crouching: (p.flags & FLAG.CROUCHING) !== 0, shake: aimShake(p.wounds, p.missing) });
     this.eye(p, this.pt);
     const ox = this.pt.x;
     const oy = this.pt.y;

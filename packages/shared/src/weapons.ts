@@ -380,13 +380,16 @@ export interface Stance {
   /** Horizontal speed, m/s. */
   speed: number;
   crouching: boolean;
+  /** D-104: a wounded or missing arm's tremble (hitReaction.ts `aimShake`), a multiplier on the cone. Absent = 1, a steady hand. */
+  shake?: number;
 }
 
 /** Cone half-angle (radians) for a shot in this stance. The HUD's crosshair and the server's resolution read this same number. */
 export function spreadFor(r: RangedStats, s: Stance): number {
   const base = s.aiming ? r.spreadAimed : r.spread;
   const move = Math.min(Math.max(0, s.speed), MOVEMENT.sprintSpeed) * r.spreadMove * (s.aiming ? 0.5 : 1);
-  return (base + move) * (s.crouching ? 0.75 : 1);
+  const shake = s.shake !== undefined && s.shake > 1 ? s.shake : 1;
+  return (base + move) * (s.crouching ? 0.75 : 1) * shake;
 }
 
 /** Seed for a shot's random pattern: world seed, shooter slot and the shooter's shot counter. */

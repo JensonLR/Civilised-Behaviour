@@ -1,7 +1,7 @@
 import { Box3, Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
-import { FLAG, WEAPONS, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
+import { FLAG, REACT, WEAPON, WEAPONS, reactKind, reactRight, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
@@ -32,6 +32,7 @@ export const FIRST_PERSON_ARMS = {
 } as const;
 
 const dropAt = new Vector3();
+const scaleAt = new Vector3();
 
 /** Root pitch of a fully downed figure; mirrors the animator (`j.root.rotation.x = down * (PI / 2 - 0.1)`). */
 const LIE_ANGLE = Math.PI / 2 - 0.1;
@@ -68,6 +69,8 @@ export interface ActorPose {
   torch?: boolean;
   /** D-095: the Society's pennant in the off hand (the siege's picket boys: a planted picket reads from across the field). Absent = none. */
   pennant?: boolean;
+  /** D-104: PlayerState.react (hitReaction.ts): down on a knee, doubled over, or just disarmed. Absent or 0 = none. */
+  react?: number;
 }
 
 /** The replicated combat state of one figure, as the actor needs it. */
@@ -118,6 +121,14 @@ export class CharacterActor {
   private pennantT = 0;
   /** A lit torch left the hand because the body went down: where it fell (world x, ground y, z) and the way it lies. Set by the game (`GroundTorches`); absent = it just goes out. */
   onTorchDropped?: (x: number, y: number, z: number, yaw: number, seed: number) => void;
+  /**
+   * D-104: a shot to the arm knocked the weapon away: which weapon, where the hurt hand was (world), the way it flies (unit x, z: out to that side and back), and the size
+   * the body held it at (the weapon hangs off the torso, so it takes the body's scale). Set by the game (LimbDebris.throwAway); absent = it simply leaves the hand.
+   */
+  onDisarmed?: (weapon: WeaponId, x: number, y: number, z: number, dx: number, dz: number, scale: number) => void;
+  /** The last weapon (not fists) seen in the hands, and the reaction kind last frame (the disarm is told on its edge). */
+  private lastArmed: WeaponId | -1 = -1;
+  private lastReact: number = REACT.NONE;
   private lastVy = 0;
   private lastVx = 0;
   private lastVz = 0;
@@ -412,6 +423,20 @@ export class CharacterActor {
     this.lastVz = pose.vz;
     const c = pose.combat;
     const weaponId = c && c.weapon > 0 ? c.weapon - 1 : -1;
+    // D-104: the weapon knocked out of the hand flies from the hurt hand, out to that side and back (the state may already show the fists: the last weapon seen is the one that goes)
+    const rk = pose.react ? reactKind(pose.react) : REACT.NONE;
+    const lost = this.lastArmed;
+    if (rk === REACT.DISARMED && this.lastReact !== REACT.DISARMED && lost !== -1) {
+      const side = reactRight(pose.react!) ? 1 : -1;
+      (side > 0 ? this.rig.joints.wristR : this.rig.joints.wristL).getWorldPosition(dropAt);
+      const f = pose.facing;
+      // (yaw 0 looks down -Z: forward is (-sin, -cos), right is (cos, -sin))
+      const dx = side * Math.cos(f) * 0.8 + Math.sin(f) * 0.6;
+      const dz = -side * Math.sin(f) * 0.8 + Math.cos(f) * 0.6;
+      this.onDisarmed?.(lost, dropAt.x, dropAt.y, dropAt.z, dx, dz, this.rig.joints.torso.getWorldScale(scaleAt).x);
+      this.lastArmed = -1;
+    } else if (weaponId >= 0 && weaponId !== WEAPON.FISTS && rk !== REACT.DISARMED) this.lastArmed = weaponId as WeaponId;
+    this.lastReact = rk;
     // Hands that are busy (carrying, dragging, kneeling, lying) put the weapon away; a fall too.
     const busy = (pose.flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DOWNED | FLAG.DRAGGED)) !== 0 || this.ragdoll !== undefined;
     const wi = this.weapons.update(dt, {
@@ -425,7 +450,7 @@ export class CharacterActor {
       carried: c?.carried,
     });
     this.anim.motion = getReduceMotion() ? 0.3 : 1;   // hair sway only (D-037): 30% under "reduce motion"
-    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride });
+    this.anim.update(dt, { speed: Math.hypot(pose.vx, pose.vz), flags: pose.flags, vy: pose.vy ?? 0, wounds: pose.wounds, weapon: wi, ride: pose.ride, react: pose.react });
     this.weapons.apply(this.anim.hold);
     // Fists close on what they hold (the hand poser reads these; empty hands go back to the body's own grip).
     const h = this.anim.hold;

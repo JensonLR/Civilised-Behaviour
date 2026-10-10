@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUTTON, FLAG, KESSAR_ANCHORS as A, NPC, WEAPON, createKessarWorld, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
+  BUTTON, FLAG, KESSAR_ANCHORS as A, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
   CollisionWorld, type MoveCommand, type PlayerStateType, type WeaponId,
 } from "@cb/shared";
 import { NAV, NPC_SIDE, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
@@ -645,3 +645,48 @@ describe("Cast on the real Kessar", () => {
 });
 
 void ({} as { a: NpcBody; b: NpcSenses });
+
+describe("Cast: hit reactions (D-104)", () => {
+  it("down on a knee or doubled over, a soldier neither moves nor fires until he gets up", () => {
+    const window = (react: number): MoveCommand[] => {
+      const r = rig();
+      r.human("p1", 0, -15);
+      r.cast.spawn([spec("s1", { post: { x: 0, z: 0 } })]);
+      r.cast.order("ward", { o: "alert" });
+      r.tick(90);
+      r.rows.get("npc:s1")!.react = react;
+      const from = r.cmds.get("npc:s1")!.length;
+      r.tick(120);
+      return r.cmds.get("npc:s1")!.slice(from);
+    };
+    const acting = (c: MoveCommand): boolean => c.moveF !== 0 || c.moveR !== 0 || (c.buttons & (BUTTON.FIRE | BUTTON.AIM | BUTTON.MELEE)) !== 0;
+    expect(window(0).some(acting)).toBe(true); // (the same soldier, unhurt, is doing something in those four seconds)
+    for (const react of [packReact(REACT.FLOORED, false, 1.5), packReact(REACT.DOUBLED, false, 1)]) {
+      const held = window(react);
+      expect(held.length).toBe(120);
+      expect(held.some(acting)).toBe(false);
+    }
+    expect(window(packReact(REACT.DISARMED, true, 0.9)).some(acting)).toBe(true); // (disarmed, he can still move and swing)
+  });
+
+  it("disarmed, a soldier puts up his fists and his nerve takes the shock; a civilian just has empty hands; a beast is never disarmed", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.cast.spawn([spec("s1", { post: { x: 0, z: 0 } }), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.PISTOL as WeaponId, post: { x: 9, z: 0 } })]);
+    r.tick(3);
+    const recs = (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey;
+    const b = recs.get("npc:s1")!.brain;
+    const shock = b.morale.shock;
+    r.cast.disarm("npc:s1");
+    expect(b.weapon).toBe(weaponToWire(WEAPON.FISTS));
+    expect(b.morale.shock).toBe(Math.min(60, shock + CAST.disarmShock));
+    expect(cries).toContain("npc:s1");
+    r.tick(2);
+    expect(r.cmds.get("npc:s1")!.at(-1)!.weapon).toBe(weaponToWire(WEAPON.FISTS));
+    r.cast.disarm("npc:h1");
+    expect(recs.get("npc:h1")!.brain.weapon).toBe(weaponToWire(WEAPON.FISTS));
+    expect(cries).not.toContain("npc:h1");
+    expect(() => r.cast.disarm("npc:nobody")).not.toThrow();
+  });
+});

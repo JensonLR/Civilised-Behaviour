@@ -4,6 +4,8 @@ import {
   CollisionWorld,
   FLAG,
   LIMB,
+  REACT,
+  WEAPON,
   WOUNDS,
   addWound,
   capWounds,
@@ -16,6 +18,11 @@ import {
   isZone,
   limbZone,
   pickZone,
+  reactKind,
+  reactOverrides,
+  reactRight,
+  reactSeconds,
+  reactionFor,
   setWound,
   severChance,
   severityForDamage,
@@ -58,6 +65,11 @@ export interface CasualtyHost {
    * so a party of one downed human with a standing hand is still routed.
    */
   scan?: { forEach(cb: (p: PlayerStateType, id: string) => void): void };
+  /**
+   * D-104: a blow to the arm knocked the weapon out of an NPC's hand (`right`: the right arm; dx, dz: the way the blow pushed). The room takes the weapon away and puts up
+   * the fists (Combat, Cast). Optional: test hosts need not.
+   */
+  disarm?(id: string, right: boolean, dx: number, dz: number): void;
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -109,6 +121,8 @@ export class Casualties {
   private readonly revives = new Map<string, Revive>(); // reviver -> revive
   private readonly drags = new Map<string, string>(); // dragger -> dragged
   private routTimer = 0;
+  /** D-104: seconds left of each body's hit reaction (PlayerState.react tells its kind; this times it). */
+  private readonly reacts = new Map<string, number>();
 
   constructor(
     private readonly host: CasualtyHost,
@@ -152,6 +166,26 @@ export class Casualties {
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
     if (down) this.down(sessionId, p);
+    else if (!hit.burn) this.react(sessionId, p, zone, amount, dx / len, dz / len);
+  }
+
+  /**
+   * D-104: where it landed decides what the blow does to the body (hitReaction.ts): down on that knee, doubled over, or the weapon knocked away. NPC rows only, never a
+   * beast or a rider or a man at a crank gun (see the header of hitReaction.ts for why the players do not).
+   */
+  private react(id: string, p: PlayerStateType, zone: ZoneId, amount: number, dx: number, dz: number): void {
+    if (p.npc === 0 || (p.flags & (FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING | FLAG.DRAGGED)) !== 0) return;
+    const armed = p.weapon !== 0 && p.weapon !== WEAPON.FISTS + 1;
+    const next = reactionFor(zone, amount, armed);
+    if (!reactOverrides(next, p.react)) return;
+    p.react = next;
+    this.reacts.set(id, reactSeconds(next));
+    if (reactKind(next) === REACT.DISARMED) this.host.disarm?.(id, reactRight(next), dx, dz);
+  }
+
+  /** D-104: the reaction in force on `id` (0 = none). */
+  reactionOf(id: string): number {
+    return this.reacts.has(id) ? (this.host.players.get(id)?.react ?? 0) : 0;
   }
 
   /**
@@ -214,6 +248,8 @@ export class Casualties {
     p.flags = (p.flags | FLAG.DOWNED) & ~(FLAG.CARRYING | FLAG.REVIVING | FLAG.DRAGGING | FLAG.CROUCHING | FLAG.SPRINTING);
     p.vx = 0;
     p.vz = 0;
+    p.react = 0; // (the downed pose takes over from a stagger)
+    this.reacts.delete(sessionId);
     log.info("casualty.down", { sessionId });
   }
 
@@ -364,6 +400,15 @@ export class Casualties {
   // ---- per-tick simulation --------------------------------------------------------------------------------------------------------
 
   tick(dt: number): void {
+    // D-104: hit reactions run out (a row that left takes its timer with it)
+    for (const [id, left] of this.reacts) {
+      const p = this.host.players.get(id);
+      const t = left - dt;
+      if (!p || t <= 0 || (p.flags & FLAG.DOWNED) !== 0) {
+        this.reacts.delete(id);
+        if (p && p.react !== 0) p.react = 0;
+      } else this.reacts.set(id, t);
+    }
     // Revives: progress only while the reviver keeps holding INTERACT, stays in reach, and both are in the right state.
     for (const [reviverId, r] of [...this.revives]) {
       const reviver = this.host.players.get(reviverId);

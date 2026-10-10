@@ -187,6 +187,12 @@ export class GameAudio {
     playSfx("gore_blood_ground", { x, y, z, volume: 0.8 });
   }
 
+  /** D-104: a weapon knocked out of a hand hits the ground. */
+  clatter(x: number, y: number, z: number): void {
+    playSfx("drop", { x, y, z, volume: 0.9 });
+    playSfx("foley_gear", { x, y, z, volume: 0.6 });
+  }
+
   /** An explosion or a cannon shot with its rumbling tail (audio/index.ts `playBlast`). */
   blast(kind: "explosion" | "cannon", x: number, y: number, z: number): void {
     playBlast(kind, x, y, z);

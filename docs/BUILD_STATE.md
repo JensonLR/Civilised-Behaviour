@@ -1,9 +1,16 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-10 (D-103, fire that spreads, D-102, characters and saves kept per device with a profile code, D-101, a clear view while playing and the welcome card for the expedition you start, D-100, the prompt says what the key will do, D-099, plain words and small boxes, D-098, pages that fit and one tidy line of orders, D-097, the bridge's fall and the signs, D-096, the Triangulation, D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-10 (D-104, hits that land where they land, D-103, fire that spreads, D-102, characters and saves kept per device with a profile code, D-101, a clear view while playing and the welcome card for the expedition you start, D-100, the prompt says what the key will do, D-099, plain words and small boxes, D-098, pages that fit and one tidy line of orders, D-097, the bridge's fall and the signs, D-096, the Triangulation, D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-104 (2026-10-10): hits that land where they land.** The second AAA mechanic (locational hit reactions; ideas, not code).
+  - **NPCs.** A leg shot drops them to that knee; a gut or head shot doubles them over. Either way they can't move or shoot for a second or so. An arm shot knocks the gun from their hand: it flies off and they put up their fists.
+  - **Players.** A badly hurt or missing arm shakes the aim: the crosshair and the server's cone grow alike. No server-imposed stagger (prediction would snap).
+  - **Trails.** Bodies with a real wound drip blood as they walk or crawl, at the Gore setting.
+  - **Fixed too.** The revive kneel no longer floats a stout body's knee off the ground.
+  - **Tested.** Shared, server (units and a real room), client and animator. Poses looked at in the lineup.
+  - **Limits.** Dropped guns can't be picked up; disarmed men don't go back for them.
 - **D-103 (2026-10-10): fire that spreads.** The first of the AAA mechanics the owner asked for (ideas from public design, not decompiled code; see the decision).
   - **What happens.** Blasts and a fallen raider's torch light the grass; it spreads with the wind, jumps gaps in a strong one, dies in rain, and stops at roads, water, rock and walls. Highmark's grass burns hardest.
   - **People.** Anyone in it catches, burns for seconds after, spreads it as they run, and panics if they are an NPC. Crouch to roll it out; water puts it out. Kegs cook off.

@@ -1,5 +1,5 @@
 import { Quaternion } from "three";
-import { FLAG, ZONE, woundLevel } from "@cb/shared";
+import { FLAG, REACT, ZONE, reactKind, reactRight, woundLevel } from "@cb/shared";
 import { FaceAnimator } from "./faceAnimate.ts";
 import { TABLE_MOODS, sumBodyMood, type BodyMood } from "./moodBody.ts";
 import { HAIR_SWAY_MAX } from "./hairSway.ts";
@@ -32,6 +32,11 @@ export interface PoseInput {
    * Absent = on foot; the last values are kept while the blend eases out.
    */
   ride?: RideInput;
+  /**
+   * D-104: a hit reaction, PlayerState.react as the server packs it (hitReaction.ts): down on the hurt knee, doubled over, or the arm whipped back by the shot that took
+   * the weapon. Absent or 0 = none; each eases in fast and out slowly (the drop is sudden, the getting up is not).
+   */
+  react?: number;
 }
 
 const damp = (current: number, target: number, rate: number, dt: number): number => current + (target - current) * (1 - Math.exp(-rate * dt));
@@ -75,6 +80,11 @@ export class CharacterAnimator {
   private carry = 0;
   private down = 0;
   private kneel = 0;
+  /** D-104: hit reaction weights (down on a knee, doubled over, an arm flinch) and the hurt side (-1 left, +1 right). */
+  private floorW = 0;
+  private doubleW = 0;
+  private flinchW = 0;
+  private reactSide = 1;
   private haul = 0;
   private breath = 0;
   /** Ambient life (idle blinking, weight shift, glances, idle actions). Disable for stills (photo mode) and deterministic tests. */
@@ -254,6 +264,11 @@ export class CharacterAnimator {
     this.carry = damp(this.carry, carrying ? 1 : 0, 12, dt);
     this.down = damp(this.down, downed ? 1 : 0, 6, dt);
     this.kneel = damp(this.kneel, reviving ? 1 : 0, 10, dt);
+    const rk = pose.react ? reactKind(pose.react) : REACT.NONE;
+    if (rk !== REACT.NONE) this.reactSide = reactRight(pose.react!) ? 1 : -1;
+    this.floorW = damp(this.floorW, rk === REACT.FLOORED && !downed ? 1 : 0, rk === REACT.FLOORED ? 14 : 4, dt);
+    this.doubleW = damp(this.doubleW, rk === REACT.DOUBLED && !downed ? 1 : 0, rk === REACT.DOUBLED ? 16 : 5, dt);
+    this.flinchW = damp(this.flinchW, rk === REACT.DISARMED && !downed ? 1 : 0, rk === REACT.DISARMED ? 24 : 4, dt);
     this.haul = damp(this.haul, dragging ? 1 : 0, 8, dt);
     this.pegBlend = damp(this.pegBlend, peg ? 1 : 0, 8, dt);
     this.updateMood(dt);
@@ -377,6 +392,29 @@ export class CharacterAnimator {
     kL = lerp(kL, 1.55, this.kneel);
     aR = lerp(aR, 1.45 - 0.5 * fc, this.kneel);
     kR = lerp(kR, 1.45, this.kneel);
+    // D-104: floored by a leg wound: down on the HURT knee, the other foot planted ahead (the revive kneel, on whichever side was hit)
+    const fL = this.reactSide < 0 ? this.floorW : 0;
+    const fR = this.reactSide > 0 ? this.floorW : 0;
+    aL = lerp(aL, 0.0, fL);
+    kL = lerp(kL, 1.55, fL);
+    aR = lerp(aR, 1.45 - 0.5 * fc, fL);
+    kR = lerp(kR, 1.45, fL);
+    aR = lerp(aR, 0.0, fR);
+    kR = lerp(kR, 1.55, fR);
+    aL = lerp(aL, 1.45 - 0.5 * fc, fR);
+    kL = lerp(kL, 1.45, fR);
+    // Kneeling (to a patient, or floored): the planted foot meets the ground at the kneeling hip height. A fixed fold left a short or stout body's planted leg too long, so it
+    // propped the hips up and the kneeling knee floated off the ground; the planted knee folds exactly as far as the kneeling hip height needs.
+    const kneelL = Math.max(this.kneel, fL);
+    const shin = P.legLower + 0.05 * P.scale;
+    const plant = (aKneel: number, aPlant: number): number => aPlant + Math.acos(clamp((P.legUpper * Math.cos(aKneel) + 0.03 - P.legUpper * Math.cos(aPlant)) / shin, -1, 1));
+    if (kneelL > 0.001) kR = lerp(kR, plant(aL, aR), kneelL);
+    if (fR > 0.001) kL = lerp(kL, plant(aR, aL), fR);
+    // doubled over: the knees give and the hips go back
+    aL += this.doubleW * 0.3;
+    aR += this.doubleW * 0.3;
+    kL += this.doubleW * 0.55;
+    kR += this.doubleW * 0.55;
     // lying down: relaxed legs, one knee a little up
     aL = lerp(aL, 0.12, this.down);
     aR = lerp(aR, -0.05, this.down);
@@ -385,7 +423,7 @@ export class CharacterAnimator {
 
     // a thick leg cannot fold as far as a thin one: past this the calf goes through the thigh
     // (a kneeling body is exempt: the knee is on the ground and the shin lies along it whatever the thickness)
-    const kCap = lerp(this.kneeMax, 4, this.kneel);
+    const kCap = lerp(this.kneeMax, 4, Math.max(this.kneel, this.floorW));
     kL = Math.min(kL, kCap);
     kR = Math.min(kR, kCap);
     j.hipL.rotation.x = aL;
@@ -399,8 +437,8 @@ export class CharacterAnimator {
     // Pelvis height: lower it until the lower foot is on the ground. Extent = how far the foot hangs below the hip.
     const foot = P.legLower + 0.05 * P.scale;
     const extent = (a: number, k: number): number => P.legUpper * Math.cos(a) + foot * Math.cos(a - k);
-    const eL = lerp(extent(aL, kL), P.legUpper * Math.cos(aL) + 0.03, this.kneel); // kneeling: the knee is the contact point
-    const eR = extent(aR, kR);
+    const eL = lerp(extent(aL, kL), P.legUpper * Math.cos(aL) + 0.03, Math.max(this.kneel, fL)); // kneeling: the knee is the contact point
+    const eR = lerp(extent(aR, kR), P.legUpper * Math.cos(aR) + 0.03, fR);
     let hipsY = Math.max(eL, eR);
     // running has a flight phase: the body rises at mid-stride; a limp and a peg lurch down onto the bad leg
     hipsY += runW * 0.05 * Math.abs(s) * move * (1 - this.air);
@@ -424,14 +462,14 @@ export class CharacterAnimator {
     j.pelvis.position.x = 0.022 * c * move * (1 + runW * 0.4) + m.drunk * 0.05 * Math.sin(this.time * 1.9) * (0.4 + move);
 
     // Torso: leans into speed and the turn, twists against the pelvis, breathes, and takes the mood.
-    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) - this.haul * 0.3 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
+    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) + this.floorW * (0.4 - 0.15 * bc) + this.doubleW * (1.0 - 0.3 * bc) - this.haul * 0.3 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
     this.lean = damp(this.lean, leanTarget, 8, dt);
     const moodLean = m.pain * 0.3 + m.angry * 0.14 + m.fear * -0.1 - m.triumph * 0.16 + m.drunk * 0.06;
     j.torso.rotation.x = -(P.lean + this.lean + moodLean * (1 - this.air)) - this.down * 0.15 + this.jolt[0]! * 0.6 + this.limp * 0.06 + m.drunk * 0.12 * Math.sin(this.time * 1.3) + nb.chest + nb.heave;
     const torsoTwist = (0.11 + 0.1) * s * twist - clamp(this.turn, -6, 6) * 0.03 * (1 - this.air); // (the shoulders lag the turn a little, the head leads it)
     j.torso.rotation.y = torsoTwist + m.drunk * 0.16 * Math.sin(this.time * 1.1) + nb.twist;
     const bank = clamp(this.turn * speed * 0.018, -0.3, 0.3); // banking into a turn: the body leans toward the inside
-    j.torso.rotation.z = this.jolt[1]! * 0.6 - this.limpSide * this.limp * 0.08 * onBad - roll * 0.7 - bank + m.drunk * 0.08 * Math.sin(this.time * 1.6 + 1) + nb.roll;
+    j.torso.rotation.z = this.jolt[1]! * 0.6 - this.limpSide * this.limp * 0.08 * onBad - roll * 0.7 - bank + m.drunk * 0.08 * Math.sin(this.time * 1.6 + 1) + nb.roll + this.reactSide * this.floorW * 0.14;
     j.pelvis.rotation.z += bank * 0.3;
     const breathe = Math.sin(this.breath * (1.7 + m.pain * 1.4 + m.fear * 1.9)) * (0.012 + m.pain * 0.008 + m.fear * 0.01);
     // landing squash (and the take-off stretch): the trunk shortens and widens on touchdown, lengthens as it leaves the ground
@@ -509,8 +547,47 @@ export class CharacterAnimator {
     szR += nb.armOut;
     elL += nb.armBend;
     elR += nb.armBend + nb.handBend;
+    // D-104 (empty hands only: a weapon in them is held on through all of it): floored, the near hand presses the hurt thigh and the other reaches for the ground;
+    // doubled, both hands clutch the belly; disarmed, the hurt arm is whipped back and out, shaking, and the other hand comes across to it
+    const shake = Math.sin(this.time * 37) * 0.06;
+    const fw = this.floorW;
+    const thighL = this.reactSide < 0 ? fw : 0;
+    const thighR = this.reactSide > 0 ? fw : 0;
+    shL = lerp(shL, 0.6, thighL);
+    elL = lerp(elL, 0.55, thighL);
+    szL = lerp(szL, 0.12, thighL);
+    shR = lerp(shR, 0.6, thighR);
+    elR = lerp(elR, 0.55, thighR);
+    szR = lerp(szR, -0.12, thighR);
+    shL = lerp(shL, 0.75, thighR);
+    elL = lerp(elL, 0.15, thighR);
+    szL = lerp(szL, -0.3, thighR);
+    shR = lerp(shR, 0.75, thighL);
+    elR = lerp(elR, 0.15, thighL);
+    szR = lerp(szR, 0.3, thighL);
+    const dw = this.doubleW;
+    shL = lerp(shL, 0.55 + shake * 0.5, dw);
+    shR = lerp(shR, 0.55 - shake * 0.5, dw);
+    elL = lerp(elL, 2.1, dw);
+    elR = lerp(elR, 2.1, dw);
+    szL = lerp(szL, 0.3, dw);
+    szR = lerp(szR, -0.3, dw);
+    const xL = this.reactSide < 0 ? this.flinchW : 0;
+    const xR = this.reactSide > 0 ? this.flinchW : 0;
+    shL = lerp(shL, -0.35 + shake, xL);
+    elL = lerp(elL, 1.1, xL);
+    szL = lerp(szL, -0.6, xL);
+    shR = lerp(shR, -0.35 - shake, xR);
+    elR = lerp(elR, 1.1, xR);
+    szR = lerp(szR, 0.6, xR);
+    shL = lerp(shL, 0.7, xR);
+    elL = lerp(elL, 1.7, xR);
+    szL = lerp(szL, 0.35, xR);
+    shR = lerp(shR, 0.7, xL);
+    elR = lerp(elR, 1.7, xL);
+    szR = lerp(szR, -0.35, xL);
     // idle life: breathing arms, weight shifts, glances and the occasional small action
-    const idle = (1 - Math.min(1, move * 2)) * (1 - this.air) * (1 - this.crouch) * (1 - busy) * (1 - this.down) * (1 - Math.max(m.pain, m.fear, m.triumph, m.angry, m.smug, m.disgust, m.surprise, m.laugh, m.sleep));
+    const idle = (1 - Math.min(1, move * 2)) * (1 - this.air) * (1 - this.crouch) * (1 - busy) * (1 - this.down) * (1 - Math.max(this.floorW, this.doubleW, this.flinchW)) * (1 - Math.max(m.pain, m.fear, m.triumph, m.angry, m.smug, m.disgust, m.surprise, m.laugh, m.sleep));
     let headYaw = 0;
     let headPitch = 0;
     let twL = 0; // (the upper arm's twist about its own length: turns a bent elbow's forearm in across the body)
@@ -679,7 +756,7 @@ export class CharacterAnimator {
 
     // ---- head: stays level against the torso, glances, leads the turn, takes the mood ---------------------------------------------------------
     this.lookYaw = damp(this.lookYaw, this.lookTarget, 7, dt);
-    j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1) + nb.headPitch;
+    j.head.rotation.x = -j.torso.rotation.x * 0.75 - (crouchW > 0 ? 0.1 * crouchW : 0) + this.jolt[0]! * 0.5 + headPitch + this.doubleW * 0.3 + m.pain * 0.3 + m.angry * 0.1 - m.fear * 0.15 - m.triumph * 0.12 + m.drunk * 0.1 * Math.sin(this.time * 1.5 + 1) + nb.headPitch;
     j.head.rotation.y = -(j.torso.rotation.y + j.pelvis.rotation.y) * 0.8 + Math.sin(this.time * 0.6) * 0.05 * (0.4 + idle) + headYaw + this.turn * 0.05 + m.fear * Math.sin(this.time * 6) * 0.05 + nb.headYaw + this.lookYaw;
     j.head.rotation.z = -(j.pelvis.rotation.z + j.torso.rotation.z) * 0.5 + m.drunk * Math.sin(this.time * 1.3) * 0.16 - bank * 0.4 + nb.headRoll;
 

@@ -27,6 +27,10 @@ interface Piece {
   landed: boolean;
   /** Orientation it settles into once it lands: the limb's length horizontal. */
   lying: Quaternion;
+  /** A limb bleeds where it lands (`onLand`); a weapon knocked out of a hand (D-104) only clatters (`onClatter`). */
+  bleed: boolean;
+  /** Height of its centre above the ground once it lies flat. */
+  rest: number;
 }
 
 const capGeo = new SphereGeometry(1, 8, 5);
@@ -36,6 +40,9 @@ const capMat = (gore: GoreLevel): MeshBasicMaterial => {
   if (!m) capMats.set(gore, (m = new MeshBasicMaterial({ color: PALETTE.gore[gore].fresh })));
   return m;
 };
+
+/** A gun lying on its side: its grip's centre this far above the ground (the stock's half thickness). */
+const WEAPON_REST = 0.035;
 
 const spin = new Quaternion();
 const axis = new Vector3();
@@ -51,6 +58,8 @@ export class LimbDebris {
   private readonly pieces: Piece[] = [];
   /** Told once when a limb first hits the ground (x, z, heading vx, vz): the integrator leaves a pool and a spatter there (render/decals). */
   onLand: ((x: number, z: number, vx: number, vz: number) => void) | undefined;
+  /** D-104: told once when a thrown weapon first hits the ground (x, y, z): the integrator plays the clatter. */
+  onClatter: ((x: number, y: number, z: number) => void) | undefined;
 
   constructor(
     private readonly scene: { add(o: Object3D): unknown },
@@ -88,6 +97,45 @@ export class LimbDebris {
       age: 0,
       landed: false,
       lying,
+      bleed: true,
+      rest: DEBRIS.restHeight,
+    });
+  }
+
+  /**
+   * D-104: a weapon knocked out of a hand. Takes ownership of `obj` (already placed in the world where the hand was): it spins away along (dx, dz) and up, clatters down,
+   * and settles flat on its side, the way a dropped gun lies. No blood: it is not a limb. It shares the pool and the life of the limbs.
+   */
+  throwAway(obj: Object3D, dx: number, dz: number, power: number): void {
+    const g = new Group();
+    g.position.copy(obj.position);
+    g.quaternion.copy(obj.quaternion);
+    obj.position.set(0, 0, 0);
+    obj.quaternion.identity();
+    obj.visible = true; // (a weapon model is built hidden until a hand shows it: this one was invisible in the first look)
+    g.add(obj);
+    this.scene.add(g);
+    if (this.pieces.length >= DEBRIS.max) this.remove(0);
+    const len = Math.hypot(dx, dz);
+    const ux = len > 1e-6 ? dx / len : 0;
+    const uz = len > 1e-6 ? dz / len : 1;
+    const p = Math.max(0.2, Math.min(1, power));
+    const speed = 1.6 + p * 2.4;
+    // lying flat: level, turned to a random heading (the model's barrel runs along -Z, its sights up)
+    const lying = new Quaternion().setFromAxisAngle(axis.set(0, 1, 0), Math.random() * Math.PI * 2).multiply(spin.setFromAxisAngle(axis.set(0, 0, 1), Math.PI / 2));
+    this.pieces.push({
+      group: g,
+      vx: ux * speed + (Math.random() - 0.5) * 0.8,
+      vy: 2.4 + p * 1.8 + Math.random() * 0.6,
+      vz: uz * speed + (Math.random() - 0.5) * 0.8,
+      wx: (Math.random() - 0.5) * 18,
+      wy: (Math.random() - 0.5) * 10,
+      wz: (Math.random() - 0.5) * 18,
+      age: 0,
+      landed: false,
+      lying,
+      bleed: false,
+      rest: WEAPON_REST,
     });
   }
 
@@ -126,7 +174,7 @@ export class LimbDebris {
         continue;
       }
       const g = s.group;
-      const ground = this.groundAt(g.position.x, g.position.z) + DEBRIS.restHeight;
+      const ground = this.groundAt(g.position.x, g.position.z) + s.rest;
       if (!s.landed || g.position.y > ground + 1e-3 || s.vy > 0) {
         s.vy -= DEBRIS.gravity * dt;
         g.position.x += s.vx * dt;
@@ -142,7 +190,10 @@ export class LimbDebris {
         const drag = Math.exp(-4 * dt);
         s.vx *= drag;
         s.vz *= drag;
-        if (!s.landed) this.onLand?.(g.position.x, g.position.z, s.vx, s.vz);
+        if (!s.landed) {
+          if (s.bleed) this.onLand?.(g.position.x, g.position.z, s.vx, s.vz);
+          else this.onClatter?.(g.position.x, g.position.y, g.position.z);
+        }
         s.landed = true;
         s.wx *= 0.5;
         s.wy *= 0.5;

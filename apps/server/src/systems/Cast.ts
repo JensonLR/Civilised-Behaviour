@@ -1,5 +1,5 @@
 import {
-  BUTTON, FLAG, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, weatherAt, yawToWire,
+  BUTTON, FLAG, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
@@ -108,6 +108,8 @@ class BudgetedNav implements NavApi {
 export const CAST = {
   sightClear: 28, sightWet: 16, allyRange: 15, tokens: 2, witnessShock: 16, goreShock: 12, crySpacingS: 6, hurtShock: 0.35, noiseShock: 4, underFireSeconds: 4,
   civilFleeSeconds: 6, civilFleeRange: 22, followRange: 40,
+  /** D-104: the morale shock of having the gun shot out of your hand. */
+  disarmShock: 30,
 } as const;
 
 const sideKey = (a: NpcSide, b: NpcSide): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -417,6 +419,21 @@ export class Cast implements CastApi {
     this.cry(r, now);
   }
 
+  /**
+   * D-104: the weapon was knocked out of row `key`'s hand. He puts up his fists (the brain fights with what it holds), and losing the gun shakes him: a timid man runs, a
+   * stout one comes on with his fists. The weapon itself is the room's business (Combat.disarm).
+   */
+  disarm(key: string): void {
+    const r = this.byKey.get(key);
+    if (!r || r.gone || r.beast) return;
+    r.brain.weapon = weaponToWire(WEAPON.FISTS);
+    if (r.civil) return;
+    const now = this.host.worldMs() / 1000;
+    r.brain.morale.shock = Math.min(60, r.brain.morale.shock + CAST.disarmShock);
+    r.brain.hurtAt = now;
+    this.cry(r, now);
+  }
+
   despawn(group?: string): void {
     const keep: Rec[] = [];
     for (const r of this.recs) {
@@ -681,7 +698,7 @@ export class Cast implements CastApi {
     if (!r.hasEnemy || r.brain.mode === "flee" || r.brain.mode === "stand_down") return false;
     const row = this.host.players.get(r.key);
     if (!row) return false;
-    const w = r.spec.weapon;
+    const w = weaponFromWire(r.brain.weapon); // (what is in the hand now: D-104 can knock the spec's weapon away)
     return row.ammo > 0 || !(w === WEAPON.PISTOL || w === WEAPON.RIFLE || w === WEAPON.BLUNDERBUSS);
   }
 
@@ -755,6 +772,12 @@ export class Cast implements CastApi {
     else if (r.civil) this.civilThink(r, row, sn, dt, now);
     else (r.fn ?? npcThink)(r.brain, me, sn, dt, this.cmd);
     if (g.holdFire) this.cmd.buttons &= ~(BUTTON.FIRE | BUTTON.MELEE | BUTTON.THROW);
+    if (reactHolds(row.react)) {
+      // D-104: down on a knee or doubled over: he stays where the blow put him, hands off the weapon, until he gets up
+      this.cmd.moveF = 0;
+      this.cmd.moveR = 0;
+      this.cmd.buttons &= ~(BUTTON.FIRE | BUTTON.MELEE | BUTTON.THROW | BUTTON.AIM | BUTTON.SPRINT | BUTTON.JUMP | BUTTON.RELOAD);
+    }
     if ((this.cmd.buttons & (BUTTON.FIRE)) !== 0) this.stats.shots++;
     this.host.stepNpc(r.key, this.cmd);
   }

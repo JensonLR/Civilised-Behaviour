@@ -114,3 +114,4 @@ export * from "./peoples.ts";
 // ---- D-103: plant cover by region (the scatters and the fire's fuel), and the fire itself ----
 export * from "./groundCover.ts";
 export * from "./fire.ts";
+export * from "./hitReaction.ts"; // D-104: where a blow lands decides what it does

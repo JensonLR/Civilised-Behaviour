@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { CollisionWorld, FLAG, PEOPLE_IDS, WEAPON, ZONE_COUNT, setWound, type PeopleId } from "@cb/shared";
+import { CollisionWorld, FLAG, PEOPLE_IDS, REACT, WEAPON, ZONE_COUNT, packReact, setWound, type PeopleId } from "@cb/shared";
 import { ARCHETYPES, FIELDS, applyPeople, computeProportions, decodeSpec, generateCharacter, sanitizeSpec, type CharacterSpec } from "@cb/procedural";
 import { CharacterAnimator, buildCharacter, type CharacterRig, type ExpressionId } from "@cb/procedural/three";
 import { RagdollWorld } from "../render/Ragdoll.ts";
@@ -251,6 +251,12 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
   const swingW = params.get("sw") !== null ? Number(params.get("sw")) : pose === "sabre" ? 0.4 : -1;
   const weaponRigs = rigs.map(({ rig, anim }) => (weaponId >= 0 ? new WeaponRig(rig, anim, params.get("outline") !== "0") : undefined));
   const weapon = { id: weaponId, aim: aimW, elev: 0, fire: 0, reload: 0, swing: swingW, swingKind: 0, fp: 0, crew: pose === "cannon" ? 1 : 0, hidden: false };
+  // D-104: react=floored|floored-r|doubled|disarmed|disarmed-r holds a hit reaction (the server packs the same byte), for reviewing the knee on the ground and the hands
+  const REACTS: Record<string, number> = {
+    floored: packReact(REACT.FLOORED, false, 1.5), "floored-r": packReact(REACT.FLOORED, true, 1.5), doubled: packReact(REACT.DOUBLED, false, 1.2),
+    disarmed: packReact(REACT.DISARMED, false, 0.9), "disarmed-r": packReact(REACT.DISARMED, true, 0.9),
+  };
+  const react = REACTS[params.get("react") ?? ""] ?? 0;
   // Step the animation to a settled, deterministic frame for stills, then keep animating for live viewing.
   const steps = Number(params.get("steps") ?? 90);
   for (let i = 0; i < steps; i++) {
@@ -260,7 +266,7 @@ async function start(canvas: HTMLCanvasElement, params: URLSearchParams): Promis
         wr.update(1 / 30, { weapon: weaponId, aiming: aimW > 0, elev: 0, reload: 0, hidden: false, crew: 0, fp: 0 });
         wr.input.swing = swingW;
       }
-      anim.update(1 / 30, { speed, flags, vy: pose === "air" ? 2 : 0, weapon: wr ? wr.input : weapon });
+      anim.update(1 / 30, { speed, flags, vy: pose === "air" ? 2 : 0, weapon: wr ? wr.input : weapon, react });
     });
   }
   rigs.forEach(({ rig, anim }, k) => {
