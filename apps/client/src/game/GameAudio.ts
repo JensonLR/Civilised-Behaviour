@@ -193,6 +193,25 @@ export class GameAudio {
     playSfx("gore_flesh_heavy", { x, y, z, volume: 0.9 });
   }
 
+  /** D-108: a boot lands (a dull thump and the cloth of it). */
+  boot(x: number, y: number, z: number): void {
+    playSfx("impact_earth", { x, y, z, volume: 1 });
+    playSfx("foley_cloth", { x, y, z, volume: 0.8 });
+  }
+
+  /** D-111: a horse goes through a man: the heavy thump, the bone of it and the cloth (the Gore setting keys the wet one, audio/index.ts). */
+  trample(x: number, y: number, z: number): void {
+    playSfx("impact_earth", { x, y, z, volume: 1 });
+    playSfx("gore_bone", { x, y, z, volume: 0.7 });
+    playSfx("foley_cloth", { x, y, z, volume: 0.8 });
+  }
+
+  /** D-108: a thrown body meets a wall or the ground from a height: the crunch (the Gore setting keys the wet one, audio/index.ts). */
+  splat(x: number, y: number, z: number): void {
+    playSfx("impact_wood", { x, y, z, volume: 1 });
+    playSfx("gore_bone", { x, y, z, volume: 0.9 });
+  }
+
   /** D-106: a lariat thrown: the whirl and the throw. */
   lasso(x: number, y: number, z: number): void {
     playSfx("throw", { x, y, z, volume: 0.9 });

@@ -26,7 +26,7 @@ describe("controls lists", () => {
   it("every action the player can rebind appears in the how-to rows, and the pad list is complete", async () => {
     const { info } = await load();
     const text = info.keyboardRows().map((r) => r.what).join("|");
-    for (const w of ["Move", "Sprint", "Jump", "Crouch", "Use", "Grab", "Throw", "Reload", "Melee", "Switch first", "Pause"]) expect(text).toContain(w);
+    for (const w of ["Move", "Sprint", "Jump", "Crouch", "Use", "Grab", "Throw", "Reload", "Kick or melee", "Switch first", "Pause"]) expect(text).toContain(w);
     const pad = info.padRows().map((r) => r.keys[0]);
     for (const g of ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "Menu"]) expect(pad).toContain(g);
     expect(info.padRows("playstation").map((r) => r.keys[0])).toEqual(expect.arrayContaining(["✕", "○", "□", "△", "L1", "R1", "L2", "R2", "Options"]));

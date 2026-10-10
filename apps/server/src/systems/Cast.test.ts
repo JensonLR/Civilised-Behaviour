@@ -378,6 +378,29 @@ describe("D-107: the pacing director's levers in the Cast", () => {
   });
 });
 
+describe("D-109: a man with a grudge", () => {
+  it("turns on the one he hates over a nearer stranger; a man without one takes the nearer; never past his sight", () => {
+    const seen = new Map<string, string>();
+    const spy: BrainFn = (b, me, sn, dt, out) => {
+      if (sn.enemy) seen.set(String((b as NpcBrainState).seed), sn.enemy.id);
+      npcThink(b, me, sn, dt, out);
+    };
+    const r = rig({ brains: { garrison: spy } });
+    r.human("ada", 0, -20, { name: "Ada" });
+    r.human("bram", 0, -10, { name: "Bram" });
+    r.cast.spawn([spec("hook", { lookSeed: 501, hates: "Ada" }), spec("plain", { post: { x: 1, z: 0 }, lookSeed: 502 })]);
+    r.cast.order("ward", { o: "alert" });
+    r.tick(5);
+    expect(seen.get("501")).toBe("ada");
+    expect(seen.get("502")).toBe("bram");
+    // she is beyond his sight: he takes the man he can see
+    r.rows.get("ada")!.z = -(CAST.sightClear + 5);
+    seen.clear();
+    r.tick(5);
+    expect(seen.get("501")).toBe("bram");
+  });
+});
+
 describe("Cast: orders", () => {
   it("stand_down is inert (and the stand-down latches), post lifts it", () => {
     const r = rig();

@@ -5,6 +5,7 @@ import type {
 import { isRegionId } from "./campaignTypes.ts";
 import { INCIDENT_IDS, INCIDENT_RESULTS } from "./incidents.ts";
 import { parseBillRecord } from "./mayhem.ts";
+import { parseGrudges } from "./grudges.ts";
 import { hash3 } from "./rng.ts";
 import { FLAG_FX } from "./powersText.ts";
 import { NEW_RESOLUTIONS, NEW_TEMPLATE_IDS, NEW_TEMPLATE_RESOLUTIONS, isNewTemplate, pluck } from "./regionEndings.ts";
@@ -204,7 +205,14 @@ function parseSites(raw: unknown): SiteLedger {
     ends: parseEnds(r.ends),
     ...parseLastIncident(r.lastIncident),
     ...parseLastBill(r.lastBill),
+    ...parseGrudgeList(r.grudges),
   };
+}
+
+/** D-109: the remembered grudges, each checked (a malformed one is dropped); absent when there is no list. Never throws. */
+function parseGrudgeList(raw: unknown): Pick<SiteLedger, "grudges"> {
+  const g = parseGrudges(raw, isRegionId, (v): v is FactionId => v === "ward" || v === "rival");
+  return g && g.length > 0 ? { grudges: g } : {};
 }
 
 /** D-084: the last run's bill, if it is well formed (mayhem.ts validates every field). Never throws. */

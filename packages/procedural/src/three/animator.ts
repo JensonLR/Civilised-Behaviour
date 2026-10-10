@@ -8,7 +8,7 @@ import type { CharacterRig } from "./rig.ts";
 import { armRestAbduction, crouchObstruction, kneeFlexLimit } from "./armClearance.ts";
 import { BEARINGS, bearingOf, type Bearing } from "./bearing.ts";
 import { applyRidePose, newRideInput, type RideInput } from "./ridePose.ts";
-import { HAND_CENTRE, applyMatrix, forearmMatrix, computeHold, newHoldOut, rotateByQuat, solveArm, solveWrist, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
+import { HAND_CENTRE, applyMatrix, forearmMatrix, computeHold, kicksWith, newHoldOut, rotateByQuat, solveArm, solveWrist, type ArmAngles, type HoldBlend, type HoldOut, type WeaponPoseInput } from "./weaponPose.ts";
 
 // The expression set (ids, targets, per-expression face poses) lives in expressions.ts; the face itself is driven by faceAnimate.ts.
 export type { ExpressionId } from "./expressions.ts";
@@ -152,6 +152,8 @@ export class CharacterAnimator {
    */
   readonly hold: HoldOut = newHoldOut();
   private readonly holdBlend: HoldBlend = { aim: 0, reload: 0, hold: 0, swing: 0 };
+  /** D-108: how far into a boot the right leg is (0..1; tests and the lean read it). */
+  kickW = 0;
   private readonly armR: ArmAngles = { a: 0.9, b: 0.1, e: 0.9 };
   private readonly armL: ArmAngles = { a: 0.9, b: -0.1, e: 0.9 };
   private crewBlend = 0;
@@ -421,6 +423,19 @@ export class CharacterAnimator {
     aR = lerp(aR, -0.05, this.down);
     kL = lerp(kL, 0.35, this.down);
     kR = lerp(kR, 0.12, this.down);
+    // D-108: the boot. With a firearm in hand a blow is a kick: the right knee comes up (the chamber), the leg drives out straight (the strike) and comes back;
+    // the standing leg straightens under it (the pelvis below sits on whichever foot is lower: the standing one)
+    const wk = pose.weapon;
+    if (wk !== undefined && wk.swing >= 0 && !wk.hidden && kicksWith(wk.id)) {
+      const ks = wk.swing;
+      const strike = smooth(0.36, 0.55, ks);
+      const k = Math.max(smooth(0, 0.34, ks), strike) * (1 - smooth(0.66, 1, ks)) * (1 - this.down);
+      aR = lerp(aR, lerp(1.2, 1.5, strike), k);
+      kR = lerp(kR, lerp(1.8, 0.08, strike), k);
+      aL = lerp(aL, -0.06, k);
+      kL = lerp(kL, 0.1, k);
+      this.kickW = k;
+    } else this.kickW = 0;
 
     // a thick leg cannot fold as far as a thin one: past this the calf goes through the thigh
     // (a kneeling body is exempt: the knee is on the ground and the shin lies along it whatever the thickness)
@@ -463,7 +478,7 @@ export class CharacterAnimator {
     j.pelvis.position.x = 0.022 * c * move * (1 + runW * 0.4) + m.drunk * 0.05 * Math.sin(this.time * 1.9) * (0.4 + move);
 
     // Torso: leans into speed and the turn, twists against the pelvis, breathes, and takes the mood.
-    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) + this.floorW * (0.4 - 0.15 * bc) + this.doubleW * (1.0 - 0.3 * bc) - this.haul * 0.3 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
+    const leanTarget = Math.min(speed / 4.4, 1.5) * (0.11 + 0.06 * runW + (sprinting ? 0.14 : 0)) + this.crouch * (0.28 - 0.12 * bc) + this.kneel * (0.55 - 0.2 * bc) + this.floorW * (0.4 - 0.15 * bc) + this.doubleW * (1.0 - 0.3 * bc) - this.haul * 0.3 - this.kickW * 0.35 + land * 0.25 + this.windup * 0.2 - this.stretch * 0.18 + clamp(this.accel * 0.02, -0.14, 0.13) * (1 - this.air) * (1 - this.down);
     this.lean = damp(this.lean, leanTarget, 8, dt);
     const moodLean = m.pain * 0.3 + m.angry * 0.14 + m.fear * -0.1 - m.triumph * 0.16 + m.drunk * 0.06;
     j.torso.rotation.x = -(P.lean + this.lean + moodLean * (1 - this.air)) - this.down * 0.15 + this.jolt[0]! * 0.6 + this.limp * 0.06 + m.drunk * 0.12 * Math.sin(this.time * 1.3) + nb.chest + nb.heave;

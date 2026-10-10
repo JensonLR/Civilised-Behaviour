@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUTTON, CollisionWorld, FLAG, Rng, STEP_DT, setWound, ZONE, type Obstacle } from "@cb/shared";
-import { CARGO_POUNDS, MOUNT, MOUNT_CAP, MOUNT_FLAG, MOUNT_PHASE, WAGON, wagonToWorld } from "@cb/shared";
+import { BOLT_SECONDS, CARGO_POUNDS, FIRE_PANIC, MOUNT, MOUNT_CAP, MOUNT_FLAG, MOUNT_PHASE, TRAMPLE, WAGON, wagonToWorld } from "@cb/shared";
 import { MountRoom, frame, type FakePlayer } from "../bots/mount.ts";
 import { MOUNT_LINES } from "./Mounts.ts";
 
@@ -292,6 +292,119 @@ describe("being thrown", () => {
     const healthy = tries(0);
     const maimed = tries(setWound(setWound(0, ZONE.ARM_L, 3), ZONE.ARM_R, 3));
     expect(maimed).toBeGreaterThan(healthy);
+  });
+});
+
+describe("D-110: horses and fire", () => {
+  const ticks = (room: MountRoom, seconds: number, frames: () => Record<string, ReturnType<typeof frame>> = () => ({})): void => {
+    for (let i = 0; i < Math.round(seconds / STEP_DT); i++) room.tick(frames());
+  };
+
+  it("a loose horse bolts directly away from burning ground within reach, and stands again once it has run itself out; one further off grazes on", () => {
+    const { room, horse } = stable();
+    const row = room.rows.get(horse)!;
+    room.fires.push({ x: row.x, z: row.z - FIRE_PANIC.scareR - 2 }); // (north, out of reach)
+    ticks(room, 1);
+    expect(row.phase).toBe(MOUNT_PHASE.loose);
+    room.fires.length = 0;
+    room.fires.push({ x: row.x, z: row.z - 5 });
+    const z0 = row.z;
+    ticks(room, 1);
+    expect(row.phase).toBe(MOUNT_PHASE.bolting);
+    expect(room.mounts.stats.firePanics).toBe(1);
+    ticks(room, BOLT_SECONDS);
+    expect(row.phase).toBe(MOUNT_PHASE.loose);
+    expect(row.z - z0).toBeGreaterThan(10); // (south, away from the flames)
+    expect(Math.abs(row.x - 1.2)).toBeLessThan((row.z - z0) * 0.5);
+  });
+
+  it("a rider keeps the horse in hand at the edge of the fire, but closer it rears and puts them down with the fire's own line; the horse runs from the flames", () => {
+    const { room, a, horse } = stable();
+    press(room, "a");
+    expect(mounted(a)).toBe(true);
+    const row = room.rows.get(horse)!;
+    room.fires.push({ x: a.x, z: a.z - 6 }); // (in the horse's fright, beyond its throw)
+    ticks(room, 1);
+    expect(mounted(a)).toBe(true);
+    // she rides on toward it, at a walk
+    for (let i = 0; i < 200 && mounted(a); i++) room.tick({ a: frame(0.35, 0, 0) });
+    expect(mounted(a)).toBe(false);
+    expect(room.mounts.stats.fireThrows).toBe(1);
+    expect(Math.hypot(a.x - room.fires[0]!.x, a.z - room.fires[0]!.z)).toBeLessThanOrEqual(FIRE_PANIC.throwR + 0.5);
+    expect(room.notices.some((n) => n.sid === "a" && (MOUNT_LINES.throwFire as readonly string[]).includes(n.text))).toBe(true);
+    expect(row.rider).toBe("");
+    expect(row.phase).toBe(MOUNT_PHASE.bolting);
+    const z0 = row.z;
+    ticks(room, 2);
+    expect(row.z).toBeGreaterThan(z0 + 4); // (back the way it came, away from the fire)
+  });
+
+  it("a caravan the fire scatters re-forms: the horse runs, then goes back to its road and walks it to the end", () => {
+    const room = new MountRoom(flat(), 4);
+    room.routes.set("convoy", [{ x: 0, z: 0 }, { x: 0, z: -20 }]);
+    const w = room.mounts.spawnWagon({ x: 0, z: 14, yaw: 0 }, { coat: 3, crates: 3, horse: true });
+    room.mounts.route(w, "convoy");
+    const horse = [...room.rows.values()].find((r) => r.kind === 0)!;
+    ticks(room, 1);
+    room.fires.push({ x: horse.x + 3, z: horse.z - 3 });
+    ticks(room, 1);
+    expect(horse.phase).toBe(MOUNT_PHASE.bolting);
+    room.fires.length = 0; // (grass burns out)
+    ticks(room, BOLT_SECONDS);
+    expect(horse.phase).toBe(MOUNT_PHASE.led);
+    for (let i = 0; i < 90 * 30 && !room.mounts.routeDone(w); i++) room.tick();
+    expect(room.mounts.routeDone(w)).toBe(true);
+  });
+});
+
+describe("D-111: ridden down", () => {
+  /** Ada mounted and moving north at `buttons`' pace; a man (an NPC row) stands in her path 15 m ahead. */
+  const charge = (f: number, buttons: number) => {
+    const { room, a } = stable();
+    press(room, "a");
+    const man = room.addPlayer("npc:s1", a.x, a.z - 15);
+    man.npc = 1;
+    run(room, "a", 0.8, f, buttons);
+    return { room, a, man };
+  };
+
+  it("a galloping horse rides down the man in its path, once, heading his way, and loses some pace for it", () => {
+    const { room, a, man } = charge(1, BUTTON.SPRINT);
+    let before = 0;
+    for (let i = 0; i < 120 && room.trampled.length === 0; i++) {
+      before = speedOf(a);
+      room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    }
+    expect(room.trampled).toHaveLength(1);
+    const t = room.trampled[0]!;
+    expect(t).toMatchObject({ rider: "a", key: "npc:s1" });
+    expect(t.speed).toBeGreaterThan(TRAMPLE.minSpeed);
+    expect(t.fz).toBeLessThan(-0.9); // (north)
+    expect(speedOf(a)).toBeLessThan(before * 0.95);
+    expect(room.mounts.stats.tramples).toBe(1);
+    // she rides on through him (the hook does not move him here): struck once a pass, not every tick he is under the horse
+    for (let i = 0; i < 10; i++) room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(room.trampled).toHaveLength(1);
+    void man;
+  });
+
+  it("at a walk nobody is ridden down; nor, at a gallop, a man already down, a hand of the party or a player", () => {
+    const walk = charge(0.35, 0);
+    for (let i = 0; i < 300; i++) walk.room.tick({ a: frame(0.35, 0, 0) });
+    expect(walk.room.trampled).toHaveLength(0);
+    const down = charge(1, BUTTON.SPRINT);
+    down.man.flags |= FLAG.DOWNED;
+    for (let i = 0; i < 120; i++) down.room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(down.room.trampled).toHaveLength(0);
+    const hand = charge(1, BUTTON.SPRINT);
+    hand.room.spared.add("npc:s1");
+    for (let i = 0; i < 120; i++) hand.room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(hand.room.trampled).toHaveLength(0);
+    expect(hand.room.mounts.stats.tramples).toBe(0);
+    const friend = charge(1, BUTTON.SPRINT);
+    friend.man.npc = 0;
+    for (let i = 0; i < 120; i++) friend.room.tick({ a: frame(1, 0, 0, BUTTON.SPRINT) });
+    expect(friend.room.trampled).toHaveLength(0);
   });
 });
 

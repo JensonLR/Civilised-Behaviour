@@ -28,6 +28,10 @@ export type BrainId = "garrison" | "follower" | "civil" | "beast";   // civil = 
 export interface NpcSpec {
   id: string; role: number; faction: FactionId; side: NpcSide; group: string; post: { x: number; z: number }; weapon: WeaponId; lookSeed: number;
   look?: Record<string, number> /* authored CharacterSpec patch, run through specFromUntrusted */; people?: PeopleId /* D-038: which native people they are (peoples.ts `peopleForNpc`); the server lays the people's overlay under `look`; absent = colonial */; name: string; skill: number; bravery: number; brain: BrainId;
+  /** D-109: he walks on a wooden leg (a remembered man back from losing one: the row carries FLAG.PEG_LEG). */
+  peg?: boolean;
+  /** D-109: the party member he has a grudge against (a display name): he picks her over a nearer stranger. */
+  hates?: string;
 }
 export type CastOrder =
   | { o: "post" } | { o: "alert" } | { o: "stand_down" } | { o: "hold_fire" } | { o: "flee" }

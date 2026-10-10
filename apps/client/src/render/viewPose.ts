@@ -163,7 +163,8 @@ const BLOWS: readonly { wind: Pose; strike: Pose }[] = [
   { wind: [0.16, 0.16, -0.22, 2.2, 0.05, 0], strike: [0.06, -0.24, -0.56, -0.35, 0.05, 0] },
 ];
 /** The butt-stroke of a firearm / a thrust of a cane: wind back, drive forward. */
-const BASH: { wind: Pose; strike: Pose; flip: number } = { wind: [0.24, -0.16, -0.14, 0.3, 0.5, 0.1], strike: [0.04, -0.12, -0.56, 0.2, 0.15, 0], flip: Math.PI * 0.92 };
+/** D-108: with a firearm in hand, V is the boot: the piece comes up and out of the way, muzzle high, while the leg does the work (the body's own leg kicks below). */
+const BRACE: { wind: Pose; strike: Pose } = { wind: [0.26, -0.04, -0.2, 0.75, 0.45, 0.15], strike: [0.3, 0.04, -0.16, 0.95, 0.55, 0.22] };
 
 // ---- state --------------------------------------------------------------------------------------------------------------------------------
 
@@ -518,9 +519,8 @@ export function computeViewmodel(s: VmState, body: VmBody, out: VmOut): VmOut {
     const weight = wind * (1 - back);
     if (!armed) jab = stroke * (1 - back);
     else if (s.bash) {
-      set(tgt, BASH.wind);
-      mix(tgt, BASH.strike, stroke);
-      tgt.ry += kind === "long" ? BASH.flip * smooth(0, 0.3, u) * (1 - smooth(0.7, 1, u)) : 0;
+      set(tgt, BRACE.wind);
+      mix(tgt, BRACE.strike, stroke);
       mix(cur, tgt, weight);
     } else {
       const b = BLOWS[s.swingKind % BLOWS.length]!;

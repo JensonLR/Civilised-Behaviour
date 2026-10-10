@@ -1,7 +1,7 @@
 import { Object3D, Scene } from "three";
 import { describe, expect, it } from "vitest";
 import { encodeSpec, generateCharacter } from "@cb/procedural";
-import { FLAG } from "@cb/shared";
+import { BOOT, FLAG, REACT, WEAPON, packReact } from "@cb/shared";
 import { CharacterActor, type ActorPose } from "./CharacterActor.ts";
 import { newEyeSample } from "./firstPerson.ts";
 
@@ -247,3 +247,51 @@ describe("D-084: faces in play", () => {
     expect(Math.abs(anim(a).look)).toBeLessThan(0.05);
   });
 });
+
+describe("D-108: booted", () => {
+  it("a booted man lies flat on his back (not on one knee) while the floored reaction holds, and stands when it ends", () => {
+    const scene = new Scene();
+    const a = new CharacterActor(scene, look(6), 1, true);
+    const j = (a as unknown as { rig: { joints: Record<string, Object3D> } }).rig.joints;
+    const floored = pose(FLAG.GROUNDED, { react: packReact(REACT.FLOORED, false, BOOT.floorS) });
+    settle(a, pose());
+    a.hit({ id: "npc:s", zone: 1, dx: 0, dz: -1, power: 0.1, down: false, boot: true }, 0);
+    settle(a, floored, 60);
+    expect(j.root!.rotation.x).toBeGreaterThan(1.2); // (flat on his back)
+    // a leg shot's floor, with no boot, is the knee
+    const b = new CharacterActor(scene, look(6), 1, true);
+    const jb = (b as unknown as { rig: { joints: Record<string, Object3D> } }).rig.joints;
+    settle(b, floored, 60);
+    expect(jb.root!.rotation.x).toBeLessThan(0.5);
+    // the server lets him up (the reaction ends): he stands, though the boot's own clock had time left
+    settle(a, pose(), 90);
+    expect(j.root!.rotation.x).toBeLessThan(0.3);
+  });
+});
+
+describe("D-104: the gun knocked out of the hand", () => {
+  it("flies from the hand the blow's event names, once, whatever frames the page drew (it never waits to see the stagger)", () => {
+    const a = new CharacterActor(new Scene(), look(4), 1, true);
+    const thrown: { w: number; dx: number; dz: number }[] = [];
+    a.onDisarmed = (w, _x, _y, _z, dx, dz) => void thrown.push({ w, dx, dz });
+    const armed = pose(FLAG.GROUNDED, { facing: 0, combat: { weapon: WEAPON.RIFLE + 1, elev: 0, reload: 0 } });
+    settle(a, armed, 5);
+    // the blow lands; no frame in between ever shows him staggered (a slow page)
+    a.hit({ id: "npc:s", zone: 3, dx: 1, dz: 0, power: 0.3, down: false, disarm: 2 }, 0);
+    expect(thrown).toHaveLength(1);
+    expect(thrown[0]!.w).toBe(WEAPON.RIFLE);
+    expect(thrown[0]!.dx).toBeGreaterThan(0); // (the right hand, facing north: out to the right, +x)
+    // fists up now: a second disarming blow has nothing to throw
+    settle(a, pose(FLAG.GROUNDED, { facing: 0, combat: { weapon: WEAPON.FISTS + 1, elev: 0, reload: 0 } }), 5);
+    a.hit({ id: "npc:s", zone: 3, dx: 1, dz: 0, power: 0.3, down: false, disarm: 2 }, 0);
+    expect(thrown).toHaveLength(1);
+    // the stagger seen on the state alone throws nothing (the event is the one signal)
+    const b = new CharacterActor(new Scene(), look(4), 1, true);
+    let n = 0;
+    b.onDisarmed = () => void n++;
+    settle(b, armed, 5);
+    settle(b, pose(FLAG.GROUNDED, { facing: 0, react: packReact(REACT.DISARMED, true, 0.9), combat: { weapon: WEAPON.FISTS + 1, elev: 0, reload: 0 } }), 5);
+    expect(n).toBe(0);
+  });
+});
+

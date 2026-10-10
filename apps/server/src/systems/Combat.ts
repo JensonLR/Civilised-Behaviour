@@ -38,6 +38,13 @@ import {
   aimShake,
   reactHolds,
   FINISHER,
+  BOOT,
+  isBoot,
+  TRAMPLE,
+  ZONE,
+  trampleDamage,
+  trampleDir,
+  trampleLift,
   stepBallistic,
   weaponFromWire,
   yawFromWire,
@@ -90,6 +97,8 @@ export interface CombatHost {
   hostile?(shooter: string, target: string): boolean;
   /** A blast shoved `id` at `speed` m/s (a rider may be thrown: Mounts.onBlast). */
   blasted?(id: string, speed: number): void;
+  /** D-108: `id` was thrown (a boot, a blast) by `by`: the room watches the body for the wall it meets and the drop it falls. */
+  flung?(id: string, by: string): void;
   /** A free prop was struck by a ranged round (the room blows a powder keg up). */
   propShot?(propId: string, shooter: string): void;
   /** D-064: a blast caught a body already down (Casualties.toss: thrown, and a fallen NPC may come apart). */
@@ -174,7 +183,12 @@ interface Pending {
   point: { x: number; y: number; z: number };
   /** D-105: a blow from the hand on a man down on a knee or doubled over: a coup de grace. */
   fin: boolean;
+  /** D-108: the boot (he is lifted, thrown and floored). */
+  boot: boolean;
 }
+
+/** D-111: the way a trampled man is thrown (scratch). */
+const tdir = { x: 0, z: 0 };
 
 interface Cannon {
   id: string;
@@ -292,7 +306,7 @@ export class Combat {
   private impactCount = 0;
   private workers: string[] = [];
   /** Counters for tests and /metrics. */
-  readonly stats = { shots: 0, swings: 0, hits: 0, blasts: 0, refused: 0, projectilesDropped: 0, finishers: 0 };
+  readonly stats = { shots: 0, swings: 0, hits: 0, blasts: 0, refused: 0, projectilesDropped: 0, finishers: 0, boots: 0, tramples: 0 };
   /** The rewind (ms) applied to the last shots, newest last (diagnostics: tests compare it with the RTT the client is under). */
   readonly lagLog: number[] = [];
 
@@ -765,13 +779,13 @@ export class Combat {
     this.host.emitImpact({ id: shooter, x: c.x, y: c.y, z: c.z, nx: c.nx, ny: c.ny, nz: c.nz, s: c.surface, w: weapon });
   }
 
-  private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number, lift = 0, fin = false): void {
+  private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number, lift = 0, fin = false, boot = false): void {
     const t = this.host.players.get(target);
     if (!t || !(damage > 0)) return;
     const k = key * 32 + (t.slot & 31); // (NPC rows take slots 16+, so every victim of one blast keeps its own entry)
     let h = this.pending.get(k);
     if (!h) {
-      h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, lift: 0, point: { x, y, z }, fin: false };
+      h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, lift: 0, point: { x, y, z }, fin: false, boot: false };
       this.pending.set(k, h);
     }
     h.damage += damage;
@@ -788,6 +802,7 @@ export class Combat {
     h.stumble = Math.max(h.stumble, stumble);
     h.lift = Math.max(h.lift, lift);
     if (fin) h.fin = true;
+    if (boot) h.boot = true;
   }
 
   /** Turns the hits gathered this tick into damage: one wound event per shot per victim, however many pellets landed. */
@@ -818,13 +833,45 @@ export class Combat {
         this.host.finished?.(h.shooter, h.target, h.weapon);
         this.stats.finishers++;
         this.host.damage(h.target, Math.max(damage, t.health + 1), { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias * FINISHER.severMul, by: h.shooter, lift: FINISHER.lift, weapon: h.weapon, finisher: true });
+      } else if (h.boot) {
+        // D-108: the boot. Little harm, but he leaves the ground and goes over on his back; a rider is thrown from the saddle; the room watches where he lands
+        this.host.damage(h.target, damage, { zone: h.zone as ZoneId, dirX, dirZ, severBias: 0, by: h.shooter, weapon: h.weapon, boot: true });
+        this.stats.boots++;
       } else this.host.damage(h.target, damage, h.lift > 0 ? { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, lift: h.lift, weapon: h.weapon } : { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, weapon: h.weapon });
-      this.knock(t, dirX, dirZ, h.knock, h.stumble, 0);
+      this.knock(t, dirX, dirZ, h.knock, h.stumble, h.boot && !h.fin ? BOOT.lift : 0);
+      if (h.boot && !h.fin) this.host.blasted?.(h.target, h.knock); // (a rider is thrown from the saddle)
+      // D-108: a body thrown hard (a boot, a blast) is watched for the wall it meets and the drop it falls (velocity applied above, so the first step counts)
+      if (!h.fin && (h.boot || h.knock >= BOOT.splatSpeed) && (t.flags & FLAG.DOWNED) === 0) this.host.flung?.(h.target, h.shooter);
       this.stats.hits++;
       metrics.hitsLanded++;
       if (!self) this.host.sendTo(h.shooter, h.fin ? { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before, fin: true } : { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before });
     }
     this.pending.clear();
+  }
+
+  /**
+   * D-111: ridden down. `rider`'s horse, at `speed` m/s heading (`fx`, `fz`), went through `target`, who stood (`ox`, `oz`) from its chest. The hooves' harm lands on a
+   * leg or the body (never a limb off: a horse is blunt), and he goes ahead and off the line, lifted with the pace, floored as by a boot, and watched for what he
+   * meets. A man it puts down is thrown all the same (a ragdoll). The room has already decided he may be ridden down.
+   */
+  trample(rider: string, target: string, speed: number, fx: number, fz: number, ox: number, oz: number): void {
+    const t = this.host.players.get(target);
+    if (!t || (t.flags & FLAG.DOWNED) !== 0) return;
+    const dmg = trampleDamage(speed);
+    if (!(dmg > 0)) return;
+    trampleDir(fx, fz, ox, oz, tdir);
+    const r = this.host.rng.next();
+    const zone = r < 0.4 ? ZONE.TORSO : r < 0.7 ? ZONE.LEG_L : ZONE.LEG_R;
+    this.host.damage(target, dmg, { zone, dirX: tdir.x, dirZ: tdir.z, severBias: 0, by: rider, trample: true });
+    this.stats.tramples++;
+    const carry = speed * TRAMPLE.carry;
+    const lift = trampleLift(speed);
+    if ((t.flags & FLAG.DOWNED) !== 0) {
+      this.host.toss?.(target, tdir.x, tdir.z, Math.min(1, carry / COMBAT.maxKnock), lift / TRAMPLE.lift, 0, 0, rider);
+      return;
+    }
+    this.knock(t, tdir.x, tdir.z, carry, TRAMPLE.stumble, lift);
+    this.host.flung?.(target, rider);
   }
 
   /** Adds velocity to a person (bounded) and takes some of their control for a moment. The predicted state simply adopts it. */
@@ -971,7 +1018,7 @@ export class Combat {
       const l = Math.hypot(dx, dz) || 1;
       // D-105: a man down on a knee or doubled over is finished by the blow (never one of your own side: a colleague is helped up, not seen off)
       const fin = reactHolds(t.react) && !(this.partySide(t) && this.partySide(p));
-      this.addHit(sessionId, h.id, def.id, meleeDamage(m, h.zone), h.zone, dx / l, dz / l, fin ? FINISHER.knock : m.knock, m.stumble, h.x, h.y, h.z, s.key, 0, fin);
+      this.addHit(sessionId, h.id, def.id, meleeDamage(m, h.zone), h.zone, dx / l, dz / l, fin ? FINISHER.knock : m.knock, m.stumble, h.x, h.y, h.z, s.key, 0, fin, isBoot(m) && !fin);
     }
     // Props in the arc are shoved (nearest one per ray of the fan's middle heights).
     if (struck < m.cleave) {

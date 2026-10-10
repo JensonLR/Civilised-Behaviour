@@ -1,3 +1,4 @@
+import { BOOT } from "./boot.ts";
 import type { Obstacle } from "./collision.ts";
 import { INTERP_DELAY_MS, MOVEMENT, PATCH_RATE_MS } from "./constants.ts";
 import { clamp } from "./math.ts";
@@ -106,7 +107,7 @@ export interface WeaponDef {
   kind: "pistol" | "long" | "scatter" | "blade" | "stick" | "artillery" | "hands";
   fire: FireMode;
   ranged?: RangedStats;
-  /** The primary blow of a melee weapon, or the butt-strike (`V`) of a firearm. */
+  /** The primary blow of a melee weapon, or (`V`) with a firearm in hand the boot (D-108, `boot.ts`). */
   melee?: MeleeStats;
   /** Seconds before it can be used after being drawn. */
   drawSeconds: number;
@@ -120,7 +121,8 @@ export interface WeaponDef {
   hands: 1 | 2;
 }
 
-const bash: MeleeStats = { damage: 14, zoneMul: zones(1.4, 1, 0.8, 0.8), reach: 1.5, arcHalf: 0.6, windup: 0.2, cooldown: 0.9, knock: 3.6, stumble: 0.4, cleave: 1 };
+/** D-108: with a firearm in hand, V is the boot (it was a butt-stroke): the same blow whatever the gun. */
+const bash: MeleeStats = BOOT.blow;
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   [WEAPON.PISTOL]: {
@@ -152,7 +154,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       spread: 0.05, spreadAimed: 0.003, spreadMove: 0.012,
       speed: 0, gravity: 0, radius: 0.02, knock: 3, stumble: 0.25, propImpulse: 8, recoil: 0.1,
     },
-    melee: { ...bash, damage: 18, reach: 1.7 },
+    melee: bash,
     drawSeconds: 0.7, ffScale: 0.7, severBias: 1, noise: 150, weight: 4.3, hands: 2,
   },
   [WEAPON.BLUNDERBUSS]: {
@@ -168,7 +170,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       spread: 0.1, spreadAimed: 0.075, spreadMove: 0.01,
       speed: 155, gravity: 6, radius: 0.03, knock: 4.5, stumble: 0.35, propImpulse: 10, recoil: 0.14,
     },
-    melee: { ...bash, damage: 16, reach: 1.6 },
+    melee: bash,
     drawSeconds: 0.7, ffScale: 0.7, severBias: 1.4, noise: 120, weight: 3.8, hands: 2,
   },
   [WEAPON.SABRE]: {

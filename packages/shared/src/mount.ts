@@ -247,6 +247,11 @@ export function stepMounted(s: CharState, cmd: MoveCommand, dt: number, world: C
 export const MOUNT_KIND = { horse: 0, wagon: 1 } as const;
 /** `MountState.phase`: loose (standing), ridden, led (follows a leader or a route), bolting (runs a few seconds then stands), wrecked (a wagon smashed or burned out). */
 export const MOUNT_PHASE = { loose: 0, ridden: 1, led: 2, bolting: 3, wrecked: 4 } as const;
+/**
+ * D-110: horses and fire. A horse with burning ground within `scareR` metres bolts away from it (a led one breaks from its leader; a wagon's goes, wagon and all); a
+ * ridden one that gets within `throwR` rears and puts its rider down. Checked every `everyTicks` room ticks.
+ */
+export const FIRE_PANIC = { scareR: 7, throwR: 4, everyTicks: 8 } as const;
 /** Pounds one cargo crate is worth when a wagon is seized. */
 export const CARGO_POUNDS = 22;
 /** Most mount rows a room keeps (horses and wagons together). */

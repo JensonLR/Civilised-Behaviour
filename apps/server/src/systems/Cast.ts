@@ -42,6 +42,8 @@ export interface CastHost {
   gore?(key: string, target: string): void;
   /** D-107: how many may shoot at `target` at once (the pacing director's say for a member of the party); undefined = `CAST.tokens`. Optional. */
   tokensFor?(target: string): number | undefined;
+  /** D-109: a last look at a batch before it is spawned (a remembered man takes one soldier's place: Grudges.respec). Optional. */
+  respec?(specs: readonly NpcSpec[]): readonly NpcSpec[];
 }
 
 interface Group { alert: boolean; standDown: boolean; holdFire: boolean; attack: NpcSide | "any" | undefined }
@@ -76,6 +78,8 @@ interface Rec {
   fleeUntil: number;
   fleeX: number;
   fleeZ: number;
+  /** D-109: the party member he wants (a display name; "" for nobody): he picks her over a nearer stranger. */
+  hates: string;
   /** D-073: the morale band after the last think (a soldier whose nerve goes cries out once), and when this row last cried out. */
   lastBand: MoraleBand;
   lastCry: number;
@@ -112,6 +116,8 @@ export const CAST = {
   civilFleeSeconds: 6, civilFleeRange: 22, followRange: 40,
   /** D-104: the morale shock of having the gun shot out of your hand. */
   disarmShock: 30,
+  /** D-109: the squared-distance factor for the one a man has a grudge against (0.25: half as far). */
+  grudgePull: 0.25,
 } as const;
 
 const sideKey = (a: NpcSide, b: NpcSide): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -163,8 +169,9 @@ export class Cast implements CastApi {
 
   // ---- CastApi ---------------------------------------------------------------------------------------------------------------------------
 
-  spawn(specs: readonly NpcSpec[]): number {
+  spawn(batch: readonly NpcSpec[]): number {
     this.ensureNav();
+    const specs = this.host.respec ? this.host.respec(batch) : batch;
     let n = 0;
     for (const spec of specs) {
       if (this.byKey.has(npcKey(spec.id)) || !this.host.spawnNpc(spec)) continue;
@@ -176,7 +183,7 @@ export class Cast implements CastApi {
         lastShooter: "", chargeTarget: "", chargeUntil: -1, hornAt: -1, gx: spec.post.x, gz: spec.post.z, grazeUntil: -1,
         fn: civil ? undefined : this.host.brains[spec.brain] ?? this.host.brains.garrison ?? npcThink,
         gone: false, wasDown: false, lastHp: 100, lastWounds: 0, lastMissing: 0, token: false, tokenHeld: false, tokenTarget: "", follow: "", fleeUntil: -1, fleeX: 0, fleeZ: 0, lastBand: "steady", lastCry: -Infinity,
-        tx: "", td: Infinity, hasEnemy: false, ex: 0, ez: 0, ev: 0, earmed: false, allies: 0, alliesDown: 0,
+        tx: "", td: Infinity, hasEnemy: false, ex: 0, ez: 0, ev: 0, earmed: false, allies: 0, alliesDown: 0, hates: spec.hates ?? "",
       };
       if (civil) rec.brain.mode = "civil";
       const row = this.host.players.get(rec.key);
@@ -317,6 +324,11 @@ export class Cast implements CastApi {
 
   row(id: string): PlayerStateType | undefined {
     return this.host.players.get(npcKey(id));
+  }
+
+  /** D-109: the spec a row (by key) was spawned from (who he is: name, face, side, brain). */
+  specOf(key: string): NpcSpec | undefined {
+    return this.byKey.get(key)?.spec;
   }
 
   /** The brain of a spawned row by NPC id (the hired hands' orders are written onto it; see Followers). */
@@ -675,8 +687,10 @@ export class Cast implements CastApi {
     const humansHostile = this.hostile(r, g, "party", false);
     for (let i = 0; i < this.humans.length && humansHostile; i++) {
       const p = this.humans[i]!;
-      const d2 = (p.x - row.x) ** 2 + (p.z - row.z) ** 2;
-      if (d2 >= bestD2 || d2 > s2) continue;
+      const raw = (p.x - row.x) ** 2 + (p.z - row.z) ** 2;
+      // D-109: the one he has a grudge against counts as half as far (he picks her over a nearer stranger; never past his sight)
+      const d2 = r.hates !== "" && p.name === r.hates ? raw * CAST.grudgePull : raw;
+      if (d2 >= bestD2 || raw > s2) continue;
       if (!nav.los(row.x, row.z, p.x, p.z)) continue;
       bestD2 = d2;
       r.tx = this.humanIds[i]!;
@@ -717,7 +731,7 @@ export class Cast implements CastApi {
     }
     if (r.tx !== "") {
       r.hasEnemy = true;
-      r.td = Math.sqrt(bestD2);
+      r.td = Math.hypot(r.ex - row.x, r.ez - row.z); // (the true distance: the grudge's pull only chose her)
     }
   }
 

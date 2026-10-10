@@ -1,12 +1,16 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { FireGrid, ROOM_WORLD, createRegionWorld, decodeBurning, type PlayerStateType } from "@cb/shared";
+import { FireGrid, MOUNT_PHASE, ROOM_WORLD, createRegionWorld, decodeBurning, type PlayerStateType } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
+import type { Mounts } from "../systems/Mounts.ts";
 import type { WorldRoom } from "./WorldRoom.ts";
 
-/** D-103: fire through a real room. The grass catches, the state carries it, a player standing in it is set alight and hurt, and sailing home leaves it behind. Port 2647. */
+/**
+ * D-103: fire through a real room. The grass catches, the state carries it, a player standing in it is set alight and hurt, and sailing home leaves it behind.
+ * D-110: a horse grazing beside the grass when it catches bolts from it. Port 2647.
+ */
 const PORT = 2647;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -69,5 +73,24 @@ describe("fire in a real room (D-103)", () => {
     await until(() => me.health < hp, 3000, "the fire hurting her");
     // the scorch follows as cells burn out
     await until(() => room.state.scorch.length > 0, 15000, "scorched ground on the state");
+  }, 30_000);
+
+  it("a horse grazing beside the grass when it catches bolts away from the flames (D-110)", async () => {
+    const room = (await colyseus.createRoom(ROOM_WORLD, { seed: 9, region: "highmark" })) as unknown as WorldRoom;
+    const c = await colyseus.connectTo(room as never, { name: "Ada" });
+    for (const t of ["hit", "sever", "shot", "impact", "boom", "hitmark", "station", "parley", "saved", "cry", "bark", "gazette", "notice"]) c.onMessage(t, () => undefined);
+    await sleep(300);
+    const at = savannah();
+    const mounts = (room as unknown as { mounts: Mounts }).mounts;
+    const id = mounts.spawnHorse({ x: at.x + 2, z: at.z - 4, yaw: 0 }, { coat: 1 });
+    const horse = room.state.mounts.get(id)!;
+    c.send("debug", { cmd: `tp:${at.x}:${at.z}:0` });
+    await sleep(200);
+    expect(horse.phase).toBe(MOUNT_PHASE.loose);
+    c.send("debug", { cmd: "fire" });
+    await until(() => horse.phase === MOUNT_PHASE.bolting, 4000, "the horse bolting");
+    expect(mounts.stats.firePanics).toBeGreaterThan(0);
+    const d0 = Math.hypot(horse.x - at.x, horse.z - (at.z - 4));
+    await until(() => Math.hypot(horse.x - at.x, horse.z - (at.z - 4)) > d0 + 8, 6000, "the horse well away from the fire");
   }, 30_000);
 });

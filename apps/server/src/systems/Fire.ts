@@ -116,6 +116,11 @@ export class Fire {
     return { x: g.centreX(best), z: g.centreZ(best) };
   }
 
+  /** D-110: the burning cell nearest (x, z) within `r` (into `out`); false when none. */
+  nearestBurning(x: number, z: number, r: number, out: { x: number; z: number }): boolean {
+    return this.grid?.nearestBurning(x, z, r, out) ?? false;
+  }
+
   /** Whether the ground at (x, z) is burning now. */
   burningAt(x: number, z: number): boolean {
     return this.grid?.burningAt(x, z) ?? false;

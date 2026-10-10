@@ -100,6 +100,11 @@ export class MountRoom {
   readonly notices: { sid: string; text: string }[] = [];
   readonly damages: { sid: string; amount: number }[] = [];
   readonly routes = new Map<string, { x: number; z: number }[]>();
+  /** Burning ground (D-110: horses shy from it): points, nearest wins. */
+  readonly fires: { x: number; z: number }[] = [];
+  /** D-111: every man a horse rode down (rider, row, speed, heading), and the rows a horse steps round instead. */
+  readonly trampled: { rider: string; key: string; speed: number; fx: number; fz: number }[] = [];
+  readonly spared = new Set<string>();
   readonly mounts: Mounts;
   private readonly prevButtons = new Map<string, number>();
   private nextProp = 1;
@@ -157,6 +162,25 @@ export class MountRoom {
         for (const b of this.players.values()) if (b.dragger === sid) (b.flags &= ~FLAG.DRAGGED), (b.dragger = "");
       },
       routePoints: (name) => this.routes.get(name),
+      trample: (rider, key, speed, fx, fz) => {
+        if (this.spared.has(key)) return false;
+        this.trampled.push({ rider, key, speed, fx, fz });
+        return true;
+      },
+      fireNear: (x, z, r, out) => {
+        let best = r * r;
+        let found = false;
+        for (const f of this.fires) {
+          const d = (f.x - x) ** 2 + (f.z - z) ** 2;
+          if (d <= best) {
+            best = d;
+            out.x = f.x;
+            out.z = f.z;
+            found = true;
+          }
+        }
+        return found;
+      },
     };
     void room;
     this.mounts = new Mounts(host);

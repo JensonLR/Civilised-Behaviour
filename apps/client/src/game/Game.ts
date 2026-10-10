@@ -1694,6 +1694,13 @@ export class Game {
     if (e.zone === ZONE.HEAD && e.power >= 0.5) this.hitFx.burst(x, this.session.value(p, "y") + h * 0.95, z, e.dx * 0.4, e.dz * 0.4, 1, gore, 1);
     // ...and a body that goes down bleeds where it falls (a little along the blow, where the fall carries it); once per fall
     // D-105: a coup de grace throws more: a second, higher fountain along the blow, a spray on the ground and the crunch of it
+    if (e.trample) this.audio.trample(x, this.session.value(p, "y") + h * 0.5, z); // (D-111)
+    else if (e.boot) this.audio.boot(x, this.session.value(p, "y") + h * 0.5, z); // (D-108)
+    if (e.splat) {
+      // D-108: what a thrown body met: the crunch, and a smear along the way he was going
+      this.audio.splat(x, this.session.value(p, "y") + h * 0.6, z);
+      this.stage.decals.sprayAt(x + e.dx * 0.5, z + e.dz * 0.5, e.dx, e.dz, 1.1);
+    }
     if (e.fin) {
       this.hitFx.burst(x, this.session.value(p, "y") + h * frac, z, e.dx, e.dz, 1, gore, 0.6);
       this.stage.decals.sprayAt(x + e.dx * 0.4, z + e.dz * 0.4, e.dx, e.dz, 1.6);

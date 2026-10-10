@@ -343,6 +343,25 @@ export class FireGrid {
     this.np = 0;
   }
 
+  /** D-110: the centre of the burning cell nearest (x, z) within `r` metres, written into `out`; false when none. Scans the burning list; allocates nothing. */
+  nearestBurning(x: number, z: number, r: number, out: { x: number; z: number }): boolean {
+    let best = r * r;
+    let found = false;
+    for (let k = 0; k < this.n; k++) {
+      const c = this.list[k]!;
+      const cx = this.centreX(c);
+      const cz = this.centreZ(c);
+      const d = (cx - x) * (cx - x) + (cz - z) * (cz - z);
+      if (d <= best) {
+        best = d;
+        out.x = cx;
+        out.z = cz;
+        found = true;
+      }
+    }
+    return found;
+  }
+
   /** Calls `cb` for each burning cell. */
   forEachBurning(cb: (c: number) => void): void {
     for (let k = 0; k < this.n; k++) cb(this.list[k]!);
