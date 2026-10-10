@@ -42,6 +42,8 @@ export interface CastHost {
   gore?(key: string, target: string): void;
   /** D-107: how many may shoot at `target` at once (the pacing director's say for a member of the party); undefined = `CAST.tokens`. Optional. */
   tokensFor?(target: string): number | undefined;
+  /** D-109: a last look at a batch before it is spawned (a remembered man takes one soldier's place: Grudges.respec). Optional. */
+  respec?(specs: readonly NpcSpec[]): readonly NpcSpec[];
 }
 
 interface Group { alert: boolean; standDown: boolean; holdFire: boolean; attack: NpcSide | "any" | undefined }
@@ -163,8 +165,9 @@ export class Cast implements CastApi {
 
   // ---- CastApi ---------------------------------------------------------------------------------------------------------------------------
 
-  spawn(specs: readonly NpcSpec[]): number {
+  spawn(batch: readonly NpcSpec[]): number {
     this.ensureNav();
+    const specs = this.host.respec ? this.host.respec(batch) : batch;
     let n = 0;
     for (const spec of specs) {
       if (this.byKey.has(npcKey(spec.id)) || !this.host.spawnNpc(spec)) continue;
@@ -317,6 +320,11 @@ export class Cast implements CastApi {
 
   row(id: string): PlayerStateType | undefined {
     return this.host.players.get(npcKey(id));
+  }
+
+  /** D-109: the spec a row (by key) was spawned from (who he is: name, face, side, brain). */
+  specOf(key: string): NpcSpec | undefined {
+    return this.byKey.get(key)?.spec;
   }
 
   /** The brain of a spawned row by NPC id (the hired hands' orders are written onto it; see Followers). */

@@ -66,6 +66,10 @@ import {
   applyOutcome,
   applyIncident,
   INCIDENT,
+  grudgeLoss,
+  GRUDGE_CAUSES,
+  rememberGrudge,
+  type Grudge,
   INCIDENT_IDS,
   ACCIDENT_OWNER,
   HONOUR_TITLE,
@@ -171,6 +175,7 @@ import { Followers } from "../systems/Followers.ts";
 import { Incidents } from "../systems/Incidents.ts";
 import { Pacing } from "../systems/Pacing.ts";
 import { Flung } from "../systems/Flung.ts";
+import { Grudges } from "../systems/Grudges.ts";
 import { Fire } from "../systems/Fire.ts";
 import { Mayhem } from "../systems/Mayhem.ts";
 import { Mounts } from "../systems/Mounts.ts";
@@ -315,6 +320,17 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (this.scenario?.live) this.mayhem.onSplat(id, by);
     },
   });
+  /** D-109: the men the party maimed, remembered; one may come back. */
+  private readonly grudges = new Grudges({
+    players: { forEach: (cb) => this.state.players.forEach(cb), get: (id) => this.state.players.get(id) },
+    specOf: (key) => this.cast.specOf(key),
+    returned: (key, g) => {
+      const name = this.state.players.get(key)?.name ?? g.name;
+      this.mayhem.onGrudgeBack(key, name, g.by, grudgeLoss(g));
+      this.broadcast("bark", { id: key, k: "grudge", salt: (g.lookSeed ^ this.state.seed) >>> 0 }); // (his voice: cosmetic, as every bark)
+    },
+    beaten: (key, g, by) => this.mayhem.onGrudgeDown(this.state.players.get(key)?.name ?? g.name, by),
+  });
   /** D-084: the run's spectacle (the gazette, the Butcher's Bill, the Society's request). */
   private readonly mayhem = new Mayhem({
     row: (id) => {
@@ -458,6 +474,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         emitLasso: (e) => this.broadcast("lasso", e),
         roped: (by, target) => {
           this.cast.onRoped(target);
+          this.grudges.onInsult(target, "rope", by); // (D-109)
           if (this.scenario?.live) this.mayhem.onRoped(target, by);
         },
       },
@@ -550,6 +567,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       brains: { garrison: npcThink, follower: followerThink },
       navOptions: (w) => regionNavOptions(this.state.region as RegionId, w),
       tokensFor: (target) => this.pacing?.tokens(target), // (D-107: the director's say on how many may fire at a member of the party)
+      respec: (specs) => this.grudges.respec(specs), // (D-109: a remembered man takes a soldier's place)
     });
     this.pacing = new Pacing({
       party: this.party,
@@ -642,6 +660,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       panic: (id, x, z) => {
         const w = windAt(seed, performance.now() - this.bornAt);
         this.cast.onFire(id, x - w.x * 4, z - w.z * 4); // (they run with the wind, away from where the fire comes from)
+        this.grudges.onBurnt(id); // (D-109)
       },
       scare: (x, z, radius) => this.cast.noise(x, z, radius, ""),
       writeBurning: (v) => {
@@ -805,6 +824,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
         this.flung.tick(ctx.dt); // (D-108: after the rows have stepped)
+        this.grudges.tick(); // (D-109: the returning man says his piece when the party comes near)
         tickProbe.lap("cast");
         this.followers.tick(ctx.dt);
         tickProbe.lap("followers");
@@ -1339,6 +1359,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     if (template === undefined) return;
     this.scenario = new Scenario(this.scenarioHost(), template);
     this.mayhem.begin(this.state.seed, this.campaign.day, template, this.campaign.sites.lastBill?.request, this.scenario.kegsInReach);
+    this.grudges.begin(this.campaign, id, this.campaign.day); // (D-109: before the garrison is spawned: a remembered man may take a place in it)
     this.scenario.start();
     this.incidents.begin(template);
     this.deeds.clear(); // (honours count from a contract's start: D-055)
@@ -1352,6 +1373,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.scenario = undefined;
     this.incidents.reset();
     this.flung.clear();
+    this.grudges.reset();
     this.followers.endExpedition();
     this.cast.despawn();
     this.mounts.dispose();
@@ -1418,6 +1440,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const m = this.mayhem.settle({ resolution: o.resolution, seconds: o.seconds, loot: o.loot });
     const bonus = m.reward + m.spectacle;
     c = { ...c, purse: Math.round(Math.min(99999, Math.max(0, c.purse + bonus))), sites: { ...c.sites, lastBill: { day: c.day, region: this.state.region as RegionId, bill: m.bill, request: m.request, met: m.met, spectacle: m.spectacle } } };
+    // D-109: the run's worst-used man is remembered; the one who came back and was beaten again has spent a return
+    c = this.grudges.settle(c);
     // D-045: a Raid on the Post was the Syndicate's raid, played: it is spent before the rival's days run (so it never lands twice), and the post takes what the ending says
     const raided = raidAftermath(p, o);
     p = raided.p;
@@ -1859,6 +1883,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     Object.assign(p, c);
     p.facing = Math.PI; // facing the bridge from the north bank, the Syndicate from the south: near enough; npcDecide turns them
     p.npc = spec.role;
+    if (spec.peg) p.flags |= FLAG.PEG_LEG; // (D-109: back on a wooden leg)
     // D-094: a beast is not a person: its own body for every hit test, its own health
     if (isBeastRole(spec.role)) {
       p.flags |= FLAG.BEAST;
@@ -1975,9 +2000,16 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.casualties.damage(sessionId, amount, hit);
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
+      // D-109: what the party did to a soldier, for the account (a limb, a boot), and a returning man's second defeat
+      const lost = p.missing & ~limbsBefore;
+      if (p.npc !== 0) {
+        if (lost) this.grudges.onMaimed(sessionId, lost, hit?.by ?? "");
+        if (hit?.boot) this.grudges.onInsult(sessionId, "boot", hit.by ?? "");
+        if (down) this.grudges.onDown(sessionId, hit?.by ?? "");
+      }
       if (this.scenario?.live) {
         if (hit?.boot) this.mayhem.onBoot(sessionId, hit.by ?? ""); // (D-108)
-        const off = p.missing & ~limbsBefore;
+        const off = lost;
         this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
       }
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
@@ -2083,6 +2115,35 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.scenario = undefined;
         this.startScenario("kessar");
       }
+    }
+    else if (cmd?.startsWith("grudge:")) {
+      // D-109, QA (the screenshots, the room test): grudge:<limbs lost, a LIMB mask>[:<cause>] remembers the nearest garrison soldier as wronged by you yesterday, and a contract
+      // nothing has happened in yet starts again, so he comes back
+      const [, m, why = "limb"] = cmd.split(":");
+      const cause = GRUDGE_CAUSES.find((x) => x === why);
+      const region = this.state.region as RegionId;
+      if (!cause || !this.scenario || (this.scenario.phase !== "planning" && this.scenario.phase !== "approach") || this.scenario.resolution !== undefined) return;
+      let best = "";
+      let bestD = Infinity;
+      this.state.players.forEach((o, id) => {
+        const sp = o.npc !== 0 ? this.cast.specOf(id) : undefined;
+        if (!sp || sp.brain !== "garrison") return;
+        const d = Math.hypot(o.x - player.x, o.z - player.z);
+        if (d < bestD) {
+          bestD = d;
+          best = id;
+        }
+      });
+      const sp = best ? this.cast.specOf(best) : undefined;
+      if (!sp) return;
+      const g: Grudge = { name: sp.name, role: sp.role, lookSeed: sp.lookSeed, faction: sp.faction, region, missing: (Number(m) | 0) & 15, burnt: cause === "fire", cause, by: player.name, day: Math.max(0, this.campaign.day - 1), returns: 0 };
+      const people = sp.people ?? peopleForNpc(sp.role, region);
+      if (people) g.people = people;
+      this.campaign = { ...this.campaign, sites: { ...this.campaign.sites, grudges: rememberGrudge(this.campaign.sites.grudges, g) } };
+      this.scenario.dispose();
+      this.scenario = undefined;
+      this.startScenario(region);
+      client.send("notice", { text: `${sp.name} remembers you.` });
     }
     else if (cmd?.startsWith("synpost:")) {
       // synpost:<0|1|2> : the Syndicate's own post at Kessar stands at once at that stage, or is struck (QA + the siege's room test, D-095)

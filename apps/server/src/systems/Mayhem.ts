@@ -170,6 +170,20 @@ export class Mayhem {
     this.touch();
   }
 
+  /** D-109: a remembered man is back (`key`, his name with the nickname); `by` is who he wants (a name, "" for the fire), `what` what he lost. The column prints it (his own bark is the room's: this bill's barks are the party's). */
+  onGrudgeBack(key: string, name: string, by: string, what: string): void {
+    void key;
+    this.say({ k: "grudge", victim: name, by, what });
+    this.touch();
+  }
+
+  /** D-109: the man who came back is down again, `by` (a name). */
+  onGrudgeDown(name: string, by: string): void {
+    if (!by) return;
+    this.say({ k: "grudge_down", victim: name, by });
+    this.touch();
+  }
+
   /** D-108: `by` booted `victim` off his feet. The Society counts a boot the party lands on anyone not of the party; the one who did it says so. */
   onBoot(victim: string, by: string): void {
     const vs = this.side(victim);

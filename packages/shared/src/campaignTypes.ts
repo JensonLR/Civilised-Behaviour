@@ -1,3 +1,4 @@
+import type { Grudge } from "./grudges.ts";
 import type { BillRecord } from "./mayhem.ts";
 import type { CastOrder, NpcSide } from "./expeditionTypes.ts";
 /** Campaign contract (docs/_notes/slice.md section 1). Types and constants only; frozen. */
@@ -63,6 +64,8 @@ export interface SiteLedger {
   lastIncident?: IncidentRecord;
   /** D-084: the last run's Butcher's Bill, its Society request and the spectacle paid (mayhem.ts): printed in the next paper. Absent until the first run after D-084. */
   lastBill?: BillRecord;
+  /** D-109: the men the party maimed and left behind, who may come back (grudges.ts). Absent until the first one. */
+  grudges?: Grudge[];
 }
 /** D-052: chaos during play (incidents.ts, docs/_notes/incidents.md). Append-only. */
 export type IncidentId = "none" | "wounded_traveller" | "courier" | "deserter" | "runaway_horse" | "powder_wagon" | "syndicate_collectors";

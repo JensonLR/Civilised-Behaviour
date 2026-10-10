@@ -98,10 +98,12 @@ export type MayhemFact =
   | { k: "finisher"; victim: string; by: string }
   | { k: "rope"; victim: string; by: string }
   | { k: "splat"; victim: string; by: string }
+  | { k: "grudge"; victim: string; by: string; what: string }
+  | { k: "grudge_down"; victim: string; by: string }
   | { k: "request"; id: RequestId };
 
 /** When several land at once (a blast), the best is printed: a commission met, a chain, a limb, a flight... */
-export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, finisher: 6, splat: 6, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
+export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
 
 const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" | "severOwn" | "flingOwn", readonly string[]>> = {
   sever: [
@@ -169,6 +171,17 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{by} ropes {victim} like a prize steer. The Agricultural Society is consulted.",
     "{victim} has been collected by {by}, with a rope, against {victim}'s wishes.",
   ],
+  grudge: [
+    "{victim}, who lost {what} to {by}, is back, with a grievance and very little else.",
+    "{victim} has returned for {by}, though not for {what}. That stays lost.",
+    "{victim}, short {what} since last meeting {by}, is back on the line and not at all philosophical about it.",
+    "Sightings of {victim}, who left {what} with {by} and would like it back, or failing that, {by}.",
+  ],
+  grudge_down: [
+    "{by} has seen off {victim} again. The Society suggests a standing arrangement.",
+    "{victim} came back for {by} and has been sent back. Correspondence is not expected.",
+    "{by} and {victim} have met again. The result was the same.",
+  ],
   splat: [
     "{victim} has met the scenery at speed. {by} is credited with the introduction.",
     "{by} has sent {victim} into the landscape. The landscape has not complained.",
@@ -205,6 +218,8 @@ export function gazetteLine(f: MayhemFact, salt: number): string {
       return fill(pick(GAZ.chain), { kegs: numberWord(f.kegs), Kegs: capital(numberWord(f.kegs)), by: f.by === "" ? "the powder" : who(f.by) });
     case "double":
       return fill(pick(GAZ.double), { by: who(f.by), n: numberWord(f.n), Nn: capital(numberWord(f.n)) });
+    case "grudge":
+      return fill(pick(GAZ.grudge), { victim: who(f.victim), by: f.by === "" ? "the fire" : who(f.by), what: f.what });
     default:
       return fill(pick(GAZ[f.k]), { victim: who(f.victim), by: who(f.by) });
   }

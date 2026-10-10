@@ -118,3 +118,4 @@ export * from "./hitReaction.ts"; // D-104: where a blow lands decides what it d
 export * from "./lasso.ts"; // D-106: the lariat
 export * from "./pacing.ts"; // D-107: the pacing director
 export * from "./boot.ts"; // D-108: the boot
+export * from "./grudges.ts"; // D-109: survivors with grudges
