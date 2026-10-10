@@ -5,6 +5,7 @@ import { ACTION_GROUPS } from "./controlsInfo.ts";
 import { Modal, h } from "./modal.ts";
 import { buildPadSection, type PadSection } from "./SettingsPad.ts";
 import { eraseMyRecords } from "../net/Session.ts";
+import { myProfileCode, restoreProfileCode } from "./profileCode.ts";
 
 /**
  * The settings screen ("Standing Orders"): four tabs, every control a real form control (range, checkbox, select, button) so it works with
@@ -12,13 +13,14 @@ import { eraseMyRecords } from "../net/Session.ts";
  * control reads and writes settings.ts (which persists and announces changes), so the audio engine, camera, stage and stylesheet follow live.
  */
 
-export type TabId = "audio" | "video" | "controls" | "pad" | "access";
+export type TabId = "audio" | "video" | "controls" | "pad" | "access" | "profile";
 const TABS: readonly { id: TabId; label: string }[] = [
   { id: "audio", label: "Sound" },
   { id: "video", label: "Display" },
   { id: "controls", label: "Controls" },
   { id: "pad", label: "Gamepad" }, // (D-098: its own page; under Controls it made that page six screens long)
   { id: "access", label: "Accessibility" },
+  { id: "profile", label: "Profile" }, // (D-102: the profile code and the records, which sat under Accessibility)
 ];
 
 let uid = 0;
@@ -62,6 +64,7 @@ export class SettingsSheet {
     this.buildControls(body);
     this.buildPad(body);
     this.buildAccess(body);
+    this.buildProfile(body);
     const done = h("button", { type: "button", class: "primary" }, "Done");
     done.addEventListener("click", () => this.close());
     // Restoring is destructive (volumes, bindings, everything), so it asks once: the first press arms the button for four seconds, the second does it.
@@ -167,7 +170,8 @@ export class SettingsSheet {
     const noteId = note ? `${id}-note` : undefined;
     if (noteId) control.setAttribute("aria-describedby", noteId);
     parent.append(
-      h("div", { class: "srow" }, h("label", { for: id }, label), control, value ?? h("span"), note ? h("p", { class: "note", id: noteId! }, note) : null),
+      // (a button keeps its own words as its name: a label pointing at it renamed "Erase my records" to "Your records" for a screen reader)
+      h("div", { class: "srow" }, h("label", { for: control.tagName === "BUTTON" ? undefined : id }, label), control, value ?? h("span"), note ? h("p", { class: "note", id: noteId! }, note) : null),
     );
   }
 
@@ -441,13 +445,91 @@ export class SettingsSheet {
     preview.addEventListener("click", () => previewCaption("[musket shot, left]"));
     p.appendChild(h("div", { class: "row-end" }, preview));
     this.slider(p, { label: "Screen shake", min: 0, max: 100, step: 5, get: () => Math.round(S.getShake() * 100), set: (v) => S.setShake(v / 100), fmt: (v) => (v === 0 ? "None" : `${v}%`), note: "Reduce motion caps it further." });
+  }
+
+  /**
+   * D-102, the profile: the code that carries this device's characters and expeditions (profileCode.ts), a box to restore one, and the records erasure. There are no accounts, so
+   * the code is how a player keeps their saves through a cleared browser or takes them to another device.
+   */
+  private buildProfile(body: HTMLElement): void {
+    const p = this.page("profile", body);
+    p.classList.add("profile");
+    // the code: a button, then the code itself (shown once asked for, selected, so it can be copied by hand where the clipboard is refused)
+    const copyId = `p${++uid}`;
+    const copy = h("button", { type: "button", id: copyId, class: "small", "aria-describedby": `${copyId}-note` }, "Copy my code");
+    const shown = h("textarea", { class: "profilecode", rows: 3, readonly: true, spellcheck: "false", "aria-label": "Your profile code", hidden: true });
+    const copyNote = h("p", { class: "note", id: `${copyId}-note`, role: "status" }, "Your characters and expeditions in one code, to keep safe or paste on another device. Keep it private: it lets anyone resume your expeditions.");
+    p.append(h("div", { class: "srow code" }, h("label", {}, "Profile code"), copy, shown, copyNote));
+    copy.addEventListener("click", () => {
+      const code = myProfileCode();
+      shown.value = code;
+      shown.hidden = false;
+      shown.select();
+      const done = (ok: boolean): void => {
+        copyNote.textContent = ok ? "Copied. Paste it into a note or an email to yourself." : "Select the code above and copy it. Keep it private.";
+      };
+      const clip = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+      if (clip?.writeText) clip.writeText(code).then(() => done(true), () => done(false));
+      else done(false);
+    });
+
+    // the restore: paste, then Restore (two presses when it would replace this device's own papers)
+    const restoreId = `p${++uid}`;
+    const field = h("textarea", { id: restoreId, class: "profilecode", rows: 2, spellcheck: "false", autocomplete: "off", placeholder: "CB1-...", "aria-describedby": `${restoreId}-note` });
+    const btn = h("button", { type: "button", class: "small" }, "Restore");
+    const note = h("p", { class: "note", id: `${restoreId}-note`, role: "status" });
+    p.append(h("div", { class: "srow code" }, h("label", { for: restoreId }, "Restore from a code"), field, h("div", { class: "foot" }, note, btn)));
+    this.restoreBtn = btn;
+    this.restoreNote = note;
+    btn.addEventListener("click", () => this.onRestore(field.value));
+    field.addEventListener("input", () => {
+      this.restoreArmed = 0;
+      this.refreshRestore();
+    });
+    this.refreshRestore();
     this.buildRecords(p);
+  }
+
+  /** What happens after a restore: the page starts again, so the door, its characters and its list are read afresh (a test replaces it). */
+  onRestored: () => void = () => location.reload();
+  private restoreBtn?: HTMLButtonElement;
+  private restoreNote?: HTMLElement;
+  private restoreArmed = 0;
+
+  private refreshRestore(msg?: string): void {
+    if (!this.restoreBtn || !this.restoreNote) return;
+    this.restoreBtn.disabled = this.playing;
+    this.restoreBtn.textContent = this.restoreArmed > Date.now() ? "Press again to replace" : "Restore";
+    this.restoreNote.textContent = msg ?? (this.playing ? "Leave the expedition first: restoring changes who you are on this device." : "Adds the code's characters and expeditions to this device.");
+  }
+
+  private onRestore(text: string): void {
+    if (this.playing) return;
+    const replace = this.restoreArmed > Date.now();
+    const r = restoreProfileCode(text, replace);
+    if (r.kind === "bad") {
+      this.restoreArmed = 0;
+      this.refreshRestore("That is not a profile code. Copy it again, all of it.");
+      return;
+    }
+    if (r.kind === "papers") {
+      this.restoreArmed = Date.now() + 6000;
+      this.refreshRestore(`This device has ${r.own} expedition${r.own === 1 ? "" : "s"} under other papers, and they would stop resuming here. Copy this device's code first to keep them.`);
+      window.setTimeout(() => this.refreshRestore(), 6100);
+      return;
+    }
+    this.restoreArmed = 0;
+    const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? "" : "s"}`;
+    this.refreshRestore(`Restored ${plural(r.characters, "character")} and ${plural(r.expeditions, "expedition")}. The front door is reopening.`);
+    if (this.restoreBtn) this.restoreBtn.disabled = true;
+    window.setTimeout(() => this.onRestored(), 1200);
   }
 
   /** Whether a game is running in this page (then the records cannot be erased: the room would save the membership straight back). Set once by boot. */
   set inGame(on: boolean) {
     this.playing = on;
     this.refreshErase();
+    this.refreshRestore();
   }
   private playing = false;
   private eraseBtn?: HTMLButtonElement;
@@ -473,7 +555,7 @@ export class SettingsSheet {
     this.eraseBtn.textContent = this.eraseArmed > Date.now() ? "Press again to erase" : "Erase my records";
     this.eraseNote.textContent = msg ?? (this.playing
       ? "Leave the expedition first (from the front door): a game in progress would write your membership straight back."
-      : "Takes you out of every campaign this browser played (one left empty is deleted) and forgets this browser. Settings stay. Cannot be undone.");
+      : "Takes you out of every campaign this browser played (one left empty is deleted) and forgets this browser. Settings and characters stay. Cannot be undone.");
   }
 
   private async onErase(): Promise<void> {

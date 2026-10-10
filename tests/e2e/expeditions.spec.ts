@@ -111,3 +111,85 @@ test("a campaign the server no longer has gets the friendly card, and Forget cle
   await expect(page.locator("#expeditions")).toBeHidden();
   expect(await page.evaluate(() => localStorage.getItem("cb.expeditions"))).toBeNull();
 });
+
+/**
+ * D-102 in a real browser, the owner's "profile persistence so people can keep their characters & campaign saves ... multiple game saves with different groups of people":
+ *   Ada founds A and a friend (another browser) joins it: the save remembers the group. "+ New" makes Cecily, who founds B. Resuming A from the list brings Ada back.
+ *   Then the profile code carries the identity, both characters and both saves to a fresh browser.
+ */
+test("two characters, a save with a friend, and the profile code to a new browser", async ({ page, browser }) => {
+  test.setTimeout(1_200_000); // (four game entries on a software rasteriser)
+  await page.addInitScript(() => localStorage.setItem("cb.gfx", "test"));
+  const opened: { close(): Promise<void> }[] = [];
+  try {
+    await page.goto("/?gfx=test");
+    await page.waitForSelector("#name", { timeout: 120_000 });
+    await page.fill("#name", "Ada");
+    await page.click("#create");
+    const a = await inGame(page);
+
+    const friendCtx = await browser.newContext();
+    opened.push(friendCtx);
+    const friend = await friendCtx.newPage();
+    await friend.goto(`/?join=${a.code}&gfx=test`);
+    await friend.waitForSelector("#name", { timeout: 120_000 });
+    await friend.fill("#name", "Bram");
+    await friend.click("#join");
+    await inGame(friend);
+    // (the room saves when the party changes; the save remembers who else was there)
+    await expect
+      .poll(() => page.evaluate((code) => (JSON.parse(localStorage.getItem("cb.expeditions") ?? "{}") as { list?: { code: string; party?: string[] }[] }).list?.find((e) => e.code === code)?.party ?? [], a.code), { timeout: 90_000 })
+      .toEqual(["Bram"]);
+    await friendCtx.close();
+    await saveAndQuit(page, a);
+    await expect(page.locator("#continue .cont-meta")).toContainText("with Bram");
+
+    // ---- a second character founds a second campaign --------------------------------------------------------------------------------------
+    await page.click("#who-new");
+    await expect(page.locator("#name")).toHaveValue("");
+    await page.fill("#name", "Cecily");
+    await expect(page.locator("#who")).toBeVisible();
+    await page.click("#create");
+    const b = await inGame(page);
+    expect(await page.evaluate(() => (window as unknown as { __cb: { session: { local?: { name: string } } } }).__cb.session.local?.name)).toBe("Cecily");
+    await saveAndQuit(page, b);
+    await expect(page.locator("#name")).toHaveValue("Cecily");
+
+    // ---- resuming A brings Ada back -------------------------------------------------------------------------------------------------------
+    await page.locator(`#expeditions .go[data-code="${a.code}"]`).click();
+    const a2 = await inGame(page);
+    expect(a2.code).toBe(a.code);
+    expect(await page.evaluate(() => (window as unknown as { __cb: { session: { local?: { name: string } } } }).__cb.session.local?.name)).toBe("Ada");
+    await saveAndQuit(page, a2);
+    await expect(page.locator("#name")).toHaveValue("Ada");
+
+    // ---- the profile code, carried to a fresh browser ---------------------------------------------------------------------------------------
+    await page.click("#options");
+    await page.click("#tab-profile");
+    await page.getByRole("button", { name: "Copy my code" }).click(); // (its own words name it: a screen reader hears the same)
+    const code = await page.locator("#panel-profile textarea[readonly]").inputValue();
+    expect(code).toMatch(/^CB1-/);
+
+    const freshCtx = await browser.newContext();
+    opened.push(freshCtx);
+    const fresh = await freshCtx.newPage();
+    await fresh.addInitScript(() => localStorage.setItem("cb.gfx", "test"));
+    await fresh.goto("/?gfx=test");
+    await fresh.waitForSelector("#name", { timeout: 120_000 });
+    await expect(fresh.locator("#continue-row")).toBeHidden();
+    await fresh.click("#options");
+    await fresh.click("#tab-profile");
+    await fresh.locator("#panel-profile textarea:not([readonly])").fill(code);
+    await fresh.getByRole("button", { name: "Restore", exact: true }).click();
+    await expect(fresh.locator("#panel-profile")).toContainText("Restored 2 characters and 2 expeditions");
+    // the door reopens with everything: both saves, both characters, Ada chosen as she was, and the same papers (the membership a resume needs; the resume itself is proved above)
+    await expect(fresh.locator("#expeditions li")).toHaveCount(2, { timeout: 60_000 });
+    await expect(fresh.locator("#who option")).toHaveText(["Ada", "Cecily"]);
+    await expect(fresh.locator("#name")).toHaveValue("Ada");
+    const papers = await page.evaluate(() => localStorage.getItem("cb.identity"));
+    expect(papers).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await fresh.evaluate(() => localStorage.getItem("cb.identity"))).toBe(papers);
+  } finally {
+    for (const c of opened) await c.close().catch(() => undefined);
+  }
+});

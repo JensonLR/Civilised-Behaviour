@@ -51,6 +51,22 @@ describe("the guide's line and marker (D-063)", () => {
     expect(at(mark)[1]).toBeGreaterThanOrEqual(120);
   });
 
+  it("D-101: keeps off the orders card in the corner, and only there (a goal on the horizon elsewhere is not pushed down onto the player)", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const g = new Guide(parent);
+    const mark = parent.querySelector<HTMLElement>(".goalmark")!;
+    const at = (el: HTMLElement): number[] => (/translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(el.style.transform) ?? []).slice(1).map(Number);
+    const w = window.innerWidth, h = window.innerHeight;
+    // the card: 300 px wide, 120 px tall, in the top-left corner
+    g.place(-0.9, 0.9, false, 50, "Gate", 4, 40, 300, 120); // (up in the top left, over the card)
+    expect(at(mark)[1]).toBeGreaterThanOrEqual(120);
+    g.place(0, 0.5, false, 50, "Gate", 4, 40, 300, 120); // (straight ahead on the horizon, clear of the card)
+    expect(at(mark)[1]).toBeCloseTo((-0.5 * 0.5 + 0.5) * h, 0);
+    expect(at(mark)[0]).toBeCloseTo(w / 2, 0);
+    g.dispose();
+  });
+
   it("D-074: the marker reports where it stands over the place, and goes quiet (the flag alone) over somebody whose name is up", () => {
     const parent = document.createElement("div");
     document.body.appendChild(parent);

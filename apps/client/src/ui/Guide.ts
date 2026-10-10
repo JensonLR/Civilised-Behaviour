@@ -6,6 +6,9 @@ import { typeset } from "./typeset.ts";
  * player never reads the same instruction twice. The marker is always this class's: an ink flag over the goal with its distance, held to the edge of the picture with an arrow
  * when the goal is behind or off to the side. Game feeds both from game/guidance.ts; nothing here allocates per frame.
  */
+/** How far the marker keeps from the orders card (CSS px: half its label's width). */
+const CARD_CLEAR_PX = 72;
+
 export class Guide {
   private readonly line: HTMLElement;
   private readonly lineText: HTMLElement;
@@ -58,9 +61,10 @@ export class Guide {
 
   /**
    * The marker, once a frame. `ndcX/ndcY` the goal's projected position (-1..1), `behind` when it is behind the camera, `dist` metres to it (-1: no goal). Within `nearM` the
-   * marker steps aside: you are there.
+   * marker steps aside: you are there. `topPx`: never above this line (the heading strip). D-101: `cardR`/`cardB`, the orders card in the top-left corner: a marker that would
+   * stand on it stands just below it instead (only there: a goal on the horizon elsewhere stays on the horizon, not pushed down onto the player).
    */
-  place(ndcX: number, ndcY: number, behind: boolean, dist: number, label: string, nearM = 4, topPx = 0): void {
+  place(ndcX: number, ndcY: number, behind: boolean, dist: number, label: string, nearM = 4, topPx = 0, cardR = 0, cardB = 0): void {
     if (dist < 0 || dist < nearM) {
       this.markOver = false;
       if (!this.mark.hidden) this.mark.hidden = true;
@@ -95,8 +99,9 @@ export class Guide {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const px = (x * 0.5 + 0.5) * w;
-    // (never over the line under the heading strip: a goal on the horizon straight ahead projected onto the words; the flag stands just below them instead)
-    const py = Math.max((-y * 0.5 + 0.5) * h, topPx);
+    // (never over the heading strip, nor on the orders card: the marker is about 7 rem either side of its point, so it keeps that far from the card's right edge)
+    let py = Math.max((-y * 0.5 + 0.5) * h, topPx);
+    if (cardB > 0 && px - CARD_CLEAR_PX < cardR && py < cardB + CARD_CLEAR_PX * 0.5) py = cardB + CARD_CLEAR_PX * 0.5;
     this.mark.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px)`;
     this.markX = px;
     this.markY = py;

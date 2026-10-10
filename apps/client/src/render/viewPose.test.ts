@@ -122,7 +122,7 @@ describe("where the hands and the weapon are, per weapon", () => {
 
   it("every weapon at the hip shows its right hand and the weapon inside a 16:9 frame at the vertical FOV", () => {
     for (const id of ALL) {
-      const s = settle(id, {});
+      const s = settle(id, {}, id < 0 ? 1 : 2); // (bare hands: their raised pose, before they lower at rest: D-101)
       computeViewmodel(s, BODIES.middle!, out);
       expect(out.visible, `weapon ${id}`).toBe(true);
       expect(inFrame(out.right, 0.97), `right hand of ${id} at ${JSON.stringify(out.right)}`).toBe(true);
@@ -135,8 +135,8 @@ describe("where the hands and the weapon are, per weapon", () => {
     }
   });
 
-  it("bare hands: both fists are on screen, low and either side of the middle", () => {
-    const s = settle(-1, {});
+  it("bare hands: both fists are on screen, low and either side of the middle (raised, before they lower at rest)", () => {
+    const s = settle(-1, {}, 1);
     computeViewmodel(s, BODIES.middle!, out);
     expect(out.weaponVisible).toBe(false);
     expect(out.right.x).toBeGreaterThan(0.08);
@@ -438,3 +438,18 @@ describe("two lenses", () => {
     expect(viewmodelFov(100)).toBeGreaterThan(viewmodelFov(65));
   });
 });
+
+describe("D-101: idle empty hands lower out of view", () => {
+  it("after a moment with nothing in them they drop away; a punch, or a weapon, brings them up", () => {
+    const s = settle(-1, {}, 3);
+    expect(s.rest).toBeGreaterThan(0.95);
+    vmSwing(s, 0.3, false);
+    for (let t = 0; t < 0.25; t += 1 / 60) stepViewmodel(s, frame(), 1 / 60);
+    expect(s.rest).toBeLessThan(0.05);
+    const armed = settle(WEAPON.PISTOL, {}, 3);
+    expect(armed.rest).toBe(0);
+    const carrying = settle(-1, { mode: MODE.CARRY }, 3);
+    expect(carrying.rest).toBeLessThan(0.05);
+  });
+});
+

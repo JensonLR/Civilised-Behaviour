@@ -16,11 +16,24 @@ import { ALL_DONE } from "./orientationLogic.ts";
 
 export const EXPEDITIONS_KEY = "cb.expeditions";
 export const EXPEDITIONS_VERSION = 1;
-/** The oldest are forgotten past this many (the server keeps its own copy for its retention period; this is only the door's list). */
-export const MAX_EXPEDITIONS = 12;
+/** The oldest are forgotten past this many (the server keeps its own copy for its retention period; this is only the door's list). D-102: 24 (several groups, several saves). */
+export const MAX_EXPEDITIONS = 24;
+/** D-102: at most this many other names are kept for a save (a party is four). */
+export const PARTY_MAX = 3;
+const CHAR_ID_RE = /^[a-z0-9]{6,12}$/;
 const MAX_RAW_CHARS = 32_768;
 const NAME_MAX = 20;
 const DAY_MAX = 100_000;
+
+/** What a caller may say about a save (every field optional, every field checked). */
+export interface ExpeditionPatch {
+  name?: string;
+  region?: string;
+  day?: number;
+  orient?: OrientProgress;
+  who?: string;
+  party?: readonly string[];
+}
 
 export interface OrientProgress {
   /** Bitmask of the orientation steps done (orientationLogic.ts). */
@@ -39,6 +52,10 @@ export interface Expedition {
   /** Epoch ms. */
   readonly lastPlayed: number;
   readonly orient?: OrientProgress;
+  /** D-102: which of this device's characters played it (characters.ts); resuming brings that character back. */
+  readonly who?: string;
+  /** D-102: the others seen in it, by the names they used (this device only: so a save reads "with Bram, Cecily", the group it was played with). */
+  readonly party?: readonly string[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -61,6 +78,8 @@ function parseOne(v: unknown, now: number): Expedition | undefined {
   if (typeof lp !== "number" || !Number.isFinite(lp) || lp < 0) return undefined;
   const day = typeof v.day === "number" && Number.isInteger(v.day) && v.day >= 0 && v.day <= DAY_MAX ? v.day : 0;
   const orient = parseOrient(v.orient);
+  const who = typeof v.who === "string" && CHAR_ID_RE.test(v.who) ? v.who : undefined;
+  const party = parseParty(v.party);
   return {
     code,
     name: cleanName(v.name),
@@ -68,7 +87,21 @@ function parseOne(v: unknown, now: number): Expedition | undefined {
     day,
     lastPlayed: Math.min(lp, now), // (a clock that was wrong once must not pin an entry to the top of the list for ever)
     ...(orient ? { orient } : {}),
+    ...(who ? { who } : {}),
+    ...(party.length ? { party } : {}),
   };
+}
+
+/** Names of the others in a save: cleaned, non-empty, no repeats, at most PARTY_MAX. */
+export function parseParty(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const n of v.slice(0, PARTY_MAX * 4)) {
+    const name = cleanName(n);
+    if (name && !out.includes(name)) out.push(name);
+    if (out.length >= PARTY_MAX) break;
+  }
+  return out;
 }
 
 /** Newest first, one per code (the newest of duplicates), capped. */
@@ -89,22 +122,31 @@ export function parseExpeditions(raw: unknown, now: number = Date.now()): Expedi
   if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_RAW_CHARS) return [];
   try {
     const j: unknown = JSON.parse(raw);
-    if (!isObj(j) || j.v !== EXPEDITIONS_VERSION || !Array.isArray(j.list)) return [];
-    const out: Expedition[] = [];
-    for (const item of j.list.slice(0, MAX_EXPEDITIONS * 4)) {
-      const e = parseOne(item, now);
-      if (e) out.push(e);
-    }
-    return tidy(out);
+    if (!isObj(j) || j.v !== EXPEDITIONS_VERSION) return [];
+    return parseExpeditionList(j.list, now);
   } catch {
     return [];
   }
 }
 
+/** A list of expeditions from anywhere (storage, a profile code): each entry checked as on reading, bad ones dropped alone, tidied. Never throws. */
+export function parseExpeditionList(v: unknown, now: number = Date.now()): Expedition[] {
+  if (!Array.isArray(v)) return [];
+  const out: Expedition[] = [];
+  for (const item of v.slice(0, MAX_EXPEDITIONS * 4)) {
+    const e = parseOne(item, now);
+    if (e) out.push(e);
+  }
+  return tidy(out);
+}
+
+/** Two lists as one: one entry per code (the more recently played wins), newest first, capped. */
+export const mergeExpeditions = (a: readonly Expedition[], b: readonly Expedition[]): Expedition[] => tidy([...a, ...b]);
+
 export const serializeExpeditions = (list: readonly Expedition[]): string => JSON.stringify({ v: EXPEDITIONS_VERSION, list: tidy([...list]) });
 
 /** Adds or updates one expedition (`lastPlayed` becomes `now`). Pure: returns the new list. */
-export function upsertExpedition(list: readonly Expedition[], code: string, patch: { name?: string; region?: string; day?: number; orient?: OrientProgress }, now: number): Expedition[] {
+export function upsertExpedition(list: readonly Expedition[], code: string, patch: ExpeditionPatch, now: number): Expedition[] {
   const c = code.toUpperCase();
   if (!isValidJoinCode(c)) return [...list];
   const old = list.find((e) => e.code === c);
@@ -112,7 +154,10 @@ export function upsertExpedition(list: readonly Expedition[], code: string, patc
   const region = isRegionId(patch.region) ? patch.region : old?.region ?? "hollowmere";
   const day = patch.day !== undefined && Number.isInteger(patch.day) && patch.day >= 0 && patch.day <= DAY_MAX ? patch.day : old?.day ?? 0;
   const orient = patch.orient ? parseOrient(patch.orient) ?? { done: 0, skipped: false } : old?.orient;
-  const next: Expedition = { code: c, name, region, day, lastPlayed: now, ...(orient ? { orient } : {}) };
+  const who = patch.who !== undefined && CHAR_ID_RE.test(patch.who) ? patch.who : old?.who;
+  // (the party gathers: names seen now come first, those seen before are kept to the cap, so a friend who stepped out for the evening still names the save)
+  const party = parseParty([...(patch.party ?? []), ...(old?.party ?? [])].filter((n) => cleanName(n) !== name));
+  const next: Expedition = { code: c, name, region, day, lastPlayed: now, ...(orient ? { orient } : {}), ...(who ? { who } : {}), ...(party.length ? { party } : {}) };
   return tidy([next, ...list.filter((e) => e.code !== c)]);
 }
 
@@ -123,11 +168,14 @@ export const withoutExpedition = (list: readonly Expedition[], code: string): Ex
 export const listExpeditions = (now: number = Date.now()): Expedition[] => parseExpeditions(readStored(EXPEDITIONS_KEY), now);
 const save = (list: readonly Expedition[]): void => writeStored(EXPEDITIONS_KEY, list.length === 0 ? null : serializeExpeditions(list));
 
+/** Replaces the whole record (a restored profile code). */
+export const replaceExpeditions = (list: readonly Expedition[]): void => save(tidy([...list]));
+
 /** The one the door's Continue offers: the most recently played. */
 export const mostRecentExpedition = (now?: number): Expedition | undefined => listExpeditions(now)[0];
 
 /** Records (or refreshes) an expedition: the code, and whatever of name / region / day the caller knows. Marks it played now. */
-export function noteExpedition(code: string, patch: { name?: string; region?: string; day?: number } = {}, now: number = Date.now()): void {
+export function noteExpedition(code: string, patch: ExpeditionPatch = {}, now: number = Date.now()): void {
   save(upsertExpedition(listExpeditions(now), code, patch, now));
 }
 
@@ -147,6 +195,14 @@ export function setOrientProgress(code: string, orient: OrientProgress, now: num
   const old = list.find((e) => e.code === code.toUpperCase());
   if (!old) return;
   save([{ ...old, orient: parseOrient(orient) ?? { done: 0, skipped: false } }, ...list.filter((e) => e.code !== old.code)]);
+}
+
+/**
+ * D-101: a player who JOINED somebody else's running expedition is not put through the welcome card (the owner: a fresh player gets the tutorial when they start a game, "if they
+ * don't join another lobby someone already started"). Marks it skipped for this campaign unless this browser already has progress there; "Replay tutorial" still brings it back.
+ */
+export function quietOrientationForJoiner(code: string): void {
+  if (getOrientProgress(code) === undefined) setOrientProgress(code, { done: 0, skipped: true });
 }
 
 /** Forgets the orientation progress of a campaign (the replay): the card starts again from nothing. */
@@ -173,9 +229,9 @@ export function ageText(ms: number): string {
   return `${Math.floor(d / 7)} weeks ago`;
 }
 
-/** The one line under an expedition in the list: "No. K7M2Q · last at Kessar Reach · Day 4 · 3 h ago". */
+/** The one line under an expedition in the list: "with Bram, Cecily · Kessar Reach · Day 4 · 3 h ago" (D-102: the group first; "No. K7M2Q" when it was played alone). */
 export function expeditionMeta(e: Expedition, now: number = Date.now()): string {
-  const parts = [`No. ${e.code}`, `last at ${REGIONS[e.region].name}`];
+  const parts = [e.party?.length ? `with ${e.party.join(", ")}` : `No. ${e.code}`, REGIONS[e.region].name];
   if (e.day > 0) parts.push(`Day ${e.day}`);
   parts.push(ageText(now - e.lastPlayed));
   return parts.join(" · ");

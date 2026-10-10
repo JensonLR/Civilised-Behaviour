@@ -253,6 +253,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--backdr
 .sheet .actions { display: flex; justify-content: space-between; gap: 0.6rem; margin-top: 0.5rem; }
 .sheet .actions .primary { flex: 0 1 12rem; }
 .sheet .row-end { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
+/* D-102: the Profile page is one column (the code is long; it wraps in a small box and never widens the sheet), its rows a label, a control, then the box and the note */
+.sheet textarea.profilecode { width: 100%; min-width: 0; box-sizing: border-box; resize: vertical; font-family: var(--type); font-size: 0.78rem; line-height: 1.25; word-break: break-all; padding: 0.3rem 0.4rem; color: var(--ink); background: var(--field); border: 1.5px solid var(--brass-dark); border-radius: 3px; }
+.sheet.settings .page.profile:not([hidden]) { display: block; max-width: 46rem; }
+.sheet .srow.code { grid-template-columns: minmax(7rem, 10.5rem) minmax(0, 1fr); row-gap: 0.3rem; }
+.sheet .page.profile .srow > button, .sheet .srow.code > .foot button { justify-self: start; padding-inline: 1.5rem 1rem; } /* (room for the pointing hand on hover) */
+.sheet .srow.code > textarea[readonly] { grid-column: 1 / -1; }
+.sheet .srow.code > .foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+.sheet .srow.code > .foot .note { margin: 0; }
+.sheet .srow.code > .foot button { flex: none; }
 .panel button.small { min-height: 2.1rem; padding: 0.25rem 0.8rem; font-size: 0.9rem; }
 
 /* Index tabs */
@@ -767,6 +776,21 @@ body.touch-ui #hud .orientation .foot { justify-content: flex-end; margin-top: 0
 
 /* D-098, the owner's "a lot of scrolling ... pages look clunky, wordy and bulky". The charter says each thing once, on fewer lines: the New campaign note is the button's own
    second line, the gore choice sits in the row with Options and the manual (its note is in Options and in its tooltip), the mature-content line and the version share the foot */
+/* D-102: the characters this device keeps sit on the label's line (a list once there are two, "+ New", a two-press Retire), so the charter grows by nothing. They come after the
+   name in the page's order (the pad and the Tab key reach the name first) and are placed beside the label by the grid */
+.panel .namebox { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label who" "row row"; align-items: end; column-gap: 0.5rem; }
+.panel .namebox .namelabel { grid-area: label; }
+.panel .namebox .namerow { grid-area: row; }
+.panel .namebox .who { grid-area: who; display: flex; align-items: center; justify-content: flex-end; gap: 0.3rem; min-width: 0; }
+.panel .namebox .who .grow { flex: 1; }
+.panel .namebox .who label.playing { display: block; margin: 0; white-space: nowrap; }
+.panel .namebox .who label.playing[hidden] { display: none; }
+.panel .namebox select { min-width: 0; max-width: 9rem; padding: 0.1rem 0.25rem; font-size: 0.9rem; }
+.panel .namebox.many { grid-template-areas: "who who" "row row"; }
+.panel .namebox.many .namelabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.panel.main .namebox.many .who { margin-top: 0.45rem; }
+.panel button.tiny { min-height: 0; padding: 0.1rem 0.4rem; font-size: 0.85rem; letter-spacing: 0.04em; white-space: nowrap; }
+html .panel button.tiny:hover::before, html .panel button.tiny:focus-visible::before { content: none; } /* (too small for the pointing hand: the hover tint and the focus ring say it) */
 .panel .namerow { display: flex; align-items: stretch; gap: 0.6rem; margin-top: 0.15rem; }
 .panel .namerow input { flex: 1; min-width: 0; }
 .panel .namerow #dress { flex: none; min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.95rem; letter-spacing: 0.06em; }
