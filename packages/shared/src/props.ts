@@ -1,9 +1,6 @@
 import { CHARACTER } from "./constants.ts";
-import { inCampFootprint } from "./camp.ts";
 import { hqRoute } from "./hqRoute.ts";
 import { angleDelta } from "./math.ts";
-import { Rng } from "./rng.ts";
-import type { Terrain } from "./terrain.ts";
 
 /** Prop kinds are numeric on the wire (uint8). Add new kinds at the END only. */
 export const PropKind = { CRATE: 0, BARREL: 1, BOTTLE: 2, CHAIR: 3, INSTRUMENT: 4 } as const;   // (D-096: the Society's theodolite in its case, the Triangulation's instrument)
@@ -114,11 +111,13 @@ export interface PropSpawn {
   x: number;
   z: number;
   yaw: number;
+  /** Height of its underside above the ground: a crate stacked on others (D-115, `stores.ts`). Absent on the ground. */
+  up?: number;
 }
 
 let hqPosts: { x: number; z: number; r: number }[] | undefined;
 /** True near an HQ finger-post (its radius plus a prop's reach) or within 1.5 m of the two authored walking lines (hqRoute.ts). */
-function hqKeepOut(x: number, z: number): boolean {
+export function hqKeepOut(x: number, z: number): boolean {
   const rt = hqRoute();
   hqPosts ??= rt.signs.map((p) => ({ x: p.x, z: p.z, r: p.r }));
   for (const p of hqPosts) if (Math.hypot(x - p.x, z - p.z) < p.r + 1.0) return true;
@@ -134,24 +133,4 @@ function hqKeepOut(x: number, z: number): boolean {
     }
   }
   return false;
-}
-
-/** Deterministic prop scatter around the spawn clearing (no authored content yet). Never inside the camp's tents, cart, fire or wall. */
-export function scatterProps(seed: number, terrain: Terrain, count: number): PropSpawn[] {
-  const rng = new Rng(seed ^ 0x51ed270b);
-  const kinds: PropKindId[] = [PropKind.CRATE, PropKind.BARREL, PropKind.BOTTLE, PropKind.CHAIR, PropKind.CRATE, PropKind.BARREL];
-  const out: PropSpawn[] = [];
-  const want = Math.min(count, INTERACT.maxPropsPerRoom);
-  for (let tries = 0; out.length < want && tries < want * 12; tries++) {
-    const a = rng.range(0, Math.PI * 2);
-    const d = rng.range(4.5, 12);
-    const x = Math.cos(a) * d;
-    const z = Math.sin(a) * d;
-    // Keep clear of every authored landmark (wall, crates, tents, fire, flag, sign, luggage, cart) with room to grab a prop beside it.
-    if (inCampFootprint(x, z, 0.9)) continue;
-    if (hqKeepOut(x, z)) continue;   // (D-038: the finger-posts and the two walking lines round HQ are furniture too)
-    void terrain;
-    out.push({ kind: rng.pick(kinds), x, z, yaw: rng.range(0, Math.PI * 2) });
-  }
-  return out;
 }

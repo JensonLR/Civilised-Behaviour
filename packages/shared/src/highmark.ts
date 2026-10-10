@@ -7,6 +7,7 @@ import type { NavOptions } from "./nav.ts";
 import { distToPaths, levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import type { AuditDoor } from "./levelAudit.ts";
 import { PropKind, type PropKindId, type PropSpawn } from "./props.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, barrelHuddle, bottles, chairCircle, chairRow, compose, crateStack, desk, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng, hash3, hashFloat } from "./rng.ts";
 import { withOutpost } from "./outpost.ts";
 import type { OutpostStage } from "./worldTypes.ts";
@@ -459,7 +460,7 @@ export function highmarkPlan(): HighmarkPlan {
     { x: HIGHMARK_SITES.grange[0]!.x - 3.5, z: HIGHMARK_SITES.grange[0]!.z - 2, yaw: Math.PI / 2, top: 4.4, w: 1.5, h: 3, kind: "grange" },
   ];
   const signs: HighmarkSign[] = [
-    { x: 3.9, z: 113.5, yaw: Math.PI / 2, text: 0 },
+    { x: 5, z: 111.4, yaw: Math.PI / 2, text: 0 },   // (D-115: at the edge of the arrival, to the right, read as you step ashore (it stood in the ring, where the camera hung); the horses stand at (±5, 108))
     { x: -6.2, z: 72, yaw: Math.PI / 2, text: 1 },
     ...[
       { p: hillPoint(71.8, 13.4), text: 2 }, { p: hillPoint(56.4, 22), text: 3 }, { p: hillPoint(43.8, -22), text: 4 },   // (D-097: the granary terrace's a pace up from its wall, which the board's end ran into)
@@ -621,42 +622,41 @@ export function highmarkSpawn(index: number, count = 4): { x: number; z: number 
   return { x: L.x + Math.cos(a) * 2.6, z: L.z - 1.4 - ARRIVAL_INLAND + Math.sin(a) * 1.2 } /* (D-070: up the shore, off the jetty's first planks) */;
 }
 
-/** The props a visit starts with: stores at the landing and in the drovers' camp, a stool or two at the Waiting Stones. Deterministic, never in anything solid. */
+/**
+ * The props a visit starts with, as still lifes (D-115, `stores.ts`): at the quay the Reapers' grain (three barrels stencilled for the Assembly: a barrel carried to a
+ * delegate is that delegate's vote) huddled west of the road beside the quay's stacked crates, and the landing clerk's desk by the sign that asks you to take a number;
+ * at the drovers' camp three more barrels of grain and two chairs at the fire; a waiting line of chairs at the Waiting Stones; the petitioners' chairs by the gate.
+ * Nothing in the arrival (the ring, the view up the road, the camera's ground), on the road, in the water or in anything solid. Deterministic.
+ */
 export function highmarkProps(seed: number, world: CollisionWorld): PropSpawn[] {
+  void seed;
   const out: PropSpawn[] = [];
-  const rng = new Rng(seed ^ 0x41a3c0de);
   const pos = { x: 0, z: 0 };
   const L = HIGHMARK_ANCHORS.landing;
   const D = HIGHMARK_SITES.drovers;
-  // the grain: three barrels stencilled for the Reapers' Assembly at the quay and three at the drovers' camp (a barrel carried to a delegate is that delegate's vote)
-  for (const [dx, dz] of [[-5.6, -5], [-6.6, -6.3], [-4.9, -6.4]] as const) out.push({ kind: PropKind.BARREL, x: L.x + dx, z: L.z + dz, yaw: rng.range(0, TAU) });
-  for (const [dx, dz] of [[5, 6], [6.2, 5], [4, 7.2]] as const) out.push({ kind: PropKind.BARREL, x: D.x + dx, z: D.z + dz, yaw: rng.range(0, TAU) });
-  const spots: { x: number; z: number; r: number; n: number; kinds: PropKindId[] }[] = [
-    { x: L.x, z: L.z - 6, r: 6, n: 5, kinds: [PropKind.CRATE, PropKind.BARREL, PropKind.CRATE, PropKind.BOTTLE, PropKind.CRATE] },
-    { x: D.x + 2, z: D.z + 3, r: 4.5, n: 4, kinds: [PropKind.BARREL, PropKind.BOTTLE, PropKind.CHAIR, PropKind.CRATE] },
-    { x: -6, z: 62, r: 3.5, n: 2, kinds: [PropKind.CHAIR, PropKind.CHAIR] },
-  ];
-  for (const s of spots) {
-    for (let i = 0, tries = 0; i < s.n && tries < 80; tries++) {
-      const a = rng.range(0, TAU);
-      const d = rng.range(1.8, s.r);
-      const x = s.x + Math.cos(a) * d;
-      const z = s.z + Math.sin(a) * d;
-      pos.x = x;
-      pos.z = z;
-      if (world.resolveXZ(pos, world.terrainHeight(x, z), 0.6, 1.2) || highmarkRoadDistance(x, z) < 1.6) continue;
-      out.push({ kind: s.kinds[i % s.kinds.length]!, x, z, yaw: rng.range(0, TAU) });
-      i++;
-    }
-  }
-  // the court's furniture: two benches' worth of chairs for the petitioners, on the court terrace by the gate
+  const W = HIGHMARK_ANCHORS.waitingStones;
   const gp = HIGHMARK_ANCHORS.capital.gate;
-  for (const [dx, dz] of [[-6, -5], [6, -5]] as const) {
-    const x = gp.x + dx, z = gp.z + dz;
+  const arrival = arrivalCentre(highmarkSpawn);
+  const wd = (world.terrain as Partial<HighmarkTerrain>).waterDepth;
+  const fits = (x: number, z: number, r: number): boolean => {
+    if (inArrival(arrival, ARRIVAL_TOWARD, x, z, r) || highmarkRoadDistance(x, z) < 1.2 + r || (wd !== undefined && wd(x, z) > 0)) return false;
     pos.x = x;
     pos.z = z;
-    if (!world.resolveXZ(pos, world.terrainHeight(x, z), 0.6, 1.2)) out.push({ kind: PropKind.CHAIR, x, z, yaw: rng.range(0, TAU) });
-  }
+    return !world.resolveXZ(pos, world.terrainHeight(x, z), Math.max(0.35, r + 0.15), 1.2);
+  };
+  const lifes: StillLife[] = [
+    { x: L.x - 7.6, z: L.z - 4.4, yaw: 0, pieces: crateStack([3, 2, 1]) },
+    { x: L.x - 6.2, z: L.z - 0.9, yaw: 0, pieces: barrelHuddle(3) },
+    { x: L.x + 6.4, z: L.z - 4.8, yaw: Math.PI, pieces: desk() },
+    // the drovers' fire (-50, 53): two chairs on its south-east side, the grain huddled by the flag
+    { x: D.x + 2, z: D.z + 3, yaw: 0, pieces: compose(chairCircle(2, 1.9, 0.15, 1.25), bottles(2, 2.3, 1.35)) },
+    { x: D.x + 5.4, z: D.z + 6, yaw: -Math.PI / 2, pieces: barrelHuddle(3) },
+    // the Waiting Stones: a line of chairs beside them, facing the capital
+    { x: W.x - 2.2, z: W.z, yaw: -Math.PI / 2, pieces: chairRow(3) },
+    // the court's petitioners: a bench's worth of chairs inside the gate, west of the road (it bends east past the gate), facing the way in
+    { x: gp.x - 5.4, z: gp.z - 4.6, yaw: Math.atan2(4.6, 5.4), pieces: chairRow(2, 0.7) },
+  ];
+  for (const sl of lifes) placeStillLife(sl, fits, out);
   return out;
 }
 

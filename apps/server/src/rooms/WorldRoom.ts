@@ -19,7 +19,7 @@ import {
   holdPosition,
   injuryMods,
   prosthesisFor,
-  scatterProps,
+
   type MoveCommand,
   JOIN_CODE_ALPHABET,
   JOIN_CODE_LENGTH,
@@ -153,6 +153,8 @@ import {
   npcKey,
   openParley,
   regionProps,
+  kitKegSpots,
+  arrivalCentre,
   peopleForNpc,
   regionSpawn,
   serializeCampaign,
@@ -1344,7 +1346,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.physics = new PhysicsWorld(this.world);
     this.state.props.clear();
     for (const spawn of regionProps(id, seed, this.world)) {
-      const body = this.physics.spawnProp(spawn, this.world.terrainHeight(spawn.x, spawn.z));
+      const body = this.physics.spawnProp(spawn, this.world.terrainHeight(spawn.x, spawn.z) + (spawn.up ?? 0));   // (D-115: a crate stacked on others starts on them)
       if (!body) continue;
       const ps = new PropState();
       ps.kind = spawn.kind;
@@ -1898,7 +1900,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.state.players.forEach((p, sid) => {
       if (!p.npc && fx.reserveMul > 1) this.combat.scaleReserve(sid, fx.reserveMul);
     });
-    for (let i = 0; i < fx.kegs; i++) this.spawnPropAt(PropKind.BARREL, land.x - 3 + i * 1.2, land.z - 4);
+    // (D-115: in rows on the bank beside the arrival, never in it, clear of the region's own stores)
+    for (const k of kitKegSpots(land, arrivalCentre((i, n) => regionSpawn(to, i, n)), this.world, regionProps(to, this.state.seed, this.world), fx.kegs)) this.spawnPropAt(PropKind.BARREL, k.x, k.z);
     let free = fx.horses;
     if (fx.wagon) {
       this.mounts.spawnWagon(spots.wagon, { coat: hash3(this.state.seed, 7, 0x4c02), crates: 0, horse: true });

@@ -11,7 +11,8 @@ import { VESPER_ANCHORS as V, VESPER_STATIONS, createVesperWorld, vesperNavOptio
 import type { NavOptions } from "./nav.ts";
 import { JETTY } from "./landscape.ts";
 import { angleDelta } from "./math.ts";
-import { INTERACT, scatterProps, type PropSpawn } from "./props.ts";
+import { INTERACT, type PropSpawn } from "./props.ts";
+import { campProps } from "./stores.ts";
 import { OUTPOST_SITES, YARD_R } from "./outpost.ts";
 import type { RegionWorldOpts } from "./worldTypes.ts";
 
@@ -110,7 +111,7 @@ export function regionSpawn(id: RegionId, index: number, count = 4): { x: number
 
 /** The props a region starts with (the integrator spawns them in the physics world). */
 export function regionProps(id: RegionId, seed: number, world: CollisionWorld): PropSpawn[] {
-  return id === "kessar" ? kessarProps(seed, world) : id === "highmark" ? highmarkProps(seed, world) : id === "vesper" ? vesperProps(seed, world) : id === "saltmarket" ? saltmarketProps(seed, world) : scatterProps(seed, world.terrain, 14);
+  return id === "kessar" ? kessarProps(seed, world) : id === "highmark" ? highmarkProps(seed, world) : id === "vesper" ? vesperProps(seed, world) : id === "saltmarket" ? saltmarketProps(seed, world) : campProps(seed, world);
 }
 
 // ---- stations: the places you can USE (map table, notice board, the dock, the pier, the Warden) ------------------------------------------------------

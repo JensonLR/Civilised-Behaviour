@@ -10,7 +10,7 @@ export const ROUTE_TEXT = {
   dockBack: ["CAMP  {m} m", "CAMP  {m} m  (the kettle is on)", "CAMP  {m} m", "CAMP  {m} m  (it will keep)"],
   /** A third board, angled off to the side: the Society's advice. */
   dockAside: ["PLEASE KEEP TO THE IMPROVED PATH", "FOOTBRIDGE: HOLD THE RAIL", "THE VILLAGE IS NOT A WELCOME PARTY", "SAILINGS ARE OPTIONAL; FORM 7 IS NOT"],
-  mapAhead: ["THE MAP ROOM", "THE SURVEY  (consult, do not correct)"],
-  mapBack: ["CAMP  {m} m", "THE DOCK  (follow the posts)"],
-  mapAside: ["SUPPLIES: THE PYRAMID", "MIND THE LANTERN POST"],
+  mapAhead: ["THE MAP ROOM  (consult, do not correct)"],
+  mapBack: ["THE DOCK  (follow the posts)"],
+  mapAside: ["MIND THE LANTERN POST"],
 } as const;

@@ -6,6 +6,7 @@ import { TAU, smoothstep } from "./math.ts";
 import type { RegionMountSpots } from "./mount.ts";
 import type { NavOptions } from "./nav.ts";
 import { PropKind, type PropKindId, type PropSpawn } from "./props.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, barrelHuddle, barrelRow, bottles, chairRow, compose, desk, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng, hash3 } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
 
@@ -383,7 +384,7 @@ export function saltmarketPlan(): SaltmarketPlan {
     { x: -54, z: 40, yaw: 0, kind: "skiff" },
   ];
   const signs: SaltmarketSign[] = [
-    { x: 3.9, z: 117, yaw: Math.PI / 2, text: 0 },
+    { x: 5.4, z: 113.6, yaw: Math.PI / 2, text: 0 },   // (D-115: beside the arrival, south of the east shed walk; it stood behind the ring, a board across the camera)
     { x: -28, z: 73, yaw: Math.PI / 2, text: 1 },
     { x: 5.5, z: -28, yaw: Math.PI / 2, text: 2 },
     { x: 5.6, z: 103.6, yaw: Math.PI / 2, text: 3 },   // (D-097: clear of the quay's lamp post, which ran through its board)
@@ -575,36 +576,36 @@ export function saltmarketSpawn(index: number, count = 4): { x: number; z: numbe
 }
 
 /**
- * The props a visit starts with: stores at the landing (barrels, bottles, a chair or two) and by the huts. NEVER a crate: the unmarked crates are the smuggling run's (its template places them at the cove), and any
- * crate delivered to the drop-house counts, so the quay must not hand them out. Deterministic, dry, never inside anything solid.
+ * The props a visit starts with, as still lifes (D-115, `stores.ts`): four barrels huddled on the quay's west apron with the empties beside them, the tide clerk's
+ * barrel-top desk on the east, two barrels against the side of the hut by the cut and a chair by the customs post. No crates (any crate carried to the drop-house
+ * counts). Nothing in the arrival, on the planks, in a doorway, in the water or in anything solid. Deterministic.
  */
 export function saltmarketProps(seed: number, world: CollisionWorld): PropSpawn[] {
+  void seed;
   const out: PropSpawn[] = [];
-  const rng = new Rng(seed ^ 0x5a17c0de);
   const pos = { x: 0, z: 0 };
   const wd = (world.terrain as Partial<SaltmarketTerrain>).waterDepth;
   const L0 = SALTMARKET_ANCHORS.landing;
   const doors = saltmarketLevel().doors;
   const walks = saltmarketPlan().boardwalks.map((b) => b.pts);
-  const spots: { x: number; z: number; r: number; n: number; kinds: PropKindId[] }[] = [
-    { x: L0.x, z: L0.z - 7, r: 6, n: 5, kinds: [PropKind.BARREL, PropKind.BOTTLE, PropKind.BARREL, PropKind.CHAIR, PropKind.BOTTLE] },
-    { x: -26, z: -2, r: 5, n: 2, kinds: [PropKind.BARREL, PropKind.BOTTLE] },
-    { x: -14, z: 58, r: 4, n: 2, kinds: [PropKind.CHAIR, PropKind.BOTTLE] },
+  const arrival = arrivalCentre(saltmarketSpawn);
+  const fits = (x: number, z: number, r: number): boolean => {
+    if (inArrival(arrival, ARRIVAL_TOWARD, x, z, r) || (wd !== undefined && wd(x, z) > 0)) return false;
+    if (inDoorApron(doors, x, z, 0.9) || distToPaths(walks, x, z) < 1.2 + r) return false;   // (D-038: never in a doorway, never on the planks)
+    pos.x = x;
+    pos.z = z;
+    return !world.resolveXZ(pos, world.terrainHeight(x, z), Math.max(0.35, r + 0.15), 1.2);
+  };
+  // the hut by the cut (-26, -2), yaw 1.2: the barrels stand against its side wall, facing out
+  const hutYaw = 1.2;
+  const side = { x: -26 - Math.sin(hutYaw) * 2.65, z: -2 + Math.cos(hutYaw) * 2.65 };
+  const lifes: StillLife[] = [
+    { x: L0.x - 7.4, z: L0.z - 4.6, yaw: 0, pieces: compose(barrelHuddle(4), bottles(2, 0.7, 1.25)) },
+    { x: L0.x + 8, z: L0.z - 3.4, yaw: Math.PI, pieces: desk(PropKind.BARREL) },   // (south of the quay walk that crosses the landing)
+    { x: side.x, z: side.z, yaw: hutYaw + Math.PI / 2, pieces: compose(barrelRow(2), bottles(1, 0.3, 1.05)) },
+    { x: -16.4, z: 58.8, yaw: 0, pieces: compose(chairRow(1), bottles(1, 0.2, 0.55)) },   // (beside the customs walk, facing it)
   ];
-  for (const s of spots) {
-    for (let i = 0, tries = 0; i < s.n && tries < 80; tries++) {
-      const a = rng.range(0, TAU);
-      const d = rng.range(2.4, s.r);
-      const x = s.x + Math.cos(a) * d;
-      const z = s.z + Math.sin(a) * d;
-      pos.x = x;
-      pos.z = z;
-      if (world.resolveXZ(pos, world.terrainHeight(x, z), 0.6, 1.2) || (wd !== undefined && wd(x, z) > 0)) continue;
-      if (inDoorApron(doors, x, z, 0.9) || distToPaths(walks, x, z) < 1.5) continue;   // (D-038: never in a doorway, never on the planks)
-      out.push({ kind: s.kinds[i % s.kinds.length]!, x, z, yaw: rng.range(0, TAU) });
-      i++;
-    }
-  }
+  for (const sl of lifes) placeStillLife(sl, fits, out);
   return out;
 }
 

@@ -126,12 +126,18 @@ for (const variant of [fileVariant, pgVariant]) {
       const crates = [...room.state.props.entries()].filter(([, p]) => p.kind === PropKind.CRATE).slice(0, FOUNDATION_CRATES + 1);
       expect(crates.length).toBeGreaterThanOrEqual(FOUNDATION_CRATES);
       let delivered = 0;
-      for (const [id, prop] of crates) {
+      for (const [first, prop] of crates) {
         if (delivered === FOUNDATION_CRATES) break;
-        place(room, me, prop.x, prop.z + 1.2, 0);
+        if (!room.state.props.has(first)) continue;
+        // (D-115: the crates are stacked in rows: stand on whichever side of this one is open, facing it)
+        const sides = [[0, 1.2, 0], [1.2, 0, Math.PI / 2], [0, -1.2, Math.PI], [-1.2, 0, -Math.PI / 2]] as const;
+        const [sx, sz, facing] = sides.find(([dx, dz]) => [...room.state.props.values()].every((q) => Math.hypot(q.x - prop.x - dx, q.z - prop.z - dz) > 0.9)) ?? sides[0];
+        place(room, me, prop.x + sx, prop.z + sz, facing);
         me.y = prop.y - 0.3;
         await press(input, BUTTON.INTERACT);
-        await until(() => room.state.props.get(id)?.holder === c.sessionId, 2000, "to pick a crate up");
+        // (D-115: the landing's crates are stacked, so the crate in hand may be this one's neighbour: deliver whichever was picked up)
+        await until(() => [...room.state.props.values()].some((p) => p.holder === c.sessionId), 2000, "to pick a crate up");
+        const id = [...room.state.props.entries()].find(([, p]) => p.holder === c.sessionId)![0];
         place(room, me, site.x + 1, site.z, 0);
         await sleep(150);
         await press(input, BUTTON.INTERACT);

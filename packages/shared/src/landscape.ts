@@ -295,15 +295,11 @@ const TRAIL_DEFS: readonly TrailDef[] = [
   },
   // the footbridge path: on from the flag path, north across the stream (on a plank bridge) to a fishing spot on the far bank
   { name: "footbridge", width: 1.15, wear: 0.8, pts: [[11, -14.5], [11.5, -19.5], [11.4, -25], [11.9, -29], [12.4, -33.5], [12.2, -38.6]] },
-  // footpaths between the camp's features
+  // footpaths between the camp's features (D-115: four, not nine: the tents to the fire, the fire up past the flag, the fire to the cart, and the way in to the survey table;
+  // the rest crossed the spawn in a web of dirt that made the first view of the game a muddle)
   { name: "tent-fire-a", width: 1.05, wear: 0.85, pts: [[-5.8, 3.7], [-3, 2.2], [0.8, -1], [4.4, -3.6]] },
-  { name: "tent-fire-b", width: 1.05, wear: 0.85, pts: [[-6.1, -4.5], [-2.6, -4.8], [1.5, -4.5], [4.4, -4.1]] },
   { name: "fire-flag", width: 0.95, wear: 0.8, pts: [[4.6, -4.6], [3.5, -6.6], [2.6, -8.4], [5.2, -10.2], [8, -12.6], [11, -14.5]] },
   { name: "fire-cart", width: 1.05, wear: 0.85, pts: [[6.4, -2.2], [7, 1.2], [8, 4.2], [8.6, 6.6]] },
-  { name: "crates", width: 0.95, wear: 0.8, pts: [[3.8, -1.6], [4.2, 2], [4, 4.8]] },
-  { name: "luggage", width: 1, wear: 0.8, pts: [[-4.2, 7.4], [-1, 6.2], [2.4, 5.8], [3.6, 5.2]] },
-  { name: "luggage-tents", width: 0.95, wear: 0.75, pts: [[-4.6, 7.4], [-5.6, 5.8], [-5.8, 3.9]] },
-  { name: "wash", width: 0.9, wear: 0.7, pts: [[-6.4, 0.6], [-9.6, -0.6], [-12.4, -1.2]] },
   { name: "table", width: 0.9, wear: 0.75, pts: [[1.2, -5.2], [-1.4, -5.6], [-2.4, -6.3]] },
   // ---- the village (village.ts): the footbridge path goes on past the fishing spot along the stream's north bank into the village's main street
   // (cart ruts all the way to the plaza), which loops round the west end and comes back south to meet the hunters' track; short lanes serve

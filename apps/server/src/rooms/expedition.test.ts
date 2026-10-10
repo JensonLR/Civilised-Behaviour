@@ -27,6 +27,11 @@ import {
   parseParty,
   regionMountSpots,
   yawToWire,
+  kitKegSpots,
+  arrivalCentre,
+  kessarSpawn,
+  regionProps,
+  type CollisionWorld,
   type PlayerStateType,
 } from "@cb/shared";
 import { createGameServer } from "../app.ts";
@@ -157,7 +162,10 @@ describe("the expedition through a real room: manifest, hired hands, orders, hor
     expect(purse(room)).toBe(purseSail - cost);
     // the rounds, the keg, the horse and the hand are ashore
     expect(combatOf(room).inspect(me.id)!.reserve[WEAPON.RIFLE]).toBe(Math.ceil(rifleBefore * 1.5));
-    expect([...room.state.props.values()].some((p) => p.kind === PropKind.BARREL && Math.hypot(p.x - A.landing.x, p.z - (A.landing.z - 4)) < 6)).toBe(true);
+    // (D-115: the kit's kegs come ashore in rows on the bank beside the arrival, clear of the region's own stores)
+    const world = (room as unknown as { world: CollisionWorld }).world;
+    const [keg] = kitKegSpots(A.landing, arrivalCentre(kessarSpawn), world, regionProps("kessar", room.state.seed, world), 1);
+    expect([...room.state.props.values()].some((p) => p.kind === PropKind.BARREL && Math.hypot(p.x - keg!.x, p.z - keg!.z) < 0.6)).toBe(true);
     expect(room.state.mounts.size).toBe(1);
     const horse = [...room.state.mounts.values()][0]!;
     const spot = regionMountSpots("kessar").horses[0]!;

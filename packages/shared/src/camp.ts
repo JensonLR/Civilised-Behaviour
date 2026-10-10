@@ -3,7 +3,7 @@ import type { Terrain } from "./terrain.ts";
 
 /**
  * The Society's expedition camp at the spawn, as authored data. The SAME numbers make the collision (createArena), the
- * visuals (client landmarks) and the keep-out for props and players (scatterProps), so the tent you see is the tent you
+ * visuals (client landmarks) and the keep-out for props and players (`stores.ts` campProps), so the tent you see is the tent you
  * bump into and nothing ever spawns inside a bell tent. All positions are in the flat spawn clearing (radius 14).
  * Yaw convention is the collision one: local +x = (cos yaw, sin yaw) in (x, z); three.js rotation.y = -yaw.
  */

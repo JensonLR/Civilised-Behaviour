@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { BUTTON, CASUALTY, FLAG, INJURY, INTERACT, LIMB, MOVEMENT, MoveInput, PROP_DEFS, ROOM_WORLD, ZONE, woundLevel, yawToWire, type PropKindId } from "@cb/shared";
+import { BUTTON, CASUALTY, FLAG, INJURY, INTERACT, LIMB, MOVEMENT, MoveInput, PROP_DEFS, PropKind, ROOM_WORLD, ZONE, woundLevel, yawToWire, type PropKindId } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
@@ -53,12 +53,19 @@ describe("injuries in play (server authority)", () => {
   };
 
   const propWith = (room: WorldRoom, heavy: boolean) => {
-    // (D-038: props now come in clusters of three, so the one a test stands beside must have no neighbour within 2.5 m, or "the nearest" is another prop than the one named)
-    const all = [...room.state.props.entries()];
-    const alone = ([k, p]: (typeof all)[number]): boolean => all.every(([k2, q]) => k2 === k || !PROP_DEFS[q.kind as PropKindId].carryable || Math.hypot(q.x - p.x, q.z - p.z) > 2.5);
-    const found = all.find((e) => (PROP_DEFS[e[1].kind as PropKindId].mass > INJURY.lightPropMass) === heavy && PROP_DEFS[e[1].kind as PropKindId].carryable && alone(e));
-    expect(found, heavy ? "seed has a crate or barrel" : "seed has a bottle or chair").toBeDefined();
-    return found!;
+    // The test's own prop, set down alone in the middle of the spawn ring (D-115: the camp's stores are still lifes, stacked and in rows, and the arrival is kept clear of them,
+    // so nothing else is within reach of it and "the nearest" is always this one)
+    const kind = heavy ? PropKind.CRATE : PropKind.CHAIR;
+    expect(PROP_DEFS[kind].mass > INJURY.lightPropMass).toBe(heavy);
+    // (a test that wants a second gets it on the far side of the ring from the first, wherever that one was dropped: of eight spots 2 m out, the one furthest from any prop)
+    const others = [...room.state.props.values()];
+    const spots = Array.from({ length: 8 }, (_, i) => ({ x: Math.cos((i * Math.PI) / 4) * 2, z: Math.sin((i * Math.PI) / 4) * 2 }));
+    const room0 = (s: { x: number; z: number }): number => Math.min(9, ...others.map((q) => Math.hypot(q.x - s.x, q.z - s.z)));
+    const at = spots.reduce((best, s) => (room0(s) > room0(best) ? s : best), spots[0]!);
+    const id = (room as unknown as { spawnPropAt(k: number, x: number, z: number): string | undefined }).spawnPropAt(kind, at.x, at.z)!;
+    const prop = room.state.props.get(id)!;
+    for (const [k, q] of room.state.props.entries()) if (k !== id && PROP_DEFS[q.kind as PropKindId].carryable) expect(Math.hypot(q.x - prop.x, q.z - prop.z), "alone").toBeGreaterThan(2.5);
+    return [id, prop] as const;
   };
 
   const standNear = (a: P, prop: { x: number; y: number; z: number }) => {

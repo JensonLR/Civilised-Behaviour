@@ -60,10 +60,8 @@ const DOCK_POSTS: readonly { at: number; side: 1 | -1; off: number }[] = [
   { at: 55, side: -1, off: 2.2 },   // (D-097: three metres on, past the stilt house; at 52 its "camp" board ran into the house)
   { at: 78, side: 1, off: 2.1 },
 ];
-const MAP_POSTS: readonly { at: number; side: 1 | -1; off: number }[] = [
-  { at: 4.5, side: 1, off: 2 },
-  { at: 7, side: 1, off: 2 },
-];
+// (D-115: one post at the marquee's open side. A second stood 3 m in front of the spawn, in the middle of the first view of the game, pointing at a tent 8 m away.)
+const MAP_POSTS: readonly { at: number; side: 1 | -1; off: number }[] = [{ at: 7, side: 1, off: 2 }];
 
 const lengthOf = (pts: readonly Pt[]): number => {
   let l = 0;
