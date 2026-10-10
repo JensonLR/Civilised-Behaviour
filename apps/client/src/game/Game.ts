@@ -31,6 +31,8 @@ import { FIRST_PERSON } from "../render/firstPerson.ts";
 import { GameAudio } from "./GameAudio.ts";
 import { ContentAudio } from "./ContentAudio.ts";
 import { LimbDebris } from "../render/LimbDebris.ts";
+import { TRAIL, trailGap, trailStep } from "../render/bloodTrail.ts";
+import { WeaponModel } from "../render/weapons/WeaponModels.ts";
 import { MountView, type RiderPoseLike } from "../render/mounts/MountView.ts";
 import { BeastView } from "../render/BeastView.ts";
 import { Orientation } from "../ui/Orientation.ts";
@@ -76,6 +78,8 @@ interface Actor {
   bledAt: number;
   /** D-103: performance.now() of this body's last cry while burning (the fire bites twice a second; they cry out now and then). */
   burnCryAt: number;
+  /** D-104: metres this body has gone since its last drop of blood (bloodTrail.ts). */
+  trail: number;
 }
 
 /** D-099: how far (radians) the camera swings round from behind you during a talk: nearly side-on, so you and the speaker stand side by side in the picture (a small turn left them one behind the other). */
@@ -299,6 +303,7 @@ export class Game {
       stage.decals.spatterAt(x, z, vx, vz, 0.32);
       this.audio.bloodOnGround(x, session.world.terrainHeight(x, z), z);
     };
+    this.debris.onClatter = (x, y, z) => this.audio.clatter(x, y, z); // (D-104: a gun shot out of a hand lands)
     this.viewmodel = new ViewModel(stage);
     this.combat = new CombatView(stage, session, controls, this.rig, () => this.actors, hud);
     this.combat.viewmodel = this.viewmodel;
@@ -1562,7 +1567,7 @@ export class Game {
       }
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER, pennant: p.npc === NPC.PICKET },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER, pennant: p.npc === NPC.PICKET, react: p.react },
         getGore(),
         getShowLimbs(),
       );
@@ -1571,6 +1576,17 @@ export class Game {
         const vx = this.session.value(p, "vx");
         const vz = this.session.value(p, "vz");
         if (vx * vx + vz * vz > 0.04) this.stage.decals.drag(a.key, x, z, vx, vz, p.wounds !== 0 ? 0.6 : 0.1);
+      } else if ((p.wounds !== 0 || p.missing !== 0) && (flags & FLAG.MOUNTED) === 0) {
+        // D-104: walking (or crawling) wounded drips a trail you can follow (bloodTrail.ts; the field draws it at the Gore level, nothing at Off)
+        const vx = this.session.value(p, "vx");
+        const vz = this.session.value(p, "vz");
+        const speed = Math.sqrt(vx * vx + vz * vz);
+        a.trail = trailStep(a.trail, speed, dt, trailGap(p.wounds, p.missing, (flags & FLAG.DOWNED) !== 0));
+        if (a.trail < 0) {
+          a.trail = 0;
+          const k = (a.key * 0.618 + performance.now() * 0.001) % 1; // (a drop to one side or the other of the line walked, not on it)
+          this.stage.decals.spatterAt(x + (k - 0.5) * 0.3 * (vz / speed), z - (k - 0.5) * 0.3 * (vx / speed), vx, vz, TRAIL.drop * (0.7 + k * 0.6));
+        }
       }
       if (!isMe) this.plate(id, p, a, x, y, z);
     });
@@ -1701,7 +1717,15 @@ export class Game {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
     body.onTorchDropped = (x, y, z, yaw, seed) => this.groundTorches.drop(x, y, z, yaw, seed);
     const key = seedFromString(`${p.slot}:${p.name}:${p.npc}`) & 0xffff;
-    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015, bledAt: -Infinity, burnCryAt: -Infinity };
+    // D-104: a gun shot out of the hand spins away and clatters down (the same model the hand held)
+    body.onDisarmed = (w, x, y, z, dx, dz, scale) => {
+      const gun = new WeaponModel(w, true);
+      gun.group.scale.setScalar(scale);
+      gun.group.position.set(x, y, z);
+      gun.group.rotation.y = Math.atan2(-dx, -dz);
+      this.debris.throwAway(gun.group, dx, dz, 0.7);
+    };
+    return { body, key, ground: { mud: 0, blast: 0, rain: 0, washing: false }, groundIn: (key & 15) * 0.015, bledAt: -Infinity, burnCryAt: -Infinity, trail: 0 };
   }
 
   private removeActor(a: Actor): void {

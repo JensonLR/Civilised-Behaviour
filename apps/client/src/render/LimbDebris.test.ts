@@ -1,4 +1,4 @@
-import { Group, Scene } from "three";
+import { Group, Scene, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { DEBRIS, LimbDebris } from "./LimbDebris.ts";
 
@@ -118,5 +118,42 @@ describe("LimbDebris", () => {
     d.spawn(g, 0, 0, 0, "full");
     run(d, 5);
     for (const v of [g.position.x, g.position.y, g.position.z, g.quaternion.w]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe("D-104: a weapon knocked out of a hand", () => {
+  it("is shown (models are built hidden), flies with the blow, clatters once, never bleeds, and lies flat and still on its side", () => {
+    const scene = new Scene();
+    const d = new LimbDebris(scene, flat);
+    let bled = 0;
+    const clatters: number[] = [];
+    d.onLand = () => void bled++;
+    d.onClatter = (x) => void clatters.push(x);
+    const gun = new Group();
+    gun.visible = false;
+    gun.scale.setScalar(0.8);
+    gun.position.set(0, 1, 0);
+    d.throwAway(gun, 1, 0, 0.7);
+    expect(gun.visible).toBe(true);
+    expect(d.count).toBe(1);
+    run(d, 0.4);
+    const piece = gun.parent!;
+    expect(piece.position.x).toBeGreaterThan(0.4);
+    run(d, 6);
+    expect(clatters).toHaveLength(1);
+    expect(bled).toBe(0);
+    expect(piece.position.y).toBeGreaterThan(0);
+    expect(piece.position.y).toBeLessThan(0.06);
+    const x = piece.position.x;
+    run(d, 1);
+    expect(piece.position.x).toBeCloseTo(x, 2);
+    expect(gun.scale.x).toBeCloseTo(0.8, 5); // (the size the body held it at survives the debris' own fade scale)
+    // on its side: the barrel (-Z) level, and the model's up (+Y) turned to lie along the ground
+    const v = new Vector3(0, 0, -1).applyQuaternion(piece.quaternion);
+    expect(Math.abs(v.y)).toBeLessThan(0.1);
+    const up = new Vector3(0, 1, 0).applyQuaternion(piece.quaternion);
+    expect(Math.abs(up.y)).toBeLessThan(0.1);
+    d.dispose();
+    expect(gun.parent?.parent).toBeFalsy();
   });
 });

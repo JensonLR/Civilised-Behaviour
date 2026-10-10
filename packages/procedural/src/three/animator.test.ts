@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FLAG } from "@cb/shared";
+import { FLAG, REACT, packReact } from "@cb/shared";
+import { Vector3 } from "three";
 import { generateCharacter } from "../spec.ts";
 import { CharacterAnimator, type ExpressionId, type PoseInput } from "./animator.ts";
 import { buildCharacter, type CharacterRig } from "./rig.ts";
@@ -259,5 +260,64 @@ describe("animator polish", () => {
       expect(worstStep).toBeLessThan(1.3);
       rig.dispose();
     }
+  });
+});
+
+describe("D-104: hit reactions in the pose", () => {
+  const knees = (rig: CharacterRig): { l: number; r: number } => {
+    rig.joints.root.updateMatrixWorld(true);
+    const v = new Vector3();
+    return { l: rig.joints.kneeL.getWorldPosition(v).y, r: rig.joints.kneeR.getWorldPosition(v).y };
+  };
+
+  it("floored by a leg wound: down on THAT knee, the other foot planted, and up again when it ends", () => {
+    for (const [seed, right] of [[5, false], [5, true], [2, false], [9, true]] as const) {
+      const { rig, anim } = make(seed);
+      anim.autoBlink = false;
+      run(anim, 1, { speed: 0, flags: G, vy: 0 });
+      const stand = knees(rig);
+      const hips = rig.joints.pelvis.position.y;
+      run(anim, 0.6, { speed: 0, flags: G, vy: 0, react: packReact(REACT.FLOORED, right, 1.5) });
+      const k = knees(rig);
+      const hurt = right ? k.r : k.l;
+      const sound = right ? k.l : k.r;
+      expect(hurt).toBeLessThan(0.06); // (the knee is ON the ground: a stout body's planted leg folds deeper rather than prop the hips and float the knee)
+      expect(sound).toBeGreaterThan(hurt + 0.02); // (the other knee is up, its foot planted)
+      expect(rig.joints.pelvis.position.y).toBeLessThan(hips * 0.8); // (relative: a short body has less far to sink)
+      expect(Math.sign(rig.joints.torso.rotation.z)).toBe(right ? 1 : -1); // (he leans onto the hurt side)
+      run(anim, 2, { speed: 0, flags: G, vy: 0 });
+      expect(rig.joints.pelvis.position.y).toBeCloseTo(hips, 2);
+      expect(knees(rig).l).toBeCloseTo(stand.l, 2);
+    }
+  });
+
+  it("doubled over: the trunk folds forward, the hands go to the belly, the knees give; disarmed: the hurt arm is flung back", () => {
+    const { rig, anim } = make(5);
+    anim.autoBlink = false;
+    const j = rig.joints;
+    run(anim, 1, { speed: 0, flags: G, vy: 0 });
+    const torso = j.torso.rotation.x;
+    run(anim, 0.6, { speed: 0, flags: G, vy: 0, react: packReact(REACT.DOUBLED, false, 1.2) });
+    expect(j.torso.rotation.x).toBeLessThan(torso - 0.6); // (forward is negative X in this rig)
+    expect(j.elbowL.rotation.x).toBeGreaterThan(1.7);
+    expect(j.elbowR.rotation.x).toBeGreaterThan(1.7);
+    expect(-j.kneeL.rotation.x).toBeGreaterThan(0.4);
+    run(anim, 2, { speed: 0, flags: G, vy: 0 });
+    run(anim, 0.4, { speed: 0, flags: G, vy: 0, react: packReact(REACT.DISARMED, true, 0.9) });
+    expect(j.shoulderR.rotation.x).toBeLessThan(0); // (swung back behind him)
+    expect(j.shoulderR.rotation.z).toBeGreaterThan(0.35); // (and out to the right)
+  });
+
+  it("the downed pose wins over a stagger; a weapon in the hands is held on through it", () => {
+    const { rig, anim } = make(5);
+    anim.autoBlink = false;
+    run(anim, 2, { speed: 0, flags: G | FLAG.DOWNED, vy: 0, react: packReact(REACT.FLOORED, false, 1.5) });
+    expect(rig.joints.root.rotation.x).toBeGreaterThan(1.2);
+    const { rig: r2, anim: a2 } = make(5);
+    const weapon = newWeaponPoseInput();
+    weapon.id = WEAPON.RIFLE;
+    run(a2, 1, { speed: 0, flags: G, vy: 0, weapon, react: packReact(REACT.DOUBLED, false, 1.2) });
+    expect(a2.hold.visible).toBe(true);
+    expect(r2.joints.torso.rotation.x).toBeLessThan(-0.5);
   });
 });

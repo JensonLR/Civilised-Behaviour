@@ -47,6 +47,7 @@ import {
   type LimbId,
   type ZoneId,
   ZONE,
+  isZone,
   CANNON,
   CANNON_SPOTS,
   CRANK,
@@ -435,6 +436,10 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         dismemberment: () => this.state.dismemberment,
         limbsChanged: (sid) => this.refreshProsthetic(sid),
         scan: this.helpable,
+        // D-104: the gun shot out of an NPC's hand: gone from his kit (the clients see it fly from PlayerState.react), and up come the fists
+        disarm: (id) => {
+          if (this.combat.disarm(id) >= 0) this.cast.disarm(id);
+        },
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -1953,6 +1958,26 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       // D-103, QA and the screenshots: the nearest grass that will burn, four metres ahead or as near to it as there is (the notice says where)
       const at = this.fire.igniteNear(player.x - Math.sin(player.facing) * 4, player.z - Math.cos(player.facing) * 4, 24);
       client.send("notice", { text: at ? `Fire lit at ${at.x.toFixed(0)}, ${at.z.toFixed(0)}.` : "Nothing near here will burn." });
+    }
+    else if (cmd?.startsWith("react:")) {
+      // D-104, QA and the screenshots: react:<zone>[:<damage>[:<row id>]] lands a blow (26 unless given) on that NPC, or the nearest standing one within 40 m, from the
+      // player's side. Nobody is named as its author, so no side takes it as a declaration.
+      const [, z, d, only] = cmd.split(":");
+      const zone = Number(z);
+      if (!isZone(zone)) return;
+      let best = "";
+      let bestD = 40;
+      this.state.players.forEach((o, id) => {
+        if (o.npc === 0 || (o.flags & FLAG.DOWNED) !== 0 || (only !== undefined && id !== `npc:${only}`)) return;
+        const dist = Math.hypot(o.x - player.x, o.z - player.z);
+        if (dist < bestD) {
+          bestD = dist;
+          best = id;
+        }
+      });
+      if (best === "") return;
+      const o = this.state.players.get(best)!;
+      this.damagePlayer(best, Number(d) > 0 ? Number(d) : 26, { zone, dirX: o.x - player.x, dirZ: o.z - player.z });
     }
     else if (cmd?.startsWith("give:")) {
       // give:all | give:<weapon id> : owns it and refills its ammunition (QA; the campaign layer will grant weapons and crates of shot)
