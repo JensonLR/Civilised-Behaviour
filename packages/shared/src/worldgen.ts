@@ -6,6 +6,8 @@ import { hashFloat } from "./rng.ts";
 import { valueNoise } from "./terrain.ts";
 import { villageCobble, villageGarden, villageYard } from "./village.ts";
 import { HILL, waterEdgeDistance, waterField, riverHalfWidth, RIVER, trailSample, type TrailSample, type WaterField } from "./landscape.ts";
+import { orchardCover, plotAt } from "./fields.ts";
+import { HOLLOWMERE_FIELDS, HOLLOWMERE_ORCHARD } from "./hollowmereFields.ts";
 
 /**
  * Pure, deterministic world-dressing decisions shared by the renderer and its tests: what an obstacle is, which tree species
@@ -152,7 +154,10 @@ const G = {
   litterRed: rgb(W.litterRed),
   crack: rgb(W.crackClay),
   peb: rgb(W.pebble),
+  hay: rgb(W.vlHay),
+  leafy: rgb(W.vlLeafy),
 };
+const plotScratch = { m: 0 };
 
 function mix(out: Rgb, c: Triple, t: number): void {
   if (t <= 0) return;
@@ -277,6 +282,30 @@ export function groundColour(x: number, z: number, h: number, slope: number, out
     mix(out, G.moss, cob * smoothstep(0.7, 0.92, n3) * 0.35);
   }
   mix(out, G.soil, villageGarden(x, z) * 0.92);
+  // D-117: the village's fields, each crop its own ground (no rows in the paint: a vertex every metre and a half would alias them into bands; the rows are the
+  // barley, the drills and the plough's ridges the scatter lays on it), and the orchard's mown sward
+  const fi = plotAt(HOLLOWMERE_FIELDS, x, z, plotScratch);
+  if (fi >= 0) {
+    const m = plotScratch.m;
+    const crop = HOLLOWMERE_FIELDS[fi]!.crop;
+    if (crop === "barley") {
+      mix(out, G.dirt, m * 0.45);
+      mix(out, G.hay, m * 0.5);
+    } else if (crop === "green") {
+      mix(out, G.dirt, m * 0.6);
+      mix(out, G.leafy, m * 0.3);
+    } else if (crop === "stubble") {
+      mix(out, G.hay, m * 0.62);
+      mix(out, G.dry, m * smoothstep(0.4, 0.8, n2) * 0.25);
+    } else if (crop === "hay") {
+      mix(out, G.meadow, m * 0.4);
+      mix(out, G.hay, m * (0.2 + smoothstep(0.45, 0.75, n2) * 0.2));
+    } else {
+      mix(out, G.soil, m * 0.82);
+      mix(out, G.dirtDark, m * smoothstep(0.5, 0.8, n3) * 0.3);
+    }
+  }
+  mix(out, G.meadow, orchardCover(HOLLOWMERE_ORCHARD, x, z) * 0.28);
   // River banks: wet mud at the water's edge, a sandy pebble apron beyond it, the meadow returns further out.
   const wf = waterField(x, z, wfScratch);
   if (wf.q < 2.7) {

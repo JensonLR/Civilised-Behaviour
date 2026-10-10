@@ -47,6 +47,22 @@ const KNUCKLE_MIN_R = 0.035;
  * accepts indexed and non-indexed sources, supports faceted shading and hashed vertex jitter, and lets a colour function look at
  * the vertex (mossy foot, pale top, sunlit crown). `base` places everything added afterwards in the world (landmarks).
  */
+const jit: [number, number, number] = [0, 0, 0];
+
+/**
+ * Where `Kit.add`'s hashed jitter (`jitter` k, `seed`) moves the source point (x, y, z), into `out`: coincident vertices move together, and a piece can be
+ * set exactly on another's jittered surface (an apple on a crown).
+ */
+export function jittered(x: number, y: number, z: number, seed: number, k: number, out: [number, number, number]): [number, number, number] {
+  const ix = Math.round(x * 1000);
+  const iy = Math.round(y * 1000);
+  const iz = Math.round(z * 1000);
+  out[0] = x + (hash3(seed, ix, iy, iz) / 4294967296 - 0.5) * 2 * k;
+  out[1] = y + (hash3(seed + 1, ix, iy, iz) / 4294967296 - 0.5) * 2 * k;
+  out[2] = z + (hash3(seed + 2, ix, iy, iz) / 4294967296 - 0.5) * 2 * k;
+  return out;
+}
+
 export class Kit {
   private readonly parts: BufferGeometry[] = [];
   private readonly baseMatrix = new Matrix4();
@@ -104,17 +120,9 @@ export class Kit {
     const p = g.attributes.position as BufferAttribute;
     if (o.jitter) {
       const seed = o.seed ?? 1;
-      const k = o.jitter;
       for (let i = 0; i < p.count; i++) {
-        const ix = Math.round(p.getX(i) * 1000);
-        const iy = Math.round(p.getY(i) * 1000);
-        const iz = Math.round(p.getZ(i) * 1000);
-        p.setXYZ(
-          i,
-          p.getX(i) + ((hash3(seed, ix, iy, iz) / 4294967296) - 0.5) * 2 * k,
-          p.getY(i) + ((hash3(seed + 1, ix, iy, iz) / 4294967296) - 0.5) * 2 * k,
-          p.getZ(i) + ((hash3(seed + 2, ix, iy, iz) / 4294967296) - 0.5) * 2 * k,
-        );
+        jittered(p.getX(i), p.getY(i), p.getZ(i), seed, o.jitter, jit);
+        p.setXYZ(i, jit[0], jit[1], jit[2]);
       }
     }
     if (o.flat || o.jitter || o.perFace) g.computeVertexNormals(); // non-indexed: one normal per face

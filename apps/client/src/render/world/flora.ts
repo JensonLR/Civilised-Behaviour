@@ -1,7 +1,7 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry, OctahedronGeometry, SphereGeometry } from "three";
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry, OctahedronGeometry, SphereGeometry, TorusGeometry } from "three";
 import { PALETTE } from "@cb/shared";
 import { Vector3 } from "three";
-import { Kit, blend, shaded, topLit, type ColourFn, type V3 } from "./kit.ts";
+import { Kit, blend, jittered, shaded, topLit, type ColourFn, type V3 } from "./kit.ts";
 
 /**
  * Scenery geometry builders. Each returns ONE merged, vertex-coloured, non-indexed geometry (with `onormal` for the ink
@@ -779,8 +779,12 @@ export function berryBushGeometry(lod: Lod): BufferGeometry {
 
 /** A stook: six sheaves of straw leaning together to dry, each bound at the waist, their ears bunched at the top. About 1.25 m tall and a metre across. */
 export function stookGeometry(lod: Lod): BufferGeometry {
+  return addStook(new Kit(), lod).build()!;
+}
+
+/** The stook's pieces, added to `k` at its base (a merged field: D-117). */
+export function addStook(k: Kit, lod: Lod): Kit {
   const H = PALETTE.highmark;
-  const k = new Kit();
   const radial = lod ? 5 : 3;
   const straw: ColourFn = (p, _n, out) => blend(out, H.grassGoldDeep, H.grangeWheat, Math.min(1, 0.35 + p.y * 0.7));
   for (let i = 0; i < 6; i++) {
@@ -791,28 +795,34 @@ export function stookGeometry(lod: Lod): BufferGeometry {
     // the ears: a pale tuft over the head of each sheaf
     k.add(new ConeGeometry(0.13, 0.26, lod ? 4 : 3), { at: [head[0] * 1.3, 1.16, head[2] * 1.3], colour: H.grassGoldPale });
   }
-  return k.build()!;
+  return k;
 }
 
 /** A haycock: a mown field's hay built into a tall dome round a pole, its top capped and the pole's end standing out of it. About 2.3 m tall, 2.7 m across. */
 export function haycockGeometry(lod: Lod): BufferGeometry {
+  return addHaycock(new Kit(), lod).build()!;
+}
+
+export function addHaycock(k: Kit, lod: Lod): Kit {
   const H = PALETTE.highmark;
-  const k = new Kit();
   const hay: ColourFn = (p, _n, out) => blend(out, H.grassGoldDeep, H.grangeWheat, Math.min(1, 0.3 + p.y * 0.4));
   k.add(new SphereGeometry(1.32, lod ? 12 : 7, lod ? 6 : 4, 0, Math.PI * 2, 0, Math.PI / 2), { at: [0, 0, 0], scale: [1, 1.55, 1], colour: hay });
   k.add(new ConeGeometry(0.42, 0.36, lod ? 8 : 5), { at: [0, 2.12, 0], colour: H.grassGoldDeep });
   k.limb([0, 1.9, 0], [0.04, 2.55, 0.02], 0.045, 0.035, H.timber, lod ? 5 : 4);
-  return k.build()!;
+  return k;
 }
 
 /**
- * A scarecrow, Highmark's own joke on its visitors: the Grange has dressed it as a gentleman of the Society, in a red coat and a pith helmet over a sack face, its arms
+ * A scarecrow, Highmark's own joke on its visitors (and Hollowmere's since D-117: the village took it up): the Grange has dressed it as a gentleman of the Society, in a red coat and a pith helmet over a sack face, its arms
  * spread on a crossbar and straw at its cuffs and hem. About 2.35 m to the top of the helmet; the post is its collision.
  */
 export function scarecrowGeometry(lod: Lod): BufferGeometry {
+  return addScarecrow(new Kit(), lod).build()!;
+}
+
+export function addScarecrow(k: Kit, lod: Lod): Kit {
   const H = PALETTE.highmark;
   const C = PALETTE.camp;
-  const k = new Kit();
   const box = (): BoxGeometry => new BoxGeometry(1, 1, 1);
   k.add(box(), { at: [0, 1.0, 0], scale: [0.09, 2.0, 0.09], colour: H.timber });
   k.add(box(), { at: [0, 1.62, 0], scale: [1.5, 0.07, 0.07], colour: H.timber });
@@ -826,7 +836,95 @@ export function scarecrowGeometry(lod: Lod): BufferGeometry {
   k.add(new SphereGeometry(0.17, lod ? 10 : 6, lod ? 7 : 4), { at: [0, 1.95, 0], colour: C.sack });
   k.add(new SphereGeometry(0.21, lod ? 10 : 6, lod ? 5 : 3, 0, Math.PI * 2, 0, Math.PI / 2), { at: [0, 2.04, 0], scale: [1, 0.95, 1.08], colour: C.canvas });
   k.add(new CylinderGeometry(0.3, 0.3, 0.025, lod ? 14 : 8), { at: [0, 2.05, 0], colour: C.canvasShade });
-  return k.build()!;
+  return k;
+}
+
+// ---- D-117: the orchard (shared/fields.ts: ORCHARD_TREE, HIVE_STAND) ------------------------------------------------------------------------------------
+
+/**
+ * A fruit tree at scale 1 (shared `ORCHARD_TREE`): a short trunk that forks into three limbs low down, under a wide, round crown in a fresher green than the forest's,
+ * hung with apples (most red, some gold) on its sides and underneath. The crown starts 2.1 m up (nobody's head goes into it), reaches 2.3 m from the trunk and tops out
+ * at 4.3 m. Its crown sways a little (`aSway`, in a Kit built with `{ sway: true }`); the trunk does not.
+ */
+export function addFruitTree(k: Kit, lod: Lod, s = 1): Kit {
+  const rad = lod ? 6 : 4;
+  const bk = bark(2.4 * s, 0.5);
+  const P = (x: number, y: number, z: number): V3 => [x * s, y * s, z * s];
+  k.limb(P(0, -0.25, 0), P(0.06, 1.15, 0.03), 0.2 * s, 0.15 * s, bk, rad);
+  k.limb(P(0.06, 1.15, 0.03), P(0.85, 2.25, 0.3), 0.1 * s, 0.06 * s, bk, rad);
+  k.limb(P(0.06, 1.15, 0.03), P(-0.7, 2.3, 0.55), 0.1 * s, 0.06 * s, bk, rad);
+  k.limb(P(0.06, 1.15, 0.03), P(0.1, 2.4, -0.8), 0.1 * s, 0.06 * s, bk, rad);
+  const crown = (tone: number): ColourFn => shaded(topLit(W.crownDeep, W.vlLeafy, W.crownLight, 0.3), tone);
+  /** How loose the crown is at a height (m, at scale 1): still at its foot, loosest at its top. */
+  const loose = (y: number): number => smooth(2.1, 4.3, y) * 0.9;
+  const lobes: readonly [V3, V3, number][] = [
+    [[0, 3.15, 0], [1.85, 1.05, 1.85], 1],
+    [[1.05, 2.85, 0.45], [1.1, 0.75, 1.05], 0.95],
+    [[-0.95, 2.9, 0.5], [1.05, 0.78, 1.0], 1.05],
+    [[0.15, 2.88, -1.0], [1.05, 0.75, 1.05], 0.92],
+    [[0.1, 3.85, 0.1], [0.95, 0.48, 0.95], 1.1],
+  ];
+  const fat = (lod ? 1 : 1.035) * s;
+  lobes.forEach(([at, sc, tone], i) =>
+    k.add(new IcosahedronGeometry(1, i < 1 ? lod : 0), {
+      at: P(at[0], at[1], at[2]),
+      scale: [sc[0] * fat, sc[1] * fat, sc[2] * fat],
+      colour: crown(tone),
+      flat: true,
+      jitter: 0.1 * (lod ? 1 : 0.7),
+      seed: 41 + i,
+      sway: (p) => loose(at[1] + p.y * sc[1]),
+    }),
+  );
+  if (!lod) return k;
+  // the apples: each on a corner of the main crown as it is drawn (its jittered vertex, so half of it is in the leaves and none hangs in the air), round its
+  // sides and underneath, where fruit hangs
+  const [at, sc] = lobes[0]!;
+  const c: [number, number, number] = [0, 0, 0];
+  APPLE_SPOTS.forEach(([vx, vy, vz], i) => {
+    jittered(vx, vy, vz, 41, 0.1, c);
+    const y = at[1] + c[1] * sc[1];
+    k.add(new OctahedronGeometry(0.075 * s, 0), { at: P(at[0] + c[0] * sc[0], y, at[2] + c[2] * sc[2]), colour: i % 5 === 0 ? W.vlAwningOchre : W.capRed, flat: true, sway: loose(y) });
+  });
+  return k;
+}
+
+/** Sixteen corners of a unit detail-1 icosahedron round its middle and underneath (the main crown lobe's, before its jitter), spread round it. */
+const APPLE_SPOTS: readonly V3[] = (() => {
+  const g = new IcosahedronGeometry(1, 1);
+  const p = g.attributes.position!;
+  const seen = new Map<string, V3>();
+  for (let i = 0; i < p.count; i++) {
+    const v: V3 = [p.getX(i), p.getY(i), p.getZ(i)];
+    if (v[1] > -0.8 && v[1] < 0.35) seen.set(v.map((n) => Math.round(n * 1000)).join(","), v);
+  }
+  g.dispose();
+  const ring = [...seen.values()].sort((a, b) => Math.atan2(a[2], a[0]) - Math.atan2(b[2], b[0]) || a[1] - b[1]);
+  const out: V3[] = [];
+  for (let i = 0; i < 16; i++) out.push(ring[Math.floor((i * ring.length) / 16)]!);
+  return out;
+})();
+
+/**
+ * A hive stand (shared `HIVE_STAND`): a plank on two legs, along local z, with `n` straw skeps on it (coiled rings tapering to a knob, as the village's), each with
+ * its dark mouth at the foot facing local +x.
+ */
+export function addHiveStand(k: Kit, lod: Lod, n: number, pitch: number, plank: number): Kit {
+  const len = n * pitch;
+  for (const s of [-1, 1]) k.add(new BoxGeometry(0.12, plank, 0.12), { at: [0, plank / 2, s * (len / 2 - 0.22)], colour: W.vlTimber, flat: true });
+  k.add(new BoxGeometry(0.56, 0.06, len), { at: [0, plank + 0.03, 0], colour: W.vlTimberLight, flat: true });
+  for (let i = 0; i < n; i++) {
+    const z = (i - (n - 1) / 2) * pitch;
+    for (let r = 0; r < 4; r++) k.add(new TorusGeometry(0.22 - r * 0.04, 0.06, 3, lod ? 8 : 6), { at: [0, plank + 0.12 + r * 0.1, z], rot: [Math.PI / 2, 0, 0], colour: r & 1 ? W.vlHay : W.vlThatch, flat: true });
+    k.add(new SphereGeometry(0.06, 5, 4), { at: [0, plank + 0.53, z], colour: W.vlThatchDark, flat: true });
+    if (lod) k.add(new BoxGeometry(0.04, 0.05, 0.12), { at: [0.28, plank + 0.09, z], colour: W.vlSoot, flat: true });
+  }
+  return k;
+}
+
+/** A windfall apple on the grass (a little sunk into it). */
+export function addWindfall(k: Kit, gold: boolean): Kit {
+  return k.add(new OctahedronGeometry(0.065, 0), { at: [0, 0.04, 0], colour: gold ? W.vlAwningOchre : W.capRed, flat: true });
 }
 
 /**

@@ -36,7 +36,7 @@ export const ALLOWANCE: Record<RegionId, AuditAllowance> = {
 
 const KIND_OF_TAG: Partial<Record<NonNullable<Obstacle["tag"]>, AuditKind>> = {
   house: "building", wall: "wall", fence: "fence", jetty: "deck", bridge: "deck", sign: "sign", flag: "banner-post", pole: "prop", tent: "tent", stall: "stall",
-  tree: "natural", rock: "natural", snag: "natural", stump: "natural", log: "natural", cliff: "natural", crate: "prop", cart: "prop", table: "furniture", fire: "prop", ruin: "wall", well: "furniture", vprop: "prop",
+  tree: "natural", rock: "natural", snag: "natural", stump: "natural", log: "natural", cliff: "natural", crate: "prop", cart: "prop", table: "furniture", fire: "prop", ruin: "wall", well: "furniture", vprop: "prop", orchard: "natural", hive: "prop",
 };
 
 /** `undefined`: its own footprint; `null`: not a footprint at all (collision scaffolding). */

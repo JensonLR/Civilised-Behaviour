@@ -2,6 +2,7 @@ import type { RegionId } from "./campaignTypes.ts";
 import type { CollisionWorld } from "./collision.ts";
 import { HIGHMARK, HIGHMARK_FIELDS, HIGHMARK_SITES, highmarkRoadness } from "./highmark.ts";
 import { fieldCover, fieldFuel } from "./fields.ts";
+import { HOLLOWMERE_FIELDS } from "./hollowmereFields.ts";
 import { KESSAR, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun } from "./kessar.ts";
 import { smoothstep } from "./math.ts";
 import { SALTMARKET } from "./saltmarket.ts";
@@ -81,7 +82,7 @@ const SLOPE_E = 0.6;
  */
 /** D-116: what a region's fields give the fire at (x, z) (0 off them, or in a region without fields). */
 export function regionFieldFuel(region: RegionId, x: number, z: number): number {
-  return region === "highmark" ? fieldFuel(HIGHMARK_FIELDS, x, z) : 0;
+  return region === "highmark" ? fieldFuel(HIGHMARK_FIELDS, x, z) : region === "hollowmere" ? fieldFuel(HOLLOWMERE_FIELDS, x, z) : 0;
 }
 
 export function regionCover(region: RegionId, world: CollisionWorld, x: number, z: number): number {
@@ -100,6 +101,7 @@ export function regionCover(region: RegionId, world: CollisionWorld, x: number, 
     case "vesper":
       return vesperCover(x, z, h, slope, t.floor?.(x, z) ?? h);
     default:
-      return coverDensity(x, z, slope);
+      // (D-117: Hollowmere's fields as Highmark's: no meadow grass on them, the crops are the fuel, and a ploughed field is a firebreak)
+      return Math.max(coverDensity(x, z, slope) * (1 - fieldCover(HOLLOWMERE_FIELDS, x, z)), fieldFuel(HOLLOWMERE_FIELDS, x, z));
   }
 }

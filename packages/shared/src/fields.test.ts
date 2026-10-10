@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { CROP_FUEL, FIELD_EDGE, FIELD_THING, fieldCover, fieldFuel, fieldThings, plotAt, plotMask, type FieldPlot } from "./fields.ts";
+import { CROP_FUEL, FIELD_EDGE, FIELD_THING, HIVE_STAND, ORCHARD_TREE, fieldCover, fieldFuel, fieldThings, orchardPlan, plotAt, plotMask, type FieldPlot } from "./fields.ts";
+import { HOLLOWMERE_FIELDS, HOLLOWMERE_ORCHARD } from "./hollowmereFields.ts";
+import { ARENA_RADIUS, createArena } from "./arena.ts";
+import { FLOCKS } from "./fauna.ts";
+import { nearTrail, waterEdgeDistance } from "./landscape.ts";
+import { villageKeepOut } from "./village.ts";
+import { groundColour } from "./worldgen.ts";
+import { regionCover } from "./groundCover.ts";
 import { HIGHMARK, HIGHMARK_FIELDS, HIGHMARK_SITES, createHighmarkWorld, herdPlan, highmarkRoadDistance, highmarkSitePoints } from "./highmark.ts";
 import { FireGrid } from "./fire.ts";
 import { OUTPOST_SITES } from "./outpost.ts";
@@ -89,5 +96,98 @@ describe("D-116: the Grange's fields at Highmark", () => {
     const fallow = HIGHMARK_FIELDS.find((f) => f.crop === "fallow")!;
     expect(fire.fuelOf(fire.cellAt((fallow.x0 + fallow.x1) / 2, (fallow.z0 + fallow.z1) / 2)), "the plough is a firebreak").toBe(0);
     expect(FIELD_THING.haycock.height).toBeGreaterThan(FIELD_THING.stook.height);
+  });
+});
+
+describe("D-117: Hollowmere's worked land", () => {
+  const rects = [...HOLLOWMERE_FIELDS, HOLLOWMERE_ORCHARD];
+  const world = createArena(7);
+
+  it("lies on open, gentle ground: off every path, out of the water and the village, inside the arena, apart, and clear of the grazing flocks", () => {
+    for (const a of rects)
+      for (const b of rects) if (a !== b) expect(a.x1 + 2 <= b.x0 || b.x1 + 2 <= a.x0 || a.z1 + 2 <= b.z0 || b.z1 + 2 <= a.z0, `${a.id} / ${b.id}`).toBe(true);
+    const grazing = FLOCKS.filter((f) => !f.inPen && !f.water && !f.cat);
+    for (const f of rects) {
+      for (let x = f.x0; x <= f.x1; x += 1) {
+        for (let z = f.z0; z <= f.z1; z += 1) {
+          expect(nearTrail(x, z, 0.5), `${f.id} ${x},${z} path`).toBe(false);
+          expect(waterEdgeDistance(x, z), `${f.id} ${x},${z} water`).toBeGreaterThan(2);
+          expect(villageKeepOut(x, z, 1), `${f.id} ${x},${z} village`).toBe(false);
+          expect(Math.hypot(x, z), `${f.id} ${x},${z} edge`).toBeLessThan(ARENA_RADIUS - 4);
+          const h = world.terrainHeight(x, z);
+          expect(Math.hypot(world.terrainHeight(x + 0.5, z) - h, world.terrainHeight(x, z + 0.5) - h) / 0.5, `${f.id} ${x},${z} slope`).toBeLessThan(0.25);
+          for (const g of grazing) expect(Math.hypot(g.home.x - x, g.home.z - z), `${f.id} ${g.kind}`).toBeGreaterThan(g.radius);
+        }
+      }
+    }
+  });
+
+  it("the orchard: trees in their rows inside it, no crown in another's trunk, a stump or two, and the hive stand in a gap of its own", () => {
+    const o = orchardPlan(HOLLOWMERE_ORCHARD);
+    expect(orchardPlan(HOLLOWMERE_ORCHARD)).toEqual(o);
+    expect(o.trees.length).toBeGreaterThanOrEqual(14);
+    expect(o.stand.n).toBe(HOLLOWMERE_ORCHARD.hives);
+    for (const t of o.trees) {
+      expect(t.x - ORCHARD_TREE.crown * t.s * 0.5).toBeGreaterThan(HOLLOWMERE_ORCHARD.x0);
+      expect(t.x).toBeLessThan(HOLLOWMERE_ORCHARD.x1);
+      expect(t.z).toBeGreaterThan(HOLLOWMERE_ORCHARD.z0);
+      expect(t.z).toBeLessThan(HOLLOWMERE_ORCHARD.z1);
+      expect(t.s * 2.1, "a crown starts above a person's head").toBeGreaterThan(1.85);
+      for (const u of o.trees) if (u !== t) expect(Math.hypot(u.x - t.x, u.z - t.z)).toBeGreaterThan(ORCHARD_TREE.crown * t.s + ORCHARD_TREE.r * u.s);
+      for (const st of o.stumps) expect(Math.hypot(st.x - t.x, st.z - t.z)).toBeGreaterThan(3);
+      expect(Math.hypot(o.stand.x - t.x, o.stand.z - t.z) - (o.stand.n * HIVE_STAND.pitch) / 2, "the stand's end is clear of a trunk").toBeGreaterThan(2);
+    }
+  });
+
+  it("the world holds what is drawn: the fields' things, the fruit trees and the hive stand, and no tree, rock or crag of the seeded dressing stands in them, on any seed", () => {
+    const things = HOLLOWMERE_FIELDS.flatMap(fieldThings);
+    const o = orchardPlan(HOLLOWMERE_ORCHARD);
+    for (const seed of [1, 7, 42, 1337, 90210]) {
+      const w = createArena(seed);
+      expect(w.obstacles.filter((q) => q.tag === "hay"), `${seed}`).toHaveLength(things.filter((t) => t.kind !== "scarecrow").length);
+      expect(w.obstacles.filter((q) => q.tag === "scarecrow")).toHaveLength(things.filter((t) => t.kind === "scarecrow").length);
+      expect(w.obstacles.filter((q) => q.tag === "orchard")).toHaveLength(o.trees.length);
+      expect(w.obstacles.filter((q) => q.tag === "hive")).toHaveLength(1);
+      for (const q of w.obstacles) {
+        if (!["tree", "rock", "snag", "log", "cliff"].includes(q.tag ?? "")) continue;
+        const r = q.kind === "circle" ? q.r : Math.hypot(q.hx, q.hz);
+        for (const f of rects) {
+          const gap = Math.hypot(Math.max(f.x0 - q.x, 0, q.x - f.x1), Math.max(f.z0 - q.z, 0, q.z - f.z1));
+          expect(gap, `${seed}: ${q.tag} at ${q.x.toFixed(1)},${q.z.toFixed(1)} in ${f.id}`).toBeGreaterThan(r);
+        }
+      }
+    }
+    // solid where they are drawn
+    const pos = { x: 0, z: 0 };
+    for (const t of [...things, ...o.trees.map((u) => ({ ...u, kind: "orchard", r: ORCHARD_TREE.r * u.s }))]) {
+      pos.x = t.x + t.r * 0.5;
+      pos.z = t.z;
+      expect(world.resolveXZ(pos, world.terrainHeight(t.x, t.z), 0.3, 1), `${t.kind} at ${t.x.toFixed(1)},${t.z.toFixed(1)} blocks`).toBe(true);
+    }
+  });
+
+  it("burns as Highmark's do, and is painted as worked ground", () => {
+    const fire = new FireGrid(world, "hollowmere", 7);
+    const mid = (id: string): { x: number; z: number } => {
+      const f = HOLLOWMERE_FIELDS.find((p) => p.id === id)!;
+      return { x: (f.x0 + f.x1) / 2 + 0.3, z: (f.z0 + f.z1) / 2 + 0.3 };
+    };
+    const cock = HOLLOWMERE_FIELDS.flatMap(fieldThings).find((t) => t.kind === "haycock")!;
+    expect(fire.fuelOf(fire.cellAt(cock.x, cock.z)), "a haycock is fuel").toBeGreaterThan(0.4);
+    const fallow = mid("fallow.west");
+    expect(fire.fuelOf(fire.cellAt(fallow.x, fallow.z)), "the plough is a firebreak").toBe(0);
+    expect(regionCover("hollowmere", world, fallow.x, fallow.z), "no meadow grass to burn on the plough").toBe(0);
+    const barley = mid("barley.mill");
+    expect(fire.fuelOf(fire.cellAt(barley.x, barley.z))).toBeGreaterThan(0.5);
+    // the plough is earth, the stubble straw: both well away from the meadow's green
+    const c = { r: 0, g: 0, b: 0 };
+    const greenness = (x: number, z: number): number => {
+      groundColour(x, z, world.terrainHeight(x, z), 0, c);
+      return c.g - (c.r + c.b) / 2;
+    };
+    const meadow = greenness(10, 60);
+    expect(greenness(fallow.x, fallow.z)).toBeLessThan(meadow - 0.05);
+    const stub = mid("stubble.far");
+    expect(greenness(stub.x, stub.z)).toBeLessThan(meadow - 0.03);
   });
 });

@@ -10,6 +10,8 @@ import { cannonObstacles } from "./weapons.ts";
 import type { Pt } from "./hqRoute.ts";
 import { hqLane, hqRoute, hqRouteObstacles } from "./hqRoute.ts";
 import { distToPaths } from "./levelPlan.ts";
+import { FIELD_EDGE, HIVE_STAND, ORCHARD_TREE, fieldThings, orchardPlan } from "./fields.ts";
+import { HOLLOWMERE_FIELDS, HOLLOWMERE_ORCHARD } from "./hollowmereFields.ts";
 
 export const ARENA_RADIUS = 90;
 
@@ -234,7 +236,46 @@ export function createArena(seed: number): CollisionWorld {
     return false;
   };
   const kept = obstacles.filter((o) => !((["tree", "rock", "snag", "stump", "log"].includes(o.tag ?? "") && (clashes(o) || crownClash(o) || (o.kind === "circle" && solids.some((f) => circleTouches(o, f))))) || cragClash(o)));
-  return new CollisionWorld(terrain, [...kept, ...furniture, ...posts], ARENA_RADIUS);
+  // D-117: the village's worked land (hollowmereFields.ts) goes in after the dressing and the furniture, so no tree, rock or crag has moved: the dressing that stood in a field
+  // or the orchard (or near enough that a crown would hang over the trees, or a stone sit in the furrows' edge) is simply not there. (The finger-posts stay last.)
+  const worked = workedObstacles(terrain);
+  const cleared = kept.filter((o) => !(["tree", "rock", "snag", "stump", "log", "cliff"].includes(o.tag ?? "") && inWorkedLand(o)));
+  return new CollisionWorld(terrain, [...cleared, ...furniture, ...worked, ...posts], ARENA_RADIUS);
+}
+
+/** Plan distance from (x, z) to an axis-aligned rectangle (0 inside it). */
+function rectGap(r: { x0: number; x1: number; z0: number; z1: number }, x: number, z: number): number {
+  return Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1));
+}
+
+/** D-117: whether a piece of the seeded dressing stands in Hollowmere's fields (or their eased edge) or the orchard (a tree a crown's reach clear of its trees). */
+function inWorkedLand(o: Obstacle): boolean {
+  const r = o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz);
+  const tall = o.tag === "tree" || o.tag === "snag";
+  for (const f of HOLLOWMERE_FIELDS) if (rectGap(f, o.x, o.z) < r + FIELD_EDGE + (tall ? 0.5 : 0.2)) return true;
+  return rectGap(HOLLOWMERE_ORCHARD, o.x, o.z) < r + (tall ? 3 : 1);
+}
+
+/** D-117: the solids of Hollowmere's worked land: the stooks, haycocks and scarecrows in the fields (`fieldThings`), the orchard's trees, a stump where one died, the hive stand. */
+function workedObstacles(terrain: { height(x: number, z: number): number }): Obstacle[] {
+  const out: Obstacle[] = [];
+  for (const t of HOLLOWMERE_FIELDS.flatMap(fieldThings)) {
+    const y = terrain.height(t.x, t.z);
+    out.push({ kind: "circle", tag: t.kind === "scarecrow" ? "scarecrow" : "hay", x: t.x, z: t.z, r: t.r, y0: y - 1, y1: y + t.height });
+  }
+  const o = orchardPlan(HOLLOWMERE_ORCHARD);
+  for (const t of o.trees) {
+    const y = terrain.height(t.x, t.z);
+    out.push({ kind: "circle", tag: "orchard", x: t.x, z: t.z, r: ORCHARD_TREE.r * t.s, y0: y - 1, y1: y + ORCHARD_TREE.height * t.s });
+  }
+  for (const s of o.stumps) {
+    const y = terrain.height(s.x, s.z);
+    out.push({ kind: "circle", tag: "stump", x: s.x, z: s.z, r: s.r, y0: y - 1, y1: y + 0.36 });
+  }
+  const st = o.stand;
+  const y = terrain.height(st.x, st.z);
+  out.push({ kind: "box", tag: "hive", x: st.x, z: st.z, hx: HIVE_STAND.hx, hz: (st.n * HIVE_STAND.pitch) / 2, yaw: st.yaw, y0: y - 1, y1: y + HIVE_STAND.height });
+  return out;
 }
 
 /** How far a tree's crown reaches from its trunk, with a roof's overhang: no tree stands nearer a building's walls than this. */
