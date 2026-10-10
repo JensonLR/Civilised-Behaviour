@@ -397,6 +397,26 @@ export class Cast implements CastApi {
     }
   }
 
+  /**
+   * D-103: row `key` is alight. A civilian (or a beast) bolts, crying out, away from (fromX, fromZ); a soldier's nerve goes (shock to the top: the morale step breaks him and
+   * the brain runs), and he screams too. A burning man running is how a grass fire spreads through a crowd.
+   */
+  onFire(key: string, fromX: number, fromZ: number): void {
+    const r = this.byKey.get(key);
+    if (!r || r.gone) return;
+    const now = this.host.worldMs() / 1000;
+    if (r.civil) {
+      if (r.fleeUntil < now && !r.beast) this.cry(r, now);
+      r.fleeUntil = now + CAST.civilFleeSeconds;
+      r.fleeX = fromX;
+      r.fleeZ = fromZ;
+      return;
+    }
+    r.brain.morale.shock = 60;
+    r.brain.hurtAt = now;
+    this.cry(r, now);
+  }
+
   despawn(group?: string): void {
     const keep: Rec[] = [];
     for (const r of this.recs) {

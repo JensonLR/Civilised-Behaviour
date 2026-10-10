@@ -123,6 +123,24 @@ export class GameAudio {
   }
   private hissing = false;
 
+  /**
+   * D-103: the nearest flames are `distance` metres off (Infinity: nothing burns) and `cells` of ground are burning. The roar fades out by 40 m and grows with the size of the
+   * fire; burning yourself, it is right on top of you.
+   */
+  fire(distance: number, cells: number, alight: boolean): void {
+    const d = alight ? 0 : distance;
+    if (Number.isFinite(d) && d < 40 && cells > 0) {
+      this.roaring = true;
+      const near = 1 - d / 40;
+      const size = Math.min(1, 0.45 + cells / 60);
+      playSfx("grass_fire", { volume: near * near * size, pitch: 0.95 + Math.min(0.1, cells / 2000) });
+    } else if (this.roaring) {
+      this.roaring = false;
+      stopSfx("grass_fire");
+    }
+  }
+  private roaring = false;
+
   /** A body was hit: the victim cries out, in a voice that belongs to their face. */
   hurt(x: number, y: number, z: number, look: string, power: number, isMe: boolean): void {
     playSfx("hurt", { x, y, z, seed: seedFromString(look), volume: (isMe ? 1 : 0.9) * Math.min(1, 0.55 + power) });

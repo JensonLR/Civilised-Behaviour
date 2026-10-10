@@ -42,15 +42,31 @@ export function setLamps(positions: readonly { x: number; y: number; z: number }
 
 const v = new Vector3();
 
-/** Puts the `LAMP_SLOTS` lanterns nearest the camera in the shader's slots, in the camera's view space; an unused slot burns at 0. */
+/** D-103: at most this many burning places light their surroundings, competing with the lanterns for the slots. */
+export const FIRE_LAMPS = 4;
+const fireXyz = new Float32Array(FIRE_LAMPS * 3);
+const fireLit = new Float32Array(FIRE_LAMPS);
+let fireCount = 0;
+
+/** D-103: where the grass is burning (up to FIRE_LAMPS places, each with how brightly 0..1); `n` 0 puts them all out. Allocation-free. */
+export function setFireLamps(xyzIn: Float32Array, lit: Float32Array, n: number): void {
+  fireCount = Math.min(FIRE_LAMPS, Math.max(0, n));
+  for (let i = 0; i < fireCount * 3; i++) fireXyz[i] = xyzIn[i]!;
+  for (let i = 0; i < fireCount; i++) fireLit[i] = lit[i]!;
+}
+
+const at = (i: number, k: number): number => (i < count ? xyz[i * 3 + k]! : fireXyz[(i - count) * 3 + k]!);
+
+/** Puts the `LAMP_SLOTS` lanterns (and burning places) nearest the camera in the shader's slots, in the camera's view space; an unused slot burns at 0. */
 export function updateLamps(camera: Camera): void {
   camera.updateMatrixWorld();
   const e = camera.matrixWorld.elements; // (the camera's world position: it may hang from a rig)
   const cx = e[12]!, cy = e[13]!, cz = e[14]!;
   const night = level ? level.value : 0;
   let n = 0;
-  for (let i = 0; i < count; i++) {
-    const dx = xyz[i * 3]! - cx, dy = xyz[i * 3 + 1]! - cy, dz = xyz[i * 3 + 2]! - cz;
+  const total = count + fireCount;
+  for (let i = 0; i < total; i++) {
+    const dx = at(i, 0) - cx, dy = at(i, 1) - cy, dz = at(i, 2) - cz;
     const d = dx * dx + dy * dy + dz * dz;
     if (n < LAMP_SLOTS) {
       pick[n] = i;
@@ -71,8 +87,8 @@ export function updateLamps(camera: Camera): void {
     const s = slots[k]!;
     if (k < n) {
       const i = pick[k]!;
-      v.set(xyz[i * 3]!, xyz[i * 3 + 1]!, xyz[i * 3 + 2]!).applyMatrix4(camera.matrixWorldInverse);
-      s.set(v.x, v.y, v.z, Math.max(base[i]!, night));
+      v.set(at(i, 0), at(i, 1), at(i, 2)).applyMatrix4(camera.matrixWorldInverse);
+      s.set(v.x, v.y, v.z, i < count ? Math.max(base[i]!, night) : fireLit[i - count]! * Math.max(0.45, night));
     } else s.set(0, -1000, 0, 0);
   }
 }

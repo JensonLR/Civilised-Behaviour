@@ -17,6 +17,7 @@ import { applyWeather, complicationWeather, createDayState, dayState, hashFloat,
 import { setOutlineViewport } from "@cb/procedural/three";
 import type { GoreLevel } from "@cb/procedural/three";
 import { DecalField, type DecalPreset } from "./decals/index.ts";
+import { scorchPlants } from "./world/scorchPlants.ts";
 import { createRegionView, type RegionView } from "./world/regionView.ts";
 import { setToonLite } from "./world/toon.ts";
 import { atmoUniforms, atmosphereForWriting, motion, motionScale, windGain } from "./world/atmosphere.ts";
@@ -124,6 +125,10 @@ export class Stage {
   private lastFrame = 0;
   /** Seconds since the world was born (the room's clock, or a local one): what the flock's positions are a function of. */
   private worldSec = 0;
+  /** The world clock as this frame has it (ms; the sky's extrapolation of the server's): the weather and the wind are pure functions of it. */
+  get worldMs(): number {
+    return this.worldSec * 1000;
+  }
   private worldView?: RegionView;
   private preset: GraphicsPreset;
   /** D-038: the field's persistent marks (blood pools, spray, drags, scorch, mud): ONE instanced draw call, kept across frames, cleared when the region changes. Gore level via `setGore`. */
@@ -246,6 +251,21 @@ export class Stage {
     if (this.dress) this.worldView.applyDress?.(this.dress);
     this.worldView.applyHistory?.(this.history);
     this.worldView.applyScenario?.(this.scenario);
+    this.applyScorch();
+  }
+
+  /** D-103: which ground is scorched (FireView's), re-applied to every new view so a preset change keeps the burnt grass burnt. */
+  private scorchTest: ((x: number, z: number) => boolean) | undefined;
+
+  /** D-103: plants standing on scorched ground burn down to black stubble (grass, sedge, barley, shrubs, ferns, flowers, reeds), in every region. */
+  setScorch(test: ((x: number, z: number) => boolean) | undefined): void {
+    this.scorchTest = test;
+    this.applyScorch();
+  }
+
+  private applyScorch(): void {
+    const root = this.worldView?.root;
+    if (this.scorchTest && root) scorchPlants(root, this.scorchTest);
   }
 
   private scenario: ScenarioView | undefined;

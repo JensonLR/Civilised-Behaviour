@@ -186,6 +186,8 @@ export interface HitEvent {
   down: boolean;
   /** 0..1, blasts only (D-064): how hard the blast threw the body UP as well as away (a ragdoll flies with it). Absent: an ordinary blow. */
   lift?: number;
+  /** D-103: the flames did it (no blood and no flinch: the fire on the body is the effect). Absent: an ordinary blow. */
+  burn?: boolean;
 }
 
 export const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

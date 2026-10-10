@@ -612,6 +612,22 @@ const fuseHiss = def({
   ],
 });
 
+/**
+ * D-103: grass burning: a low roar that breathes, the rush of the flames over it, and a scatter of crackles and pops, in a seamless 2 s loop (every layer ends inside the
+ * period). Played louder as the nearest flames come closer and as more of the ground burns (GameAudio.fire).
+ */
+const grassFire = def({
+  group: "ambient", peakDb: -12, ui: true, reverb: 0.08, prio: 2, cap: 1, gap: 0, variants: 1, loop: 2, jitter: 0,
+  layers: (p) => [
+    N({ kind: "brown", at: 0, atk: 0.45, dec: 0.9, peak: 0.9, f: [lp(380, 240, 0.8)] }),
+    N({ kind: "brown", at: 0.9, atk: 0.35, dec: 0.7, peak: 0.85, f: [lp(420, 260, 0.6)] }),
+    N({ kind: "pink", at: 0.1, atk: 0.3, dec: 0.75, peak: 0.45, f: [bp(950, 0.8)] }),
+    N({ kind: "pink", at: 1.0, atk: 0.3, dec: 0.6, peak: 0.4, f: [bp(1250, 0.8)] }),
+    ...Array.from({ length: 22 }, (_, i) => N({ at: 0.04 + i * 0.085 + p.rng.next() * 0.04, dec: 0.006 + p.rng.next() * 0.02, peak: 0.35 + p.rng.next() * 0.55, f: [bp(1700 + p.rng.next() * 4200, 1.6)] })),
+    ...[0.3, 1.2, 1.7].map((t) => T({ at: t + p.rng.next() * 0.08, hz: 900, to: 300, over: 0.025, dec: 0.03, peak: 0.25 })),
+  ],
+});
+
 /** A ship under way: timbers working, a rope, the slop of water on the hull, in a seamless 2.4 s loop (every layer ends inside the period). */
 const sailCreak = def({
   group: "ambient", peakDb: -16, ui: true, reverb: 0.1, prio: 1, cap: 1, gap: 0, variants: 1, loop: 2.4, jitter: 0,
@@ -783,6 +799,7 @@ export const SOUNDS: Readonly<Record<string, SoundDef>> = {
   ui_error: uiError,
   revive_hold: reviveHold,
   fuse_hiss: fuseHiss,
+  grass_fire: grassFire,
   revive_done: reviveDone,
   hurt,
   scream,

@@ -111,3 +111,6 @@ export * from "./budgets.ts";
 export * from "./levelAudit.ts";
 export * from "./levelAuditAdapters.ts";
 export * from "./peoples.ts";
+// ---- D-103: plant cover by region (the scatters and the fire's fuel), and the fire itself ----
+export * from "./groundCover.ts";
+export * from "./fire.ts";
