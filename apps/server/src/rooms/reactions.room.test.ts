@@ -142,10 +142,19 @@ describe("hit reactions in a real room (D-104)", () => {
     expect((s.flags & FLAG.DOWNED) !== 0).toBe(true);
     expect(gained).toBe(FINISHER.heal);
     expect(hits.some((h) => h.id === key && h.fin === true && h.down)).toBe(true);
-    // the control, last (it starts the Ward's fight): the same blade on a sentry on his feet is an ordinary blow
+    // the control, last: the same blade on a sentry on his feet is an ordinary blow. Her finisher roused the Ward, who move and shoot (CI read his spot 900 ms before
+    // the swing, and he had gone), so the garrison is stood down first: he stops where he is, on his feet, and nobody shoots her
+    const cast = (room as unknown as { cast: { order(group: string, o: { o: "stand_down" }): void; byKey: Map<string, { group: string }> } }).cast;
+    cast.order(cast.byKey.get("npc:sentry-1")!.group, { o: "stand_down" });
+    await sleep(900); // (he comes to a stop; the sabre's cooldown)
     const o = room.state.players.get("npc:sentry-1")! as PlayerStateType;
-    c.send("debug", { cmd: `tp:${o.x}:${o.z + 1.2}:0` });
-    await sleep(900); // (the sabre's cooldown)
+    expect((o.flags & FLAG.DOWNED) !== 0).toBe(false);
+    me.health = 100;
+    c.send("debug", { cmd: `tp:${o.x}:${o.z + 1.1}:0` });
+    for (let i = 0; i < 4; i++) {
+      input.send();
+      await sleep(40);
+    }
     const n = marks.length;
     d.buttons = BUTTON.FIRE;
     input.send();
