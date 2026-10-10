@@ -17,6 +17,7 @@ describe("D-109: what he becomes", () => {
     expect(epithet(man({ cause: "boot" }))).toBe("Bootprint");
     expect(epithet(man({ cause: "rope" }))).toBe("Tether");
     expect(epithet(man({ cause: "hoof" }))).toBe("Hoofprint"); // (D-111: ridden down)
+    expect(epithet(man({ cause: "shield" }))).toBe("Sandbag"); // (D-112: held up as a shield)
     expect(grudgeName("Sentry Tamsin Cray", "Hook")).toBe('Sentry Tamsin "Hook" Cray');
     expect(grudgeName("Picket Corporal Dunstan Aldous", "Peg")).toBe('Picket Corporal Dunstan "Peg" Aldous');
     expect(grudgeName('Sentry Tamsin "Hook" Cray', "Peg")).toBe('Sentry Tamsin "Hook" Cray'); // (one nickname is plenty)
@@ -30,6 +31,7 @@ describe("D-109: what he becomes", () => {
     expect(grudgeLoss(man({ cause: "fire", burnt: true }))).toBe("his eyebrows");
     expect(grudgeLoss(man({ cause: "rope" }))).toBe("his liberty");
     expect(grudgeLoss(man({ cause: "hoof" }))).toBe("his hat");
+    expect(grudgeLoss(man({ cause: "shield" }))).toBe("his faith in his colleagues");
   });
 });
 

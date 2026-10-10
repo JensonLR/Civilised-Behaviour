@@ -346,3 +346,26 @@ describe("D-111: ridden down, in the bill", () => {
   });
 });
 
+describe("D-112: the human shield, in the bill", () => {
+  it("a man the party takes up as a shield is billed, shouted and printed; his own side shooting him is billed and printed once a man; none of it for our own", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, bram: { name: "Bram", npc: 0 }, "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: string[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (_id, kind) => barks.push(kind) });
+    m.begin(99, 2, "secure_crossing");
+    m.onSeize("npc:s1", "ada");
+    m.onSeize("bram", "ada");
+    expect(m.bill.shields).toBe(1);
+    expect(barks).toEqual(["shield"]);
+    m.onShieldShot("npc:s1", "ada");
+    m.onShieldShot("npc:s1", "ada"); // (the second round of the same volley)
+    expect(m.bill.comrades).toBe(1);
+    for (let i = 0; i < 80; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "shield_shot" && p.t.includes("Ada") && p.t.includes("Dunstan"))).toBe(true);
+    expect(billLine(m.bill)).toContain("1 man held up as a shield (1 shot by his own side)");
+    expect(spectacle(m.bill).pay).toBe(4);
+  });
+});
+

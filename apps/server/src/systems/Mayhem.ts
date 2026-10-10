@@ -65,6 +65,8 @@ export class Mayhem {
   private lastKegAt = -Infinity;
   private runChain = 0;
   private readonly streak = new Map<string, { at: number; n: number }>();
+  /** D-112: shields whose own side has already shot them this run (billed once a man). */
+  private readonly shotComrades = new Set<string>();
   private progress = "";
   private salt = 0;
 
@@ -80,6 +82,7 @@ export class Mayhem {
     this.lastKegAt = -Infinity;
     this.runChain = 0;
     this.streak.clear();
+    this.shotComrades.clear();
     this.barked.clear();
     this.partyBarked = -Infinity;
     this.salt = (seed ^ (day * 7919)) >>> 0;
@@ -190,6 +193,25 @@ export class Mayhem {
     if (!vs || vs === "party" || this.side(by) !== "party") return;
     this.bill.boots++;
     this.bark(by, "boot");
+    this.touch();
+  }
+
+  /** D-112: `by` took `victim` up as a shield. Billed when the party did it to anyone not of the party; the holder says so and the column prints it. */
+  onSeize(victim: string, by: string): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || this.side(by) !== "party") return;
+    this.bill.shields++;
+    this.bark(by, "shield");
+    this.say({ k: "shield", victim: this.name(victim), by: this.name(by) });
+    this.touch();
+  }
+
+  /** D-112: `victim`, held up as a shield by `by`, was shot by his own side. Billed and printed once a man (a volley is one story, not ten). */
+  onShieldShot(victim: string, by: string): void {
+    if (this.shotComrades.has(victim) || this.side(by) !== "party") return;
+    this.shotComrades.add(victim);
+    this.bill.comrades++;
+    this.say({ k: "shield_shot", victim: this.name(victim), by: this.name(by) });
     this.touch();
   }
 

@@ -3,7 +3,7 @@ import {
   BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, LASSO, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
   CollisionWorld, type MoveCommand, type PlayerStateType, type WeaponId,
 } from "@cb/shared";
-import { NAV, NPC_SIDE, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
+import { NAV, NPC_SIDE, SHIELD, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
 import { kessarNavOptions } from "@cb/shared";
 import { npcThink, type NpcBrainState } from "@cb/shared";
 import { Cast, CAST, type CastHost } from "./Cast.ts";
@@ -398,6 +398,29 @@ describe("D-109: a man with a grudge", () => {
     seen.clear();
     r.tick(5);
     expect(seen.get("501")).toBe("bram");
+  });
+});
+
+describe("D-112: a comrade held up as a shield", () => {
+  /** Ada 20 m north of a sentry; one of the sentry's own side stands (pinned, stood down) between them, or off to one side; her shield is `shield`. */
+  const scene = (o: { shieldAt: { x: number; z: number }; bravery?: number; held?: boolean }) => {
+    const r = rig();
+    r.human("p1", 0, -20);
+    r.host.shieldOf = (k) => (k === "p1" && o.held !== false ? "npc:held" : "");
+    r.cast.spawn([spec("s1", { lookSeed: 601, bravery: o.bravery ?? 50 }), spec("held", { group: "pinned", post: o.shieldAt, lookSeed: 602 })]);
+    r.cast.order("pinned", { o: "stand_down" });
+    r.cast.order("ward", { o: "alert" });
+    r.tick(300);
+    return r;
+  };
+
+  it("he holds his fire while his comrade is between them; fires when the comrade is not in the way, or not held, or when he is brave enough not to care", () => {
+    const between = scene({ shieldAt: { x: 0, z: -19.4 } });
+    expect(fired(between, "npc:s1")).toBe(0);
+    expect(between.cast.stats.heldFire).toBeGreaterThan(0);
+    expect(fired(scene({ shieldAt: { x: 6, z: -19.4 } }), "npc:s1")).toBeGreaterThan(0); // (off the line: a clear shot)
+    expect(fired(scene({ shieldAt: { x: 0, z: -19.4 }, held: false }), "npc:s1")).toBeGreaterThan(0); // (merely standing there, not held: the rule is the hold)
+    expect(fired(scene({ shieldAt: { x: 0, z: -19.4 }, bravery: SHIELD.ruthless }), "npc:s1")).toBeGreaterThan(0); // (the ruthless fire through him)
   });
 });
 

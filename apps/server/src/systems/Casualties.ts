@@ -19,6 +19,9 @@ import {
   limbZone,
   pickZone,
   LASSO,
+  NPC_SIDE,
+  SHIELD,
+  findFinisherTarget,
   dragHurt,
   findRopeTarget,
   newWorldHit,
@@ -84,6 +87,10 @@ export interface CasualtyHost {
   emitLasso?(e: LassoEvent): void;
   /** D-106: `by` roped `target` (Cast: the fright; Mayhem: the bill). */
   roped?(by: string, target: string): void;
+  /** D-112: `by` took `target` up as a shield (Mayhem: the bill and the shout; Grudges: the account). */
+  seized?(by: string, target: string): void;
+  /** D-112: `by` shoved the shield `target` off (the room watches where he lands, D-108). */
+  shoved?(by: string, target: string): void;
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -147,6 +154,8 @@ export class Casualties {
   private readonly reacts = new Map<string, number>();
   /** D-106: men held on a rope (by row): seconds before one on his feet works loose, and damage owed for being hauled too fast. */
   private readonly ropes = new Map<string, { left: number; owed: number }>();
+  /** D-112: men held up as shields (by row key), and how long each has before he works himself free. The holder is in `drags`. */
+  private readonly shields = new Map<string, { left: number }>();
   /** D-106: loops in the air (by thrower): at whom, and seconds until they land. And when each thrower may throw again (sim seconds). */
   private readonly throws = new Map<string, { target: string; left: number }>();
   private readonly ropeReady = new Map<string, number>();
@@ -315,8 +324,11 @@ export class Casualties {
     if ((p.flags & FLAG.DOWNED) !== 0) return true; // the downed can crawl and wait; nothing else
 
     if (pressed & BUTTON.GRAB) {
-      if (this.drags.has(sessionId)) this.releaseDrag(sessionId);
-      else if (!this.startDrag(sessionId, p)) this.throwRope(sessionId, p); // (D-106: nobody down in reach: the lariat, at whoever it is aimed at)
+      const held = this.drags.get(sessionId);
+      if (held !== undefined && this.shields.has(held)) this.shove(sessionId); // (D-112: a shield is shoved off, not set down)
+      else if (held !== undefined) this.releaseDrag(sessionId);
+      // nobody down in reach: a staggered man in front is seized as a shield (D-112); nobody staggered either: the lariat, at whoever it is aimed at (D-106)
+      else if (!this.startDrag(sessionId, p) && !this.seize(sessionId, p)) this.throwRope(sessionId, p);
     }
     if (pressed & BUTTON.INTERACT && (p.flags & (FLAG.CARRYING | FLAG.DRAGGING)) === 0 && !this.revives.has(sessionId)) {
       return this.startRevive(sessionId, p);
@@ -418,6 +430,54 @@ export class Casualties {
     return true;
   }
 
+  // ---- D-112: the human shield ------------------------------------------------------------------------------------------------------------
+
+  /** Rows that cannot be seized: down, already held, a beast, a rider, a man at a crank gun (the finisher's target is otherwise the rule: staggered, in reach, in front). */
+  private static readonly UNSEIZABLE = FLAG.DOWNED | FLAG.DRAGGED | FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING;
+
+  /** Takes the staggered man in front of `id` up as a shield, if there is one (never one of the party's own). True when he was taken. */
+  private seize(id: string, p: PlayerStateType): boolean {
+    const rows = this.host.rows;
+    if (!rows || p.npc !== 0 || (p.flags & (FLAG.CARRYING | FLAG.REVIVING | FLAG.DRAGGING | FLAG.OPERATING | FLAG.MOUNTED)) !== 0) return false;
+    const targetId = findFinisherTarget<string>(p, (cb) => rows.forEach((o, k) => k !== id && NPC_SIDE[o.npc] !== "party" && cb(k, o)), Casualties.UNSEIZABLE);
+    const t = targetId !== undefined ? this.host.players.get(targetId) : undefined;
+    if (targetId === undefined || !t) return false;
+    this.drags.set(id, targetId);
+    p.flags |= FLAG.DRAGGING;
+    t.flags |= FLAG.DRAGGED;
+    t.dragger = id;
+    t.roped = SHIELD.held;
+    t.react = 0; // (held up: the stagger is over, the collar holds him)
+    this.reacts.delete(targetId);
+    this.shields.set(targetId, { left: SHIELD.holdS });
+    this.host.seized?.(id, targetId);
+    return true;
+  }
+
+  /** The holder shoves the shield off: he goes forward onto his back (floored), and the room watches what he meets. */
+  private shove(holderId: string): void {
+    const targetId = this.drags.get(holderId);
+    const holder = this.host.players.get(holderId);
+    if (targetId === undefined || !holder) return;
+    this.releaseDrag(holderId);
+    const t = this.host.players.get(targetId);
+    if (!t || (t.flags & FLAG.DOWNED) !== 0) return;
+    t.vx = -Math.sin(holder.facing) * SHIELD.shove;
+    t.vz = -Math.cos(holder.facing) * SHIELD.shove;
+    t.vy = SHIELD.shoveLift;
+    t.stumble = Math.max(t.stumble, SHIELD.shoveStumble);
+    t.flags &= ~FLAG.GROUNDED;
+    t.react = packReact(REACT.FLOORED, false, SHIELD.shoveFloorS);
+    this.reacts.set(targetId, SHIELD.shoveFloorS);
+    this.host.shoved?.(holderId, targetId);
+  }
+
+  /** D-112: the man `holderId` holds up as a shield ("" for none). */
+  shieldOf(holderId: string): string {
+    const t = this.drags.get(holderId);
+    return t !== undefined && this.shields.has(t) ? t : "";
+  }
+
   // ---- D-106: the lariat -------------------------------------------------------------------------------------------------------------
 
   /** Rows a loop cannot take: down, held, a beast, a rider, a man at a crank gun. */
@@ -490,6 +550,7 @@ export class Casualties {
       target.dragger = "";
       target.vx = 0;
       target.vz = 0;
+      if (this.shields.delete(targetId) && target.roped !== 0) target.roped = 0; // (D-112: let go of, he stands where he was held)
       if (this.ropes.delete(targetId)) {
         // D-106: off the rope. A man on his feet lies a moment, then gets up (the floored pose, as a leg shot leaves him)
         if (target.roped !== 0) target.roped = 0;
@@ -570,6 +631,29 @@ export class Casualties {
       const dragger = this.host.players.get(draggerId);
       const target = this.host.players.get(targetId);
       const rope = this.ropes.get(targetId);
+      const shield = this.shields.get(targetId);
+      if (shield) {
+        // D-112: held up in front, facing the way the holder faces. Let go when either goes down (shot by his own side, as like as not), when they are parted, or when
+        // he has worked himself free
+        shield.left -= dt;
+        if (!dragger || !target || ((dragger.flags | target.flags) & FLAG.DOWNED) !== 0 || horizontal(dragger, target) > SHIELD.breakRange || shield.left <= 0) {
+          this.releaseDrag(draggerId);
+          continue;
+        }
+        const wantX = dragger.x - Math.sin(dragger.facing) * SHIELD.ahead;
+        const wantZ = dragger.z - Math.cos(dragger.facing) * SHIELD.ahead;
+        let vx = dragger.vx + (wantX - target.x) * SHIELD.stiff;
+        let vz = dragger.vz + (wantZ - target.z) * SHIELD.stiff;
+        const m = Math.hypot(vx, vz);
+        if (m > SHIELD.maxSpeed) {
+          vx = (vx / m) * SHIELD.maxSpeed;
+          vz = (vz / m) * SHIELD.maxSpeed;
+        }
+        target.vx = vx;
+        target.vz = vz;
+        target.facing = dragger.facing;
+        continue;
+      }
       if (!dragger || !target || (dragger.flags & FLAG.DOWNED) !== 0 || (rope === undefined && (target.flags & FLAG.DOWNED) === 0) || horizontal(dragger, target) > (rope ? LASSO.breakRange : CASUALTY.dragBreakRange)) {
         this.releaseDrag(draggerId);
         continue;

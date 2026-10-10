@@ -3,7 +3,7 @@ import {
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
-import { BEAST, NAV, NPC_SIDE, hash3 } from "@cb/shared";
+import { BEAST, NAV, NPC_SIDE, SHIELD, hash3, shieldBetween } from "@cb/shared";
 import type {
   BrainFn, BrainId, CastApi, CastCount, CastOrder, NavApi, NavPath, NpcBody, NpcBrain, NpcSenses, NpcSide, NpcSpec, PlayersView,
 } from "@cb/shared";
@@ -44,6 +44,8 @@ export interface CastHost {
   tokensFor?(target: string): number | undefined;
   /** D-109: a last look at a batch before it is spawned (a remembered man takes one soldier's place: Grudges.respec). Optional. */
   respec?(specs: readonly NpcSpec[]): readonly NpcSpec[];
+  /** D-112: the man `key` holds up as a shield ("" or undefined for none). Optional: absent, nobody does. */
+  shieldOf?(key: string): string | undefined;
 }
 
 interface Group { alert: boolean; standDown: boolean; holdFire: boolean; attack: NpcSide | "any" | undefined }
@@ -163,7 +165,7 @@ export class Cast implements CastApi {
     this.humanIds.push(id);
   };
   /** Counters for tests and the debug overlay. */
-  readonly stats = { ticks: 0, paths: 0, refused: 0, tokenGrants: 0, shots: 0 };
+  readonly stats = { ticks: 0, paths: 0, refused: 0, tokenGrants: 0, shots: 0, heldFire: 0 };
 
   constructor(private readonly host: CastHost) {}
 
@@ -869,6 +871,15 @@ export class Cast implements CastApi {
     else if (r.civil) this.civilThink(r, row, sn, dt, now);
     else (r.fn ?? npcThink)(r.brain, me, sn, dt, this.cmd);
     if (g.holdFire) this.cmd.buttons &= ~(BUTTON.FIRE | BUTTON.MELEE | BUTTON.THROW);
+    // D-112: the man he would shoot holds one of his own side up in front, between them: he holds his fire rather than shoot his comrade (unless he has the nerve not to care)
+    if ((this.cmd.buttons & (BUTTON.FIRE | BUTTON.THROW)) !== 0 && r.hasEnemy && r.spec.bravery < SHIELD.ruthless) {
+      const sk = this.host.shieldOf?.(r.tx);
+      const sh = sk ? this.host.players.get(sk) : undefined;
+      if (sh && NPC_SIDE[sh.npc] === r.side && shieldBetween(row.x, row.z, sh.x, sh.z, r.ex, r.ez)) {
+        this.cmd.buttons &= ~(BUTTON.FIRE | BUTTON.THROW);
+        this.stats.heldFire++;
+      }
+    }
     if (reactHolds(row.react)) {
       // D-104: down on a knee or doubled over: he stays where the blow put him, hands off the weapon, until he gets up
       this.cmd.moveF = 0;

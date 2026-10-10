@@ -1,7 +1,7 @@
 import { Guide } from "../ui/Guide.ts";
 import { guidance, type Guidance } from "./guidance.ts";
 import { Vector3 } from "three";
-import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, MOUNT_KIND, TAG_RANGE, WEAPON, carryUsePrompt, contractUse, WEAPONS, npcKey, seedFromString, type UsePlaces, type WeaponId } from "@cb/shared";
+import { INCIDENT, INCIDENT_PROMPT, INCIDENT_USE_IDS, KESSAR, KESSAR_ANCHORS, MOUNT_KIND, SHIELD, TAG_RANGE, WEAPON, carryUsePrompt, contractUse, WEAPONS, npcKey, seedFromString, type UsePlaces, type WeaponId } from "@cb/shared";
 import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
@@ -1154,7 +1154,8 @@ export class Game {
       vm.speed = Math.hypot(this.session.value(pred, "vx"), this.session.value(pred, "vz"));
       vm.grounded = (flags & FLAG.GROUNDED) !== 0;
       vm.reload = mine.weapon === w + 1 ? (mine.reload ?? 0) / 100 : 0;
-      vm.mode = modeFor((flags & FLAG.CARRYING) !== 0, (flags & FLAG.REVIVING) !== 0, (flags & FLAG.DRAGGING) !== 0, (flags & FLAG.OPERATING) !== 0);
+      // (D-112: holding a man up as a shield is not dragging him: the gun stays up in first person)
+      vm.mode = modeFor((flags & FLAG.CARRYING) !== 0, (flags & FLAG.REVIVING) !== 0, (flags & FLAG.DRAGGING) !== 0 && this.shieldHeldBy(this.session.sessionId) === undefined, (flags & FLAG.OPERATING) !== 0);
       vm.yaw = this.rig.yaw;
       vm.pitch = this.rig.pitch;
       vm.look = mine.look;
@@ -1211,7 +1212,9 @@ export class Game {
       prompt = `Hold ${use}...`;
       dressing = patientId !== undefined && (players.get(patientId)!.flags & FLAG.DOWNED) === 0;
     } else if ((flags & FLAG.DRAGGING) !== 0) {
-      prompt = mp !== undefined ? `${use}  ${mp}     ${grab}  Let go` : `${grab}  Let go`;
+      // (D-112: a man held up as a shield is shoved off, not set down)
+      const let_ = this.shieldHeldBy(this.session.sessionId) !== undefined ? "Shove him off" : "Let go";
+      prompt = mp !== undefined ? `${use}  ${mp}     ${grab}  ${let_}` : `${grab}  ${let_}`;
     } else if ((flags & FLAG.CARRYING) !== 0 && mp !== undefined) {
       prompt = `${use}  ${mp}     ${throwKey}  Throw`;
     } else if ((flags & FLAG.CARRYING) !== 0) {
@@ -1581,12 +1584,12 @@ export class Game {
       }
       a.body.update(
         dt,
-        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER, pennant: p.npc === NPC.PICKET, react: p.react },
+        { x, y, z, facing: this.session.value(p, "facing"), vx: this.session.value(p, "vx"), vz: this.session.value(p, "vz"), flags, wounds: p.wounds, missing: p.missing, combat: this.combat.actorCombat(id, p, isMe, dt), ride: this.mountView.rideInput(id), ground: a.ground, torch: p.npc === NPC.RAIDER, pennant: p.npc === NPC.PICKET, react: p.react, held: p.roped === SHIELD.held, clutch: (flags & FLAG.DRAGGING) !== 0 && this.shieldHeldBy(id) !== undefined },
         getGore(),
         getShowLimbs(),
       );
       // a body dragged across the field leaves its trail (the pool under a bleeding body is the hit's; this is the smear behind a rescue)
-      if ((flags & FLAG.DRAGGED) !== 0) {
+      if ((flags & FLAG.DRAGGED) !== 0 && p.roped !== SHIELD.held) {
         const vx = this.session.value(p, "vx");
         const vz = this.session.value(p, "vz");
         if (vx * vx + vz * vz > 0.04) this.stage.decals.drag(a.key, x, z, vx, vz, p.wounds !== 0 ? 0.6 : 0.1);
@@ -1752,20 +1755,36 @@ export class Game {
     if (victim) this.hitFx.bleedOut(this.session.value(victim, "x"), this.session.value(victim, "z"), 0.5); // and the stump bleeds where they stand
   }
 
-  /** D-105: "{melee}  Finish off <name>" when a staggered NPC is in reach in front and the hands hold something a blow can be struck with; "" otherwise. */
+  /**
+   * D-105: "{melee}  Finish off <name>" when a staggered NPC is in reach in front and the hands hold something a blow can be struck with; D-112: and "{grab}  Seize"
+   * (he can be taken up as a shield, armed or not: the server's GRAB takes a staggered man before it throws a rope); "" when nobody is staggered in reach.
+   */
   private finisherPrompt(me: PlayerStateType, mine: PlayerStateType): string {
-    const w = mine.weapon - 1;
-    if (w < 0 || w === WEAPON.CANNON || w === WEAPON.CRANK || (me.flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.OPERATING)) !== 0) return "";
+    if ((me.flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.OPERATING)) !== 0) return "";
     const players = this.session.room.state.players;
     const self = this.session.sessionId;
     const at = this.finAt;
     at.x = this.session.value(me, "x");
     at.z = this.session.value(me, "z");
     at.facing = this.session.value(me, "facing");
-    const id = findFinisherTarget<string>(at, (cb) => players.forEach((o, k) => k !== self && cb(k, o)), FLAG.DOWNED);
+    const id = findFinisherTarget<string>(at, (cb) => players.forEach((o, k) => k !== self && cb(k, o)), FLAG.DOWNED | FLAG.DRAGGED);
     if (id === undefined) return "";
-    const name = players.get(id)?.name;
-    return name ? `{melee}  Finish off ${name}` : "{melee}  Finish off";
+    const o = players.get(id);
+    const name = o?.name ?? "";
+    const w = mine.weapon - 1;
+    const blow = w >= 0 && w !== WEAPON.CANNON && w !== WEAPON.CRANK;
+    const seize = o !== undefined && NPC_SIDE[o.npc] !== "party" && (me.flags & FLAG.MOUNTED) === 0;
+    if (blow) return `{melee}  Finish off ${name}`.trimEnd() + (seize ? "     {grab}  Seize" : "");
+    return seize ? `{grab}  Seize ${name}`.trimEnd() : "";
+  }
+
+  /** D-112: the man `holder` holds up as a shield (his row key), if any. Only asked while someone is DRAGGING, so the scan is rare. */
+  private shieldHeldBy(holder: string): string | undefined {
+    let found: string | undefined;
+    this.session.room.state.players.forEach((o, k) => {
+      if (found === undefined && o.roped === SHIELD.held && o.dragger === holder) found = k;
+    });
+    return found;
   }
   private readonly finAt = { x: 0, z: 0, facing: 0 };
   private readonly ropeA = new Vector3();

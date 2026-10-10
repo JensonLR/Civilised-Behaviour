@@ -359,3 +359,32 @@ describe("D-108: the boot", () => {
     expect(rig.joints.hipR.rotation.x).toBeLessThan(restHip + 0.3);
   });
 });
+
+describe("D-112: the human shield", () => {
+  it("held up by the collar, both arms go behind the back and the head drops; the one holding him locks the off arm across, even with a rifle in hand", () => {
+    const { rig, anim } = make(7);
+    anim.autoBlink = false;
+    run(anim, 1, { speed: 0, flags: G, vy: 0 });
+    const restL = rig.joints.shoulderL.rotation.x;
+    const restHead = rig.joints.head.rotation.x;
+    run(anim, 1, { speed: 0, flags: G, vy: 0, held: true });
+    expect(rig.joints.shoulderL.rotation.x).toBeLessThan(restL - 0.5); // (arms back)
+    expect(rig.joints.shoulderR.rotation.x).toBeLessThan(-0.4);
+    expect(rig.joints.elbowL.rotation.x).toBeGreaterThan(1);
+    expect(rig.joints.head.rotation.x).toBeGreaterThan(restHead + 0.15); // (looking at his boots)
+    // and back again when let go
+    run(anim, 1, { speed: 0, flags: G, vy: 0 });
+    expect(Math.abs(rig.joints.shoulderL.rotation.x - restL)).toBeLessThan(0.1);
+    // the holder: a rifle wants both hands, the clutch takes the left anyway
+    const h = make(8);
+    h.anim.autoBlink = false;
+    const weapon = { ...newWeaponPoseInput(), id: WEAPON.RIFLE };
+    run(h.anim, 1, { speed: 0, flags: G, vy: 0, weapon });
+    const gunL = h.rig.joints.shoulderL.rotation.x;
+    run(h.anim, 1, { speed: 0, flags: G, vy: 0, weapon, clutch: true });
+    expect(h.rig.joints.shoulderL.rotation.x).toBeCloseTo(1.45, 1); // (reaching forward at his shoulders' height)
+    expect(h.rig.joints.shoulderL.rotation.y).toBeCloseTo(-1.3, 1); // (twisted so the bent forearm crosses, not rises to the face: the first look)
+    expect(h.rig.joints.elbowL.rotation.x).toBeCloseTo(0.95, 1);
+    expect(Math.abs(h.rig.joints.shoulderL.rotation.x - gunL)).toBeGreaterThan(0.05);
+  });
+});

@@ -60,6 +60,7 @@ import {
   isCarried,
   NPC_CAP,
   NPC_SIDE,
+  SHIELD,
   NPC,
   windAt,
   WEAPONS,
@@ -477,6 +478,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
           this.grudges.onInsult(target, "rope", by); // (D-109)
           if (this.scenario?.live) this.mayhem.onRoped(target, by);
         },
+        // D-112: a staggered man taken up as a shield is billed and remembered; shoved off, he is watched for what he meets (D-108)
+        seized: (by, target) => {
+          this.cast.onRoped(target); // (the fright of a collar, as of a loop: he cries out, and his side hears it)
+          this.grudges.onInsult(target, "shield", by);
+          if (this.scenario?.live) this.mayhem.onSeize(target, by);
+        },
+        shoved: (by, target) => this.flung.track(target, by),
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -521,6 +529,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
       flung: (id, by) => this.flung.track(id, by), // (D-108)
+      shielding: (id) => this.casualties.shieldOf(id) !== "", // (D-112: the holder fires over his shoulder)
       // D-105: a coup de grace pays: the one who struck gets a second wind, the fallen man's friends nearby lose their nerve, the Society takes note
       finished: (by, target, weapon) => {
         const who = this.state.players.get(by);
@@ -568,6 +577,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       navOptions: (w) => regionNavOptions(this.state.region as RegionId, w),
       tokensFor: (target) => this.pacing?.tokens(target), // (D-107: the director's say on how many may fire at a member of the party)
       respec: (specs) => this.grudges.respec(specs), // (D-109: a remembered man takes a soldier's place)
+      shieldOf: (key) => this.casualties.shieldOf(key), // (D-112: his comrade in the way stays his hand)
     });
     this.pacing = new Pacing({
       party: this.party,
@@ -2007,6 +2017,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const p = this.state.players.get(sessionId);
     const wasDown = p !== undefined && (p.flags & FLAG.DOWNED) !== 0;
     const limbsBefore = p?.missing ?? 0;
+    // D-112: a man held up as a shield, hit by one of his own side
+    const holder = p !== undefined && p.npc !== 0 && p.roped === SHIELD.held ? p.dragger : "";
+    if (holder && hit?.by && hit.by !== holder) {
+      const shooter = this.state.players.get(hit.by);
+      if (shooter && shooter.npc !== 0 && NPC_SIDE[shooter.npc] === NPC_SIDE[p!.npc] && this.scenario?.live) this.mayhem.onShieldShot(sessionId, holder);
+    }
     this.casualties.damage(sessionId, amount, hit);
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;
