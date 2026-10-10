@@ -6,7 +6,7 @@ import type { CollisionWorld, Obstacle } from "./collision.ts";
 import { HILL, JETTY, MILL, RIVER, TRAILS, WEIR, nearTrail, riverCentre, riverHalfWidth, trailDistance, waterEdgeDistance, withLandscape, type LandscapeTerrain } from "./landscape.ts";
 import { createTerrain } from "./terrain.ts";
 import { createCharState, stepCharacter, yawToWire } from "./movement.ts";
-import { scatterProps } from "./props.ts";
+import { campProps } from "./stores.ts";
 import { SITES, VILLAGE_PADS, VILLAGE_SIGNS, toWorld, villageGarden, villageKeepOut, villageObstacles, villagePlan, villageYard, type Building } from "./village.ts";
 import { classifyObstacle } from "./worldgen.ts";
 
@@ -76,7 +76,7 @@ describe("HOLLOWMERE: the plan", () => {
           expect(Math.hypot(p.x, p.z), `${b.id} inside the camp`).toBeGreaterThan(30);
         }
       }
-      for (const pr of scatterProps(seed, w.terrain, 48)) expect(villageKeepOut(pr.x, pr.z, 0)).toBe(false);
+      for (const pr of campProps(seed, w)) expect(villageKeepOut(pr.x, pr.z, 0)).toBe(false);
       for (let i = 0; i < 4; i++) {
         const sp = spawnPoint(i, 4);
         expect(villageKeepOut(sp.x, sp.z, 2)).toBe(false);

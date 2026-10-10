@@ -66,10 +66,13 @@ function openBearing(room: WorldRoom, len: number): number {
     for (const side of [0.95, -0.95]) {
       const cx = -dx * 3.2 - dz * side;
       const cz = -dz * 3.2 + dx * side;
-      const tx = dx * len - cx;
-      const tz = dz * len - cz;
-      const l = Math.hypot(tx, tz);
-      ok = ok && !rayWorld(arena, cx, 1.85, cz, tx / l, 0, tz / l, l, out);
+      // the level line, and the crosshair's own ray, which slants down to a chest at any distance out to `len` (a low crate or a table can meet it short of the man)
+      for (const [ty, reach] of [[1.85, len], [1.1, 5], [1.1, 15], [1.1, len]] as const) {
+        const tx = dx * reach - cx;
+        const tz = dz * reach - cz;
+        const l = Math.hypot(tx, ty - 1.85, tz);
+        ok = ok && !rayWorld(arena, cx, 1.85, cz, tx / l, (ty - 1.85) / l, tz / l, l, out);
+      }
     }
     room.state.props.forEach((pr) => {
       const along = pr.x * dx + pr.z * dz;

@@ -6,6 +6,7 @@ import { lerp, smoothstep } from "./math.ts";
 import { propRadius } from "./levelAudit.ts";
 import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import { PropKind, type PropSpawn } from "./props.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, barrelRow, bottles, chairRow, compose, crateStack, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
 import { KESSAR_OUTPOST, rivalPostObstacles, withOutpost } from "./outpost.ts";
@@ -278,7 +279,7 @@ export function kessarPlan(): KessarPlan {
     }),
     { x: bx + 5.2, z: A.tollBar.z - 1.2, yaw: Math.PI / 2, top: 4.6, w: 1.6, h: 2.8, kind: "ward" },
     { x: -34 + 3.2, z: A.rivalCamp.z - 2.4, yaw: Math.PI / 2, top: 5.6, w: 1.8, h: 3, kind: "syndicate" },
-    { x: 4.4, z: A.landing.z - 1.6, yaw: Math.PI / 2, top: 4.6, w: 1.5, h: 2.6, kind: "society" },
+    { x: 5.8, z: A.landing.z - 7.4, yaw: Math.PI / 2, top: 4.6, w: 1.5, h: 2.6, kind: "society" },   // (D-115: ahead and to the right of the arrival, flanking the road on; it stood in the ring, a sheet of cloth across the camera)
   ];
   const signs: KessarSign[] = [
     { x: -4.7, z: 3.0, yaw: Math.PI / 2, text: 0 },   // (D-097: off the road, and three metres short of the toll post, which stood in front of its lettering)
@@ -555,27 +556,29 @@ export function kessarSpawn(index: number, count = 4): { x: number; z: number } 
 }
 
 /**
- * Props: the Society's powder (three barrels by the cart on the south bank: the trick resolution's ingredient), and stores on the beach and at the
- * camp. Deterministic; none on the deck, the pier, the water or inside anything solid.
+ * Props: the Society's powder (three barrels by the cart on the south bank: the trick resolution's ingredient), and the landing's stores as still lifes (D-115,
+ * `stores.ts`): the expedition's crates stacked west of the landing by the Society's banner, and on the east side of the beach two chairs set out facing the sea
+ * with the empties beside them and two barrels against the bank. Deterministic; none on the deck, the pier, the water, the road, in the arrival or inside anything solid.
  */
 export function kessarProps(seed: number, world: CollisionWorld): PropSpawn[] {
+  void seed;
   const out: PropSpawn[] = [];
   const p = A.powder;
   for (const [dx, dz, yaw] of [[-0.9, -0.8, 0.4], [0.3, -1.5, 1.9], [1.1, -0.4, 3.0]] as const) out.push({ kind: PropKind.BARREL, x: p.x + dx, z: p.z + dz, yaw });
-  const rng = new Rng(seed ^ 0x57042);
-  const kinds = [PropKind.CRATE, PropKind.CRATE, PropKind.BOTTLE, PropKind.CHAIR, PropKind.BARREL, PropKind.CRATE, PropKind.BOTTLE];
   const pos = { x: 0, z: 0 };
-  for (let i = 0, tries = 0; i < 9 && tries < 200; tries++) {
-    const a = rng.range(0, Math.PI * 2);
-    const d = rng.range(4.5, 11);
-    const x = A.landing.x + Math.cos(a) * d;
-    const z = A.landing.z + Math.sin(a) * d;
+  const arrival = arrivalCentre(kessarSpawn);
+  const fits = (x: number, z: number, r: number): boolean => {
+    if (inArrival(arrival, ARRIVAL_TOWARD, x, z, r) || z > SHORE_Z - 3 || kessarRoad(x, z) > 0.05) return false;   // (D-038: stores lie beside the road, never on it)
     pos.x = x;
     pos.z = z;
-    const y = world.terrainHeight(x, z);
-    if (z > SHORE_Z - 3 || kessarRoad(x, z) > 0.05 || world.resolveXZ(pos, y, propRadius(kinds[i % kinds.length]!) + 0.2, 1.2)) continue;   // (D-038: stores lie beside the road, never on it)
-    out.push({ kind: kinds[i % kinds.length]!, x, z, yaw: rng.range(0, Math.PI * 2) });
-    i++;
-  }
+    return !world.resolveXZ(pos, world.terrainHeight(x, z), Math.max(0.35, r + 0.15), 1.2);
+  };
+  const L = A.landing;
+  const lifes: StillLife[] = [
+    { x: L.x - 7.6, z: L.z - 0.8, yaw: 0, pieces: crateStack([3, 2]) },
+    { x: L.x + 6.2, z: L.z + 2.2, yaw: Math.PI / 2, pieces: compose(chairRow(2, 0.9), bottles(2, 0.2, 1.05)) },
+    { x: L.x + 8.4, z: L.z - 2.4, yaw: Math.PI, pieces: barrelRow(2) },
+  ];
+  for (const sl of lifes) placeStillLife(sl, fits, out);
   return out;
 }

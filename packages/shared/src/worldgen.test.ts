@@ -4,7 +4,7 @@ import { createArena, spawnPoint, ARENA_RADIUS } from "./arena.ts";
 import { chroma, PALETTE } from "./palette.ts";
 import { MAX_PLAYERS } from "./constants.ts";
 import { autumnAt, classifyObstacle, coverDensity, groundColour, inMeadow, treeSpecies, type Rgb } from "./worldgen.ts";
-import { scatterProps } from "./props.ts";
+import { campProps } from "./stores.ts";
 import { createTerrain } from "./terrain.ts";
 import type { Obstacle } from "./collision.ts";
 
@@ -175,10 +175,9 @@ describe("the arena and the camp", () => {
     for (const o of createArena(1).obstacles) expect(Math.hypot(o.x, o.z)).toBeLessThan(ARENA_RADIUS);
   });
 
-  it("scattered props never spawn inside a landmark, and the count is honoured", () => {
+  it("the camp's props never spawn inside a landmark, and every piece of every still life is set out (D-115)", () => {
     for (const seed of [1, 2, 3, 7, 99, 4242]) {
-      const t = createTerrain(seed);
-      const props = scatterProps(seed, t, 14);
+      const props = campProps(seed, createArena(seed));
       expect(props.length).toBe(14);
       for (const p of props) expect(inCampFootprint(p.x, p.z, 0.5), `seed ${seed} ${p.x},${p.z}`).toBe(false);
     }

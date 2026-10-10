@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { BUTTON, FLAG, STEP_DT } from "./constants.ts";
 import { CollisionWorld } from "./collision.ts";
 import { createCharState, stepCharacter } from "./movement.ts";
-import { INTERACT, PropKind, findInteractTarget, holdPosition, scatterProps, type PropView } from "./props.ts";
+import { INTERACT, PropKind, findInteractTarget, holdPosition, type PropView } from "./props.ts";
+import { campProps } from "./stores.ts";
+import { createArena } from "./arena.ts";
 import { createTerrain } from "./terrain.ts";
 
 const prop = (x: number, z: number, over: Partial<PropView> = {}): PropView => ({ kind: PropKind.CRATE, x, y: 0, z, holder: "", ...over });
@@ -62,12 +64,12 @@ describe("carry", () => {
   });
 });
 
-describe("scatterProps", () => {
-  it("is deterministic and capped", () => {
-    const t = createTerrain(3);
-    const a = scatterProps(3, t, 100);
-    expect(a).toEqual(scatterProps(3, t, 100));
+describe("campProps (D-115)", () => {
+  it("is deterministic, capped, and a little different in every campaign", () => {
+    const w = createArena(3);
+    const a = campProps(3, w);
+    expect(a).toEqual(campProps(3, w));
     expect(a.length).toBeLessThanOrEqual(INTERACT.maxPropsPerRoom);
-    expect(scatterProps(4, t, 20)).not.toEqual(scatterProps(3, t, 20));
+    expect(campProps(4, w)).not.toEqual(a);
   });
 });

@@ -7,6 +7,7 @@ import type { RegionMountSpots } from "./mount.ts";
 import type { NavOptions } from "./nav.ts";
 import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLevel } from "./levelPlan.ts";
 import { PropKind, type PropSpawn } from "./props.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, bottles, chairRow, compose, crateStack, desk, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng } from "./rng.ts";
 import { createTerrain, valueNoise, type Terrain } from "./terrain.ts";
 
@@ -365,7 +366,7 @@ export function vesperPlan(): VesperPlan {
   lamps.push({ x: -31, z: 52, h: 3.2 }, { x: -31, z: 34, h: 3.2 }, { x: 33, z: 22, h: 3.2 }, { x: -36, z: -22, h: 3.2 }, { x: -12.5, z: -87.6, h: 3.4 }, { x: 6, z: -90, h: 3.4 }, { x: -6, z: -90, h: 3.4 });
 
   const signs: VesperSign[] = [
-    { x: 4.4, z: 112.5, yaw: Math.PI / 2, text: 0 },
+    { x: 5, z: 111.4, yaw: Math.PI / 2, text: 0 },   // (D-115: at the edge of the arrival, not in the ring; the horses stand at (±5, 108))
     { x: -25, z: 49, yaw: 0, text: 1 },
     { x: 26, z: 12, yaw: Math.PI, text: 2 },
     { x: 5.3, z: -88, yaw: Math.PI / 2, text: 3 },
@@ -615,37 +616,33 @@ export function vesperSpawn(index: number, count = 4): { x: number; z: number } 
 }
 
 /**
- * The props a visit starts with: ore crates and a bottle or two at the landing, chairs (a funeral's worth) in front of the Long Cloister, crates at the Assay House and the pegging ground.
- * Deterministic, never in anything solid; no barrel (the only powder in the gorge is the Company's keg, which the Lower Gallery's template places).
+ * The props a visit starts with, as still lifes (D-115, `stores.ts`): the ore crates stacked either side of the landing, a front row of chairs before the cloister
+ * (facing it: there is always a funeral), the assayer's desk, a desk at the pegging ground and two crates at the works. No barrels (a barrel is a powder keg).
+ * Nothing in the arrival, on the road, at a story point or in anything solid. Deterministic.
  */
 export function vesperProps(seed: number, world: CollisionWorld): PropSpawn[] {
+  void seed;
   const out: PropSpawn[] = [];
-  const rng = new Rng(seed ^ 0x51c0ffe);
   const pos = { x: 0, z: 0 };
   const L = VESPER_ANCHORS.landing;
-  const spots: { x: number; z: number; r: number; n: number; kinds: PropSpawn["kind"][] }[] = [
-    { x: L.x - 2, z: L.z - 7, r: 6, n: 5, kinds: [PropKind.CRATE, PropKind.CRATE, PropKind.BOTTLE, PropKind.CRATE, PropKind.BOTTLE] },
-    { x: -33, z: 46, r: 4, n: 4, kinds: [PropKind.CHAIR, PropKind.CHAIR, PropKind.CHAIR, PropKind.BOTTLE] },
-    { x: 30, z: 25, r: 4, n: 3, kinds: [PropKind.CRATE, PropKind.CRATE, PropKind.CHAIR] },
-    { x: -30, z: -30, r: 5, n: 3, kinds: [PropKind.CRATE, PropKind.CHAIR, PropKind.BOTTLE] },
-    { x: 4, z: -48, r: 4, n: 2, kinds: [PropKind.CRATE, PropKind.CRATE] },
+  const arrival = arrivalCentre(vesperSpawn);
+  const sites = vesperSitePoints();
+  const fits = (x: number, z: number, r: number): boolean => {
+    if (inArrival(arrival, ARRIVAL_TOWARD, x, z, r) || vesperRoadDistance(x, z) < 1.2 + r) return false;
+    for (const p of sites) if (Math.hypot(p.x - x, p.z - z) < 1.3 + r) return false;
+    pos.x = x;
+    pos.z = z;
+    return !world.resolveXZ(pos, world.terrainHeight(x, z), Math.max(0.35, r + 0.15), 1.2);
+  };
+  const lifes: StillLife[] = [
+    { x: L.x - 7.4, z: L.z - 3.8, yaw: 0, pieces: crateStack([3, 2, 1]) },
+    { x: L.x + 8.0, z: L.z - 2.4, yaw: Math.PI, pieces: compose(crateStack([2, 1]), bottles(2, 0.75, 1.1)) },
+    { x: -35.2, z: 47, yaw: Math.PI, pieces: compose(chairRow(3, 0.7), bottles(1, -0.7, 1.4)) },   // (north of the cloister track)
+    { x: 27.6, z: 25.2, yaw: 0, pieces: desk() },
+    { x: -27, z: -24.5, yaw: Math.PI, pieces: desk() },   // (outside the pegged ground, clear of the rival surveyors)
+    { x: 2.4, z: -48, yaw: 0, pieces: crateStack([2]) },
   ];
-  for (const s of spots) {
-    for (let i = 0, tries = 0; i < s.n && tries < 80; tries++) {
-      const a = rng.range(0, TAU);
-      const d = rng.range(1.8, s.r);
-      const x = s.x + Math.cos(a) * d;
-      const z = s.z + Math.sin(a) * d;
-      pos.x = x;
-      pos.z = z;
-      if (world.resolveXZ(pos, world.terrainHeight(x, z), 0.6, 1.2) || vesperRoadDistance(x, z) < 1.6) continue;
-      let near = false;
-      for (const p of vesperSitePoints()) if (Math.hypot(p.x - x, p.z - z) < 1.6) near = true;
-      if (near) continue;
-      out.push({ kind: s.kinds[i % s.kinds.length]!, x, z, yaw: rng.range(0, TAU) });
-      i++;
-    }
-  }
+  for (const sl of lifes) placeStillLife(sl, fits, out);
   return out;
 }
 
