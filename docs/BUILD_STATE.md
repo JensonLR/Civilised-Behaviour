@@ -1,9 +1,15 @@
 # BUILD STATE - durable handoff
 
-Last updated: 2026-10-10 (D-105, the coup de grâce, D-104, hits that land where they land, D-103, fire that spreads, D-102, characters and saves kept per device with a profile code, D-101, a clear view while playing and the welcome card for the expedition you start, D-100, the prompt says what the key will do, D-099, plain words and small boxes, D-098, pages that fit and one tidy line of orders, D-097, the bridge's fall and the signs, D-096, the Triangulation, D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
+Last updated: 2026-10-10 (D-106, the lariat, D-105, the coup de grâce, D-104, hits that land where they land, D-103, fire that spreads, D-102, characters and saves kept per device with a profile code, D-101, a clear view while playing and the welcome card for the expedition you start, D-100, the prompt says what the key will do, D-099, plain words and small boxes, D-098, pages that fit and one tidy line of orders, D-097, the bridge's fall and the signs, D-096, the Triangulation, D-095, the Siege of the Counting-House, D-094, the Great Grey, D-093, the Lost Survey, D-092, the crank gun, and D-091, the industrial age, head "Now"; D-050 to D-090 are under them. Earlier, D-049: touch controls for phones and tablets; every sheet and the HUD looked at from a phone to 4K; a pad can type a join code and a pad-only player hears sound; the console path written down. Before it, D-048: the play link proved, a fort holdable, persistence findings closed, a security review. Everything below "Now" is the history that led here.)
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-106 (2026-10-10): the lariat.** The fourth AAA mechanic (the lasso; ideas, not code).
+  - **The move.** F at a man on his feet within 12 m: the loop flies; caught, he goes on his back and is hauled on a 3.2 m rope.
+  - **The rope.** It pulls only when taut; he works free in 7 s, or you let go. Dragged behind a horse, the ground hurts him down.
+  - **Readable.** "F  Rope <name>"; the loop and the rope drawn; his cry; a bark; a line in the paper; a pound in the Bill.
+  - **Tested.** Shared, server (units and a real room), client, animator. Looked at in a live game.
+  - **Limits.** The rope passes through things in the way; no tying up; NPCs never throw one.
 - **D-105 (2026-10-10): the coup de grâce.** The third AAA mechanic (finishers, after DOOM's glory kills; ideas, not code).
   - **The move.** A blow from the hand on an enemy down on a knee or doubled over finishes him: always down, sprawling, a blade likelier to take a limb.
   - **The pay.** 15 health back; his friends nearby lose their nerve; the Bill counts it and the Committee pays £2 each.

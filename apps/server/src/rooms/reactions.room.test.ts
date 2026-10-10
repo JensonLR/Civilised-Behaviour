@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { BUTTON, FINISHER, FLAG, MoveInput, REACT, ROOM_WORLD, WEAPON, ZONE, aimShake, reactKind, setWound, weaponToWire, yawToWire, type HitEvent, type HitMarkEvent, type PlayerStateType, type ShotEvent } from "@cb/shared";
+import { BUTTON, FINISHER, FLAG, MoveInput, REACT, ROOM_WORLD, WEAPON, ZONE, aimShake, reactKind, setWound, weaponToWire, yawToWire, type HitEvent, type HitMarkEvent, type LassoEvent, type PlayerStateType, type ShotEvent } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
@@ -41,13 +41,15 @@ describe("hit reactions in a real room (D-104)", () => {
     const c = await colyseus.connectTo(room as never, { name: "Ada" });
     const shots: ShotEvent[] = [];
     for (const t of ["sever", "impact", "boom", "station", "notice", "parley", "saved", "cry", "bark", "gazette"]) c.onMessage(t, () => undefined);
+    const loops: LassoEvent[] = [];
+    c.onMessage("lasso", (e: LassoEvent) => void loops.push(e));
     const marks: HitMarkEvent[] = [];
     const hits: HitEvent[] = [];
     c.onMessage("hitmark", (e: HitMarkEvent) => void marks.push(e));
     c.onMessage("hit", (e: HitEvent) => void hits.push(e));
     c.onMessage("shot", (e: ShotEvent) => void shots.push(e));
     await sleep(300);
-    return { room, c, shots, marks, hits, inner: room as unknown as Inner, me: room.state.players.get(c.sessionId)! as PlayerStateType };
+    return { room, c, shots, marks, hits, loops, inner: room as unknown as Inner, me: room.state.players.get(c.sessionId)! as PlayerStateType };
   }
 
   it("an arm shot takes a sentry's rifle and puts his fists up; a leg shot floors him, and he gets up", async () => {
@@ -161,5 +163,39 @@ describe("hit reactions in a real room (D-104)", () => {
     await until(() => marks.length > n, 3000, "the ordinary blow");
     expect(marks[n]!.fin).toBeUndefined();
     expect(marks.filter((m) => m.fin).length).toBe(1);
+  }, 30_000);
+
+  it("D-106: the lariat thrown at a sentry ahead: every client sees the loop fly, he is roped and hauled, and the same key lets him go", async () => {
+    const { room, c, loops, me } = await kessar();
+    const key = "npc:sentry-3";
+    const s = room.state.players.get(key)! as PlayerStateType;
+    // six metres south of him, facing him (north: yaw 0 looks down -Z)
+    c.send("debug", { cmd: `tp:${s.x}:${s.z + 6}:0` });
+    const input = c.input({ type: MoveInput, mode: "reliable" }) as unknown as Input;
+    const d = input.data;
+    d.yaw = d.aimYaw = yawToWire(0);
+    for (let i = 0; i < 10; i++) {
+      input.send();
+      await sleep(40);
+    }
+    d.buttons = BUTTON.GRAB;
+    input.send();
+    await sleep(60);
+    d.buttons = 0;
+    input.send();
+    await until(() => loops.length > 0, 2000, "the loop thrown");
+    expect(loops[0]).toMatchObject({ by: c.sessionId, hit: true });
+    await until(() => s.roped === 1, 2000, "him roped");
+    expect(s.dragger).toBe(c.sessionId);
+    expect((s.flags & FLAG.DRAGGED) !== 0).toBe(true);
+    expect((me.flags & FLAG.DRAGGING) !== 0).toBe(true);
+    // let go
+    await sleep(300);
+    d.buttons = BUTTON.GRAB;
+    input.send();
+    await sleep(60);
+    d.buttons = 0;
+    input.send();
+    await until(() => s.roped === 0 && (s.flags & FLAG.DRAGGED) === 0, 2000, "him let go");
   }, 30_000);
 });

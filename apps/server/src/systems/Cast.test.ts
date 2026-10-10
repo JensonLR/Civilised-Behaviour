@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
+  BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, LASSO, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
   CollisionWorld, type MoveCommand, type PlayerStateType, type WeaponId,
 } from "@cb/shared";
 import { NAV, NPC_SIDE, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
@@ -715,5 +715,22 @@ describe("Cast: the fright of a coup de grace (D-105)", () => {
     r.tick(60);
     expect(r.rows.get(npcKey("carter"))!.x).toBeLessThan(-6); // (ran west, away from it)
     expect(() => r.cast.terror("npc:nobody", 0, 0)).not.toThrow();
+  });
+});
+
+describe("Cast: on the end of a rope (D-106)", () => {
+  it("a roped soldier's nerve takes the shock and he cries out; a roped civilian cries out", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.cast.spawn([spec("s1", { post: { x: 0, z: 0 } }), spec("h1", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: 9, z: 0 } })]);
+    r.tick(3);
+    const b = (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get("npc:s1")!.brain;
+    const shock = b.morale.shock;
+    r.cast.onRoped("npc:s1");
+    r.cast.onRoped("npc:h1");
+    expect(b.morale.shock).toBe(Math.min(60, shock + LASSO.shock));
+    expect(cries).toEqual(expect.arrayContaining(["npc:s1", "npc:h1"]));
+    expect(() => r.cast.onRoped("npc:nobody")).not.toThrow();
   });
 });

@@ -441,6 +441,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         disarm: (id) => {
           if (this.combat.disarm(id) >= 0) this.cast.disarm(id);
         },
+        // D-106: the lariat is thrown at anyone on his feet, the loop flies on every client, and a catch frightens him and is billed
+        rows: this.state.players,
+        emitLasso: (e) => this.broadcast("lasso", e),
+        roped: (by, target) => {
+          this.cast.onRoped(target);
+          if (this.scenario?.live) this.mayhem.onRoped(target, by);
+        },
       },
       { routSeconds: getRoomConfig().routSeconds },
     );

@@ -1,5 +1,5 @@
 import {
-  BUTTON, FINISHER, FLAG, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
+  BUTTON, FINISHER, FLAG, LASSO, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
@@ -416,6 +416,18 @@ export class Cast implements CastApi {
     }
     r.brain.morale.shock = 60;
     r.brain.hurtAt = now;
+    this.cry(r, now);
+  }
+
+  /** D-106: row `key` is on the end of somebody's rope: a soldier's nerve takes the humiliation, and he cries out. */
+  onRoped(key: string): void {
+    const r = this.byKey.get(key);
+    if (!r || r.gone) return;
+    const now = this.host.worldMs() / 1000;
+    if (!r.civil) {
+      r.brain.morale.shock = Math.min(60, r.brain.morale.shock + LASSO.shock);
+      r.brain.hurtAt = Math.max(r.brain.hurtAt, now);
+    }
     this.cry(r, now);
   }
 

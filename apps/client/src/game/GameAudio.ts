@@ -193,6 +193,12 @@ export class GameAudio {
     playSfx("gore_flesh_heavy", { x, y, z, volume: 0.9 });
   }
 
+  /** D-106: a lariat thrown: the whirl and the throw. */
+  lasso(x: number, y: number, z: number): void {
+    playSfx("throw", { x, y, z, volume: 0.9 });
+    playSfx("foley_cloth", { x, y, z, volume: 0.7 });
+  }
+
   /** D-104: a weapon knocked out of a hand hits the ground. */
   clatter(x: number, y: number, z: number): void {
     playSfx("drop", { x, y, z, volume: 0.9 });

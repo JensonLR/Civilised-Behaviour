@@ -46,6 +46,7 @@ describe("D-084: the casualty column", () => {
     { k: "brolly", victim: "Picket Mabel Quenby", by: "Ada" },
     { k: "double", by: "Ada", n: 2 },
     { k: "finisher", victim: "Sentry Tamsin Cray", by: "Ada" },
+    { k: "rope", victim: "Carter Obadiah Plume", by: "Ada" },
     ...REQUEST_IDS.map((id): MayhemFact => ({ k: "request", id })),
   ];
 
@@ -129,6 +130,14 @@ describe("D-105: the coup de grace in the bill", () => {
     const old = parseBillRecord({ day: 3, region: "kessar", request: "flight", met: false, spectacle: 0, bill: { foes: 2, limbs: 1 } }, isRegionId)!;
     expect(old.bill.finishers).toBe(0);
     expect(FACT_RANK.finisher).toBeGreaterThan(FACT_RANK.headshot);
+  });
+
+  it("D-106: a lasso landed is billed and paid a pound; an old save reads none", () => {
+    const b = { ...newBill(), ropes: 3 };
+    expect(spectacle(b).pay).toBe(3);
+    expect(billLine(b)).toContain("3 lassos landed");
+    expect(billLine({ ...newBill(), ropes: 1 })).toContain("1 lasso landed");
+    expect(parseBillRecord({ day: 3, region: "kessar", request: "flight", met: false, spectacle: 0, bill: { foes: 2 } }, isRegionId)!.bill.ropes).toBe(0);
   });
 });
 

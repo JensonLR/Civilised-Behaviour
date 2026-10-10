@@ -112,6 +112,16 @@ export class CharacterActor {
   private ragdoll: Ragdoll | undefined;
   /** The weapon in the hands: model, recoil, blows (weapons/WeaponRig.ts). Rebuilt with the rig. */
   private weapons!: WeaponRig;
+  /** D-106: where the rope leaves the hand (world): the right wrist, as last drawn. */
+  handAt(out: Vector3): Vector3 {
+    return this.rig.joints.wristR.getWorldPosition(out);
+  }
+
+  /** D-106: where a rope round the body sits (world): the chest, as last drawn. */
+  chestAt(out: Vector3): Vector3 {
+    return this.rig.joints.torso.getWorldPosition(out);
+  }
+
   /** D-047: built on the first frame that wants one. */
   private torch?: TorchHold;
   private torchT = 0;
