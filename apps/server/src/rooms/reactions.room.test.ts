@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { BUTTON, FINISHER, FLAG, MoveInput, REACT, ROOM_WORLD, WEAPON, ZONE, aimShake, reactKind, setWound, weaponToWire, yawToWire, type HitEvent, type HitMarkEvent, type LassoEvent, type PlayerStateType, type ShotEvent } from "@cb/shared";
+import { BUTTON, FINISHER, FLAG, HEAD, MoveInput, WEAPONS, REACT, ROOM_WORLD, WEAPON, ZONE, aimShake, reactKind, setWound, weaponToWire, yawToWire, type HitEvent, type HitMarkEvent, type LassoEvent, type PlayerStateType, type ShotEvent } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
@@ -167,6 +167,21 @@ describe("hit reactions in a real room (D-104)", () => {
     await until(() => marks.length > n, 3000, "the ordinary blow");
     expect(marks[n]!.fin).toBeUndefined();
     expect(marks.filter((m) => m.fin).length).toBe(1);
+  }, 30_000);
+
+  it("D-118: a sabre's coup de grâce on a sentry's head takes it off (the room's own rule: he is an enemy), and the Society counts it; the same on the party takes nothing", async () => {
+    const { room, c, me } = await kessar();
+    const key = "npc:sentry-3";
+    const s = room.state.players.get(key)! as PlayerStateType;
+    const blow = { zone: ZONE.HEAD, finisher: true, weapon: WEAPON.SABRE, severBias: WEAPONS[WEAPON.SABRE].severBias * FINISHER.severMul, dirX: 0, dirZ: -1 } as const;
+    room.damagePlayer(key, 40, { ...blow, by: c.sessionId });
+    expect(s.missing & HEAD).toBe(HEAD);
+    expect((s.flags & FLAG.DOWNED) !== 0).toBe(true);
+    const mayhem = (room as unknown as { mayhem: { bill: { heads: number; limbs: number } } }).mayhem;
+    expect(mayhem.bill.heads).toBe(1);
+    expect(mayhem.bill.limbs).toBe(0); // (a head is not a limb)
+    room.damagePlayer(c.sessionId, 40, { ...blow, by: key });
+    expect(me.missing).toBe(0);
   }, 30_000);
 
   it("D-106: the lariat thrown at a sentry ahead: every client sees the loop fly, he is roped and hauled, and the same key lets him go", async () => {

@@ -1,5 +1,5 @@
 import {
-  FLAG, PropKind, SCENARIO, WEAPON, createWeather, hash3, isNpcKey, npcKey, weatherAt,
+  FLAG, PropKind, SCENARIO, WEAPON, createWeather, hash3, isNpcKey, limbBits, npcKey, weatherAt,
   type BridgeState, type CampaignState, type CasualtyTally, type Leverage, type ParleyKind, type ParleyStep, type ParleyView, type PlayerStateType,
   type ScenarioFx, type ScenarioInput, type ScenarioOutcome, type ScenarioTemplateId, type ScenarioView, type RivalPresence,
 } from "@cb/shared";
@@ -632,7 +632,7 @@ export class Scenario {
   }
 
   private noteLimbs(id: string, p: PlayerStateType): void {
-    const n = popcount(p.missing);
+    const n = popcount(limbBits(p.missing)); // (D-118: a head is not a limb; the paper's limb lines and the fear they put about count the four)
     const before = this.limbs.get(id);
     this.limbs.set(id, n);
     if (before !== undefined && n > before && this.s.phase !== "resolved") this.apply({ t: "tally", add: { limbsLost: n - before } });

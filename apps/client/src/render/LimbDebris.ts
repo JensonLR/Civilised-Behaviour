@@ -44,6 +44,37 @@ const capMat = (gore: GoreLevel): MeshBasicMaterial => {
 /** A gun lying on its side: its grip's centre this far above the ground (the stock's half thickness). */
 const WEAPON_REST = 0.035;
 
+/** D-118: a head's size as the debris needs it (CharacterActor.headShape): its radius, its middle and the neck's cut (metres up the neck joint), the neck's radius. */
+export interface HeadShape {
+  radius: number;
+  centre: number;
+  neckY: number;
+  neckR: number;
+}
+
+/** The head `pivot` (origin at the neck joint) re-hung about its own middle, its neck capped: the group the debris moves. */
+function headGroup(pivot: Group, gore: GoreLevel, shape: HeadShape): Group {
+  const g = new Group();
+  g.position.set(0, shape.centre, 0).applyQuaternion(pivot.quaternion).add(pivot.position);
+  g.quaternion.copy(pivot.quaternion);
+  pivot.position.set(0, -shape.centre, 0);
+  pivot.quaternion.identity();
+  g.add(pivot);
+  const cap = new Mesh(capGeo, capMat(gore));
+  cap.scale.set(shape.neckR, 0.018, shape.neckR * 0.95);
+  cap.position.set(0, shape.neckY, 0);
+  pivot.add(cap);
+  return g;
+}
+
+/** D-118: a head as it comes to rest (on a cheek, `yaw` its heading, (x, ground, z) under its middle), for a still (showcase/Gore.ts); the debris settles it the same way. */
+export function headAtRest(pivot: Group, gore: GoreLevel, shape: HeadShape, x: number, ground: number, z: number, yaw: number, cheek: 1 | -1 = 1): Group {
+  const g = headGroup(pivot, gore, shape);
+  g.position.set(x, ground + shape.radius * 0.95, z);
+  g.quaternion.setFromAxisAngle(new Vector3(0, 1, 0), yaw).multiply(new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), (cheek * Math.PI) / 2));
+  return g;
+}
+
 const spin = new Quaternion();
 const axis = new Vector3();
 const down = new Vector3(0, -1, 0);
@@ -99,6 +130,38 @@ export class LimbDebris {
       lying,
       bleed: true,
       rest: DEBRIS.restHeight,
+    });
+  }
+
+  /**
+   * D-118: a head taken off. Takes ownership of `pivot` (CharacterRig.detachLimb(HEAD): its origin at the neck joint, the head standing up its +Y): it is turned about its
+   * own middle (`centre` metres up the pivot), not the neck, so it tumbles like a ball; the cut at the bottom of the neck (`neckY`, its radius `neckR`) is capped like a
+   * limb's; it comes to rest on one cheek, `radius` off the ground, and bleeds where it lands.
+   */
+  spawnHead(pivot: Group, dx: number, dz: number, power: number, gore: GoreLevel, shape: HeadShape): void {
+    const g = headGroup(pivot, gore, shape);
+    this.scene.add(g);
+    if (this.pieces.length >= DEBRIS.max) this.remove(0);
+    const len = Math.hypot(dx, dz);
+    const ux = len > 1e-6 ? dx / len : 0;
+    const uz = len > 1e-6 ? dz / len : 1;
+    const p = Math.max(0.3, Math.min(1, power));
+    const speed = 1.8 + p * 3.0;
+    // at rest: on one cheek or the other, facing any way
+    const lying = new Quaternion().setFromAxisAngle(axis.set(0, 1, 0), Math.random() * Math.PI * 2).multiply(spin.setFromAxisAngle(axis.set(0, 0, 1), Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2));
+    this.pieces.push({
+      group: g,
+      vx: ux * speed + (Math.random() - 0.5) * 1.0,
+      vy: 3.6 + p * 2.4 + Math.random() * 0.8,
+      vz: uz * speed + (Math.random() - 0.5) * 1.0,
+      wx: (Math.random() - 0.5) * 12,
+      wy: (Math.random() - 0.5) * 6,
+      wz: (Math.random() - 0.5) * 12,
+      age: 0,
+      landed: false,
+      lying,
+      bleed: true,
+      rest: shape.radius * 0.95,
     });
   }
 

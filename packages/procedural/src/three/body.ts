@@ -167,6 +167,40 @@ export { buildForeArm, buildHandBone, buildLowerLeg, buildUpperArm, buildUpperLe
  * The end of a limb that has been taken off, in the shoulder or hip frame: a short stub of sleeve or trouser with a torn edge and a
  * capped wound - flesh, a ring of blood (iodine when gore is off) and the pale disc of bone. Bone-local, hanging along -Y.
  */
+/**
+ * D-118: what is left above the collar when an enemy's head has come off: the neck as the head drew it (the same loft, so it comes out of the same collar), cut short with
+ * a ragged edge and capped as a stump is: a ring of blood (iodine when gore is off), the flesh, the pale disc of the spine. In the HEAD's frame (its joint at the origin,
+ * +Y up), parented to the torso where the head was.
+ */
+export function buildNeckStump(c: BodyCtx, gore: "full" | "reduced" | "off"): BufferGeometry | undefined {
+  const { P } = c;
+  const R = P.headRadius;
+  const b = new PartBuilder();
+  const top = R * 0.06;
+  const raw = tone(c.skin, 0.78); // (the torn edge, a shade darker)
+  b.loft(
+    [
+      { y: top, rx: R * 0.445, rz: R * 0.425, color: raw, crease: true },
+      { y: top - 0.012, rx: R * 0.45, rz: R * 0.43, color: c.skin },
+      { y: -(P.neck + 0.03), rx: R * 0.46, rz: R * 0.44, color: singe(c.skin, 1) },
+    ],
+    c.skin,
+    undefined,
+    undefined,
+    undefined,
+    { capTop: false, capBottom: false },
+  );
+  const ramp = skinRamp(c.skin);
+  const flesh = tone(ramp.lip.getHex(), 0.95);
+  const blood = gore === "off" ? PALETTE.gore.off.fresh : gore === "reduced" ? PALETTE.gore.reduced.fresh : PALETTE.gore.full.fresh;
+  const rx = R * 0.42;
+  const rz = R * 0.4;
+  b.loft([{ y: top + 0.008, rx, rz, color: blood }, { y: top - 0.014, rx: rx * 0.98, rz: rz * 0.98, color: blood }], blood);
+  b.loft([{ y: top + 0.016, rx: rx * 0.76, rz: rz * 0.76, color: flesh }, { y: top + 0.004, rx: rx * 0.72, rz: rz * 0.72, color: flesh }], flesh);
+  b.loft([{ y: top + 0.026, rx: rx * 0.26, rz: rz * 0.26, color: PALETTE.trim.ivory }, { y: top + 0.012, rx: rx * 0.24, rz: rz * 0.24, color: PALETTE.trim.ivory }], PALETTE.trim.ivory);
+  return b.build();
+}
+
 export function buildStump(c: BodyCtx, limb: "arm" | "leg", gore: "full" | "reduced" | "off", fitted = false): BufferGeometry | undefined {
   const { P } = c;
   const b = new PartBuilder();

@@ -9,6 +9,8 @@ import {
   CARRIED_MASK,
   COMBAT,
   FLAG,
+  isHeadless,
+  limbBits,
   NPC_SIDE,
   SURFACE,
   WEAPON,
@@ -855,7 +857,12 @@ export class Combat {
       if (!h.fin && (h.boot || h.knock >= BOOT.splatSpeed) && (t.flags & FLAG.DOWNED) === 0) this.host.flung?.(h.target, h.shooter);
       this.stats.hits++;
       metrics.hitsLanded++;
-      if (!self) this.host.sendTo(h.shooter, h.fin ? { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before, fin: true } : { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before });
+      if (!self) {
+        const mark: HitMarkEvent = { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: limbBits(t.missing) !== limbBits(before) };
+        if (h.fin) mark.fin = true;
+        if (isHeadless(t.missing) && !isHeadless(before)) mark.head = true; // (D-118)
+        this.host.sendTo(h.shooter, mark);
+      }
     }
     this.pending.clear();
   }

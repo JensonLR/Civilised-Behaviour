@@ -163,13 +163,15 @@ export interface HitMarkEvent {
   sever: boolean;
   /** D-105: it was a coup de grace (a blow on a staggered man). Absent: an ordinary blow. */
   fin?: boolean;
+  /** D-118: it took his head off. Absent: it did not. */
+  head?: boolean;
 }
 
 /** Broadcast when a limb comes off. Direction and power drive the flying limb and the spray. */
 export interface SeverEvent {
   /** Session id of the victim. */
   id: string;
-  /** LIMB bit. */
+  /** LIMB bit, or HEAD (D-118: an enemy's head). */
   limb: number;
   dx: number;
   dz: number;

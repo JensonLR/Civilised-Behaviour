@@ -78,7 +78,8 @@ Wounds and lost limbs change movement and carrying through the shared injury rul
 (fills a passed-in struct, allocation-free, table-tested). `stepCharacter` calls it once per step with `s.wounds`, `s.missing` and `FLAG.PEG_LEG`; the server
 also uses it for pickup/throw. `wounds` and `missing` are on `CharState` and in `PREDICTED_FIELDS`: the step only READS them, but the reconciler mirrors them
 with the position they produced, so a replay after a correction steps with the injuries the server had at that ack. `FLAG.PEG_LEG` (512) is raised by the
-server (`refreshProsthetic`) when the look-history `woodenLeg` (0 none, 1 left, 2 right) sits where a leg is missing; it is an ordinary predicted flag.
+server (`refreshProsthetic`) when the look-history `woodenLeg` (0 none, 1 left, 2 right) sits where a leg is missing; it is an ordinary predicted flag. (D-118: `missing` has a
+fifth bit, `HEAD`, set only on an enemy's row; the injury table reads the four limb bits and ignores it.)
 | Injury | Effect |
 |--------|--------|
 | leg gash (2) | speed x0.9 |

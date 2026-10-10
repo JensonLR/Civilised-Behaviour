@@ -1,8 +1,9 @@
 import { ZONE, type ZoneId } from "./wounds.ts";
 
 /**
- * Limbs that can be lost. A bit mask (PlayerState.missing) so it replicates as one byte. Heads and torsos are never severed: characters are
- * downed, never dead, and the comedy stops short of decapitation.
+ * Limbs that can be lost. A bit mask (PlayerState.missing) so it replicates as one byte. A torso is never severed, and neither is a player's head or a hand's:
+ * the party is downed, never dead. An ENEMY's head can come off (D-118, `HEAD`, `beheads`): the owner's call, behind the campaign's dismemberment rule and the
+ * player's gore settings.
  */
 export const LIMB = { ARM_L: 1, ARM_R: 2, LEG_L: 4, LEG_R: 8 } as const;
 export type LimbId = (typeof LIMB)[keyof typeof LIMB];
@@ -27,8 +28,33 @@ export function limbZone(limb: LimbId): ZoneId {
 export const isLimb = (v: unknown): v is LimbId => v === 1 || v === 2 || v === 4 || v === 8;
 export const hasLimbLoss = (missing: number, limb: LimbId): boolean => (missing & limb) !== 0;
 export const limbsLost = (missing: number): number => LIMB_LIST.filter((l) => (missing & l) !== 0).length;
-/** Mask is 4 bits; sanitise anything from the wire or a save. */
-export const sanitizeMissing = (mask: unknown): number => (typeof mask === "number" && Number.isFinite(mask) ? Math.floor(mask) & 15 : 0);
+/** Mask is 5 bits (the four limbs and the head); sanitise anything from the wire or a save. */
+export const sanitizeMissing = (mask: unknown): number => (typeof mask === "number" && Number.isFinite(mask) ? Math.floor(mask) & 31 : 0);
+
+/**
+ * D-118: the head, as a bit in the same mask. Not a limb (`LIMB_LIST`, the stumps, the dressings and the limb tallies stay the four): it comes off only an enemy's
+ * shoulders (the room decides who), and a man without one is down for good (never revived, never back as a grudge).
+ */
+export const HEAD = 16;
+export const isHeadless = (missing: number): boolean => (missing & HEAD) !== 0;
+/** The four limbs of a mask, without the head (what the limb tallies, the grudges and the stumps count). */
+export const limbBits = (missing: number): number => missing & 15;
+
+export const BEHEAD = {
+  /** Any blow to the head this heavy (its damage x the weapon's sever bias) takes it off: a cannonball or a powder blast at the man's ear; never a rifle ball (154) or a sabre's ordinary cut (97). */
+  heavy: 250,
+} as const;
+
+/**
+ * Whether a blow that lands on `zone` takes the head off: a sabre's coup de grace (D-105) that lands on the head always does, and no other coup de grace ever does (a gun's
+ * butt carries the finisher's quadrupled sever bias, and must not); any other blow to the head does at `amount` x `severBias` of `BEHEAD.heavy` or more. Pure and
+ * certain (no roll, so it never draws on the room's randomness); the room decides who may lose a head at all.
+ */
+export function beheads(zone: number, amount: number, severBias: number, finisher: boolean, sabre: boolean): boolean {
+  if (zone !== ZONE.HEAD || !(amount > 0)) return false;
+  if (finisher) return sabre;
+  return amount * Math.max(0, severBias) >= BEHEAD.heavy;
+}
 
 export const SEVER = {
   /** Below this a blow cannot take a limb off. */

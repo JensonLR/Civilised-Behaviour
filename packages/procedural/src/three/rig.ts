@@ -11,7 +11,7 @@ import {
   type Bone,
   type Material,
 } from "three";
-import { LIMB, PALETTE, ZONE, ZONE_COUNT, woundLevel, zoneLimb, type LimbId, type ZoneId } from "@cb/shared";
+import { HEAD, LIMB, PALETTE, ZONE, ZONE_COUNT, woundLevel, zoneLimb, type LimbId, type ZoneId } from "@cb/shared";
 import * as K from "../catalog.ts";
 import { computeProportions, type Proportions } from "../proportions.ts";
 import { encodeSpec, type CharacterSpec } from "../spec.ts";
@@ -23,7 +23,7 @@ import { hairSwayHullMaterial, hairSwayMaterial, type HairSwayUniform } from "./
 import { mergeRigid, posedBounds, type RigidPart } from "./merged.ts";
 import { PartBuilder, singe, type Lod } from "./parts.ts";
 import { buildProsthesis } from "./prosthetics.ts";
-import { buildStump, buildForeArm, buildHandBone, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
+import { buildNeckStump, buildStump, buildForeArm, buildHandBone, buildLowerLeg, buildPelvis, buildTorso, buildUpperArm, buildUpperLeg, type BodyCtx } from "./body.ts";
 import { buildWoundGeometry, type GoreLevel } from "./wounds.ts";
 
 export type { FaceParts } from "./faceRig.ts";
@@ -96,9 +96,12 @@ export interface CharacterRig {
   /**
    * A free-standing copy of a limb, frozen in its current pose, for flying off as debris: a Group whose origin is the joint (the cut end)
    * with the limb hanging down its -Y. Geometry and materials are shared with the rig (dispose nothing but the group's own children);
-   * add it to the scene yourself. Works whether or not the limb is currently hidden.
+   * add it to the scene yourself. Works whether or not the limb is currently hidden. D-118: `HEAD` gives the head (its face, hat and hair, frozen
+   * in its last expression) with the origin at the neck joint and the head standing up its +Y.
    */
-  detachLimb(limb: LimbId): Group | undefined;
+  detachLimb(limb: number): Group | undefined;
+  /** D-118: the head has come off (`setMissing` with the HEAD bit): the head joint and everything on it is hidden, and a neck stump stands on the collar. */
+  readonly headless: boolean;
   dispose(): void;
 }
 
@@ -482,10 +485,32 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   const prosthesisMeshes = new Map<number, Mesh>();
   let shownMissing = 0;
   let shownMissingGore: GoreLevel = "full";
+  // D-118: the head. Hiding its joint hides everything on it (the head's mesh and hull, the face's parts, its dressing, the marks on it); the neck stump stands on the
+  // torso where the joint is, so it stays when the head is gone.
+  let neckStump: Mesh | undefined;
+  const setHeadless = (gone: boolean, gore: GoreLevel): void => {
+    head.visible = !gone;
+    if (!gone) {
+      if (neckStump) neckStump.visible = false;
+      return;
+    }
+    const geo = cached(`stump|neck|${gore}|${key}`, () => withMode(lod, false, () => buildNeckStump(body, gore)));
+    if (!geo) return;
+    if (!neckStump) {
+      neckStump = new Mesh(geo, material);
+      neckStump.name = "stump_head";
+      neckStump.castShadow = true;
+      neckStump.position.copy(head.position);
+      torso.add(neckStump);
+    }
+    neckStump.geometry = geo;
+    neckStump.visible = true;
+  };
   const setMissing = (mask: number, gore: GoreLevel = "full"): void => {
     if (mask === shownMissing && gore === shownMissingGore) return;
     shownMissing = mask;
     shownMissingGore = gore;
+    setHeadless((mask & HEAD) !== 0, gore);
     for (const limb of [LIMB.ARM_L, LIMB.ARM_R, LIMB.LEG_L, LIMB.LEG_R] as LimbId[]) {
       const info = LIMB_BONES[limb]!;
       const gone = (mask & limb) !== 0;
@@ -535,7 +560,24 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
   };
 
   const inv = new Matrix4();
-  const detachLimb = (limb: LimbId): Group | undefined => {
+  /** D-118: the head as it is now, every child of its joint copied in place (shared geometry and materials; a mesh keeps its expression). */
+  const detachHead = (): Group => {
+    root.updateWorldMatrix(true, true);
+    const pivot = new Group();
+    head.matrixWorld.decompose(pivot.position, pivot.quaternion, pivot.scale);
+    pivot.scale.set(1, 1, 1);
+    pivot.updateMatrix();
+    inv.copy(pivot.matrix).invert();
+    for (const child of head.children) {
+      const c = child.clone(true);
+      c.matrixAutoUpdate = false;
+      c.matrix.multiplyMatrices(inv, child.matrixWorld);
+      pivot.add(c);
+    }
+    return pivot;
+  };
+  const detachLimb = (limb: number): Group | undefined => {
+    if (limb === HEAD) return detachHead();
     const info = LIMB_BONES[limb];
     if (!info) return undefined;
     root.updateWorldMatrix(true, true);
@@ -706,6 +748,9 @@ export function buildCharacter(spec: CharacterSpec, options: BuildOptions = {}):
     setHandGrip,
     handGrip: (side) => grip[side],
     detachLimb,
+    get headless() {
+      return (shownMissing & HEAD) !== 0;
+    },
     dispose() {
       // Bone and face geometry and materials belong to the shared caches (freed by clearCharacterCaches); a rig owns only its scene-graph objects (and a merged rig's bone texture).
       for (const m of swayMaterials) m.dispose();

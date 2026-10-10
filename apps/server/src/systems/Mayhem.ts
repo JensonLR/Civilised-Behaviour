@@ -46,6 +46,8 @@ export interface HitFact {
   lift: number;
   /** A limb this hit took off, and the way the blow pushed. */
   severed?: LimbId;
+  /** D-118: it took the victim's head off. */
+  beheaded?: boolean;
   dirX: number;
   dirZ: number;
 }
@@ -124,11 +126,12 @@ export class Mayhem {
       if (h.down) this.say({ k: "friendly", victim, by });
     }
     if (h.severed !== undefined) this.severed(h.victim, h.severed, by, cause, h.dirX, h.dirZ);
+    if (h.beheaded) this.beheaded(h.victim, by, byParty, cause, h.dirX, h.dirZ);
     // D-087: who exclaims, and why (one voice a moment: the first that applies)
     // (a colleague dropped by mistake: the apology is the moment, not the yelp)
     if (byParty && victimParty && h.by !== h.victim && h.down) this.bark(h.by, "friendly");
     else if (h.down && victimParty) this.bark(h.victim, h.lift > 0 && flightYards(h.power, h.lift) >= FLING_YARDS ? "flung" : "down");
-    else if (byParty && !victimParty && h.severed !== undefined) this.bark(h.by, "limb");
+    else if (byParty && !victimParty && (h.severed !== undefined || h.beheaded)) this.bark(h.by, "limb");
     else if (byParty && !victimParty && h.down && vs !== "neutral") this.bark(h.by, cause === "brolly" ? "brolly" : h.zone === ZONE.HEAD && cause === "shot" ? "headshot" : "triumph");
     if (h.down) {
       if (victimParty) b.partyDowns++;
@@ -281,6 +284,12 @@ export class Mayhem {
     this.flung(victim, this.name(victim), byName, vs === "party", power, lift);
     if (vs === "party" && flightYards(power, lift) >= FLING_YARDS) this.bark(victim, "flung");
     this.touch();
+  }
+
+  /** D-118: an enemy's head came off (only an enemy's can: Casualties). The Society counts it if the party's hand did it; the column prints it either way. */
+  private beheaded(victim: string, by: string, byParty: boolean, cause: Cause, dx: number, dz: number): void {
+    if (byParty) this.bill.heads++;
+    this.say({ k: "behead", victim: this.name(victim), by, cause, dir: compassPoint(dx, dz) });
   }
 
   /** A limb came off somebody: counted against the party or for the Museum. */

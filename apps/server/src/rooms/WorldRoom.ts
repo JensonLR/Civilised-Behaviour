@@ -60,6 +60,8 @@ import {
   isCarried,
   NPC_CAP,
   NPC_SIDE,
+  isHeadless,
+  limbBits,
   SHIELD,
   HOLDUP,
   herdPlan,
@@ -501,6 +503,12 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         emitSever: (e) => this.broadcast("sever", e),
         dismemberment: () => this.state.dismemberment,
         limbsChanged: (sid) => this.refreshProsthetic(sid),
+        // D-118: only an enemy's head comes off (the Crown's men, a rival's, an outlaw); never the party's, a hand's, a bystander's or an incident's people
+        mayBehead: (id) => {
+          const p = this.state.players.get(id);
+          const side = p && p.npc !== 0 ? NPC_SIDE[p.npc] : undefined;
+          return (side === "ward" || side === "rival" || side === "outlaw") && !this.incidents?.owns(id);
+        },
         scan: this.helpable,
         // D-104: the gun shot out of an NPC's hand: gone from his kit (the clients see it fly from PlayerState.react), and up come the fists
         disarm: (id) => {
@@ -2098,8 +2106,8 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         if (hit?.boot) this.mayhem.onBoot(sessionId, hit.by ?? ""); // (D-108)
         if (hit?.stampede) this.mayhem.onStampede(sessionId, hit.by ?? ""); // (D-114: a herd the party set running)
         else if (hit?.trample) this.mayhem.onTrample(sessionId, hit.by ?? ""); // (D-111)
-        const off = lost;
-        this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
+        const off = limbBits(lost);
+        this.mayhem.onHit({ victim: sessionId, by: hit?.by ?? "", weapon: hit?.weapon, zone: hit?.zone, down, power: Math.min(1, amount / 60), lift: hit?.lift ?? 0, severed: off ? (off as LimbId) : undefined, beheaded: isHeadless(lost), dirX: hit?.dirX ?? 0, dirZ: hit?.dirZ ?? 1 });
       }
       this.scenario?.onDamage(sessionId, hit?.by ?? "", hit?.zone ?? -1, down);
       if (hit?.by) this.incidents?.onHurt(sessionId);

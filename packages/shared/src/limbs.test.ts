@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { LIMB, LIMB_LIST, SEVER, hasLimbLoss, isLimb, limbZone, limbsLost, sanitizeMissing, severChance, zoneLimb } from "./limbs.ts";
+import { BEHEAD, HEAD, LIMB, LIMB_LIST, SEVER, beheads, hasLimbLoss, isHeadless, isLimb, limbBits, limbZone, limbsLost, sanitizeMissing, severChance, zoneLimb } from "./limbs.ts";
+import { FINISHER } from "./hitReaction.ts";
+import { WEAPON, WEAPONS } from "./weapons.ts";
 import { ZONE, ZONE_COUNT } from "./wounds.ts";
 
 describe("limbs", () => {
@@ -19,7 +21,7 @@ describe("limbs", () => {
     expect(hasLimbLoss(LIMB.LEG_L | LIMB.ARM_R, LIMB.LEG_L)).toBe(true);
     expect(hasLimbLoss(LIMB.LEG_L, LIMB.LEG_R)).toBe(false);
     expect(limbsLost(0b1011)).toBe(3);
-    expect(sanitizeMissing(0xffff)).toBe(15);
+    expect(sanitizeMissing(0xffff)).toBe(31); // (D-118: the four limbs and the head)
     expect(sanitizeMissing(NaN)).toBe(0);
     expect(isLimb(4)).toBe(true);
     expect(isLimb(3)).toBe(false);
@@ -36,5 +38,25 @@ describe("limbs", () => {
     expect(b).toBeGreaterThan(a);
     expect(severChance(60, 3)).toBeGreaterThan(a);
     expect(severChance(60, 3)).toBeLessThanOrEqual(1);
+  });
+  it("D-118: the head is its own bit, not a limb (the limb lists, tallies and stumps stay the four)", () => {
+    expect(LIMB_LIST.includes(HEAD as never)).toBe(false);
+    expect(isLimb(HEAD)).toBe(false);
+    expect(LIMB_LIST.reduce((a, b) => a | b, 0) & HEAD).toBe(0);
+    expect(isHeadless(HEAD | LIMB.ARM_L)).toBe(true);
+    expect(isHeadless(15)).toBe(false);
+    expect(limbBits(HEAD | LIMB.LEG_R)).toBe(LIMB.LEG_R);
+  });
+  it("D-118: a sabre's coup de grâce on the head takes it, no other coup de grâce does, and only a very heavy blow otherwise", () => {
+    const sabre = WEAPONS[WEAPON.SABRE];
+    const fin = sabre.severBias * FINISHER.severMul;
+    expect(beheads(ZONE.HEAD, 30, fin, true, true)).toBe(true);
+    expect(beheads(ZONE.TORSO, 300, fin, true, true)).toBe(false);
+    expect(beheads(ZONE.HEAD, 200, WEAPONS[WEAPON.RIFLE].severBias * FINISHER.severMul, true, false)).toBe(false); // (a gun's butt)
+    expect(beheads(ZONE.HEAD, 36 * 1.5, sabre.severBias, false, true)).toBe(false); // (a sabre's ordinary cut: 97)
+    expect(beheads(ZONE.HEAD, 70 * 2.2, WEAPONS[WEAPON.RIFLE].severBias, false, false)).toBe(false); // (a rifle ball: 154)
+    expect(beheads(ZONE.HEAD, 160, WEAPONS[WEAPON.CANNON].severBias, false, false)).toBe(true); // (a cannonball: 352)
+    expect(beheads(ZONE.HEAD, BEHEAD.heavy, 1, false, false)).toBe(true);
+    expect(beheads(ZONE.HEAD, NaN, 9, false, false)).toBe(false);
   });
 });

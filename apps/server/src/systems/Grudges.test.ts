@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FLAG, GRUDGE, LIMB, NPC, WEAPON, newCampaign, type CampaignState, type Grudge, type NpcSpec, type PlayerStateType, type WeaponId } from "@cb/shared";
+import { FLAG, GRUDGE, HEAD, LIMB, NPC, WEAPON, newCampaign, type CampaignState, type Grudge, type NpcSpec, type PlayerStateType, type WeaponId } from "@cb/shared";
 import { Grudges } from "./Grudges.ts";
 
 /** D-109: survivors with grudges on the server. The run's worst-used soldier is remembered; a remembered man takes a soldier's place, speaks once, and spends a return when beaten. */
@@ -129,6 +129,28 @@ describe("D-109: the man who comes back", () => {
     g.respec([spec("s0")]);
     g.onDown("npc:s0", "ada");
     expect(g.settle({ ...after, day: 6 }).sites.grudges).toBeUndefined();
+  });
+
+  it("D-118: nobody comes back from losing his head: the worst-used man of a run is remembered only if he kept it, and a returning man who lost it is forgotten at once", () => {
+    const { g, specs, rows, add } = rig();
+    const c0 = newCampaign(3);
+    g.begin(c0, "kessar", 1);
+    const a = add(spec("a"));
+    const b = add(spec("bb", { lookSeed: 777 }));
+    g.onMaimed(a, LIMB.LEG_L | LIMB.ARM_R | HEAD, "ada"); // (the worst used of all, and headless)
+    g.onInsult(b, "boot", "ada");
+    const c = g.settle({ ...c0, day: 2 });
+    expect(c.sites.grudges).toHaveLength(1);
+    expect(c.sites.grudges![0]).toMatchObject({ lookSeed: 777, missing: 0 });
+    // the returning man, beaten with his first return to spare, but headless: gone from the ledger
+    const back = withGrudges([remembered()]);
+    g.begin(back, "kessar", 4);
+    g.respec([spec("s0")]);
+    specs.set("npc:s0", spec("s0"));
+    rows.set("npc:s0", row(0, 0, NPC.SENTRY, 'Sentry Tamsin "Hook" Cray'));
+    g.onMaimed("npc:s0", HEAD, "ada");
+    g.onDown("npc:s0", "ada");
+    expect(g.settle({ ...back, day: 5 }).sites.grudges).toBeUndefined();
   });
 
   it("a man who came back and was not beaten waits for the next time, as he was", () => {

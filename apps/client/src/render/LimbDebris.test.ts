@@ -9,6 +9,34 @@ const run = (d: LimbDebris, seconds: number, dt = 1 / 30): void => {
 };
 
 describe("LimbDebris", () => {
+  it("D-118: a head flies along the blow, tumbling about its own middle, bleeds once where it lands, and comes to rest on a cheek, its radius off the ground", () => {
+    const shape = { radius: 0.24, centre: 0.22, neckY: -0.08, neckR: 0.1 };
+    for (let k = 0; k < 40; k++) {
+      const c = k / 40;
+      const random = vi.spyOn(Math, "random").mockReturnValue(c);
+      const scene = new Scene();
+      const d = new LimbDebris(scene, flat);
+      const landed: number[] = [];
+      d.onLand = (x) => void landed.push(x);
+      const pivot = new Group();
+      pivot.position.set(0, 1.55, 0); // (the neck joint of a man standing)
+      d.spawnHead(pivot, 1, 0, 1, "full", shape);
+      random.mockRestore();
+      expect(scene.children).toHaveLength(1);
+      const g = scene.children[0]!;
+      // it is turned about the head's middle: the pivot hangs below the group by the head's centre
+      expect(g.position.y).toBeCloseTo(1.55 + shape.centre, 6);
+      run(d, 0.4);
+      expect(g.position.x, `c ${c}`).toBeGreaterThan(0.4);
+      run(d, 8);
+      expect(g.position.y, `c ${c}`).toBeCloseTo(shape.radius * 0.95, 3);
+      expect(landed).toHaveLength(1);
+      // on a cheek: the head's up axis (+Y of the group) lies flat
+      const upY = 1 - 2 * (g.quaternion.x ** 2 + g.quaternion.z ** 2);
+      expect(Math.abs(upY), `c ${c}`).toBeLessThan(0.1);
+    }
+  });
+
   it("flies off in the direction of the blow, lands, and comes to rest flat on the ground", () => {
     const scene = new Scene();
     const d = new LimbDebris(scene, flat);

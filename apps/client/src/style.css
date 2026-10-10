@@ -487,9 +487,9 @@ ol.steps li::marker { font-family: var(--display); color: var(--stamp); }
 .hitmark svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hitmark path { fill: none; stroke: var(--paper); stroke-width: 3.6; stroke-linecap: round; paint-order: stroke; filter: drop-shadow(0 0 1px var(--ink)); }
 .hitmark .bar { display: none; }
-.hitmark[data-kind="down"] .bar, .hitmark[data-kind="sever"] .bar, .hitmark[data-kind="fin"] .bar { display: block; }
-.hitmark[data-kind="sever"] .cross, .hitmark[data-kind="fin"] .cross { stroke: var(--stamp); }
-.hitmark[data-kind="fin"] svg { transform: scale(1.35); }
+.hitmark[data-kind="down"] .bar, .hitmark[data-kind="sever"] .bar, .hitmark[data-kind="fin"] .bar, .hitmark[data-kind="behead"] .bar { display: block; }
+.hitmark[data-kind="sever"] .cross, .hitmark[data-kind="fin"] .cross, .hitmark[data-kind="behead"] .cross { stroke: var(--stamp); }
+.hitmark[data-kind="fin"] svg, .hitmark[data-kind="behead"] svg { transform: scale(1.35); }
 .hitmark[data-kind="head"] svg { transform: scale(1.25); }
 .hitmark .mtext { position: absolute; top: 3.5rem; font: 0.85rem var(--display); letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); text-shadow: 0 1px 0 var(--ink), 0 0 6px var(--ink); white-space: nowrap; }
 .hitmark.pop svg { animation: markpop 0.22s ease-out; }

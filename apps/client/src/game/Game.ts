@@ -6,7 +6,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent, findFinisherTarget, findRopeTarget, type LassoEvent } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, HEAD, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent, findFinisherTarget, findRopeTarget, type LassoEvent } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { TouchContext } from "../input/touchLogic.ts";
@@ -1753,14 +1753,24 @@ export class Game {
     }
     if (e.id === this.session.sessionId) this.rig.addShake(0.6 + e.power * 0.4);
     const victim = this.session.room.state.players.get(e.id);
+    const head = e.limb === HEAD;
     if (victim) {
-      this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
-      this.audio.scream(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, e.id === this.session.sessionId); // (D-073: and the victim has an opinion about it)
+      if (head) this.audio.behead(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.6, this.session.value(victim, "z"));
+      else this.audio.sever(this.session.value(victim, "x"), this.session.value(victim, "y") + 1, this.session.value(victim, "z"));
+      // (D-073: and the victim has an opinion about it; D-118: not a man who has lost his head)
+      if (!head) this.audio.scream(this.session.value(victim, "x"), this.session.value(victim, "y") + 1.5, this.session.value(victim, "z"), victim.look, e.id === this.session.sessionId);
     }
     if (!a || !getShowLimbs()) return;
-    const piece = a.body.detachLimb(e.limb as LimbId);
+    const piece = a.body.detachLimb(e.limb);
     if (!piece) return;
     const gore = getGore();
+    if (head) {
+      // D-118: the neck fountains (up, not out), the head flies and rolls, and the body bleeds where it falls
+      this.hitFx.burst(piece.position.x, piece.position.y, piece.position.z, e.dx, e.dz, 1, gore, 1);
+      this.debris.spawnHead(piece, e.dx, e.dz, e.power, gore, a.body.headShape());
+      if (victim) this.hitFx.bleedOut(this.session.value(victim, "x"), this.session.value(victim, "z"), 0.7);
+      return;
+    }
     this.hitFx.burst(piece.position.x, piece.position.y, piece.position.z, e.dx, e.dz, 1, gore, 0.8); // the joint fountains
     this.debris.spawn(piece, e.dx, e.dz, e.power, gore);
     if (victim) this.hitFx.bleedOut(this.session.value(victim, "x"), this.session.value(victim, "z"), 0.5); // and the stump bleeds where they stand
