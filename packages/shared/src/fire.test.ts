@@ -160,6 +160,29 @@ describe("D-103: the spread", () => {
   });
 });
 
+describe("D-110: the nearest burning ground (horses shy from it)", () => {
+  it("is the centre of the closest burning cell within the radius, nothing beyond it, nothing once it is out", () => {
+    const g = new FireGrid(worldOf("highmark"), "highmark", 7);
+    const c = fuelledSpot(g);
+    const out = { x: 0, z: 0 };
+    const x = g.centreX(c);
+    const z = g.centreZ(c);
+    expect(g.nearestBurning(x + 3, z, 7, out)).toBe(false);
+    g.igniteCell(c);
+    expect(g.nearestBurning(x + 3, z, 7, out)).toBe(true);
+    expect(out).toEqual({ x, z });
+    expect(g.nearestBurning(x + 8, z, 7, out)).toBe(false);
+    // two fires: the nearer one
+    const far = c + 4;
+    g.igniteCell(far);
+    expect(g.nearestBurning(g.centreX(far) + 1, g.centreZ(far), 30, out)).toBe(true);
+    expect(out).toEqual({ x: g.centreX(far), z: g.centreZ(far) });
+    g.douse(c);
+    g.douse(far);
+    expect(g.nearestBurning(x, z, 30, out)).toBe(false);
+  });
+});
+
 describe("D-103: the wire", () => {
   it("round-trips the burning cells and the scorched ground", () => {
     const g = new FireGrid(worldOf("highmark"), "highmark", 7);

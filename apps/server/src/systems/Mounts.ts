@@ -15,6 +15,7 @@ import {
 import {
   BOLT_SECONDS,
   CARGO_POUNDS,
+  FIRE_PANIC,
   MOUNT,
   MOUNT_CAP,
   MOUNT_FLAG,
@@ -106,6 +107,8 @@ export interface MountsHost {
   releaseDrag(draggerSid: string): void;
   /** A named route (the cast's `defineRoute`). */
   routePoints(name: string): readonly { x: number; z: number }[] | undefined;
+  /** D-110: the burning ground nearest (x, z) within `r` (into `out`); false when none. Optional: no fire, no panic. */
+  fireNear?(x: number, z: number, r: number, out: { x: number; z: number }): boolean;
 }
 
 /** Authored one-liners (pending developer review: AI_CONTENT_REGISTER). */
@@ -114,6 +117,7 @@ export const MOUNT_LINES = {
   throwBlast: ["The horse took the blast personally, and then you off.", "The horse left the explosion; you followed, briefly, through the air."],
   throwBlow: ["The horse was struck, and strongly disagreed with your plan to stay on.", "Thrown. The Society's riding manual calls this 'an informal dismount'."],
   throwDown: ["You slide from the saddle, as the wounded do."],
+  throwFire: ["The horse has views on fire and acts on them. You are not consulted.", "Rearing at the flames, the horse sets you down in the grass. The burning grass.", "The horse declines the fire, and you with it."],
   full: "The wagon is full. The Society's cargo regulations do not provide for optimism.",
   nothing: "There is nothing here to load.",
   taken: "That horse is spoken for.",
@@ -157,6 +161,11 @@ export class Mounts {
   private readonly lastSpeed = new Map<string, number>();
   /** After an unhitch the same press cannot hitch again for a moment (so INTERACT beside the tongue can unhitch, then dismount). */
   private readonly noHitchUntil = new Map<string, number>();
+
+  /** D-110: horses that bolted from fire, and riders put down by one. */
+  readonly stats = { firePanics: 0, fireThrows: 0 };
+  /** The burning ground a horse is shying from (scratch for `panicAtFire`). */
+  private readonly fireAt = { x: 0, z: 0 };
 
   constructor(private readonly host: MountsHost) {}
 
@@ -327,6 +336,7 @@ export class Mounts {
   /** Once per room tick, after the players have stepped and before the physics step. */
   tick(dt: number): void {
     this.tickNo++;
+    this.panicAtFire(); // (D-110)
     const world = this.host.world();
     // riders: the horse copies the rider; a wall at speed unseats them
     for (const e of this.ents.values()) {
@@ -427,7 +437,8 @@ export class Mounts {
   private tickBolting(e: Entity, row: MountRow, dt: number, world: CollisionWorld): void {
     e.boltT -= dt;
     if (e.boltT <= 0) {
-      this.setPhase(e, MOUNT_PHASE.loose);
+      // run out: back to whoever was leading it, or the road it was on (D-110: a fire's bolt keeps them), else it stands
+      this.setPhase(e, e.leader || e.route ? MOUNT_PHASE.led : MOUNT_PHASE.loose);
       row.speed = 0;
       return;
     }
@@ -596,7 +607,7 @@ export class Mounts {
     e.route = "";
   }
 
-  private throwRider(sid: string, p: PlayerStateType, why: "wall" | "blast" | "blow" | "down", speedBefore?: number): void {
+  private throwRider(sid: string, p: PlayerStateType, why: "wall" | "blast" | "blow" | "down" | "fire", speedBefore?: number): void {
     const horse = this.horseOfRider(sid);
     const speed = speedBefore ?? Math.hypot(p.vx, p.vz);
     this.dismountFlags(p);
@@ -614,12 +625,46 @@ export class Mounts {
         this.bolt(horse);
       }
     }
-    const lines = why === "wall" ? MOUNT_LINES.throwWall : why === "blast" ? MOUNT_LINES.throwBlast : why === "blow" ? MOUNT_LINES.throwBlow : MOUNT_LINES.throwDown;
+    const lines = why === "wall" ? MOUNT_LINES.throwWall : why === "blast" ? MOUNT_LINES.throwBlast : why === "blow" ? MOUNT_LINES.throwBlow : why === "fire" ? MOUNT_LINES.throwFire : MOUNT_LINES.throwDown;
     if (why !== "down") {
       this.host.notice(sid, pick(lines, this.host.seed, this.tickNo, p.slot));
       const dmg = throwDamage(speed);
       if (dmg > 0) this.host.damage(sid, dmg, { by: "mount" });
     }
+  }
+
+  /**
+   * D-110: a horse with burning ground within `scareR` bolts directly away from it. A ridden one only once the fire is within `throwR`: it rears and puts its rider
+   * down (the fire's own throw line), then bolts away from the flames. A led or routed horse keeps its leader and route and goes back to them when it has run itself
+   * out, so a caravan the fire scatters re-forms rather than being lost to the contract.
+   */
+  private panicAtFire(): void {
+    const near = this.host.fireNear;
+    if (!near || this.tickNo % FIRE_PANIC.everyTicks !== 0) return;
+    for (const e of this.ents.values()) {
+      if (e.kind !== MOUNT_KIND.horse) continue;
+      const row = this.host.rows.get(e.id);
+      if (!row || row.phase === MOUNT_PHASE.bolting || row.phase === MOUNT_PHASE.wrecked) continue;
+      if (!near(row.x, row.z, FIRE_PANIC.scareR, this.fireAt)) continue;
+      if (row.rider) {
+        if (Math.hypot(this.fireAt.x - row.x, this.fireAt.z - row.z) > FIRE_PANIC.throwR) continue;
+        const p = this.host.players.get(row.rider);
+        if (!p) continue;
+        this.stats.fireThrows++;
+        this.throwRider(row.rider, p, "fire");
+      } else this.stats.firePanics++;
+      this.boltFrom(e, row, this.fireAt.x, this.fireAt.z);
+    }
+  }
+
+  /** Bolts away from (x, z) with a little deterministic wobble; whoever was leading it is let go of, not forgotten (`tickBolting` returns it to them). */
+  private boltFrom(horse: Entity, row: MountRow, x: number, z: number): void {
+    horse.state.x = row.x;
+    horse.state.z = row.z;
+    const away = Math.atan2(-(row.x - x), -(row.z - z));
+    horse.state.facing = wrapAngle(away + ((hash3(this.host.seed, this.tickNo, horse.id.length, 0xf12e) % 1000) / 1000 - 0.5) * 0.6);
+    horse.boltT = BOLT_SECONDS;
+    this.setPhase(horse, MOUNT_PHASE.bolting);
   }
 
   private bolt(horse: Entity): void {

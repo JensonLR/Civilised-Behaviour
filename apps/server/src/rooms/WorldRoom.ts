@@ -598,6 +598,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       notice: (sid, text) => this.clients.getById(sid)?.send("notice", { text }),
       seed,
       rowOf: (key) => this.state.players.get(key),
+      fireNear: (x, z, r, out) => this.fire.nearestBurning(x, z, r, out), // (D-110: horses shy from the flames)
       takeHeld: (sid) => {
         const held = this.carrying.get(sid);
         const p = this.state.players.get(sid);
