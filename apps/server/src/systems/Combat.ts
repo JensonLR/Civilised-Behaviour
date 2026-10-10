@@ -41,6 +41,7 @@ import {
   BOOT,
   isBoot,
   TRAMPLE,
+  SHIELD,
   ZONE,
   trampleDamage,
   trampleDir,
@@ -99,6 +100,8 @@ export interface CombatHost {
   blasted?(id: string, speed: number): void;
   /** D-108: `id` was thrown (a boot, a blast) by `by`: the room watches the body for the wall it meets and the drop it falls. */
   flung?(id: string, by: string): void;
+  /** D-112: whether `id` is holding a man up as a shield (DRAGGING, yet the hands are free enough to fire over his shoulder). Absent: nobody is. */
+  shielding?(id: string): boolean;
   /** A free prop was struck by a ranged round (the room blows a powder keg up). */
   propShot?(propId: string, shooter: string): void;
   /** D-064: a blast caught a body already down (Casualties.toss: thrown, and a fallen NPC may come apart). */
@@ -349,6 +352,8 @@ export class Combat {
    * pass through everyone else, so a sentry's shot does not kill the Syndicate man behind the player. (A shooter with no row counts as the party.)
    */
   private hittable(shooter: string, targetId: string, t: PlayerStateType): boolean {
+    // D-112: a man held up as a shield is in the way of everyone but the one holding him: his own side's rounds meet him first
+    if (t.roped === SHIELD.held && t.dragger !== "") return t.dragger !== shooter;
     const s = this.host.players.get(shooter);
     const ownSide = this.partySide(t);
     if (this.partySide(s)) {
@@ -520,8 +525,8 @@ export class Combat {
       }
     }
 
-    // (D-104: down on a knee or doubled over from a hit, an NPC can do nothing with its hands until it gets up)
-    if ((p.flags & BUSY) !== 0 || reactHolds(p.react)) {
+    // (D-104: down on a knee or doubled over from a hit, an NPC can do nothing with its hands until it gets up; D-112: a man holding a shield fires over its shoulder)
+    if (this.busy(sessionId, p) || reactHolds(p.react)) {
       this.cancelActions(pc);
       return consumed;
     }
@@ -551,6 +556,12 @@ export class Combat {
     }
     this.sync(p, pc);
     return consumed;
+  }
+
+  /** Hands too full to fight with (BUSY), except a man holding another up as a shield (D-112): one arm round his neck, the other free for the gun. */
+  private busy(id: string, p: PlayerStateType): boolean {
+    if ((p.flags & BUSY) === 0) return false;
+    return (p.flags & (BUSY & ~FLAG.DRAGGING)) !== 0 || this.host.shielding?.(id) !== true;
   }
 
   private cancelActions(pc: PlayerCombat): void {
@@ -1305,7 +1316,7 @@ export class Combat {
         if (pc.swing.left <= 0) {
           const s = pc.swing;
           pc.swing = undefined;
-          if ((p.flags & BUSY) === 0) this.resolveSwing(id, p, s);
+          if (!this.busy(id, p)) this.resolveSwing(id, p, s);
         }
       }
       this.sync(p, pc);

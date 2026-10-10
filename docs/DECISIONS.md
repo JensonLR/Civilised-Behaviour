@@ -692,3 +692,46 @@ Tests: the framing function; the rule's quiet and its return with a weapon; the 
 - **Rejected.** Damage to the horse or a throw for the rider (it would make the charge a gamble; the pace it costs is the price); NPCs leaping aside (not yet: they do not see horses coming); riders of the enemy charging the party (no NPC rides today); a lance (no lances).
 - **Tested.** Shared: the harm by pace (none at a walk, capped), the throw's side (ahead and away from the line, dead ahead goes right), the lift. Server: a gallop strikes the man in its path once, heading his way, and loses pace; at a walk nobody, and at a gallop never the downed, a hand or a player (mutation-checked: the pace gate and the once-a-pass cooldown); the bill, bark and column; the nickname and its save. A real room: Ada mounts, gallops at a sentry, he is ridden down, laid flat, thrown north and billed (mutation-checked: the room unwired).
 - **Not yet.** Unplayed by a human and not looked at in a browser; men walk through a walking horse (characters do not collide with each other); no hoofprint decal.
+
+**D-112 The human shield (2026-10-10).** The ninth of the AAA mechanics (ideas, never code; D-103): the hostage grab of the cover shooters and the westerns. A man staggered in front of you can be taken by the collar and held up in front of you, and his comrades must decide whether to shoot through him.
+- **The seize** (`server/systems/Casualties.ts` `seize`, `shared/shield.ts`). GRAB on a man down on a knee or doubled over in reach in front (the finisher's target, D-105; never the party's own, a beast, a rider, a man at a crank gun) takes him. GRAB's order is: a body down in reach is dragged, else a staggered man is seized, else the lariat is thrown (D-106). He is held 0.62 m in front, facing the way you face, by the drag's machinery (`DRAGGED` on him, `DRAGGING` on you, `PlayerState.roped = 2`). You walk at the drag's pace. His cry frightens his side (the rope's fright).
+- **The fight.** You can still fire (Combat lets `DRAGGING` through for a holder): your rounds never meet him, and everyone else's do, his own side's included. A man whose target holds one of his own side between them holds his fire, unless his bravery is 75 or more (a returning grudge man, D-109, has the nerve). The Society bills the seize, and when his own side shoots him the column prints it, once a man.
+- **The end.** GRAB again shoves him off: forward at 7.5 m/s with his footing gone, onto his back for 1.8 s, watched for what he meets (D-108). He works himself free after 9 s. Either of you going down, or being parted by 2.2 m, lets go.
+- **Clients.** "{grab} Seize" joins the finisher prompt (alone when nothing is drawn); holding him, it is "Shove him off". He stands with his arms pinned behind his back and his head down (not lying as a dragged body does). Your off arm locks across in front of you, the gun still in hand, also in first person. No drag smear.
+- **Rejected.** Using him as a battering ram or throwing him further (the shove is the boot's job); a separate hostage animation set (two eased weights over the existing pose); letting NPCs seize the party (no NPC grabs anyone yet); a timer bar (he simply wriggles free).
+- **Tested.** Shared: in the way or not (on the line, beside it, behind the holder, no line). Server:
+  - A real room: seized from the doubled-over pose; held in front as she walks; she fires; his side's rounds would meet him and hers do not; the bill; the shove (thrown forward, floored, watched); working free when his time is up. Mutation-checked: firing while holding, rounds meeting him.
+  - Cast: holds fire with his comrade between, fires when the comrade is off the line, or not held, or when he is ruthless. Mutation-checked: the rule, and the line test.
+  - The bill, bark and column (once a man); the "Sandbag" nickname. Animator: the pinned arms and the locked off arm (over a rifle's grip).
+- **Looked at.** The poses in line-up renders. In a live game, a doubled-over sentry seized, held in front with the prompt and the column's line (from the side and the front).
+- **Tuning found by the look and the tests.**
+  - The first clutch put the off hand to the face; it now reaches forward and crosses.
+  - The first shove moved him 1.35 m; with the boot's lost footing it carries him about 5 m.
+  - At 0.62 m the holder's forearm sits inside his back, so it does not show from the front.
+- **Not yet.** Unplayed by a human; NPCs never seize anyone; no special sound for the grab.
+
+**D-113 The hold-up (2026-10-10).** The tenth of the AAA mechanics (ideas, never code; D-103): the western's "hands up". A gun is also a way of not using a gun. The Society calls it the civilised method, and bills it.
+- **Covered** (`server/systems/HoldUps.ts`, `shared/holdup.ts`). Each tick, for every member of the party aiming a firearm, the man in the sights is found: within 14 m, inside a cone of about 8 degrees, the line open, the nearest. The time he has been covered by that member is kept; it starts again if he leaves the sights. Never a hand of the party, a man down, held (rope, collar) or already given in, a beast, a rider, a man at a crank gun. The scan allocates nothing.
+- **Whose nerve goes** (Cast `yields`). After 0.9 s covered, a man gives in if he is broken or wavering, or shaken and alone or below 60 health. A steady man never does, nor a man of bravery 85 or more. Morale is the existing model, so fire, wounds, fallen friends and fear all bring a man to it.
+- **Hands up** (the room's `surrender`).
+  - His weapon is taken (every client throws it to the ground from a `yield` message) and `PlayerState.roped` becomes 3. Clients draw his hands up, open and shaking, with a frightened face.
+  - He says so ("I yield!"), and the holder of the gun barks ("You are hereby civilised!").
+  - He stands where he gave in for the rest of the run: the Cast skips his brain entirely, and no group order lifts it.
+  - He counts as routed for the contract (`Cast.count`), so a garrison can be broken without being shot down.
+  - His side within 16 m takes a fright (a morale shock of 22), so one surrender can bring on another.
+  - He cannot then be roped or seized: one hold at a time.
+- **The bill.** "men held up at gunpoint" and 1 spectacle each. Shooting a man with his hands up is billed and printed once a man: "The Society notes that he had his hands up at the time." It pays nothing; the Committee is writing.
+- **Rejected.**
+  - A prompt or a meter (the moment is his face and his hands, not a bar).
+  - Taking prisoners back to the boat (the wagon's rack already carries bodies; a prisoner economy is a contract of its own).
+  - NPCs holding the party up (players are never staggered or disarmed by design, D-104).
+  - Surrender by speech alone (the parley is its own system).
+- **Tested.**
+  - Shared: who yields at each band; the sights (range, cone, the nearest, a wall, behind).
+  - Server unit: one surrender once covered long enough, to the one holding the gun; nothing for a man not aimed at, a sabre, out of the cone, past a wall, his nerve holding, a hand, a man already held; the time starts again.
+  - Cast: yields by band; once given in, he stands, never fires, counts as routed, frightens his comrades but not those out of earshot; no order lifts it. Mutation-checked: the brain skipped.
+  - A real room: Ada aims at a wavering sentry, he drops his rifle (every client told), puts his hands up, stays put, is billed; shot afterwards, unsporting. Mutation-checked: the room unwired.
+  - The bill and the column; the animator's hands up.
+- **Found by the tests.** An NPC row's `roped` starts unset, not 0, so "not already held" read as held for every NPC (and would have stopped the shield's seize as well). The checks now read the field as falsy, and the unit test's rows leave it unset as the real ones do.
+- **Looked at.** The hands-up pose in a line-up of four peoples.
+- **Not yet.** Unplayed by a human and not seen in a live game. No prompt says that a man is wavering; whether players find it without one is the open question.

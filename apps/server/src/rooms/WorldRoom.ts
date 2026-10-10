@@ -60,6 +60,10 @@ import {
   isCarried,
   NPC_CAP,
   NPC_SIDE,
+  SHIELD,
+  HOLDUP,
+  rayWorld,
+  newWorldHit,
   NPC,
   windAt,
   WEAPONS,
@@ -175,6 +179,7 @@ import { Followers } from "../systems/Followers.ts";
 import { Incidents } from "../systems/Incidents.ts";
 import { Pacing } from "../systems/Pacing.ts";
 import { Flung } from "../systems/Flung.ts";
+import { HoldUps } from "../systems/HoldUps.ts";
 import { Grudges } from "../systems/Grudges.ts";
 import { Fire } from "../systems/Fire.ts";
 import { Mayhem } from "../systems/Mayhem.ts";
@@ -320,6 +325,20 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       if (this.scenario?.live) this.mayhem.onSplat(id, by);
     },
   });
+  /** D-113: the men in the party's sights; one whose nerve goes puts his hands up. */
+  private readonly holdUps = new HoldUps({
+    players: { forEach: (cb) => this.state.players.forEach(cb), get: (id) => this.state.players.get(id) },
+    clear: (ax, ay, az, bx, by, bz) => {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const dz = bz - az;
+      const d = Math.hypot(dx, dy, dz) || 1;
+      return !rayWorld(this.world, ax, ay, az, dx / d, dy / d, dz / d, d, this.sightHit);
+    },
+    yields: (key) => this.cast.yields(key),
+    surrender: (key, by) => this.surrender(key, by),
+  });
+  private readonly sightHit = newWorldHit();
   /** D-109: the men the party maimed, remembered; one may come back. */
   private readonly grudges = new Grudges({
     players: { forEach: (cb) => this.state.players.forEach(cb), get: (id) => this.state.players.get(id) },
@@ -477,6 +496,13 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
           this.grudges.onInsult(target, "rope", by); // (D-109)
           if (this.scenario?.live) this.mayhem.onRoped(target, by);
         },
+        // D-112: a staggered man taken up as a shield is billed and remembered; shoved off, he is watched for what he meets (D-108)
+        seized: (by, target) => {
+          this.cast.onRoped(target); // (the fright of a collar, as of a loop: he cries out, and his side hears it)
+          this.grudges.onInsult(target, "shield", by);
+          if (this.scenario?.live) this.mayhem.onSeize(target, by);
+        },
+        shoved: (by, target) => this.flung.track(target, by),
       },
       { routSeconds: getRoomConfig().routSeconds },
     );
@@ -521,6 +547,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
       flung: (id, by) => this.flung.track(id, by), // (D-108)
+      shielding: (id) => this.casualties.shieldOf(id) !== "", // (D-112: the holder fires over his shoulder)
       // D-105: a coup de grace pays: the one who struck gets a second wind, the fallen man's friends nearby lose their nerve, the Society takes note
       finished: (by, target, weapon) => {
         const who = this.state.players.get(by);
@@ -568,6 +595,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
       navOptions: (w) => regionNavOptions(this.state.region as RegionId, w),
       tokensFor: (target) => this.pacing?.tokens(target), // (D-107: the director's say on how many may fire at a member of the party)
       respec: (specs) => this.grudges.respec(specs), // (D-109: a remembered man takes a soldier's place)
+      shieldOf: (key) => this.casualties.shieldOf(key), // (D-112: his comrade in the way stays his hand)
     });
     this.pacing = new Pacing({
       party: this.party,
@@ -826,6 +854,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         tickProbe.lap("scenario");
         this.cast.tick(ctx.dt);
         this.flung.tick(ctx.dt); // (D-108: after the rows have stepped)
+        this.holdUps.tick(ctx.dt); // (D-113: who is in whose sights)
         this.grudges.tick(); // (D-109: the returning man says his piece when the party comes near)
         tickProbe.lap("cast");
         this.followers.tick(ctx.dt);
@@ -1375,6 +1404,7 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.scenario = undefined;
     this.incidents.reset();
     this.flung.clear();
+    this.holdUps.reset();
     this.grudges.reset();
     this.followers.endExpedition();
     this.cast.despawn();
@@ -1994,6 +2024,22 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     this.refreshProsthetic(client.sessionId);
   }
 
+  /**
+   * D-113: `key` gives in to `by` at gunpoint: his weapon goes to the ground (every client throws it), his hands go up (`PlayerState.roped`), the Cast counts him out of
+   * the fight and frightens his side, he says so, and the Society bills it.
+   */
+  private surrender(key: string, by: string): void {
+    const p = this.state.players.get(key);
+    if (!p || p.npc === 0) return;
+    this.combat.disarm(key);
+    this.cast.surrender(key);
+    p.react = 0;
+    p.roped = HOLDUP.held;
+    this.broadcast("yield", { id: key, by });
+    this.broadcast("bark", { id: key, k: "yield", salt: (this.state.seed ^ p.slot) >>> 0 });
+    if (this.scenario?.live) this.mayhem.onHoldUp(key, by);
+  }
+
   /** D-111: a ridden horse met an NPC on foot. The party's own hands are stepped round; anyone else is ridden down (Combat's `trample`). */
   private rideDown(rider: string, key: string, speed: number, fx: number, fz: number, ox: number, oz: number): boolean {
     const t = this.state.players.get(key);
@@ -2007,6 +2053,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
     const p = this.state.players.get(sessionId);
     const wasDown = p !== undefined && (p.flags & FLAG.DOWNED) !== 0;
     const limbsBefore = p?.missing ?? 0;
+    // D-113: a man shot with his hands up (the Society would like a word)
+    if (p !== undefined && p.npc !== 0 && p.roped === HOLDUP.held && hit?.by && this.scenario?.live) this.mayhem.onUnsporting(sessionId, hit.by);
+    // D-112: a man held up as a shield, hit by one of his own side
+    const holder = p !== undefined && p.npc !== 0 && p.roped === SHIELD.held ? p.dragger : "";
+    if (holder && hit?.by && hit.by !== holder) {
+      const shooter = this.state.players.get(hit.by);
+      if (shooter && shooter.npc !== 0 && NPC_SIDE[shooter.npc] === NPC_SIDE[p!.npc] && this.scenario?.live) this.mayhem.onShieldShot(sessionId, holder);
+    }
     this.casualties.damage(sessionId, amount, hit);
     if (p && !wasDown) {
       const down = (p.flags & FLAG.DOWNED) !== 0;

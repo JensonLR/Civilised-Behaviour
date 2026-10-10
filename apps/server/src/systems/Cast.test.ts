@@ -3,7 +3,7 @@ import {
   BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, LASSO, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
   CollisionWorld, type MoveCommand, type PlayerStateType, type WeaponId,
 } from "@cb/shared";
-import { NAV, NPC_SIDE, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
+import { NAV, NPC_SIDE, SHIELD, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
 import { kessarNavOptions } from "@cb/shared";
 import { npcThink, type NpcBrainState } from "@cb/shared";
 import { Cast, CAST, type CastHost } from "./Cast.ts";
@@ -398,6 +398,60 @@ describe("D-109: a man with a grudge", () => {
     seen.clear();
     r.tick(5);
     expect(seen.get("501")).toBe("bram");
+  });
+});
+
+describe("D-112: a comrade held up as a shield", () => {
+  /** Ada 20 m north of a sentry; one of the sentry's own side stands (pinned, stood down) between them, or off to one side; her shield is `shield`. */
+  const scene = (o: { shieldAt: { x: number; z: number }; bravery?: number; held?: boolean }) => {
+    const r = rig();
+    r.human("p1", 0, -20);
+    r.host.shieldOf = (k) => (k === "p1" && o.held !== false ? "npc:held" : "");
+    r.cast.spawn([spec("s1", { lookSeed: 601, bravery: o.bravery ?? 50 }), spec("held", { group: "pinned", post: o.shieldAt, lookSeed: 602 })]);
+    r.cast.order("pinned", { o: "stand_down" });
+    r.cast.order("ward", { o: "alert" });
+    r.tick(300);
+    return r;
+  };
+
+  it("he holds his fire while his comrade is between them; fires when the comrade is not in the way, or not held, or when he is brave enough not to care", () => {
+    const between = scene({ shieldAt: { x: 0, z: -19.4 } });
+    expect(fired(between, "npc:s1")).toBe(0);
+    expect(between.cast.stats.heldFire).toBeGreaterThan(0);
+    expect(fired(scene({ shieldAt: { x: 6, z: -19.4 } }), "npc:s1")).toBeGreaterThan(0); // (off the line: a clear shot)
+    expect(fired(scene({ shieldAt: { x: 0, z: -19.4 }, held: false }), "npc:s1")).toBeGreaterThan(0); // (merely standing there, not held: the rule is the hold)
+    expect(fired(scene({ shieldAt: { x: 0, z: -19.4 }, bravery: SHIELD.ruthless }), "npc:s1")).toBeGreaterThan(0); // (the ruthless fire through him)
+  });
+});
+
+describe("D-113: at gunpoint", () => {
+  it("a wavering man yields, a steady one does not; once he has, he stands still, never fires, counts as routed, and his side nearby takes a fright", () => {
+    const r = rig();
+    r.human("p1", 0, -12);
+    r.cast.spawn([spec("s1", { lookSeed: 701 }), spec("s2", { post: { x: 3, z: 0 }, lookSeed: 702 }), spec("far", { post: { x: 60, z: 0 }, lookSeed: 703 })]);
+    r.cast.order("ward", { o: "alert" });
+    r.tick(5);
+    const rec = (k: string) => (r.cast as unknown as { byKey: Map<string, { brain: { morale: { v: number; shock: number } } }> }).byKey.get(npcKey(k))!;
+    rec("s1").brain.morale.v = 80;
+    expect(r.cast.yields(npcKey("s1"))).toBe(false);
+    rec("s1").brain.morale.v = 40;
+    expect(r.cast.yields(npcKey("s1"))).toBe(true);
+    const shock2 = rec("s2").brain.morale.shock;
+    const shockFar = rec("far").brain.morale.shock;
+    r.cast.surrender(npcKey("s1"));
+    expect(r.cast.hasYielded(npcKey("s1"))).toBe(true);
+    expect(r.cast.yields(npcKey("s1"))).toBe(false); // (once is enough)
+    expect(rec("s2").brain.morale.shock).toBeGreaterThan(shock2); // (his comrade beside him)
+    expect(rec("far").brain.morale.shock).toBe(shockFar); // (out of earshot)
+    expect(r.cast.count("ward").routed).toBeGreaterThanOrEqual(1);
+    const at = { x: r.rows.get(npcKey("s1"))!.x, z: r.rows.get(npcKey("s1"))!.z };
+    const shots = fired(r, npcKey("s1"));
+    r.cast.order("ward", { o: "post" }); // (no order lifts it: back to their posts, then roused again)
+    r.cast.order("ward", { o: "alert" });
+    r.tick(200);
+    expect(fired(r, npcKey("s2"))).toBeGreaterThan(0); // (his comrade fights on)
+    expect(fired(r, npcKey("s1"))).toBe(shots);
+    expect(Math.hypot(r.rows.get(npcKey("s1"))!.x - at.x, r.rows.get(npcKey("s1"))!.z - at.z)).toBeLessThan(0.2);
   });
 });
 

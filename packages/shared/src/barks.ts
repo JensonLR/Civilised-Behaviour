@@ -7,8 +7,8 @@ import { hash3 } from "./rng.ts";
  * `bark` event); the client picks the line. The joke is the Empire's own bluster (D-085): never a people abroad.
  */
 
-export type BarkKind = "triumph" | "headshot" | "brolly" | "limb" | "chain" | "down" | "flung" | "friendly" | "commission" | "finisher" | "rope" | "boot" | "grudge" | "trample";
-export const BARK_KINDS: readonly BarkKind[] = ["triumph", "headshot", "brolly", "limb", "chain", "down", "flung", "friendly", "commission", "finisher", "rope", "boot", "grudge", "trample"];
+export type BarkKind = "triumph" | "headshot" | "brolly" | "limb" | "chain" | "down" | "flung" | "friendly" | "commission" | "finisher" | "rope" | "boot" | "grudge" | "trample" | "shield" | "holdup" | "yield";
+export const BARK_KINDS: readonly BarkKind[] = ["triumph", "headshot", "brolly", "limb", "chain", "down", "flung", "friendly", "commission", "finisher", "rope", "boot", "grudge", "trample", "shield", "holdup", "yield"];
 export const isBarkKind = (k: unknown): k is BarkKind => typeof k === "string" && (BARK_KINDS as readonly string[]).includes(k);
 
 /** The shape of the babble that carries a line: a boast rises and swoops, an exclamation is short and high, a mutter is low, a harrumph is a harrumph. */
@@ -28,6 +28,9 @@ export const BARK_LINES: Readonly<Record<BarkKind, { key: BabbleKey; lines: read
   rope: { key: "exclaim", lines: ["Got you, sir!", "Come along quietly!", "Mind the rope, it's new!", "In the name of the Society!", "Hold still, there's a good chap!"] },
   boot: { key: "boast", lines: ["This is Pall Mall!", "Off you pop!", "Mind the step!", "Manners!", "Make way for the Society!"] },
   trample: { key: "exclaim", lines: ["View halloo!", "Gangway!", "Mind the horse!", "Charge, by gum!", "Sorry! Can't stop!"] },
+  holdup: { key: "boast", lines: ["Hands up, there's a good fellow!", "In the name of the Society!", "Drop it, old chap!", "You are hereby civilised!", "Steady now. Steady."] },
+  yield: { key: "exclaim", lines: ["Enough! Enough!", "I yield!", "Hold your fire!", "Don't shoot!", "Peace! Peace!"] },
+  shield: { key: "boast", lines: ["Nobody move!", "Steady on, old chap!", "He's with me!", "Mind your colleague!", "Diplomatic immunity!"] },
   grudge: { key: "exclaim", lines: ["You! I remember you!", "We meet again!", "Remember me, do you?", "I've been practising!", "Not so clever now!"] },
   finisher: { key: "boast", lines: ["And stay down!", "Fair and square, old chap!", "My compliments to your mother!", "That's quite enough of that!", "Do mind the boots!"] },
 };

@@ -4,14 +4,14 @@ import { isPeopleId, type PeopleId } from "./peoples.ts";
 
 /**
  * SURVIVORS WITH GRUDGES (D-109), after the nemesis of the big orc-hunting game (the idea; built here). A soldier the party maims (an arm or a leg off, set alight,
- * booted, roped, ridden down: D-111) and leaves behind is not always as dead as he looked. The worst-used man of a run is remembered in the campaign (`sites.grudges`); a later contract in
+ * booted, roped, ridden down: D-111, held up as a shield: D-112) and leaves behind is not always as dead as he looked. The worst-used man of a run is remembered in the campaign (`sites.grudges`); a later contract in
  * the same region fields him again: the same face, a hook where his hand was or a peg where his leg was, singed if he burned, a name the paper has given him, more nerve
  * and a better eye, and something to say to the party. Beaten again, he may be back again (`maxReturns`), and the paper keeps count.
  *
  * Pure. The server records (systems/Grudges.ts) and fields him (the Cast's spawn); the codec validates the list (factions.ts `parseSites`).
  */
-export type GrudgeCause = "limb" | "fire" | "boot" | "rope" | "hoof";
-export const GRUDGE_CAUSES: readonly GrudgeCause[] = ["limb", "fire", "boot", "rope", "hoof"];
+export type GrudgeCause = "limb" | "fire" | "boot" | "rope" | "hoof" | "shield";
+export const GRUDGE_CAUSES: readonly GrudgeCause[] = ["limb", "fire", "boot", "rope", "hoof", "shield"];
 
 export interface Grudge {
   /** The man as he was: his name (rank and all), role, face, people (absent: the colonial caricature), and whose he was where. */
@@ -42,7 +42,7 @@ export const GRUDGE = {
   skill: 20,
   bravery: 30,
   /** The order the causes count in when picking the run's worst-used man. */
-  weight: { limb: 3, fire: 2, boot: 1, rope: 1, hoof: 1 } as Record<GrudgeCause, number>,
+  weight: { limb: 3, fire: 2, boot: 1, rope: 1, hoof: 1, shield: 1 } as Record<GrudgeCause, number>,
   /** He says his piece when he is this close to one of the party and can be heard. */
   speakR: 25,
 } as const;
@@ -54,6 +54,7 @@ export function epithet(g: Pick<Grudge, "missing" | "burnt" | "cause">): string 
   if (g.burnt || g.cause === "fire") return "Smoky";
   if (g.cause === "boot") return "Bootprint";
   if (g.cause === "hoof") return "Hoofprint";
+  if (g.cause === "shield") return "Sandbag";
   return "Tether";
 }
 
@@ -89,6 +90,7 @@ export function grudgeLoss(g: Pick<Grudge, "missing" | "burnt" | "cause">): stri
   if (g.burnt || g.cause === "fire") return "his eyebrows";
   if (g.cause === "boot") return "his dignity";
   if (g.cause === "hoof") return "his hat";
+  if (g.cause === "shield") return "his faith in his colleagues";
   return "his liberty";
 }
 
