@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { FLAG, ZONE, createArena, setWound, spawnPoint } from "@cb/shared";
+import { FLAG, HEAD, ZONE, createArena, setWound, spawnPoint } from "@cb/shared";
 import { generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, buildCharacter, type CharacterRig, type GoreLevel } from "@cb/procedural/three";
 import { Stage } from "../render/Stage.ts";
@@ -7,6 +7,7 @@ import { HitFx } from "../render/HitFx.ts";
 import { DecalField } from "../render/decals/DecalField.ts";
 import { Aftermath, planAftermath, type AftermathCentre } from "../render/world/aftermath.ts";
 import { ShotFx } from "../render/weapons/ShotFx.ts";
+import { headAtRest } from "../render/LimbDebris.ts";
 
 /**
  * The field after a fight (`?showcase=weapons&view=gore`, or `?showcase=gore` once the integrator routes it): the real arena with a small battle's consequences on it, frozen at a chosen moment so a still can judge the
@@ -18,6 +19,8 @@ import { ShotFx } from "../render/weapons/ShotFx.ts";
  *   back=6.5, fov=55           how far back the bodies/marks camera stands, and its lens
  *   cxz=20,-20                where the field is (world x,z)
  *   gfx=low|medium|high, time=17.2, yaw=0.35, pitch=0.3, dist=11
+ *   behead=1                  D-118: the second of the fallen has lost his head: the neck's stump on his collar, and the head on its cheek a pace off (try sub=bodies)
+ *   cam=x,y,z&at=x,y,z        an explicit camera and target (metres; y above the ground there)
  */
 export function runGore(canvas: HTMLCanvasElement, params: URLSearchParams): void {
   const stage = new Stage(canvas, (params.get("gfx") as "low" | "medium" | "high" | null) ?? "medium");
@@ -46,6 +49,7 @@ export function runGore(canvas: HTMLCanvasElement, params: URLSearchParams): voi
 
   // ---- the fallen: three bodies on their backs, open wounds, pools under them ---------------------------------------------------------------------------------------------
   const goreOf = gore;
+  const behead = params.get("behead") === "1";
   const bodies: { rig: CharacterRig; marks: BodyMarks; anim: CharacterAnimator }[] = [];
   const fallen = [
     { f: 0.5, r: -1.6, seed: 31, yaw: 0.4, mask: setWound(setWound(0, ZONE.TORSO, 3), ZONE.ARM_L, 2) },
@@ -63,6 +67,16 @@ export function runGore(canvas: HTMLCanvasElement, params: URLSearchParams): voi
     anim.autoBlink = false;
     for (let i = 0; i < 80; i++) anim.update(1 / 30, { speed: 0, flags: FLAG.DOWNED | FLAG.GROUNDED, vy: 0 });
     rig.root.position.y = groundAt(p.x, p.z) + 0.12;
+    if (behead && b.seed === 47) {
+      // D-118: the head as it was, laid on its cheek a pace off toward the camera's side, and the stump on the collar
+      rig.root.updateMatrixWorld(true);
+      const piece = rig.detachLimb(HEAD)!;
+      rig.setMissing(HEAD, goreOf);
+      const P = rig.proportions;
+      const h = at(b.f - 0.3, b.r + 1.5);
+      stage.scene.add(headAtRest(piece, goreOf, { radius: P.headRadius, centre: P.headRadius * 0.9, neckY: -(P.neck + 0.03), neckR: P.headRadius * 0.44 }, h.x, groundAt(h.x, h.z), h.z, 0.9));
+      decals.bloodPool(h.x, h.z, 0.35, 0.6);
+    }
     const marks = new BodyMarks(rig);
     marks.set({ open: b.mask, dryness: Math.min(1, age / 180), mud: 2, soot: 1, gore: goreOf });
     bodies.push({ rig, marks, anim });
@@ -154,6 +168,12 @@ export function runGore(canvas: HTMLCanvasElement, params: URLSearchParams): voi
   } else {
     cam.position.copy(eye);
     cam.rotation.set(-pitch, yaw, 0);
+  }
+  const camP = params.get("cam")?.split(",").map(Number);
+  const atP = params.get("at")?.split(",").map(Number);
+  if (camP?.length === 3 && atP?.length === 3) {
+    cam.position.set(camP[0]!, groundAt(camP[0]!, camP[2]!) + camP[1]!, camP[2]!);
+    cam.lookAt(atP[0]!, groundAt(atP[0]!, atP[2]!) + atP[1]!, atP[2]!);
   }
   cam.updateProjectionMatrix();
   cam.updateMatrixWorld(true);

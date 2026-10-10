@@ -170,6 +170,12 @@ export class GameAudio {
     playSfx("gore_sever_wet", { x, y, z, volume: 0.8 }); // the Gore setting picks its version (audio/index.ts); at Off it is a rubbery boing
   }
 
+  /** D-118: a head taken off: the crack of the neck and the parting (no limb's line in the captions: "something cracks", "a messy parting"). */
+  behead(x: number, y: number, z: number): void {
+    playSfx("gore_bone", { x, y, z });
+    playSfx("gore_sever_wet", { x, y, z });
+  }
+
   /** A body goes down for good: the weight and the gear landing, then (a moment later) a bad breath. */
   private fall(x: number, y: number, z: number, isMe: boolean): void {
     playSfx("gore_body_fall", { x, y, z, volume: isMe ? 0.9 : 1 });

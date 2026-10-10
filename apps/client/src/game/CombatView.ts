@@ -147,7 +147,7 @@ export class CombatView {
     room.onMessage("impact", (e: ImpactEvent) => this.onImpact(e));
     room.onMessage("boom", (e: BoomEvent) => this.onBoom(e));
     room.onMessage("hitmark", (e: HitMarkEvent) => {
-      this.hud.hitMarker(e.zone, e.down, e.sever, e.fin === true);
+      this.hud.hitMarker(e.zone, e.down, e.sever, e.fin === true, e.head === true);
       if (e.down) this.actors().get(this.session.sessionId)?.body.cue("triumph", 2.2); // (D-084: you grin over the one you dropped)
       this.controls.rumble("hit", e.down || e.fin ? 1 : 0.6);
       if (e.fin) {

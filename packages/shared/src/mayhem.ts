@@ -67,9 +67,11 @@ export interface Bill {
   unsporting: number;
   /** D-114: men trampled by a herd the party set running. */
   stampeded: number;
+  /** D-118: enemies whose heads the party took off (a sabre's coup de grâce, or a blow to the head heavy enough). */
+  heads: number;
 }
 
-export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0, ropes: 0, boots: 0, splats: 0, trampled: 0, shields: 0, comrades: 0, holdups: 0, unsporting: 0, stampeded: 0 });
+export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0, ropes: 0, boots: 0, splats: 0, trampled: 0, shields: 0, comrades: 0, holdups: 0, unsporting: 0, stampeded: 0, heads: 0 });
 
 /** A blast that throws a body this far (yards) makes the column and counts as a flight. */
 export const FLING_YARDS = 7;
@@ -98,6 +100,7 @@ export function compassPoint(dx: number, dz: number): string {
 /** One notable moment, as the room saw it. Names are display names; `by` "" means nobody's hand (the powder, a horse). */
 export type MayhemFact =
   | { k: "sever"; victim: string; limb: LimbId; by: string; cause: Cause; party: boolean; dir: string }
+  | { k: "behead"; victim: string; by: string; cause: Cause; dir: string }
   | { k: "fling"; victim: string; yards: number; by: string; party: boolean }
   | { k: "headshot"; victim: string; by: string }
   | { k: "chain"; kegs: number; by: string }
@@ -119,9 +122,19 @@ export type MayhemFact =
   | { k: "request"; id: RequestId };
 
 /** When several land at once (a blast), the best is printed: a commission met, a chain, a limb, a flight... */
-export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, trample: 6, shield: 5, shield_shot: 7, holdup: 5, unsporting: 8, stampede: 7, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
+export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, behead: 8, chain: 8, sever: 7, brolly: 7, fling: 6, grudge: 8, grudge_down: 7, finisher: 6, splat: 6, trample: 6, shield: 5, shield_shot: 7, holdup: 5, unsporting: 8, stampede: 7, rope: 5, friendly: 5, double: 4, headshot: 3, civilian: 2 };
 
-const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" | "severOwn" | "flingOwn", readonly string[]>> = {
+const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" | "severOwn" | "flingOwn" | "beheadPowder", readonly string[]>> = {
+  behead: [
+    "{by} has taken {victim}'s head off with one stroke. The Society asks whether it will mount.",
+    "{victim}'s head has left without {victim}. {by} wipes the sabre on a club napkin.",
+    "{by} settles the matter of {victim}'s head. The Museum has written to ask for the hat.",
+    "{by} takes {victim}'s head in the name of the Empire. Pall Mall calls it decisive.",
+  ],
+  beheadPowder: [
+    "The powder has parted {victim} from {victim}'s head. The Ordnance Board calls it precision.",
+    "{victim}'s head was last seen heading {dir}. The rest of {victim} stayed for the inquiry.",
+  ],
   sever: [
     "{by} has relieved {victim} of the {limb}. The {limb} was not consulted.",
     "{victim} and the {limb} have parted company, at {by}'s insistence.",
@@ -259,6 +272,8 @@ export function gazetteLine(f: MayhemFact, salt: number): string {
       const list = f.party ? GAZ.severOwn : f.cause === "blast" || f.by === "" ? GAZ.severPowder : GAZ.sever;
       return fill(pick(list), { victim: who(f.victim), by: who(f.by), limb: LIMB_NAMES[f.limb], dir: f.dir });
     }
+    case "behead":
+      return fill(pick(f.cause === "blast" || f.by === "" ? GAZ.beheadPowder : GAZ.behead), { victim: who(f.victim), by: who(f.by), dir: f.dir });
     case "fling":
       return fill(pick(f.party || f.by === "" ? GAZ.flingOwn : GAZ.fling), { victim: who(f.victim), by: who(f.by), yards: f.yards });
     case "chain":
@@ -372,7 +387,7 @@ export const SPECTACLE_CAP = 30;
 
 /** What the Committee for Remittances adds for the spectacle (pounds, capped) and the line it sends; 0 and "" for a dull run. */
 export function spectacle(b: Bill): { pay: number; line: string } {
-  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0) + (b.ropes ?? 0) + 2 * (b.splats ?? 0) + 2 * (b.trampled ?? 0) + (b.shields ?? 0) + 3 * (b.comrades ?? 0) + (b.holdups ?? 0) + 2 * (b.stampeded ?? 0);
+  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0) + (b.ropes ?? 0) + 2 * (b.splats ?? 0) + 2 * (b.trampled ?? 0) + (b.shields ?? 0) + 3 * (b.comrades ?? 0) + (b.holdups ?? 0) + 2 * (b.stampeded ?? 0) + 4 * (b.heads ?? 0);
   const pay = Math.min(SPECTACLE_CAP, raw);
   if (pay <= 0) return { pay: 0, line: "" };
   return { pay, line: `The Committee adds £${pay} for spectacle${pay === SPECTACLE_CAP ? ", the most it will pay for anything it has to print with a warning" : ""}. London wants more of this.` };
@@ -383,6 +398,7 @@ const plural = (n: number, one: string, many: string): string => `${n === 0 ? "n
 /** The Butcher's Bill as the debrief prints it: one line, only what happened ("" for a run with nothing to bill). */
 export function billLine(b: Bill): string {
   const parts: string[] = [];
+  if ((b.heads ?? 0) > 0) parts.push(plural(b.heads, "head taken off", "heads taken off"));
   if (b.limbs > 0) parts.push(plural(b.limbs, "limb", "limbs"));
   if (b.flings > 0) parts.push(`${plural(b.flings, "flight", "flights")} (the longest ${b.longest} yards, ${who(b.longestWho)})`);
   if (b.kegs > 0) parts.push(`${plural(b.kegs, "keg", "kegs")}${b.chain >= 2 ? ` (a chain of ${b.chain})` : ""}`);
@@ -412,7 +428,7 @@ export function billStory(c: CampaignState): { head: string; body: string } | un
   const latest = c.history[c.history.length - 1];
   if (!r || !latest || r.day !== latest.day) return undefined;
   const b = r.bill;
-  const loud = b.limbs + b.flings + b.kegs + b.headshots + b.brolly + b.friendly;
+  const loud = b.limbs + (b.heads ?? 0) + b.flings + b.kegs + b.headshots + b.brolly + b.friendly;
   const req = REQUESTS[r.request];
   const thanks = r.met ? fill(req.paper, { longest: b.longest, chain: b.chain, limbs: b.limbs }) : "";
   if (loud === 0 && !r.met) return undefined;

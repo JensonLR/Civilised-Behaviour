@@ -36,6 +36,9 @@ import {
   setWound,
   severChance,
   severityForDamage,
+  HEAD,
+  beheads,
+  isHeadless,
   woundLevel,
   zoneLimb,
   wrapAngle,
@@ -91,6 +94,10 @@ export interface CasualtyHost {
   seized?(by: string, target: string): void;
   /** D-112: `by` shoved the shield `target` off (the room watches where he lands, D-108). */
   shoved?(by: string, target: string): void;
+  /**
+   * D-118: whether `id` is a man whose head may come off: an enemy's row (never a player, a hired hand, a bystander, a beast or an incident's people). Absent: nobody's.
+   */
+  mayBehead?(id: string): boolean;
 }
 
 /** Where and from which way a blow landed. Both optional: unaimed hits get a seeded random zone and direction. */
@@ -179,6 +186,16 @@ export class Casualties {
     let zone = isZone(hit.zone) ? hit.zone : pickZone(this.host.rng);
     const limb = zoneLimb(zone);
     if (!isZone(hit.zone) && limb !== undefined && (p.missing & limb) !== 0) zone = ZONE.TORSO; // an unaimed blow does not pick on a stump
+    // D-118: a sabre's coup de grâce on an enemy's head, or a blow to it heavy enough, takes it off. Certain, so it draws nothing on the seeded randomness; decided here,
+    // before the hit goes out, so the hit says he is down.
+    const behead =
+      zone === ZONE.HEAD &&
+      (p.missing & HEAD) === 0 &&
+      (p.flags & FLAG.BEAST) === 0 &&
+      beheads(zone, amount, hit.severBias ?? 1, hit.finisher === true, hit.weapon === WEAPON.SABRE) &&
+      this.host.dismemberment() &&
+      this.host.mayBehead?.(sessionId) === true;
+    if (behead) p.health = 0;
     const levelBefore = woundLevel(p.wounds, zone);
     p.wounds = addWound(p.wounds, zone, severityForDamage(amount));
     let dx = hit.dirX ?? 0;
@@ -212,6 +229,7 @@ export class Casualties {
       const chance = severChance(amount * Math.max(0, hit.severBias ?? 1), levelBefore);
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
+    if (behead) this.behead(sessionId, p, dx / len, dz / len, power);
     if (down) this.down(sessionId, p);
     else if (next !== 0) this.react(sessionId, p, next, dx / len, dz / len);
   }
@@ -280,6 +298,18 @@ export class Casualties {
   }
 
   /**
+   * D-118: an enemy's head comes off (state + event: the same `sever` message, with the HEAD bit). He is down for good: never revived (`revivable`), taken away with
+   * the other fallen enemies. Only `damage` calls it, after the room's `mayBehead`: there is no way to ask for a player's head.
+   */
+  private behead(sessionId: string, p: PlayerStateType, dirX: number, dirZ: number, power: number): void {
+    p.missing |= HEAD;
+    p.wounds = setWound(p.wounds, ZONE.HEAD, 3);
+    this.host.limbsChanged(sessionId);
+    this.host.emitSever({ id: sessionId, limb: HEAD, dx: dirX, dz: dirZ, power: Math.max(power, 0.8) });
+    log.info("casualty.behead", { sessionId });
+  }
+
+  /**
    * Restores every lost limb. DEBUG ONLY: nothing in play calls this (revive and rout patch wounds but never regrow a limb; a
    * later campaign layer may offer prosthetics, never regrowth).
    */
@@ -342,7 +372,7 @@ export class Casualties {
 
   private startRevive(reviverId: string, reviver: PlayerStateType): boolean {
     const targetId = findDownedTarget<string>(reviver, CASUALTY.reviveRange, (cb) =>
-      this.scan().forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && cb(id, o)),
+      this.scan().forEach((o, id) => id !== reviverId && !this.isBeingRevived(id) && (o.flags & FLAG.DRAGGED) === 0 && !isHeadless(o.missing) && cb(id, o)),
     );
     if (targetId === undefined) return false;
     this.revives.set(reviverId, { kind: "revive", target: targetId, progress: 0 });
@@ -388,7 +418,7 @@ export class Casualties {
     if ((medic.flags & (FLAG.DOWNED | FLAG.CARRYING | FLAG.DRAGGING | FLAG.REVIVING | FLAG.DRAGGED)) !== 0 || this.isBeingRevived(targetId)) return false;
     if (horizontal(medic, target) > CASUALTY.reviveRange || Math.abs(medic.y - target.y) > 1.6) return false;
     const ok = kind === "revive"
-      ? (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED
+      ? (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED && !isHeadless(target.missing)
       : (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === 0 && dressableZone(target.wounds, target.missing) >= 0;
     if (!ok) return false;
     this.revives.set(medicId, { kind, target: targetId, progress: 0, auto: true });
@@ -600,7 +630,7 @@ export class Casualties {
       const patientOk =
         target !== undefined &&
         (r.kind === "revive"
-          ? (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED
+          ? (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === FLAG.DOWNED && !isHeadless(target.missing) // (D-118: a man without his head is not got up again)
           : (target.flags & (FLAG.DOWNED | FLAG.DRAGGED)) === 0 && dressableZone(target.wounds, target.missing) >= 0);
       const valid =
         reviver !== undefined &&

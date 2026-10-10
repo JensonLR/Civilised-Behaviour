@@ -9,7 +9,7 @@ import { typeset } from "./typeset.ts";
  * moment later (the fireball up, the bodies in the air: `armCapture`); a column line of the right kind then publishes the most recent picture, or takes one now. At most
  * one plate every `PLATE_GAP_S`: a plate is an event, not a stream.
  */
-export const PLATE_KINDS: ReadonlySet<string> = new Set(["request", "chain", "double", "brolly", "fling", "sever", "finisher"]);
+export const PLATE_KINDS: ReadonlySet<string> = new Set(["request", "chain", "double", "brolly", "fling", "sever", "finisher", "behead"]);
 export const PLATE_GAP_S = 18;
 export const PLATE_SHOW_S = 5;
 export const MAX_ALBUM = 12;

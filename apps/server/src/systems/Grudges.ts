@@ -1,5 +1,5 @@
 import {
-  FLAG, GRUDGE, epithet, grudgeLook, grudgeName, npcKey, peopleForNpc, pickGrudge, rememberGrudge,
+  FLAG, GRUDGE, epithet, isHeadless, limbBits, grudgeLook, grudgeName, npcKey, peopleForNpc, pickGrudge, rememberGrudge,
   type CampaignState, type Grudge, type GrudgeCause, type NpcSpec, type PlayersView, type RegionId,
 } from "@cb/shared";
 
@@ -27,6 +27,8 @@ interface Account {
   burnt: boolean;
   cause: GrudgeCause;
   by: string;
+  /** D-118: he lost his head: nobody comes back from that, with or without a grudge. */
+  headless?: boolean;
 }
 
 /** Display name of a party member, or "" (an NPC, nobody, the fire). */
@@ -118,8 +120,10 @@ export class Grudges {
   onMaimed(key: string, limbs: number, by: string): void {
     const a = this.account(key);
     if (!a) return;
-    a.missing |= limbs & 15;
-    this.raise(a, "limb", by, GRUDGE.weight.limb * popcount(limbs & 15));
+    if (isHeadless(limbs)) a.headless = true;
+    if (limbBits(limbs) === 0) return;
+    a.missing |= limbBits(limbs);
+    this.raise(a, "limb", by, GRUDGE.weight.limb * popcount(limbBits(limbs)));
   }
 
   /** `key` caught fire (nobody's hand: the fire spreads itself). */
@@ -171,7 +175,7 @@ export class Grudges {
       const more = this.accounts.get(this.backKey);
       if (this.down) {
         const returns = was.returns + 1;
-        if (returns >= GRUDGE.maxReturns) list.splice(this.backIndex, 1);
+        if (returns >= GRUDGE.maxReturns || more?.headless) list.splice(this.backIndex, 1); // (D-118: and a man who lost his head is not back again)
         else
           list[this.backIndex] = {
             ...was,
@@ -185,7 +189,7 @@ export class Grudges {
     }
     let best: Account | undefined;
     for (const a of this.accounts.values()) {
-      if (a.key === this.backKey) continue;
+      if (a.key === this.backKey || a.headless) continue;
       if (!best || a.score > best.score) best = a;
     }
     if (best) {

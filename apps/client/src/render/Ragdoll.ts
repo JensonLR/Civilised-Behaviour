@@ -177,6 +177,9 @@ export class Ragdoll {
   private blendT = 0;
   private calm = 0;
   private readonly bodies: Body[] = [];
+  /** The collider of each body, in `ORDER` (D-118: the head's is swapped for the neck's when it comes off). */
+  private readonly colliders: InstanceType<Rapier["Collider"]>[] = [];
+  private headGone = false;
   private readonly joints: Group[];
   /** World-space snapshot taken when the blend starts. */
   private readonly snapQ = ORDER.map(() => new Quaternion());
@@ -251,8 +254,8 @@ export class Ragdoll {
           .setLinearDamping(0.4)
           .setAngularDamping(1.6),
       );
-      const { desc, mass } = shape(name);
-      this.world.createCollider(desc.setMass(mass).setFriction(0.9).setRestitution(0.05).setCollisionGroups(groups), body);
+      const { desc, mass } = name === "head" && this.rig.headless ? this.neck() : shape(name);
+      this.colliders.push(this.world.createCollider(desc.setMass(mass).setFriction(0.9).setRestitution(0.05).setCollisionGroups(groups), body));
       // Everything inherits the victim's velocity; the blow shoves the hit zone hardest and lifts the whole body a little.
       const k = name === hitBody ? 1.5 : 1;
       body.setLinvel(
@@ -501,11 +504,34 @@ export class Ragdoll {
   private freeBodies(): void {
     for (const b of this.bodies) this.world.removeRigidBody(b);
     this.bodies.length = 0;
+    this.colliders.length = 0; // (removing a body removes its colliders)
   }
 
   private finish(): void {
     this.phase = "done";
     this.onDone();
+  }
+
+  /** D-118: the stub of a neck where a head was: a small ball at the cut, light. */
+  private neck(): { desc: InstanceType<Rapier["ColliderDesc"]>; mass: number } {
+    this.headGone = true;
+    return { desc: this.owner.R.ColliderDesc.ball(0.05).setTranslation(0, 0.02, 0), mass: 0.6 };
+  }
+
+  /**
+   * D-118: the head came off while the body was already falling (the hit that downs him arrives before the head goes): its ball, which nothing draws any more, is
+   * swapped for the neck's, so the shoulders come down on the ground and not on an invisible head.
+   */
+  dropHead(): void {
+    if (this.headGone || this.phase === "done") return;
+    const i = INDEX.head;
+    const body = this.bodies[i];
+    const old = this.colliders[i];
+    if (!body || !old) return;
+    const groups = old.collisionGroups();
+    this.world.removeCollider(old, false);
+    const { desc, mass } = this.neck();
+    this.colliders[i] = this.world.createCollider(desc.setMass(mass).setFriction(0.9).setRestitution(0.05).setCollisionGroups(groups), body);
   }
 
   dispose(): void {

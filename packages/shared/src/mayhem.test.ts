@@ -47,6 +47,8 @@ describe("D-084: the casualty column", () => {
     { k: "double", by: "Ada", n: 2 },
     { k: "finisher", victim: "Sentry Tamsin Cray", by: "Ada" },
     { k: "rope", victim: "Carter Obadiah Plume", by: "Ada" },
+    { k: "behead", victim: "Sentry Tamsin Cray", by: "Ada", cause: "blade", dir: "north" },
+    { k: "behead", victim: "Scout Fitzwilliam Hale-Dunmarrow", by: "", cause: "blast", dir: "south-west" },
     ...REQUEST_IDS.map((id): MayhemFact => ({ k: "request", id })),
   ];
 
@@ -118,6 +120,21 @@ describe("D-084: the Society's requests", () => {
     expect(REQUESTS.punctual.done(q, { resolution: "paid", seconds: 301 })).toBe(false);
     expect(REQUESTS.punctual.done(q, { resolution: "paid", seconds: 300 })).toBe(true);
     for (const id of REQUEST_IDS) expect(REQUESTS[id].reward).toBeGreaterThan(0);
+  });
+});
+
+describe("D-118: a head taken off", () => {
+  it("is billed apart from the limbs, paid four pounds as spectacle, printed first in the bill, outranks a limb in the column, and an old save reads none", () => {
+    const b = { ...newBill(), heads: 2, limbs: 1 };
+    expect(spectacle(b).pay).toBe(4 * 2 + 3);
+    expect(billLine(b)).toMatch(/^The Butcher's Bill: 2 heads taken off; 1 limb/);
+    expect(billLine({ ...newBill(), heads: 1 })).toContain("1 head taken off");
+    expect(FACT_RANK.behead).toBeGreaterThan(FACT_RANK.sever);
+    const old = parseBillRecord({ day: 3, region: "kessar", request: "flight", met: false, spectacle: 0, bill: { foes: 2, limbs: 1 } }, isRegionId)!;
+    expect(old.bill.heads).toBe(0);
+    // the blade's line names the hand; the powder's does not
+    expect(gazetteLine({ k: "behead", victim: "Sentry Tamsin Cray", by: "Ada", cause: "blade", dir: "north" }, 3)).toContain("Ada");
+    expect(gazetteLine({ k: "behead", victim: "Sentry Tamsin Cray", by: "", cause: "blast", dir: "north" }, 3)).not.toContain("a stranger");
   });
 });
 

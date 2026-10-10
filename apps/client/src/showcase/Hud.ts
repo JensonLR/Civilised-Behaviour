@@ -15,7 +15,7 @@ import { previewCaption } from "../audio/index.ts";
  *   w=0..4|-1        weapon in hand;  ammo=N&reserve=N&reload=0..100;  pad=1 shows the gamepad hints
  *   prompt="..."     the contextual ticket;  revive=40 a progress bar;  fp=1 the first-person dot
  *   notices=3        that many telegrams (a fourth waits);  caption=1 shows sample captions
- *   hit=hit|head|down|sever  a hit marker;  bearing=deg[,deg]  the directions blows came from (0 = ahead, 90 = to the right)
+ *   hit=hit|head|down|sever|behead  a hit marker;  bearing=deg[,deg]  the directions blows came from (0 = ahead, 90 = to the right)
  *   yaw=0.4          camera yaw (heading strip);  x,z= the player's place (default the spawn)
  *   ui=1.25&cvd=1&contrast=1&largetext=1&reducemotion=1   the display settings (as in the game)
  *   bg=world|flat    the backdrop (world = the real arena at golden hour)
@@ -81,7 +81,7 @@ export function runHud(canvas: HTMLCanvasElement, params: URLSearchParams): void
   combat.updateArms({ weapon: w, owned, ammo: num("ammo", 1), reserve: num("reserve", 12), reload: num("reload", 0), wait: 0, gamepad: pad, busy: down });
   combat.updateSight({ visible: w >= 0 && !down, gap: num("gap", 10), aiming: params.get("aim") === "1" });
   const hit = params.get("hit");
-  if (hit) combat.hitMarker(hit === "head" ? 0 : 1, hit === "down", hit === "sever");
+  if (hit) combat.hitMarker(hit === "head" || hit === "behead" ? 0 : 1, hit === "down" || hit === "behead", hit === "sever", false, hit === "behead");
   for (const b of (params.get("bearing") ?? "").split(",").filter(Boolean)) combat.damageFrom((Number(b) * Math.PI) / 180, 0.8);
   for (let i = 0; i < num("notices", 0); i++) hud.showNotice(["The Society regrets to announce that Sir Reginald is no longer in charge.", "Mrs Ffoulkes-Crumb has been improved.", "A comrade has fallen; the ground is not yet improved.", "The pot is on."][i % 4]!, 60);
   // the telegram queue moves on a timer; a still wants it settled

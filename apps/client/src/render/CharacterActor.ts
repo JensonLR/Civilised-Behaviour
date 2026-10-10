@@ -308,7 +308,7 @@ export class CharacterActor {
 
   private applyHeadVisibility(): void {
     const hide = this.firstPerson || this.lensInHead;
-    this.rig.joints.head.visible = !hide;
+    this.rig.joints.head.visible = !hide && !this.rig.headless; // (D-118: a head that has come off stays off)
     if (hide && !this.headShadow) {
       const P = this.rig.proportions;
       headShadowGeo ??= new SphereGeometry(1, 10, 6);
@@ -524,6 +524,7 @@ export class CharacterActor {
     if (this.fpBlend > 0.002) this.poseFirstPersonArms(dt, pose);
     this.rig.setWounds(pose.wounds ?? 0, gore);
     this.rig.setMissing(showLimbs ? (pose.missing ?? 0) : 0, gore);
+    if (this.rig.headless) this.ragdoll?.dropHead(); // (D-118: the body fell before the head went: its head ball goes now)
     this.updateMarks(dt, pose, gore, downed);
     if (this.viewmodelOn) this.applyViewmodelGhost();
 
@@ -594,8 +595,14 @@ export class CharacterActor {
     return this.anim.hold.visible;
   }
 
-  /** A free-standing copy of a limb in its current pose, to fly off as debris (see CharacterRig.detachLimb). */
-  detachLimb(limb: LimbId): Group | undefined {
+  /** D-118: the head's size as the debris needs it: its radius, its middle and the cut at the neck (metres up the neck joint), the neck's radius. */
+  headShape(): { radius: number; centre: number; neckY: number; neckR: number } {
+    const P = this.rig.proportions;
+    return { radius: P.headRadius, centre: P.headRadius * 0.9, neckY: -(P.neck + 0.03), neckR: P.headRadius * 0.44 };
+  }
+
+  /** A free-standing copy of a limb (or, D-118, the head) in its current pose, to fly off as debris (see CharacterRig.detachLimb). */
+  detachLimb(limb: number): Group | undefined {
     return this.rig.detachLimb(limb);
   }
 
