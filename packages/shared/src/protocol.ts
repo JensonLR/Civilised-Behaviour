@@ -198,6 +198,8 @@ export interface HitEvent {
   boot?: boolean;
   /** D-108: a thrown body met a wall or the ground from a height (the clients hear the crunch). Absent: an ordinary blow. */
   splat?: boolean;
+  /** D-104: this blow knocked the weapon out of his hand (1 the left, 2 the right): the clients throw it from the message, never from a frame that happened to see the stagger. */
+  disarm?: 1 | 2;
   /** D-111: a horse went through him (`boot` is set too, so he is laid flat; the clients hear the hooves). Absent: an ordinary blow. */
   trample?: boolean;
 }

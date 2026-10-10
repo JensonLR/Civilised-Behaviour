@@ -1,7 +1,7 @@
 import { Object3D, Scene } from "three";
 import { describe, expect, it } from "vitest";
 import { encodeSpec, generateCharacter } from "@cb/procedural";
-import { BOOT, FLAG, REACT, packReact } from "@cb/shared";
+import { BOOT, FLAG, REACT, WEAPON, packReact } from "@cb/shared";
 import { CharacterActor, type ActorPose } from "./CharacterActor.ts";
 import { newEyeSample } from "./firstPerson.ts";
 
@@ -268,3 +268,30 @@ describe("D-108: booted", () => {
     expect(j.root!.rotation.x).toBeLessThan(0.3);
   });
 });
+
+describe("D-104: the gun knocked out of the hand", () => {
+  it("flies from the hand the blow's event names, once, whatever frames the page drew (it never waits to see the stagger)", () => {
+    const a = new CharacterActor(new Scene(), look(4), 1, true);
+    const thrown: { w: number; dx: number; dz: number }[] = [];
+    a.onDisarmed = (w, _x, _y, _z, dx, dz) => void thrown.push({ w, dx, dz });
+    const armed = pose(FLAG.GROUNDED, { facing: 0, combat: { weapon: WEAPON.RIFLE + 1, elev: 0, reload: 0 } });
+    settle(a, armed, 5);
+    // the blow lands; no frame in between ever shows him staggered (a slow page)
+    a.hit({ id: "npc:s", zone: 3, dx: 1, dz: 0, power: 0.3, down: false, disarm: 2 }, 0);
+    expect(thrown).toHaveLength(1);
+    expect(thrown[0]!.w).toBe(WEAPON.RIFLE);
+    expect(thrown[0]!.dx).toBeGreaterThan(0); // (the right hand, facing north: out to the right, +x)
+    // fists up now: a second disarming blow has nothing to throw
+    settle(a, pose(FLAG.GROUNDED, { facing: 0, combat: { weapon: WEAPON.FISTS + 1, elev: 0, reload: 0 } }), 5);
+    a.hit({ id: "npc:s", zone: 3, dx: 1, dz: 0, power: 0.3, down: false, disarm: 2 }, 0);
+    expect(thrown).toHaveLength(1);
+    // the stagger seen on the state alone throws nothing (the event is the one signal)
+    const b = new CharacterActor(new Scene(), look(4), 1, true);
+    let n = 0;
+    b.onDisarmed = () => void n++;
+    settle(b, armed, 5);
+    settle(b, pose(FLAG.GROUNDED, { facing: 0, react: packReact(REACT.DISARMED, true, 0.9), combat: { weapon: WEAPON.FISTS + 1, elev: 0, reload: 0 } }), 5);
+    expect(n).toBe(0);
+  });
+});
+

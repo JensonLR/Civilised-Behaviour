@@ -1,7 +1,7 @@
 import { Box3, Mesh, MeshBasicMaterial, SphereGeometry, Vector3, type Group, type Scene } from "three";
 import { decodeSpec, generateCharacter } from "@cb/procedural";
 import { BodyMarks, CharacterAnimator, HandPoser, buildCharacter, grimeLevel, stepExposure, type CharacterRig, type ExpressionId, type Exposure, type ExposureInput, type GoreLevel, type RideInput } from "@cb/procedural/three";
-import { BOOT, FLAG, REACT, WEAPON, WEAPONS, reactKind, reactRight, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
+import { BOOT, FLAG, REACT, WEAPON, WEAPONS, reactKind, wrapAngle, type HitEvent, type LimbId, type WeaponId } from "@cb/shared";
 import { getReduceMotion } from "../settings.ts";
 import { damp, type EyeSample } from "./firstPerson.ts";
 import type { Ragdoll, RagdollWorld } from "./Ragdoll.ts";
@@ -138,9 +138,8 @@ export class CharacterActor {
    * the body held it at (the weapon hangs off the torso, so it takes the body's scale). Set by the game (LimbDebris.throwAway); absent = it simply leaves the hand.
    */
   onDisarmed?: (weapon: WeaponId, x: number, y: number, z: number, dx: number, dz: number, scale: number) => void;
-  /** The last weapon (not fists) seen in the hands, and the reaction kind last frame (the disarm is told on its edge). */
+  /** The last weapon (not fists) seen in the hands: the one a disarming blow sends flying (D-104). */
   private lastArmed: WeaponId | -1 = -1;
-  private lastReact: number = REACT.NONE;
   private lastVy = 0;
   private lastVx = 0;
   private lastVz = 0;
@@ -362,12 +361,29 @@ export class CharacterActor {
    * A blow landed on this figure: jolt the torso away from it, pull a pained face and, if it put them down, hand the
    * body to the ragdoll. `facing` is the body's current yaw, used to express the world-space push in the body's own frame.
    */
+  /**
+   * D-104: a blow knocked the weapon out of the hand (the hit event says so): it flies from that hand, out to that side and back. Driven by the message, never by a
+   * frame happening to see the stagger (a page at a few frames a second can miss its 0.9 s on the state entirely: the CI flake that found it).
+   */
+  private dropWeapon(right: boolean, facing: number): void {
+    const lost = this.lastArmed;
+    if (lost === -1) return;
+    const side = right ? 1 : -1;
+    (side > 0 ? this.rig.joints.wristR : this.rig.joints.wristL).getWorldPosition(dropAt);
+    // (yaw 0 looks down -Z: forward is (-sin, -cos), right is (cos, -sin))
+    const dx = side * Math.cos(facing) * 0.8 + Math.sin(facing) * 0.6;
+    const dz = -side * Math.sin(facing) * 0.8 + Math.cos(facing) * 0.6;
+    this.onDisarmed?.(lost, dropAt.x, dropAt.y, dropAt.z, dx, dz, this.rig.joints.torso.getWorldScale(scaleAt).x);
+    this.lastArmed = -1;
+  }
+
   hit(e: HitEvent, facing: number): void {
     const cos = Math.cos(facing);
     const sin = Math.sin(facing);
     this.anim.flinch(e.dx * cos - e.dz * sin, e.dx * sin + e.dz * cos, e.power);
     this.painTimer = 0.5 + e.power * 0.7;
     if (e.boot) this.sprawl = BOOT.floorS;
+    if (e.disarm) this.dropWeapon(e.disarm === 2, facing);
     if (!e.down) return;
     const lift = e.lift ?? 0;
     // D-064: a blast finding a body still in the air throws it on; a body already lying (or easing back into the pose) is picked up and thrown again
@@ -436,20 +452,9 @@ export class CharacterActor {
     this.lastVz = pose.vz;
     const c = pose.combat;
     const weaponId = c && c.weapon > 0 ? c.weapon - 1 : -1;
-    // D-104: the weapon knocked out of the hand flies from the hurt hand, out to that side and back (the state may already show the fists: the last weapon seen is the one that goes)
+    // D-104: the last weapon seen in the hand is the one a disarming blow sends flying (`dropWeapon`, from the hit event: the state may already show the fists)
     const rk = pose.react ? reactKind(pose.react) : REACT.NONE;
-    const lost = this.lastArmed;
-    if (rk === REACT.DISARMED && this.lastReact !== REACT.DISARMED && lost !== -1) {
-      const side = reactRight(pose.react!) ? 1 : -1;
-      (side > 0 ? this.rig.joints.wristR : this.rig.joints.wristL).getWorldPosition(dropAt);
-      const f = pose.facing;
-      // (yaw 0 looks down -Z: forward is (-sin, -cos), right is (cos, -sin))
-      const dx = side * Math.cos(f) * 0.8 + Math.sin(f) * 0.6;
-      const dz = -side * Math.sin(f) * 0.8 + Math.cos(f) * 0.6;
-      this.onDisarmed?.(lost, dropAt.x, dropAt.y, dropAt.z, dx, dz, this.rig.joints.torso.getWorldScale(scaleAt).x);
-      this.lastArmed = -1;
-    } else if (weaponId >= 0 && weaponId !== WEAPON.FISTS && rk !== REACT.DISARMED) this.lastArmed = weaponId as WeaponId;
-    this.lastReact = rk;
+    if (weaponId >= 0 && weaponId !== WEAPON.FISTS && rk !== REACT.DISARMED) this.lastArmed = weaponId as WeaponId;
     // D-108: booted, he lies flat on his back (the lying pose the rope uses, D-106) until the floored reaction lets him up, not on one knee
     if (this.sprawl > 0) this.sprawl = rk === REACT.FLOORED ? this.sprawl - dt : 0;
     const flags = this.sprawl > 0 ? pose.flags | FLAG.DRAGGED : pose.flags;

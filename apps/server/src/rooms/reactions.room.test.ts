@@ -52,8 +52,8 @@ describe("hit reactions in a real room (D-104)", () => {
     return { room, c, shots, marks, hits, loops, inner: room as unknown as Inner, me: room.state.players.get(c.sessionId)! as PlayerStateType };
   }
 
-  it("an arm shot takes a sentry's rifle and puts his fists up; a leg shot floors him, and he gets up", async () => {
-    const { room, inner } = await kessar();
+  it("an arm shot takes a sentry's rifle and puts his fists up (the blow's own event says so); a leg shot floors him, and he gets up", async () => {
+    const { room, inner, hits } = await kessar();
     const key = "npc:sentry-1";
     const s = room.state.players.get(key)! as PlayerStateType;
     await until(() => s.weapon !== 0, 3000, "the sentry armed");
@@ -61,6 +61,8 @@ describe("hit reactions in a real room (D-104)", () => {
     expect(held).not.toBe(weaponToWire(WEAPON.FISTS));
     inner.casualties.damage(key, 24, { zone: ZONE.ARM_R, dirX: 1, dirZ: 0 });
     expect(reactKind(s.react)).toBe(REACT.DISARMED);
+    // (every client throws the rifle from the message: a page at a few frames a second can miss the stagger on the state, the CI flake that found this)
+    await until(() => hits.some((h) => h.id === key && h.disarm === 2), 2000, "the disarming blow's event");
     expect(s.weapon).toBe(weaponToWire(WEAPON.FISTS)); // (the same tick: the clients never see the rifle in the hand and in the air at once)
     expect((inner.combat.inspect(key)!.owned & (1 << (held - 1))) === 0).toBe(true);
     await sleep(1500);
@@ -68,6 +70,8 @@ describe("hit reactions in a real room (D-104)", () => {
     expect(s.react).toBe(0);
     inner.casualties.damage(key, 30, { zone: ZONE.LEG_L, dirX: 1, dirZ: 0 });
     expect(reactKind(s.react)).toBe(REACT.FLOORED);
+    await sleep(200);
+    expect(hits.filter((h) => h.id === key && h.disarm !== undefined)).toHaveLength(1); // (a leg shot disarms nobody)
     await until(() => s.react === 0, 3000, "him up again");
   }, 20_000);
 

@@ -4,6 +4,7 @@ Last updated: 2026-10-10 (D-111, ridden down, D-110, horses and fire, D-109, sur
 **Read this first after any context reset.** Be honest here: "done" means implemented AND verified.
 
 ## Now
+- **D-104 fix (2026-10-10): the dropped gun comes from the hit event.** A page at CI's frame rate could miss the stagger and never throw the gun (one e2e failure). The disarming blow's event now says so.
 - **D-111 (2026-10-10): ridden down.** The eighth AAA mechanic (the cavalry charge; ideas, not code).
   - **The move.** A horse at a trot or faster goes through any man on foot not of the party. Up to 30 harm at a gallop; he is thrown ahead and aside, laid flat and watched for the wall he meets. The horse loses some pace.
   - **The noise.** A shout, a column line, "men ridden down" on the Butcher's Bill, spectacle pay, and a survivor comes back as "Hoofprint".

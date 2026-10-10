@@ -188,6 +188,10 @@ export class Casualties {
     if (hit.boot || hit.trample) ev.boot = true;
     if (hit.trample) ev.trample = true;
     if (hit.splat) ev.splat = true;
+    // D-104: the reaction is decided before the event goes out, so a blow that knocks the weapon away says so (a client at a few frames a second can miss the
+    // stagger's 0.9 s on the state; it cannot miss the message)
+    const next = down || hit.burn ? 0 : this.reactionTo(p, zone, amount, hit.boot === true || hit.trample === true);
+    if (next !== 0 && reactKind(next) === REACT.DISARMED) ev.disarm = reactRight(next) ? 2 : 1;
     this.host.emitHit(ev);
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
     // so unrelated hits never consume randomness.
@@ -198,19 +202,23 @@ export class Casualties {
       if (chance > 0 && this.host.rng.chance(chance)) this.sever(sessionId, target, dx / len, dz / len, power);
     }
     if (down) this.down(sessionId, p);
-    else if (!hit.burn) this.react(sessionId, p, zone, amount, dx / len, dz / len, hit.boot === true || hit.trample === true);
+    else if (next !== 0) this.react(sessionId, p, next, dx / len, dz / len);
   }
 
   /**
    * D-104: where it landed decides what the blow does to the body (hitReaction.ts): down on that knee, doubled over, or the weapon knocked away. NPC rows only, never a
-   * beast or a rider or a man at a crank gun (see the header of hitReaction.ts for why the players do not).
+   * beast or a rider or a man at a crank gun (see the header of hitReaction.ts for why the players do not). The packed reaction this blow puts on him, or 0 for none.
    */
-  private react(id: string, p: PlayerStateType, zone: ZoneId, amount: number, dx: number, dz: number, boot = false): void {
-    if (p.npc === 0 || (p.flags & (FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING | FLAG.DRAGGED)) !== 0) return;
+  private reactionTo(p: PlayerStateType, zone: ZoneId, amount: number, boot: boolean): number {
+    if (p.npc === 0 || (p.flags & (FLAG.BEAST | FLAG.MOUNTED | FLAG.OPERATING | FLAG.DRAGGED)) !== 0) return 0;
     const armed = p.weapon !== 0 && p.weapon !== WEAPON.FISTS + 1;
     // (D-108: a boot puts him on the ground wherever it lands)
     const next = boot ? packReact(REACT.FLOORED, false, BOOT.floorS) : reactionFor(zone, amount, armed);
-    if (!reactOverrides(next, p.react)) return;
+    return reactOverrides(next, p.react) ? next : 0;
+  }
+
+  /** Puts the reaction `next` (from `reactionTo`, decided when the blow landed) on `id`; a disarming one has the room take the weapon away. */
+  private react(id: string, p: PlayerStateType, next: number, dx: number, dz: number): void {
     p.react = next;
     this.reacts.set(id, reactSeconds(next));
     if (reactKind(next) === REACT.DISARMED) this.host.disarm?.(id, reactRight(next), dx, dz);
