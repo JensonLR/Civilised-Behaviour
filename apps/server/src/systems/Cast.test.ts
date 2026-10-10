@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUTTON, FLAG, KESSAR_ANCHORS as A, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
+  BUTTON, FINISHER, FLAG, KESSAR_ANCHORS as A, NPC, REACT, WEAPON, createKessarWorld, packReact, createCharState, garrisonRoster, newCampaign, npcKey, stepCharacter, weaponToWire,
   CollisionWorld, type MoveCommand, type PlayerStateType, type WeaponId,
 } from "@cb/shared";
 import { NAV, NPC_SIDE, type BrainFn, type NpcBody, type NpcSenses, type NpcSpec } from "@cb/shared";
@@ -688,5 +688,32 @@ describe("Cast: hit reactions (D-104)", () => {
     expect(recs.get("npc:h1")!.brain.weapon).toBe(weaponToWire(WEAPON.FISTS));
     expect(cries).not.toContain("npc:h1");
     expect(() => r.cast.disarm("npc:nobody")).not.toThrow();
+  });
+});
+
+describe("Cast: the fright of a coup de grace (D-105)", () => {
+  it("the fallen man's own side near him lose their nerve and cry out; civilians near run from it; the far and the other side are untouched", () => {
+    const r = rig();
+    const cries: string[] = [];
+    r.host.cry = (k) => cries.push(k);
+    r.cast.spawn([
+      spec("victim", { post: { x: 0, z: 0 } }),
+      spec("near", { post: { x: 6, z: 0 } }),
+      spec("far", { post: { x: 40, z: 0 } }),
+      spec("rival", { role: NPC.RIVAL_GUARD, faction: "rival", side: "rival", group: "rival", post: { x: 0, z: 5 } }),
+      spec("carter", { role: NPC.HOSTAGE, side: "neutral", group: "hostage", brain: "civil", weapon: WEAPON.FISTS as WeaponId, post: { x: -5, z: 0 } }),
+    ]);
+    r.tick(3);
+    const brain = (id: string): NpcBrainState => (r.cast as unknown as { byKey: Map<string, { brain: NpcBrainState }> }).byKey.get(npcKey(id))!.brain;
+    const before = { near: brain("near").morale.shock, far: brain("far").morale.shock, rival: brain("rival").morale.shock };
+    r.cast.terror(npcKey("victim"), 0, 0);
+    expect(brain("near").morale.shock).toBe(Math.min(60, before.near + FINISHER.fearShock));
+    expect(brain("far").morale.shock).toBe(before.far);
+    expect(brain("rival").morale.shock).toBe(before.rival);
+    expect(cries).toContain(npcKey("near"));
+    expect(cries).toContain(npcKey("carter"));
+    r.tick(60);
+    expect(r.rows.get(npcKey("carter"))!.x).toBeLessThan(-6); // (ran west, away from it)
+    expect(() => r.cast.terror("npc:nobody", 0, 0)).not.toThrow();
   });
 });

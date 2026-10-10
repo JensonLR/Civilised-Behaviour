@@ -7,8 +7,8 @@ import { hash3 } from "./rng.ts";
  * `bark` event); the client picks the line. The joke is the Empire's own bluster (D-085): never a people abroad.
  */
 
-export type BarkKind = "triumph" | "headshot" | "brolly" | "limb" | "chain" | "down" | "flung" | "friendly" | "commission";
-export const BARK_KINDS: readonly BarkKind[] = ["triumph", "headshot", "brolly", "limb", "chain", "down", "flung", "friendly", "commission"];
+export type BarkKind = "triumph" | "headshot" | "brolly" | "limb" | "chain" | "down" | "flung" | "friendly" | "commission" | "finisher";
+export const BARK_KINDS: readonly BarkKind[] = ["triumph", "headshot", "brolly", "limb", "chain", "down", "flung", "friendly", "commission", "finisher"];
 export const isBarkKind = (k: unknown): k is BarkKind => typeof k === "string" && (BARK_KINDS as readonly string[]).includes(k);
 
 /** The shape of the babble that carries a line: a boast rises and swoops, an exclamation is short and high, a mutter is low, a harrumph is a harrumph. */
@@ -25,6 +25,7 @@ export const BARK_LINES: Readonly<Record<BarkKind, { key: BabbleKey; lines: read
   flung: { key: "exclaim", lines: ["Wheeeee!", "I can see London from here!", "Not again!", "Put me down this instant!"] },
   friendly: { key: "mutter", lines: ["Terribly sorry, old chap!", "My mistake, frightfully sorry!", "He moved!", "We'll tell the Gazette it was the weather."] },
   commission: { key: "boast", lines: ["Hear, hear!", "The Society is grateful!", "Pall Mall will be in raptures!", "Put it on the account!"] },
+  finisher: { key: "boast", lines: ["And stay down!", "Fair and square, old chap!", "My compliments to your mother!", "That's quite enough of that!", "Do mind the boots!"] },
 };
 
 /** The line and its babble for a bark: deterministic in (kind, salt), so every client in the party shows the same words for the same moment. */

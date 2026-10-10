@@ -98,3 +98,50 @@ const armShake = (wounds: number, missing: number, zone: ZoneId, limb: number): 
 export function aimShake(wounds: number, missing: number): number {
   return Math.min(HIT_REACT.shake.max, 1 + armShake(wounds, missing, ZONE.ARM_L, LIMB.ARM_L) + armShake(wounds, missing, ZONE.ARM_R, LIMB.ARM_R));
 }
+
+/**
+ * D-105, THE COUP DE GRACE: a blow from the hand (a blade, an umbrella, fists, or a gun's butt) that lands on a man down on a knee or doubled over finishes him, after the
+ * glory kills of DOOM (2016) and the takedowns of the westerns. It always puts him down; a blade is far likelier to take the limb it lands on; he is sent sprawling. It pays:
+ * the one who struck gets back some health (a second wind), the fallen man's friends nearby lose their nerve, and the Society counts it in the Butcher's Bill. The server
+ * decides it from the swing that actually lands; the prompt only says when one would.
+ */
+export const FINISHER = {
+  /** Health the finisher gets back. */
+  heal: 15,
+  /** The fallen man's side within this many metres takes a fright of this much morale shock. */
+  fearRadius: 14,
+  fearShock: 25,
+  /** The blow's knock (m/s), throw (0..1, the hit event's lift) and the multiplier on the sever roll. */
+  knock: 6,
+  lift: 0.3,
+  severMul: 4,
+  /** The prompt shows a finisher in reach within this many metres, in front (cosine of the half-angle). */
+  promptReach: 2.1,
+  promptCos: 0.5,
+} as const;
+
+/**
+ * The staggered body nearest `me` that a blow could finish now: within `FINISHER.promptReach`, in front of `me.facing`, an NPC down on a knee or doubled over. `each` walks
+ * the candidates (id, row). Allocation-free; undefined when there is none.
+ */
+export function findFinisherTarget<K>(
+  me: { x: number; z: number; facing: number },
+  each: (cb: (id: K, o: { x: number; z: number; npc: number; flags: number; react: number }) => void) => void,
+  downedFlag: number,
+): K | undefined {
+  let best: K | undefined;
+  let bestD: number = FINISHER.promptReach;
+  const fx = -Math.sin(me.facing);
+  const fz = -Math.cos(me.facing);
+  each((id, o) => {
+    if (o.npc === 0 || (o.flags & downedFlag) !== 0 || !reactHolds(o.react)) return;
+    const dx = o.x - me.x;
+    const dz = o.z - me.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d > bestD) return;
+    if (d > 0.3 && (dx * fx + dz * fz) / d < FINISHER.promptCos) return;
+    bestD = d;
+    best = id;
+  });
+  return best;
+}

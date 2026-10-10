@@ -1,5 +1,5 @@
 import {
-  BUTTON, FLAG, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
+  BUTTON, FINISHER, FLAG, SCENARIO, WEAPON, createWeather, hashFloat, isNpcKey, npcKey, reactHolds, weaponFromWire, weaponToWire, weatherAt, yawToWire,
   type CollisionWorld, type MoveCommand, type PlayerStateType,
 } from "@cb/shared";
 // New shared modules are imported by path until the integrator adds their `export *` lines to the shared index (then switch these to "@cb/shared").
@@ -417,6 +417,31 @@ export class Cast implements CastApi {
     r.brain.morale.shock = 60;
     r.brain.hurtAt = now;
     this.cry(r, now);
+  }
+
+  /**
+   * D-105: row `key` was finished where he knelt, at (x, z). His own side within `FINISHER.fearRadius` takes a fright (a soldier's nerve may go, and he cries out); the
+   * civilians there run from it. The one who did it is not the Cast's business (the room pays him).
+   */
+  terror(key: string, x: number, z: number): void {
+    const victim = this.byKey.get(key);
+    if (!victim || !Number.isFinite(x + z)) return;
+    const now = this.host.worldMs() / 1000;
+    for (const r of this.recs) {
+      if (r.gone || r.key === key || r.beast) continue;
+      const row = this.host.players.get(r.key);
+      if (!row || (row.flags & FLAG.DOWNED) !== 0 || Math.hypot(row.x - x, row.z - z) > FINISHER.fearRadius) continue;
+      if (r.civil) {
+        if (r.fleeUntil < now) this.cry(r, now);
+        r.fleeUntil = now + CAST.civilFleeSeconds;
+        r.fleeX = x;
+        r.fleeZ = z;
+      } else if (r.side === victim.side) {
+        r.brain.morale.shock = Math.min(60, r.brain.morale.shock + FINISHER.fearShock);
+        r.brain.hurtAt = Math.max(r.brain.hurtAt, now);
+        this.cry(r, now);
+      }
+    }
   }
 
   /**

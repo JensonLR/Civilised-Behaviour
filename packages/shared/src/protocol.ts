@@ -159,6 +159,8 @@ export interface HitMarkEvent {
   down: boolean;
   /** A limb was taken. */
   sever: boolean;
+  /** D-105: it was a coup de grace (a blow on a staggered man). Absent: an ordinary blow. */
+  fin?: boolean;
 }
 
 /** Broadcast when a limb comes off. Direction and power drive the flying limb and the spray. */
@@ -188,6 +190,8 @@ export interface HitEvent {
   lift?: number;
   /** D-103: the flames did it (no blood and no flinch: the fire on the body is the effect). Absent: an ordinary blow. */
   burn?: boolean;
+  /** D-105: a coup de grace (the clients throw more blood and the body sprawls). Absent: an ordinary blow. */
+  fin?: boolean;
 }
 
 export const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

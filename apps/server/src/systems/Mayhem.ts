@@ -147,6 +147,19 @@ export class Mayhem {
     this.touch();
   }
 
+  /**
+   * D-105: `by` finished `victim` (a blow on a man down on a knee or doubled over). The Society counts it when the party did it to an enemy, the column prints it, and the
+   * one who did it says something suitable. Told before the blow's own hit (so this bark is the moment's, not the hit's).
+   */
+  onFinisher(victim: string, by: string, _weapon: WeaponId): void {
+    const vs = this.side(victim);
+    if (!vs || vs === "party" || vs === "neutral" || this.side(by) !== "party") return;
+    this.bill.finishers++;
+    this.say({ k: "finisher", victim: this.name(victim), by: this.name(by) });
+    this.bark(by, "finisher");
+    this.touch();
+  }
+
   /** A blast threw somebody already down (Casualties.toss), maybe taking a limb. */
   onToss(victim: string, by: string, power: number, lift: number, severed: LimbId | undefined, dirX: number, dirZ: number): void {
     const vs = this.side(victim);

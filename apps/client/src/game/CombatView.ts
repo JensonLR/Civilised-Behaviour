@@ -105,6 +105,8 @@ export class CombatView {
   private readonly blasts: number[] = [];
   /** Told once for every blast (x, z): the battlefield's ledger keeps its place (game/battleLedger.ts). */
   onBlast: ((x: number, z: number, radius: number) => void) | undefined;
+  /** D-105: your coup de grace landed (the game photographs it for the paper). */
+  onFinisher: (() => void) | undefined;
   private readonly projectiles: Projectiles;
   private readonly hud: CombatHud;
   private readonly cannons = new Map<string, CannonView | CrankGunView>();
@@ -145,9 +147,14 @@ export class CombatView {
     room.onMessage("impact", (e: ImpactEvent) => this.onImpact(e));
     room.onMessage("boom", (e: BoomEvent) => this.onBoom(e));
     room.onMessage("hitmark", (e: HitMarkEvent) => {
-      this.hud.hitMarker(e.zone, e.down, e.sever);
+      this.hud.hitMarker(e.zone, e.down, e.sever, e.fin === true);
       if (e.down) this.actors().get(this.session.sessionId)?.body.cue("triumph", 2.2); // (D-084: you grin over the one you dropped)
-      this.controls.rumble("hit", e.down ? 1 : 0.6);
+      this.controls.rumble("hit", e.down || e.fin ? 1 : 0.6);
+      if (e.fin) {
+        // D-105: your coup de grace lands: the lens takes the blow, and the moment is photographed for the paper as he sprawls
+        this.rig.addShake(0.45);
+        this.onFinisher?.();
+      }
     });
   }
 

@@ -6,7 +6,7 @@ import { isDemo, wishlistLink } from "../platform/flags.ts";
 import type { PlatformLink } from "../platform/PlatformLink.ts";
 import { DemoBanner } from "../ui/DemoBanner.ts";
 import { Wishlist } from "../ui/Wishlist.ts";
-import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent } from "@cb/shared";
+import { DEMO, FOUNDATION_CRATES, OUTPOST_SITES, STAGE_LABEL, audiencesAt, campaignMapOf, foundationStatus, historyPieces, mapPins, newPowers, newSettlements, parsePowers, parseSettlements, pickTemplate, powerEffects, powersDispatches, reachableRegions, regionDressOf, rivalPresence, rivalSighting, settlementDispatches, settlementNews, techEffects, templateNote, type CampaignMapData, type PowersState, type SettlementsState, BUTTON, CASUALTY, COMMAND_IDS, FLAG, MOUNT, NPC, NPC_SIDE, NO_COMMAND, PROP_DEFS, ZONE, ZONE_NAMES, canCarry, findStation, generatePaper, hirePool, isRegionId, moraleBand, newCampaign, newParty, parseCampaign, parseParty, PropKind, newWorldHit, rayWorld, type CommandId, type CommandMsg, type PartyState, type CampaignState, type ParleyView, type RegionId, type ScenarioView, carryRefusal, createInjuryMods, dressableZone, findDownedTarget, findInteractTarget, findWoundedTarget, injuryMods, yawToWire, type CryEvent, type HitEvent, type LimbId, type PlayerStateType, type SeverEvent, type PropKindId, LEVEL_ADAPTERS, COMBAT, clamp, objectiveMark, regionMarks, isTemplateId, type ScenarioTemplateId, barkLine, babbleKeyFor, isBarkKind, type BarkEvent, findFinisherTarget } from "@cb/shared";
 import { AIM, assistLook, type AssistOut, type AssistTarget } from "../input/aim.ts";
 import type { Controls } from "../input/Controls.ts";
 import type { TouchContext } from "../input/touchLogic.ts";
@@ -308,6 +308,7 @@ export class Game {
     this.combat = new CombatView(stage, session, controls, this.rig, () => this.actors, hud);
     this.combat.viewmodel = this.viewmodel;
     this.combat.audio = this.audio;
+    this.combat.onFinisher = () => this.newsPlates.armCapture(performance.now(), 0.25); // (D-105: the sprawl, for the paper)
     this.combat.onBlast = (x, z, radius) => {
       this.ledger.noteBlast(x, z);
       this.debris.blast(x, z, radius * 0.9); // (limbs on the ground go up again: D-064)
@@ -1223,6 +1224,8 @@ export class Game {
         prompt = `Hold ${use}  Revive ${players.get(downedId)?.name ?? "comrade"}      ${grab}  Drag`;
       } else if (mp !== undefined) {
         prompt = `${use}  ${mp}`;
+      } else if ((prompt = this.finisherPrompt(me, mine)) !== "") {
+        // D-105: a man down on a knee or doubled over in front of you, and something in your hand: the blow will finish him (the server decides it from the swing)
       } else {
         // D-100: the press goes where the server sends it, in its order (WorldRoom: the cannon's crew, then the places you can USE, then a prop on the ground), so the
         // prompt names what will happen: a person you can talk to wins over a barrel at their feet
@@ -1667,10 +1670,16 @@ export class Game {
     // D-064: a hard blow to the head fountains (the Gore setting decides what the drops are: blood, brown, or dust and stars)
     if (e.zone === ZONE.HEAD && e.power >= 0.5) this.hitFx.burst(x, this.session.value(p, "y") + h * 0.95, z, e.dx * 0.4, e.dz * 0.4, 1, gore, 1);
     // ...and a body that goes down bleeds where it falls (a little along the blow, where the fall carries it); once per fall
+    // D-105: a coup de grace throws more: a second, higher fountain along the blow, a spray on the ground and the crunch of it
+    if (e.fin) {
+      this.hitFx.burst(x, this.session.value(p, "y") + h * frac, z, e.dx, e.dz, 1, gore, 0.6);
+      this.stage.decals.sprayAt(x + e.dx * 0.4, z + e.dz * 0.4, e.dx, e.dz, 1.6);
+      this.audio.finisher(x, this.session.value(p, "y") + h * frac, z);
+    }
     const now = performance.now();
     if (e.down && now - a.bledAt > 15_000) {
       a.bledAt = now;
-      this.hitFx.bleedOut(x + e.dx * 0.8, z + e.dz * 0.8, 0.55 + 0.45 * e.power);
+      this.hitFx.bleedOut(x + e.dx * 0.8, z + e.dz * 0.8, 0.55 + 0.45 * e.power + (e.fin ? 0.3 : 0));
     }
     if (gore === "off") this.combat.fx.bodyDust(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), e.dx, e.dz, e.power);
     this.audio.hurt(this.session.value(p, "x"), this.session.value(p, "y") + h * frac, this.session.value(p, "z"), p.look, e.power, e.id === this.session.sessionId);
@@ -1712,6 +1721,23 @@ export class Game {
     this.debris.spawn(piece, e.dx, e.dz, e.power, gore);
     if (victim) this.hitFx.bleedOut(this.session.value(victim, "x"), this.session.value(victim, "z"), 0.5); // and the stump bleeds where they stand
   }
+
+  /** D-105: "{melee}  Finish off <name>" when a staggered NPC is in reach in front and the hands hold something a blow can be struck with; "" otherwise. */
+  private finisherPrompt(me: PlayerStateType, mine: PlayerStateType): string {
+    const w = mine.weapon - 1;
+    if (w < 0 || w === WEAPON.CANNON || w === WEAPON.CRANK || (me.flags & (FLAG.CARRYING | FLAG.DRAGGING | FLAG.OPERATING)) !== 0) return "";
+    const players = this.session.room.state.players;
+    const self = this.session.sessionId;
+    const at = this.finAt;
+    at.x = this.session.value(me, "x");
+    at.z = this.session.value(me, "z");
+    at.facing = this.session.value(me, "facing");
+    const id = findFinisherTarget<string>(at, (cb) => players.forEach((o, k) => k !== self && cb(k, o)), FLAG.DOWNED);
+    if (id === undefined) return "";
+    const name = players.get(id)?.name;
+    return name ? `{melee}  Finish off ${name}` : "{melee}  Finish off";
+  }
+  private readonly finAt = { x: 0, z: 0, facing: 0 };
 
   private addActor(p: PlayerStateType): Actor {
     const body = new CharacterActor(this.stage.scene, p.look, p.slot + 1, this.stage.outlines, () => this.ragdolls);
