@@ -102,6 +102,7 @@ export class Grudges {
       bravery: Math.min(100, s.bravery + GRUDGE.bravery),
       peg: look.woodenLeg !== undefined,
     };
+    if (g.by) him.hates = g.by;
     if (g.people) him.people = g.people;
     else delete him.people;
     this.backKey = npcKey(s.id);

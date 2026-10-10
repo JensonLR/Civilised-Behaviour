@@ -6,7 +6,7 @@ Last updated: 2026-10-10 (D-109, survivors with grudges, D-108, the boot, D-107,
 ## Now
 - **D-109 (2026-10-10): survivors with grudges.** The seventh AAA mechanic (the orc-hunting game's nemesis; ideas, not code).
   - **Remembered.** The run's worst-used soldier (a limb, the fire, a boot, a rope) is kept in the campaign, with who did it.
-  - **Back.** A later contract in his region fields him: his face, a hook or a peg, a nickname, more nerve. He speaks up when you come near; the paper prints it.
+  - **Back.** A later contract in his region fields him: his face, a hook or a peg, a nickname, more nerve. He speaks up when you come near, goes for whoever maimed him, and the paper prints it.
   - **Proof.** Unit, room (mutation-checked) and a live look. Unplayed by a human.
 - **D-108 (2026-10-10): the boot.** The sixth AAA mechanic (the sword-and-sorcery kick; ideas, not code).
   - **The move.** V with a gun in hand kicks: little harm, but he is thrown 4 to 7 m onto his back for 2.6 s. Boot him again, down, to finish him.
