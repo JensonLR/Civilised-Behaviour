@@ -206,11 +206,12 @@ export class CombatHud {
   }
 
   /** The shooter's confirmation: a cross for a hit, barred for a man down, worded for a limb lost. */
-  hitMarker(zone: number, down: boolean, sever: boolean): void {
+  hitMarker(zone: number, down: boolean, sever: boolean, fin = false): void {
     this.mark.hidden = false;
-    this.mark.dataset.kind = sever ? "sever" : down ? "down" : zone === 0 ? "head" : "hit";
-    this.markText.textContent = sever ? "Severed" : down ? "Down" : zone === 0 ? "Headshot" : "";
-    this.markTimer = sever || down ? 0.9 : 0.35;
+    // (D-105: a coup de grace outranks the limb it may also have taken: it is the moment)
+    this.mark.dataset.kind = fin ? "fin" : sever ? "sever" : down ? "down" : zone === 0 ? "head" : "hit";
+    this.markText.textContent = fin ? "Finished" : sever ? "Severed" : down ? "Down" : zone === 0 ? "Headshot" : "";
+    this.markTimer = fin ? 1.2 : sever || down ? 0.9 : 0.35;
     void this.mark.getBoundingClientRect(); // restart the CSS animation
     this.mark.classList.remove("pop");
     void this.mark.offsetWidth;

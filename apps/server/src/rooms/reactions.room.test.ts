@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ColyseusTestServer } from "@colyseus/testing";
-import { BUTTON, MoveInput, REACT, ROOM_WORLD, WEAPON, ZONE, aimShake, reactKind, setWound, weaponToWire, yawToWire, type PlayerStateType, type ShotEvent } from "@cb/shared";
+import { BUTTON, FINISHER, FLAG, MoveInput, REACT, ROOM_WORLD, WEAPON, ZONE, aimShake, reactKind, setWound, weaponToWire, yawToWire, type HitEvent, type HitMarkEvent, type PlayerStateType, type ShotEvent } from "@cb/shared";
 import { createGameServer } from "../app.ts";
 import { loadConfig } from "../config.ts";
 import { configureLogger } from "../log.ts";
@@ -40,10 +40,14 @@ describe("hit reactions in a real room (D-104)", () => {
     const room = (await colyseus.createRoom(ROOM_WORLD, { seed: 9, region: "kessar", scenario: "secure_crossing" })) as unknown as WorldRoom;
     const c = await colyseus.connectTo(room as never, { name: "Ada" });
     const shots: ShotEvent[] = [];
-    for (const t of ["hit", "sever", "impact", "boom", "hitmark", "station", "notice", "parley", "saved", "cry", "bark", "gazette"]) c.onMessage(t, () => undefined);
+    for (const t of ["sever", "impact", "boom", "station", "notice", "parley", "saved", "cry", "bark", "gazette"]) c.onMessage(t, () => undefined);
+    const marks: HitMarkEvent[] = [];
+    const hits: HitEvent[] = [];
+    c.onMessage("hitmark", (e: HitMarkEvent) => void marks.push(e));
+    c.onMessage("hit", (e: HitEvent) => void hits.push(e));
     c.onMessage("shot", (e: ShotEvent) => void shots.push(e));
     await sleep(300);
-    return { room, c, shots, inner: room as unknown as Inner, me: room.state.players.get(c.sessionId)! as PlayerStateType };
+    return { room, c, shots, marks, hits, inner: room as unknown as Inner, me: room.state.players.get(c.sessionId)! as PlayerStateType };
   }
 
   it("an arm shot takes a sentry's rifle and puts his fists up; a leg shot floors him, and he gets up", async () => {
@@ -95,5 +99,67 @@ describe("hit reactions in a real room (D-104)", () => {
     const shaky = await shoot();
     expect(shaky.spread).toBeCloseTo(steady.spread * aimShake(me.wounds, 0), 5);
     expect(shaky.spread).toBeGreaterThan(steady.spread * 1.5);
+  }, 30_000);
+
+  it("D-105: a sabre on a floored sentry finishes him (down, marked as a coup de grace to the one who struck, a second wind for her); on a man on his feet it is only a blow", async () => {
+    const { room, c, marks, hits, inner, me } = await kessar();
+    const key = "npc:sentry-3";
+    const s = room.state.players.get(key)! as PlayerStateType;
+    const input = c.input({ type: MoveInput, mode: "reliable" }) as unknown as Input;
+    const d = input.data;
+    // the sabre drawn, facing north (yaw 0 looks down -Z)
+    d.weapon = weaponToWire(WEAPON.SABRE);
+    d.yaw = d.aimYaw = yawToWire(0);
+    d.aimElev = 0;
+    for (let i = 0; i < 25; i++) {
+      input.send();
+      await sleep(40);
+    }
+    await until(() => me.weapon === weaponToWire(WEAPON.SABRE), 3000, "the sabre drawn");
+    me.health = 60;
+    // the second wind, measured across the room's own payout (any other harm to her in the same moment would blur her health)
+    const host = (inner.combat as unknown as { host: { finished?: (by: string, t: string, w: number) => void } }).host;
+    const paid = host.finished!.bind(host);
+    let gained = 0;
+    host.finished = (by, t, w) => {
+      const h0 = me.health;
+      paid(by, t, w);
+      gained = me.health - h0;
+    };
+    // floored by a blow nobody is named for (so the Ward is not up yet), then she steps up just south of him and swings
+    inner.casualties.damage(key, 30, { zone: ZONE.LEG_L, dirX: 0, dirZ: -1 });
+    expect(reactKind(s.react)).toBe(REACT.FLOORED);
+    c.send("debug", { cmd: `tp:${s.x}:${s.z + 1.2}:0` });
+    for (let i = 0; i < 4; i++) {
+      input.send();
+      await sleep(40);
+    }
+    d.buttons = BUTTON.FIRE;
+    input.send();
+    await until(() => marks.some((m) => m.fin === true), 3000, "the coup de grace");
+    d.buttons = 0;
+    input.send();
+    expect((s.flags & FLAG.DOWNED) !== 0).toBe(true);
+    expect(gained).toBe(FINISHER.heal);
+    expect(hits.some((h) => h.id === key && h.fin === true && h.down)).toBe(true);
+    // the control, last: the same blade on a sentry on his feet is an ordinary blow. Her finisher roused the Ward, who move and shoot (CI read his spot 900 ms before
+    // the swing, and he had gone), so the garrison is stood down first: he stops where he is, on his feet, and nobody shoots her
+    const cast = (room as unknown as { cast: { order(group: string, o: { o: "stand_down" }): void; byKey: Map<string, { group: string }> } }).cast;
+    cast.order(cast.byKey.get("npc:sentry-1")!.group, { o: "stand_down" });
+    await sleep(900); // (he comes to a stop; the sabre's cooldown)
+    const o = room.state.players.get("npc:sentry-1")! as PlayerStateType;
+    expect((o.flags & FLAG.DOWNED) !== 0).toBe(false);
+    me.health = 100;
+    c.send("debug", { cmd: `tp:${o.x}:${o.z + 1.1}:0` });
+    for (let i = 0; i < 4; i++) {
+      input.send();
+      await sleep(40);
+    }
+    const n = marks.length;
+    d.buttons = BUTTON.FIRE;
+    input.send();
+    await until(() => marks.length > n, 3000, "the ordinary blow");
+    expect(marks[n]!.fin).toBeUndefined();
+    expect(marks.filter((m) => m.fin).length).toBe(1);
   }, 30_000);
 });

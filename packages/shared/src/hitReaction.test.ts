@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HIT_REACT, REACT, aimShake, packReact, reactHolds, reactKind, reactOverrides, reactRight, reactSeconds, reactionFor } from "./hitReaction.ts";
+import { FINISHER, HIT_REACT, REACT, aimShake, findFinisherTarget, packReact, reactHolds, reactKind, reactOverrides, reactRight, reactSeconds, reactionFor } from "./hitReaction.ts";
 import { LIMB } from "./limbs.ts";
 import { WEAPON, WEAPONS, spreadFor } from "./weapons.ts";
 import { ZONE, setWound } from "./wounds.ts";
@@ -81,5 +81,26 @@ describe("D-104: hit reactions", () => {
     expect(spreadFor(rifle, { aiming: true, speed: 0, crouching: false, shake: 1 })).toBe(steady);
     expect(spreadFor(rifle, { aiming: true, speed: 0, crouching: false, shake: grievous })).toBeCloseTo(steady * grievous, 9);
     expect(spreadFor(rifle, { aiming: true, speed: 0, crouching: false, shake: 0.2 })).toBe(steady); // (nothing steadies a hand past steady)
+  });
+});
+
+describe("D-105: who a blow would finish (the prompt's half; the server decides from the swing)", () => {
+  const DOWN = 1;
+  const floored = packReact(REACT.FLOORED, false, 1.5);
+  type Row = { x: number; z: number; npc: number; flags: number; react: number };
+  const find = (me: { x: number; z: number; facing: number }, rows: Record<string, Row>): string | undefined =>
+    findFinisherTarget<string>(me, (cb) => Object.entries(rows).forEach(([k, o]) => cb(k, o)), DOWN);
+
+  it("the nearest staggered NPC in reach and in front; never one standing, one already down, one behind, or a player", () => {
+    const me = { x: 0, z: 0, facing: 0 }; // (facing 0 looks down -Z)
+    expect(find(me, { a: { x: 0, z: -1.5, npc: 1, flags: 0, react: floored } })).toBe("a");
+    expect(find(me, { a: { x: 0, z: -1.5, npc: 1, flags: 0, react: 0 } })).toBeUndefined();
+    expect(find(me, { a: { x: 0, z: -1.5, npc: 1, flags: DOWN, react: floored } })).toBeUndefined();
+    expect(find(me, { a: { x: 0, z: 1.5, npc: 1, flags: 0, react: floored } })).toBeUndefined();
+    expect(find(me, { a: { x: 0, z: -(FINISHER.promptReach + 0.2), npc: 1, flags: 0, react: floored } })).toBeUndefined();
+    expect(find(me, { a: { x: 0, z: -1.5, npc: 0, flags: 0, react: floored } })).toBeUndefined();
+    // disarmed is not staggered: he is on his feet with his fists up
+    expect(find(me, { a: { x: 0, z: -1.5, npc: 1, flags: 0, react: packReact(REACT.DISARMED, true, 0.9) } })).toBeUndefined();
+    expect(find(me, { far: { x: 0.3, z: -1.9, npc: 1, flags: 0, react: floored }, near: { x: -0.2, z: -1.1, npc: 1, flags: 0, react: packReact(REACT.DOUBLED, false, 1) } })).toBe("near");
   });
 });

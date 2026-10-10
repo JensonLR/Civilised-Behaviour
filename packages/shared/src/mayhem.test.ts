@@ -45,6 +45,7 @@ describe("D-084: the casualty column", () => {
     { k: "civilian", victim: "Carter Obadiah Plume", by: "Ada" },
     { k: "brolly", victim: "Picket Mabel Quenby", by: "Ada" },
     { k: "double", by: "Ada", n: 2 },
+    { k: "finisher", victim: "Sentry Tamsin Cray", by: "Ada" },
     ...REQUEST_IDS.map((id): MayhemFact => ({ k: "request", id })),
   ];
 
@@ -116,6 +117,18 @@ describe("D-084: the Society's requests", () => {
     expect(REQUESTS.punctual.done(q, { resolution: "paid", seconds: 301 })).toBe(false);
     expect(REQUESTS.punctual.done(q, { resolution: "paid", seconds: 300 })).toBe(true);
     for (const id of REQUEST_IDS) expect(REQUESTS[id].reward).toBeGreaterThan(0);
+  });
+});
+
+describe("D-105: the coup de grace in the bill", () => {
+  it("is billed, paid for as spectacle (two pounds each, under the cap), and a record saved before it existed reads as none", () => {
+    const b = { ...newBill(), finishers: 2 };
+    expect(spectacle(b).pay).toBe(4);
+    expect(billLine(b)).toContain("2 coups de grâce");
+    expect(billLine({ ...newBill(), finishers: 1 })).toContain("1 coup de grâce");
+    const old = parseBillRecord({ day: 3, region: "kessar", request: "flight", met: false, spectacle: 0, bill: { foes: 2, limbs: 1 } }, isRegionId)!;
+    expect(old.bill.finishers).toBe(0);
+    expect(FACT_RANK.finisher).toBeGreaterThan(FACT_RANK.headshot);
   });
 });
 

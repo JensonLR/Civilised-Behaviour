@@ -255,3 +255,30 @@ describe("D-087: the party speaks", () => {
     expect(barks.map((b) => `${b.id}:${b.k}`)).toEqual(["ada:chain", "bram:flung"]);
   });
 });
+
+describe("D-105: the coup de grace", () => {
+  it("the party finishing an enemy is billed, printed and boasted of; finishing a colleague, a bystander, or by the enemy is not the Society's spectacle", () => {
+    const rows: Record<string, { name: string; npc: number }> = {
+      ada: { name: "Ada", npc: 0 }, "npc:hand": { name: "Rifleman Tobias Fenn", npc: NPC.HIRED_RIFLE },
+      "npc:s1": { name: "Picket Corporal Dunstan Aldous", npc: NPC.SENTRY }, "npc:carter": { name: "Carter Obadiah Plume", npc: NPC.DRIVER },
+    };
+    const printed: { t: string; k: string }[] = [];
+    const barks: { id: string; kind: string }[] = [];
+    const m = new Mayhem({ row: (id) => rows[id], print: (t, k) => printed.push({ t, k }), changed: () => undefined, bark: (id, kind) => barks.push({ id, kind }) });
+    m.begin(1234, 3, "secure_crossing");
+    m.onFinisher("npc:s1", "ada", WEAPON.SABRE);
+    expect(m.bill.finishers).toBe(1);
+    expect(barks).toEqual([{ id: "ada", kind: "finisher" }]);
+    for (let i = 0; i < 40; i++) m.tick(0.1);
+    expect(printed.some((p) => p.k === "finisher" && p.t.includes("Picket Corporal Dunstan Aldous") && p.t.includes("Ada"))).toBe(true);
+    // a hired hand finishing counts for the expedition too
+    m.onFinisher("npc:s1", "npc:hand", WEAPON.FISTS);
+    expect(m.bill.finishers).toBe(2);
+    // not the Society's: a bystander, one of our own, or the enemy doing it
+    m.onFinisher("npc:carter", "ada", WEAPON.SABRE);
+    m.onFinisher("npc:hand", "ada", WEAPON.SABRE);
+    m.onFinisher("npc:hand", "npc:s1", WEAPON.SABRE);
+    m.onFinisher("nobody", "ada", WEAPON.SABRE);
+    expect(m.bill.finishers).toBe(2);
+  });
+});

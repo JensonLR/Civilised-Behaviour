@@ -2,6 +2,25 @@ import type { RegionId } from "./campaignTypes.ts";
 import { insideFootprint, type CollisionWorld } from "./collision.ts";
 import { regionCover } from "./groundCover.ts";
 import { hash3 } from "./rng.ts";
+
+/**
+ * `hash3` in its top 30 bits: the same mixing, the low two bits dropped, so the roll is a small integer and is never boxed. `hash3` returns a uint32, and half of those do not
+ * fit the engine's small integers: from a call the engine did not inline, each came back as a 16-byte heap number. Whether the step inlined it depended on what had been
+ * compiled when the step was (load, timing), so on a loaded machine the step allocated ~400 B (the allocation test failed 1 run in ~5). `fireRoll(...) < p * ROLL` is
+ * `hash3(...) / 2^32 < p` to within 2^-30: the fires burn as they did.
+ */
+export function fireRoll(seed: number, x: number, y: number, z: number): number {
+  let h = (seed | 0) ^ 0x9e3779b9;
+  h = Math.imul(h ^ (x | 0), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13) ^ (y | 0), 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 16) ^ (z | 0), 0x27d4eb2f);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  return h >>> 2;
+}
+/** 2^30: a `fireRoll` divided by this is a fraction in [0, 1). */
+const ROLL = 1073741824;
 import { smoothstep } from "./math.ts";
 import { valueNoise } from "./terrain.ts";
 
@@ -280,7 +299,7 @@ export class FireGrid {
     for (let k = this.n - 1; k >= 0; k--) {
       const c = this.list[k]!;
       let lft = this.left[c]! - 1;
-      if (rain > 0 && hash3(seed ^ 0x5a1, c, tick, 9) / 4294967296 < rain * 0.5) lft--;
+      if (rain > 0 && fireRoll(seed ^ 0x5a1, c, tick, 9) < rain * 0.5 * ROLL) lft--;
       if (lft <= 0) {
         this.left[c] = 0;
         this.unlist(c);
@@ -304,9 +323,9 @@ export class FireGrid {
         let wm = 1 + align * wind * (align > 0 ? FIRE.windGain : 1);
         if (wm < FIRE.windFloor) wm = FIRE.windFloor;
         const p = ((FIRE.spread * fb) / 254) * wm * (d >= 4 ? FIRE.diagonal : 1) * choke;
-        if (hash3(seed ^ 0xf17e, c, tick, d) / 4294967296 < p) this.queue(nc);
+        if (fireRoll(seed ^ 0xf17e, c, tick, d) < p * ROLL) this.queue(nc);
       }
-      if (wind > FIRE.emberWind && hash3(seed ^ 0xe3b, c, tick, 11) / 4294967296 < FIRE.ember * wind * choke) {
+      if (wind > FIRE.emberWind && fireRoll(seed ^ 0xe3b, c, tick, 11) < FIRE.ember * wind * choke * ROLL) {
         const dist = 2 + (hash3(seed ^ 0xe3c, c, tick, 12) % 3);
         const ei = ci + Math.round(windX * dist);
         const ej = cj + Math.round(windZ * dist);

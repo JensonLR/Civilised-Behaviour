@@ -91,6 +91,8 @@ export interface HitInfo {
   weapon?: WeaponId;
   /** D-103: the flames (the hit event says so: the clients draw no blood for it). */
   burn?: boolean;
+  /** D-105: a coup de grace (the hit event says so: the clients throw more blood). */
+  finisher?: boolean;
 }
 
 interface Revive {
@@ -156,6 +158,7 @@ export class Casualties {
     const lift = hit.lift !== undefined && hit.lift > 0 ? Math.min(1, hit.lift) : 0;
     const ev: HitEvent = lift > 0 ? { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down, lift } : { id: sessionId, zone, dx: dx / len, dz: dz / len, power, down };
     if (hit.burn) ev.burn = true;
+    if (hit.finisher) ev.fin = true;
     this.host.emitHit(ev);
     // A heavy blow to a limb (helped by how cut up it already is) can take it off. The roll only happens when there is a chance,
     // so unrelated hits never consume randomness.

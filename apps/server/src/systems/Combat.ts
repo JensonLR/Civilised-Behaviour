@@ -37,6 +37,7 @@ import {
   spreadFor,
   aimShake,
   reactHolds,
+  FINISHER,
   stepBallistic,
   weaponFromWire,
   yawFromWire,
@@ -102,6 +103,8 @@ export interface CombatHost {
    * the playtest emptied a rifle at the Ward's sentries from the bridge, every round into the parapet beside them, and they never looked up.
    */
   shotAt?(shooter: string, target: string): void;
+  /** D-105: `by` finished `target` with a blow from the hand (`weapon`): the room pays out (health back, the fright, the Society's notice). Told before the blow's damage. */
+  finished?(by: string, target: string, weapon: WeaponId): void;
 }
 
 /** How close a round must pass to an NPC's chest to count as being shot at (m). */
@@ -169,6 +172,8 @@ interface Pending {
   /** 0..1: a blast's throw (D-064), carried to the hit event. */
   lift: number;
   point: { x: number; y: number; z: number };
+  /** D-105: a blow from the hand on a man down on a knee or doubled over: a coup de grace. */
+  fin: boolean;
 }
 
 interface Cannon {
@@ -287,7 +292,7 @@ export class Combat {
   private impactCount = 0;
   private workers: string[] = [];
   /** Counters for tests and /metrics. */
-  readonly stats = { shots: 0, swings: 0, hits: 0, blasts: 0, refused: 0, projectilesDropped: 0 };
+  readonly stats = { shots: 0, swings: 0, hits: 0, blasts: 0, refused: 0, projectilesDropped: 0, finishers: 0 };
   /** The rewind (ms) applied to the last shots, newest last (diagnostics: tests compare it with the RTT the client is under). */
   readonly lagLog: number[] = [];
 
@@ -760,13 +765,13 @@ export class Combat {
     this.host.emitImpact({ id: shooter, x: c.x, y: c.y, z: c.z, nx: c.nx, ny: c.ny, nz: c.nz, s: c.surface, w: weapon });
   }
 
-  private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number, lift = 0): void {
+  private addHit(shooter: string, target: string, weapon: WeaponId, damage: number, zone: number, dx: number, dz: number, knock: number, stumble: number, x: number, y: number, z: number, key: number, lift = 0, fin = false): void {
     const t = this.host.players.get(target);
     if (!t || !(damage > 0)) return;
     const k = key * 32 + (t.slot & 31); // (NPC rows take slots 16+, so every victim of one blast keeps its own entry)
     let h = this.pending.get(k);
     if (!h) {
-      h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, lift: 0, point: { x, y, z } };
+      h = { shooter, target, weapon, damage: 0, zone, zoneDamage: 0, dirX: 0, dirZ: 0, knock: 0, stumble: 0, lift: 0, point: { x, y, z }, fin: false };
       this.pending.set(k, h);
     }
     h.damage += damage;
@@ -782,6 +787,7 @@ export class Combat {
     h.knock = Math.max(h.knock, knock);
     h.stumble = Math.max(h.stumble, stumble);
     h.lift = Math.max(h.lift, lift);
+    if (fin) h.fin = true;
   }
 
   /** Turns the hits gathered this tick into damage: one wound event per shot per victim, however many pellets landed. */
@@ -806,11 +812,17 @@ export class Combat {
       // ffScale softens a comrade's hit; the garrison is an enemy and takes the whole blow.
       const damage = h.damage * (self ? Math.min(def.ffScale, 0.5) : this.partySide(t) && this.partySide(this.host.players.get(h.shooter)) ? def.ffScale : 1);
       const before = t.missing;
-      this.host.damage(h.target, damage, h.lift > 0 ? { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, lift: h.lift, weapon: h.weapon } : { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, weapon: h.weapon });
+      if (h.fin) {
+        // D-105: the coup de grace. It is told first (the payout, the fright, the Society's notice: the room's bark for it then wins the moment), then it always
+        // puts him down, sprawling, and a blade is far likelier to take the limb it lands on
+        this.host.finished?.(h.shooter, h.target, h.weapon);
+        this.stats.finishers++;
+        this.host.damage(h.target, Math.max(damage, t.health + 1), { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias * FINISHER.severMul, by: h.shooter, lift: FINISHER.lift, weapon: h.weapon, finisher: true });
+      } else this.host.damage(h.target, damage, h.lift > 0 ? { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, lift: h.lift, weapon: h.weapon } : { zone: h.zone as ZoneId, dirX, dirZ, severBias: def.severBias, by: h.shooter, weapon: h.weapon });
       this.knock(t, dirX, dirZ, h.knock, h.stumble, 0);
       this.stats.hits++;
       metrics.hitsLanded++;
-      if (!self) this.host.sendTo(h.shooter, { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before });
+      if (!self) this.host.sendTo(h.shooter, h.fin ? { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before, fin: true } : { zone: h.zone, down: (t.flags & FLAG.DOWNED) !== 0, sever: t.missing !== before });
     }
     this.pending.clear();
   }
@@ -957,7 +969,9 @@ export class Combat {
       const dx = t.x - ox;
       const dz = t.z - oz;
       const l = Math.hypot(dx, dz) || 1;
-      this.addHit(sessionId, h.id, def.id, meleeDamage(m, h.zone), h.zone, dx / l, dz / l, m.knock, m.stumble, h.x, h.y, h.z, s.key);
+      // D-105: a man down on a knee or doubled over is finished by the blow (never one of your own side: a colleague is helped up, not seen off)
+      const fin = reactHolds(t.react) && !(this.partySide(t) && this.partySide(p));
+      this.addHit(sessionId, h.id, def.id, meleeDamage(m, h.zone), h.zone, dx / l, dz / l, fin ? FINISHER.knock : m.knock, m.stumble, h.x, h.y, h.z, s.key, 0, fin);
     }
     // Props in the arc are shoved (nearest one per ray of the fan's middle heights).
     if (struck < m.cleave) {

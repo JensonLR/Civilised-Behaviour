@@ -50,9 +50,11 @@ export interface Bill {
   shots: number;
   /** Enemies the party put down with an umbrella. */
   brolly: number;
+  /** D-105: enemies the party finished with a blow while they were down on a knee or doubled over. */
+  finishers: number;
 }
 
-export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0 });
+export const newBill = (): Bill => ({ foes: 0, civilians: 0, limbs: 0, bladeLimbs: 0, ownLimbs: 0, headshots: 0, flings: 0, longest: 0, longestWho: "", kegs: 0, chain: 0, friendly: 0, partyDowns: 0, shots: 0, brolly: 0, finishers: 0 });
 
 /** A blast that throws a body this far (yards) makes the column and counts as a flight. */
 export const FLING_YARDS = 7;
@@ -88,10 +90,11 @@ export type MayhemFact =
   | { k: "civilian"; victim: string; by: string }
   | { k: "brolly"; victim: string; by: string }
   | { k: "double"; by: string; n: number }
+  | { k: "finisher"; victim: string; by: string }
   | { k: "request"; id: RequestId };
 
 /** When several land at once (a blast), the best is printed: a commission met, a chain, a limb, a flight... */
-export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, friendly: 5, double: 4, headshot: 3, civilian: 2 };
+export const FACT_RANK: Readonly<Record<MayhemFact["k"], number>> = { request: 9, chain: 8, sever: 7, brolly: 7, fling: 6, finisher: 6, friendly: 5, double: 4, headshot: 3, civilian: 2 };
 
 const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" | "severOwn" | "flingOwn", readonly string[]>> = {
   sever: [
@@ -146,6 +149,12 @@ const GAZ: Readonly<Record<Exclude<MayhemFact["k"], "request"> | "severPowder" |
     "{by} has felled {victim} with an umbrella. The Umbrella Makers' Company is beside itself.",
     "{victim} has been put down by {by}'s umbrella, closed. Imagine it open.",
     "{by} fells {victim} with a British umbrella. Pall Mall is beside itself.",
+  ],
+  finisher: [
+    "{by} has administered the coup de grâce to {victim}, with a little bow.",
+    "{victim} was already on the way down. {by} saw to the rest.",
+    "{by} finishes {victim} in the manner of a gentleman: from close, and without a word.",
+    "{victim} has been finished off by {by}. The Society calls it tidiness.",
   ],
   double: [
     "{by} has dropped {n} in as many seconds. The Committee for Remittances leans forward.",
@@ -282,7 +291,7 @@ export const SPECTACLE_CAP = 30;
 
 /** What the Committee for Remittances adds for the spectacle (pounds, capped) and the line it sends; 0 and "" for a dull run. */
 export function spectacle(b: Bill): { pay: number; line: string } {
-  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly;
+  const raw = 3 * b.limbs + 2 * b.flings + (b.chain >= 3 ? 6 : b.chain >= 2 ? 3 : 0) + b.headshots + 4 * b.brolly + 2 * (b.finishers ?? 0);
   const pay = Math.min(SPECTACLE_CAP, raw);
   if (pay <= 0) return { pay: 0, line: "" };
   return { pay, line: `The Committee adds £${pay} for spectacle${pay === SPECTACLE_CAP ? ", the most it will pay for anything it has to print with a warning" : ""}. London wants more of this.` };
@@ -298,6 +307,7 @@ export function billLine(b: Bill): string {
   if (b.kegs > 0) parts.push(`${plural(b.kegs, "keg", "kegs")}${b.chain >= 2 ? ` (a chain of ${b.chain})` : ""}`);
   if (b.headshots > 0) parts.push(plural(b.headshots, "hat vacated", "hats vacated"));
   if (b.brolly > 0) parts.push(plural(b.brolly, "man umbrella'd", "men umbrella'd"));
+  if ((b.finishers ?? 0) > 0) parts.push(plural(b.finishers, "coup de grâce", "coups de grâce"));
   if (b.friendly > 0) parts.push(plural(b.friendly, "colleague shot", "colleagues shot"));
   if (b.civilians > 0) parts.push(plural(b.civilians, "bystander", "bystanders"));
   if (b.ownLimbs > 0) parts.push(`${plural(b.ownLimbs, "limb", "limbs")} of our own`);

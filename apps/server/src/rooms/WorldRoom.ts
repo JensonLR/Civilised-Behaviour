@@ -48,6 +48,7 @@ import {
   type ZoneId,
   ZONE,
   isZone,
+  FINISHER,
   CANNON,
   CANNON_SPOTS,
   CRANK,
@@ -483,6 +484,14 @@ export class WorldRoom extends Room<{ state: WorldStateType; input: MoveInputTyp
         this.cast.shotFrom(target, shooter);
       },
       blasted: (id, speed) => this.mounts.onBlast(id, speed),
+      // D-105: a coup de grace pays: the one who struck gets a second wind, the fallen man's friends nearby lose their nerve, the Society takes note
+      finished: (by, target, weapon) => {
+        const who = this.state.players.get(by);
+        if (who && (who.flags & FLAG.DOWNED) === 0) who.health = Math.min(100, who.health + FINISHER.heal);
+        const t = this.state.players.get(target);
+        if (t) this.cast.terror(target, t.x, t.z);
+        if (this.scenario?.live) this.mayhem.onFinisher(target, by, weapon);
+      },
       // D-091: the Society's breech-loaders, for its own people (a player, never a row: the garrison's and the bandits' guns are their own)
       reloadScale: (sid, weapon) => (this.state.players.get(sid)?.npc === 0 && (weapon === WEAPON.RIFLE || weapon === WEAPON.PISTOL) ? techEffects(this.settlements.tech).reloadScale : 1),
       propShot: (id, shooter) => this.propShot(id, shooter),

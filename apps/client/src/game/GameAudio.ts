@@ -187,6 +187,12 @@ export class GameAudio {
     playSfx("gore_blood_ground", { x, y, z, volume: 0.8 });
   }
 
+  /** D-105: a coup de grace lands (the bone and the heavy blow; the Gore setting keys the wet ones, audio/index.ts). */
+  finisher(x: number, y: number, z: number): void {
+    playSfx("gore_bone", { x, y, z, volume: 1 });
+    playSfx("gore_flesh_heavy", { x, y, z, volume: 0.9 });
+  }
+
   /** D-104: a weapon knocked out of a hand hits the ground. */
   clatter(x: number, y: number, z: number): void {
     playSfx("drop", { x, y, z, volume: 0.9 });
