@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Staithe (D-126, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Five houses, the coffins, post, crepe line and steelyard in Vesper's merged solid (no draw of their own; seven lantern-glass panes join the windows' draw, five notices the cloth's plaques) | Node, no GPU, `WORLD_STATS=1` (`vesper.test.ts` budgets) | Main-pass draws unchanged **22 / 26 / 35 / 35**; triangles **test 47,259 / low 87,861 / medium 247,043 / high 344,974** (were 45,451 / 86,053 / 242,633 / 340,564: +4,410 at medium and high). `VESPER_VIEW_BUDGET` (22 / 28 / 44 / 44, 120k / 170k / 440k / 540k) unchanged, never loosened; medium has 193k left. Colliders: the hamlet adds 10 and drops the few seeded boulders in its yards. The cloth atlas grows by five plaque strips (96 px each). |
+
 ## Vesper's folk (D-125, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

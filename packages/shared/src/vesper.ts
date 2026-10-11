@@ -9,6 +9,7 @@ import { levelOf, planBuilding, roomObstacles, type LevelBuilding, type RegionLe
 import { PropKind, type PropSpawn } from "./props.ts";
 import { ARRIVAL_TOWARD, arrivalCentre, bottles, chairRow, compose, crateStack, desk, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng } from "./rng.ts";
+import { inStaithe, staitheObstacles, staithePlan, staitheTop } from "./staithe.ts";
 import { createTerrain, valueNoise, type Terrain } from "./terrain.ts";
 
 /**
@@ -447,6 +448,8 @@ export function vesperLevel(): RegionLevel {
     planBuilding("winding", "solid", at(p.winding), { height: p.winding.height, floor: 0, wallH: p.winding.height }),
     planBuilding("tipple", "solid", at(p.tipple), { height: p.tipple.height, floor: 0, wallH: p.tipple.height }),
     ...p.tents.map((t, i) => planBuilding(`syndicate.tent${i}`, "tent", { x: t.x, z: t.z, yaw: t.yaw, hx: 2, hz: 1.6 }, { height: 2.4, floor: 0, wallH: 2.4 })),
+    // D-126: the Staithe's houses, every door sealed with a notice (docs/LEVEL_PLAN.md: the region's one interior stays the Records Room)
+    ...staithePlan().houses.map((h) => planBuilding(`staithe.${h.id}`, "sealed", { x: h.x, z: h.z, yaw: h.yaw, hx: h.hx, hz: h.hz }, { height: staitheTop(h), floor: 0, wallH: h.wallH, sign: h.sign })),
   ];
   cachedLevel = levelOf(buildings);
   return cachedLevel;
@@ -594,6 +597,7 @@ export function vesperObstacles(terrain: Terrain, seed: number): Obstacle[] {
     }
     return true;
   };
+  const seeded0 = out.length;
   for (let i = 0, tries = 0; i < 46 && tries < 900; tries++) {
     const z = rng.range(-106, 106);
     const x = rng.range(vesperWestFoot(z) + 3, vesperEastFoot(z) - 3);
@@ -606,6 +610,13 @@ export function vesperObstacles(terrain: Terrain, seed: number): Obstacle[] {
   // D-125: the sample bin (after the boulders, so their draw is unchanged: it stands inside the Assay House's own keep-clear, where no boulder can fall)
   const sb = plan.sampleBin;
   box("crate", sb.x, sb.z, sb.hx, sb.hz, sb.yaw, sb.height);
+  // D-126: the Staithe. The boulders are drawn exactly as before; whichever of them stood in the hamlet's yards is not there, and the hamlet's solids are appended
+  // with no random draws, so nothing else in the gorge has moved.
+  for (let i = out.length - 1; i >= seeded0; i--) {
+    const o = out[i]!;
+    if (o.kind === "circle" && o.tag === "rock" && inStaithe(o.x, o.z, o.r, 1)) out.splice(i, 1);
+  }
+  out.push(...staitheObstacles(terrain));
   return out;
 }
 

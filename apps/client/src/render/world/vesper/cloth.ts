@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshToonMaterial, SRGBColorSpace } from "three";
 import { letterSign } from "../signLettering.ts";
-import { PALETTE, VESPER_SEALED_SIGNS, VESPER_SIGNS, cssHex, vesperLevel, type Terrain } from "./shared.ts";
+import { PALETTE, STAITHE_SIGNS, VESPER_SEALED_SIGNS, VESPER_SIGNS, cssHex, vesperLevel, type Terrain } from "./shared.ts";
 import { pushPlaques } from "../plaques.ts";
 import { sharedToonRamp } from "@cb/procedural/three";
 import { atmoUniforms } from "../atmosphere.ts";
@@ -18,8 +18,8 @@ const BANNER_H = 448;
 const SYN_H = 320;
 const SIGN_H = 96;
 const SIGN_Y = BANNER_H + SYN_H;
-/** D-038: the sealed buildings' notices (the Assay House's, the Company's office, the magazine), one strip each after the signboards. */
-const SEALED_TEXTS: readonly string[] = [VESPER_SEALED_SIGNS.assay, VESPER_SEALED_SIGNS.office, VESPER_SEALED_SIGNS.magazine];
+/** D-038: the sealed buildings' notices (the Assay House's, the Company's office, the magazine; D-126: the Staithe's five), one strip each after the signboards. */
+const SEALED_TEXTS: readonly string[] = [VESPER_SEALED_SIGNS.assay, VESPER_SEALED_SIGNS.office, VESPER_SEALED_SIGNS.magazine, ...STAITHE_SIGNS];
 const PLAQUE_Y = SIGN_Y + SIGN_H * VESPER_SIGNS.length;
 export const ATLAS_H = PLAQUE_Y + SIGN_H * SEALED_TEXTS.length;
 
