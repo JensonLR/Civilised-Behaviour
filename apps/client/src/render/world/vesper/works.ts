@@ -327,6 +327,9 @@ function wharf(k: Kit, world: CollisionWorld, lod: Lod): void {
   k.limb([0, 0.9, -2.6], [0, 4.4, -2.6], 0.1, 0.07, P.timber, 6);
   k.add(new SphereGeometry(0.12, 5, 4), { at: [0, 4.5, -2.6], colour: P.glowLamp });
   k.clearBase();
+  // D-125: the gangplank from the deck's edge down to the barge's gunwale (the bargefolk's way aboard: they live on her)
+  const gx0 = q.x + q.half - 0.1, gx1 = bt.x - 1.3, gy0 = q.y + 0.03, gy1 = q.pool.y + 1.0;
+  k.add(new BoxGeometry(Math.hypot(gx1 - gx0, gy1 - gy0) + 0.2, 0.06, 0.7), { at: [(gx0 + gx1) / 2, (gy0 + gy1) / 2, bt.z], rot: [0, 0, Math.atan2(gy1 - gy0, gx1 - gx0)], colour: P.timberLight, flat: true });
 }
 
 export function addVesperWorks(k: Kit, world: CollisionWorld, lod: Lod, parts: VesperSolidParts): void {

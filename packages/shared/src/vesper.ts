@@ -303,6 +303,8 @@ export interface VesperPlan {
   /** The Long Cloister: a gallery of arches along the foot of the west cliff, with a bell-gable. */
   cloister: VesperBox & { arches: number };
   assay: VesperBox;
+  /** D-125: the Assay House's sample bin, against its south wall: the porter tips the carts' samples into it and the clerk tallies them on the board above. */
+  sampleBin: VesperBox;
   /** The Assay House's furnace stack. */
   chimney: VesperRound;
   /** The Company's yard at the head: the foreman's office, the powder magazine, the timber stack. */
@@ -346,6 +348,7 @@ export function vesperPlan(): VesperPlan {
   const cloister = { x: -47.5, z: 44, yaw: 0, hx: 5.5, hz: 18, height: 7.2, arches: 7 };
   const assay: VesperBox = { x: 39, z: 16, yaw: 0, hx: 5.5, hz: 5, height: 6.4 };
   const chimney: VesperRound = { x: 43.5, z: 10, r: 0.9, height: 17 };
+  const sampleBin: VesperBox = { x: assay.x - 2, z: assay.z - assay.hz - 0.6, yaw: 0, hx: 1.1, hz: 0.55, height: 0.9 };
   // (D-038: the office moved 4 m east and 3 m south: at (-19,-84) its north-west corner stood in the cliff's foot, on a 3.5 m slope)
   const office: VesperBox = { x: -15, z: -81, yaw: 0, hx: 3.6, hz: 3, height: 3.6 };
   const magazine: VesperBox = { x: -24, z: -73, yaw: 0, hx: 2.4, hz: 2, height: 2.6 };
@@ -403,7 +406,7 @@ export function vesperPlan(): VesperPlan {
     pool: { x: 0, z: 134, r: 8, y: -1.1 },
   };
   cachedPlan = {
-    cloister, assay, chimney, office, magazine, timberStack, winding, headframe, trestle, tipple, fall, lamps, signs, banners,
+    cloister, assay, sampleBin, chimney, office, magazine, timberStack, winding, headframe, trestle, tipple, fall, lamps, signs, banners,
     pegs: S.claimPegs.map((p) => ({ x: p.x, z: p.z })), tents, carts, spoil, needles, wharf,
   };
   return cachedPlan;
@@ -600,6 +603,9 @@ export function vesperObstacles(terrain: Terrain, seed: number): Obstacle[] {
     out.push({ kind: "circle", tag: "rock", x, z, r, y0: y - 1.2, y1: y + r * rng.range(1.1, 1.7) });
     i++;
   }
+  // D-125: the sample bin (after the boulders, so their draw is unchanged: it stands inside the Assay House's own keep-clear, where no boulder can fall)
+  const sb = plan.sampleBin;
+  box("crate", sb.x, sb.z, sb.hx, sb.hz, sb.yaw, sb.height);
   return out;
 }
 

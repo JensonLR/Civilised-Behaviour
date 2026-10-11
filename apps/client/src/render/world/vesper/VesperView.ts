@@ -1,5 +1,5 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, smoothstep, vesperLevel, type CollisionWorld, type DayState, type ScenarioView } from "@cb/shared";
+import { PALETTE, buildVesperFolk, smoothstep, vesperLevel, type CollisionWorld, type DayState, type ScenarioView } from "@cb/shared";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { bushGeometry, grassTuftGeometry, pebbleGeometry, reedGeometry, snagGeometry, type Lod } from "../flora.ts";
@@ -8,6 +8,7 @@ import { buildRain } from "../rain.ts";
 import type { Item } from "../scatter.ts";
 import { setRgb } from "../sky.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
+import { Villagers, folkBudget } from "../villagers.ts";
 import type { WorldDetail, WorldStats } from "../WorldView.ts";
 import type { RegionView } from "../regionView.ts";
 import { buildVesperCloth, createVesperAtlas, vesperClothMaterial } from "./cloth.ts";
@@ -96,6 +97,28 @@ export class VesperView implements RegionView {
     this.count();
     // (a dev hook for stills: ?fall=open|dug|blasted|sealed|consecrated, ?pegs=party,rival,none,party and ?trig=party,none,none&candle=1 dress the scenery without a room; harmless in a game)
     this.applyScenario(dressFromUrl());
+    this.addFolk();
+  }
+
+  // ---- the gorge's folk (D-125: the same schedule and bodies as the other regions' folk: the Guild, the Assay, the Barge) -----------------------------------------
+
+  private folk?: Villagers;
+  private hours = 12;
+  private readonly walkers: { x: number; z: number }[] = [];
+  private walkerCount = 0;
+  private readonly folkFrame = { hours: 12, worldSec: 0, rain: 0, x: 0, y: 0, z: 0, walkers: this.walkers, walkerCount: 0 };
+  private lastT = -1;
+
+  private addFolk(): void {
+    if (!this.detail.villagers) return;
+    const budget = folkBudget(this.detail);
+    if (budget.count <= 0) return;
+    this.folk = new Villagers(this.scene, this.world, budget, 140, buildVesperFolk, "THE GORGE");
+  }
+
+  /** The gorge's folk: who is on stage, at what detail, and what it costs. */
+  get folkView(): Villagers | undefined {
+    return this.folk;
   }
 
   private track<T extends { dispose(): void }>(x: T): T {
@@ -279,6 +302,7 @@ export class VesperView implements RegionView {
     setWindowNight(this.ambientU.uLamp.value);
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
+    this.hours = d.hours;
   }
 
   /** The grass and scrub bend away from up to four walkers (the same pusher slots the whole world uses). */
@@ -288,9 +312,28 @@ export class VesperView implements RegionView {
       if (i < n && i < list.length) u.set(list[i]!.x, list[i]!.z, 1.5, 1);
       else u.set(0, 0, 1, 0);
     }
+    // (the gorge's folk turn their heads to the walkers and greet them)
+    this.walkerCount = Math.min(n, list.length, MAX_PUSHERS);
+    for (let i = 0; i < this.walkerCount; i++) {
+      const w = (this.walkers[i] ??= { x: 0, z: 0 });
+      w.x = list[i]!.x;
+      w.z = list[i]!.z;
+    }
   }
 
-  update(t: number, camera?: { x: number; y?: number; z: number }, _worldSec?: number): void {
+  update(t: number, camera?: { x: number; y?: number; z: number }, worldSec?: number): void {
+    if (this.folk && camera) {
+      const f = this.folkFrame;
+      f.hours = this.hours;
+      f.worldSec = worldSec ?? t;
+      f.rain = atmoUniforms.uRain.value;
+      f.x = camera.x;
+      f.y = camera.y ?? 0;
+      f.z = camera.z;
+      f.walkerCount = this.walkerCount;
+      this.folk.update(this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - this.lastT)), f);
+    }
+    this.lastT = t;
     worldTime.value = t;
     this.fill.update(t);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
@@ -303,6 +346,8 @@ export class VesperView implements RegionView {
   }
 
   dispose(): void {
+    this.folk?.dispose();
+    this.folk = undefined;
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;

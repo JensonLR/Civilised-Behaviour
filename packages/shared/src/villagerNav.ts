@@ -412,6 +412,8 @@ function stationDefs(plan: VillagePlan, terrainY: (x: number, z: number) => numb
 export interface NavTrail {
   line: ArrayLike<number>;
   width: number;
+  /** D-125: the height a walker's feet are at along it, where that is not the ground's (a deck over water); the ground by default. */
+  y?: number;
 }
 
 /** D-120: what a region's walking network is made of: its footpaths, a grid of open ground, and its stations (ideal places; `buildNavFrom` nudges and drops). */
@@ -444,11 +446,13 @@ export function buildNavFrom(world: CollisionWorld, spec: NavSpec, why?: Map<str
     for (let i = 0; i + 1 < t.line.length; i += 2) {
       const x = t.line[i]!;
       const z = t.line[i + 1]!;
-      const y = groundAt(x, z);
-      if (standingHeight(world, x, z, y) === undefined) {
+      const feet = t.y ?? groundAt(x, z);
+      const h = standingHeight(world, x, z, feet);
+      if (h === undefined) {
         prev = -1;
         continue;
       }
+      const y = t.y === undefined ? feet : h;   // (a trail on the ground keeps the ground's height, as it always has)
       const id = g.add(x, z, y, clear);
       owner.push(ti);
       if (prev >= 0 && segmentOk(world, g.x[prev]!, g.z[prev]!, g.y[prev]!, x, z)) g.link(prev, id);

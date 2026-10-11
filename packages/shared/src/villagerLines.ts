@@ -7,7 +7,7 @@ import { hash3 } from "./rng.ts";
  * dry and quite capable of managing the visitors back. Nothing here refers to any real people, nation or faith.
  */
 
-export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind | BrineLineKind | MarcherLineKind;
+export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind | BrineLineKind | MarcherLineKind | GorgeLineKind;
 
 /** D-120: what Lampside's people say (Kessar's lower town): their own trades, and the Kessarine pools below instead of Hollowmere's. */
 export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kClerk" | "kElder" | "kChild";
@@ -15,6 +15,8 @@ export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kCler
 export type BrineLineKind = "bRaker" | "bBarrow" | "bSkim" | "bTally" | "bPump" | "bElder" | "bChild";
 /** D-124: the Marchers of Highmark's capital (the King has been "pending" for six years; the Chamberlain's offices run the hill meanwhile). */
 export type MarcherLineKind = "hSeller" | "hCrier" | "hClerk" | "hPetition" | "hReeve" | "hPorter" | "hWater" | "hChild";
+/** D-125: Vesper's folk, members of the gorge's institutions (the Lamentation Guild, the Assay House, the ore barge), never a people. */
+export type GorgeLineKind = "vGuild" | "vBell" | "vElder" | "vAssay" | "vBarge" | "vChild";
 
 const GENERAL: readonly string[] = [
   "Lovely day for not improving anything.",
@@ -29,7 +31,7 @@ const GENERAL: readonly string[] = [
   "Do sign the visitors' book. We press flowers in it.",
 ];
 
-const BY_KIND: Record<Exclude<LineKind, KessarLineKind | BrineLineKind | MarcherLineKind>, readonly string[]> = {
+const BY_KIND: Record<Exclude<LineKind, KessarLineKind | BrineLineKind | MarcherLineKind | GorgeLineKind>, readonly string[]> = {
   keeper: [
     "It is very nearly the hour. It usually is.",
     "The hour is kept, not caught. Do sit.",
@@ -394,6 +396,76 @@ const MARCHER_FRIGHT: readonly string[] = [
 
 const isMarcher = (k: LineKind): k is MarcherLineKind => k in MARCHER_BY_KIND;
 
+// ---- D-125: Vesper's folk (the gorge bills per outcome) --------------------------------------------------------------------------------
+
+const GORGE_BY_KIND: Record<GorgeLineKind, readonly string[]> = {
+  vGuild: [
+    "Grief at the standard rate. Wailing is extra.",
+    "We mourn in advance. It saves time later.",
+    "Third verse, minor key. The Company pays for the minor key.",
+    "Every rock fall is a hymn. Every hymn is invoiced.",
+  ],
+  vBell: [
+    "One bell for a death, two for a claim, three for the bill.",
+    "I ring the hours. The Guild bills them.",
+    "Mind your ears. The Guild charges for silence.",
+  ],
+  vElder: [
+    "I've mourned the same miner four times. He keeps coming back for the hymns.",
+    "In my day we wept for nothing. Badly, mind.",
+    "Sixty years of grief and not one complaint. Not one we didn't invoice.",
+  ],
+  vAssay: [
+    "Ore in, verdict out. Appeals by the window.",
+    "This sample's promising. That means taxable.",
+    "Weighed twice, disputed three times.",
+    "Carry it gently. It might be valuable, which is worse.",
+  ],
+  vBarge: [
+    "The river's dry three seasons in four. We stay ready.",
+    "Ore down the gorge, grief up it. That's the trade.",
+    "Mind the plank. The plank minds no one.",
+  ],
+  vChild: [
+    "When I'm big I'll steer the barge. When there's water.",
+    "Bet you can't throw a stone over the trestle.",
+    "The Guild pays me a penny to cry. I'm saving up.",
+  ],
+};
+
+const GORGE_GENERAL: readonly string[] = [
+  "Everything in the gorge is billed. Even the echo.",
+  "Your Society's here? Then somebody's about to be surveyed.",
+  "Mind the strata. They were here first.",
+  "The Syndicate wants a railway. The rock has declined.",
+];
+
+const GORGE_RAIN: readonly string[] = [
+  "Rain! Write it down, it won't happen again.",
+  "Wet rock, wet ore, wet ledger.",
+];
+
+const GORGE_NIGHT: readonly string[] = [
+  "The cloister's lamps are lit. Grief keeps shop hours.",
+  "Night in the gorge. Even the echo's gone to bed.",
+];
+
+const GORGE_GREET: readonly string[] = [
+  "Welcome to the gorge. Mind the falling rock and the falling prices.",
+  "Ah, your Society. Here to dig, or to be mourned?",
+  "Morning! The Guild does a very reasonable rate for explorers.",
+];
+
+/** D-125: shooting in the gorge. */
+const GORGE_FRIGHT: readonly string[] = [
+  "Shots in the gorge! The echo will bill us twice!",
+  "Down! Down behind the ore!",
+  "Not again! We haven't finished the last hymn!",
+  "Into the cloister! Grieve later!",
+];
+
+const isGorge = (k: LineKind): k is GorgeLineKind => k in GORGE_BY_KIND;
+
 const RAIN: readonly string[] = [
   "It's only weather. Weather is very good at being weather.",
   "Under here, quick. The awning has never said no.",
@@ -427,6 +499,10 @@ const GREET: readonly string[] = [
 
 /** The line to show for a person: deterministic in (id, slot). `moment` picks a special pool; otherwise a mix of the person's own and the general pool. */
 export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" | "fright" = ""): string {
+  if (isGorge(kind)) {
+    const pool = moment === "rain" ? GORGE_RAIN : moment === "night" ? GORGE_NIGHT : moment === "greet" ? GORGE_GREET : moment === "fright" ? GORGE_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? GORGE_BY_KIND[kind] : GORGE_GENERAL;
+    return pool[hash3(id, slot, 11) % pool.length]!;
+  }
   if (isMarcher(kind)) {
     const pool = moment === "rain" ? MARCHER_RAIN : moment === "night" ? MARCHER_NIGHT : moment === "greet" ? MARCHER_GREET : moment === "fright" ? MARCHER_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? MARCHER_BY_KIND[kind] : MARCHER_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
@@ -445,5 +521,5 @@ export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | 
 
 /** Every line, for tests (tone and content checks). */
 export function allLines(): string[] {
-  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT];
+  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT, ...GORGE_GENERAL, ...Object.values(GORGE_BY_KIND).flat(), ...GORGE_RAIN, ...GORGE_NIGHT, ...GORGE_GREET, ...GORGE_FRIGHT];
 }
