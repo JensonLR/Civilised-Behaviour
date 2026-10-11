@@ -96,6 +96,11 @@ pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennan
 |------|-------|-------------|--------|
 | 2026-10-11 | Ten Kessarine on Hollowmere's folk machinery (pure schedule + client rigs) in Kessar's view | Node, no GPU | Network 221 nodes and 49 stations, built once per world and seed; the same `FOLK_BUDGETS` as the hub (at most 6 / 14 / 18 shown on low / medium / high, LOD by distance); the region view's own draws and triangles are unchanged (the people are their own root). Cost per frame is the hub's per person (see below): ten people is under half the hub's roster. |
 
+## The Brine Houses' salt works (D-121, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
+
 ## Hollowmere's folk (2026-09-30)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

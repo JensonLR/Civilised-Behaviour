@@ -253,6 +253,9 @@ const TAG_SURFACE: Record<string, SurfaceId> = {
   wall: SURFACE.STONE,
   ruin: SURFACE.STONE,
   fire: SURFACE.EARTH,
+  // (D-121: a clay bund and a heap of salt take a round like the ground does)
+  bund: SURFACE.EARTH,
+  salt: SURFACE.EARTH,
 };
 
 export const surfaceOfTag = (tag: string | undefined): SurfaceId => (tag !== undefined ? TAG_SURFACE[tag] : undefined) ?? SURFACE.STONE;

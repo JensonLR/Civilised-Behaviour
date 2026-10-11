@@ -32,7 +32,7 @@ function tamariskGeometry(lod: Lod): BufferGeometry {
   const k = new Kit();
   const c = topLit(P.siltDark, P.reedDark, P.reedGreen, 0.4);
   for (const [x, y, z, r] of [[0, 0.5, 0, 0.9], [0.6, 0.38, 0.3, 0.6], [-0.5, 0.34, -0.3, 0.55]] as const) {
-    k.add(new SphereGeometry(r, lod ? 9 : 6, lod ? 6 : 4), { at: [x, y, z], scale: [1, 0.75, 1], colour: c, flat: true, jitter: 0.07, seed: 31 + Math.round(x * 10) });
+    k.add(new SphereGeometry(r, lod ? 8 : 6, lod ? 5 : 4), { at: [x, y, z], scale: [1, 0.75, 1], colour: c, flat: true, jitter: 0.07, seed: 31 + Math.round(x * 10) });   // (D-121: 8 x 5, not 9 x 6: a third fewer faces on every bush, the same flat-shaded lobes; it paid for the salt works)
   }
   return k.build()!;
 }

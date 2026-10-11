@@ -5,9 +5,10 @@ import v8 from "node:v8";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import {
-  PALETTE, SALTMARKET, SALTMARKET_ANCHORS as A, SALTMARKET_CHANNELS, SALTMARKET_SIGNS, SALTMARKET_VIEW_BUDGET, createDayState, createRegionWorld, createSaltmarketWorld, dayState, saltmarketPlan, type ScenarioView,
-  type SaltmarketTerrain,
+  PALETTE, SALTMARKET, SALTMARKET_ANCHORS as A, SALTMARKET_CHANNELS, SALTMARKET_SIGNS, SALTMARKET_VIEW_BUDGET, SALTWORKS, createDayState, createRegionWorld, createSaltmarketWorld, dayState, inSaltworks, saltmarketPlan,
+  saltworksPlan, type ScenarioView, type SaltmarketTerrain,
 } from "@cb/shared";
+import { regionSurfaceAt } from "../../../audio/surface.ts";
 import { PRESETS } from "../../../render/Stage.ts";
 import { saltmarketViews } from "../../../showcase/saltmarket.ts";
 import { createRegionView } from "../regionView.ts";
@@ -391,7 +392,7 @@ describe("Saltmarket view: the palette and the showcase", () => {
 
   it("every vantage point the brief asks for exists, looks at something inside the bounds and stands above the ground", () => {
     const views = saltmarketViews((x, z) => world.terrainHeight(x, z));
-    for (const name of ["landing", "quay", "boardwalk", "channel", "stilts", "customs", "berth", "cove", "drop", "exchange", "flood", "horizon", "top"]) expect(views[name], name).toBeDefined();
+    for (const name of ["landing", "quay", "boardwalk", "channel", "stilts", "customs", "berth", "cove", "drop", "exchange", "flood", "horizon", "top", "saltworks", "pans", "heaps", "brinepump"]) expect(views[name], name).toBeDefined();
     for (const [name, [cam, at]] of Object.entries(views)) {
       expect(Number.isFinite(cam.x + cam.y + cam.z + at.x + at.y + at.z), name).toBe(true);
       expect(Math.hypot(at.x, at.z), name).toBeLessThan(A.bounds + 2);
@@ -409,5 +410,70 @@ describe("Saltmarket view: the palette and the showcase", () => {
     const noon = (water.material as unknown as { uniforms: { uLight?: unknown } }).uniforms;
     expect(noon).toBeDefined();
     v.dispose();
+  });
+});
+
+describe("D-121: the Brine Houses' salt works, drawn", () => {
+  const works = saltworksPlan();
+  const solid = buildSaltmarketSolid(world, 1);
+  const verts: [number, number, number, number, number, number][] = [];
+  for (const geo of solid.geometries) {
+    const p = geo!.attributes.position!, c = geo!.attributes.color!;
+    for (let i = 0; i < p.count; i++) if (inSaltworks(p.getX(i), p.getZ(i), 0, 9)) verts.push([p.getX(i), p.getY(i), p.getZ(i), c.getX(i), c.getY(i), c.getZ(i)]);
+  }
+  const gy = (x: number, z: number): number => world.terrainHeight(x, z);
+
+  it("draws every piece where its collider stands: a bund's top is the height a walker stands at, a heap's apex its height, the brine a sheet a hand above the floor", () => {
+    for (const b of works.bunds) {
+      // the highest point along the bund's line (away from the gates, the stakes and the pump) is its collider's top
+      const alongX = b.hx > b.hz;
+      const near = verts.filter((v) => (alongX ? Math.abs(v[0] - b.x) < b.hx - 0.5 && Math.abs(v[2] - b.z) < SALTWORKS.bund.top : Math.abs(v[2] - b.z) < b.hz - 0.5 && Math.abs(v[0] - b.x) < SALTWORKS.bund.top)
+        && !works.sluices.some((s) => Math.hypot(v[0] - s.x, v[2] - s.z) < 1.2) && Math.hypot(v[0] - works.pump.x, v[2] - works.pump.z) > 2.2
+        && !works.pans.some((p) => Math.hypot(v[0] - p.x0 - 0.45, v[2] - p.z0 - 0.45) < 0.4));
+      const top = Math.max(...near.map((v) => v[1])) - gy(b.x, b.z);
+      expect(top, `bund ${b.x},${b.z}`).toBeGreaterThan(b.height - 0.04);
+      expect(top, `bund ${b.x},${b.z}`).toBeLessThan(b.height + 0.04);
+    }
+    for (const h of works.heaps) expect(verts.some((v) => Math.hypot(v[0] - h.x, v[2] - h.z) < 0.3 && Math.abs(v[1] - gy(h.x, h.z) - h.height - (h.capped ? 0.06 : 0)) < 0.25), `heap ${h.x}`).toBe(true);
+    for (const p of works.pans.filter((q) => ["reservoir", "green", "olive", "rose"].includes(q.state))) {
+      for (const [x, z] of [[p.x0, p.z0], [p.x1, p.z1]] as const) expect(verts.some((v) => Math.abs(v[0] - x) < 0.01 && Math.abs(v[2] - z) < 0.01 && Math.abs(v[1] - gy(x, z) - 0.03) < 0.005), `${p.id} sheet`).toBe(true);
+    }
+    // the pump's pipe goes down into the Long Cut's water
+    expect(verts.some((v) => Math.abs(v[2] - works.pump.z) < 0.2 && v[0] > SALTWORKS.x1 + 3 && v[1] < SALTMARKET.waterY - 0.3), "the pipe's foot in the cut").toBe(true);
+  });
+
+  it("the brine thickens in colour: sea-green in the first condensers, rose in the third, white in the windrows", () => {
+    const mean = (state: string): [number, number, number] => {
+      const p = works.pans.find((q) => q.state === state)!;
+      const vs = verts.filter((v) => v[0] > p.x0 + 0.3 && v[0] < p.x1 - 0.3 && v[2] > p.z0 + 0.3 && v[2] < p.z1 - 0.3 && v[1] < gy(v[0], v[2]) + 0.05);
+      expect(vs.length, state).toBeGreaterThan(0);
+      return [0, 1, 2].map((k) => vs.reduce((a, v) => a + v[3 + k]!, 0) / vs.length) as [number, number, number];
+    };
+    const green = mean("green"), rose = mean("rose");
+    expect(green[1]).toBeGreaterThan(green[0]);
+    expect(rose[0]).toBeGreaterThan(rose[1]);
+    const row = works.rows[0]!;
+    const crest = verts.filter((v) => Math.abs(v[0] - row.x) < 1 && Math.abs(v[2] - row.z) < 0.15 && v[1] > gy(row.x, row.z) + row.height * 0.6);
+    expect(crest.length).toBeGreaterThan(0);
+    for (const v of crest) expect(v[3] + v[4] + v[5], "a windrow's crest is salt-white (the crust round it is no brighter than salt-shade, 1.46)").toBeGreaterThan(1.8);
+  });
+
+  it("nothing wild grows on the worked ground (no reed, sedge or bush in a pan, the yard or the bunds' margin)", () => {
+    const sc = planSaltmarketScatter(world, PRESETS.high);
+    for (const it of [...sc.reeds, ...sc.sedge, ...sc.bushes, ...sc.stakes]) expect(inSaltworks(it.x, it.z, 0, 1), `${it.x.toFixed(1)},${it.z.toFixed(1)}`).toBe(false);
+  });
+
+  it("is heard: a splash in the brine, a crunch on the crust and the windrows, clay on a bund and in the yard, planks on the boardwalk", () => {
+    const at = (state: string): [number, number] => {
+      const p = works.pans.find((q) => q.state === state)!;
+      return [(p.x0 + p.x1) / 2 + 0.3, (p.z0 + p.z1) / 2 + 0.3];
+    };
+    for (const s of ["reservoir", "green", "olive", "rose"]) expect(regionSurfaceAt("saltmarket", ...at(s)), s).toBe("water");
+    for (const s of ["crust", "raked", "lifted"]) expect(regionSurfaceAt("saltmarket", ...at(s)), s).toBe("sand");
+    const b = works.bunds[2]!;
+    expect(regionSurfaceAt("saltmarket", b.x, b.z, b.height)).toBe("mud");
+    expect(regionSurfaceAt("saltmarket", 14, 70)).toBe("mud");
+    expect(regionSurfaceAt("saltmarket", -10, 40)).toBe("plank");
+    expect(regionSurfaceAt("saltmarket", 14, 30, 0, 0.5)).toBe("water");   // (standing water is water wherever it is)
   });
 });

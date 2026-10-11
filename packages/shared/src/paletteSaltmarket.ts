@@ -20,6 +20,11 @@ export const SALTMARKET_PALETTE = {
   // salt, in small amounts
   salt: 0xe8e0d0,
   saltShade: 0xc2bcae,
+  // brine in the Houses' pans (D-121), as it thickens: sea-grey-green, olive, the rose the brine turns before it salts, and the rose crust
+  brineGreen: 0x7d9284,
+  brineOlive: 0x989a7a,
+  brineRose: 0xb68e8a,
+  brineRoseLight: 0xcfb0a8,
   // reeds
   reed: 0xb4a45c,
   reedDark: 0x7a7444,

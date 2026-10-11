@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
 import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, smoothstep, valueNoise, type Rgb, type SaltmarketTerrain, type Terrain } from "./shared.ts";
-import { saltmarketCover } from "@cb/shared";
+import { saltmarketCover, saltworksClear } from "@cb/shared";
 // (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
 export { saltmarketCover };
 
@@ -57,6 +57,13 @@ export function saltmarketGroundColour(x: number, z: number, h: number, slope: n
   mix(out, G.reedDark, cover * smoothstep(0.55, 0.8, n3) * 0.4);
   mix(out, G.reed, cover * smoothstep(0.62, 0.85, n2) * 0.25);
   mix(out, G.reedGreen, cover * smoothstep(0.7, 0.9, n1) * 0.18);
+  // D-121: the salt works' ground is trodden clay (the yard, the towpath, the margins of the bunds), with salt spilt where the barrows run
+  const works = saltworksClear(x, z);
+  if (works > 0) {
+    mix(out, G.mudPale, works * 0.55);
+    mix(out, G.saltShade, works * smoothstep(0.55, 0.85, n3) * 0.45);
+    mix(out, G.siltDark, works * smoothstep(0.7, 0.95, n2) * 0.25);
+  }
   // a bank is wet dark mud, and darker the steeper it is
   mix(out, G.mudDark, smoothstep(0.5, 1.2, slope) * 0.85);
   mix(out, G.tar, smoothstep(1.4, 3.2, slope) * 0.4);
