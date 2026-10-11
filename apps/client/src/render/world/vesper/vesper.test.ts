@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import {
-  PALETTE, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_TRIG, VESPER_VIEW_BUDGET, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign, vesperPlan,
+  CLOISTER, GORGE_DOORS, PALETTE, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_TRIG, VESPER_VIEW_BUDGET, buildVesperFolk, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign, vesperPlan,
   type ScenarioView, type VesperTerrain,
 } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
@@ -17,6 +17,8 @@ import { planVesperScatter } from "./scatter.ts";
 import { buildVesperSolid } from "./solid.ts";
 import { VesperView } from "./VesperView.ts";
 import { sheaveGeometry } from "./works.ts";
+import { noteFolkNoise } from "../folkFright.ts";
+import type { Villagers } from "../villagers.ts";
 
 // (CPU-bound: most tests here build the whole region at least once, up to about 2 s each alone; under the full suite's four workers one ran past vitest's 5 s default.
 // A time limit, not a budget: the budgets are the assertions.)
@@ -396,5 +398,64 @@ describe("Vesper view: palette discipline", () => {
       expect(lits, f).toEqual([]);
       expect(src, f).not.toMatch(/#[0-9a-fA-F]{6}\b/);
     }
+  });
+});
+
+describe("D-125: the gorge's folk", () => {
+  it("each of their ways in is drawn where they go in (the Guild's door in the corridor's back wall, the Assay House's on its east face, the gangplank to the barge) and the sample bin where they work", () => {
+    const geo = buildVesperSolid(world, 1).geometry!;
+    const p = geo.attributes.position!;
+    const folk = buildVesperFolk(world, 7);
+    const plan = vesperPlan();
+    const near = (test: (x: number, y: number, z: number) => boolean): number => {
+      let n = 0;
+      for (let i = 0; i < p.count; i++) if (test(p.getX(i), p.getY(i), p.getZ(i))) n++;
+      return n;
+    };
+    const g = (x: number, z: number): number => world.terrainHeight(x, z);
+    // the Guild's leaf, proud of the back wall, at its door's line, up to head height
+    const gz = GORGE_DOORS.guild;
+    expect(near((x, y, z) => x > CLOISTER.backX + 0.05 && x < CLOISTER.backX + 0.15 && Math.abs(z - gz) < 0.55 && y - g(x, z) > 1.9 && y - g(x, z) < 2.2), "the Guild's door").toBeGreaterThan(0);
+    const a = plan.assay;
+    const az = GORGE_DOORS.assay;
+    expect(near((x, y, z) => x > a.x + a.hx + 0.05 && x < a.x + a.hx + 0.15 && Math.abs(z - az) < 0.55 && y - g(x, z) > 1.8 && y - g(x, z) < 2.2), "the Assay House's back door").toBeGreaterThan(0);
+    // the gangplank spans the gap between the deck's edge and the barge
+    const w = plan.wharf;
+    expect(near((x, _y, z) => x > w.x + w.half + 0.2 && x < w.barge.x - 1.5 && Math.abs(z - w.barge.z) < 0.4), "the gangplank").toBeGreaterThan(0);
+    // the sample bin against the house's south wall, heaped over its rim, the tally board on the wall above it; it is solid, and the folk's place at it stands before its front
+    const sb = plan.sampleBin;
+    const by = g(sb.x, sb.z);
+    expect(near((x, y, z) => Math.abs(x - sb.x) < sb.hx - 0.1 && Math.abs(z - sb.z) < sb.hz - 0.1 && y - by > sb.height + 0.01), "the ore heaped over the bin's rim").toBeGreaterThan(0);
+    expect(near((x, y, z) => Math.abs(x - sb.x) < 0.6 && z > a.z - a.hz - 0.1 && z < a.z - a.hz && y - by > 1.25 && y - by < 2.0), "the tally board").toBeGreaterThan(0);
+    expect(world.obstacles.some((o) => o.kind === "box" && o.tag === "crate" && o.x === sb.x && o.z === sb.z), "the bin's collider").toBe(true);
+    const bin = folk.nav.stations[folk.nav.index.get("bin")!]!;
+    expect(Math.abs(bin.x - sb.x)).toBeLessThan(sb.hx);
+    expect(sb.z - sb.hz - bin.z).toBeGreaterThan(0.3);
+    expect(sb.z - sb.hz - bin.z).toBeLessThan(1.2);
+    // and each hidden way in is right there
+    for (const [k, x, z] of [["in:guild", CLOISTER.backX + 0.3, gz], ["in:assay", a.x + a.hx + 0.3, az], ["in:barge", w.x + w.half - 0.25, w.barge.z]] as const) {
+      const st = folk.nav.stations[folk.nav.index.get(k)!]!;
+      expect(Math.hypot(st.x - x, st.z - z), k).toBeLessThan(0.3);
+    }
+  });
+
+  it("the view puts the gorge's folk on the stage at work by mid-morning, their slips say THE GORGE, and a shot by the cloister sends them down or indoors", () => {
+    const view = createRegionView("vesper", new Scene(), world, PRESETS.medium, sun);
+    const folk = (view as unknown as { folkView?: Villagers }).folkView;
+    expect(folk).toBeDefined();
+    view.applyDay(dayState(10, createDayState()));
+    for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: -30, y: 4, z: 55 }, 1 + i * 0.2);
+    const people = folk!.people!;
+    expect(people.folk.roster).toHaveLength(10);
+    expect(people.folk.roster.every((v) => v.people === "vesperine" && / of the (Guild|Assay|Barge)$/.test(v.name))).toBe(true);
+    expect(people.poses.filter((q) => q.visible).length).toBeGreaterThanOrEqual(8);
+    expect((folk as unknown as { place: string }).place).toBe("THE GORGE");
+    const before = people.poses.map((q) => q.visible);
+    noteFolkNoise(-40, 55, "shot");
+    for (let i = 0; i < 90; i++) view.update(1.8 + i / 30, { x: -30, y: 4, z: 55 }, 1.8 + i / 30);
+    const after = folk!.people!.poses;
+    expect(after.filter((q, i) => q.act === "cower" || (before[i] && !q.visible) || (q.act === "walk" && q.speed > 2.5)).length).toBeGreaterThanOrEqual(3);
+    expect(after.some((_, i) => (folk!.stateOf(i)?.fear ?? 0) > 0.5)).toBe(true);
+    view.dispose();
   });
 });

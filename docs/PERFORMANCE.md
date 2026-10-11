@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## Vesper's folk (D-125, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Two folk doors, the sample bin with its tally board and the gangplank in Vesper's merged solids and works (no draw of their own); ten of the gorge's folk on the folk machinery in Vesper's view | Node, no GPU, `WORLD_STATS=1` (`vesper.test.ts` budgets) | Main-pass draws unchanged **22 / 26 / 35 / 35**; triangles **test 45,451 / low 86,053 / medium 242,633 / high 340,564** (medium and high were 241,697 / 339,628: +936, the bin's ore heap and planking most of it). `VESPER_VIEW_BUDGET` (22 / 28 / 44 / 44, 120k / 170k / 440k / 540k) unchanged, never loosened; the test preset's 22 meshes are at its cap, as before. The gorge's network is a grid over the floor and benches from the wharf to the trestle plus the road and the wharf's deck: about 4,240 nodes and 27 stations, built in 0.19 to 0.23 s once per world and seed. The people are their own root, under the same `FOLK_BUDGETS` (ten people). |
+
 ## The Marchers of Highmark's capital (D-124, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

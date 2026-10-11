@@ -921,3 +921,33 @@ What changed:
   The client tests check the doors drawn where the folk go in, and the real view putting the twelve on stage, with THE CAPITAL on their slips and a shot sending them down or indoors. The ground, overlap, coplanar and door audits pass.
 - **Looked at.** The market at mid-morning with its keepers, the petitioners at the Chamberlain's door (close up), the lodgers' door in the back lane behind the assay office, and the granary pair at their granary.
 - **Not yet.** Unplayed. The halls they lodge in have no interiors. The folk are silent, as all the folk are. Vesper still has no people, and Highmark's plain and fields have none either.
+
+**D-125 Vesper's folk (2026-10-11).** Vesper was the last region with no one living in it. The cloister had banners and no mourners; the Assay House sealed its door on nobody; the ore barge lay at the wharf with no one aboard. Now the gorge has its people. As the gorge's own rule says (`vesper.ts`), they belong to its institutions and are named for them, not for a family or a place: "Corsk of the Guild", "Nimsy of the Assay", "Mavrin of the Barge" (the given names are drawn per seed). They wear the Vesperine's dress (D-067).
+- **The people** (`shared/vesperFolk.ts`). Ten of them, on the same folk machinery as every other region's folk: a pure schedule every client computes alike, drawn by the client, never sent or hit.
+  - **The Lamentation Guild** lodge in the Long Cloister, behind a door in the corridor's back wall. The Bell-Warden rings the hours in the arcade and leans at the south arch between them. Two choristers practise their dirges from a book in two south arches. A novice sweeps the corridor. The Senior Mourner leans on the southmost pier and watches the gorge.
+  - **The Assay House** keeps a Sample-Clerk, who walks the ore road's three carts with a book and tallies the samples at the bin, and a Sample-Porter, who carries them from a cart to the bin all day. They lodge behind a back door on the house's east face, in the strip between the house and the cliff.
+  - **The bargefolk** live aboard the ore barge. The Bargee minds the moorings at the wharf's far end. The Barge-Hand carries crates from the nearest cart down to the gangplank. Their child, Scrap, plays on the bank and by the road.
+
+  Everyone keeps off the gorge's head beyond the trestle (the mine's yard and the winding house are the contracts') and at least 6 m from every story point.
+- **What they needed built.**
+  - **A sample bin.** The porter's first draft tipped their sacks onto bare sand: the house had nowhere for samples to go. An open plank bin heaped with copper ore now stands against the house's south wall, with the clerk's tally board above it (chalked in fives). It is solid (a `crate` collider in the shared plan, appended after the seeded boulders so their draw is unchanged on every seed; it stands inside the house's own keep-clear, where no boulder can fall).
+  - **Two folk doors,** like Lampside's and the Marchers' (not a player's door, no handle, not in the door audit): the Guild's, a crepe-black leaf in a bone-stone surround in the corridor's back wall; the Assay House's, a plank leaf in a chalk surround with a step.
+  - **A gangplank** from the wharf's deck down to the barge's gunwale: the bargefolk's way aboard. Their door station stands at the deck's edge where it lands, not out over the water.
+- **The deck is a floor over water** (`villagerNav.ts`). The wharf's planks stand over the basin, and the folk's walking network put every node on the ground under them, so nothing on the wharf was standable and the bargefolk could not reach their own barge. A trail can now carry its own feet height (`NavTrail.y`): the wharf's deck is a trail at the deck's level, and its stations carry the same height. A trail without it is unchanged (its nodes stand on the ground, as they always have), so no other region's network moved. Vesper also sets its own water test (only the wharf's basin is water; the default is Hollowmere's stream).
+- **Rain.** The Guild work on under the arcade's roof, which is the point of an arcade. The Senior Mourner, the Assay House and the bargefolk go in.
+- **Their voice** (`shared/villagerLines.ts`, the `v*` kinds). Their own pools: trades, general, rain, night, greeting and fright. The comedy is a gorge that bills for everything, grief included ("Grief at the standard rate. Wailing is extra.", "I've mourned the same miner four times. He keeps coming back for the hymns.", "This sample's promising. That means taxable.") and the Society ("Ah, your Society. Here to dig, or to be mourned?"). D-122's fright works on them ("Shots in the gorge! The echo will bill us twice!"), and their slips say THE GORGE.
+- **Found on the way.** The first schedule had the Sample-Clerk meet the porter in the assay yard while still at the far cart, so they ran 3.7 m/s to make it. The clerk's day now brings them back to the bin before the meeting (the D-124 splitter fix covers long stints, not a meeting dropped into the middle of one; a meeting belongs near the person's work).
+- **Tested.** `vesperFolk.test.ts` (9 tests) covers:
+  - the roster;
+  - every place reachable on five seeds, the wharf's stations at the deck's height;
+  - the gorge's head and the story points kept clear;
+  - nobody ever inside a building, cart, bin, wall or the basin, at any hour, dry or in a downpour, on any seed (the deck and the trestle are floors);
+  - no adult ever faster than 1.9 m/s and the child 2.6;
+  - the hours, and nobody left in the open in the rain;
+  - their places;
+  - nobody standing in anybody;
+  - their own lines, apart from Lampside's, the Brinefolk's and the Marchers'.
+
+  The client tests check the doors, the gangplank and the bin drawn where the folk use them (the folk's door stations hidden just inside), and the real view putting the ten on stage, with THE GORGE on their slips and a shot by the cloister sending them down or indoors. The ground, overlap, coplanar and door audits pass.
+- **Looked at.** The cloister's arcade mid-morning with the Guild about it; the sample bin with its tally board and the porter at it; the wharf from the bank and from the deck, with the gangplank and the Bargee at the moorings.
+- **Not yet.** Unplayed. The cloister and the Assay House have no interiors. The folk are silent, as all the folk are. The gorge's floor between the Assay House and the wharf is still empty of anything built, and Highmark's plain and fields have no people.

@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
-import { CLOISTER, PALETTE, VESPER_TRIG, hash3, vesperLevel, type CollisionWorld } from "./shared.ts";
+import { CLOISTER, GORGE_DOORS, PALETTE, VESPER_TRIG, hash3, vesperLevel, type CollisionWorld } from "./shared.ts";
 import { pane, type LitPane } from "../litWindows.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
@@ -474,6 +474,60 @@ export interface VesperSolidParts {
   roofs: RoofKits;
 }
 
+/**
+ * D-125: the gorge's folk's own ways in. The Guild's door in the cloister corridor's back wall (into their cells in the rock): a crepe-black leaf in a bone-stone surround. The
+ * Assay House's back door on its east face, in the strip between the house and the cliff: a plank leaf in a chalk surround and a step. (The bargefolk's way aboard is the
+ * gangplank, drawn with the barge: works.ts.) The folk's, not a player's: no handle, not in the door audit.
+ */
+function folkDoors(k: Kit, world: CollisionWorld): void {
+  const C = CLOISTER;
+  const g = (x: number, z: number): number => world.terrainHeight(x, z);
+  k.setBase(0, 0, 0, 0);
+  {
+    const z = GORGE_DOORS.guild, y = g(C.backX + 0.3, z);
+    box(k, [0.08, 2.35, 1.3], [C.backX + 0.04, y + 1.17, z], P.strataBone);
+    box(k, [0.06, 2.1, 1.0], [C.backX + 0.1, y + 1.05, z], P.crepe);
+  }
+  {
+    const a = vesperPlan().assay;
+    const x = a.x + a.hx, z = GORGE_DOORS.assay, y = g(x + 0.3, z);
+    box(k, [0.08, 2.3, 1.3], [x + 0.04, y + 1.15, z], P.chalk);
+    box(k, [0.06, 2.05, 1.0], [x + 0.1, y + 1.02, z], (p, _n, o) => blend(o, P.timber, P.timberLight, (Math.floor((p.z + 50) * 6) & 1) * 0.35));
+    box(k, [0.45, 0.12, 1.4], [x + 0.26, y + 0.03, z], P.chalk);
+  }
+  k.clearBase();
+}
+
+/**
+ * D-125: the Assay House's sample bin against its south wall (its collider is the plan's `sampleBin`): an open plank bin on two skids, heaped with the carts' copper samples,
+ * and the clerk's tally board on the wall above it (black, chalked in fives). The porter tips sacks in; the clerk writes the count up.
+ */
+function sampleBin(k: Kit, world: CollisionWorld): void {
+  const b = vesperPlan().sampleBin;
+  const { hx, hz } = b;
+  // on the lowest of its corners (the yard falls a little to the south): the skids sink a few centimetres into the high side
+  let gy = Infinity;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) gy = Math.min(gy, world.terrainHeight(b.x + sx * hx, b.z + sz * hz));
+  k.setBase(b.x, gy, b.z, b.yaw);
+  const planked: ColourFn = (p, _n, o) => blend(o, P.timber, P.timberLight, (Math.floor((p.y + 10) * 5) & 1) * 0.3);
+  for (const sz of [-1, 1]) box(k, [hx * 2 + 0.16, 0.14, 0.14], [0, 0.02, sz * (hz - 0.12)], P.timber);
+  box(k, [hx * 2, 0.08, hz * 2], [0, 0.13, 0], P.timber);
+  const H = b.height;
+  for (const sz of [-1, 1]) box(k, [hx * 2, H - 0.1, 0.07], [0, 0.1 + (H - 0.1) / 2, sz * (hz - 0.035)], planked);
+  for (const sx of [-1, 1]) box(k, [0.07, H - 0.1, hz * 2 - 0.14], [sx * (hx - 0.035), 0.1 + (H - 0.1) / 2, 0], planked);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.04), 0.0, sz * (hz - 0.04)], [sx * (hx - 0.04), H + 0.05, sz * (hz - 0.04)], 0.06, 0.06, P.timber, 5);
+  k.add(new IcosahedronGeometry(1, 1), { at: [0, H - 0.25, 0], scale: [hx - 0.12, 0.34, hz - 0.12], colour: (_p, n, out) => blend(out, P.copper, P.verdigris, Math.max(0, n.y) * 0.3), flat: true, jitter: 0.08, seed: 371 });
+  // the tally board: let 3 cm into the wall above the bin's back, five-bar gates chalked on it
+  const wallZ = vesperPlan().assay.z - vesperPlan().assay.hz - b.z;
+  box(k, [1.2, 0.66, 0.1], [0, 1.62, wallZ - 0.02], P.crepe);
+  for (let gate = 0; gate < 3; gate++) {
+    const x0 = -0.4 + gate * 0.3;
+    for (let i = 0; i < 4; i++) box(k, [0.025, 0.2, 0.02], [x0 + i * 0.045, 1.68, wallZ - 0.075], P.chalk);
+    box(k, [0.025, 0.25, 0.02], [x0 + 0.07, 1.68, wallZ - 0.08], P.chalk, [0, 0, -1.05]);
+  }
+  k.clearBase();
+}
+
 /** The buildings, tents, carts, spoil, lamps and needles (the works: headframe, trestle, wharf, fall, rails are works.ts). */
 export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, parts: VesperSolidParts): void {
   const plan: VesperPlan = vesperPlan();
@@ -481,6 +535,8 @@ export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, par
   const out: VesperOut = { marks: parts.marks, roofs: parts.roofs, panes: parts.panes };
   cloister(k, world, lod, parts.glows, out);
   assay(k, world, lod, out);
+  folkDoors(k, world);
+  sampleBin(k, world);
   yard(k, world, lod, out);
   for (const t of plan.tents) tent(k, t.x, g(t.x, t.z), t.z, t.yaw, t.kind, lod);
   plan.carts.forEach((c, i) => cart(k, c.x, g(c.x, c.z), c.z, c.yaw, lod, 290 + i));
