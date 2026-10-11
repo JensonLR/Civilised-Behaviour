@@ -581,6 +581,9 @@ function quay(k: Kit, lod: Lod, y: number): void {
   box(k, [0.6, 0.45, 0.6], [-0.5, 0.75, 2.1], P.timber);
   k.add(new SphereGeometry(0.34, 6, 4), { at: [0.3, 0.75, 2.6], scale: [1, 0.8, 1], colour: P.grangeWheat, flat: true });
   k.clearBase();
+  // D-128: the gangplank from the quay's edge down to the barge's deck (the Grange's hands live aboard her: their way home); one board, no outline of its own to pay for
+  const gx0 = q.x + q.half - 0.1, gx1 = bt.x - 1.0, gy0 = HIGHMARK.level + 0.03, gy1 = HIGHMARK.level + HIGHMARK.river.water + 0.05 + 0.5;
+  box(k, [Math.hypot(gx1 - gx0, gy1 - gy0) + 0.2, 0.06, 0.65], [(gx0 + gx1) / 2, (gy0 + gy1) / 2, bt.z], P.timberLight, [0, 0, Math.atan2(gy1 - gy0, gx1 - gx0)]);
 }
 
 function camp(k: Kit, world: CollisionWorld, lod: Lod): void {

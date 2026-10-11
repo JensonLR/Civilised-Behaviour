@@ -14,7 +14,7 @@ export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kCler
 /** D-123: the Brinefolk at the Brine Houses' salt pans. */
 export type BrineLineKind = "bRaker" | "bBarrow" | "bSkim" | "bTally" | "bPump" | "bElder" | "bChild";
 /** D-124: the Marchers of Highmark's capital (the King has been "pending" for six years; the Chamberlain's offices run the hill meanwhile). */
-export type MarcherLineKind = "hSeller" | "hCrier" | "hClerk" | "hPetition" | "hReeve" | "hPorter" | "hWater" | "hChild";
+export type MarcherLineKind = "hSeller" | "hCrier" | "hClerk" | "hPetition" | "hReeve" | "hPorter" | "hWater" | "hChild" | "hField";
 /** D-125: Vesper's folk, members of the gorge's institutions (the Lamentation Guild, the Assay House, the ore barge), never a people. */
 export type GorgeLineKind = "vGuild" | "vBell" | "vElder" | "vAssay" | "vBarge" | "vChild" | "vReceive" | "vCompany";
 
@@ -356,6 +356,14 @@ const MARCHER_BY_KIND: Record<MarcherLineKind, readonly string[]> = {
     "When I grow up I'm going to be King. Pending.",
     "Bet you can't climb all the ramps without stopping.",
     "The crier lets me ring the bell when nobody's important.",
+  ],
+  // D-128: the Grange's hands in the plain's fields (they live on the Grange's barge at the quay)
+  hField: [
+    "The ox struck with the reapers. I'm the ox now.",
+    "Turn the hay, wait for a King, turn the hay.",
+    "Gleaning's free. The Chamberlain's working on that.",
+    "We sleep on the Grange's barge. Rent-free, river-cold.",
+    "The scarecrow outranks me. It has a coat.",
   ],
 };
 

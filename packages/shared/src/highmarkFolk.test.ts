@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { insideObstacle } from "./camp.ts";
-import { HIGHMARK, createHighmarkWorld, highmarkPlan, highmarkSitePoints, type HighmarkTerrain } from "./highmark.ts";
+import type { FieldPlot } from "./fields.ts";
+import { HIGHMARK, HIGHMARK_FIELDS, createHighmarkWorld, highmarkPlan, highmarkSitePoints, highmarkSpawn, type HighmarkTerrain } from "./highmark.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, inArrival } from "./stores.ts";
 import { MARCHER_HOMES, buildHighmarkFolk, marcherNav } from "./highmarkFolk.ts";
 import { buildLampsideFolk } from "./lampsideFolk.ts";
 import { createKessarWorld } from "./kessar.ts";
@@ -22,11 +24,11 @@ function whyIllegal(folk: Folk, p: VillagerPose): string {
   const w = folk.nav.world;
   let why = "";
   w.forEachNear(p.x, p.z, (o) => {
-    if (why || o.y0 > p.y + 2.2) return;
+    if (why || o.tag === "jetty" || o.y0 > p.y + 2.2) return;   // (the quay's planks are a floor: D-128's hands walk them to the Grange's barge)
     if (insideObstacle(o, p.x, p.z, 0.2)) why = `inside a ${o.tag ?? "obstacle"} at ${o.x.toFixed(1)}, ${o.z.toFixed(1)}`;
   });
   if (why) return why;
-  if ((w.terrain as HighmarkTerrain).waterDepth(p.x, p.z) > 0.02) return "in the water";
+  if ((w.terrain as HighmarkTerrain).waterDepth(p.x, p.z) > 0.02 && p.y < HIGHMARK.level - 0.1) return "in the water";   // (on the quay's deck, above it, is dry)
   if (Math.abs(w.groundHeight(p.x, p.z, p.y) - p.y) > 0.5) return `floating or sunk: y ${p.y.toFixed(2)} vs ground ${w.groundHeight(p.x, p.z, p.y).toFixed(2)}`;
   return "";
 }
@@ -35,18 +37,19 @@ describe("D-124: the Marchers of Highmark's capital", () => {
   const w = createHighmarkWorld(7);
   const folk = buildHighmarkFolk(w, 7);
 
-  it("are twelve Marchers, each named for the ring of the hill they lodge on, with a trade, a bed behind a sealed hall's back door and a day's work", () => {
-    expect(folk.roster).toHaveLength(12);
-    const homes = MARCHER_HOMES.map((h) => `hall${h.hall}`);
+  it("are eighteen Marchers, each named for the ring of the hill they lodge on (D-128: or the Grange, for its hands on the barge), with a trade, a bed and a day's work", () => {
+    expect(folk.roster).toHaveLength(18);
+    const homes = [...MARCHER_HOMES.map((h) => `hall${h.hall}`), "barge"];
     for (const v of folk.roster) {
       expect(v.people).toBe("marchers");
-      expect(v.name).toMatch(/ of the (Third|Fourth) Ring$/);
+      expect(v.name).toMatch(v.home === "barge" ? / of the Grange$/ : / of the (Third|Fourth) Ring$/);
       expect(homes).toContain(v.home);
       expect(v.stints.some((s) => folk.nav.stations[s.st]!.key === `in:${v.home}` && s.act === "sleep"), `${v.name} has a bed`).toBe(true);
       expect(v.stints.some((s) => !folk.nav.stations[s.st]!.hidden && s.act !== "idle"), `${v.name} has work`).toBe(true);
     }
-    expect(new Set(folk.roster.map((v) => v.name)).size).toBe(12);
-    for (const t of ["Cheese-Seller", "Loaf-Seller", "Hide-Seller", "Grain-Seller", "Town Crier", "Water-Carrier", "Under-Clerk", "Petitioner", "Old Petitioner", "Granary-Reeve", "Porter"]) {
+    expect(new Set(folk.roster.map((v) => v.name)).size).toBe(18);
+    for (const t of ["Cheese-Seller", "Loaf-Seller", "Hide-Seller", "Grain-Seller", "Town Crier", "Water-Carrier", "Under-Clerk", "Petitioner", "Old Petitioner", "Granary-Reeve", "Porter",
+      "Hay-Turner", "Haycock-Builder", "Ploughman", "Hoer", "Gleaner"]) {
       expect(folk.roster.some((v) => v.title === t), t).toBe(true);
     }
     // deterministic in (world, seed), cached, and their own
@@ -195,6 +198,38 @@ describe("D-124: the Marchers of Highmark's capital", () => {
     }
     expect(selling).toBeGreaterThan(300);
     expect(waiting).toBeGreaterThan(150);
+  });
+
+  it("D-128: the Grange's hands work the plain's fields (each in the field of their trade, never the strike's barley), live on the Grange's barge at the quay, and keep out of the party's arrival", () => {
+    const pose = createVillagerPose();
+    const field = (id: string): FieldPlot => HIGHMARK_FIELDS.find((f) => f.id === id)!;
+    const inField = (f: FieldPlot, x: number, z: number, m = 0.5): boolean => x > f.x0 - m && x < f.x1 + m && z > f.z0 - m && z < f.z1 + m;
+    const want: Record<string, string> = { "Hay-Turner": "hay.west", "Haycock-Builder": "hay.west", Ploughman: "fallow.east", Hoer: "green.west", Gleaner: "stubble.east", Pip: "stubble.east" };
+    const working: Record<string, number> = {};
+    for (let i = 0; i < folk.roster.length; i++) {
+      const v = folk.roster[i]!;
+      if (v.home !== "barge") continue;
+      for (let h = 7.5; h < 17.5; h += 0.05) {
+        villagerAt(folk, i, clockAt(7, h), pose);
+        if (!pose.visible || pose.act === "walk" || pose.act === "chat" || pose.act === "idle") continue;
+        if (/^(step|in):/.test(folk.nav.stations[pose.station]!.key)) continue;   // (at the barge: a child plays at the door too)
+        working[v.title] = (working[v.title] ?? 0) + 1;
+        expect(inField(field(want[v.title]!), pose.x, pose.z), `${v.name} (${v.title}) in their field at ${h.toFixed(2)} h: ${pose.x.toFixed(1)}, ${pose.z.toFixed(1)}`).toBe(true);
+        expect(inField(field("strike"), pose.x, pose.z, 2), `${v.name} off the strike's barley`).toBe(false);
+      }
+    }
+    for (const t of Object.keys(want)) expect(working[t] ?? 0, t).toBeGreaterThan(40);
+    // home: the barge's stations stand on the quay's deck, by the barge
+    const q = highmarkPlan().quay;
+    for (const k of ["step:barge", "in:barge"]) {
+      const st = folk.nav.stations[folk.nav.index.get(k)!]!;
+      expect(Math.abs(st.y - HIGHMARK.level), k).toBeLessThan(0.05);
+      expect(Math.abs(st.x - q.x), k).toBeLessThan(q.half);
+      expect(Math.abs(st.z - q.boat.z), k).toBeLessThan(0.5);
+    }
+    // nobody's place is in the party's arrival (the ring, the view up the road, the camera's ground)
+    const arrival = arrivalCentre(highmarkSpawn);
+    for (const s of folk.nav.stations) expect(inArrival(arrival, ARRIVAL_TOWARD, s.x, s.z, 0.4), s.key).toBe(false);
   });
 
   it("nobody stands in anybody, dry or wet", () => {

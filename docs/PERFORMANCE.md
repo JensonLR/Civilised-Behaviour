@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Grange's hands (D-128, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | A gangplank in Highmark's merged solid (no draw of its own); six more Marchers (eighteen) on the folk machinery in Highmark's view | Node, no GPU, `WORLD_STATS=1` (`highmark.test.ts` budgets) | Main-pass draws unchanged **21 / 26 / 39 / 39**; triangles **test 77,894 / low 147,156 / medium 414,386 / high 539,767** (high was 539,743: the board, 24 triangles). `HIGHMARK_VIEW_BUDGET` unchanged, never loosened: high has **233 triangles** left. The Marchers' network adds the plain's road, the quay's deck and four field paths (trails, no grid): 4,143 nodes (were 3,984) and 55 stations (were 39), built in about 0.25 s once per world and seed. `FOLK_BUDGETS` unchanged: medium draws the first sixteen of the eighteen (the Gleaner and Pip from high). |
+
 ## The Staithe's people (D-127, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|
