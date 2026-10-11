@@ -951,3 +951,24 @@ What changed:
   The client tests check the doors, the gangplank and the bin drawn where the folk use them (the folk's door stations hidden just inside), and the real view putting the ten on stage, with THE GORGE on their slips and a shot by the cloister sending them down or indoors. The ground, overlap, coplanar and door audits pass.
 - **Looked at.** The cloister's arcade mid-morning with the Guild about it; the sample bin with its tally board and the porter at it; the wharf from the bank and from the deck, with the gangplank and the Bargee at the moorings.
 - **Not yet.** Unplayed. The cloister and the Assay House have no interiors. The folk are silent, as all the folk are. The gorge's floor between the Assay House and the wharf is still empty of anything built, and Highmark's plain and fields have no people.
+
+**D-126 The Staithe (2026-10-11).** The owner's note on the world ("very sparse") held hardest at Vesper's landing. Everybody arrives at the wharf, and the walk up the ore road to the cloister and the Assay House was sixty metres of bare gorge floor between boulders: the first thing a party saw of Vesper was nothing. Now the landing has its hamlet, and every part of it is one of the gorge's institutions already at work on the new arrival.
+- **West of the road, a step from the wharf: the Lamentation Guild's Receiving House.** It is the cloister's own stuff on a small scale: bone plaster on a stone plinth, a plum band under crepe-black slates with a silver ridge, a hand-bell under the front gable, and crepe hung either side of the door. Its notice reads "MEASURED ON ARRIVAL. NO OBLIGATION". Coffins in four sizes stand ready against its south gable, so they face the landing. A measuring post, notched in the Guild's own units, is fixed to its front beside the door. Mourning crepe hangs drying on a line behind it.
+- **East of the road: the Lower Gallery Company.** A weigh-house ("WEIGHED TWICE. DISPUTED THRICE.") has a steelyard on a free-standing gallows: a copper pan on chains with a sample sack in it. Up the gorge stands the Rows, three plank bunkhouses ("BUNKS LET BY THE HOUR", "SLEEP AT OWN RISK. RISK EXTRA.", "NO SINGING: THE GUILD OWNS HYMNS"). Each has a lit window in a side wall that burns at night.
+- **Every door is sealed,** each notice lettered on the cloth's plaques. The region's one interior stays the Records Room (LEVEL_PLAN). The Company's houses are the foreman's office's kin: planks on timber footings under a corrugated gable.
+- **Nothing else in the gorge moved** (`shared/staithe.ts`). The hamlet is one pure plan, read by the colliders, the level plan, the plaques and the client. Its solids are appended after the gorge's seeded boulders, with no random draws of their own. The boulders that fell in its two yards are simply not there (on seed 1, one stood where the Receiving House is). The ground is not levelled (the floor falls about 3 cm a metre here), so each house stands on a plinth or footings sunk to its low side.
+- **Kept clear,** each proven by a test:
+  - the ore road, with its edge more than 1.2 m from any solid, and the road walked on its line from the landing to the cloister's track on every seed;
+  - D-115's arrival: the ring, the view up the road and the camera's ground;
+  - the mounts' ring, the still lifes, the kit's kegs, the lamps and the carts;
+  - every story point by more than 5 m;
+  - every sealed door's apron.
+
+  From the landing, the headframe stays in sight over the hamlet: the ray to its top, three-quarters and half never meets a house.
+- **Found on the way.** The first draft set the measuring post 0.8 m off the wall and the steelyard's gallows 0.26 m off the weigh-house corner. Both gaps are too narrow to walk through and wide enough to snag on. The post is now fixed to the wall and the gallows stands a body's width clear. The plan test now holds the rule for every pair of the hamlet's solids: each stands against another or at least a metre from it. The first draft's bell also hung 3 cm under its bracket, which the grounding audit caught.
+- **Tested.**
+  - `staithe.test.ts` (5 tests) covers the plan, the clearances, the solids and aprons, the boulders, and the landmark. The boulder filter and the sightline were each mutation-checked.
+  - The client test checks each house drawn where it collides, with nothing above its collider's top, plus the coffins, the steelyard's pan and the crepe, and the notices lettered. It fails without the drawing.
+  - The ground, overlap, coplanar, door and lit-window audits pass, as do the level audit and its document table.
+- **Looked at.** The arrival from the landing; an overhead of the mouth; each yard close; and the Rows by day and at night with a window lit.
+- **Not yet.** Nobody lives in the Staithe yet: its people are next (D-127). The houses have no interiors. The gorge floor west of the road between the Receiving House and the cloister is still open ground.

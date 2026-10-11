@@ -6,6 +6,7 @@ import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, tentFlap, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
 import { PLAQUE } from "../plaques.ts";
 import { vesperPlan, type VesperBox, type VesperPlan } from "./shared.ts";
+import { addStaithe } from "./staithe.ts";
 
 /**
  * The buildings and small works of Vesper Gorge, merged by `buildVesperSolid` (solid.ts) into ONE vertex-coloured geometry: the Long Cloister (a gallery of arches cut into the west cliff, hung with crepe,
@@ -94,13 +95,13 @@ export function frame(b: VesperBox, face: "n" | "e" | "s" | "w"): { yaw: number;
 
 /** The Records Room's inside: lime-wash the colour of old paper, plank floor, ledger shelves. The sealed buildings' boards and chain. */
 const RECORDS: ShellStyle = { outer: P.strataBone, inner: P.companyCream, floor: P.timberLight, floorDark: P.timber, trim: P.timber, leaf: P.timber, strap: P.iron, lamp: P.glowLamp, ceiling: P.timber };
-const SEAL: SealedStyle = { frame: P.chalk, door: P.timber, board: P.timberLight, boardDark: P.timber, iron: P.iron, brass: P.copper, paper: P.companyCream, wax: P.companyRed };
+export const SEAL: SealedStyle = { frame: P.chalk, door: P.timber, board: P.timberLight, boardDark: P.timber, iron: P.iron, brass: P.copper, paper: P.companyCream, wax: P.companyRed };
 
 /**
  * The block a sealed door's notice is nailed to (in the building's level frame, door face at `hx`): the cloth's plaque (`pushPlaques`) stands 0.3 m proud of the wall, clear of the door's boards, so without
  * this it hung in front of them. A backing board just behind the plaque (a rim wider than it), held off the crossed boards by two blocks.
  */
-function notice(k: Kit, hx: number, floor: number, doorH: number): void {
+export function notice(k: Kit, hx: number, floor: number, doorH: number): void {
   const y = floor + 0.08 + doorH * 0.62;
   box(k, [0.04, PLAQUE.hh * 2 + 0.06, PLAQUE.hw * 2 + 0.08], [hx + 0.275, y, 0], P.timber);
   for (const s of [-1, 1]) box(k, [0.16, 0.2, 0.12], [hx + 0.18, y, s * (PLAQUE.hw - 0.2)], P.timber);
@@ -537,6 +538,7 @@ export function addVesperStructures(k: Kit, world: CollisionWorld, lod: Lod, par
   assay(k, world, lod, out);
   folkDoors(k, world);
   sampleBin(k, world);
+  addStaithe(k, world, lod, out);
   yard(k, world, lod, out);
   for (const t of plan.tents) tent(k, t.x, g(t.x, t.z), t.z, t.yaw, t.kind, lod);
   plan.carts.forEach((c, i) => cart(k, c.x, g(c.x, c.z), c.z, c.yaw, lod, 290 + i));

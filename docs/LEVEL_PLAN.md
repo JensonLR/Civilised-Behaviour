@@ -244,6 +244,7 @@ Deviations that apply to a whole region:
 - Saltmarket (D-123): the rakers' row (x 6.4 to 25.4, z 78.9 to 81.9) is four solid `house` boxes to their 2.6 m ridge, 1 m apart, not in the level plan's buildings (no interior, no player door). Each has a back door on the Customs Cut side for the Brinefolk (not a player's door: not in the audit), the folk's front lane 1.2 m before the row and a back lane behind it (between the huts' backs and the revetment). The eave overhangs 0.3 m, under a player's 0.4 m radius, so a player at a wall never has their head in the thatch. The salt works' bunds are floors to the folk's walking network as to players.
 - Highmark (D-124): the assay office (hall1) and two of the Chamberlain's offices (hall2, hall3) have a back door drawn on their inward long face for the Marchers (not a player's door: no handle, not in the audit; the halls stay solid and their fronts `sealed`). The folk walk under the gate's lintel (`setFolkHeadroom`, Highmark only); every other region's folk treat anything overhead as solid. A ramp now owns its top edge (no 2.2 m pit at exactly the riser's radius).
 - Vesper (D-125): the Assay House's sample bin (x 35.9 to 38.1, z 9.85 to 10.95, against the house's south wall) is a solid `crate` box to 0.9 m, appended after the seeded boulders (inside the house's keep-clear, so no boulder ever moves). The Guild's door in the cloister corridor's back wall (z 56) and the Assay House's back door on its east face (z 17) are the folk's, not a player's (no handle, not in the audit); the cloister and the house stay as they were. The wharf's deck is a floor to the folk's network at its own height (`NavTrail.y`); a trail without a height still stands on the ground.
+- Vesper (D-126): the Staithe at the landing is five `sealed` houses, `staithe.receiving` (the Guild's, west of the road) and the Company's `staithe.weigh` and `staithe.bunk0..2` (east of it), each door to the road with its notice. Also solid: the coffins against the Receiving House's south gable (one `crate` box), its measuring post (fixed to the front) and the crepe line's two posts, and the steelyard's gallows (a round about its pan). All are appended after the seeded boulders; those in the hamlet's two yards are dropped and nothing else moves. Each solid stands against another or at least 1 m from it (never a squeeze), and every door's apron is open. The ore road, D-115's arrival, the mounts, the stores, the kegs and every story point are kept clear, and the headframe stays in sight from the landing.
 
 | region | id | kind | at x,z | yaw | W x D | h | floor | door (w / h) | steps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -296,6 +297,11 @@ Deviations that apply to a whole region:
 | Vesper | syndicate.tent0 | tent | -23.0,-42.0 | 0.30 | 4.0x3.2 | 2.4 | 0 | - | 0 |
 | Vesper | syndicate.tent1 | tent | -17.0,-35.0 | -0.25 | 4.0x3.2 | 2.4 | 0 | - | 0 |
 | Vesper | syndicate.tent2 | tent | 22.5,-84.5 | 0.20 | 4.0x3.2 | 2.4 | 0 | - | 0 |
+| Vesper | staithe.receiving | sealed | -11.0,99.0 | 0.00 | 3.6x4.6 | 4.3 | 0 | 1.5 / 2.4 | 0 |
+| Vesper | staithe.weigh | sealed | 8.8,89.0 | 3.14 | 3.0x3.6 | 3.9 | 0 | 1.5 / 2.4 | 0 |
+| Vesper | staithe.bunk0 | sealed | 13.0,82.0 | 3.14 | 5.0x4.2 | 4.1 | 0 | 1.5 / 2.4 | 0 |
+| Vesper | staithe.bunk1 | sealed | 13.4,76.0 | 3.14 | 5.0x4.2 | 4.1 | 0 | 1.5 / 2.4 | 0 |
+| Vesper | staithe.bunk2 | sealed | 13.0,70.0 | 3.14 | 5.0x4.2 | 4.1 | 0 | 1.5 / 2.4 | 0 |
 | Saltmarket | warehouse0 | interior | -44.0,108.0 | 0.00 | 13.0x8.0 | 5.1 | 0.9 | 1.5 / 2.4 | 3 |
 | Saltmarket | warehouse1 | interior | 46.0,110.0 | 3.14 | 12.0x8.0 | 5.3 | 0.9 | 1.5 / 2.4 | 3 |
 | Saltmarket | warehouse2 | sealed | -26.0,-2.0 | 1.20 | 5.2x4.0 | 4.4 | 0.9 | 1.5 / 2.4 | 0 |

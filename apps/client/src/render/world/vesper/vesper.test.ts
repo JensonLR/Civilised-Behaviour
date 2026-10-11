@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import {
-  CLOISTER, GORGE_DOORS, PALETTE, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_TRIG, VESPER_VIEW_BUDGET, buildVesperFolk, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign, vesperPlan,
+  CLOISTER, GORGE_DOORS, PALETTE, STAITHE_SIGNS, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_TRIG, VESPER_VIEW_BUDGET, buildVesperFolk, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign,
+  staithePlan, staitheTop, vesperPlan,
   type ScenarioView, type VesperTerrain,
 } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
@@ -457,5 +458,35 @@ describe("D-125: the gorge's folk", () => {
     expect(after.filter((q, i) => q.act === "cower" || (before[i] && !q.visible) || (q.act === "walk" && q.speed > 2.5)).length).toBeGreaterThanOrEqual(3);
     expect(after.some((_, i) => (folk!.stateOf(i)?.fear ?? 0) > 0.5)).toBe(true);
     view.dispose();
+  });
+});
+
+describe("D-126: the Staithe", () => {
+  it("each house is drawn where it collides (its ridge over its middle, its sealed door on the road side), with the coffins, the steelyard's pan and the crepe; its notices are lettered", () => {
+    const geo = buildVesperSolid(world, 1).geometry!;
+    const p = geo.attributes.position!;
+    const count = (test: (x: number, y: number, z: number) => boolean): number => {
+      let n = 0;
+      for (let i = 0; i < p.count; i++) if (test(p.getX(i), p.getY(i), p.getZ(i))) n++;
+      return n;
+    };
+    const g = (x: number, z: number): number => world.terrainHeight(x, z);
+    const plan = staithePlan();
+    for (const h of plan.houses) {
+      const y = g(h.x, h.z);
+      expect(count((x, yy, z) => Math.abs(x - h.x) < h.hx + 0.4 && Math.abs(z - h.z) < 0.1 && Math.abs(yy - (y + staitheTop(h))) < 0.08), `${h.id}'s ridge`).toBeGreaterThan(0);
+      // nothing of the house stands above its collider's top (the box you see is the box you bump into)
+      expect(count((x, yy, z) => Math.abs(x - h.x) < h.hx && Math.abs(z - h.z) < h.hz && yy > y + staitheTop(h) + 0.02), `${h.id} over its top`).toBe(0);
+      const fx = h.x + Math.cos(h.yaw) * h.hx;
+      expect(count((x, yy, z) => Math.abs(x - fx) < 0.25 && Math.abs(z - h.z) < 0.8 && yy - y > 2.0 && yy - y < 2.7), `${h.id}'s door`).toBeGreaterThan(0);
+    }
+    const c = plan.coffins;
+    expect(count((x, yy, z) => Math.abs(x - c.x) < c.hx && Math.abs(z - c.z) < c.hz && yy - g(x, z) > 1.8), "the tallest coffin").toBeGreaterThan(0);
+    const s = plan.gallows;
+    expect(count((x, yy, z) => Math.abs(x - s.panX) < 0.3 && Math.abs(z - s.z) < 0.3 && Math.abs(yy - g(s.x, s.z) - 1.0) < 0.05), "the steelyard's pan").toBeGreaterThan(0);
+    const l = plan.line;
+    expect(count((x, yy, z) => Math.abs(x - l.x) < 0.05 && z > l.z0 + 0.4 && z < l.z1 - 0.4 && yy - g(x, z) > 1.0 && yy - g(x, z) < 2.2), "the crepe on the line").toBeGreaterThan(10);
+    buildVesperCloth(world.terrain);
+    for (const t of STAITHE_SIGNS) expect(drawn).toContain(t);
   });
 });
