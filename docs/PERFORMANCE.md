@@ -91,6 +91,11 @@ pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennan
 |------|-------|-------------|--------|
 | 2026-10-10 | Kessar's lower town: five houses, two stalls, a well, two lamp posts and the garden walls in Kessar's merged solid; fifteen date palms in its palm set; the gardens' barley instanced and the drills and scarecrows one merged solid + hull | Node, no GPU, `WORLD_STATS=1` (`kessar.test.ts` budgets) | Main-pass draws **test 15 / low 19 / medium 29 / high 29** (were 13 / 16 / 26 / 26); triangles **67k / 105k / 283k / 356k** (were 59k / 95k / 253k / 327k). Kessar's ceilings (20 / 26 / 40 / 40 draws, 110k / 150k / 400k / 500k) unchanged. |
 
+## Lampside's people (D-120, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Ten Kessarine on Hollowmere's folk machinery (pure schedule + client rigs) in Kessar's view | Node, no GPU | Network 221 nodes and 49 stations, built once per world and seed; the same `FOLK_BUDGETS` as the hub (at most 6 / 14 / 18 shown on low / medium / high, LOD by distance); the region view's own draws and triangles are unchanged (the people are their own root). Cost per frame is the hub's per person (see below): ten people is under half the hub's roster. |
+
 ## Hollowmere's folk (2026-09-30)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

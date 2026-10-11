@@ -189,6 +189,12 @@ export function lampsidePlan(): LampsidePlan {
   return cached;
 }
 
+/** A stall's counter (its depth from the customer's face) and its backboard (from the back), metres: the gap between is the stallholder's (`stallKeeper`). */
+export const STALL = { counter: 0.6, back: 0.1 } as const;
+
+/** Where a stall's keeper stands, behind the counter (in the stall's own frame: `lx` from its middle toward the customer's side). */
+export const stallKeeper = (s: LampsideStall): number => (s.hx - STALL.counter + (-s.hx + STALL.back)) / 2;
+
 /** A house's highest point above the ground (the tile hip's ridge, or the flat roof's parapet). */
 export const houseTop = (h: LampsideHouse): number => h.height + (h.roof === "tile" ? LAMPSIDE.roofRise : 0);
 
@@ -222,9 +228,14 @@ export function lampsideObstacles(terrain: Terrain): Obstacle[] {
     const y = g(h.x, h.z);
     out.push({ kind: "box", tag: "house", x: h.x, z: h.z, hx: h.hx, hz: h.hz, yaw: h.yaw, y0: y - 1, y1: y + houseTop(h) });
   }
+  // a stall is its counter on the customer's side and its backboard, with the stallholder's standing room between (D-120: 0.7 m, room for a seller and not for a
+  // player); the posts and the awning stand over it
   for (const s of plan.stalls) {
     const y = g(s.x, s.z);
-    out.push({ kind: "box", tag: "stall", x: s.x, z: s.z, hx: s.hx, hz: s.hz, yaw: s.yaw, y0: y - 1, y1: y + s.height + 0.3 });
+    const c = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+    const part = (lx: number, half: number, top: number): void => void out.push({ kind: "box", tag: "stall", x: s.x + c * lx, z: s.z + sn * lx, hx: half, hz: s.hz, yaw: s.yaw, y0: y - 1, y1: y + top });
+    part(s.hx - STALL.counter / 2, STALL.counter / 2, 1.05);
+    part(-s.hx + STALL.back / 2, STALL.back / 2, s.height + 0.3);
   }
   const w = plan.well;
   out.push({ kind: "circle", tag: "well", x: w.x, z: w.z, r: w.r, y0: g(w.x, w.z) - 1, y1: g(w.x, w.z) + w.height });

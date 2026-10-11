@@ -239,6 +239,7 @@ Deviations that apply to a whole region:
 - Vesper: the cloister is `open-front` with a gallery `rect` and a separate `records` interior (7.2 x 3.1, floor 0.25: a 0.35 floor was unreachable on some seeds). The office moved to (-15,-81) and the tipple to (-38,-63.2) (a hopper, no door-like mouth); tent2 to (22.5,-84.5).
 - Saltmarket: warehouses 0 and 1 are 5.1 and 5.3 high, warehouse1 faces west (yaw pi); the Customs House faces east (yaw pi/2, 6.0 x 8.4); three new boardwalk spurs (`customsDoor`, `shedW`, `shedE`) reach the three interiors. Sealed warehouses carry plaques: "CLOSED FOR TIDE", "BONDED. CHAIN BY ORDER.", "LOT WITHDRAWN".
 - Kessar (D-119): Lampside's five houses face the fort road, every door `sealed` with a plaque: "GONE TO TRIM THE LAMPS. BACK AT DUSK", "NO CALLERS WITHOUT A WARDEN'S CHIT", "SOCIETY FORMS ACCEPTED AS KINDLING", "ASSESSED, STAMPED AND STILL NOT IN", "THE OCCUPANT IS UNSURPRISED". The region's one interior is still the toll booth.
+- Kessar (D-120): each stall is two solids, its counter and its backboard, with 0.7 m between (a stallkeeper's room, too narrow for a player); every house has a back door drawn on its garden side for the townsfolk (not a player's door: no handle outside, not in the audit), the street door stays `sealed`.
 
 | region | id | kind | at x,z | yaw | W x D | h | floor | door (w / h) | steps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

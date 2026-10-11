@@ -3,6 +3,7 @@ import { phaseOfHour, wrapHours, WORLD_CLOCK } from "./daycycle.ts";
 import { clamp, smoothstep, wrapAngle } from "./math.ts";
 import { hash3, hashFloat, Rng } from "./rng.ts";
 import { pickLine, type LineKind } from "./villagerLines.ts";
+import type { PeopleId } from "./peoples.ts";
 import { buildNav, routePoint, segmentOk, standingHeight, type Nav, type Route } from "./villagerNav.ts";
 import { weatherAt, createWeather } from "./weather.ts";
 
@@ -78,6 +79,8 @@ export interface Villager {
   /** Which kind of lines they speak. */
   lines: LineKind;
   stints: Stint[];
+  /** D-120: the people they are, when their region says (Lampside's are Kessarine); otherwise by trade (`peopleForVillager`). */
+  people?: PeopleId;
 }
 
 export interface Stint {
@@ -155,9 +158,9 @@ function msBetween(c: FolkClock, from: number, to: number): number {
 
 type Opt = { carry?: Carry; carryIn?: Carry; to?: string; actTo?: Activity; carryOut?: Carry; with?: string };
 /** [arrival hour, station key(s) with fallbacks after "|", what they do, options] */
-type Appt = [at: number, keys: string, act: Activity, opt?: Opt];
+export type Appt = [at: number, keys: string, act: Activity, opt?: Opt];
 
-interface CastDef {
+export interface CastDef {
   key: string;
   title: string;
   occupation: Occupation;
@@ -245,8 +248,15 @@ const CAST: readonly CastDef[] = [
   ] },
 ];
 
-/** Talking events: two people meet at a conversation spot for a while, then go back to whatever they were doing. */
-const MEETINGS: readonly { at: number; dur: number; spot: number; a: string; b: string }[] = [
+/** Talking events: two people meet at a conversation spot (`chat:<spot>:a|b`) for a while, then go back to whatever they were doing. */
+export interface Meeting {
+  at: number;
+  dur: number;
+  spot: number;
+  a: string;
+  b: string;
+}
+const MEETINGS: readonly Meeting[] = [
   { at: 17.9, dur: 1.0, spot: 0, a: "keeper", b: "clock" },
   { at: 12.5, dur: 0.9, spot: 3, a: "miller", b: "oldgent" },
   { at: 18.6, dur: 1.0, spot: 2, a: "smith", b: "baker" },
@@ -261,18 +271,66 @@ const LAST = ["Puddlecote", "Thistlewick", "Mumblecrust", "Applewarden", "Brindl
 
 // ---- building the folk -------------------------------------------------------------------------------------------------------------------------
 
-const cache = new WeakMap<CollisionWorld, Map<number, Folk>>();
+/**
+ * D-120: a region's people: who they are, what they do, where they walk and where they shelter. Hollowmere's village is `HOLLOWMERE_FOLK`; Lampside's street
+ * (Kessar) is in lampsideFolk.ts. The schedule, the walking and the places round a station are the same machinery for both.
+ */
+export interface FolkSpec {
+  /** Names the cache entry (one world, one region's people). */
+  id: string;
+  /** Salts the name shuffle (`Rng(seed ^ salt)`) and, but for Hollowmere's 0, the look seeds. */
+  salt: number;
+  lookSalt: number;
+  cast: readonly CastDef[];
+  meetings: readonly Meeting[];
+  firsts: readonly string[];
+  lasts: readonly string[];
+  /** Stations the adults who work in the open shelter under when it rains (the others go indoors: `indoors`). */
+  roofs: readonly string[];
+  indoors(v: Villager): boolean;
+  /** A person's name from the shuffled lists (`i` their seat in the cast). */
+  name(c: CastDef, i: number, firsts: readonly string[], lasts: readonly string[]): string;
+  /** A last change to a person's script (the lamplighter's rounds). */
+  script?(c: CastDef, script: Appt[]): Appt[];
+  /** The people they are, for the dress (undefined: by trade, `peopleForVillager`). */
+  people?: PeopleId;
+  nav(world: CollisionWorld): Nav;
+}
+
+const HOLLOWMERE_FOLK: FolkSpec = {
+  id: "hollowmere",
+  salt: 0x40110d,
+  lookSalt: 0,
+  cast: CAST,
+  meetings: MEETINGS,
+  firsts: FIRST,
+  lasts: LAST,
+  roofs: ["arch:a", "arch:b", "arch:c", "smithy:a", "smithy:b", "porch:hall:a", "porch:hall:b", "stall:1", "stall:2", "stall:3", "stall:4"],
+  indoors: (v) => v.age !== "adult" || v.occupation === "fisher" || v.occupation === "gardener" || v.occupation === "beekeeper" || v.occupation === "laundress" || v.occupation === "ferryman" || v.occupation === "lamplighter",
+  name: (c, i, firsts, lasts) => (c.age === "child" ? `${c.title} ${lasts[(i * 7 + 3) % lasts.length]!}` : `${firsts[i % firsts.length]!} ${lasts[i % lasts.length]!}`),
+  script: (c, script) => (c.key === "lamp" ? lampScript(script) : script),
+  nav: (world) => buildNav(world),
+};
+
+const cache = new WeakMap<CollisionWorld, Map<string, Folk>>();
 
 /** The village's people for a world and its seed: deterministic in both, built once and cached. */
 export function buildFolk(world: CollisionWorld, seed: number): Folk {
+  return buildFolkFrom(world, seed, HOLLOWMERE_FOLK);
+}
+
+/** A region's people (`spec`) for a world and its seed: deterministic in both, built once and cached. */
+export function buildFolkFrom(world: CollisionWorld, seed: number, spec: FolkSpec): Folk {
   let bySeed = cache.get(world);
   if (!bySeed) cache.set(world, (bySeed = new Map()));
-  const hit = bySeed.get(seed);
+  const key = `${spec.id}:${seed}`;
+  const hit = bySeed.get(key);
   if (hit) return hit;
-  const nav = buildNav(world);
-  const rng = new Rng((seed ^ 0x40110d) >>> 0);
-  const firsts = shuffled(FIRST, rng);
-  const lasts = shuffled(LAST, rng);
+  const nav = spec.nav(world);
+  const rng = new Rng((seed ^ spec.salt) >>> 0);
+  const firsts = shuffled(spec.firsts, rng);
+  const lasts = shuffled(spec.lasts, rng);
+  const CAST = spec.cast;
   const keyToId = new Map(CAST.map((c, i) => [c.key, i]));
   const okStation = (keys: string): number => {
     for (const k of keys.split("|")) {
@@ -284,8 +342,7 @@ export function buildFolk(world: CollisionWorld, seed: number): Folk {
   // hours a person leaves the house door, per person and stable: a little spread so nobody moves in lockstep
   const roster: Villager[] = CAST.map((c, i) => {
     const jit = (hashFloat(seed, i, 0x51) - 0.5) * 0.3;
-    const first = firsts[i % firsts.length]!;
-    const name = c.age === "child" ? `${c.title} ${lasts[(i * 7 + 3) % lasts.length]!}` : `${first} ${lasts[i % lasts.length]!}`;
+    const name = spec.name(c, i, firsts, lasts);
     const base: Villager = {
       id: i,
       name,
@@ -293,22 +350,23 @@ export function buildFolk(world: CollisionWorld, seed: number): Folk {
       occupation: c.occupation,
       age: c.age,
       home: c.home,
-      lookSeed: hash3(seed, i, 0x100) >>> 0,
+      lookSeed: hash3((seed ^ spec.lookSalt) >>> 0, i, 0x100) >>> 0,
       archetype: c.archetype ?? Math.floor(hashFloat(seed, i, 0x77) * 6),
       scale: c.scale ?? 1,
       walk: c.walk ?? 1,
       lane: 0.3 + hashFloat(seed, i, 0x33) * 0.7,
       lines: c.lines,
       stints: [],
+      ...(spec.people ? { people: spec.people } : {}),
     };
     // meetings first, so they can override the script
     let script = c.script.map((a) => [...a] as unknown as Appt);
-    for (const m of MEETINGS) {
+    for (const m of spec.meetings) {
       const side = m.a === c.key ? "a" : m.b === c.key ? "b" : undefined;
       if (!side) continue;
       script = withEvent(script, m.at, m.dur, [m.at, `chat:${m.spot}:${side}`, "chat", { with: side === "a" ? m.b : m.a }]);
     }
-    if (c.key === "lamp") script = lampScript(script);
+    if (spec.script) script = spec.script(c, script);
     const stints: Stint[] = [];
     for (const [at0, keys, act, opt] of script) {
       const st = okStation(keys);
@@ -325,9 +383,9 @@ export function buildFolk(world: CollisionWorld, seed: number): Folk {
   });
 
   // rain shelters: children, elders and people who work in the open go indoors; the rest of the adults stand under the nearest roofs
-  const roofs = ["arch:a", "arch:b", "arch:c", "smithy:a", "smithy:b", "porch:hall:a", "porch:hall:b", "stall:1", "stall:2", "stall:3", "stall:4"].map((k) => nav.index.get(k) ?? -1).filter((i) => i >= 0 && nav.stations[i]!.ok);
+  const roofs = spec.roofs.map((k) => nav.index.get(k) ?? -1).filter((i) => i >= 0 && nav.stations[i]!.ok);
   for (const v of roster) {
-    const indoors = v.age !== "adult" || v.occupation === "fisher" || v.occupation === "gardener" || v.occupation === "beekeeper" || v.occupation === "laundress" || v.occupation === "ferryman" || v.occupation === "lamplighter";
+    const indoors = spec.indoors(v);
     const homeIn = nav.index.get(`in:${v.home}`) ?? -1;
     for (const s of v.stints) {
       const at = nav.stations[s.st]!;
@@ -367,7 +425,7 @@ export function buildFolk(world: CollisionWorld, seed: number): Folk {
   const { spotsOf, idsOf, groupOf } = stationSpots(nav);
   assignSpots(roster, idsOf, groupOf);
   const folk: Folk = { nav, roster, seed, spots: spotsOf };
-  bySeed.set(seed, folk);
+  bySeed.set(key, folk);
   return folk;
 }
 

@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
-import { LAMPSIDE_GARDENS, LAMPSIDE_SIGNS, createDayState, dayState, inLampside, kessarLevel, lampsidePlan } from "@cb/shared";
+import { LAMPSIDE_GARDENS, LAMPSIDE_SIGNS, buildLampsideFolk, createDayState, dayState, inLampside, kessarLevel, lampsidePlan } from "@cb/shared";
+import { applyPeople, generateCharacter } from "@cb/procedural";
+import { folkSpec } from "../villagerLooks.ts";
+import type { Villagers } from "../villagers.ts";
 import { PRESETS } from "../../Stage.ts";
 import { WorldView } from "../WorldView.ts";
 import { createRegionView } from "../regionView.ts";
@@ -269,5 +272,30 @@ describe("D-119: Lampside drawn", () => {
     expect(kessarCover((green!.x0 + green!.x1) / 2, (green!.z0 + green!.z1) / 2, 0.5, 0)).toBeCloseTo(0, 6);
     expect(kessarCover((barley!.x0 + barley!.x1) / 2, (barley!.z0 + barley!.z1) / 2, 0.5, 0)).toBeCloseTo(0, 6);
     expect(kessarCover(0, -14, 0.5, 0)).toBeCloseTo(0, 6);
+  });
+});
+
+describe("D-120: Lampside's people drawn", () => {
+  it("the view puts Lampside's folk on the stage (Kessarine, on the town's own network) and runs them through the morning", () => {
+    const view = createRegionView("kessar", new Scene(), world, PRESETS.medium, sun);
+    const folk = (view as unknown as { folkView?: Villagers }).folkView;
+    expect(folk).toBeDefined();
+    view.applyDay(dayState(10.5, createDayState()));
+    for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: 0, y: 2, z: -12 }, 1 + i * 0.2);
+    const people = folk!.people!;
+    expect(people.folk.roster).toHaveLength(10);
+    expect(people.folk.roster.every((v) => v.people === "kessarine" && / Lamp$/.test(v.name))).toBe(true);
+    expect(people.poses.filter((p) => p.visible).length).toBeGreaterThanOrEqual(8);
+    expect(folk!.stats.visible).toBeGreaterThan(0);
+    view.dispose();
+  });
+
+  it("dresses them as the Kessarine: their people's skin band and dyes (D-067), not the hub's spread of tones and village dyes", () => {
+    for (const v of buildLampsideFolk(world, 7).roster) {
+      const spec = folkSpec(v);
+      const own = applyPeople(generateCharacter(v.lookSeed, v.archetype), "kessarine", v.lookSeed);
+      expect(spec.skin, v.name).toBe(own.skin);
+      if (v.age !== "child") expect(spec.jacketColor, v.name).toBe(own.jacketColor);
+    }
   });
 });

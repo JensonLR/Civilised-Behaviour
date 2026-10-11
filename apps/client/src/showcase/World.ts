@@ -25,7 +25,7 @@ import { VESPER_DEFAULT_VIEW, vesperViews } from "./vesper.ts";
  *   drift=1    keep the clock running after ?time=
  *   push=x,z;x,z   up to four invisible walkers the grass bends away from (the figures are pushers too)
  *   i=N        which tree/rock/snag for view=tree|rock|snag
- *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat|town|square|garden|grove|towntop|townback, bridge=collapsed (the span down)
+ *   region=kessar   KESSAR REACH (the colony region) instead of Hollowmere: view=landing|pier|bridge|underbridge|gate|fort|ford|toll|camp|powder|rim|top|fortfar|boat|town|square|garden|grove|towntop|townback|alley, bridge=collapsed (the span down)
  *   region=highmark HIGHMARK (D-036; the savannah and its hill-capital): view=landing|road|grass|herds|waiting|foot|terraces|granary|market|ramp|gate|window|court|throne|palace|capital|capitalfar|plateau|top|quay|camp
  *     (time=dusk is the harvest bell hour: the lamps burn); herds are a function of seed and the world clock (wms=N sits it)
  *   region=vesper   VESPER GORGE (D-037; the canyon and its mine): the vantage points are package C3's (showcase/vesper.ts)
@@ -274,6 +274,8 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     grove: [new Vector3(16, ky(16, -2) + 2.4, -2), new Vector3(28, ky(28, -16) + 1.5, -16)],
     towntop: [new Vector3(-2, 55, 18), new Vector3(-2, 0, -15)],
     townback: [new Vector3(-1.5, ky(0, -27) + 1.8, -27), new Vector3(0, ky(0, 2) + 1.6, 2)],
+    // D-120: the alley behind the west houses, where the town comes and goes by its back doors
+    alley: [new Vector3(-15.3, ky(-15.3, -3.5) + 1.8, -3.5), new Vector3(-13.5, ky(-13.5, -15) + 1.2, -15)],
   };
   // Highmark: named vantage points (the quay you arrive at, the road across the grass, the herds, the foot of the hill and its five terraces, the gate and its Window, the court)
   const hviews: Record<string, [Vector3, Vector3]> = {

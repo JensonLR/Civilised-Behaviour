@@ -49,7 +49,7 @@ export interface Station {
   node: number;
 }
 
-interface StationDef {
+export interface StationDef {
   key: string;
   x: number;
   z: number;
@@ -146,8 +146,17 @@ export function standingHeight(world: CollisionWorld, x: number, z: number, feet
   if (world.resolveXZ(probe, feetY, r, 1.7)) return undefined;
   const gy = world.groundHeight(x, z, feetY);
   const th = world.terrainHeight(x, z);
-  if (gy <= th + 0.04 && waterEdgeDistance(x, z) < 0.3) return undefined; // in the water, and nothing carries the walker
+  if (gy <= th + 0.04 && (wetOf.get(world) ?? hollowmereWet)(x, z)) return undefined; // in the water, and nothing carries the walker
   return gy;
+}
+
+/** Where a walker on the bare ground would be in the water: Hollowmere's stream and pond, unless the world's own folk say otherwise (`setFolkWater`, D-120). */
+const hollowmereWet = (x: number, z: number): boolean => waterEdgeDistance(x, z) < 0.3;
+const wetOf = new WeakMap<CollisionWorld, (x: number, z: number) => boolean>();
+
+/** D-120: the water of a region whose folk are not Hollowmere's (its terrain's own rivers and sea), for every standing test in `world`. */
+export function setFolkWater(world: CollisionWorld, wet: (x: number, z: number) => boolean): void {
+  wetOf.set(world, wet);
 }
 
 /** True if a walker can go straight from a to b (every 0.45 m standable, the ground height followed from `y0`). */
@@ -388,18 +397,36 @@ function stationDefs(plan: VillagePlan, terrainY: (x: number, z: number) => numb
   return out;
 }
 
-/** Builds the network, the stations and (lazily) the routes between them for a world. */
+/** A footpath of the network: its vertices (x, z pairs) and its width (m); `undefined` holds a place for a path a world lacks. */
+export interface NavTrail {
+  line: ArrayLike<number>;
+  width: number;
+}
+
+/** D-120: what a region's walking network is made of: its footpaths, a grid of open ground, and its stations (ideal places; `buildNavFrom` nudges and drops). */
+export interface NavSpec {
+  trails: readonly (NavTrail | undefined)[];
+  grid: { x0: number; x1: number; z0: number; z1: number; step: number };
+  stations: StationDef[];
+}
+
+/** Builds the network, the stations and (lazily) the routes between them for Hollowmere's village. */
 export function buildNav(world: CollisionWorld, why?: Map<string, string>): Nav {
   const plan = villagePlan(world.terrain);
+  return buildNavFrom(world, { trails: NAV_TRAILS.map((name) => TRAILS.find((q) => q.name === name)), grid: GRID, stations: stationDefs(plan, (x, z) => world.terrainHeight(x, z)) }, why);
+}
+
+/** Builds the network, the stations and (lazily) the routes between them from a region's spec (D-120: Hollowmere's village, Lampside's street). */
+export function buildNavFrom(world: CollisionWorld, spec: NavSpec, why?: Map<string, string>): Nav {
   const g = new Graph();
   const groundAt = (x: number, z: number): number => world.terrainHeight(x, z);
+  const GRID = spec.grid;
 
   // trail vertices become nodes; consecutive vertices are joined where a walker could pass
   const starts: number[] = [];
   const ends: number[] = [];
   const owner: number[] = [];
-  NAV_TRAILS.forEach((name, ti) => {
-    const t = TRAILS.find((q) => q.name === name);
+  spec.trails.forEach((t, ti) => {
     if (!t) return;
     const clear = Math.max(0, Math.min(0.45, t.width / 2 - 0.55));
     let prev = -1;
@@ -475,7 +502,7 @@ export function buildNav(world: CollisionWorld, why?: Map<string, string>): Nav 
   const networkNodes = g.x.length;
 
   // stations: nudge each to standable ground, then connect it (through its way-in points) to the network
-  const defs = stationDefs(plan, groundAt);
+  const defs = spec.stations;
   const stations: Station[] = [];
   const index = new Map<string, number>();
   const benchIgnore = (sx: number, sz: number) => (o: Obstacle): boolean => o.tag === "vprop" && Math.hypot(o.x - sx, o.z - sz) < 1.4;

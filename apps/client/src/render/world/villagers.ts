@@ -189,6 +189,8 @@ export class Villagers {
     budget: FolkBudget,
     /** Milliseconds between cold builds of bodies (tests and review scenes pass 0). */
     private readonly buildGapMs = 140,
+    /** D-120: whose people (Hollowmere's village by default; Kessar passes Lampside's). */
+    private readonly build: (world: CollisionWorld, seed: number) => Folk = buildFolk,
   ) {
     // review scenes: `?folkbudget=review` lifts every limit (all in full detail), `?folklod=1|2` forces one level for everybody
     let params = new URLSearchParams();
@@ -218,7 +220,7 @@ export class Villagers {
   private ensure(): Folk {
     if (this.folk && this.builtSeed === folkHints.seed) return this.folk;
     for (const s of this.slots) s.body?.dispose();
-    const folk = buildFolk(this.world, folkHints.seed);
+    const folk = this.build(this.world, folkHints.seed);
     this.folk = folk;
     this.builtSeed = folkHints.seed;
     const n = Math.min(this.budget.count, folk.roster.length);

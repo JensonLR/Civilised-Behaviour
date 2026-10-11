@@ -1,5 +1,5 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { LAMPSIDE_GARDENS, PALETTE, kessarLevel, lampsidePlan, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
+import { LAMPSIDE_GARDENS, PALETTE, buildLampsideFolk, kessarLevel, lampsidePlan, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
 import type { WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
@@ -26,6 +26,7 @@ import { buildKessarSolid } from "./structures.ts";
 import { BridgeWreck } from "./bridgeWreck.ts";
 import { addWindows, setWindowNight } from "../litWindows.ts";
 import { buildKessarWater } from "./water.ts";
+import { Villagers, folkBudget } from "../villagers.ts";
 import type { WaterUniforms } from "../water.ts";
 
 const WHITE = new Color(1, 1, 1);
@@ -88,6 +89,7 @@ export class KessarView implements RegionView {
     this.addCloth(terrain);
     this.addWater(terrain);
     this.addAmbient();
+    this.addFolk();
     cullPlants(this.root); // (no plant grows through anything built)
     this.count();
   }
@@ -294,6 +296,26 @@ export class KessarView implements RegionView {
     }
   }
 
+  // ---- Lampside's people (D-120: the same schedule and bodies as Hollowmere's folk, on the town's own network) -----------------------------------
+
+  private folk?: Villagers;
+  private hours = 12;
+  private readonly walkers: { x: number; z: number }[] = [];
+  private walkerCount = 0;
+  private readonly folkFrame = { hours: 12, worldSec: 0, rain: 0, x: 0, y: 0, z: 0, walkers: this.walkers, walkerCount: 0 };
+
+  private addFolk(): void {
+    if (!this.detail.villagers) return;
+    const budget = folkBudget(this.detail);
+    if (budget.count <= 0) return;
+    this.folk = new Villagers(this.scene, this.world, budget, 140, buildLampsideFolk);
+  }
+
+  /** The people of Lampside: who is on stage, at what detail, and what it costs. */
+  get folkView(): Villagers | undefined {
+    return this.folk;
+  }
+
   // ---- the dress: the outpost, the roads, the wire, the launch, the Syndicate's post (swapped in place: outpostDress.ts) ----------------------------
 
   applyDress(d: RegionDress): void {
@@ -329,6 +351,7 @@ export class KessarView implements RegionView {
     setWindowNight(d.fire);
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
+    this.hours = d.hours;
   }
 
   /** Once a frame for the local player: the roof of the room the viewer stands in is lifted (docs/LEVEL_PLAN.md section 4, rule 7). */
@@ -352,6 +375,13 @@ export class KessarView implements RegionView {
       if (i < n && i < list.length) u.set(list[i]!.x, list[i]!.z, 1.5, 1);
       else u.set(0, 0, 1, 0);
     }
+    // (Lampside's people turn their heads to the walkers and wave)
+    this.walkerCount = Math.min(n, list.length, MAX_PUSHERS);
+    for (let i = 0; i < this.walkerCount; i++) {
+      const w = (this.walkers[i] ??= { x: 0, z: 0 });
+      w.x = list[i]!.x;
+      w.z = list[i]!.z;
+    }
   }
 
   /** D-097: the span's pieces (only when the bridge is down). */
@@ -364,8 +394,19 @@ export class KessarView implements RegionView {
     return this.wreck.landings(kessarWaterY(0));
   }
 
-  update(t: number, camera?: { x: number; y?: number; z: number }): void {
+  update(t: number, camera?: { x: number; y?: number; z: number }, worldSec = t): void {
     if (this.wreck && this.lastT >= 0) this.wreck.update(t - this.lastT);
+    if (this.folk && camera) {
+      const f = this.folkFrame;
+      f.hours = this.hours;
+      f.worldSec = worldSec;
+      f.rain = atmoUniforms.uRain.value;
+      f.x = camera.x;
+      f.y = camera.y ?? 0;
+      f.z = camera.z;
+      f.walkerCount = this.walkerCount;
+      this.folk.update(this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - this.lastT)), f);
+    }
     this.lastT = t;
     worldTime.value = t;
     this.hillU.uSailAngle.value = t * 0.32;
@@ -375,6 +416,8 @@ export class KessarView implements RegionView {
   }
 
   dispose(): void {
+    this.folk?.dispose();
+    this.folk = undefined;
     this.dress.clear();
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();
