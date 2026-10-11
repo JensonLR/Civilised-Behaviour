@@ -39,6 +39,7 @@ import type { CameraRig } from "../render/CameraRig.ts";
 import type { ViewModel } from "../render/ViewModel.ts";
 import type { ActorCombat, CharacterActor } from "../render/CharacterActor.ts";
 import { Projectiles } from "../render/Projectiles.ts";
+import { noteFolkNoise } from "../render/world/folkFright.ts";
 import type { Stage } from "../render/Stage.ts";
 import { CannonView } from "../render/weapons/CannonView.ts";
 import { CrankGunView } from "../render/weapons/CrankGunView.ts";
@@ -360,6 +361,7 @@ export class CombatView {
     const def = WEAPONS[w as WeaponId];
     const r = def.ranged;
     if (!r) return;
+    noteFolkNoise(ox, oz, "shot"); // (D-122: the townsfolk hear it)
     // your own shot in first person leaves the viewmodel's muzzle (where the gun is on the screen), not the hidden body's
     const vm = own && this.viewmodel?.active ? this.viewmodel : undefined;
     const fromVm = vm?.muzzleWorld(muzzle);
@@ -437,6 +439,7 @@ export class CombatView {
     if (view) view.muzzle(muzzle, mdir);
     else muzzle.set(e.x, e.y, e.z), mdir.set(e.dx, e.dy, e.dz);
     this.fx.muzzle(WEAPON.CANNON, muzzle.x, muzzle.y, muzzle.z, mdir.x, mdir.y, mdir.z);
+    noteFolkNoise(e.x, e.z, "blast");
     this.audio?.blast("cannon", e.x, e.y, e.z);
     const r = WEAPONS[WEAPON.CANNON].ranged!;
     this.projectiles.spawn(WEAPON.CANNON, muzzle.x, muzzle.y, muzzle.z, e.dx * r.speed, e.dy * r.speed, e.dz * r.speed);
@@ -455,6 +458,7 @@ export class CombatView {
     if (view) view.muzzle(muzzle, mdir);
     else muzzle.set(e.x, e.y, e.z), mdir.set(e.dx, e.dy, e.dz);
     this.fx.muzzle(WEAPON.CRANK, muzzle.x, muzzle.y, muzzle.z, mdir.x, mdir.y, mdir.z);
+    noteFolkNoise(e.x, e.z, "shot");
     sfx.sound(REPORT[WEAPON.CRANK] ?? "pistol_shot", { x: muzzle.x, y: muzzle.y, z: muzzle.z });
     const r = WEAPONS[WEAPON.CRANK].ranged!;
     const yaw = Math.atan2(-e.dx, -e.dz);
@@ -476,6 +480,7 @@ export class CombatView {
 
   private onBoom(e: BoomEvent): void {
     this.fx.explosion(e.x, e.y, e.z, e.radius);
+    noteFolkNoise(e.x, e.z, "blast"); // (D-122: and the townsfolk run from it)
     // D-084: everyone in earshot starts and looks at it
     for (const a of this.actors().values()) {
       const p = a.body.root.position;

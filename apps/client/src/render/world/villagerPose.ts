@@ -36,9 +36,11 @@ export interface BodyState {
   cane: boolean;
   /** Ground height under the feet (added to the root after the animator has set it). */
   ground: number;
+  /** D-122: 0..1 frightened (shooting near): the face, a hand on the head when running. */
+  fear: number;
 }
 
-export const createBodyState = (): BodyState => ({ act: "idle", carry: "none", speed: 0, t: 0, rain: 0, umbrella: false, covered: false, lookYaw: 0, lookPitch: 0, look: 0, wave: 0, talk: 0, hue: 0, cane: false, ground: 0 });
+export const createBodyState = (): BodyState => ({ act: "idle", carry: "none", speed: 0, t: 0, rain: 0, umbrella: false, covered: false, lookYaw: 0, lookPitch: 0, look: 0, wave: 0, talk: 0, hue: 0, cane: false, ground: 0, fear: 0 });
 
 const damp = (a: number, b: number, rate: number, dt: number): number => a + (b - a) * (1 - Math.exp(-rate * dt));
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -79,6 +81,7 @@ export class FolkBody {
   private lookPitch = 0;
   private shown: Group | undefined;
   private shownL: Group | undefined;
+  private feared = false;
   private outline: boolean;
   private lodNow: Lod;
   private hipY = 0.9;
@@ -180,7 +183,15 @@ export class FolkBody {
     const j = this.rig.joints;
     const P = this.rig.proportions;
     const sitting = s.act === "sit";
-    this.anim.update(dt, { speed: s.speed, flags: FLAG.GROUNDED, vy: 0 });
+    // (D-122: somebody cowering is crouched, as a player is; a frightened face while it lasts)
+    this.anim.update(dt, { speed: s.speed, flags: s.act === "cower" ? FLAG.GROUNDED | FLAG.CROUCHING : FLAG.GROUNDED, vy: 0 });
+    if (s.fear > 0.2) {
+      this.anim.setExpression("fear", Math.min(1, s.fear));
+      this.feared = true;
+    } else if (this.feared) {
+      this.anim.setExpression("neutral", 0);
+      this.feared = false;
+    }
     const near = this.lodNow < 2;
     this.sit = damp(this.sit, sitting ? 1 : 0, 9, dt);
     const L = P.armUpper + P.armLower;
@@ -417,6 +428,16 @@ export class FolkBody {
         break;
       }
       case "sit": {
+        if (s.fear > 0.5) {
+          // D-122: frightened on a seat: hands over the head, bent over the knees
+          this.aimAt(aimR, 0.1, sy + 0.3 * L, -0.1 * L);
+          this.aimAt(aimL, -0.1, sy + 0.3 * L, -0.1 * L);
+          wantR = wantL = 1;
+          torso = 0.3;
+          headPitch = 0.5;
+          gripR = gripL = 0.2;
+          break;
+        }
         // hands on the knees (a reader takes a book)
         const reading = s.carry === "book";
         this.aimAt(aimR, 0.12, reading ? sy - 0.3 * L : -0.05, reading ? -0.3 * L - 0.1 : -P.legUpper * 0.72);
@@ -429,6 +450,16 @@ export class FolkBody {
           heldL = g;
         }
         gripR = gripL = 0.5;
+        break;
+      }
+      case "cower": {
+        // D-122: down on the haunches, both hands over the head, the head tucked
+        this.aimAt(aimR, 0.1, sy + 0.3 * L, -0.1 * L);
+        this.aimAt(aimL, -0.1, sy + 0.3 * L, -0.1 * L);
+        wantR = wantL = 1;
+        torso = 0.32;
+        headPitch = 0.5;
+        gripR = gripL = 0.2;
         break;
       }
       case "play": {
@@ -525,8 +556,15 @@ export class FolkBody {
       gripL = 0.9;
     }
 
+    // ---- D-122: running from shooting, a hand clamped on the head (the hat stays on) -----------------------------------------------------------
+    if (s.fear > 0.5 && s.act === "walk" && s.speed > 2 && !heldR && near) {
+      this.aimAt(aimR, 0.08, sy + 0.32 * L, -0.12 * L);
+      wantR = 0.9;
+      gripR = 0.4;
+    }
+
     // ---- rain: an umbrella in the right hand, or a hand over the head ------------------------------------------------------------------------
-    const wet = s.rain > 0.36 && !s.covered && !sitting && s.act !== "hammer" && s.act !== "sweep" && s.act !== "sell";
+    const wet = s.rain > 0.36 && !s.covered && !sitting && s.act !== "hammer" && s.act !== "sweep" && s.act !== "sell" && s.act !== "cower" && s.fear < 0.5;
     if (wet && !heldR && near) {
       if (s.umbrella) {
         const g = this.prop("umbrella", s.hue);
@@ -544,7 +582,7 @@ export class FolkBody {
     }
 
     // ---- a wave for a passer-by ------------------------------------------------------------------------------------------------------------
-    if (s.wave > 0.02 && !heldR && near && s.act !== "sit") {
+    if (s.wave > 0.02 && !heldR && near && s.act !== "sit" && s.fear < 0.3) {
       const w = Math.sin(t * 9);
       this.aimAt(aimR, 0.14 + 0.05 * w, sy + 0.34 * L, -0.12 * L);
       wantR = Math.max(wantR, s.wave);

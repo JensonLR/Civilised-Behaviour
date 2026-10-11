@@ -211,6 +211,16 @@ const KESSAR_GREET: readonly string[] = [
   "Visitors! Mind the gardens. The barley bites.",
 ];
 
+/** D-122: shooting in the street. The Kessarine have seen expeditions before; they go in by the back and complain in writing. */
+const KESSAR_FRIGHT: readonly string[] = [
+  "Lamps out! Everyone in by the back!",
+  "Not in the street, sirs! The street is for walking!",
+  "The Ward will hear of this. Loudly. In triplicate.",
+  "Inside, little one! Leave the hoop!",
+  "Another expedition, another shutter.",
+  "Gunfire? We were promised a survey.",
+];
+
 const isKessar = (k: LineKind): k is KessarLineKind => k in KESSAR_BY_KIND;
 
 const RAIN: readonly string[] = [
@@ -226,6 +236,16 @@ const NIGHT: readonly string[] = [
   "Quiet night. Well, quiet-ish. The owls have a lot to say.",
 ];
 
+/** D-122: shooting in the village. The Mereborn take cover first and send the invoice later. */
+const FRIGHT: readonly string[] = [
+  "Inside! Everybody inside! Mind the hens!",
+  "Not the windows! We've only just paid for the windows!",
+  "Is this the improvement they promised?",
+  "Somebody write this down. Then hide the pen.",
+  "The Society's here, then. Get the washing in!",
+  "Not again! The geese had only just calmed down!",
+];
+
 const GREET: readonly string[] = [
   "Good day. Please don't improve anything.",
   "A visitor! Do keep to the path we didn't make.",
@@ -235,16 +255,16 @@ const GREET: readonly string[] = [
 ];
 
 /** The line to show for a person: deterministic in (id, slot). `moment` picks a special pool; otherwise a mix of the person's own and the general pool. */
-export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" = ""): string {
+export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" | "fright" = ""): string {
   if (isKessar(kind)) {
-    const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? KESSAR_GREET : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
+    const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? KESSAR_GREET : moment === "fright" ? KESSAR_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
-  const pool = moment === "rain" ? RAIN : moment === "night" ? NIGHT : moment === "greet" ? GREET : hash3(id, slot, 3) % 5 < 3 ? BY_KIND[kind] : GENERAL;
+  const pool = moment === "rain" ? RAIN : moment === "night" ? NIGHT : moment === "greet" ? GREET : moment === "fright" ? FRIGHT : hash3(id, slot, 3) % 5 < 3 ? BY_KIND[kind] : GENERAL;
   return pool[hash3(id, slot, 11) % pool.length]!;
 }
 
 /** Every line, for tests (tone and content checks). */
 export function allLines(): string[] {
-  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET];
+  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT];
 }

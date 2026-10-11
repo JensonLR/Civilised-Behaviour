@@ -308,7 +308,7 @@ export class KessarView implements RegionView {
     if (!this.detail.villagers) return;
     const budget = folkBudget(this.detail);
     if (budget.count <= 0) return;
-    this.folk = new Villagers(this.scene, this.world, budget, 140, buildLampsideFolk);
+    this.folk = new Villagers(this.scene, this.world, budget, 140, buildLampsideFolk, "LAMPSIDE");
   }
 
   /** The people of Lampside: who is on stage, at what detail, and what it costs. */
