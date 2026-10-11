@@ -3,7 +3,8 @@ import { Vector3 } from "three";
 /**
  * The Saltmarket Delta's named vantage points for `?showcase=world&region=saltmarket&view=<name>` (D-037, package D4; `ky(x, z)` is the ground height there). A view is [camera position, look-at]. The names
  * docs/_notes/regions34.md section 4 asks for: landing, quay, boardwalk, channel, stilts, customs, berth, cove, drop, exchange, flood (inside the hall, at high water: `time` and the scenario clock decide how high),
- * horizon (the whole delta from the quay: the silhouette shot), `top`; and a few more the art review wants: walk3 (the skyline's own viewpoint), lanterns, crane, campanile, windpump, reeds, rim, bridge; D-093's peg, chalk and survey.
+ * horizon (the whole delta from the quay: the silhouette shot), `top`; and a few more the art review wants: walk3 (the skyline's own viewpoint), lanterns, crane, campanile, windpump, reeds, rim, bridge; D-093's peg, chalk and survey;
+ * D-121's saltworks, pans, heaps and brinepump.
  */
 export const SALTMARKET_DEFAULT_VIEW = "horizon";
 export function saltmarketViews(ky: (x: number, z: number) => number): Record<string, [Vector3, Vector3]> {
@@ -33,6 +34,11 @@ export function saltmarketViews(ky: (x: number, z: number) => number): Record<st
     peg: v(-65, 1.5, -18.6, -67.5, 0.9, -21.4),
     chalk: v(-86.8, 1.7, -7.6, -89.35, 1.6, -9.77),
     survey: v(-77, 2.0, -107, -80, 1.8, -93),
+    // D-121, the Brine Houses' salt works: the field from above the bridge, the pans close, the heaps in the yard, the brine pump on its corner
+    saltworks: [new Vector3(-6, ky(-6, 104) + 22, 104), new Vector3(14, ky(14, 50), 50)],
+    pans: v(8, 9, 74, 15, 0, 56),
+    heaps: v(9, 2.2, 81, 15, 1, 71),
+    brinepump: v(18, 4.5, 10, 27, 1.5, 19),
     top: [new Vector3(0, 190, 10), new Vector3(0, 0, 10)],
   };
 }

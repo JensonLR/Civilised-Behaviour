@@ -1,4 +1,4 @@
-import { HIGHMARK, HILL, VESPER_ROAD_HALF, highmarkRoadDistance, saltmarketPlan, trailSample, vesperRoadDistance, waterField, type TrailSample, type WaterField } from "@cb/shared";
+import { BRINE_STATES, HIGHMARK, HILL, VESPER_ROAD_HALF, highmarkRoadDistance, saltPanAt, saltmarketPlan, trailSample, vesperRoadDistance, waterField, type TrailSample, type WaterField } from "@cb/shared";
 
 export type Surface = "grass" | "dirt" | "stone" | "wood" | "water" | "mud" | "sand" | "plank";
 
@@ -55,9 +55,13 @@ export function regionSurfaceAt(region: string, x: number, z: number, aboveGroun
   switch (region) {
     case "kessar":
       return "sand";
-    case "saltmarket":
+    case "saltmarket": {
       walks ??= saltmarketPlan().boardwalks.map((w) => w.pts);
-      return nearPaths(walks, x, z, WALK_HALF) ? "plank" : "mud";
+      if (nearPaths(walks, x, z, WALK_HALF)) return "plank";
+      // D-121: a splash in a pan's brine, a crunch on its crust (a bund is clay: mud)
+      const pan = saltPanAt(x, z);
+      return pan === undefined ? "mud" : BRINE_STATES.includes(pan.state) ? "water" : "sand";
+    }
     case "vesper":
       return vesperRoadDistance(x, z) < VESPER_ROAD_HALF ? "dirt" : "stone";
     case "highmark":

@@ -9,6 +9,7 @@ import { PropKind, type PropKindId, type PropSpawn } from "./props.ts";
 import { ARRIVAL_TOWARD, arrivalCentre, barrelHuddle, barrelRow, bottles, chairRow, compose, desk, inArrival, placeStillLife, type StillLife } from "./stores.ts";
 import { Rng, hash3 } from "./rng.ts";
 import { createTerrain, type Terrain } from "./terrain.ts";
+import { saltworksObstacles, saltworksPad, saltworksPlan } from "./saltworks.ts";
 
 /**
  * THE SALTMARKET DELTA, region four (D-037; docs/_notes/regions34.md section 4). The delta and wetland trading region of the GDD: braided channels across a flat silt plain, stilted warehouses and a boardwalk
@@ -216,6 +217,7 @@ export function createSaltmarketTerrain(seed: number): SaltmarketTerrain {
       const v = 1 - smoothstep(f.r, f.r + f.blend, Math.hypot(x - f.x, z - f.z));
       if (v > flat) flat = v;
     }
+    flat = Math.max(flat, saltworksPad(x, z));   // (D-121: the salt works stand on levelled ground)
     let h = L + base.height(x, z) * (1 - flat);
     let carve = 0;
     // the Customs Cut's centreline at this x: the two northern cuts END in it (a deep tail running on south of it would have no revetment: the rim stops at the Customs Cut's north lip)
@@ -388,6 +390,7 @@ export function saltmarketPlan(): SaltmarketPlan {
     { x: -28, z: 73, yaw: Math.PI / 2, text: 1 },
     { x: 5.5, z: -28, yaw: Math.PI / 2, text: 2 },
     { x: 5.6, z: 103.6, yaw: Math.PI / 2, text: 3 },   // (D-097: clear of the quay's lamp post, which ran through its board)
+    { ...saltworksPlan().sign, text: 4 },   // (D-121: the salt works' notice, facing the boardwalk where it leaves the bridge)
   ];
   const banners: SaltmarketBanner[] = [
     { x: -33.1, z: 60.2, yaw: Math.PI / 2, top: 7.3, w: 2.0, h: 3.0, kind: "customs" },
@@ -560,6 +563,8 @@ export function saltmarketObstacles(terrain: Terrain, seed: number): Obstacle[] 
   }
   for (const s of plan.signs) circle("sign", s.x, s.z, 0.12, 2);
   for (const l of plan.lamps) circle("pole", l.x, l.z, 0.14, l.h);
+  // D-121: the salt works, appended last (nothing above moves)
+  out.push(...saltworksObstacles(terrain));
   return out;
 }
 

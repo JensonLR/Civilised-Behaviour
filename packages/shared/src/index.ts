@@ -44,6 +44,7 @@ export * from "./vesperLedger.ts";
 export * from "./vesperText.ts";
 export * from "./paletteVesper.ts";
 export * from "./saltmarket.ts";
+export * from "./saltworks.ts";
 export * from "./saltmarketLedger.ts";
 export * from "./saltmarketText.ts";
 export * from "./paletteSaltmarket.ts";

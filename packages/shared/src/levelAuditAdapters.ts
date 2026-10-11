@@ -15,6 +15,7 @@ import { kessarLevel, kessarPlan, kessarSitePoints } from "./kessar.ts";
 import { inLampside } from "./lampside.ts";
 import { CLOISTER, VESPER_ANCHORS, vesperLevel, vesperPlan, vesperRoad, vesperSitePoints, vesperTracks } from "./vesper.ts";
 import { SALTMARKET_ANCHORS, saltmarketLevel, saltmarketPlan, saltmarketSitePoints } from "./saltmarket.ts";
+import { inSaltworks, saltworksPoints } from "./saltworks.ts";
 
 /**
  * THE FIVE REGION ADAPTERS (D-038, docs/LEVEL_PLAN.md section 9). Each turns a region's own plan (the same pure data the collision, the view and the nav read) into the audit's
@@ -126,6 +127,8 @@ export function saltmarketAdapter(seed: number): RegionAuditInput {
     if ((t === "jetty" || t === "pole") && Math.abs(o.x) < 4 && o.z > 119 && o.z < 135) return { id: `quay@${r1(o.x)},${r1(o.z)}`, group: "quay" };
     if (t === "jetty") return { id: `pier@${r1(o.x)},${r1(o.z)}`, group: "covePier" };
     if ((t === "ruin" || t === "wall" || t === "table") && inRect(o, ex.x, ex.z, ex.hx + 1, ex.hz + 3)) return { id: `exchange.${t}@${r1(o.x)},${r1(o.z)}`, group: "exchange" };
+    // (D-121: the salt works are one built thing: the bunds meet at their corners, a heap is two rings, the pump stands astride a corner)
+    if ((t === "bund" || t === "salt" || t === "pole" || t === "cart") && inSaltworks(o.x, o.z)) return { id: `saltworks.${t}@${r1(o.x)},${r1(o.z)}`, group: "saltworks" };
     return undefined;
   };
   const routes: AuditRoute[] = [
@@ -141,7 +144,7 @@ export function saltmarketAdapter(seed: number): RegionAuditInput {
   return assemble({
     region: "saltmarket", seed, world, group,
     doors: withFloors(world, level),
-    points: pts(saltmarketSitePoints()),
+    points: pts([...saltmarketSitePoints(), ...saltworksPoints()]),
     routes,
     // (a bridge's parapet ends in the revetment's pilings: a joint, not an overlap you could see or bump)
     allowOverlap: [["revetment", "bridge:customsBridge"], ["revetment", "bridge:coveBridge"], ["revetment", "bridge:reedBridge"]],

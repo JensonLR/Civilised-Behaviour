@@ -1,10 +1,11 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, SphereGeometry, TorusGeometry } from "three";
 import { pane, type LitPane } from "../litWindows.ts";
-import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, SALTMARKET_SURVEY, hash3, saltmarketLevel, saltmarketPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
+import { PALETTE, SALTMARKET, SALTMARKET_ANCHORS, SALTMARKET_SURVEY, hash3, saltmarketLevel, saltmarketPlan, saltworksPlan, type CollisionWorld, type SaltmarketBox, type SaltmarketBoat, type SaltmarketHair } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import { SIGN_BOARD } from "./cloth.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, type DoorMark, type LevelBuilding, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
+import { buildSaltworks } from "./saltworks.ts";
 
 /**
  * Every solid thing in the Saltmarket Delta merged into a few vertex-coloured geometries (one draw and one ink hull each, split four ways over the map so the frustum can cull): the quay and its pontoon, the three
@@ -716,6 +717,10 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   plan.boats.forEach((b, i) => boat(kitAt(b.x, b.z), b, lod, i));
   plan.racks.forEach((r, i) => rack(kitAt(r.x, r.z), r, g(r.x, r.z), lod, i));
   plan.saltPans.forEach((p) => saltPan(kitAt(p.x, p.z), p, g(p.x, p.z)));
+  // D-121: the Brine Houses' salt works by the main boardwalk, and its brine pump (a windpump like the west pond's, with no chalk on it)
+  const pump = saltworksPlan().pump;
+  hair(kitAt(pump.x, pump.z), { x: pump.x, z: pump.z, kind: "windpump", r: pump.r, height: pump.height }, g(pump.x, pump.z), lod, plan.hairs.length);
+  buildSaltworks(kitAt, world, lod);
   for (const l of plan.lamps) {
     const y = g(l.x, l.z);
     lamp(kitAt(l.x, l.z), l.x, l.z, y, l.h);

@@ -29,7 +29,7 @@ const REGIONS = [
 describe("signs stand clear (D-097)", () => {
   it("every region still has all its signs, each with its own text (an edit once commented two of Highmark's out)", () => {
     const counts = Object.fromEntries(REGIONS.map(([r, signs]) => [r, signs().length]));
-    expect(counts).toEqual({ kessar: 6, vesper: 6, highmark: 7, saltmarket: 4 });
+    expect(counts).toEqual({ kessar: 6, vesper: 6, highmark: 7, saltmarket: 5 });   // (D-121: the salt works' notice is the delta's fifth)
     for (const [r, signs] of REGIONS) expect(new Set(signs().map((s) => s.text)).size, r).toBe(signs().length);
   });
 

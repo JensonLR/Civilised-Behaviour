@@ -1,4 +1,4 @@
-import { Rng, SALTMARKET, SALTMARKET_ANCHORS, hash3, saltmarketPlan, saltmarketSitePoints, type CollisionWorld, type Obstacle, type SaltmarketTerrain } from "./shared.ts";
+import { Rng, SALTMARKET, SALTMARKET_ANCHORS, hash3, inSaltworks, saltmarketPlan, saltmarketSitePoints, type CollisionWorld, type Obstacle, type SaltmarketTerrain } from "./shared.ts";
 import type { Item, ScatterDetail } from "../scatter.ts";
 import { saltmarketCover } from "./ground.ts";
 
@@ -47,7 +47,8 @@ export function planSaltmarketScatter(world: CollisionWorld, detail: ScatterDeta
   };
   const q = plan.quay;
   const onQuay = (x: number, z: number): boolean => Math.abs(x - q.x) < q.half + 3 && z > q.z0 - 8;
-  const free = (x: number, z: number, margin: number): boolean => Math.hypot(x, z) < SALTMARKET_ANCHORS.bounds + 8 && !onQuay(x, z) && walkDist(x, z) > 2.2 + margin && !blocked(x, z, margin) && !keep.some((p) => Math.hypot(p.x - x, p.z - z) < 3 + margin);
+  // (D-121: and nothing on the salt works' worked ground or its margin: the pans are kept)
+  const free = (x: number, z: number, margin: number): boolean => Math.hypot(x, z) < SALTMARKET_ANCHORS.bounds + 8 && !onQuay(x, z) && walkDist(x, z) > 2.2 + margin && !inSaltworks(x, z, margin, 1.4) && !blocked(x, z, margin) && !keep.some((p) => Math.hypot(p.x - x, p.z - z) < 3 + margin);
   const e = 0.6;
 
   // reed beds: clusters in the shallows and along every margin, on their own Rng stream

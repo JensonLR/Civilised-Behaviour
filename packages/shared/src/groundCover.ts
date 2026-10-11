@@ -7,6 +7,7 @@ import { LAMPSIDE_GARDENS, lampsideStreet } from "./lampside.ts";
 import { KESSAR, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun } from "./kessar.ts";
 import { smoothstep } from "./math.ts";
 import { SALTMARKET } from "./saltmarket.ts";
+import { saltworksClear } from "./saltworks.ts";
 import { valueNoise } from "./terrain.ts";
 import { vesperRoadX, vesperRoadness } from "./vesper.ts";
 import { coverDensity } from "./worldgen.ts";
@@ -60,7 +61,7 @@ export function saltmarketCover(x: number, z: number, h: number, slope: number, 
   const n2 = valueNoise(423, x / 5.1, z / 5.1);
   const wet = 1 - smoothstep(0.05, 0.5, Math.abs(h - SALTMARKET.waterY - 0.15));   // near the waterline, either side
   const patch = 0.3 + 0.7 * smoothstep(0.3, 0.6, n1 + (n2 - 0.5) * 0.3);
-  const v = (0.18 + 0.82 * wet) * patch * (1 - smoothstep(0.35, 0.7, slope)) * (water > 0.55 ? 0 : 1);
+  const v = (0.18 + 0.82 * wet) * patch * (1 - smoothstep(0.35, 0.7, slope)) * (water > 0.55 ? 0 : 1) * (1 - saltworksClear(x, z));   // (D-121: nothing grows in a worked pan: a firebreak)
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
