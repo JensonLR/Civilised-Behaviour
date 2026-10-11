@@ -135,13 +135,15 @@ export function folkSpec(v: Villager): CharacterSpec {
   let n = 0;
   for (const [field, pick] of Object.entries(costume) as [FieldKey, Pick][]) spec[field] = resolve(field, pick, hash3(v.lookSeed, n++, 0x77));
   if (spec.hair === K.HAIR_STYLES.indexOf("Top Knot")) spec.hair = 3;
-  // a person of a fictional people (D-038), the Society's own staff excepted
-  const people = peopleForVillager(v.title);
+  // a person of a fictional people (D-038), the Society's own staff excepted. D-120: a region's own people (Lampside's Kessarine) keep their people's skin band (D-067) and
+  // dyes; Hollowmere's keep the village's spread of tones and its local dyes
+  const own = v.people !== undefined;
+  const people = v.people ?? peopleForVillager(v.title);
   if (people !== "colonial") {
     const skin = spec.skin;
     const native = applyPeople(spec as unknown as CharacterSpec, people, v.lookSeed);
     Object.assign(spec, native);
-    spec.skin = skin;
+    if (!own) spec.skin = skin;
     if (v.age !== "child") {
       let m = 0;
       for (const [field, pick] of Object.entries(NATIVE_KEEP[v.title] ?? {}) as [FieldKey, Pick][]) spec[field] = resolve(field, pick, hash3(v.lookSeed, m++, 0x91));
@@ -150,12 +152,14 @@ export function folkSpec(v: Villager): CharacterSpec {
       if (!own()) for (const f of ["hat", "jacket", "neckwear", "hair"] as const) spec[f] = native[f];
     }
   }
-  // the local palette: the same trade in a different year's dye (only where the costume does not fix one)
+  // the local palette: the same trade in a different year's dye (only where the costume does not fix one; a region's own people wear their people's dyes)
   const jitter = hash3(v.lookSeed, 0x1c, 0x5) % LOCAL_DYES.length;
-  if (!("jacketColor" in costume)) spec.jacketColor = LOCAL_DYES[jitter]!;
-  if (!("trousersColor" in costume)) spec.trousersColor = LOCAL_DYES[(jitter + 3) % LOCAL_DYES.length]!;
-  if (!("hatColor" in costume)) spec.hatColor = LOCAL_DYES[(jitter + 5) % LOCAL_DYES.length]!;
-  if (spec.hatColor === spec.jacketColor) spec.hatColor = LOCAL_DYES[(LOCAL_DYES.indexOf(spec.hatColor) + 2) % LOCAL_DYES.length]!;
+  if (!own) {
+    if (!("jacketColor" in costume)) spec.jacketColor = LOCAL_DYES[jitter]!;
+    if (!("trousersColor" in costume)) spec.trousersColor = LOCAL_DYES[(jitter + 3) % LOCAL_DYES.length]!;
+    if (!("hatColor" in costume)) spec.hatColor = LOCAL_DYES[(jitter + 5) % LOCAL_DYES.length]!;
+    if (spec.hatColor === spec.jacketColor) spec.hatColor = LOCAL_DYES[(LOCAL_DYES.indexOf(spec.hatColor) + 2) % LOCAL_DYES.length]!;
+  }
   if (v.age === "child") {
     // small bodies with big heads and short legs (the root is scaled down on top of this)
     spec.height = 30 + (hash3(v.lookSeed, 1, 1) % 40);

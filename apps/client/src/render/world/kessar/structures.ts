@@ -673,7 +673,17 @@ function lampsideHouse(k: Kit, h: LampsideHouse, terrain: (x: number, z: number)
       box(k, [1.0, 1.9, 0.08], [0, floor2 + 1.1, D + 0.03], K.wardBlue);
       box(k, [0.05, 1.86, 0.1], [0, floor2 + 1.1, D + 0.05], K.timber);
     }
-  } else lit(0, 1.65, -D - 0.02, -1, 0.6, 0.7, seed * 7);   // (a single storey's lit window looks onto its garden: the street face is shuttered)
+  } else lit(W * 0.5, 1.65, -D - 0.02, -1, 0.6, 0.7, seed * 7);   // (a single storey's lit window looks onto its garden: the street face is shuttered)
+  // D-120: the back door onto the alley, the town's own way in and out (the street door is sealed to the Society): planks in a stone frame, two iron straps, a
+  // worn step; no handle on this side (it is latched from within)
+  {
+    const bw = 1.0, bh = LAMPSIDE.door.height - 0.15;
+    box(k, [bw, bh, 0.08], [0, bh / 2, -D - 0.03], (p, _n, o) => blend(o, K.timber, K.timberLight, (Math.floor((p.x + 5) * 6) & 1) * 0.35));
+    for (const sx of [-1, 1]) box(k, [0.12, bh + 0.1, 0.14], [sx * (bw / 2 + 0.06), (bh + 0.1) / 2, -D - 0.04], K.stoneCap);
+    box(k, [bw + 0.36, 0.14, 0.16], [0, bh + 0.07, -D - 0.05], K.stoneCap);
+    if (lod) for (const y of [0.45, bh - 0.45]) box(k, [bw - 0.08, 0.06, 0.03], [0, y, -D - 0.085], K.iron);
+    box(k, [bw + 0.3, 0.12, 0.42], [0, 0.04, -D - 0.21], K.stoneShade);
+  }
   // the lamp beside the door, and (some houses) an awning of the Ward's stripes over it
   const dw = LAMPSIDE.door.width;
   bracketLamp(k, -(dw / 2 + 0.55), 2.45, D + 0.02, 0.42, out);
