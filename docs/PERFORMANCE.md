@@ -96,6 +96,9 @@ pebbles 1, grass 1, flowers 1; the whole camp is one merged mesh (+hull), pennan
 |------|-------|-------------|--------|
 | 2026-10-11 | Ten Kessarine on Hollowmere's folk machinery (pure schedule + client rigs) in Kessar's view | Node, no GPU | Network 221 nodes and 49 stations, built once per world and seed; the same `FOLK_BUDGETS` as the hub (at most 6 / 14 / 18 shown on low / medium / high, LOD by distance); the region view's own draws and triangles are unchanged (the people are their own root). Cost per frame is the hub's per person (see below): ten people is under half the hub's roster. |
 
+## Folk under fire (D-122, 2026-10-11)
+The fright is a per-person override in the crowd's update: an allocation-free step of a few comparisons for everyone at ease, a route lookup (the folk's own cached routes, about a millisecond the first time one is built) only when somebody starts or stops running, and a pass over the crowd per noise heard (a crank gun is eight a second: 8 x 22 distance checks). No new draws, no new bodies: the same rigs in other poses.
+
 ## The Brine Houses' salt works (D-121, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

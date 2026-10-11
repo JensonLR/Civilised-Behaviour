@@ -861,3 +861,22 @@ What changed:
 - **Looked at.** From above the bridge, the pans close, the raked row and the lifted pan, the heaps in the yard at eye height and at dusk, the pump and its pipe from the far bank, the boardwalk at dusk (the pump a mast on the line), and on the low preset.
 - **Not yet.** Unplayed. Nobody works the pans: salt-rakers on the folk machinery (D-120) are the obvious next step here.
 
+**D-122 Folk under fire (2026-10-11).** The townsfolk were scenery that bullets never look at, and they behaved like it: a gunfight in Lampside's street (where Kessar's siege, raid and toll-bar fights happen) left the Lamp-Trimmer trimming and the jar-seller selling. D-120 named this as the next step. Now a shot or a blast near the folk of Hollowmere or Lampside is heard.
+- **What they do** (`client/render/world/folkFright.ts`). They start (a jolt back from the noise, the head snapping to it, a frightened face), and a beat later choose: the old get down where they are; children run home; grown-ups mostly run for their own door (or the nearest one if home is more than 42 m off, or a stall's roof), along the folk's own walking routes, a hand clamped on the hat; the rest crouch where they stand, back to the noise, both hands over the head. Somebody on a bench stays on it, bent double. Whoever reaches a door goes in. When it has been quiet for 14 to 24 seconds (every shot they hear starts the quiet again) they come back out and walk back into their day: by the routes to wherever the schedule has them by then, straight at it once it is in plain reach, and a short blend when they meet. Nobody is ever popped from place to place in sight. A line in their own people's voice goes up as they start ("Not the windows! We've only just paid for the windows!", "Lamps out! Everyone in by the back!", "Gunfire? We were promised a survey.").
+- **Heard how far.** A shot carries 42 m, a blast or a cannon 75. CombatView puts every shot it draws (yours, everyone else's, the crank gun's) and every blast into a small ring of noises that the crowd reads each frame. Nobody asleep or indoors hears anything.
+- **Cosmetic and client-side, like the folk themselves.** Nothing is sent, simulated on the server or hit. The schedule is never changed: the fright is an override of the pose the schedule gives and hands the person back to it. It is deterministic in what was heard, so two players see the same panic a few milliseconds apart. It runs on its own clock of frames, so it plays out the same whatever the day's clock is doing.
+- **Found on the way.** Lampside's speech slips were headed "HOLLOWMERE" (the overlay's default, since D-120): they now say "LAMPSIDE". A villager seated on a bench would have frozen and cowered inside the bench's collider: seated people stay seated. Somebody who reached their station before their own schedule did would have slid six metres in a blend: they now walk to it.
+- **Tested.** `folkFright.test.ts` runs the planner over the real schedules of Hollowmere's 22 and Lampside's 10:
+  - exactly those within earshot are frightened (a shot 45 m off the crowd reaches some and not others, a blast reaches more);
+  - the old never run, children run home, and somebody cowers, flees and hides;
+  - wherever a frightened person moves to, a person can stand, and no one moves faster than a run while in sight;
+  - a minute later everyone is calm, exactly where the schedule has them;
+  - a second shot while coming back out sends them down again and the quiet starts over;
+  - the same shot gives the same panic twice, and those asleep hear nothing;
+  - the noise ring wraps;
+  - the two peoples' lines differ.
+
+  Mutation-checked: elders made to run, the earshot ignored, the walk-back replaced by a slide, and never coming back out each fail. Kessar's crowd test fires a shot through the real view: Lampside's people go down or indoors, frightened, and their slips say LAMPSIDE. A real body cowering is crouched (`villagers.test.ts`: hips and head lower, both hands above the shoulders, the fear face; a frightened runner's hand is above the shoulder).
+- **Looked at.** Hollowmere's plaza half a second, two and a half and eight seconds after a shot (`?showcase=world&view=folkplaza&folkshot=x,z,age`), a seller running with a hand on his hat, the elder at his bench, and Lampside's street with the Kessarine running for their back doors.
+- **Not yet.** Unplayed. No cry is heard (the slips are silent, as all the folk's speech is). The noise ring has no source for fire yet: a burning roof does not frighten them.
+

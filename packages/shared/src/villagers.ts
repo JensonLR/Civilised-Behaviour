@@ -47,7 +47,9 @@ export type Activity =
   | "play"
   | "sack"
   | "hive"
-  | "write";
+  | "write"
+  /** D-122: crouched, hands over the head (never scheduled: the client's fright puts it on, when there is shooting near). */
+  | "cower";
 
 /** What is carried (held in front of the body, or in the hand). */
 export type Carry = "none" | "sack" | "basket" | "bucket" | "crate" | "lantern" | "book" | "bottle" | "loaves" | "fish" | "washing" | "chair";
@@ -938,4 +940,9 @@ export function villagerSays(v: Villager, pose: VillagerPose, worldSec: number, 
 /** A greeting for a passing player (the client asks when someone comes close and the villager is idle). */
 export function villagerGreeting(v: Villager, slot: number): string {
   return pickLine(v.lines, v.id, slot, "greet");
+}
+
+/** D-122: what somebody cries out when the shooting starts near them (their people's own pool). */
+export function villagerFright(v: Villager, slot: number): string {
+  return pickLine(v.lines, v.id, slot + 0x2b5, "fright");   // (offset: a slot equal to the id would always pick the same line)
 }

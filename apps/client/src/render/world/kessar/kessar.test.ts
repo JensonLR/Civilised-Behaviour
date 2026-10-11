@@ -6,6 +6,7 @@ import { folkSpec } from "../villagerLooks.ts";
 import type { Villagers } from "../villagers.ts";
 import { PRESETS } from "../../Stage.ts";
 import { WorldView } from "../WorldView.ts";
+import { noteFolkNoise } from "../folkFright.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildKessarCloth, createKessarAtlas, plaqueUv } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover, kessarGroundColour, skirtY } from "./ground.ts";
@@ -287,6 +288,14 @@ describe("D-120: Lampside's people drawn", () => {
     expect(people.folk.roster.every((v) => v.people === "kessarine" && / Lamp$/.test(v.name))).toBe(true);
     expect(people.poses.filter((p) => p.visible).length).toBeGreaterThanOrEqual(8);
     expect(folk!.stats.visible).toBeGreaterThan(0);
+    // D-122: their speech slips say where they are (they said "HOLLOWMERE"), and a shot in the street sends them down or indoors
+    expect((folk as unknown as { place: string }).place).toBe("LAMPSIDE");
+    const before = people.poses.map((p) => p.visible);
+    noteFolkNoise(0, -15, "shot");
+    for (let i = 0; i < 90; i++) view.update(1.8 + i / 30, { x: 0, y: 2, z: -12 }, 1.8 + i / 30);
+    const after = folk!.people!.poses;
+    expect(after.filter((p, i) => p.act === "cower" || (before[i] && !p.visible) || (p.act === "walk" && p.speed > 2.5)).length).toBeGreaterThanOrEqual(4);
+    expect(after.some((_, i) => (folk!.stateOf(i)?.fear ?? 0) > 0.5)).toBe(true);
     view.dispose();
   });
 

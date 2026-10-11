@@ -1,7 +1,8 @@
 import { Group, type Camera, type Scene } from "three";
-import { buildFolk, createFolkClock, createVillagerPose, hash3, hashFloat, parseWeatherKind, setFolkClock, standingHeight, villagerAt, villagerGreeting, villagerSays, weatherPreset, type CollisionWorld, type Folk, type FolkClock, type Speech, type VillagerPose } from "@cb/shared";
+import { buildFolk, createFolkClock, createVillagerPose, hash3, hashFloat, parseWeatherKind, setFolkClock, standingHeight, villagerAt, villagerFright, villagerGreeting, villagerSays, weatherPreset, type CollisionWorld, type Folk, type FolkClock, type Speech, type VillagerPose } from "@cb/shared";
 import type { CharacterSpec } from "@cb/procedural";
 import type { Lod } from "@cb/procedural/three";
+import { FEAR, createFright, eachFolkNoise, folkNoiseCount, hearFright, noteFolkNoise, stepFright, type Fright } from "./folkFright.ts";
 import { folkSpec } from "./villagerLooks.ts";
 import { FolkOverlay } from "./villagerOverlay.ts";
 import { FolkBody, createBodyState, type BodyState } from "./villagerPose.ts";
@@ -16,6 +17,7 @@ import { disposeProps } from "./villagerProps.ts";
  *
  * Cosmetic reactions to the players (the walkers the grass bends away from) live here and nowhere else: heads turn to follow you, a villager
  * waves and says hello when you come near, and somebody in your way steps aside. They change no schedule and no shared state.
+ * D-122: and to shooting (`folkFright.ts`): a shot or a blast near them and they start, then cower or run for a door, and come back out when it is quiet.
  */
 
 /** How near (m) a walker passes somebody standing before stepping round them. */
@@ -147,6 +149,11 @@ interface Slot {
   offX: number;
   offZ: number;
   talk: number;
+  /** D-122: their fright, the line they cried out and how long it shows, and a start still to be put into the body. */
+  fright: Fright;
+  frightLine: string;
+  frightT: number;
+  flinch: boolean;
 }
 
 export interface FolkStats {
@@ -182,6 +189,20 @@ export class Villagers {
   private frame = 0;
   /** When the last body was built (ms): a cold build is 10-50 ms of JavaScript, so they are spread out rather than done in a burst. */
   private lastBuild = -1e9;
+  /** D-122: how many noises (shots, blasts) have been heard so far; a new crowd hears none from before it was made. */
+  private heard = folkNoiseCount();
+  private readonly hear = (x: number, z: number, r: number, seq: number): void => {
+    for (let i = 0; i < this.slots.length; i++) {
+      const slot = this.slots[i]!;
+      if (!hearFright(slot.fright, this.poses[i]!, x, z, r, this.nowSec, seq, i)) continue;
+      slot.flinch = true;
+      slot.frightLine = villagerFright(this.folk!.roster[i]!, seq + i);
+      slot.frightT = 3.6;
+    }
+  };
+  /** The fright's own clock (seconds of frames: it runs on while a review scene holds the hour still). */
+  private nowSec = 0;
+  private reviewShot: { x: number; z: number; age: number } | undefined;
 
   constructor(
     scene: Scene,
@@ -191,6 +212,8 @@ export class Villagers {
     private readonly buildGapMs = 140,
     /** D-120: whose people (Hollowmere's village by default; Kessar passes Lampside's). */
     private readonly build: (world: CollisionWorld, seed: number) => Folk = buildFolk,
+    /** The place their speech slips are headed with (Lampside's said "HOLLOWMERE" until D-122 heard them shout). */
+    private readonly place = "HOLLOWMERE",
   ) {
     // review scenes: `?folkbudget=review` lifts every limit (all in full detail), `?folklod=1|2` forces one level for everybody
     let params = new URLSearchParams();
@@ -200,6 +223,9 @@ export class Villagers {
       params = new URLSearchParams();
     }
     this.review = params.get("folkbudget") === "review";
+    // review: `folkshot=x,z,age` fires a shot at (x, z) and plays `age` seconds of the fright before the first frame is drawn (a still of the panic)
+    const shot = (params.get("folkshot") ?? "").split(",").map(Number);
+    if (shot.length >= 2 && shot.every(Number.isFinite)) this.reviewShot = { x: shot[0]!, z: shot[1]!, age: shot[2] ?? 1.2 };
     if (this.review) budget = { ...budget, count: 22, maxVisible: 24, lod0: 24, lod1: 24, lod2: 24, near: params.get("folklod") === "1" ? 0 : params.get("folklod") === "2" ? -1 : 500, mid: params.get("folklod") === "2" ? -1 : 500, far: 500, tris: 1e9 };
     this.budget = budget;
     this.root.name = "folk";
@@ -228,7 +254,7 @@ export class Villagers {
     this.poses = [];
     for (let i = 0; i < n; i++) {
       this.poses.push(createVillagerPose());
-      this.slots.push({ body: undefined, spec: undefined, lod: -1, state: createBodyState(), umbrella: hash3(folkHints.seed, i, 0x0b) % 5 < 3, hue: hash3(folkHints.seed, i, 0x0c) % 12, waveT: 0, waveCool: 4 + hashFloat(i, 1, 9) * 10, greetT: 0, greet: "", lookAt: 0, offX: 0, offZ: 0, talk: 0 });
+      this.slots.push({ body: undefined, spec: undefined, lod: -1, state: createBodyState(), umbrella: hash3(folkHints.seed, i, 0x0b) % 5 < 3, hue: hash3(folkHints.seed, i, 0x0c) % 12, waveT: 0, waveCool: 4 + hashFloat(i, 1, 9) * 10, greetT: 0, greet: "", lookAt: 0, offX: 0, offZ: 0, talk: 0, fright: createFright(), frightLine: "", frightT: 0, flinch: false });
     }
     if (this.dist.length < n) {
       this.dist = new Float64Array(n);
@@ -283,6 +309,27 @@ export class Villagers {
         if (!this.cast(i, p)) p.visible = false;
         else p.visible = true;
       }
+    }
+    // D-122: what was heard since the last frame (against where the schedule has everybody), then everybody's fright over their scheduled pose
+    this.nowSec += dt;
+    if (this.reviewShot) {
+      const r = this.reviewShot;
+      this.reviewShot = undefined;
+      noteFolkNoise(r.x, r.z, "shot");
+      this.heard = eachFolkNoise(this.heard, this.hear);
+      for (let k = 0; k < r.age * 30; k++) {
+        this.nowSec += 1 / 30;
+        for (let i = 0; i < n; i++) {
+          villagerAt(folk, i, this.clock, this.poses[i]!);
+          stepFright(this.slots[i]!.fright, folk, this.world, i, this.poses[i]!, this.nowSec, 1 / 30);
+        }
+      }
+      for (let i = 0; i < n; i++) villagerAt(folk, i, this.clock, this.poses[i]!);
+    }
+    this.heard = eachFolkNoise(this.heard, this.hear);
+    for (let i = 0; i < n; i++) {
+      const p = this.poses[i]!;
+      if (!this.cast) stepFright(this.slots[i]!.fright, folk, this.world, i, p, this.nowSec, dt);
       this.dist[i] = p.visible ? Math.hypot(p.x - f.x, p.z - f.z) : Infinity;
       this.lodNow[i] = this.slots[i]!.body && this.slots[i]!.lod >= 0 ? this.slots[i]!.lod : -1;
     }
@@ -345,16 +392,29 @@ export class Villagers {
           nz = w.z;
         }
       }
-      const rel = nearest < 12 ? wrapPi(Math.atan2(-(nx - pose.x), -(nz - pose.z)) - pose.facing) : 0;
+      const fr = slot.fright;
+      const startled = fr.mode === FEAR.startle;
+      // (a startled face turns to the noise, not to you)
+      const lx = startled ? fr.sx : nx, lz = startled ? fr.sz : nz;
+      const rel = nearest < 12 || startled ? wrapPi(Math.atan2(-(lx - pose.x), -(lz - pose.z)) - pose.facing) : 0;
       const front = Math.abs(rel) < 2.0;
-      slot.lookAt += ((nearest < 9 && front && pose.act !== "sleep" ? 1 : 0) - slot.lookAt) * Math.min(1, dt * 3);
+      slot.lookAt += (((nearest < 9 && front && pose.act !== "sleep" && fr.mode === FEAR.none) || startled ? 1 : 0) - slot.lookAt) * Math.min(1, dt * (startled ? 8 : 3));
       s.look = slot.lookAt;
       s.lookYaw = Math.max(-1.05, Math.min(1.05, rel * 0.85));
       s.lookPitch = 0.05;
       slot.waveCool -= dt;
       slot.waveT = Math.max(0, slot.waveT - dt);
       slot.greetT = Math.max(0, slot.greetT - dt);
-      const idleish = pose.act === "idle" || pose.act === "lean" || pose.act === "shelter";
+      slot.frightT = Math.max(0, slot.frightT - dt);
+      if (slot.flinch) {
+        // the start: a jolt back from the noise
+        body.anim.flinch(0, 1, 0.7);
+        slot.flinch = false;
+        slot.waveT = 0;
+        slot.greetT = 0;
+      }
+      s.fear = fr.fear;
+      const idleish = fr.mode === FEAR.none && (pose.act === "idle" || pose.act === "lean" || pose.act === "shelter");
       if (nearest < 5.5 && front && idleish && slot.waveCool <= 0 && want <= 1) {
         slot.waveT = 2.4;
         slot.greetT = 4.2;
@@ -420,7 +480,10 @@ export class Villagers {
         const top = pose.y + body.rig.proportions.totalHeight * v.scale + 0.42;
         let text = "";
         let u = 0.5;
-        if (slot.greetT > 0) {
+        if (slot.frightT > 0) {
+          text = slot.frightLine;
+          u = 1 - slot.frightT / 3.6;
+        } else if (slot.greetT > 0) {
           text = slot.greet;
           u = 1 - slot.greetT / 4.2;
         } else {
@@ -432,7 +495,7 @@ export class Villagers {
         }
         slot.talk += ((text ? 1 : 0) - slot.talk) * Math.min(1, dt * 6);
         if (text && bubbles < 3 && this.dist[i]! < 26) {
-          this.overlay.bubble(i, text, pose.x, top, pose.z, u);
+          this.overlay.bubble(i, text, pose.x, top, pose.z, u, this.place);
           bubbles++;
         } else if (!text) slot.talk = Math.max(0, slot.talk - dt * 4);
         if (tags < 2 && nearest < 4.2) {

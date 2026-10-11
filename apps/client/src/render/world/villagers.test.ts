@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { Scene } from "three";
+import { Scene, Vector3 } from "three";
 import * as v8 from "node:v8";
 import * as vm from "node:vm";
 import { createArena, buildFolk, peopleForVillager, type CollisionWorld } from "@cb/shared";
@@ -184,7 +184,7 @@ describe("the poses of the trades", () => {
     const folk = buildFolk(world, 7);
     const people = [folk.roster.find((v) => v.title === "Keeper of the Hours")!, folk.roster.find((v) => v.title === "Clockkeeper")!, folk.roster.find((v) => v.age === "child")!];
     const scene = new Scene();
-    const acts = ["idle", "walk", "sweep", "hammer", "scrub", "hang", "tend", "hive", "fish", "read", "write", "sell", "ring", "lookup", "draw", "lamp", "sack", "chat", "lean", "shelter", "sit", "play", "sleep"] as const;
+    const acts = ["idle", "walk", "sweep", "hammer", "scrub", "hang", "tend", "hive", "fish", "read", "write", "sell", "ring", "lookup", "draw", "lamp", "sack", "chat", "lean", "shelter", "sit", "play", "sleep", "cower"] as const;
     const carries = ["none", "sack", "basket", "loaves", "washing", "fish", "bucket", "lantern", "book", "bottle", "chair"] as const;
     for (const v of people) {
       for (const lod of [0, 1, 2] as const) {
@@ -225,6 +225,41 @@ describe("the poses of the trades", () => {
         body.dispose();
       }
     }
+    expect(scene.children.length).toBe(0);
+  });
+
+  it("D-122: cowering is down on the haunches with both hands above the shoulders, a frightened runner's hand is on the head, and a frightened face shows", () => {
+    const folk = buildFolk(world, 7);
+    const v = folk.roster.find((q) => q.age === "elder")!;
+    const scene = new Scene();
+    const at = (act: "idle" | "cower" | "walk", fear: number, speed = 0): { pelvis: number; head: number; handR: number; handL: number; shoulder: number; face: string } => {
+      const b = new FolkBody(folkSpec(v), v.scale, 0, false, scene);
+      const s = createBodyState();
+      s.act = act;
+      s.fear = fear;
+      s.speed = speed;
+      for (let k = 0; k < 60; k++) {
+        s.t += 1 / 30;
+        b.place(0, 0, 0);
+        b.update(1 / 30, s);
+      }
+      b.rig.root.updateMatrixWorld(true);
+      const j = b.rig.joints;
+      const y = (o: { getWorldPosition(v: Vector3): Vector3 }): number => o.getWorldPosition(new Vector3()).y;
+      const out = { pelvis: y(j.pelvis), head: y(j.head), handR: y(j.wristR), handL: y(j.wristL), shoulder: y(j.shoulderR), face: b.anim.currentExpression };
+      b.dispose();
+      return out;
+    };
+    const idle = at("idle", 0);
+    const cower = at("cower", 1);
+    expect(idle.pelvis - cower.pelvis).toBeGreaterThan(0.08);
+    expect(idle.head - cower.head).toBeGreaterThan(0.15);
+    expect(cower.handR).toBeGreaterThan(cower.shoulder);
+    expect(cower.handL).toBeGreaterThan(cower.shoulder);
+    expect(cower.face).toBe("fear");
+    expect(idle.face).not.toBe("fear");
+    const run = at("walk", 1, 3.5);
+    expect(run.handR).toBeGreaterThan(run.shoulder);
     expect(scene.children.length).toBe(0);
   });
 
