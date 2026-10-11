@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import {
   CLOISTER, GORGE_DOORS, PALETTE, STAITHE_SIGNS, TEMPLATES, VESPER_ANCHORS as A, VESPER_SIGNS, VESPER_TRIG, VESPER_VIEW_BUDGET, buildVesperFolk, createDayState, createRegionWorld, createVesperWorld, dayState, newCampaign,
-  staithePlan, staitheTop, vesperPlan,
+  STAITHE_LODGINGS, staithePlan, staitheTop, vesperPlan,
   type ScenarioView, type VesperTerrain,
 } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
@@ -447,8 +447,8 @@ describe("D-125: the gorge's folk", () => {
     view.applyDay(dayState(10, createDayState()));
     for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: -30, y: 4, z: 55 }, 1 + i * 0.2);
     const people = folk!.people!;
-    expect(people.folk.roster).toHaveLength(10);
-    expect(people.folk.roster.every((v) => v.people === "vesperine" && / of the (Guild|Assay|Barge)$/.test(v.name))).toBe(true);
+    expect(people.folk.roster).toHaveLength(15);
+    expect(people.folk.roster.every((v) => v.people === "vesperine" && / of the (Guild|Assay|Barge|Company)$/.test(v.name))).toBe(true);
     expect(people.poses.filter((q) => q.visible).length).toBeGreaterThanOrEqual(8);
     expect((folk as unknown as { place: string }).place).toBe("THE GORGE");
     const before = people.poses.map((q) => q.visible);
@@ -488,5 +488,27 @@ describe("D-126: the Staithe", () => {
     expect(count((x, yy, z) => Math.abs(x - l.x) < 0.05 && z > l.z0 + 0.4 && z < l.z1 - 0.4 && yy - g(x, z) > 1.0 && yy - g(x, z) < 2.2), "the crepe on the line").toBeGreaterThan(10);
     buildVesperCloth(world.terrain);
     for (const t of STAITHE_SIGNS) expect(drawn).toContain(t);
+  });
+
+  it("D-127: each house the Staithe's folk live in has its back door drawn where they go in, on the side away from the road", () => {
+    const geo = buildVesperSolid(world, 1).geometry!;
+    const p = geo.attributes.position!;
+    const folk = buildVesperFolk(world, 7);
+    const g = (x: number, z: number): number => world.terrainHeight(x, z);
+    for (const h of staithePlan().houses) {
+      const back = -Math.cos(h.yaw);
+      const bx = h.x + back * h.hx;
+      let n = 0;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        if (Math.abs(x - (bx + back * 0.1)) < 0.06 && Math.abs(z - h.z) < 0.55 && y - g(h.x, h.z) > 1.9 && y - g(h.x, h.z) < 2.4) n++;
+      }
+      const lives = STAITHE_LODGINGS.includes(h.id);
+      expect(n > 0, `${h.id}'s back door`).toBe(lives);
+      if (!lives) continue;
+      const st = folk.nav.stations[folk.nav.index.get(`in:${h.id}`)!]!;
+      expect(st.hidden).toBe(true);
+      expect(Math.hypot(st.x - (bx + back * 0.3), st.z - h.z), h.id).toBeLessThan(0.3);
+    }
   });
 });

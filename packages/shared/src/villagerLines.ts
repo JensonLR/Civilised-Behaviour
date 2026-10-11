@@ -16,7 +16,7 @@ export type BrineLineKind = "bRaker" | "bBarrow" | "bSkim" | "bTally" | "bPump" 
 /** D-124: the Marchers of Highmark's capital (the King has been "pending" for six years; the Chamberlain's offices run the hill meanwhile). */
 export type MarcherLineKind = "hSeller" | "hCrier" | "hClerk" | "hPetition" | "hReeve" | "hPorter" | "hWater" | "hChild";
 /** D-125: Vesper's folk, members of the gorge's institutions (the Lamentation Guild, the Assay House, the ore barge), never a people. */
-export type GorgeLineKind = "vGuild" | "vBell" | "vElder" | "vAssay" | "vBarge" | "vChild";
+export type GorgeLineKind = "vGuild" | "vBell" | "vElder" | "vAssay" | "vBarge" | "vChild" | "vReceive" | "vCompany";
 
 const GENERAL: readonly string[] = [
   "Lovely day for not improving anything.",
@@ -430,6 +430,19 @@ const GORGE_BY_KIND: Record<GorgeLineKind, readonly string[]> = {
     "When I'm big I'll steer the barge. When there's water.",
     "Bet you can't throw a stone over the trestle.",
     "The Guild pays me a penny to cry. I'm saving up.",
+  ],
+  // D-127: the Staithe. The Guild's Receiver measures every arrival; the Company's weigher and its men off shift
+  vReceive: [
+    "Welcome to the gorge! Hold still. It's only a tape.",
+    "Five foot nine. We have one in stock.",
+    "No obligation. Just a small deposit.",
+    "Measured the last survey party. They kept very well.",
+  ],
+  vCompany: [
+    "Weighed it twice. Heavier the second time. Disputed.",
+    "Bunk's let by the hour. I sleep fast.",
+    "Shift's over. The mountain isn't.",
+    "The Guild measured me on the way in. Said I'd keep.",
   ],
 };
 

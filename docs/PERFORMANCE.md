@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Staithe's people (D-127, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Four back doors in Vesper's merged solid (no draw of their own); five more of the gorge's folk (fifteen) on the folk machinery in Vesper's view | Node, no GPU, `WORLD_STATS=1` (`vesper.test.ts` budgets) | Main-pass draws unchanged **22 / 26 / 35 / 35**; triangles **test 47,391 / low 87,993 / medium 247,307 / high 345,238** (were 47,259 / 87,861 / 247,043 / 344,974: the doors, 264 triangles at medium). `VESPER_VIEW_BUDGET` unchanged, never loosened. The gorge's network is about 4,236 nodes and 46 stations (was 27), built in 0.23 to 0.27 s once per world and seed. Fifteen people stay inside the same `FOLK_BUDGETS` as the hub (22 in its roster). |
+
 ## The Staithe (D-126, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

@@ -972,3 +972,23 @@ What changed:
   - The ground, overlap, coplanar, door and lit-window audits pass, as do the level audit and its document table.
 - **Looked at.** The arrival from the landing; an overhead of the mouth; each yard close; and the Rows by day and at night with a window lit.
 - **Not yet.** Nobody lives in the Staithe yet: its people are next (D-127). The houses have no interiors. The gorge floor west of the road between the Receiving House and the cloister is still open ground.
+
+**D-127 The Staithe's people (2026-10-11).** D-126 built the hamlet at Vesper's landing and nobody lived in it. Now five more of the gorge's institution-folk do, on the same folk machinery as the Guild, the Assay and the bargefolk (D-125). That makes fifteen in the gorge. As before, each is named for the institution they belong to ("Ostry of the Company"; the given names are drawn per seed).
+- **The Guild's Receiving House.**
+  - The Receiver writes at the measuring post by the door with a book, and three times a day walks out to watch the landing for arrivals. Their place is clear of the horses and of D-115's arrival, so nobody stands in the party's ring.
+  - The Crepe-Keeper carries the mourning black between the two ends of the drying line and hangs it.
+  - Both lodge behind a back door on the house's west face, the line's side.
+- **The Company.**
+  - The Weigher writes at the steelyard's pan and checks the near ore cart twice a day. They live over the scale, behind the weigh-house's back door.
+  - Two miners, off shift, lean at the Rows' fronts. One wanders down to watch a weighing in the afternoon.
+  - The miners have let two of the three bunkhouses (back doors on the east, away from the road). bunk0 stands empty: let by the hour, and nobody has the hour.
+  - At midday the miners talk before the Rows; in the afternoon the Receiver and the Crepe-Keeper talk before the Receiving House.
+- **Their voice.** Two new pools (`vReceive`, `vCompany`): "Welcome to the gorge! Hold still. It's only a tape.", "Five foot nine. We have one in stock.", "Bunk's let by the hour. I sleep fast.", "The Guild measured me on the way in. Said I'd keep." The Crepe-Keeper speaks as the Guild. D-122's fright and THE GORGE slips work on them as on the rest.
+- **Found on the way.** The first draft lodged the Weigher in bunk0. On one sample of one seed their walk to the steelyard clipped bunk0's corner. The network keeps a round 0.26 m clearance, while the test pads a box with a square 0.2 m, which is wider at a corner. Neither the test nor the network's radius was changed. The Weigher moved into the weigh-house, so their walk to the scale is a few metres of open ground, and the whole cast is clean on every seed, dry and wet.
+- **Tested.**
+  - `vesperFolk.test.ts` (10 tests). The roster is fifteen. Every new place is reachable on five seeds.
+  - The existing guards still hold for the newcomers: legality, speed, spacing, the hours and the rain, their own lines, and 6 m from every story point.
+  - A new test puts the Staithe at work (the Receiver's book at the post and the watch, the crepe hung at the line, the Weigher by the pan, the miners at the Rows). It also keeps every folk place out of the arrival and 3 m from the horses.
+  - The client tests check each lodging's back door drawn where its folk go in (and none on the empty bunk), and the view putting fifteen on stage. The audits pass.
+- **Looked at.** The landing at mid-morning with the hamlet peopled; the Receiver at the post; the Weigher at the steelyard with a book.
+- **Not yet.** Unplayed. The Staithe's houses have no interiors. The folk are silent, as all the folk are.

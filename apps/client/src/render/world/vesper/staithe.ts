@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferAttribute, CylinderGeometry, IcosahedronGeometry, SphereGeometry } from "three";
-import { PALETTE, staithePlan, vesperLevel, type CollisionWorld, type StaitheHouse } from "./shared.ts";
+import { PALETTE, STAITHE_LODGINGS, staithePlan, vesperLevel, type CollisionWorld, type StaitheHouse } from "./shared.ts";
 import { pane } from "../litWindows.ts";
 import { blend, type ColourFn, type Kit } from "../kit.ts";
 import type { Lod } from "../flora.ts";
@@ -25,12 +25,29 @@ export function addStaithe(k: Kit, world: CollisionWorld, lod: Lod, out: VesperO
     else companyHouse(k, h, lod, out);
     sealedDoor(k, `${lb.id}.door`, lb.hx, 0, lb.door, lb.doorH, SEAL, lod, out.marks, { x: h.x, y: gy, z: h.z, yaw: lb.yaw });
     notice(k, lb.hx, lb.floor, lb.doorH);
+    if (STAITHE_LODGINGS.includes(h.id)) backDoor(k, h);
     k.clearBase();
   }
   coffins(k, world, lod);
   measuringPost(k, world);
   crepeLine(k, world);
   steelyard(k, world, lod);
+}
+
+/**
+ * D-127: a lodging's own way in, on its back (local -x, away from the road): the folk's, not a player's (no handle, not in the door audit), like the gorge's other folk
+ * doors (D-125). The Guild's is a crepe leaf in a bone-stone surround; the Company's a plank leaf in a chalk surround over a step.
+ */
+function backDoor(k: Kit, h: StaitheHouse): void {
+  const x = -h.hx;
+  if (h.kind === "receiving") {
+    box(k, [0.08, 2.35, 1.3], [x - 0.04, 1.17, 0], P.strataBone);
+    box(k, [0.06, 2.1, 1.0], [x - 0.1, 1.05, 0], P.crepe);
+    return;
+  }
+  box(k, [0.08, 2.3, 1.3], [x - 0.04, 1.15, 0], P.chalk);
+  box(k, [0.06, 2.05, 1.0], [x - 0.1, 1.02, 0], (p, _n, o) => blend(o, P.timber, P.timberLight, (Math.floor((p.z + 50) * 6) & 1) * 0.35));
+  box(k, [0.45, 0.12, 1.4], [x - 0.26, 0.03, 0], P.chalk);
 }
 
 /** The Guild's: a stone plinth sunk to the low side, bone plaster, a plum band under the eaves, crepe-black slates with a silver ridge, a hand-bell under the front gable, crepe either side of the door. */
