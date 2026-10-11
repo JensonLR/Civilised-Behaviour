@@ -992,3 +992,30 @@ What changed:
   - The client tests check each lodging's back door drawn where its folk go in (and none on the empty bunk), and the view putting fifteen on stage. The audits pass.
 - **Looked at.** The landing at mid-morning with the hamlet peopled; the Receiver at the post; the Weigher at the steelyard with a book.
 - **Not yet.** Unplayed. The Staithe's houses have no interiors. The folk are silent, as all the folk are.
+
+**D-128 The Grange's hands (2026-10-11).** Highmark's plain was worked land with nobody working it. D-116 sowed and cut its fields, and D-124 peopled the capital on the hill, but the 130 m from the quay to the hill's foot stayed empty of people. Now six of the Grange's hands work the fields, on the same folk machinery as the Marchers of the capital, eighteen Marchers in all. Each is named for the Grange ("Arnet of the Grange"; the given names are drawn per seed), and the child is Pip.
+- **The fields.**
+  - A Hay-Turner rakes between the hay's rows, and a Haycock-Builder builds by a haycock (the hay, west of the road).
+  - A Ploughman walks the fallow's headlands. The ox struck with the reapers, so they are the ox now (the plough, east).
+  - A Hoer works the young green, north of its scarecrow (west).
+  - An old Gleaner and Pip glean between the stooks (the stubble, east).
+  - Nobody works the strike's barley: that is the Reapers' Compact's, and they are on strike. The two pairs talk at midday by their fields.
+- **Their home is the Grange's barge** at the Reed Landing, the one already moored there with its crates, sacks and wheat sheaf. They live aboard (rent-free, river-cold) and come and go by a new gangplank from the quay's edge to her deck: one board, 24 triangles, from Highmark's 257 of headroom. At dawn they muster on the quay and walk up the Processional Road to their fields; at dusk they walk back. Everyone arrives at that quay, so the first thing a party sees of Highmark now includes people going to work.
+- **Why the barge and not a tent or a hall.**
+  - The drovers' tents at the camp would have put the hands' door 5.5 m from the camp's story point, where the Succession contract stands its two drovers. Players would have met interactive drovers among scenery look-alikes, so the 6 m rule held.
+  - The capital's lodging halls are on the guild and court terraces, about 230 m of switchbacks from the fields, roughly two game hours each way.
+  - A new field barn would have needed triangles Highmark does not have (its high preset is 257 under a ceiling that is never loosened).
+- **The walking network** (`shared/highmarkFolk.ts`). The road trail now runs the whole Processional Road, from the quay's foot to the court; it used to stop at the hill. The quay's deck is a trail at the planks' height (`NavTrail.y`, D-125). Four field paths run from the road into the hay, the stubble, the plough and the green, threaded between their haycocks, stooks and scarecrow. A trail's end joins the road within 3.4 m, so there is no grid on the plain: 4,143 nodes (were 3,984).
+- **Rain** sends them home to the barge: there is no roof on the plain.
+- **The walks.** The far fields are given an hour and a half. The Ploughman's 150 m from the quay to the fallow is walked at the folk's pace, and the D-124 motion test (nobody faster than 1.9 m/s, dry or wet) holds for all eighteen.
+- **Their voice** (`hField`): "The ox struck with the reapers. I'm the ox now.", "Gleaning's free. The Chamberlain's working on that.", "We sleep on the Grange's barge. Rent-free, river-cold.", "The scarecrow outranks me. It has a coat." (the scarecrow is dressed as a gentleman of the Society).
+- **The medium preset** draws sixteen people, the first in the cast's order. That means the capital's twelve and four of the hands (the hay pair, the Ploughman, the Hoer); the Gleaner and Pip appear from the high preset. The folk budgets were not raised.
+- **Tested.**
+  - `highmarkFolk.test.ts` (10 tests). The roster is eighteen, each with a bed and a day's work.
+  - Every new place is reachable on five seeds: the deck at the planks' height, the fields through their paths.
+  - Legality, dry and wet. The quay's planks are a floor, and someone on the deck over the river is not in the water.
+  - Speed, the hours and the rain, spacing, the story points and their own lines.
+  - A new test puts each hand in the field of their trade and never in the strike's barley, puts their home on the deck by the barge, and keeps every folk place out of D-115's arrival.
+  - The client tests check the gangplank drawn where the hands go aboard, and the view's eighteen. The ground, overlap and coplanar audits pass.
+- **Looked at.** The hay at mid-morning (the Hay-Turner and the Haycock-Builder among the haycocks, the capital beyond); the quay at dawn (the hands mustered by the barge, the gangplank); the stubble with the folk budget lifted (the Gleaner stooping, Pip).
+- **Not yet.** Unplayed. Nobody works the far fields (the stubble and green beyond the outpost's ground), and the hands have no harvest cart. The folk are silent.

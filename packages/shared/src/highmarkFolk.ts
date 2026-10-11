@@ -39,10 +39,8 @@ const OFFICES = [2, 3, 4] as const;
 /** The granaries' bearings on the hill (the plan's). */
 const GRANARY_DEG = [-45, -58, -71] as const;
 
-/** The Processional Road over the hill (from its foot to the court), cut into links of at most two metres: the folk walk it like everyone else. */
-function roadTrail(): NavTrail {
-  const C = HIGHMARK.centre;
-  const pts = highmarkRoad().filter((p) => Math.hypot(p.x - C.x, p.z - C.z) <= HIGHMARK.radii[0] + HIGHMARK.rampRun + 1);
+/** A polyline cut into links of at most two metres (a trail's nodes). */
+function cut(pts: readonly { x: number; z: number }[]): number[] {
   const line: number[] = [];
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i]!;
@@ -53,7 +51,38 @@ function roadTrail(): NavTrail {
     }
     line.push(p.x, p.z);
   }
-  return { width: HIGHMARK.rampHalf * 2, line };
+  return line;
+}
+
+/** The Processional Road from the quay's foot over the hill to the court (D-128: the whole of it, the plain too: the Grange's hands walk it to the fields). */
+function roadTrail(): NavTrail {
+  const L = highmarkPlan().quay;
+  return { width: HIGHMARK.rampHalf * 2, line: cut([{ x: L.x, z: L.z0 - 1.4 }, ...highmarkRoad()]) };
+}
+
+/**
+ * D-128: the quay's deck (at the planks' height, over the river: `NavTrail.y`) from its foot to the barge, and the field paths: from the road into each worked field
+ * the Grange's hands work, threaded between its haycocks, stooks and scarecrow.
+ */
+function plainTrails(): NavTrail[] {
+  const q = highmarkPlan().quay;
+  const deck: NavTrail = { width: q.half * 2, y: HIGHMARK.level, line: cut([{ x: q.x, z: q.z0 - 0.9 }, { x: q.x, z: q.z1 - 0.6 }]) };
+  const path = (pts: { x: number; z: number }[]): NavTrail => ({ width: 1.6, line: cut(pts) });
+  const roadAt = (z: number): { x: number; z: number } => {
+    const r = highmarkRoad();
+    for (let i = 0; i + 1 < r.length; i++) {
+      const a = r[i]!, b = r[i + 1]!;
+      if ((a.z - z) * (b.z - z) <= 0 && a.z !== b.z) return { x: a.x + ((b.x - a.x) * (z - a.z)) / (b.z - a.z), z };
+    }
+    return { x: 0, z };
+  };
+  return [
+    deck,
+    path([roadAt(78), { x: -19, z: 78 }, { x: -19, z: 90 }]),   // the hay (west): between its haycocks
+    path([roadAt(66), { x: 25, z: 66 }]),   // the stubble (east): between its rows of stooks
+    path([roadAt(2), { x: 30, z: 2 }]),   // the plough (east)
+    path([roadAt(13.5), { x: -27, z: 13.5 }]),   // the young green (west): north of its scarecrow
+  ];
 }
 
 /** Open ground over the whole hill (its terraces are joined only by the road's ramps, and the gate's passage): people cross a terrace, not only walk the road. */
@@ -131,6 +160,22 @@ export function marcherStations(): StationDef[] {
     add({ key: `chat:${i}:a`, x: p.x - ux, z: p.z - uz, facing: face(ux, uz), sheltered: lee, reach: 5 });
     add({ key: `chat:${i}:b`, x: p.x + ux, z: p.z + uz, facing: face(-ux, -uz), sheltered: lee, reach: 5 });
   }
+  // D-128: the Grange's hands. Their home is the Grange's barge at the quay: the step on the deck beside her and, out of sight, the gangplank's head at the deck's edge
+  const q = plan.quay;
+  add({ key: "step:barge", x: q.x + q.half - 0.7, z: q.boat.z, facing: face(1, 0), y: HIGHMARK.level, sheltered: true, reach: 4 });
+  add({ key: "in:barge", x: q.x + q.half - 0.25, z: q.boat.z, facing: face(1, 0), y: HIGHMARK.level, hidden: true, sheltered: true, parent: "step:barge" });
+  // the fields' places (each on its path): turning the hay between two of its rows, building a haycock, the plough's two headlands, gleaning between the stooks, hoeing the green
+  for (const [key, x, z, fx, fz] of [
+    ["hay:a", -19, 79, 1, 0], ["hay:b", -19, 89, 1, 0], ["hay:c", -12.6, 79, 0, 1],
+    ["plough:a", 17, 2, 1, 0], ["plough:b", 29, 2, -1, 0],
+    ["glean:a", 13.5, 66, 0, 1], ["glean:b", 19.5, 66, 0, -1], ["glean:c", 24.5, 66, 0, 1],
+    ["hoe:a", -25, 13.5, 1, 0], ["hoe:b", -15.5, 13.5, -1, 0],
+  ] as const) add({ key, x, z, facing: face(fx, fz), reach: 4 });
+  // their two conversation spots: by the hay's road side, by the stubble's
+  for (const [i, [cx, cz]] of ([[-8.5, 82], [7.5, 66]] as const).entries()) {
+    add({ key: `chat:${4 + i}:a`, x: cx, z: cz - 0.55, facing: face(0, 1), reach: 5 });
+    add({ key: `chat:${4 + i}:b`, x: cx, z: cz + 0.55, facing: face(0, -1), reach: 5 });
+  }
   return out;
 }
 
@@ -142,7 +187,7 @@ export function marcherNav(world: CollisionWorld, why?: Map<string, string>): Na
   const t = world.terrain as { waterDepth?: (x: number, z: number) => number };
   setFolkWater(world, (x, z) => (t.waterDepth?.(x, z) ?? 0) > 0.02);
   setFolkHeadroom(world, 2.2);
-  return buildNavFrom(world, { trails: [roadTrail()], grid: MARCHER_GRID, stations: marcherStations() }, why);
+  return buildNavFrom(world, { trails: [roadTrail(), ...plainTrails()], grid: MARCHER_GRID, stations: marcherStations() }, why);
 }
 
 // ---- the cast ----------------------------------------------------------------------------------------------------------------------------------
@@ -193,6 +238,25 @@ const CAST: readonly CastDef[] = [
   { key: "tibb", title: "Tibb", occupation: "child", age: "child", home: "hall1", lines: "hChild", scale: 0.68, walk: 1.5, archetype: 3, script: [
     [7.9, "step:hall1", "play"], [8.5, "play:guild", "play", { to: "play:ramp", actTo: "play" }], [12.4, "step:hall1", "idle"], [13.5, "play:market", "play", { to: "front:2", actTo: "play" }], [17.4, "step:hall1", "play"], [19.1, "in:hall1", "sleep"],
   ] },
+  // D-128: the Grange's hands, who live on the Grange's barge at the quay and walk up the road to the plain's fields (the far ones are given an hour and a half)
+  { key: "turner", title: "Hay-Turner", occupation: "gardener", age: "adult", home: "barge", lines: "hField", archetype: 0, script: [
+    [5.8, "step:barge", "idle"], [7.0, "hay:a", "sweep", { to: "hay:b", actTo: "sweep" }], [12.8, "hay:a", "sweep", { to: "hay:b", actTo: "sweep" }], [17.6, "step:barge", "idle"], [18.6, "in:barge", "sleep"],
+  ] },
+  { key: "haycock", title: "Haycock-Builder", occupation: "gardener", age: "adult", home: "barge", lines: "hField", archetype: 2, script: [
+    [6.0, "step:barge", "idle"], [7.2, "hay:c", "tend"], [12.8, "hay:c", "tend"], [17.8, "step:barge", "idle"], [18.8, "in:barge", "sleep"],
+  ] },
+  { key: "plough", title: "Ploughman", occupation: "gardener", age: "adult", home: "barge", lines: "hField", archetype: 4, script: [
+    [5.6, "step:barge", "idle"], [7.4, "plough:a", "tend", { to: "plough:b", actTo: "tend" }], [12.0, "plough:a", "idle"], [12.8, "plough:a", "tend", { to: "plough:b", actTo: "tend" }], [16.8, "step:barge", "idle"], [17.8, "in:barge", "sleep"],
+  ] },
+  { key: "hoer", title: "Hoer", occupation: "gardener", age: "adult", home: "barge", lines: "hField", archetype: 1, script: [
+    [5.7, "step:barge", "idle"], [7.5, "hoe:a", "tend", { to: "hoe:b", actTo: "tend" }], [12.2, "hoe:a", "idle"], [13.0, "hoe:a", "tend", { to: "hoe:b", actTo: "tend" }], [17.0, "step:barge", "idle"], [18.0, "in:barge", "sleep"],
+  ] },
+  { key: "gleaner", title: "Gleaner", occupation: "gardener", age: "elder", home: "barge", lines: "hField", archetype: 5, walk: 0.7, script: [
+    [6.6, "step:barge", "idle"], [8.0, "glean:a", "tend", { to: "glean:b", actTo: "tend" }], [13.2, "glean:a", "tend", { to: "glean:b", actTo: "tend" }], [16.4, "step:barge", "idle"], [17.4, "in:barge", "sleep"],
+  ] },
+  { key: "pip", title: "Pip", occupation: "child", age: "child", home: "barge", lines: "hField", scale: 0.66, walk: 1.5, archetype: 3, script: [
+    [7.0, "step:barge", "play"], [8.2, "glean:c", "play", { to: "glean:b", actTo: "play" }], [12.6, "glean:c", "play", { to: "glean:b", actTo: "play" }], [16.2, "step:barge", "play"], [17.2, "in:barge", "sleep"],
+  ] },
 ];
 
 /** Talking events at the conversation spots. */
@@ -201,11 +265,15 @@ const MEETINGS: readonly Meeting[] = [
   { at: 15.2, dur: 0.6, spot: 1, a: "hides", b: "grain" },
   { at: 10.9, dur: 0.5, spot: 2, a: "reeve", b: "porter" },
   { at: 12.4, dur: 0.7, spot: 3, a: "clerk", b: "petitioner" },
+  { at: 12.1, dur: 0.5, spot: 4, a: "turner", b: "haycock" },
+  { at: 12.7, dur: 0.5, spot: 5, a: "gleaner", b: "pip" },
 ];
 
 /** Invented given names (no real language's); a Marcher is named for the ring of the hill they lodge on. */
-const FIRSTS = ["Corvane", "Hessaly", "Brannick", "Tirelle", "Oswend", "Maddrey", "Fennor", "Savric", "Ondrel", "Pelleth", "Grisane", "Varrow", "Lorcet", "Huldry"];
+const FIRSTS = ["Corvane", "Hessaly", "Brannick", "Tirelle", "Oswend", "Maddrey", "Fennor", "Savric", "Ondrel", "Pelleth", "Grisane", "Varrow", "Lorcet", "Huldry", "Arnet", "Wystan", "Calloe", "Dunmere"];
 const ringOf = (home: string): string => MARCHER_HOMES.find((h) => `hall${h.hall}` === home)?.ring ?? "Third";
+/** A Marcher's house: the ring of the hill they lodge on, or (D-128) the Grange, for its hands on the barge. */
+const houseOf = (home: string): string => (home === "barge" ? "the Grange" : `the ${ringOf(home)} Ring`);
 
 export const MARCHER_FOLK: FolkSpec = {
   id: "highmark",
@@ -214,11 +282,12 @@ export const MARCHER_FOLK: FolkSpec = {
   cast: CAST,
   meetings: MEETINGS,
   firsts: FIRSTS,
-  lasts: ["Third", "Fourth"],
+  lasts: ["Third", "Fourth", "Grange"],
   roofs: ["stall:0", "stall:1", "stall:2", "stall:3", "stall:4"],
   // (the market's people stand the rain out under the stalls' awnings, the granary pair under the granaries' cones; the court's people, the elder and the child go in)
-  indoors: (v) => v.age !== "adult" || v.occupation === "registrar" || v.occupation === "keeper" || v.occupation === "miller",
-  name: (c, i, firsts) => `${c.age === "child" ? c.title : firsts[i % firsts.length]!} of the ${ringOf(c.home)} Ring`,
+  // (D-128: the Grange's hands go home to the barge: there is no roof on the plain)
+  indoors: (v) => v.age !== "adult" || v.occupation === "registrar" || v.occupation === "keeper" || v.occupation === "miller" || v.occupation === "gardener",
+  name: (c, i, firsts) => `${c.age === "child" ? c.title : firsts[i % firsts.length]!} of ${houseOf(c.home)}`,
   people: "marchers",
   nav: (world) => marcherNav(world),
 };

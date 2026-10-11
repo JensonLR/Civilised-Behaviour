@@ -402,6 +402,23 @@ describe("D-114: the herds stampede", () => {
 });
 
 describe("D-124: the Marchers of the capital", () => {
+  it("D-128: the Grange's barge has a gangplank from the quay's edge to her deck, and her hands go aboard right there", () => {
+    const solid = buildHighmarkSolid(world, 1);
+    const q = highmarkPlan().quay;
+    const folk = buildHighmarkFolk(world, 7);
+    const p = solid.geometry!.attributes.position!;
+    let plank = 0;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i);
+      if (x > q.x + q.half + 0.3 && x < q.boat.x - 1.2 && Math.abs(z - q.boat.z) < 0.45) plank++;
+    }
+    expect(plank, "the gangplank").toBeGreaterThan(0);
+    const st = folk.nav.stations[folk.nav.index.get("in:barge")!]!;
+    expect(st.hidden).toBe(true);
+    expect(Math.abs(st.z - q.boat.z)).toBeLessThan(0.5);
+    expect(q.x + q.half - st.x).toBeLessThan(0.5);
+  });
+
   it("each lodging hall has its folk's door drawn where they go in: a leaf in a surround on the inward face, at the back step's line, the sealed front untouched", () => {
     const solid = buildHighmarkSolid(world, 1);
     const plan = highmarkPlan();
@@ -436,8 +453,8 @@ describe("D-124: the Marchers of the capital", () => {
     view.applyDay(dayState(10, createDayState()));
     for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: 0, y: 8, z: -40 }, 1 + i * 0.2);
     const people = folk!.people!;
-    expect(people.folk.roster).toHaveLength(12);
-    expect(people.folk.roster.every((v) => v.people === "marchers" && / Ring$/.test(v.name))).toBe(true);
+    expect(people.folk.roster).toHaveLength(18);
+    expect(people.folk.roster.every((v) => v.people === "marchers" && / (Ring|the Grange)$/.test(v.name))).toBe(true);
     expect(people.poses.filter((p) => p.visible).length).toBeGreaterThanOrEqual(10);
     expect(folk!.stats.visible).toBeGreaterThan(0);
     expect((folk as unknown as { place: string }).place).toBe("THE CAPITAL");
