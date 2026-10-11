@@ -206,7 +206,7 @@ export function createHighmarkTerrain(seed: number): HighmarkTerrain {
       const th = Math.atan2(dx, dz);
       for (let k = 0; k < 5; k++) {
         const rk = RADII[k]!;
-        if (r <= rk || r > rk + RUN) continue;
+        if (r < rk || r > rk + RUN) continue;   // (the ramp owns its top edge: at exactly r = rk the terraces' rule gives the lower level, a 2.2 m pit on the road's line)
         const a = angleDelta(RAMP_TH[k]!, th);
         if (Math.abs(a) >= Math.PI / 2 || Math.abs(r * Math.sin(a)) > HW) continue;
         const lo = LV[k]!;

@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Marchers of Highmark's capital (D-124, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Three back doors in Highmark's merged solid (no draw of their own); twelve Marchers on the folk machinery in Highmark's view | Node, no GPU, `WORLD_STATS=1` (`highmark.test.ts` budgets) | Main-pass draws unchanged **21 / 26 / 39 / 39**; triangles **test 77.9k / low 147.1k / medium 414.4k / high 539,743** (were 77.8k / 147.0k / 414.1k / 539,527: the doors and their ink, 216 triangles). `HIGHMARK_VIEW_BUDGET` (22 / 28 / 44 / 44, 120k / 170k / 440k / 540k) unchanged, never loosened: high has **257 triangles** left. The Marchers' network is a grid over the whole hill plus the road: 3,984 nodes and 39 stations, built in 0.15 to 0.24 s once per world and seed (it is the biggest network yet: Hollowmere's is 817 nodes). The people are their own root, under the same `FOLK_BUDGETS` (twelve people, fewer than the hub's 22). |
+
 ## The Brinefolk at the pans (D-123, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

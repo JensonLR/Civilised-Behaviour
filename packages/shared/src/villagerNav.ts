@@ -136,8 +136,10 @@ function strictGrid(world: CollisionWorld): Map<number, Obstacle[]> {
 export function standingHeight(world: CollisionWorld, x: number, z: number, feetY: number, r = FOLK_RADIUS, ignore?: (o: Obstacle) => boolean): number | undefined {
   const list = strictGrid(world).get(cellOf(Math.floor(x / CELL), Math.floor(z / CELL)));
   if (list) {
+    const head = headroomOf.get(world);
     for (const o of list) {
       if (ignore && ignore(o)) continue;
+      if (head !== undefined && o.y0 > feetY + head) continue;   // (D-124: overhead, where the world allows it: the walker passes under)
       if (insideObstacle(o, x, z, r)) return undefined;
     }
   }
@@ -157,6 +159,15 @@ const wetOf = new WeakMap<CollisionWorld, (x: number, z: number) => boolean>();
 /** D-120: the water of a region whose folk are not Hollowmere's (its terrain's own rivers and sea), for every standing test in `world`. */
 export function setFolkWater(world: CollisionWorld, wet: (x: number, z: number) => boolean): void {
   wetOf.set(world, wet);
+}
+
+const headroomOf = new WeakMap<CollisionWorld, number>();
+/**
+ * D-124: let the folk of `world` walk under anything whose underside is more than `headroom` above their feet (Highmark's gate: the lintel is 3.6 m over the
+ * passage). Elsewhere every solid thing blocks them however high it is (the default, unchanged: Hollowmere's, Lampside's and the Brinefolk's networks rely on it).
+ */
+export function setFolkHeadroom(world: CollisionWorld, headroom: number): void {
+  headroomOf.set(world, headroom);
 }
 
 /** True if a walker can go straight from a to b (every 0.45 m standable, the ground height followed from `y0`). */

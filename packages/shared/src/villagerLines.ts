@@ -7,12 +7,14 @@ import { hash3 } from "./rng.ts";
  * dry and quite capable of managing the visitors back. Nothing here refers to any real people, nation or faith.
  */
 
-export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind | BrineLineKind;
+export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind | BrineLineKind | MarcherLineKind;
 
 /** D-120: what Lampside's people say (Kessar's lower town): their own trades, and the Kessarine pools below instead of Hollowmere's. */
 export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kClerk" | "kElder" | "kChild";
 /** D-123: the Brinefolk at the Brine Houses' salt pans. */
 export type BrineLineKind = "bRaker" | "bBarrow" | "bSkim" | "bTally" | "bPump" | "bElder" | "bChild";
+/** D-124: the Marchers of Highmark's capital (the King has been "pending" for six years; the Chamberlain's offices run the hill meanwhile). */
+export type MarcherLineKind = "hSeller" | "hCrier" | "hClerk" | "hPetition" | "hReeve" | "hPorter" | "hWater" | "hChild";
 
 const GENERAL: readonly string[] = [
   "Lovely day for not improving anything.",
@@ -27,7 +29,7 @@ const GENERAL: readonly string[] = [
   "Do sign the visitors' book. We press flowers in it.",
 ];
 
-const BY_KIND: Record<Exclude<LineKind, KessarLineKind | BrineLineKind>, readonly string[]> = {
+const BY_KIND: Record<Exclude<LineKind, KessarLineKind | BrineLineKind | MarcherLineKind>, readonly string[]> = {
   keeper: [
     "It is very nearly the hour. It usually is.",
     "The hour is kept, not caught. Do sit.",
@@ -307,6 +309,91 @@ const BRINE_FRIGHT: readonly string[] = [
 
 const isBrine = (k: LineKind): k is BrineLineKind => k in BRINE_BY_KIND;
 
+// ---- D-124: the Marchers of Highmark's capital ------------------------------------------------------------------------------------------
+
+const MARCHER_BY_KIND: Record<MarcherLineKind, readonly string[]> = {
+  hSeller: [
+    "Cheese! Aged as long as the King's been pending!",
+    "Two loaves, one stamp. The stamp is extra.",
+    "Buy it today. The Assay Office weighs it again on Thursday.",
+    "Priced in sheaves. The Crown pays in arrears.",
+  ],
+  hCrier: [
+    "Hear ye! The King remains pending! Further pending to follow!",
+    "Hear ye! By order of the Chamberlain, no orders today!",
+    "Hear ye! The queue for petitions is closed to petitions!",
+    "Hear ye! The Society is welcome! The Society is invoiced!",
+  ],
+  hClerk: [
+    "Form nine, in triplicate. The third copy is for the fire.",
+    "Your petition is received, which is a kind of answer.",
+    "The Chamberlain will see you as soon as the King has seen him.",
+  ],
+  hPetition: [
+    "Six years I've waited. I'm told I'm nearly next.",
+    "I came about a fence. The fence has since retired.",
+    "Ticket forty. They've reached nine.",
+    "They gave me a room here. It's quicker than going home to wait.",
+  ],
+  hReeve: [
+    "Three granaries, one harvest, four audits.",
+    "The Grange grows it, the Crown counts it, I lock it.",
+    "Every sack's numbered. The mice aren't.",
+  ],
+  hPorter: [
+    "From this granary to that one. The Chamberlain likes them level.",
+    "Same sack, third time today. A very audited sack.",
+    "Up the ramps, down the ramps. The ramps are the only ones getting anywhere.",
+  ],
+  hWater: [
+    "The well's the only office on the hill that opens on time.",
+    "Water's free. The bucket is under review.",
+    "Every stall gets a bucket. The cheese gets two.",
+  ],
+  hChild: [
+    "When I grow up I'm going to be King. Pending.",
+    "Bet you can't climb all the ramps without stopping.",
+    "The crier lets me ring the bell when nobody's important.",
+  ],
+};
+
+const MARCHER_GENERAL: readonly string[] = [
+  "Long live the King, whenever he starts.",
+  "Mind the ramps. They're the only way up, and they know it.",
+  "Your Society surveys us. We survey your Society. It's even.",
+  "Six years without a King, and the bread still rises.",
+  "The Grange votes with scythes. One scythe, one vote. Sharpen accordingly.",
+];
+
+const MARCHER_RAIN: readonly string[] = [
+  "Rain on the terraces! Cover the cheese!",
+  "Wet again. The Chamberlain will issue a notice about it.",
+  "In, quick. The ramps run like rivers.",
+];
+
+const MARCHER_NIGHT: readonly string[] = [
+  "The lamps are lit. The offices are not.",
+  "Night on the hill. Even the queue goes home.",
+  "Late. The gate shuts at dark, in principle.",
+];
+
+const MARCHER_GREET: readonly string[] = [
+  "Welcome to the capital! Take a ticket.",
+  "Ah, the Society. Have you an appointment with the Chamberlain? Nobody has.",
+  "Morning! Up the ramps, left at the gate, and wait.",
+];
+
+/** D-124: shooting on the hill. */
+const MARCHER_FRIGHT: readonly string[] = [
+  "Shooting! In the market! Without a licence!",
+  "Down! The Assay Office will hear of this!",
+  "Not the cheese!",
+  "Into the halls! Petition later!",
+  "Is that the Society or the succession?",
+];
+
+const isMarcher = (k: LineKind): k is MarcherLineKind => k in MARCHER_BY_KIND;
+
 const RAIN: readonly string[] = [
   "It's only weather. Weather is very good at being weather.",
   "Under here, quick. The awning has never said no.",
@@ -340,6 +427,10 @@ const GREET: readonly string[] = [
 
 /** The line to show for a person: deterministic in (id, slot). `moment` picks a special pool; otherwise a mix of the person's own and the general pool. */
 export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" | "fright" = ""): string {
+  if (isMarcher(kind)) {
+    const pool = moment === "rain" ? MARCHER_RAIN : moment === "night" ? MARCHER_NIGHT : moment === "greet" ? MARCHER_GREET : moment === "fright" ? MARCHER_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? MARCHER_BY_KIND[kind] : MARCHER_GENERAL;
+    return pool[hash3(id, slot, 11) % pool.length]!;
+  }
   if (isBrine(kind)) {
     const pool = moment === "rain" ? BRINE_RAIN : moment === "night" ? BRINE_NIGHT : moment === "greet" ? BRINE_GREET : moment === "fright" ? BRINE_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? BRINE_BY_KIND[kind] : BRINE_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
@@ -354,5 +445,5 @@ export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | 
 
 /** Every line, for tests (tone and content checks). */
 export function allLines(): string[] {
-  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT];
+  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT];
 }

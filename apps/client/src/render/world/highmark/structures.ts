@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, RingGeometry, Shape, SphereGeometry } from "three";
-import { PALETTE, hash3, highmarkLevel, type CollisionWorld } from "@cb/shared";
+import { MARCHER_HOMES, PALETTE, hash3, highmarkLevel, type CollisionWorld } from "@cb/shared";
 import { pane, type LitPane } from "../litWindows.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
@@ -315,6 +315,13 @@ function hall(k: Kit, b: HighmarkBox, gy: number, lod: Lod, seed: number, index:
     box(k, [0.7, 1.1, 0.12], [x, b.height * 0.55, b.hz + 0.02], P.timber);
     box(k, [0.9, 0.12, 0.2], [x, b.height * 0.55 - 0.62, b.hz + 0.06], P.chalkCap);
     if (lod) for (const y of [-0.3, 0, 0.3]) box(k, [0.08, 0.06, 0.8], [x, b.height * 0.55 + y, b.hz + 0.09], P.timberLight);   // planks nailed across
+  }
+  // D-124: where the Marchers lodge, their own door on the inward long face (the sealed front stays sealed): a plank leaf in a chalk surround and a worn step, no
+  // handle outside (it is latched from within). Lean on purpose: Highmark's high preset has a few hundred triangles to spare.
+  if (MARCHER_HOMES.some((m) => m.hall === index)) {
+    box(k, [1.3, 2.25, 0.06], [0, 1.125, -b.hz - 0.03], P.chalkCap);
+    box(k, [1.0, 2.0, 0.06], [0, 1.0, -b.hz - 0.075], (p, _n, o) => blend(o, P.timber, P.timberLight, (Math.floor((p.x + 5) * 6) & 1) * 0.35));
+    box(k, [1.4, 0.12, 0.45], [0, 0.03, -b.hz - 0.255], P.chalkCap);
   }
   k.clearBase();
   // the sealed door, on the long face the road passes (the frame turned a quarter so local +x is that face)

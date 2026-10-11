@@ -406,6 +406,7 @@ export function buildFolkFrom(world: CollisionWorld, seed: number, spec: FolkSpe
     }
   }
   // split long stints so every part decides for itself whether the weather has driven it under cover; drop stints whose routes do not exist
+  const hourSec0 = createFolkClock().hourSec;
   for (const v of roster) {
     const out: Stint[] = [];
     for (let k = 0; k < v.stints.length; k++) {
@@ -418,8 +419,30 @@ export function buildFolkFrom(world: CollisionWorld, seed: number, spec: FolkSpe
         out.push(s);
         continue;
       }
-      const parts = Math.ceil((end - s.at) / limit);
-      for (let p = 0; p < parts; p++) out.push({ ...s, at: wrapHours(s.at + ((end - s.at) * p) / parts), carryIn: p === 0 ? s.carryIn : s.carry });
+      const span = end - s.at;
+      const parts = Math.ceil(span / limit);
+      // D-124: the walk to the next place happens in the last part; where that walk is long (Highmark's hill), the last part is kept long enough for it at the
+      // default day's pace (an even split gave it 0.8 h at most, and anyone going further than about eighty metres ran), whichever end the rain has moved either
+      // stint to. A short walk leaves the even split as it was.
+      let from = 0;
+      for (const a of [s.st, s.to, s.shelter]) {
+        if (a < 0) continue;
+        for (const b of [next.st, next.shelter]) {
+          if (b < 0 || a === b) continue;
+          const d = nav.distance(a, b);
+          if (d < Infinity && d > from) from = d;
+        }
+      }
+      const need = from > 0 ? commuteHours(from, v.walk, hourSec0) / 0.85 + 0.05 : 0;
+      if (need <= span / parts) {
+        for (let p = 0; p < parts; p++) out.push({ ...s, at: wrapHours(s.at + (span * p) / parts), carryIn: p === 0 ? s.carryIn : s.carry });
+        continue;
+      }
+      const last = Math.min(need, span);
+      const rest = span - last;
+      const before = rest > 1e-6 ? Math.ceil(rest / limit) : 0;
+      for (let p = 0; p < before; p++) out.push({ ...s, at: wrapHours(s.at + (rest * p) / before), carryIn: p === 0 ? s.carryIn : s.carry });
+      out.push({ ...s, at: wrapHours(s.at + rest), carryIn: before === 0 ? s.carryIn : s.carry });
     }
     out.sort((a, b) => a.at - b.at);
     v.stints = pruneUnroutable(nav, out);
