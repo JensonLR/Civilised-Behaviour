@@ -1,13 +1,14 @@
 import { Color, Group, Matrix4, Mesh, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, kessarLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
+import { LAMPSIDE_GARDENS, PALETTE, kessarLevel, lampsidePlan, smoothstep, type CollisionWorld, type DayState, type RegionDress } from "@cb/shared";
 import type { WorldInkClass } from "@cb/procedural/three";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
-import { acaciaGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, type Lod } from "../flora.ts";
+import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, pebbleGeometry, type Lod } from "../flora.ts";
 import { HORIZON, buildHills, buildTreeLine, createHillUniforms, hillMaterial, treeLineMaterial, type HillUniforms } from "../horizon.ts";
 import { disposeTree } from "../kit.ts";
 import { buildRain } from "../rain.ts";
-import { planScatter, type Item, type ScatterPlan } from "../scatter.ts";
+import { planScatter, type Item, type ScatterPlan, type WorkedLand } from "../scatter.ts";
+import { buildWorkedLand } from "../worked.ts";
 import { setRgb } from "../sky.ts";
 import { WINDMILL } from "../windmill.ts";
 import { MAX_PUSHERS, composeInstance, makeInstances, makeSolid, pushers, setToonLite, toonMaterial, worldTime, type InstanceSet } from "../toon.ts";
@@ -28,6 +29,8 @@ import { buildKessarWater } from "./water.ts";
 import type { WaterUniforms } from "../water.ts";
 
 const WHITE = new Color(1, 1, 1);
+/** D-119: Lampside's gardens, the worked land of Kessar (fieldScatter's plots: no orchard). */
+const KESSAR_LAND: WorkedLand = { plots: LAMPSIDE_GARDENS };
 const fract = (x: number): number => x - Math.floor(x);
 
 interface SetOptions {
@@ -77,9 +80,10 @@ export class KessarView implements RegionView {
     const terrain = world.terrain as KessarTerrain;
     this.addGround(terrain);
     this.addHills();
-    const plan = planScatter(world, detail, (h, x, z) => (z > 90 ? Number.NaN : visualY(h, x, z))); // (the far trees stand on Kessar's ground as drawn, and none in the sea)
+    const plan = planScatter(world, detail, (h, x, z) => (z > 90 ? Number.NaN : visualY(h, x, z)), KESSAR_LAND); // (the far trees stand on Kessar's ground as drawn, and none in the sea; D-119: Lampside's gardens are worked land)
     this.addScatter(plan);
     this.addPalms();
+    this.addGardens(plan);
     this.addSolid();
     this.addCloth(terrain);
     this.addWater(terrain);
@@ -184,8 +188,20 @@ export class KessarView implements RegionView {
   }
 
   private addPalms(): void {
-    const items: Item[] = kessarPlan().palms.map((p, i) => ({ x: p.x, y: this.world.terrainHeight(p.x, p.z), z: p.z, yaw: p.yaw, sx: p.s, sy: p.s, sz: p.s, cls: 0, v: fract(i * 0.618) }));
+    // (the shore's and the river's palms, and Lampside's date palms in its gardens: D-119)
+    const items: Item[] = [...kessarPlan().palms, ...lampsidePlan().palms].map((p, i) => ({ x: p.x, y: this.world.terrainHeight(p.x, p.z), z: p.z, yaw: p.yaw, sx: p.s, sy: p.s, sz: p.s, cls: 0, v: fract(i * 0.618) }));
     this.instanced("palms", palmGeometry, this.track(toonMaterial({ wind: "tree" })), items, items.map((i) => this.varied(i.v, 0.14)), { shadow: true, ink: "large", wind: "tree", hull: palmHullGeometry, lod: this.detail.treeLod });
+  }
+
+  /** D-119: what grows in Lampside's gardens (the young barley's drills, the ripe barley, the scarecrows), as Hollowmere's and Highmark's fields are drawn: the barley instanced, the rest one solid. */
+  private addGardens(p: ScatterPlan): void {
+    this.instanced("barley", () => barleyGeometry(), this.track(toonMaterial({ doubleSided: true, wind: "grass" })), p.fields.barley, p.fields.barley.map((i) => this.varied(i.v, 0.1)), { noCull: true });
+    const geo = buildWorkedLand(p, this.detail.treeLod);
+    if (!geo) return;
+    const hull = this.detail.outlines ? buildWorkedLand(p, 0, true) : undefined;
+    this.track(geo);
+    if (hull) this.track(hull);
+    makeSolid(this.root, geo, this.track(toonMaterial({ wind: "village" })), { name: "gardens", outline: this.detail.outlines, ink: "medium", hullGeometry: hull, castShadow: true, wind: "village" });
   }
 
   // ---- the solid things, the cloth, the water ---------------------------------------------------------------------------------------------------

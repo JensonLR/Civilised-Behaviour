@@ -12,6 +12,7 @@ import { WELL } from "./clearing.ts";
 import { SITES, villageLevel } from "./village.ts";
 import { HIGHMARK_TRACKS, highmarkLevel, highmarkPlan, highmarkRoad, highmarkSitePoints, hillPoint } from "./highmark.ts";
 import { kessarLevel, kessarPlan, kessarSitePoints } from "./kessar.ts";
+import { inLampside } from "./lampside.ts";
 import { CLOISTER, VESPER_ANCHORS, vesperLevel, vesperPlan, vesperRoad, vesperSitePoints, vesperTracks } from "./vesper.ts";
 import { SALTMARKET_ANCHORS, saltmarketLevel, saltmarketPlan, saltmarketSitePoints } from "./saltmarket.ts";
 
@@ -164,6 +165,8 @@ export function kessarAdapter(seed: number): RegionAuditInput {
     if ((t === "wall" || t === "ruin" || t === "house") && d > 17 && d < 27) return { id: `fort@${r1(o.x)},${r1(o.z)}`, group: "fort", kind: "wall" };
     if (t === "house") return { id: `bldg@${r1(o.x)},${r1(o.z)}`, group: buildingGroup(level, o) ?? `solo-${r1(o.x)},${r1(o.z)}`, kind: "building" };
     if (t === "wall" && o.z > 8 && o.z < 32 && Math.abs(o.x) < 4.5) return { id: `bridge.rail@${r1(o.x)},${r1(o.z)}`, group: "bridge" };
+    // D-119: Lampside's garden walls (their runs meet at the corners and the gate piers)
+    if (t === "wall" && inLampside(o.x, o.z, 0, 1)) return { id: `lampside.wall@${r1(o.x)},${r1(o.z)}`, group: "lampside.walls", kind: "fence" };
     if (t === "bridge" && Math.abs(o.x) < 4.5) return { id: `bridge@${r1(o.x)},${r1(o.z)}`, group: "bridge" };
     if (t === "wall") return { id: `rim@${r1(o.x)},${r1(o.z)}`, group: "rim", kind: "fence" };
     return undefined;
@@ -178,6 +181,8 @@ export function kessarAdapter(seed: number): RegionAuditInput {
     { id: "landing", ...A.landing }, { id: "tollBar", ...A.tollBar }, { id: "wardenPost", ...A.wardenPost }, { id: "pier", ...A.pier }, ...A.sentries.map((s, i) => ({ id: `sentry${i}`, x: s.x, z: s.z })),
     { id: "ford", ...A.ford }, { id: "fort.gate", ...A.fort.gate }, { id: "rivalCamp", ...A.rivalCamp }, { id: "rivalParley", ...A.rivalParley }, { id: "powder", ...A.powder },
     ...kessarSitePoints(),
+    // D-119: inside each of Lampside's gardens, through its gates (the path between the west garden's plots; the east garden's grove), and the square's well
+    { id: "lampside.west", x: -28, z: -16.5 }, { id: "lampside.east", x: 23.8, z: -11.4 }, { id: "lampside.square", x: 10.6, z: -21 },
     // the fort's courtyard is inside the sealed curtain (drawn, not enterable): not a place anybody must reach
     { id: "A.fort", x: A.fort.x, z: A.fort.z },
   ];

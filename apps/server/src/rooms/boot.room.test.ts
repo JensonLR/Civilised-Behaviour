@@ -52,15 +52,16 @@ describe("the boot in a real room (D-108)", () => {
     const s = room.state.players.get(key)! as PlayerStateType;
     const input = c.input({ type: MoveInput, mode: "reliable" }) as unknown as Input;
     const d = input.data;
-    // the pistol drawn, facing north (yaw 0 looks down -Z), a pace south of him
+    // the pistol drawn, facing south (yaw 0 looks down -Z), a pace north of him: he goes back into the open customs yard (D-119: north of his post is now a house of
+    // Lampside, three metres off, and a body booted into it stops against its wall, as it should)
     d.weapon = weaponToWire(WEAPON.PISTOL);
-    d.yaw = d.aimYaw = yawToWire(0);
+    d.yaw = d.aimYaw = yawToWire(Math.PI);
     for (let i = 0; i < 25; i++) {
       input.send();
       await sleep(40);
     }
     await until(() => me.weapon === weaponToWire(WEAPON.PISTOL), 3000, "the pistol drawn");
-    c.send("debug", { cmd: `tp:${s.x}:${s.z + 1.2}:0` });
+    c.send("debug", { cmd: `tp:${s.x}:${s.z - 1.2}:0` });
     for (let i = 0; i < 4; i++) {
       input.send();
       await sleep(40);
@@ -77,13 +78,13 @@ describe("the boot in a real room (D-108)", () => {
     expect(inner.combat.stats.boots).toBe(1);
     expect(inner.flung.stats.watched).toBeGreaterThanOrEqual(1);
     await until(() => Math.hypot(s.x - x0, s.z - z0) > 3, 3000, "him thrown back");
-    expect(s.z).toBeLessThan(z0); // (away from her: north)
+    expect(s.z).toBeGreaterThan(z0); // (away from her: south)
     expect(health0 - s.health).toBeLessThan(40); // (the boot itself barely hurts; whatever he met does)
     expect(inner.mayhem.bill.boots).toBe(1);
     expect((s.flags & FLAG.DOWNED) !== 0).toBe(false);
     // he lies: she walks up and boots him again (the stamp)
     await sleep(1100); // (the boot's cooldown)
-    c.send("debug", { cmd: `tp:${s.x}:${s.z + 1.0}:0` });
+    c.send("debug", { cmd: `tp:${s.x}:${s.z - 1.0}:0` });
     for (let i = 0; i < 4; i++) {
       input.send();
       await sleep(40);

@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
-import { createDayState, dayState } from "@cb/shared";
+import { LAMPSIDE_GARDENS, LAMPSIDE_SIGNS, createDayState, dayState, inLampside, kessarLevel, lampsidePlan } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
 import { WorldView } from "../WorldView.ts";
 import { createRegionView } from "../regionView.ts";
-import { ATLAS_H, ATLAS_W, buildKessarCloth } from "./cloth.ts";
+import { ATLAS_H, ATLAS_W, buildKessarCloth, createKessarAtlas, plaqueUv } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover, kessarGroundColour, skirtY } from "./ground.ts";
 import { palmGeometry } from "./palms.ts";
 import { KESSAR, KESSAR_ANCHORS as A, KESSAR_SIGNS, createKessarWorld, kessarBridgeWreck, createRegionWorld, kessarPlan, type KessarTerrain } from "./shared.ts";
@@ -227,3 +227,47 @@ describe("Kessar Reach view: geometry", () => {
 });
 
 const terrainH = (x: number, z: number): number => world.terrainHeight(x, z);
+
+describe("D-119: Lampside drawn", () => {
+  it("draws its five sealed doors, its nine lamps (lit at night, not by day), a window lit or dark on every house, and the notice on every door", () => {
+    const solid = buildKessarSolid(world, 1);
+    const doors = solid.marks.filter((m) => m.id.startsWith("lampside."));
+    expect(doors.map((m) => m.leads)).toEqual(["sealed", "sealed", "sealed", "sealed", "sealed"]);
+    const lamps = solid.lamps.filter((l) => inLampside(l.x, l.z, 0, 0));
+    expect(lamps).toHaveLength(9);
+    for (const l of lamps) {
+      expect(l.lit).toBeUndefined();
+      expect(l.y - world.terrainHeight(l.x, l.z)).toBeGreaterThan(1.8); // (over a head, not in a face)
+    }
+    // a pane on every house: three on a two-storey house (two on the street, one at the back), one on a single storey (onto its garden)
+    const panes = solid.panes.filter((p) => inLampside(p.x, p.z, 0, 0));
+    expect(panes).toHaveLength(lampsidePlan().houses.reduce((n, h) => n + (h.storeys === 2 ? 3 : 1), 0));
+    // every notice is lettered on the atlas, and pinned on the cloth (a plaque per sealed door, inside the atlas)
+    createKessarAtlas()?.dispose();
+    for (const sign of LAMPSIDE_SIGNS) expect(drawn).toContain(sign);
+    const cloth = buildKessarCloth(world.terrain)!;
+    // (the cloth that hangs in the town is exactly its plaques: a quad on each door, each in its notice's strip of the atlas)
+    const pos = cloth.attributes.position!.array as ArrayLike<number>;
+    const uv = cloth.attributes.uv!.array as ArrayLike<number>;
+    const strips = LAMPSIDE_SIGNS.map((_, i) => plaqueUv(i));
+    let plaqueVerts = 0;
+    for (let i = 0; i < pos.length / 3; i++) {
+      if (!inLampside(pos[i * 3]!, pos[i * 3 + 2]!, 0, 0)) continue;
+      plaqueVerts++;
+      expect(strips.some(([, v0, , v1]) => uv[i * 2 + 1]! >= v0 - 1e-6 && uv[i * 2 + 1]! <= v1 + 1e-6)).toBe(true);
+    }
+    expect(plaqueVerts).toBe(kessarLevel().buildings.filter((b) => b.id.startsWith("lampside.")).length * 6);
+  });
+
+  it("grows its gardens: the young green in drills and the ripe barley inside the walls, and no scrub or wild grass in them or in the street", () => {
+    const view = createRegionView("kessar", new Scene(), world, PRESETS.medium, sun);
+    const parts = view.stats.parts;
+    expect(parts.barley ?? 0).toBeGreaterThan(0);
+    expect(parts.gardens ?? 0).toBeGreaterThan(0);
+    view.dispose();
+    const [green, barley] = LAMPSIDE_GARDENS;
+    expect(kessarCover((green!.x0 + green!.x1) / 2, (green!.z0 + green!.z1) / 2, 0.5, 0)).toBeCloseTo(0, 6);
+    expect(kessarCover((barley!.x0 + barley!.x1) / 2, (barley!.z0 + barley!.z1) / 2, 0.5, 0)).toBeCloseTo(0, 6);
+    expect(kessarCover(0, -14, 0.5, 0)).toBeCloseTo(0, 6);
+  });
+});

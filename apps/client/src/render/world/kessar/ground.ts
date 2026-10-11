@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
-import { PALETTE, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
+import { LAMPSIDE_GARDENS, PALETTE, lampsideStreet, plotAt, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
 import { KESSAR, KESSAR_ANCHORS, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun, type KessarTerrain } from "./shared.ts";
 import { kessarCover } from "@cb/shared";
 // (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
@@ -19,6 +19,8 @@ const G = {
   sand: rgb(K.sand), pale: rgb(K.sandPale), wet: rgb(K.sandWet), ochre: rgb(K.ochre), clay: rgb(K.clay), strata: rgb(K.strata), strataDark: rgb(K.strataDark),
   scrub: rgb(K.scrub), scrubDry: rgb(K.scrubDry), scrubDeep: rgb(K.scrubDeep), shingle: rgb(K.shingle), road: rgb(K.roadDust), rut: rgb(K.roadRut), stone: rgb(K.stoneShade), stoneDark: rgb(K.stoneDark),
 };
+
+const plotHit = { m: 0 };
 
 function mix(out: Rgb, c: Triple, t: number): void {
   if (t <= 0) return;
@@ -65,10 +67,21 @@ export function kessarGroundColour(x: number, z: number, h: number, slope: numbe
     mix(out, G.stone, on * smoothstep(0.25, 0.7, slope) * 0.8);
     mix(out, G.ochre, on * 0.25);
   }
-  // roads and the packed customs yard
+  // D-119: Lampside's gardens, watered (the rows run north-south, a row every `plot.row` metres): dark wet earth, the young green in drills, the ripe barley's straw
+  const gi = plotAt(LAMPSIDE_GARDENS, x, z, plotHit);
+  if (gi >= 0) {
+    const p = LAMPSIDE_GARDENS[gi]!;
+    const m = plotHit.m;
+    const rowK = 0.5 + 0.5 * Math.cos((x * Math.PI * 2) / p.row);
+    mix(out, G.clay, m * 0.75);
+    mix(out, G.wet, m * (1 - rowK) * 0.35);
+    if (p.crop === "barley") mix(out, G.scrubDry, m * rowK * 0.55);
+    else mix(out, G.scrubDeep, m * rowK * 0.6);
+  }
+  // roads, the packed customs yard, and Lampside's street and square
   const road = kessarRoad(x, z);
   const yard = (1 - smoothstep(8, 13, Math.hypot(x, z - 6))) * 0.85;
-  const worn = Math.max(road, yard);
+  const worn = Math.max(road, yard, lampsideStreet(x, z) * 0.8);
   mix(out, G.road, worn * 0.85);
   mix(out, G.rut, road * smoothstep(0.55, 0.75, n3) * (1 - smoothstep(0.6, 0.95, road)) * 0.6 + road * smoothstep(0.9, 0.96, n2) * 0.25);
   // rocky slopes, then tonal variation
