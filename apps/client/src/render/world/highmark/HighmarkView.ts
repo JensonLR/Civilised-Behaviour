@@ -1,5 +1,5 @@
 import { BoxGeometry, Color, Group, Matrix4, Mesh, MeshBasicMaterial, MeshToonMaterial, Vector3, type BufferGeometry, type Object3D, type Scene } from "three";
-import { PALETTE, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type ScenarioView } from "@cb/shared";
+import { PALETTE, buildHighmarkFolk, highmarkLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type ScenarioView } from "@cb/shared";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { acaciaGeometry, barleyGeometry, boulderGeometry, bushGeometry, grassTuftGeometry, haycockGeometry, pebbleGeometry, reedGeometry, ridgeGeometry, scarecrowGeometry, stookGeometry, type Lod } from "../flora.ts";
@@ -26,6 +26,7 @@ import { addWindows, setWindowNight } from "../litWindows.ts";
 import { buildHighmarkWater } from "./water.ts";
 import { buildGranaryScale, buildScythes } from "./strikeProps.ts";
 import { OutpostDress } from "../outpostDress.ts";
+import { Villagers, folkBudget } from "../villagers.ts";
 
 const WHITE = new Color(1, 1, 1);
 /** Peak intensity of the room's fill light (see `InteriorFill`): the Assembly Hall's ends and benches read at night; the chalk walls do not wash out at noon. */
@@ -86,6 +87,28 @@ export class HighmarkView implements RegionView {
     this.addStrikeProps();
     cullPlants(this.root); // (no plant grows through anything built)
     this.count();
+    this.addFolk();
+  }
+
+  // ---- the Marchers of the capital (D-124: the same schedule and bodies as Hollowmere's folk, Lampside's and the Brinefolk's, on the hill's own network) ----------
+
+  private folk?: Villagers;
+  private hours = 12;
+  private readonly walkers: { x: number; z: number }[] = [];
+  private walkerCount = 0;
+  private readonly folkFrame = { hours: 12, worldSec: 0, rain: 0, x: 0, y: 0, z: 0, walkers: this.walkers, walkerCount: 0 };
+  private lastT = -1;
+
+  private addFolk(): void {
+    if (!this.detail.villagers) return;
+    const budget = folkBudget(this.detail);
+    if (budget.count <= 0) return;
+    this.folk = new Villagers(this.scene, this.world, budget, 140, buildHighmarkFolk, "THE CAPITAL");
+  }
+
+  /** The people of the capital: who is on stage, at what detail, and what it costs. */
+  get folkView(): Villagers | undefined {
+    return this.folk;
   }
 
   // ---- D-046: the Reapers' Strike's scale (always: it is the granary's) and the Compact's laid-down scythes (only while the strike is on) --------------------------------------
@@ -376,6 +399,7 @@ export class HighmarkView implements RegionView {
     this.lantern?.color.copy(this.lanternDark).lerp(this.lanternLit, this.ambientU.uLamp.value); // ... and so is the tower's glass
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
+    this.hours = d.hours;
   }
 
   /** The grass and scrub bend away from up to four walkers (the same pusher slots the whole world uses). */
@@ -384,6 +408,13 @@ export class HighmarkView implements RegionView {
       const u = pushers.value[i]!;
       if (i < n && i < list.length) u.set(list[i]!.x, list[i]!.z, 1.5, 1);
       else u.set(0, 0, 1, 0);
+    }
+    // (the Marchers turn their heads to the walkers and greet them)
+    this.walkerCount = Math.min(n, list.length, MAX_PUSHERS);
+    for (let i = 0; i < this.walkerCount; i++) {
+      const w = (this.walkers[i] ??= { x: 0, z: 0 });
+      w.x = list[i]!.x;
+      w.z = list[i]!.z;
     }
   }
 
@@ -402,6 +433,18 @@ export class HighmarkView implements RegionView {
   }
 
   update(t: number, camera?: { x: number; y?: number; z: number }, worldSec?: number): void {
+    if (this.folk && camera) {
+      const f = this.folkFrame;
+      f.hours = this.hours;
+      f.worldSec = worldSec ?? t;
+      f.rain = atmoUniforms.uRain.value;
+      f.x = camera.x;
+      f.y = camera.y ?? 0;
+      f.z = camera.z;
+      f.walkerCount = this.walkerCount;
+      this.folk.update(this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - this.lastT)), f);
+    }
+    this.lastT = t;
     worldTime.value = t;
     this.hillU.uSailAngle.value = t * 0.32;
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
@@ -412,6 +455,8 @@ export class HighmarkView implements RegionView {
   }
 
   dispose(): void {
+    this.folk?.dispose();
+    this.folk = undefined;
     this.dress.clear();
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();

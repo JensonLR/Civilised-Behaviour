@@ -61,6 +61,16 @@ describe("Highmark: the world", () => {
       expect(slope, `ramp ${k + 1}`).toBeGreaterThan(0.25);
       expect(slope, `ramp ${k + 1}`).toBeLessThan(0.4);
     }
+    // D-124: a ramp owns its top edge: along its axis the ground runs on unbroken into the terrace above it (at exactly r = the riser's radius it fell 2.2 m to the
+    // terrace below: a pit on the road's line, and the nav grid's samples on the gate's ramp land on it)
+    for (let k = 0; k < 5; k++) {
+      const th = HIGHMARK.rampDeg[k]!;
+      const r = HIGHMARK.radii[k]!;
+      const at = (q: number): number => { const p = hillPoint(q, th); return t.height(p.x, p.z); };
+      expect(at(r), `ramp ${k + 1}'s top edge`).toBeCloseTo(HIGHMARK.heights[k + 1]!, 6);
+      expect(Math.abs(at(r) - at(r + 1e-4)), `ramp ${k + 1}`).toBeLessThan(0.01);
+      expect(Math.abs(at(r) - at(r - 1e-4)), `ramp ${k + 1}`).toBeLessThan(0.01);
+    }
     // the river's bed is wadeable, the deep middle is closed to the nav
     const w = t as HighmarkTerrain;
     expect(w.waterDepth(0, 118)).toBe(0);

@@ -2,7 +2,7 @@ import vm from "node:vm";
 import v8 from "node:v8";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Matrix4, Mesh, Scene, Vector3, type Material } from "three";
-import { HIGHMARK_ANCHORS as A, HIGHMARK_FIELDS, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, encodeHerdRuns, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
+import { MARCHER_HOMES, buildHighmarkFolk, HIGHMARK_ANCHORS as A, HIGHMARK_FIELDS, HIGHMARK_SIGNS, HIGHMARK_SITES, HIGHMARK_VIEW_BUDGET, HERD_CAP, PALETTE, createDayState, dayState, createHighmarkWorld, createRegionWorld, encodeHerdRuns, herdAt, herdCount, herdPlan, highmarkLevel, highmarkPlan, highmarkRoadDistance, type HighmarkTerrain } from "@cb/shared";
 import { PRESETS } from "../../Stage.ts";
 import { createRegionView } from "../regionView.ts";
 import { ATLAS_H, ATLAS_W, buildHighmarkCloth } from "./cloth.ts";
@@ -13,6 +13,8 @@ import { HighmarkView, HILL_SCALE } from "./HighmarkView.ts";
 import { buildHighmarkSolid } from "./structures.ts";
 import { buildHighmarkWater, riverShore } from "./water.ts";
 import { buildGranaryScale, buildScythes, scytheSpots } from "./strikeProps.ts";
+import { noteFolkNoise } from "../folkFright.ts";
+import type { Villagers } from "../villagers.ts";
 
 // (CPU-bound: most tests here build the whole region at least once, up to about 2 s each alone; under the full suite's four workers one ran past vitest's 5 s default.
 // A time limit, not a budget: the budgets are the assertions.)
@@ -399,3 +401,52 @@ describe("D-114: the herds stampede", () => {
   });
 });
 
+describe("D-124: the Marchers of the capital", () => {
+  it("each lodging hall has its folk's door drawn where they go in: a leaf in a surround on the inward face, at the back step's line, the sealed front untouched", () => {
+    const solid = buildHighmarkSolid(world, 1);
+    const plan = highmarkPlan();
+    const folk = buildHighmarkFolk(world, 7);
+    for (const { hall } of MARCHER_HOMES) {
+      const h = plan.halls[hall]!;
+      const c = Math.cos(h.yaw), s = Math.sin(h.yaw);
+      const y0 = world.terrainHeight(h.x, h.z);
+      let door = 0;
+      const p = solid.geometry!.attributes.position!;
+      for (let i = 0; i < p.count; i++) {
+        const dx = p.getX(i) - h.x, dz = p.getZ(i) - h.z;
+        const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+        // proud of the inward face, within the door's width, up to the lintel
+        if (lz < -h.hz - 0.05 && lz > -h.hz - 0.12 && Math.abs(lx) < 0.66 && p.getY(i) - y0 > 1.9 && p.getY(i) - y0 < 2.3) door++;
+      }
+      expect(door, `hall${hall}'s door`).toBeGreaterThan(0);
+      // the folk go in right there: their hidden station is at the door, their step out in front of it
+      const st = folk.nav.stations[folk.nav.index.get(`in:hall${hall}`)!]!;
+      const lz = -(st.x - h.x) * s + (st.z - h.z) * c;
+      const lx = (st.x - h.x) * c + (st.z - h.z) * s;
+      expect(lz, `in:hall${hall}`).toBeLessThan(-h.hz);
+      expect(lz).toBeGreaterThan(-h.hz - 0.6);
+      expect(Math.abs(lx)).toBeLessThan(0.5);
+    }
+  });
+
+  it("the view puts the Marchers on the stage at work by mid-morning, their slips say THE CAPITAL, and a shot in the market sends them down or indoors", () => {
+    const view = createRegionView("highmark", new Scene(), world, PRESETS.medium, sun);
+    const folk = (view as unknown as { folkView?: Villagers }).folkView;
+    expect(folk).toBeDefined();
+    view.applyDay(dayState(10, createDayState()));
+    for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: 0, y: 8, z: -40 }, 1 + i * 0.2);
+    const people = folk!.people!;
+    expect(people.folk.roster).toHaveLength(12);
+    expect(people.folk.roster.every((v) => v.people === "marchers" && / Ring$/.test(v.name))).toBe(true);
+    expect(people.poses.filter((p) => p.visible).length).toBeGreaterThanOrEqual(10);
+    expect(folk!.stats.visible).toBeGreaterThan(0);
+    expect((folk as unknown as { place: string }).place).toBe("THE CAPITAL");
+    const before = people.poses.map((p) => p.visible);
+    noteFolkNoise(0, -44, "shot");
+    for (let i = 0; i < 90; i++) view.update(1.8 + i / 30, { x: 0, y: 8, z: -40 }, 1.8 + i / 30);
+    const after = folk!.people!.poses;
+    expect(after.filter((p, i) => p.act === "cower" || (before[i] && !p.visible) || (p.act === "walk" && p.speed > 2.5)).length).toBeGreaterThanOrEqual(4);
+    expect(after.some((_, i) => (folk!.stateOf(i)?.fear ?? 0) > 0.5)).toBe(true);
+    view.dispose();
+  });
+});

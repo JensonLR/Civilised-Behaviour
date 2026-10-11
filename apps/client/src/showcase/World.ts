@@ -299,6 +299,9 @@ export function runWorld(canvas: HTMLCanvasElement, params: URLSearchParams): vo
     capital: [new Vector3(0, 5.2, 58), new Vector3(0, 12, -92)],
     capitalfar: [new Vector3(0, 8, 110), new Vector3(0, 11, -92)],
     plateau: [new Vector3(0, 40, -40), new Vector3(0, 8, -96)],
+    // D-124: the petitioners at the Chamberlain's sealed door, and the lodgers' back door on the assay office
+    offices: [new Vector3(-6.5, 11.2, -62.5), new Vector3(-13.7, 10.2, -66.5)],
+    lodging: [new Vector3(-33.2, 8.8, -75.2), new Vector3(-38.0, 8.1, -80.6)],
     top: [new Vector3(0, 190, 10), new Vector3(0, 0, 10)],
   };
   const [defCam, defAt] = (region === "kessar" ? kviews[params.get("view") ?? "landing"] : region === "highmark" ? hviews[params.get("view") ?? "capital"] : region === "vesper" ? vesperViews(ky)[params.get("view") ?? VESPER_DEFAULT_VIEW] : region === "saltmarket" ? saltmarketViews(ky)[params.get("view") ?? SALTMARKET_DEFAULT_VIEW] : undefined) ?? views[params.get("view") ?? "game"] ?? views.game!;

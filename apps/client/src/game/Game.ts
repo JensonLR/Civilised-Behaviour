@@ -1637,7 +1637,7 @@ export class Game {
     const clock = this.session.room.state; // the server-owned world clock: every player sees the same hour and the same weather
     if (clock.worldMs !== undefined && clock.dayMinutes !== undefined) {
       this.stage.syncWorldClock(clock.seed, clock.worldMs, clock.dayStartHour, clock.dayMinutes);
-      if (this.builtRegion === "hollowmere" || this.builtRegion === "kessar" || this.builtRegion === "saltmarket") noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera); // the folk (Hollowmere's village, Lampside's street: D-120, the Brinefolk at the pans: D-123): their seed, their hours, and where name tags and speech go
+      if (this.builtRegion === "hollowmere" || this.builtRegion === "kessar" || this.builtRegion === "saltmarket" || this.builtRegion === "highmark") noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera); // the folk (Hollowmere's village, Lampside's street: D-120, the Brinefolk at the pans: D-123, the Marchers of the capital: D-124): their seed, their hours, and where name tags and speech go
     }
     for (const [id, a] of this.actors) {
       if (!seen.has(id)) {
