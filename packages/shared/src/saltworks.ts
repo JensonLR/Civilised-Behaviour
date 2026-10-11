@@ -34,11 +34,19 @@ export interface SaltBund { x: number; z: number; hx: number; hz: number; height
 /** A windrow: raked salt in a low ridge along x (walkable). */
 export interface SaltRow { x: number; z: number; hx: number; hz: number; height: number }
 export interface SaltHeap { x: number; z: number; r: number; height: number; capped: boolean; house: number }
+/**
+ * D-123: a raker's hut in the row between the yard and the Customs Cut: a low reed-walled hut with a thatched ridge (`height` above the ground, kept low: from the boardwalk and
+ * the quay the row is under the line), facing the yard. Collision convention: local +x is its front (north, to the heaps), `hx` its half depth and `hz` its half width. The
+ * Brinefolk who live in it go in by a low door at the back, on the cut side (not a player's door: the front has a shuttered window and no way in).
+ */
+export interface SaltHut { id: string; x: number; z: number; yaw: number; hx: number; hz: number; height: number; wall: number }
 export interface SaltworksPlan {
   pans: SaltPan[];
   bunds: SaltBund[];
   rows: SaltRow[];
   heaps: SaltHeap[];
+  /** D-123: the rakers' row. */
+  huts: SaltHut[];
   /** Wooden sluice gates in the bunds, where the brine is let from one row of pans to the next (alternate ends: it zigzags). `along`: the bund runs along x. */
   sluices: { x: number; z: number }[];
   /** The brine pump: a lattice windpump astride the reservoir's north-east corner; its suction pipe runs east over the revetment into the Long Cut. */
@@ -56,6 +64,10 @@ const ZL = [18, 27, 35, 43, 51, 59, 67] as const;
 export const SALTWORKS = {
   /** The works' outer bounds (the bunds' centre-lines, then the yard to `yardZ1`). */
   x0: XL[0], x1: XL[3], z0: ZL[0], z1: ZL[6], yardZ1: 77,
+  /** D-123: the rakers' row's back (the huts and the path behind them, short of the Customs Cut's revetment). */
+  rowZ1: 82.8,
+  /** D-123: a hut: half depth (north-south) and half width, walls and ridge (the ridge low enough to keep the delta's line: `saltworks.test.ts` measures it). */
+  hut: { hx: 1.5, hz: 2.0, wall: 1.75, ridge: 2.6, z: 80.4, xs: [8.4, 13.4, 18.4, 23.4] },   // (the walls high enough that a Brinefolk leaning on the front stands clear of the eave)
   /** A bund's collider half-width and height (its drawn base is a little wider, its top a little narrower: a clay bank). */
   bund: { half: 0.3, height: 0.24, base: 0.38, top: 0.24 },
   /** The windrows: half-width and height. */
@@ -121,8 +133,11 @@ export function saltworksPlan(): SaltworksPlan {
     const c = r % 2 === 1 ? 2 : 0;
     sluices.push({ x: (XL[c]! + XL[c + 1]!) / 2, z: ZL[r]! });
   }
+  // D-123: the rakers' row, facing the heaps across the front lane, its backs to the Customs Cut
+  const H = SALTWORKS.hut;
+  const huts: SaltHut[] = H.xs.map((x, i) => ({ id: `hut${i}`, x, z: H.z, yaw: -Math.PI / 2, hx: H.hx, hz: H.hz, height: H.ridge, wall: H.wall }));
   cached = {
-    pans, bunds, rows, heaps, sluices,
+    pans, bunds, rows, heaps, huts, sluices,
     pump: { x: XL[3], z: ZL[0], r: 1.0, height: 10 },   // (on the reservoir's north-east corner: from the boardwalk it stands in line with the cove's derrick, a hair on the line that shuts no more of the horizon)
     barrows: [{ x: 9.1, z: 68.9, yaw: 0.25 }, { x: 20.1, z: 76.1, yaw: Math.PI + 0.4 }],
     rakes: [{ heap: 0, yaw: -0.6 }, { heap: 2, yaw: 2.4 }],
@@ -142,7 +157,7 @@ export function saltPanAt(x: number, z: number): SaltPan | undefined {
 function outside(x: number, z: number): number {
   const W = SALTWORKS, h = W.bund.base;
   const dx = Math.max(W.x0 - h - x, 0, x - W.x1 - h);
-  const dz = Math.max(W.z0 - h - z, 0, z - W.yardZ1);
+  const dz = Math.max(W.z0 - h - z, 0, z - W.rowZ1);
   return Math.hypot(dx, dz);
 }
 
@@ -170,7 +185,7 @@ export const SALTWORKS_PIPE = { y: 2.15, r: 0.09 } as const;
 
 /**
  * Everything solid of the works, appended after the rest of the delta: the bunds and the windrows (floors a walker steps onto), the heaps (a wide ring to chest height and a narrow one to
- * the shoulder: the cone's own shape, near enough for a bullet), the pump, the barrows. Tags: `bund` and `salt` are new (earth to a bullet); the pump is a `pole`, a barrow a `cart`.
+ * the shoulder: the cone's own shape, near enough for a bullet), the pump, the barrows, and (D-123) the rakers' huts, boxes to the ridge. Tags: `bund` and `salt` are new (earth to a bullet); the pump is a `pole`, a barrow a `cart`.
  */
 export function saltworksObstacles(terrain: Terrain): Obstacle[] {
   const plan = saltworksPlan();
@@ -195,6 +210,10 @@ export function saltworksObstacles(terrain: Terrain): Obstacle[] {
   for (const b of plan.barrows) {
     const y = g(b.x, b.z);
     out.push({ kind: "box", tag: "cart", x: b.x, z: b.z, hx: 0.85, hz: 0.36, yaw: b.yaw, y0: y - 0.2, y1: y + 0.72 });
+  }
+  for (const h of plan.huts) {
+    const y = g(h.x, h.z);
+    out.push({ kind: "box", tag: "house", x: h.x, z: h.z, hx: h.hx, hz: h.hz, yaw: h.yaw, y0: y - 0.3, y1: y + h.height });
   }
   return out;
 }

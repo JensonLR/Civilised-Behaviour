@@ -7,10 +7,12 @@ import { hash3 } from "./rng.ts";
  * dry and quite capable of managing the visitors back. Nothing here refers to any real people, nation or faith.
  */
 
-export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind;
+export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind | BrineLineKind;
 
 /** D-120: what Lampside's people say (Kessar's lower town): their own trades, and the Kessarine pools below instead of Hollowmere's. */
 export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kClerk" | "kElder" | "kChild";
+/** D-123: the Brinefolk at the Brine Houses' salt pans. */
+export type BrineLineKind = "bRaker" | "bBarrow" | "bSkim" | "bTally" | "bPump" | "bElder" | "bChild";
 
 const GENERAL: readonly string[] = [
   "Lovely day for not improving anything.",
@@ -25,7 +27,7 @@ const GENERAL: readonly string[] = [
   "Do sign the visitors' book. We press flowers in it.",
 ];
 
-const BY_KIND: Record<Exclude<LineKind, KessarLineKind>, readonly string[]> = {
+const BY_KIND: Record<Exclude<LineKind, KessarLineKind | BrineLineKind>, readonly string[]> = {
   keeper: [
     "It is very nearly the hour. It usually is.",
     "The hour is kept, not caught. Do sit.",
@@ -223,6 +225,88 @@ const KESSAR_FRIGHT: readonly string[] = [
 
 const isKessar = (k: LineKind): k is KessarLineKind => k in KESSAR_BY_KIND;
 
+/**
+ * D-123: the Brinefolk, delta waders who work the Brine Houses' pans: "who sell the tide by deed and everything else by the lot". The joke is the Houses' auctions and the
+ * Society's surveyors meeting people who have long since been sold, resold and counted, and find it all very funny; the Brinefolk themselves are dry, quick and amused.
+ */
+const BRINE_BY_KIND: Record<BrineLineKind, readonly string[]> = {
+  bRaker: [
+    "Rake it in rows. The Houses like to count it twice.",
+    "Lot nine's still drying. Lot nine was sold on Tuesday.",
+    "Salt's the only thing here that keeps.",
+    "Mind the windrows. That's somebody's dowry.",
+  ],
+  bBarrow: [
+    "Heap one's sold, heap two's bid, heap three's arguing.",
+    "Mind your boots. That's somebody's profit.",
+    "Forty barrows a day. The barrow gets a bead for each.",
+  ],
+  bSkim: [
+    "When it goes pink it's nearly salt. When it goes white it's nearly sold.",
+    "Skim the crust, leave the brine. Leave the bids to the Houses.",
+    "Rose, then white, then money. In that order, mostly.",
+  ],
+  bTally: [
+    "Every grain counted. The grains are not consulted.",
+    "Bids close at high water. Everything closes at high water.",
+    "One bead a barrow. Don't tell the beads.",
+    "Your Society bid on lot four. Lot four declined.",
+  ],
+  bPump: [
+    "The wind pumps, I watch. It's a partnership.",
+    "Brine in, salt out, the Houses in between.",
+    "She creaks when she's happy. She's never happy.",
+  ],
+  bElder: [
+    "I raked this pan when it was a different lot.",
+    "The Houses have changed their colours four times. The salt hasn't.",
+    "Salt's patient. The Houses aren't. That's the whole trade.",
+  ],
+  bChild: [
+    "I'm not allowed in the pink ones.",
+    "Bet you can't walk the bund with your eyes shut.",
+    "When I'm big I'll rake the white ones.",
+  ],
+};
+
+const BRINE_GENERAL: readonly string[] = [
+  "You're standing on lot twelve. That'll be a penny.",
+  "The Society wants to survey the salt. The salt has declined to be surveyed.",
+  "Everything here's for sale but the weather, and that's under offer.",
+  "Bought by the Houses, sold by the Houses, raked by us. Fair's fair.",
+  "We'd show you round, but you'd want a receipt.",
+];
+
+const BRINE_RAIN: readonly string[] = [
+  "Rain! Cover the heaps! Cover the bids!",
+  "Rain in the pans. Three days gone and the price up.",
+  "Indoors. The salt won't rake itself, and in this it won't even try.",
+];
+
+const BRINE_NIGHT: readonly string[] = [
+  "The pans sleep. The Houses don't.",
+  "Dark's free. The Houses haven't noticed.",
+  "Late for a bid. Early for a raking.",
+];
+
+const BRINE_GREET: readonly string[] = [
+  "Welcome to the pans. Mind the brine, it bites boots.",
+  "A visitor! Buying, or being sold to?",
+  "Morning. Don't stand on the windrows, they're spoken for.",
+  "Ah, the Society. Lot or no lot?",
+];
+
+/** D-123: shooting at the pans. */
+const BRINE_FRIGHT: readonly string[] = [
+  "Not in the pans! That's twelve lots of salt!",
+  "Into the hut! Leave the rake!",
+  "Who's shooting at the salt?",
+  "Down! Down in the brine!",
+  "That's the Society. Nobody else bids that loud.",
+];
+
+const isBrine = (k: LineKind): k is BrineLineKind => k in BRINE_BY_KIND;
+
 const RAIN: readonly string[] = [
   "It's only weather. Weather is very good at being weather.",
   "Under here, quick. The awning has never said no.",
@@ -256,6 +340,10 @@ const GREET: readonly string[] = [
 
 /** The line to show for a person: deterministic in (id, slot). `moment` picks a special pool; otherwise a mix of the person's own and the general pool. */
 export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" | "fright" = ""): string {
+  if (isBrine(kind)) {
+    const pool = moment === "rain" ? BRINE_RAIN : moment === "night" ? BRINE_NIGHT : moment === "greet" ? BRINE_GREET : moment === "fright" ? BRINE_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? BRINE_BY_KIND[kind] : BRINE_GENERAL;
+    return pool[hash3(id, slot, 11) % pool.length]!;
+  }
   if (isKessar(kind)) {
     const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? KESSAR_GREET : moment === "fright" ? KESSAR_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
@@ -266,5 +354,5 @@ export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | 
 
 /** Every line, for tests (tone and content checks). */
 export function allLines(): string[] {
-  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT];
+  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT];
 }

@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, Matrix4, Mesh, MeshToonMaterial, SphereGeometry, Vector3, type Object3D, type Scene, type ShaderMaterial } from "three";
-import { PALETTE, SALTMARKET_ANCHORS, saltmarketLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type SaltmarketTerrain, type ScenarioView } from "./shared.ts";
+import { PALETTE, SALTMARKET_ANCHORS, buildSaltworksFolk, saltmarketLevel, smoothstep, type CollisionWorld, type DayState, type RegionDress, type SaltmarketTerrain, type ScenarioView } from "./shared.ts";
 import { atmoUniforms, bakeGroundHeights, motion } from "../atmosphere.ts";
 import { createAmbientUniforms, buildBirds, buildLanternGlow, buildMotes, type AmbientUniforms } from "../ambient.ts";
 import { grassTuftGeometry, reedGeometry, type Lod } from "../flora.ts";
@@ -21,6 +21,7 @@ import { buildDeltaHorizon } from "./horizon.ts";
 import { planSaltmarketScatter, type SaltmarketScatter } from "./scatter.ts";
 import { buildSaltmarketPlanks, buildSaltmarketSolid } from "./structures.ts";
 import { buildSaltmarketWater } from "./water.ts";
+import { Villagers, folkBudget } from "../villagers.ts";
 
 const WHITE = new Color(1, 1, 1);
 /** Peak intensity of the room's fill light (see `InteriorFill`): enough that a warehouse's planks and the customs desk read in a still at noon. */
@@ -99,6 +100,28 @@ export class SaltmarketView implements RegionView {
     this.addAmbient();
     cullPlants(this.root); // (no plant grows through anything built)
     this.count();
+    this.addFolk();
+  }
+
+  // ---- the Brinefolk at the pans (D-123: the same schedule and bodies as Hollowmere's folk and Lampside's, on the salt works' own network) ----------
+
+  private folk?: Villagers;
+  private hours = 12;
+  private readonly walkers: { x: number; z: number }[] = [];
+  private walkerCount = 0;
+  private readonly folkFrame = { hours: 12, worldSec: 0, rain: 0, x: 0, y: 0, z: 0, walkers: this.walkers, walkerCount: 0 };
+  private lastT = -1;
+
+  private addFolk(): void {
+    if (!this.detail.villagers) return;
+    const budget = folkBudget(this.detail);
+    if (budget.count <= 0) return;
+    this.folk = new Villagers(this.scene, this.world, budget, 140, buildSaltworksFolk, "THE PANS");
+  }
+
+  /** The people at the pans: who is on stage, at what detail, and what it costs. */
+  get folkView(): Villagers | undefined {
+    return this.folk;
   }
 
   private track<T extends { dispose(): void }>(x: T): T {
@@ -359,6 +382,7 @@ export class SaltmarketView implements RegionView {
     setWindowNight(this.ambientU.uLamp.value); // (D-089: and so are the windows)
     this.ambientU.uLight.value.copy(this.tint);
     atmoUniforms.uHour.value = d.hours;
+    this.hours = d.hours;
   }
 
   /** The reeds and sedge bend away from up to four walkers (the same pusher slots the whole world uses). */
@@ -368,9 +392,28 @@ export class SaltmarketView implements RegionView {
       if (i < n && i < list.length) u.set(list[i]!.x, list[i]!.z, 1.5, 1);
       else u.set(0, 0, 1, 0);
     }
+    // (the Brinefolk turn their heads to the walkers and wave)
+    this.walkerCount = Math.min(n, list.length, 4);
+    for (let i = 0; i < this.walkerCount; i++) {
+      const w = (this.walkers[i] ??= { x: 0, z: 0 });
+      w.x = list[i]!.x;
+      w.z = list[i]!.z;
+    }
   }
 
   update(t: number, camera?: { x: number; y?: number; z: number }, worldSec?: number): void {
+    if (this.folk && camera) {
+      const f = this.folkFrame;
+      f.hours = this.hours;
+      f.worldSec = worldSec ?? t;
+      f.rain = atmoUniforms.uRain.value;
+      f.x = camera.x;
+      f.y = camera.y ?? 0;
+      f.z = camera.z;
+      f.walkerCount = this.walkerCount;
+      this.folk.update(this.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - this.lastT)), f);
+    }
+    this.lastT = t;
     worldTime.value = t;
     this.fill.update(t);
     if (camera) this.ambientU.uBaseY.value = this.world.terrainHeight(camera.x, camera.z);
@@ -382,6 +425,8 @@ export class SaltmarketView implements RegionView {
   }
 
   dispose(): void {
+    this.folk?.dispose();
+    this.folk = undefined;
     disposeTree(this.root as Object3D);
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;

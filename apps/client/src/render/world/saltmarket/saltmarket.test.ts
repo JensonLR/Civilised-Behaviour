@@ -12,6 +12,8 @@ import { regionSurfaceAt } from "../../../audio/surface.ts";
 import { PRESETS } from "../../../render/Stage.ts";
 import { saltmarketViews } from "../../../showcase/saltmarket.ts";
 import { createRegionView } from "../regionView.ts";
+import { noteFolkNoise } from "../folkFright.ts";
+import type { Villagers } from "../villagers.ts";
 import { ATLAS_H, ATLAS_W, BANNER_UV, buildSaltmarketCloth } from "./cloth.ts";
 import { FLOOD, floodLevel, floodTarget } from "./flood.ts";
 import { buildSaltmarketGround, buildSaltmarketSkirt, saltmarketCover, saltmarketGroundColour } from "./ground.ts";
@@ -475,5 +477,60 @@ describe("D-121: the Brine Houses' salt works, drawn", () => {
     expect(regionSurfaceAt("saltmarket", 14, 70)).toBe("mud");
     expect(regionSurfaceAt("saltmarket", -10, 40)).toBe("plank");
     expect(regionSurfaceAt("saltmarket", 14, 30, 0, 0.5)).toBe("water");   // (standing water is water wherever it is)
+  });
+});
+
+describe("D-123: the Brinefolk's row and the people who work the pans", () => {
+  const works = saltworksPlan();
+  const solid = buildSaltmarketSolid(world, 1);
+
+  it("draws each hut where its collider stands: walls on its four faces, the ridge at the collider's top and nothing above it, the folk's door at the back and a pane in the front", () => {
+    expect(works.huts).toHaveLength(4);
+    for (const h of works.huts) {
+      const c = Math.cos(h.yaw), s = Math.sin(h.yaw);
+      const local = (x: number, z: number): [number, number] => [(x - h.x) * c + (z - h.z) * s, -(x - h.x) * s + (z - h.z) * c];
+      const y0 = world.terrainHeight(h.x, h.z);
+      const mine: [number, number, number][] = [];
+      for (const geo of solid.geometries) {
+        const p = geo!.attributes.position!;
+        for (let i = 0; i < p.count; i++) {
+          const [lx, lz] = local(p.getX(i), p.getZ(i));
+          if (Math.abs(lx) <= h.hx + 0.35 && Math.abs(lz) <= h.hz + 0.35) mine.push([lx, p.getY(i) - y0, lz]);
+        }
+      }
+      const top = Math.max(...mine.map((v) => v[1]));
+      expect(top, `${h.id}: nothing drawn above its collider`).toBeLessThanOrEqual(h.height + 0.005);
+      expect(top, `${h.id}: its ridge`).toBeGreaterThan(h.height - 0.02);
+      // a wall on each face of the box, from the sill to the wall head
+      for (const [axis, side] of [[0, 1], [0, -1], [2, 1], [2, -1]] as const) {
+        const face = mine.filter((v) => Math.abs(v[axis] - side * (axis === 0 ? h.hx : h.hz)) < 0.01);
+        expect(face.some((v) => v[1] > h.wall - 0.05), `${h.id} face ${axis} ${side}: up to the wall head`).toBe(true);
+        expect(face.some((v) => v[1] < 0.15), `${h.id} face ${axis} ${side}: down to the sill`).toBe(true);
+      }
+      // the low plank door proud of the back (the cut side, where the folk's step is), and the window's pane in the front, facing the yard (north)
+      expect(mine.some((v) => v[0] < -h.hx - 0.04 && Math.abs(v[2]) < 0.4 && v[1] > 1.2 && v[1] < h.wall), `${h.id}: its back door`).toBe(true);
+      expect(solid.panes.some((q) => Math.abs(local(q.x, q.z)[0] - h.hx - 0.092) < 0.01 && Math.abs(local(q.x, q.z)[1]) < h.hz && q.nz < -0.99), `${h.id}: its window`).toBe(true);
+    }
+  });
+
+  it("the view puts the Brinefolk on the stage at work in the works by mid-morning, their slips say THE PANS, and a shot among them sends them down or indoors", () => {
+    const view = createRegionView("saltmarket", new Scene(), world, PRESETS.medium, sun);
+    const folk = (view as unknown as { folkView?: Villagers }).folkView;
+    expect(folk).toBeDefined();
+    view.applyDay(dayState(10, createDayState()));
+    for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: 14, y: 3, z: 60 }, 1 + i * 0.2);
+    const people = folk!.people!;
+    expect(people.folk.roster).toHaveLength(8);
+    expect(people.folk.roster.every((v) => v.people === "brinefolk" && / of Lot /.test(v.name))).toBe(true);
+    expect(people.poses.filter((p) => p.visible && inSaltworks(p.x, p.z, 0, 1)).length).toBeGreaterThanOrEqual(6);
+    expect(folk!.stats.visible).toBeGreaterThan(0);
+    expect((folk as unknown as { place: string }).place).toBe("THE PANS");
+    const before = people.poses.map((p) => p.visible);
+    noteFolkNoise(14, 55, "shot");
+    for (let i = 0; i < 90; i++) view.update(1.8 + i / 30, { x: 14, y: 3, z: 60 }, 1.8 + i / 30);
+    const after = folk!.people!.poses;
+    expect(after.filter((p, i) => p.act === "cower" || (before[i] && !p.visible) || (p.act === "walk" && p.speed > 2.5)).length).toBeGreaterThanOrEqual(4);
+    expect(after.some((_, i) => (folk!.stateOf(i)?.fear ?? 0) > 0.5)).toBe(true);
+    view.dispose();
   });
 });

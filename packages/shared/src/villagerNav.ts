@@ -22,7 +22,7 @@ const DS = 0.5;
 const GRID = { x0: -47, x1: 13, z0: -70, z1: -26, step: 2 };
 
 /** Obstacle tags that are FLOORS or stairs (walk on them under the step rule) rather than things in the way. */
-const SURFACE_TAGS: ReadonlySet<string> = new Set(["house", "jetty", "weir", "bridge"]);
+const SURFACE_TAGS: ReadonlySet<string> = new Set(["house", "jetty", "weir", "bridge", "bund"]);   // (D-123: the salt works' clay bunds are walked along)
 
 const face = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
 const faceTo = (x: number, z: number, tx: number, tz: number): number => face(tx - x, tz - z);

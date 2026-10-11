@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Brinefolk at the pans (D-123, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Four rakers' huts in the delta's merged solids (no draw of their own; their four panes join the windows' draw), eight Brinefolk on the folk machinery in the Saltmarket's view | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 55k / low 137k / medium 349,147 / high 493k** (were 54k / 137k / 347,075 / 490k). `SALTMARKET_VIEW_BUDGET` unchanged, never loosened: medium has **853 triangles** left, so the next thing drawn in the delta must pay for itself. Colliders 345 a seed (were 341; the cap is 420). The Brinefolk's network and roster build in ~0.1 s once per world and seed (39 stations); the people are their own root, under the same `FOLK_BUDGETS` as the hub (eight people, fewer than the hub's 22). |
+
 ## Hollowmere's folk (2026-09-30)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|
