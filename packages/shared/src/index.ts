@@ -79,6 +79,7 @@ export * from "./fields.ts";
 export * from "./hollowmereFields.ts";
 export * from "./lampside.ts";
 export * from "./lampsideFolk.ts";
+export * from "./relicWorks.ts";
 export * from "./saltworksFolk.ts";
 export * from "./highmarkFolk.ts";
 export * from "./staithe.ts";

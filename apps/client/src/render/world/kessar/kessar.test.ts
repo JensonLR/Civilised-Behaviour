@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
-import { LAMPSIDE_GARDENS, LAMPSIDE_SIGNS, buildLampsideFolk, createDayState, dayState, inLampside, kessarLevel, lampsidePlan } from "@cb/shared";
+import { LAMPSIDE_GARDENS, LAMPSIDE_SIGNS, RELIC_BOARDS, RELIC_SIGNS, buildLampsideFolk, createDayState, dayState, inLampside, inRelicWorks, kessarLevel, lampsidePlan, relicPlan } from "@cb/shared";
 import { applyPeople, generateCharacter } from "@cb/procedural";
 import { folkSpec } from "../villagerLooks.ts";
 import type { Villagers } from "../villagers.ts";
@@ -8,7 +8,7 @@ import { PRESETS } from "../../Stage.ts";
 import { WorldView } from "../WorldView.ts";
 import { noteFolkNoise } from "../folkFright.ts";
 import { createRegionView } from "../regionView.ts";
-import { ATLAS_H, ATLAS_W, buildKessarCloth, createKessarAtlas, plaqueUv } from "./cloth.ts";
+import { ATLAS_H, ATLAS_W, buildKessarCloth, createKessarAtlas, plaqueUv, signUv } from "./cloth.ts";
 import { buildKessarGround, buildKessarSkirt, kessarCover, kessarGroundColour, skirtY } from "./ground.ts";
 import { palmGeometry } from "./palms.ts";
 import { KESSAR, KESSAR_ANCHORS as A, KESSAR_SIGNS, createKessarWorld, kessarBridgeWreck, createRegionWorld, kessarPlan, type KessarTerrain } from "./shared.ts";
@@ -273,6 +273,53 @@ describe("D-119: Lampside drawn", () => {
     expect(kessarCover((green!.x0 + green!.x1) / 2, (green!.z0 + green!.z1) / 2, 0.5, 0)).toBeCloseTo(0, 6);
     expect(kessarCover((barley!.x0 + barley!.x1) / 2, (barley!.z0 + barley!.z1) / 2, 0.5, 0)).toBeCloseTo(0, 6);
     expect(kessarCover(0, -14, 0.5, 0)).toBeCloseTo(0, 6);
+  });
+});
+
+describe("D-129: the Relic Works drawn", () => {
+  it("draws the works' sealed door with its notice pinned on, its lamp, the stall's lamp and the kiln's glow (lit at night), and the works' one lit window onto the yard", () => {
+    const solid = buildKessarSolid(world, 1);
+    expect(solid.marks.filter((m) => m.id.startsWith("relic.")).map((m) => m.leads)).toEqual(["sealed"]);
+    const lamps = solid.lamps.filter((l) => inRelicWorks(l.x, l.z, 0, 0));
+    expect(lamps).toHaveLength(3);
+    for (const l of lamps) expect(l.lit).toBeUndefined();
+    // (the kiln's mouth glows low, at its fire; the door's and the stall's lamps hang over a head)
+    const k = relicPlan().kiln;
+    expect(lamps.filter((l) => Math.hypot(l.x - k.x, l.z - k.z) < k.half + 0.3 && l.y - world.terrainHeight(l.x, l.z) < 1)).toHaveLength(1);
+    expect(lamps.filter((l) => l.y - world.terrainHeight(l.x, l.z) > 1.8)).toHaveLength(2);
+    const panes = solid.panes.filter((p) => inRelicWorks(p.x, p.z, 0, 0));
+    expect(panes).toHaveLength(1);
+    // the pane looks west, onto the ageing yard (the street face is shuttered)
+    expect(panes[0]!.x).toBeLessThan(relicPlan().works.x);
+  });
+
+  it("letters its notice and both boards on the atlas, pins the notice on the door and hangs each board's words on its board", () => {
+    drawn.length = 0;
+    createKessarAtlas()?.dispose();
+    const words = drawn.join(" ");
+    for (const t of [...RELIC_SIGNS, ...RELIC_BOARDS]) for (const w of t.split(" ")) expect(words, t).toContain(w);
+    const cloth = buildKessarCloth(world.terrain)!;
+    const pos = cloth.attributes.position!.array as ArrayLike<number>;
+    const uv = cloth.attributes.uv!.array as ArrayLike<number>;
+    const inStrip = (i: number, [, v0, , v1]: readonly [number, number, number, number]): boolean => uv[i * 2 + 1]! >= v0 - 1e-6 && uv[i * 2 + 1]! <= v1 + 1e-6;
+    // the door's plaque: six vertices in the works' notice strip, at the works
+    const notice = plaqueUv(LAMPSIDE_SIGNS.length);
+    const w = relicPlan().works;
+    let onDoor = 0;
+    for (let i = 0; i < pos.length / 3; i++) if (inStrip(i, notice) && Math.hypot(pos[i * 3]! - w.x, pos[i * 3 + 2]! - w.z) < w.hx + 0.5) onDoor++;
+    expect(onDoor).toBe(6);
+    // each board: twelve vertices (both faces) in its own strip, within a board's half-length of its post
+    relicPlan().boards.forEach((b) => {
+      const strip = signUv(KESSAR_SIGNS.length + b.text);
+      let n = 0;
+      for (let i = 0; i < pos.length / 3; i++) if (inStrip(i, strip) && Math.hypot(pos[i * 3]! - b.x, pos[i * 3 + 2]! - b.z) < 1.4) n++;
+      expect(n, RELIC_BOARDS[b.text]).toBe(12);
+    });
+  });
+
+  it("keeps scrub and wild grass off its worked ground", () => {
+    const p = relicPlan();
+    for (const [x, z] of [[p.works.x + 3.4, p.works.z], [p.yard.x1 - 1, p.works.z + 0.5], [p.kiln.x + 2, p.kiln.z], [p.stall.x + 1.4, p.stall.z]] as const) expect(kessarCover(x, z, 0.5, 0), `${x},${z}`).toBeCloseTo(0, 6);
   });
 });
 
