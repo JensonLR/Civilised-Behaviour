@@ -7,8 +7,10 @@ import { createKessarWorld } from "./kessar.ts";
 import { REAL_WORLD_RE } from "./realWorld.ts";
 import { createSaltmarketWorld } from "./saltmarket.ts";
 import { buildSaltworksFolk } from "./saltworksFolk.ts";
-import { CLOISTER, createVesperWorld, vesperPlan, vesperSitePoints } from "./vesper.ts";
-import { buildVesperFolk, gorgeNav } from "./vesperFolk.ts";
+import { staithePlan } from "./staithe.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, inArrival } from "./stores.ts";
+import { CLOISTER, VESPER_MOUNT_SPOTS, createVesperWorld, vesperPlan, vesperSitePoints, vesperSpawn } from "./vesper.ts";
+import { STAITHE_LODGINGS, buildVesperFolk, gorgeNav } from "./vesperFolk.ts";
 import { createFolkClock, createVillagerPose, setFolkClock, villagerAt, villagerFright, villagerGreeting, type Folk, type FolkClock, type VillagerPose } from "./villagers.ts";
 import { allLines, pickLine } from "./villagerLines.ts";
 
@@ -36,17 +38,17 @@ describe("D-125: Vesper's folk", () => {
   const w = createVesperWorld(7);
   const folk = buildVesperFolk(w, 7);
 
-  it("are ten members of the gorge's institutions, each named for the one they belong to, with a trade, a bed (the cloister, the Assay House, the barge) and a day's work", () => {
-    expect(folk.roster).toHaveLength(10);
+  it("are fifteen members of the gorge's institutions, each named for the one they belong to, with a trade, a bed (the cloister, the Assay House, the barge; D-127: the Staithe's houses) and a day's work", () => {
+    expect(folk.roster).toHaveLength(15);
     for (const v of folk.roster) {
       expect(v.people).toBe("vesperine");
-      expect(v.name).toMatch(/ of the (Guild|Assay|Barge)$/);
-      expect(["guild", "assay", "barge"]).toContain(v.home);
+      expect(v.name).toMatch(/ of the (Guild|Assay|Barge|Company)$/);
+      expect(["guild", "assay", "barge", ...STAITHE_LODGINGS]).toContain(v.home);
       expect(v.stints.some((s) => folk.nav.stations[s.st]!.key === `in:${v.home}` && s.act === "sleep"), `${v.name} has a bed`).toBe(true);
       expect(v.stints.some((s) => !folk.nav.stations[s.st]!.hidden && s.act !== "idle"), `${v.name} has work`).toBe(true);
     }
-    expect(new Set(folk.roster.map((v) => v.name)).size).toBe(10);
-    for (const t of ["Bell-Warden", "Chorister", "Novice", "Senior Mourner", "Sample-Clerk", "Sample-Porter", "Bargee", "Barge-Hand"]) expect(folk.roster.some((v) => v.title === t), t).toBe(true);
+    expect(new Set(folk.roster.map((v) => v.name)).size).toBe(15);
+    for (const t of ["Bell-Warden", "Chorister", "Novice", "Senior Mourner", "Sample-Clerk", "Sample-Porter", "Bargee", "Barge-Hand", "Receiver", "Crepe-Keeper", "Weigher", "Miner, Off Shift"]) expect(folk.roster.some((v) => v.title === t), t).toBe(true);
     expect(buildVesperFolk(createVesperWorld(7), 7).roster.map((v) => v.name)).toEqual(folk.roster.map((v) => v.name));
     expect(buildVesperFolk(w, 7)).toBe(folk);
   });
@@ -57,7 +59,8 @@ describe("D-125: Vesper's folk", () => {
       const nav = gorgeNav(createVesperWorld(seed), why);
       expect(nav.stations.filter((s) => !s.ok).map((s) => `${s.key}: ${why.get(s.key)}`), `seed ${seed}`).toEqual([]);
       const from = nav.index.get("step:guild")!;
-      for (const k of ["bell", "arch:a", "arch:b", "sweep:a", "sweep:b", "lean:arch", "step:assay", "in:assay", "bin", "cart:0", "cart:1", "cart:2", "step:barge", "in:barge", "moor:w", "moor:e", "plank", "play:bank", "play:road"]) {
+      for (const k of ["bell", "arch:a", "arch:b", "sweep:a", "sweep:b", "lean:arch", "step:assay", "in:assay", "bin", "cart:0", "cart:1", "cart:2", "step:barge", "in:barge", "moor:w", "moor:e", "plank", "play:bank", "play:road",
+        "step:receiving", "in:receiving", "post", "watch:landing", "line:a", "line:b", "step:weigh", "in:weigh", "scale", "step:bunk1", "in:bunk1", "step:bunk2", "in:bunk2", "lean:rows:a", "lean:rows:b"]) {
         expect(nav.distance(from, nav.index.get(k)!), `seed ${seed} ${k}`).toBeLessThan(Infinity);
       }
       // the bargefolk stand on the deck, not the basin's floor
@@ -180,6 +183,47 @@ describe("D-125: Vesper's folk", () => {
     }
     expect(reading).toBeGreaterThan(150);
     expect(mooring).toBeGreaterThan(80);
+  });
+
+  it("D-127: the Staithe at work: the Receiver writing at the measuring post and watching the landing, the crepe hung on its line, the Weigher at the steelyard, the miners leaning at the Rows", () => {
+    const pose = createVillagerPose();
+    const st = staithePlan();
+    const counts = { post: 0, watch: 0, hang: 0, scale: 0, lean: 0 };
+    for (let i = 0; i < folk.roster.length; i++) {
+      const v = folk.roster[i]!;
+      for (let h = 7.5; h < 17.5; h += 0.05) {
+        villagerAt(folk, i, clockAt(7, h), pose);
+        if (!pose.visible || pose.act === "walk" || pose.act === "chat") continue;
+        const key = folk.nav.stations[pose.station]!.key;
+        if (v.title === "Receiver" && pose.act === "write") {
+          counts.post++;
+          expect(pose.carry).toBe("book");
+          expect(Math.hypot(pose.x - st.post.x, pose.z - st.post.z), `${v.name} by the post`).toBeLessThan(2);
+        }
+        if (v.title === "Receiver" && key === "watch:landing") counts.watch++;
+        if (v.title === "Crepe-Keeper" && pose.act === "hang") {
+          counts.hang++;
+          expect(Math.abs(pose.x - st.line.x), `${v.name} at the line`).toBeLessThan(1.4);
+          expect(pose.z).toBeGreaterThan(st.line.z0 - 0.5);
+          expect(pose.z).toBeLessThan(st.line.z1 + 0.5);
+        }
+        if (v.title === "Weigher" && pose.act === "write" && key === "scale") {
+          counts.scale++;
+          expect(Math.hypot(pose.x - st.gallows.panX, pose.z - st.gallows.z), `${v.name} by the pan`).toBeLessThan(1.6);
+        }
+        if (v.title === "Miner, Off Shift" && pose.act === "lean") {
+          counts.lean++;
+          expect(key.startsWith("lean:rows"), key).toBe(true);
+        }
+      }
+    }
+    for (const [k, n] of Object.entries(counts)) expect(n, k).toBeGreaterThan(20);
+    // nobody's place is in the party's arrival (the ring, the view up the road, the camera's ground) or among the horses
+    const arrival = arrivalCentre(vesperSpawn);
+    for (const s of folk.nav.stations) {
+      expect(inArrival(arrival, ARRIVAL_TOWARD, s.x, s.z, 0.4), s.key).toBe(false);
+      for (const m of VESPER_MOUNT_SPOTS.horses) expect(Math.hypot(s.x - m.x, s.z - m.z), `${s.key} by a horse`).toBeGreaterThan(3);
+    }
   });
 
   it("nobody stands in anybody, dry or wet", () => {
