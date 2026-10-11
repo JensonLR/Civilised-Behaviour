@@ -1,7 +1,8 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, PlaneGeometry } from "three";
-import { PALETTE, SALTMARKET, SALTWORKS, SALTWORKS_PIPE, hash3, insideFootprint, saltworksPlan, smoothstep, valueNoise, type CollisionWorld, type SaltHeap, type SaltPan } from "./shared.ts";
+import { PALETTE, SALTMARKET, SALTWORKS, SALTWORKS_PIPE, hash3, insideFootprint, saltworksPlan, smoothstep, valueNoise, type CollisionWorld, type SaltHeap, type SaltHut, type SaltPan } from "./shared.ts";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
+import { LIT_SHARE, type LitPane } from "../litWindows.ts";
 
 /**
  * D-121: the Brine Houses' salt works, drawn into the delta's merged solids (no draw of its own). Every piece stands where `saltworksPlan()` puts its collider: the clay bunds a walker
@@ -251,8 +252,92 @@ function pipe(k: Kit, world: CollisionWorld, y: number): void {
   box(k, [0.3, top - R - capY + 0.02, 0.3], [(rimIn + rimOut) / 2, (top - R + capY) / 2, z], P.tarPlankDark);
 }
 
+/** D-123: the thatch's thickness, and how far the roof overhangs the walls (front and back) and the gable ends. */
+const THATCH = 0.2, EAVE = 0.3, VERGE = 0.3;   // (EAVE under a body's radius: a player or a Brinefolk at the wall stands clear of it)
+/** Reed matting: upright bundles in two tones (the gable ends, and the hut's top hand above the daub). `along`: the local axis the wall runs along. */
+const reeds = (along: "x" | "z"): ColourFn => (q, _n, out) => {
+  blend(out, P.reed, P.reedDark, (Math.floor((along === "x" ? q.x : q.z) * 3.4 + 40) & 1) * 0.55);
+};
+/** The walls: reed mat daubed with the pans' own pale clay to `daub` (the bundles' ridges still show through), the foot splashed dark, the mat bare above the daub line. */
+const daubed = (along: "x" | "z", foot: number, daub: number, seed: number): ColourFn => (q, n, out) => {
+  const a = along === "x" ? q.x : q.z;
+  if (q.y > daub + h01(seed, a * 1.6) * 0.12) return reeds(along)(q, n, out);
+  blend(out, P.mudPale, P.siltPale, 0.25 + h01(seed + 1, a * 2.2, q.y * 3) * 0.45);
+  if (Math.floor(a * 3.4 + 40) & 1) blend(out, out.getHex(), P.mud, 0.12);
+  if (q.y < foot) blend(out, out.getHex(), P.mud, 0.6);
+};
+
+/**
+ * D-123: a Brinefolk hut. In its own frame (the collider's: local +x out of the front, to the yard; local z along it): a clay sill; walls `h.wall` high of reed mat daubed with
+ * the pans' clay (bare under the eaves) and reed gable ends; a thick thatched roof on a ridge along z whose ridge roll tops out at exactly `h.height` (the collider's top: nothing
+ * drawn above it, and the skyline test holds); corner posts; the low plank door at the back (the folk's: `step:hut*` is outside it) with its doorstep; a shuttered window in the
+ * front wall (a lit pane at night) and the hut's lot board above it; and a rake left leaning on the east gable. The elder's leaning place (`lean:hut*`, the front's west half) is bare.
+ */
+function hut(k: Kit, h: SaltHut, y: number, lod: Lod, i: number, panes: LitPane[] | undefined): void {
+  const hx = h.hx, hz = h.hz, wall = h.wall, sill = 0.12;
+  k.setBase(h.x, y, h.z, h.yaw);
+  box(k, [hx * 2 + 0.16, sill * 2, hz * 2 + 0.16], [0, 0, 0], (q, n, out) => blend(out, P.mud, P.mudPale, n.y > 0.5 ? 0.6 : 0.2 + h01(700 + i, q.x * 3, q.z * 3) * 0.3));
+  // the walls: a box of reed mat on the sill (its long faces run along z, its ends along x), the gable ends' triangles over the end walls
+  const wallH = wall - sill;
+  k.add(new BoxGeometry(hx * 2, wallH, hz * 2), { at: [0, sill + wallH / 2, 0], colour: (q, n, out) => daubed(Math.abs(n.x) > 0.5 ? "z" : "x", -wallH / 2 + 0.16, wallH / 2 - 0.3, 720 + i)(q, n, out), flat: true, perFace: true });
+  // the roof's pitch: the thatch's underside from the wall head (x = +-hx at `wall`) up to the ridge line, so its ridge roll's top is the collider's
+  const roll = 0.1, ridgeUnder = h.height - roll * 2 - 0.055;
+  const rise = ridgeUnder - wall, th = Math.atan2(rise, hx);
+  const gableGeo = new BufferGeometry();
+  const tri: number[] = [];
+  for (const s of [-1, 1]) {
+    // (each end's triangle wound to face out of its end)
+    const zz = s * (hz + 0.004);
+    const a = [-hx, wall, zz], b = [hx, wall, zz], c = [0, ridgeUnder, zz];
+    tri.push(...(s > 0 ? [...a, ...b, ...c] : [...b, ...a, ...c]));
+  }
+  gableGeo.setAttribute("position", new BufferAttribute(new Float32Array(tri), 3));
+  gableGeo.computeVertexNormals();
+  k.add(gableGeo, { at: [0, 0, 0], colour: reeds("x"), flat: true, perFace: true });
+  // two thick slabs of thatch, front and back, from the eave (overhanging the walls by EAVE) to the ridge, the verges past the gables by VERGE
+  const len = (hx + EAVE) / Math.cos(th);
+  for (const s of [-1, 1]) {
+    // the underside's middle, then out along the slope's normal by half the thatch
+    const ux = s * (hx + EAVE) / 2, uy = ridgeUnder - (rise / hx) * (hx + EAVE) / 2;
+    const nx = s * Math.sin(th), ny = Math.cos(th);
+    k.add(new BoxGeometry(len, THATCH, hz * 2 + VERGE * 2, lod ? 3 : 1, 1, lod ? 2 : 1), {
+      at: [ux + nx * THATCH / 2, uy + ny * THATCH / 2, 0], rot: [0, 0, -s * th],
+      colour: (q, n, out) => blend(out, P.thatchDark, P.thatch, (n.y > 0.5 ? 0.45 : 0.1) + h01(710 + i, q.x * 2.5, q.z * 2.5, s) * 0.4),
+      flat: true, perFace: true, jitter: lod ? 0.025 : 0, seed: 711 + i * 2 + (s > 0 ? 1 : 0),
+    });
+  }
+  // the ridge roll along the top, bound with two withies (whose tops are the hut's height)
+  const withy = 0.015, rollY = h.height - roll - withy;
+  k.add(new CylinderGeometry(roll, roll, hz * 2 + VERGE * 2 + 0.06, lod ? 6 : 4), { at: [0, rollY, 0], rot: [Math.PI / 2, 0, 0], colour: P.thatchDark, flat: true });
+  if (lod) for (const z of [-hz * 0.55, hz * 0.55]) k.add(new CylinderGeometry(roll + withy, roll + withy, 0.06, 6), { at: [0, rollY, z], rot: [Math.PI / 2, 0, 0], colour: P.reedDark, flat: true });
+  // corner posts, a hand proud of the mat, from below the sill to the wall head
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (hx - 0.02), -0.2, sz * (hz - 0.02)], [sx * (hx - 0.02), wall - 0.02, sz * (hz - 0.02)], 0.065, 0.06, P.tarPlankDark, 4);
+  // the back door: a low plank leaf in a frame, a doorstep before it
+  const doorH = 1.42, doorW = 0.72, back = -hx;
+  box(k, [0.06, doorH, doorW], [back - 0.03, sill + doorH / 2, 0], (q, _n, out) => blend(out, P.tarPlank, P.tarPlankDark, (Math.floor(q.z * 9 + 40) & 1) * 0.5));
+  box(k, [0.1, 0.08, doorW + 0.26], [back - 0.05, sill + doorH + 0.04, 0], P.tarPlankDark);   // (under the eave's thatch)
+  for (const s of [-1, 1]) box(k, [0.1, doorH, 0.08], [back - 0.05, sill + doorH / 2, s * (doorW / 2 + 0.05)], P.tarPlankDark);
+  box(k, [0.36, 0.1, doorW + 0.2], [back - 0.26, 0.02, 0], P.tarPlankLight);
+  if (!lod) return void k.clearBase();
+  // the front: a shuttered window east of the middle (its leaves swung back flat on the mat), the pane in it, a sill board, the lot board above
+  const wz = hz * 0.42, wy = sill + wallH * 0.56, front = hx;
+  box(k, [0.08, 0.58, 0.64], [front + 0.04, wy, wz], P.tarPlankDark);
+  for (const s of [-1, 1]) box(k, [0.04, 0.54, 0.3], [front + 0.02, wy, wz + s * 0.49], P.tarPlank);
+  box(k, [0.16, 0.05, 0.78], [front + 0.08, wy - 0.31, wz], P.tarPlankLight);
+  box(k, [0.03, 0.16, 0.46], [front + 0.015, wall - 0.14, wz], HOUSE[i % HOUSE.length]!);
+  if (panes) {
+    const a = k.worldPoint(front + 0.08 + 0.012, wy, wz), b = k.worldPoint(front + 1.08 + 0.012, wy, wz);
+    const nx = b[0] - a[0], nz = b[2] - a[2], l = Math.hypot(nx, nz) || 1;
+    panes.push({ x: a[0], y: a[1], z: a[2], nx: nx / l, nz: nz / l, w: 0.5, h: 0.46, lit: hash3(0x5a17, Math.round(a[0] * 10), Math.round(a[2] * 10)) / 4294967296 < LIT_SHARE });
+  }
+  // a rake left on the east gable: its head on the clay, its handle against the wall under the verge
+  k.limb([0.55, 0.06, hz + 0.42], [0.15, wall - 0.12, hz + 0.025], 0.022, 0.02, P.tarPlankLight, 4);
+  box(k, [0.6, 0.12, 0.05], [0.55, 0.06, hz + 0.44], P.tarPlank);
+  k.clearBase();
+}
+
 /** Everything of the works, each piece into the kit of its quarter of the map. The pump's tower is the caller's (a hair). */
-export function buildSaltworks(kitAt: (x: number, z: number) => Kit, world: CollisionWorld, lod: Lod): void {
+export function buildSaltworks(kitAt: (x: number, z: number) => Kit, world: CollisionWorld, lod: Lod, panes?: LitPane[]): void {
   const plan = saltworksPlan();
   const g = (x: number, z: number): number => world.terrainHeight(x, z);
   plan.pans.forEach((p, i) => {
@@ -270,4 +355,5 @@ export function buildSaltworks(kitAt: (x: number, z: number) => Kit, world: Coll
     rake(kitAt(h.x, h.z), h, r.yaw, g(h.x, h.z));
   }
   pipe(kitAt(plan.pump.x, plan.pump.z), world, g(plan.pump.x, plan.pump.z));
+  plan.huts.forEach((h, i) => hut(kitAt(h.x, h.z), h, g(h.x, h.z), lod, i, panes));
 }

@@ -720,7 +720,7 @@ export function buildSaltmarketSolid(world: CollisionWorld, lod: Lod): Saltmarke
   // D-121: the Brine Houses' salt works by the main boardwalk, and its brine pump (a windpump like the west pond's, with no chalk on it)
   const pump = saltworksPlan().pump;
   hair(kitAt(pump.x, pump.z), { x: pump.x, z: pump.z, kind: "windpump", r: pump.r, height: pump.height }, g(pump.x, pump.z), lod, plan.hairs.length);
-  buildSaltworks(kitAt, world, lod);
+  buildSaltworks(kitAt, world, lod, houseOut.panes);
   for (const l of plan.lamps) {
     const y = g(l.x, l.z);
     lamp(kitAt(l.x, l.z), l.x, l.z, y, l.h);
