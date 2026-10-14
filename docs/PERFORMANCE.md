@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Relic Works (D-129, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | The works, its kiln, the ageing yard's walls and beds (44 pot mouths), the drying shelf, the stall and two boards in Kessar's merged solid (no draw of their own; one lit pane joins the windows' draw, two boards and a notice the cloth's atlas) | Node, no GPU, `WORLD_STATS=1` (`kessar.test.ts` budgets) | Main-pass draws unchanged **15 / 19 / 29 / 29**; triangles **test 68,358 / low 105,590 / medium 292,121 / high 365,108** (were 67,530 / 104,896 / 283,812 / 356,693: +8.3k at medium, most of it the pot mouths, drawn only in the detailed solid). Kessar's ceilings (110k / 150k / 400k / 500k) unchanged. The cloth atlas grows three strips (512 x 2112, was 1824). |
+
 ## The Grange's hands (D-128, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

@@ -13,6 +13,7 @@ import { KESSAR_OUTPOST, rivalPostObstacles, withOutpost } from "./outpost.ts";
 import type { OutpostStage } from "./worldTypes.ts";
 import { bridgeWreckObstacles } from "./bridgeWreck.ts";
 import { LAMPSIDE, houseTop, inLampside, lampsideObstacles, lampsidePad, lampsidePlan } from "./lampside.ts";
+import { inRelicWorks, relicObstacles, relicPad, relicPlan } from "./relicWorks.ts";
 
 /**
  * KESSAR REACH, region 1: the authored plan (ONE pure description the terrain, the colliders, the props and the client's geometry all read, like
@@ -100,7 +101,7 @@ export function createKessarTerrain(seed: number): KessarTerrain {
     const run = kessarWallRun(x);
     const reach = w + run;
     let flat = 1 - smoothstep(reach + 1, reach + 16, ad);
-    flat = Math.max(flat, disc(x, z, 0, 6, 12, 14), disc(x, z, A.landing.x, A.landing.z, 9, 9), disc(x, z, A.rivalCamp.x, A.rivalCamp.z, 9, 9), disc(x, z, A.powder.x, A.powder.z, 7, 8), lampsidePad(x, z));   // (D-119: Lampside stands on levelled ground)
+    flat = Math.max(flat, disc(x, z, 0, 6, 12, 14), disc(x, z, A.landing.x, A.landing.z, 9, 9), disc(x, z, A.rivalCamp.x, A.rivalCamp.z, 9, 9), disc(x, z, A.powder.x, A.powder.z, 7, 8), lampsidePad(x, z), relicPad(x, z));   // (D-119: Lampside stands on levelled ground; D-129: the Relic Works too)
     h += (L - h) * flat;
     const hd = Math.hypot(x - F.x, z - F.z);
     if (hd < KESSAR.hillRadius) h += (L + KESSAR.hillRise - h) * (1 - smoothstep(KESSAR.hillPlateau, KESSAR.hillRadius, hd));
@@ -386,6 +387,8 @@ export function kessarLevel(): RegionLevel {
     ...p.sites.camp.tents.map((t, i) => planBuilding(`orchard.tent${i}`, "tent", { x: t.x, z: t.z, yaw: t.yaw, hx: 2, hz: 1.6 }, { height: 2.4, floor: 0, wallH: 2.4 })),
     // D-119: Lampside's houses, every door shut with the Ward's seal and a notice (docs/LEVEL_PLAN.md: the region's one interior stays the toll booth)
     ...lampsidePlan().houses.map((h) => planBuilding(`lampside.${h.id}`, "sealed", { x: h.x, z: h.z, yaw: h.yaw, hx: h.hx, hz: h.hz }, { height: houseTop(h), floor: 0, wallH: h.height, door: LAMPSIDE.door.width, doorH: LAMPSIDE.door.height, sign: h.sign })),
+    // D-129: the Relic Works on the west beach, its door sealed as Lampside's are
+    ...[relicPlan().works].map((h) => planBuilding(`relic.${h.id}`, "sealed", { x: h.x, z: h.z, yaw: h.yaw, hx: h.hx, hz: h.hz }, { height: houseTop(h), floor: 0, wallH: h.height, door: LAMPSIDE.door.width, doorH: LAMPSIDE.door.height, sign: h.sign })),
   ];
   cachedLevel = levelOf(buildings);
   return cachedLevel;
@@ -525,12 +528,15 @@ export function kessarObstacles(terrain: Terrain, seed: number, bridge: BridgeSt
   }
   // D-119: Lampside, the Ward's lower town between the toll bar and the fort's gate. The dressing above is drawn exactly as before; whatever of it stood in the town is not there
   // (a tree's crown keeps clear of the roofs and the palms), and the town's solids are appended after it with no random draws, so nothing else in Kessar has moved.
+  // D-129: the Relic Works on the west beach likewise (appended after the town).
   const dressed = out.splice(dressFrom);
   for (const o of dressed) {
     const r = o.kind === "circle" ? o.r : Math.hypot(o.hx, o.hz);
-    if (!inLampside(o.x, o.z, r, o.tag === "tree" ? 3.5 : 1)) out.push(o);
+    const m = o.tag === "tree" ? 3.5 : 1;
+    if (!inLampside(o.x, o.z, r, m) && !inRelicWorks(o.x, o.z, r, m)) out.push(o);
   }
   out.push(...lampsideObstacles(terrain));
+  out.push(...relicObstacles(terrain));
   // D-035: the Society's outpost. The seeded dressing above is computed exactly as before at EVERY stage; a stage above "none" then clears the scatter out of the outpost's
   // ring (the same set at every stage, so a stage change moves nothing else) and appends its own colliders, which draw no random numbers. "none" is today's world, byte for byte.
   // (and the Syndicate's own post, once it has one: appended last, so a world without it is the old world)

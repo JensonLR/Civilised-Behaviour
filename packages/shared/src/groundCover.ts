@@ -4,6 +4,7 @@ import { HIGHMARK, HIGHMARK_FIELDS, HIGHMARK_SITES, highmarkRoadness } from "./h
 import { fieldCover, fieldFuel } from "./fields.ts";
 import { HOLLOWMERE_FIELDS } from "./hollowmereFields.ts";
 import { LAMPSIDE_GARDENS, lampsideStreet } from "./lampside.ts";
+import { relicGround } from "./relicWorks.ts";
 import { KESSAR, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun } from "./kessar.ts";
 import { smoothstep } from "./math.ts";
 import { SALTMARKET } from "./saltmarket.ts";
@@ -30,8 +31,8 @@ export function kessarCover(x: number, z: number, h: number, slope: number): num
   const road = kessarRoad(x, z);
   const yard = 1 - smoothstep(9, 15, Math.hypot(x, z - 6));
   const gorge = 1 - smoothstep(0, 4.5, Math.abs(z - kessarRiverZ(x)) - kessarRiverHalf(x) - kessarWallRun(x) + 4.5);
-  // (D-119: Lampside's street and square are packed earth, and its gardens grow what is sown in them, not scrub)
-  const town = Math.max(lampsideStreet(x, z), fieldCover(LAMPSIDE_GARDENS, x, z));
+  // (D-119: Lampside's street and square are packed earth, and its gardens grow what is sown in them, not scrub; D-129: the Relic Works' ground is worked earth too)
+  const town = Math.max(lampsideStreet(x, z), fieldCover(LAMPSIDE_GARDENS, x, z), relicGround(x, z));
   const v = patch * (1 - beach) * (1 - road * 1.4) * (1 - yard) * (1 - gorge) * (1 - town) * (1 - smoothstep(0.3, 0.6, slope)) * (1 - smoothstep(KESSAR.level + 2, KESSAR.level + 4, h));
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }

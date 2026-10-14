@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Shape, SphereGeometry, Vector3 } from "three";
-import { LAMPSIDE, PALETTE, hash3, kessarLevel, lampsidePlan, type CollisionWorld, type LampsideHouse, type LampsideStall, type LampsideWall } from "@cb/shared";
+import { LAMPSIDE, PALETTE, hash3, kessarLevel, lampsidePlan, relicPlan, type CollisionWorld, type LampsideHouse, type LampsideStall, type LampsideWall, type RelicBed } from "@cb/shared";
 import { Kit, blend, type ColourFn, type V3 } from "../kit.ts";
 import type { Lod } from "../flora.ts";
 import { RoofKits, interiorShell, sealedDoor, type DoorMark, type RoofSource, type SealedStyle, type ShellStyle } from "../rooms.ts";
@@ -409,19 +409,22 @@ function tollStation(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: n
   void right;
 }
 
-function signposts(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number, z: number) => number): void {
-  for (const s of plan.signs) {
-    const y = terrain(s.x, s.z);
-    k.setBase(s.x, y, s.z, s.yaw);
-    // the post stops under the board, with two braces out to it (it ran up through the board and crossed the middle of the lettering on both faces)
-    k.limb([0, -0.3, 0], [0, 1.53, 0], 0.09, 0.075, K.timber, 5);
-    for (const sz of [-1, 1]) k.limb([0, 0.95, 0], [0, 1.53, sz * 0.75], 0.03, 0.03, K.timber, 3);
-    // (local +x is the board's FACE direction, so the board runs along local z)
-    box(k, [0.09, 0.52, 2.5], [0, 1.85, 0], K.wardCream);
-    box(k, [0.12, 0.06, 2.6], [0, 2.14, 0], K.timberLight);
-    box(k, [0.12, 0.06, 2.6], [0, 1.56, 0], K.timberLight);
-  }
+/** A signboard on its post (Kessar's own boards, and D-129's at the Relic Works): the lettering is the cloth's decal on both faces. */
+function signpost(k: Kit, s: { x: number; z: number; yaw: number }, terrain: (x: number, z: number) => number): void {
+  const y = terrain(s.x, s.z);
+  k.setBase(s.x, y, s.z, s.yaw);
+  // the post stops under the board, with two braces out to it (it ran up through the board and crossed the middle of the lettering on both faces)
+  k.limb([0, -0.3, 0], [0, 1.53, 0], 0.09, 0.075, K.timber, 5);
+  for (const sz of [-1, 1]) k.limb([0, 0.95, 0], [0, 1.53, sz * 0.75], 0.03, 0.03, K.timber, 3);
+  // (local +x is the board's FACE direction, so the board runs along local z)
+  box(k, [0.09, 0.52, 2.5], [0, 1.85, 0], K.wardCream);
+  box(k, [0.12, 0.06, 2.6], [0, 2.14, 0], K.timberLight);
+  box(k, [0.12, 0.06, 2.6], [0, 1.56, 0], K.timberLight);
   k.clearBase();
+}
+
+function signposts(k: Kit, plan: ReturnType<typeof kessarPlan>, terrain: (x: number, z: number) => number): void {
+  for (const s of plan.signs) signpost(k, s, terrain);
 }
 
 /** How far a ray from (x, z) along (dx, dz) (unit) travels before it meets a footprint: a box (yawed as `Kit.setBase` turns it) or a circle. 0 when it starts inside, Infinity on a miss. */
@@ -597,8 +600,8 @@ function bracketLamp(k: Kit, x: number, y: number, z: number, reach: number, out
  * storeys with a string course and a timber balcony over the door; shuttered windows below and lit ones above (D-089); the door SEALED with the Ward's paper seal (its notice is
  * the cloth's plaque) and a lamp on a bracket beside it; an awning over some. Drawn in the house's front frame: local z out of the street face, local x along the street.
  */
-function lampsideHouse(k: Kit, h: LampsideHouse, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut, seed: number): void {
-  const lb = kessarLevel().buildings.find((b) => b.id === `lampside.${h.id}`)!;
+function lampsideHouse(k: Kit, h: LampsideHouse, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut, seed: number, levelId = `lampside.${h.id}`): void {
+  const lb = kessarLevel().buildings.find((b) => b.id === levelId)!;
   const gy = terrain(h.x, h.z);
   // (the town's ground is levelled, but the walls reach under the lowest corner all the same)
   let lo = gy;
@@ -699,7 +702,7 @@ function lampsideHouse(k: Kit, h: LampsideHouse, terrain: (x: number, z: number)
 }
 
 /** A market stall: a counter on the customer's side, a backboard, four posts and an awning in the Ward's stripes falling toward the front, the goods (lamps, jars, a bolt of ward-blue cloth), and its lamp. */
-function lampsideStall(k: Kit, st: LampsideStall, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut, i: number): void {
+function lampsideStall(k: Kit, st: LampsideStall, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut, i: number, goods: (k: Kit, W: number, D: number) => void = townGoods): void {
   const gy = terrain(st.x, st.z);
   k.setBase(st.x, gy, st.z, st.yaw - Math.PI / 2);
   const W = st.hz, D = st.hx, H = st.height;
@@ -710,18 +713,20 @@ function lampsideStall(k: Kit, st: LampsideStall, terrain: (x: number, z: number
   const tilt = Math.atan2(0.45, D * 2);
   k.add(new BoxGeometry(W * 2 + 0.4, 0.06, D * 2 + 0.5, lod ? 6 : 1, 1, 1), { at: [0, H + 0.24, 0.05], rot: [tilt, 0, 0], colour: (p, n, o) => stripes(i)(new Vector3(p.z, p.y, p.x), n, o), flat: true, perFace: true });
   box(k, [W * 2 + 0.4, 0.2, 0.04], [0, H - 0.08, D + 0.29], (p, n, o) => stripes(i + 1)(new Vector3(p.z, p.y, p.x), n, o));
-  if (lod) {
-    // the goods: brass lamps (the town's trade), clay jars, a bolt of ward-blue cloth
-    for (let g = 0; g < 3; g++) {
-      const gx = -W + 0.45 + g * 0.42;
-      k.add(new CylinderGeometry(0.07, 0.1, 0.2, 6), { at: [gx, 1.11, D - 0.3], colour: gold, flat: true });
-      k.add(new CylinderGeometry(0.02, 0.02, 0.12, 4), { at: [gx + 0.08, 1.15, D - 0.3], rot: [0, 0, 1.1], colour: gold, flat: true });
-    }
-    for (let g = 0; g < 2; g++) k.add(new SphereGeometry(0.17, 7, 5), { at: [W - 0.45 - g * 0.4, 1.17, D - 0.32], scale: [1, 1.2, 1], colour: K.clay, flat: true });
-    k.add(new CylinderGeometry(0.12, 0.12, 0.7, 8), { at: [0.1, 1.13, D - 0.28], rot: [0, 0, Math.PI / 2], colour: K.wardBlue, flat: true });
-  }
+  if (lod) goods(k, W, D);
   bracketLamp(k, W - 0.07, H - 0.12, D - 0.07, 0.25, out);
   k.clearBase();
+}
+
+/** Lampside's stalls' goods on the counter (in the stall's frame: x along the counter, z out to the customer): brass lamps (the town's trade), clay jars, a bolt of ward-blue cloth. */
+function townGoods(k: Kit, W: number, D: number): void {
+  for (let g = 0; g < 3; g++) {
+    const gx = -W + 0.45 + g * 0.42;
+    k.add(new CylinderGeometry(0.07, 0.1, 0.2, 6), { at: [gx, 1.11, D - 0.3], colour: gold, flat: true });
+    k.add(new CylinderGeometry(0.02, 0.02, 0.12, 4), { at: [gx + 0.08, 1.15, D - 0.3], rot: [0, 0, 1.1], colour: gold, flat: true });
+  }
+  for (let g = 0; g < 2; g++) k.add(new SphereGeometry(0.17, 7, 5), { at: [W - 0.45 - g * 0.4, 1.17, D - 0.32], scale: [1, 1.2, 1], colour: K.clay, flat: true });
+  k.add(new CylinderGeometry(0.12, 0.12, 0.7, 8), { at: [0.1, 1.13, D - 0.28], rot: [0, 0, Math.PI / 2], colour: K.wardBlue, flat: true });
 }
 
 /** The town's well: a stone head with a dark shaft, a timber frame, its pulley, the rope and a bucket on the rim. */
@@ -787,6 +792,119 @@ function lampside(k: Kit, terrain: (x: number, z: number) => number, lod: Lod, o
   lampsideWalls(k, plan.walls, terrain, lod);
 }
 
+// ---- the Relic Works (D-129): antiquities made to order on the west beach -----------------------------------------------------------
+
+/** The stall's goods: two banded amphorae, three figurines, two clay tablets leaning on the backboard's side, and on its own plinth the bust of an ancient king in a pith helmet. */
+function relicGoods(k: Kit, W: number, D: number): void {
+  const top = 1.01;
+  const z = D - 0.3;
+  for (let g = 0; g < 2; g++) {
+    const gx = -W + 0.35 + g * 0.4;
+    k.add(new SphereGeometry(0.15, 8, 6), { at: [gx, top + 0.21, z], scale: [1, 1.4, 1], colour: K.clay, flat: true });
+    k.add(new CylinderGeometry(0.152, 0.152, 0.05, 8), { at: [gx, top + 0.22, z], colour: K.roofDark, flat: true });
+    k.add(new CylinderGeometry(0.05, 0.06, 0.13, 6), { at: [gx, top + 0.46, z], colour: K.clay, flat: true });
+    for (const sx of [-1, 1]) k.limb([gx + sx * 0.05, top + 0.47, z], [gx + sx * 0.13, top + 0.34, z], 0.016, 0.016, K.clay, 3);
+  }
+  for (let g = 0; g < 3; g++) {
+    const gx = -0.25 + g * 0.2;
+    k.add(new CylinderGeometry(0.035, 0.05, 0.17, 6), { at: [gx, top + 0.085, z + 0.05], colour: K.stoneShade, flat: true });
+    k.add(new SphereGeometry(0.045, 6, 4), { at: [gx, top + 0.2, z + 0.05], colour: K.stoneShade, flat: true });
+  }
+  for (let g = 0; g < 2; g++) box(k, [0.22, 0.28, 0.04], [0.32 + g * 0.27, top + 0.14, z - 0.12], K.clay, [-0.22, 0, 0]);
+  // the king: terracotta on a pale plinth, moustached, in a whitewashed pith helmet (what the Society wants to find, it finds)
+  const bx = W - 0.33;
+  box(k, [0.26, 0.14, 0.26], [bx, top + 0.07, z], K.stoneCap);
+  box(k, [0.34, 0.15, 0.2], [bx, top + 0.215, z], K.clay);
+  k.add(new CylinderGeometry(0.05, 0.06, 0.08, 6), { at: [bx, top + 0.32, z], colour: K.clay, flat: true });
+  k.add(new SphereGeometry(0.105, 8, 6), { at: [bx, top + 0.43, z], scale: [0.95, 1.05, 1], colour: K.clay, flat: true });
+  // a nose, and the moustache in two waxed halves swept down and out
+  box(k, [0.035, 0.05, 0.04], [bx, top + 0.43, z + 0.1], K.clay);
+  for (const sx of [-1, 1]) box(k, [0.075, 0.022, 0.03], [bx + sx * 0.04, top + 0.397, z + 0.098], K.timber, [0, 0, sx * -0.35]);
+  k.add(new SphereGeometry(0.125, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), { at: [bx, top + 0.46, z], scale: [1, 0.9, 1.08], colour: K.wardCream, flat: true });
+  k.add(new CylinderGeometry(0.19, 0.19, 0.02, 10), { at: [bx, top + 0.46, z], scale: [1, 1, 1.12], colour: K.wardCream, flat: true });
+}
+
+/** The kiln: a square of mud brick with a pale cap, its firing mouth to the east (dark, the embers red in it, a timber lintel) and its flue rising at the back. The mouth glows at night. */
+function relicKiln(k: Kit, kn: { x: number; z: number; half: number; height: number; flue: number }, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut): void {
+  const gy = terrain(kn.x, kn.z);
+  k.setBase(kn.x, gy, kn.z, 0);
+  const s = kn.half * 2, H = kn.height, drop = 0.3;
+  k.add(new BoxGeometry(s, H - 0.1 + drop, s, lod ? 3 : 1, lod ? 6 : 1, lod ? 3 : 1), { at: [0, (H - 0.1 - drop) / 2, 0], colour: mudBrick(560), flat: true, perFace: true });
+  box(k, [s + 0.08, 0.1, s + 0.08], [0, H - 0.05, 0], K.sandPale);
+  // (local +x is east: the mouth's face)
+  box(k, [0.04, 0.58, 0.64], [kn.half + 0.01, 0.5, 0], K.stoneDark);
+  box(k, [0.04, 0.24, 0.46], [kn.half + 0.02, 0.33, 0], K.wardRed);
+  box(k, [0.12, 0.1, 0.9], [kn.half + 0.04, 0.84, 0], K.timber);
+  const fl = kn.flue - H;
+  k.add(new BoxGeometry(0.5, fl + 0.05, 0.5, 1, lod ? 3 : 1, 1), { at: [-kn.half + 0.4, H + fl / 2 - 0.025, 0], colour: mudBrick(570), flat: true, perFace: true });
+  box(k, [0.6, 0.08, 0.6], [-kn.half + 0.4, kn.flue + 0.04, 0], K.sandPale);
+  if (lod) box(k, [0.3, 0.04, 0.3], [-kn.half + 0.4, kn.flue + 0.1, 0], K.stoneDark);
+  const f = k.worldPoint(kn.half + 0.06, 0.45, 0);
+  out.lamps.push({ x: f[0], y: f[1], z: f[2] });
+  k.clearBase();
+}
+
+/** An ageing bed: a heap of sand over two rows of buried pots, only their mouths showing (a few dug half out, ripe), and a stake with a paper tag at its north end. */
+function relicBed(k: Kit, b: RelicBed, terrain: (x: number, z: number) => number, lod: Lod, i: number): void {
+  const gy = terrain(b.x, b.z);
+  k.setBase(b.x, gy, b.z, 0);
+  const drop = 0.3;
+  k.add(new BoxGeometry(b.hx * 2, b.height - 0.1 + drop, b.hz * 2, 1, 1, lod ? 6 : 1), { at: [0, (b.height - 0.1 - drop) / 2, 0], colour: (p, n, o) => blend(o, K.sand, K.sandWet, n.y > 0.6 ? 0.1 : 0.45 + h01(700 + i, Math.floor((p.z + 9) / 1.4)) * 0.2), flat: true, perFace: true });
+  box(k, [b.hx * 2 - 0.22, 0.1, b.hz * 2 - 0.22], [0, b.height - 0.05, 0], K.sand);
+  if (lod) {
+    for (const lx of [-0.32, 0.32]) {
+      for (let j = 0, z = -b.hz + 0.5; z < b.hz - 0.3; z += 0.75, j++) {
+        const ripe = h01(710 + i, j, lx > 0 ? 1 : 0) > 0.86;
+        const y = b.height;
+        if (ripe) {
+          // dug half out: the shoulder above the sand, the neck and the lip
+          k.add(new SphereGeometry(0.14, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), { at: [lx, y - 0.02, z], colour: K.clay, flat: true });
+          k.add(new CylinderGeometry(0.06, 0.07, 0.12, 7), { at: [lx, y + 0.17, z], colour: K.clay, flat: true });
+          k.add(new CylinderGeometry(0.085, 0.085, 0.03, 7), { at: [lx, y + 0.24, z], colour: K.roofDark, flat: true });
+        } else {
+          k.add(new CylinderGeometry(0.11, 0.13, 0.05, 7), { at: [lx, y + 0.02, z], colour: K.clay, flat: true });
+          k.add(new CylinderGeometry(0.075, 0.075, 0.012, 7), { at: [lx, y + 0.045, z], colour: K.stoneDark, flat: true });
+        }
+      }
+    }
+  }
+  k.limb([0, b.height - 0.1, -b.hz + 0.12], [0, b.height + 0.62, -b.hz + 0.12], 0.025, 0.022, K.timber, 4);
+  box(k, [0.22, 0.14, 0.02], [0, b.height + 0.5, -b.hz + 0.1], K.wardCream);
+  k.clearBase();
+}
+
+/** The drying shelf against the works' south gable: two trestles, two planks, new pots and bowls drying pale (unfired) in the sun. */
+function relicShelf(k: Kit, sh: { x: number; z: number; hx: number; hz: number; height: number }, terrain: (x: number, z: number) => number, lod: Lod): void {
+  const gy = terrain(sh.x, sh.z);
+  k.setBase(sh.x, gy, sh.z, 0);
+  const H = sh.height;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.limb([sx * (sh.hx - 0.15), -0.1, sz * (sh.hz - 0.06)], [sx * (sh.hx - 0.15), H - 0.06, sz * (sh.hz - 0.06)], 0.035, 0.035, K.timber, 4);
+  box(k, [sh.hx * 2, 0.06, sh.hz * 2], [0, H - 0.03, 0], K.timberLight);
+  box(k, [sh.hx * 2 - 0.1, 0.05, sh.hz * 2 - 0.08], [0, 0.36, 0], K.timberLight);
+  if (lod) {
+    for (let g = 0; g < 7; g++) {
+      const gx = -sh.hx + 0.25 + g * 0.42;
+      const r = 0.1 + h01(720, g) * 0.06;
+      k.add(new SphereGeometry(r, 7, 5), { at: [gx, H + r * 1.1, 0], scale: [1, 1.25, 1], colour: K.sandPale, flat: true });
+      k.add(new CylinderGeometry(r * 0.4, r * 0.48, 0.1, 6), { at: [gx, H + r * 2.45 + 0.04, 0], colour: K.sandPale, flat: true });
+    }
+    for (let g = 0; g < 4; g++) k.add(new CylinderGeometry(0.15, 0.1, 0.1, 8), { at: [-sh.hx + 0.45 + g * 0.7, 0.435, 0], colour: K.stoneCap, flat: true });
+  }
+  k.clearBase();
+}
+
+/** The Relic Works, everything solid: the works (a Lampside house by type), its kiln, the ageing yard's walls and beds, the drying shelf, the stall and the two boards. */
+function relicWorks(k: Kit, terrain: (x: number, z: number) => number, lod: Lod, out: KessarOut): void {
+  const plan = relicPlan();
+  lampsideHouse(k, plan.works, terrain, lod, out, 640, `relic.${plan.works.id}`);
+  relicKiln(k, plan.kiln, terrain, lod, out);
+  lampsideWalls(k, plan.yard.walls, terrain, lod);
+  plan.beds.forEach((b, i) => relicBed(k, b, terrain, lod, i));
+  relicShelf(k, plan.shelf, terrain, lod);
+  lampsideStall(k, plan.stall, terrain, lod, out, 3, relicGoods);
+  for (const b of plan.boards) signpost(k, b, terrain);
+}
+
 /** Everything solid, merged. `collapsed` swaps the bridge for its stumps; `lod` 0 is the cheap shape the ink hull and the low preset use. */
 export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: BufferGeometry | undefined; collapsed: boolean; marks: DoorMark[]; lamps: { x: number; y: number; z: number; lit?: number }[]; roofs: RoofSource | undefined; panes: LitPane[] } {
   const plan = kessarPlan();
@@ -812,6 +930,7 @@ export function buildKessarSolid(world: CollisionWorld, lod: Lod): { geometry: B
   pier(k, plan, lod);
   camps(k, plan, terrain, lod);
   lampside(k, terrain, lod, out);
+  relicWorks(k, terrain, lod, out);
   k.clearBase();
   return { geometry: k.build(), collapsed: !intact, marks: out.marks, lamps: out.lamps, roofs: out.roofs.finish(), panes: out.panes };
 }

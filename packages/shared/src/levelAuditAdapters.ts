@@ -13,6 +13,7 @@ import { SITES, villageLevel } from "./village.ts";
 import { HIGHMARK_TRACKS, highmarkLevel, highmarkPlan, highmarkRoad, highmarkSitePoints, hillPoint } from "./highmark.ts";
 import { kessarLevel, kessarPlan, kessarSitePoints } from "./kessar.ts";
 import { inLampside } from "./lampside.ts";
+import { inRelicWorks, relicPlan } from "./relicWorks.ts";
 import { CLOISTER, VESPER_ANCHORS, vesperLevel, vesperPlan, vesperRoad, vesperSitePoints, vesperTracks } from "./vesper.ts";
 import { SALTMARKET_ANCHORS, saltmarketLevel, saltmarketPlan, saltmarketSitePoints } from "./saltmarket.ts";
 import { inSaltworks, saltworksPoints } from "./saltworks.ts";
@@ -170,6 +171,8 @@ export function kessarAdapter(seed: number): RegionAuditInput {
     if (t === "wall" && o.z > 8 && o.z < 32 && Math.abs(o.x) < 4.5) return { id: `bridge.rail@${r1(o.x)},${r1(o.z)}`, group: "bridge" };
     // D-119: Lampside's garden walls (their runs meet at the corners and the gate piers)
     if (t === "wall" && inLampside(o.x, o.z, 0, 1)) return { id: `lampside.wall@${r1(o.x)},${r1(o.z)}`, group: "lampside.walls", kind: "fence" };
+    // D-129: the Relic Works' ageing yard (walled as Lampside's gardens)
+    if (t === "wall" && inRelicWorks(o.x, o.z, 0, 1)) return { id: `relic.wall@${r1(o.x)},${r1(o.z)}`, group: "relic.walls", kind: "fence" };
     if (t === "bridge" && Math.abs(o.x) < 4.5) return { id: `bridge@${r1(o.x)},${r1(o.z)}`, group: "bridge" };
     if (t === "wall") return { id: `rim@${r1(o.x)},${r1(o.z)}`, group: "rim", kind: "fence" };
     return undefined;
@@ -186,6 +189,8 @@ export function kessarAdapter(seed: number): RegionAuditInput {
     ...kessarSitePoints(),
     // D-119: inside each of Lampside's gardens, through its gates (the path between the west garden's plots; the east garden's grove), and the square's well
     { id: "lampside.west", x: -28, z: -16.5 }, { id: "lampside.east", x: 23.8, z: -11.4 }, { id: "lampside.square", x: 10.6, z: -21 },
+    // D-129: the ageing yard's east lane, through its gate, and the stall's counter, from the road
+    { id: "relic.yard", x: relicPlan().yard.x1 - 1.3, z: relicPlan().works.z + 0.5 }, { id: "relic.stall", x: relicPlan().stall.x + 1.6, z: relicPlan().stall.z },
     // the fort's courtyard is inside the sealed curtain (drawn, not enterable): not a place anybody must reach
     { id: "A.fort", x: A.fort.x, z: A.fort.z },
   ];

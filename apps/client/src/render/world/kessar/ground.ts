@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, PlaneGeometry, SRGBColorSpace } from "three";
-import { LAMPSIDE_GARDENS, PALETTE, lampsideStreet, plotAt, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
+import { LAMPSIDE_GARDENS, PALETTE, lampsideStreet, plotAt, relicGround, smoothstep, valueNoise, type Rgb, type Terrain } from "@cb/shared";
 import { KESSAR, KESSAR_ANCHORS, kessarRiverHalf, kessarRiverZ, kessarRoad, kessarWallRun, type KessarTerrain } from "./shared.ts";
 import { kessarCover } from "@cb/shared";
 // (D-103: the cover functions live in shared, where the fire's fuel map reads them too)
@@ -78,10 +78,10 @@ export function kessarGroundColour(x: number, z: number, h: number, slope: numbe
     if (p.crop === "barley") mix(out, G.scrubDry, m * rowK * 0.55);
     else mix(out, G.scrubDeep, m * rowK * 0.6);
   }
-  // roads, the packed customs yard, and Lampside's street and square
+  // roads, the packed customs yard, Lampside's street and square, and the Relic Works' worked ground (D-129)
   const road = kessarRoad(x, z);
   const yard = (1 - smoothstep(8, 13, Math.hypot(x, z - 6))) * 0.85;
-  const worn = Math.max(road, yard, lampsideStreet(x, z) * 0.8);
+  const worn = Math.max(road, yard, lampsideStreet(x, z) * 0.8, relicGround(x, z) * 0.6);
   mix(out, G.road, worn * 0.85);
   mix(out, G.rut, road * smoothstep(0.55, 0.75, n3) * (1 - smoothstep(0.6, 0.95, road)) * 0.6 + road * smoothstep(0.9, 0.96, n2) * 0.25);
   // rocky slopes, then tonal variation

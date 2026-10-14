@@ -107,30 +107,21 @@ export const LAMPSIDE_GARDENS: readonly FieldPlot[] = [
   { id: "lampside.grove", x0: 19, x1: 33.6, z0: -23.6, z1: -7.4, row: 0.8, crop: "green" },
 ];
 
-let cached: LampsidePlan | undefined;
+/** A gate in a walled plot: on its north, south, east or west side, `at` the x (n, s) or z (e, w) of its middle, `width` clear. */
+export interface PlotGate {
+  side: "n" | "s" | "e" | "w";
+  at: number;
+  width: number;
+}
 
-export function lampsidePlan(): LampsidePlan {
-  if (cached) return cached;
-  const E = Math.PI;
-  const S = LAMPSIDE_SIGNS;
-  const houses: LampsideHouse[] = [
-    // the west side of the street, doors east onto it
-    { id: "w1", x: -9.0, z: -7.4, yaw: 0, hx: 3.4, hz: 2.8, height: 3.6, storeys: 1, roof: "flat", lime: true, awning: true, sign: S[0] },
-    { id: "w2", x: -9.6, z: -16.2, yaw: 0, hx: 3.8, hz: 3.0, height: 5.8, storeys: 2, roof: "tile", lime: false, awning: false, sign: S[1] },
-    { id: "w3", x: -8.8, z: -24.4, yaw: 0, hx: 3.0, hz: 2.4, height: 3.4, storeys: 1, roof: "flat", lime: false, awning: false, sign: S[2] },
-    // the east side, doors west
-    { id: "e1", x: 9.4, z: -7.0, yaw: E, hx: 3.2, hz: 2.6, height: 5.6, storeys: 2, roof: "tile", lime: true, awning: false, sign: S[3] },
-    { id: "e2", x: 9.0, z: -15.4, yaw: E, hx: 2.8, hz: 3.2, height: 3.4, storeys: 1, roof: "flat", lime: false, awning: true, sign: S[4] },
-  ];
-  // the square north of e2: the well in its middle, a stall on its east side (counter west) and one on its north (counter south, toward the street's end)
-  const stalls: LampsideStall[] = [
-    { id: "stall.e", x: 14.4, z: -21.6, yaw: E, hx: 0.7, hz: 1.3, height: 2.3 },
-    { id: "stall.n", x: 9.8, z: -27.4, yaw: Math.PI / 2, hx: 0.7, hz: 1.3, height: 2.3 },
-  ];
-  const walls: LampsideWall[] = [];
-  const gates: LampsidePlan["gates"] = [];
+/**
+ * The walls round a rectangular plot (Lampside's gardens, D-119; the Relic Works' ageing yard, D-129), pushed onto `walls`, with a gap at each of `gates` (pushed onto `gates`).
+ * Each solid stretch is cut into runs of at most `LAMPSIDE.wall.run` metres so each sits on its own ground, a pier at every run end that meets a gate. The north and south sides
+ * run the full width and over the corners, the east and west sides fit between them: no two runs overlap and no corner is notched.
+ */
+export function walledPlot(g: { x0: number; x1: number; z0: number; z1: number; gates: readonly PlotGate[] }, walls: LampsideWall[], gates: { x: number; z: number; width: number }[]): void {
   const W = LAMPSIDE.wall;
-  // a side of a garden from (ax, az) to (bx, bz), with gaps at `cuts` (distance along the side, width); each solid stretch cut into runs of at most `W.run`
+  // a side of a plot from (ax, az) to (bx, bz), with gaps at `cuts` (distance along the side, width)
   const side = (ax: number, az: number, bx: number, bz: number, cuts: { at: number; width: number }[]): void => {
     const len = Math.hypot(bx - ax, bz - az);
     const ux = (bx - ax) / len;
@@ -159,15 +150,37 @@ export function lampsidePlan(): LampsidePlan {
       }
     }
   };
-  for (const g of GARDENS) {
-    const cut = (s: string, along: (v: number) => number): { at: number; width: number }[] => g.gates.filter((q) => q.side === s).map((q) => ({ at: along(q.at), width: q.width }));
-    // (the corners: the north and south sides run the full width and over the corners, the east and west sides fit between them, so no two runs overlap and no corner is notched)
-    const h = W.half;
-    side(g.x0 - h, g.z1, g.x1 + h, g.z1, cut("s", (v) => v - (g.x0 - h)));
-    side(g.x0 - h, g.z0, g.x1 + h, g.z0, cut("n", (v) => v - (g.x0 - h)));
-    side(g.x0, g.z0 + h, g.x0, g.z1 - h, cut("w", (v) => v - (g.z0 + h)));
-    side(g.x1, g.z0 + h, g.x1, g.z1 - h, cut("e", (v) => v - (g.z0 + h)));
-  }
+  const cut = (s: string, along: (v: number) => number): { at: number; width: number }[] => g.gates.filter((q) => q.side === s).map((q) => ({ at: along(q.at), width: q.width }));
+  const h = W.half;
+  side(g.x0 - h, g.z1, g.x1 + h, g.z1, cut("s", (v) => v - (g.x0 - h)));
+  side(g.x0 - h, g.z0, g.x1 + h, g.z0, cut("n", (v) => v - (g.x0 - h)));
+  side(g.x0, g.z0 + h, g.x0, g.z1 - h, cut("w", (v) => v - (g.z0 + h)));
+  side(g.x1, g.z0 + h, g.x1, g.z1 - h, cut("e", (v) => v - (g.z0 + h)));
+}
+
+let cached: LampsidePlan | undefined;
+
+export function lampsidePlan(): LampsidePlan {
+  if (cached) return cached;
+  const E = Math.PI;
+  const S = LAMPSIDE_SIGNS;
+  const houses: LampsideHouse[] = [
+    // the west side of the street, doors east onto it
+    { id: "w1", x: -9.0, z: -7.4, yaw: 0, hx: 3.4, hz: 2.8, height: 3.6, storeys: 1, roof: "flat", lime: true, awning: true, sign: S[0] },
+    { id: "w2", x: -9.6, z: -16.2, yaw: 0, hx: 3.8, hz: 3.0, height: 5.8, storeys: 2, roof: "tile", lime: false, awning: false, sign: S[1] },
+    { id: "w3", x: -8.8, z: -24.4, yaw: 0, hx: 3.0, hz: 2.4, height: 3.4, storeys: 1, roof: "flat", lime: false, awning: false, sign: S[2] },
+    // the east side, doors west
+    { id: "e1", x: 9.4, z: -7.0, yaw: E, hx: 3.2, hz: 2.6, height: 5.6, storeys: 2, roof: "tile", lime: true, awning: false, sign: S[3] },
+    { id: "e2", x: 9.0, z: -15.4, yaw: E, hx: 2.8, hz: 3.2, height: 3.4, storeys: 1, roof: "flat", lime: false, awning: true, sign: S[4] },
+  ];
+  // the square north of e2: the well in its middle, a stall on its east side (counter west) and one on its north (counter south, toward the street's end)
+  const stalls: LampsideStall[] = [
+    { id: "stall.e", x: 14.4, z: -21.6, yaw: E, hx: 0.7, hz: 1.3, height: 2.3 },
+    { id: "stall.n", x: 9.8, z: -27.4, yaw: Math.PI / 2, hx: 0.7, hz: 1.3, height: 2.3 },
+  ];
+  const walls: LampsideWall[] = [];
+  const gates: LampsidePlan["gates"] = [];
+  for (const g of GARDENS) walledPlot(g, walls, gates);
   // the date palms: a row down the middle of each plot in the west garden, a grove of nine in the east (each a hand off its line and its own size). None stands in line
   // with a gate: the way in from each gate is clear to the path between the plots (the barley's row is set between the two east gates, the grove's rows and columns either
   // side of its gates).
