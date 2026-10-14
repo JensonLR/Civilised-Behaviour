@@ -43,6 +43,7 @@ import { MountPrompter } from "../render/mounts/mountPrompt.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
 import { noteFolk, type FolkVoice } from "../render/world/villagers.ts";
+import { noteFolkFire } from "../render/world/folkFright.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { CommandWheel, WHEEL_STAMPS } from "../ui/CommandWheel.ts";
 import { GloryPlates, type Plate } from "../ui/GloryPlates.ts";
@@ -1035,12 +1036,14 @@ export class Game {
     });
     this.fire.setPeople(this.burners, n);
     this.fire.update(dt, this.stage.worldMs, this.stage.camera.position);
+    this.fire.eachFlame(24, this.folkFlame); // (D-132: the townsfolk see it and keep away)
     const me = this.session.predicted;
     const near = me ? this.fire.nearest(this.session.value(me, "x"), this.session.value(me, "z")) : undefined;
     this.audio.fire(near ? near.d : Infinity, near ? near.n : 0, mine > 0);
     if (mine > 0 && !this.wasAlight) this.hud.showNotice("You're on fire! Crouch to roll it out, or get into water.");
     this.wasAlight = mine > 0;
   }
+  private readonly folkFlame = (x: number, z: number): void => void noteFolkFire(x, z, this.stage.worldMs / 1000);
   private readonly burners: BurningPerson[] = Array.from({ length: 12 }, () => ({ x: 0, y: 0, z: 0, left: 0, seed: 0 }));
   private wasAlight = false;
 

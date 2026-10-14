@@ -252,6 +252,15 @@ const KESSAR_FRIGHT: readonly string[] = [
   "Gunfire? We were promised a survey.",
 ];
 
+/** D-132: what the Kessarine cry when the grass is alight near them. */
+const KESSAR_FIRE: readonly string[] = [
+  "Fire in the grass! Sand, not water! Who taught them water?",
+  "Lamps in! It's lit enough out here!",
+  "Inside, little one! The fire doesn't care how small you are!",
+  "Somebody has improved the field again.",
+  "Smoke! Tell the Ward. Then tell the Ward to fetch a bucket.",
+];
+
 const isKessar = (k: LineKind): k is KessarLineKind => k in KESSAR_BY_KIND;
 
 /**
@@ -332,6 +341,13 @@ const BRINE_FRIGHT: readonly string[] = [
   "Who's shooting at the salt?",
   "Down! Down in the brine!",
   "That's the Society. Nobody else bids that loud.",
+];
+
+const BRINE_FIRE: readonly string[] = [
+  "Fire on the flats! Back to the pans! The brine won't burn!",
+  "The reeds are going! Wet the sacks!",
+  "Salt doesn't burn. We do. Move!",
+  "Smoke! Who brought a light to a salt field?",
 ];
 
 const isBrine = (k: LineKind): k is BrineLineKind => k in BRINE_BY_KIND;
@@ -427,6 +443,13 @@ const MARCHER_FRIGHT: readonly string[] = [
   "Is that the Society or the succession?",
 ];
 
+const MARCHER_FIRE: readonly string[] = [
+  "Fire! Fetch a magistrate! And a bucket! The bucket first!",
+  "Mind the granary! The court can burn, not the barley!",
+  "Who lit the common without a permit?",
+  "Smoke on the plain! Into the halls!",
+];
+
 const isMarcher = (k: LineKind): k is MarcherLineKind => k in MARCHER_BY_KIND;
 
 // ---- D-125: Vesper's folk (the gorge bills per outcome) --------------------------------------------------------------------------------
@@ -510,6 +533,13 @@ const GORGE_FRIGHT: readonly string[] = [
   "Into the cloister! Grieve later!",
 ];
 
+const GORGE_FIRE: readonly string[] = [
+  "Fire! Back from it! Grieve from a distance!",
+  "Smoke! The crepe will never come clean!",
+  "The scrub's alight! Into the cloister!",
+  "Mind the barges! Wood floats, and burns!",
+];
+
 const isGorge = (k: LineKind): k is GorgeLineKind => k in GORGE_BY_KIND;
 
 const RAIN: readonly string[] = [
@@ -535,6 +565,15 @@ const FRIGHT: readonly string[] = [
   "Not again! The geese had only just calmed down!",
 ];
 
+/** D-132: and the Mereborn, when the grass goes up. */
+const BLAZE: readonly string[] = [
+  "Fire! Fetch the buckets! Not those buckets!",
+  "The thatch! Mind the thatch!",
+  "Get the geese out first. They'll only complain otherwise.",
+  "Fire in the meadow! Is this the survey?",
+  "Somebody's set the field alight. Somebody in boots.",
+];
+
 const GREET: readonly string[] = [
   "Good day. Please don't improve anything.",
   "A visitor! Do keep to the path we didn't make.",
@@ -544,28 +583,28 @@ const GREET: readonly string[] = [
 ];
 
 /** The line to show for a person: deterministic in (id, slot). `moment` picks a special pool; otherwise a mix of the person's own and the general pool. */
-export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" | "fright" = ""): string {
+export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | "rain" | "night" | "greet" | "fright" | "fire" = ""): string {
   if (isGorge(kind)) {
-    const pool = moment === "rain" ? GORGE_RAIN : moment === "night" ? GORGE_NIGHT : moment === "greet" ? GORGE_GREET : moment === "fright" ? GORGE_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? GORGE_BY_KIND[kind] : GORGE_GENERAL;
+    const pool = moment === "rain" ? GORGE_RAIN : moment === "night" ? GORGE_NIGHT : moment === "greet" ? GORGE_GREET : moment === "fright" ? GORGE_FRIGHT : moment === "fire" ? GORGE_FIRE : hash3(id, slot, 3) % 5 < 3 ? GORGE_BY_KIND[kind] : GORGE_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
   if (isMarcher(kind)) {
-    const pool = moment === "rain" ? MARCHER_RAIN : moment === "night" ? MARCHER_NIGHT : moment === "greet" ? MARCHER_GREET : moment === "fright" ? MARCHER_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? MARCHER_BY_KIND[kind] : MARCHER_GENERAL;
+    const pool = moment === "rain" ? MARCHER_RAIN : moment === "night" ? MARCHER_NIGHT : moment === "greet" ? MARCHER_GREET : moment === "fright" ? MARCHER_FRIGHT : moment === "fire" ? MARCHER_FIRE : hash3(id, slot, 3) % 5 < 3 ? MARCHER_BY_KIND[kind] : MARCHER_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
   if (isBrine(kind)) {
-    const pool = moment === "rain" ? BRINE_RAIN : moment === "night" ? BRINE_NIGHT : moment === "greet" ? BRINE_GREET : moment === "fright" ? BRINE_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? BRINE_BY_KIND[kind] : BRINE_GENERAL;
+    const pool = moment === "rain" ? BRINE_RAIN : moment === "night" ? BRINE_NIGHT : moment === "greet" ? BRINE_GREET : moment === "fright" ? BRINE_FRIGHT : moment === "fire" ? BRINE_FIRE : hash3(id, slot, 3) % 5 < 3 ? BRINE_BY_KIND[kind] : BRINE_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
   if (isKessar(kind)) {
-    const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? (isRelic(kind) ? RELIC_GREET : KESSAR_GREET) : moment === "fright" ? KESSAR_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
+    const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? (isRelic(kind) ? RELIC_GREET : KESSAR_GREET) : moment === "fright" ? KESSAR_FRIGHT : moment === "fire" ? KESSAR_FIRE : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
-  const pool = moment === "rain" ? RAIN : moment === "night" ? NIGHT : moment === "greet" ? GREET : moment === "fright" ? FRIGHT : hash3(id, slot, 3) % 5 < 3 ? BY_KIND[kind] : GENERAL;
+  const pool = moment === "rain" ? RAIN : moment === "night" ? NIGHT : moment === "greet" ? GREET : moment === "fright" ? FRIGHT : moment === "fire" ? BLAZE : hash3(id, slot, 3) % 5 < 3 ? BY_KIND[kind] : GENERAL;
   return pool[hash3(id, slot, 11) % pool.length]!;
 }
 
 /** Every line, for tests (tone and content checks). */
 export function allLines(): string[] {
-  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...RELIC_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT, ...GORGE_GENERAL, ...Object.values(GORGE_BY_KIND).flat(), ...GORGE_RAIN, ...GORGE_NIGHT, ...GORGE_GREET, ...GORGE_FRIGHT];
+  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...BLAZE, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...RELIC_GREET, ...KESSAR_FRIGHT, ...KESSAR_FIRE, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...BRINE_FIRE, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT, ...MARCHER_FIRE, ...GORGE_GENERAL, ...Object.values(GORGE_BY_KIND).flat(), ...GORGE_RAIN, ...GORGE_NIGHT, ...GORGE_GREET, ...GORGE_FRIGHT, ...GORGE_FIRE];
 }

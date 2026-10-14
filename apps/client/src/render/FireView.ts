@@ -271,6 +271,21 @@ export class FireView {
     return this.nCells;
   }
 
+  /** D-132: up to `max` of the burning cells in turn (a window that moves on each call, so every cell is told within a few frames), then everybody alight: for the townsfolk to see. */
+  eachFlame(max: number, fn: (x: number, z: number) => void): void {
+    const g = this.grid;
+    if (g && this.nCells > 0) {
+      const m = Math.min(max, this.nCells);
+      for (let j = 0; j < m; j++) {
+        const c = this.cells[(this.flameAt + j) % this.nCells]!;
+        fn(g.centreX(c), g.centreZ(c));
+      }
+      this.flameAt = (this.flameAt + m) % this.nCells;
+    }
+    for (let i = 0; i < this.nPeople; i++) fn(this.people[i]!.x, this.people[i]!.z);
+  }
+  private flameAt = 0;
+
   /** One frame. `cam` is where the lens is: smoke right against it thins away, so a player downwind of a fire still sees where they are going. */
   update(dt: number, worldMs: number, cam?: { x: number; y: number; z: number }): void {
     this.t += dt;

@@ -208,14 +208,14 @@ export class Villagers {
   private frame = 0;
   /** When the last body was built (ms): a cold build is 10-50 ms of JavaScript, so they are spread out rather than done in a burst. */
   private lastBuild = -1e9;
-  /** D-122: how many noises (shots, blasts) have been heard so far; a new crowd hears none from before it was made. */
+  /** D-122: how many noises (shots, blasts; D-132: flames) have been heard so far; a new crowd hears none from before it was made. */
   private heard = folkNoiseCount();
-  private readonly hear = (x: number, z: number, r: number, seq: number): void => {
+  private readonly hear = (x: number, z: number, r: number, seq: number, fire: boolean): void => {
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i]!;
-      if (!hearFright(slot.fright, this.poses[i]!, x, z, r, this.nowSec, seq, i)) continue;
+      if (!hearFright(slot.fright, this.poses[i]!, x, z, r, this.nowSec, seq, i, fire)) continue;
       slot.flinch = true;
-      slot.frightLine = villagerFright(this.folk!.roster[i]!, seq + i);
+      slot.frightLine = villagerFright(this.folk!.roster[i]!, seq + i, fire);
       slot.frightT = 3.6;
     }
   };
