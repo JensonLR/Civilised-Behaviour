@@ -970,7 +970,7 @@ export function villagerGreeting(v: Villager, slot: number): string {
   return pickLine(v.lines, v.id, slot, "greet");
 }
 
-/** D-122: what somebody cries out when the shooting starts near them (their people's own pool). */
-export function villagerFright(v: Villager, slot: number): string {
-  return pickLine(v.lines, v.id, slot + 0x2b5, "fright");   // (offset: a slot equal to the id would always pick the same line)
+/** D-122: what somebody cries out when the shooting starts near them (their people's own pool); D-132: or when the grass goes up near them (`fire`). */
+export function villagerFright(v: Villager, slot: number, fire = false): string {
+  return pickLine(v.lines, v.id, slot + 0x2b5, fire ? "fire" : "fright");   // (offset: a slot equal to the id would always pick the same line)
 }

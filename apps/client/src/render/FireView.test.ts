@@ -89,6 +89,31 @@ describe("D-103: the fire as the clients draw it", () => {
     expect(view.nearest(3, 4)).toEqual({ d: 0, n: 1 });
   });
 
+  it("D-132: the flames are shown to the townsfolk a window of cells at a time, every burning cell within a few frames, and everybody alight every frame", () => {
+    const scene = new Scene();
+    const view = new FireView(scene);
+    view.setRegion("highmark", world, 7);
+    const { g, burning } = serverFire(80);
+    view.sync(burning, "");
+    view.setPeople([{ x: 3, y: world.terrainHeight(3, 4), z: 4, left: 4, seed: 9 }], 1);
+    const want = new Set<string>();
+    g.forEachBurning((c) => void want.add(`${g.centreX(c)},${g.centreZ(c)}`));
+    const seen = new Set<string>();
+    let perCall = 0, people = 0;
+    const calls = Math.ceil(g.burning / 24);
+    for (let k = 0; k < calls; k++) {
+      perCall = 0;
+      view.eachFlame(24, (x, z) => {
+        perCall++;
+        if (x === 3 && z === 4) people++;
+        else seen.add(`${x},${z}`);
+      });
+      expect(perCall).toBeLessThanOrEqual(25);
+    }
+    expect(seen).toEqual(want);
+    expect(people).toBe(calls);
+  });
+
   it("a new region forgets the old scorch", () => {
     const scene = new Scene();
     const view = new FireView(scene);

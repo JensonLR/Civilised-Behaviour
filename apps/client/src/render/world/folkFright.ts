@@ -31,35 +31,67 @@ export const FRIGHT = {
   /** How long the hand-back to the schedule takes (s), and how far apart the two may be for it to be a blend rather than another walk (m). */
   blend: 0.8,
   blendNear: 2.5,
+  /** D-132: burning ground is seen and smelt, not heard far: it frightens within `fireR` (m). A refuge must stand `fireClear` from it, and a run passes no nearer than `firePass`. */
+  fireR: 16,
+  fireClear: 10,
+  firePass: 4,
+  /** From fire even the old get up and go, at this share of a run. */
+  fireElder: 0.55,
+  /** One place's flames are told again only after `fireAgain` seconds, or `fireApart` metres on (a spreading fire is a few noises a second, never hundreds). */
+  fireAgain: 2,
+  fireApart: 6,
 } as const;
 
 // ---- what was heard --------------------------------------------------------------------------------------------------------------------------------------
 
-/** The kind of noise and so how far it carries. */
-export type FolkNoiseKind = "shot" | "blast";
+/** The kind of noise and so how far it carries (D-132: and fire, which is seen rather than heard). */
+export type FolkNoiseKind = "shot" | "blast" | "fire";
 
 const RING = 32;
 const noiseX = new Float64Array(RING);
 const noiseZ = new Float64Array(RING);
 const noiseR = new Float64Array(RING);
+const noiseFire = new Uint8Array(RING);
 let noiseSeq = 0;
 
-/** A noise somewhere in the world (CombatView: every shot it draws, every cannon and every blast). */
+/** A noise somewhere in the world (CombatView: every shot it draws, every cannon and every blast; `noteFolkFire`: the flames). */
 export function noteFolkNoise(x: number, z: number, kind: FolkNoiseKind): void {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return;
   const i = noiseSeq % RING;
   noiseX[i] = x;
   noiseZ[i] = z;
-  noiseR[i] = kind === "blast" ? FRIGHT.blastR : FRIGHT.shotR;
+  noiseR[i] = kind === "blast" ? FRIGHT.blastR : kind === "fire" ? FRIGHT.fireR : FRIGHT.shotR;
+  noiseFire[i] = kind === "fire" ? 1 : 0;
   noiseSeq++;
+}
+
+const FIRE_RING = 16;
+const fireX = new Float64Array(FIRE_RING);
+const fireZ = new Float64Array(FIRE_RING);
+const fireT = new Float64Array(FIRE_RING).fill(-Infinity);
+let fireSeq = 0;
+
+/**
+ * D-132: flames at (x, z) at `now` seconds (the game: a few burning cells a frame, in turn, and everybody alight). Told as a fire noise unless the same place was told
+ * within `fireAgain` seconds, so a fire that keeps burning keeps them away and a wildfire's hundred cells are a handful of noises. Returns whether it was told.
+ */
+export function noteFolkFire(x: number, z: number, now: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+  for (let k = 0; k < FIRE_RING; k++) if (now - fireT[k]! < FRIGHT.fireAgain && now >= fireT[k]! && Math.hypot(fireX[k]! - x, fireZ[k]! - z) < FRIGHT.fireApart) return false;
+  const i = fireSeq++ % FIRE_RING;
+  fireX[i] = x;
+  fireZ[i] = z;
+  fireT[i] = now;
+  noteFolkNoise(x, z, "fire");
+  return true;
 }
 
 /** How many noises there have been (a reader keeps the count it has seen). */
 export const folkNoiseCount = (): number => noiseSeq;
 
 /** Every noise after the `since`-th (at most the last 32), oldest first; returns the new count to keep. */
-export function eachFolkNoise(since: number, fn: (x: number, z: number, r: number, seq: number) => void): number {
-  for (let s = Math.max(since, noiseSeq - RING); s < noiseSeq; s++) fn(noiseX[s % RING]!, noiseZ[s % RING]!, noiseR[s % RING]!, s);
+export function eachFolkNoise(since: number, fn: (x: number, z: number, r: number, seq: number, fire: boolean) => void): number {
+  for (let s = Math.max(since, noiseSeq - RING); s < noiseSeq; s++) fn(noiseX[s % RING]!, noiseZ[s % RING]!, noiseR[s % RING]!, s, noiseFire[s % RING] === 1);
   return noiseSeq;
 }
 
@@ -101,9 +133,11 @@ export interface Fright {
   fear: number;
   /** The noise that started this fright (its line is picked from it). */
   noise: number;
+  /** D-132: it was flames: everybody goes, and not toward them. */
+  fire: boolean;
 }
 
-export const createFright = (): Fright => ({ mode: FEAR.none, since: 0, calmAt: 0, sx: 0, sz: 0, x: 0, y: 0, z: 0, facing: 0, ax: 0, ay: 0, az: 0, af: 0, route: undefined, lead: 0, s: 0, speed: 0, goal: -1, tries: 0, seated: false, at: -1, fear: 0, noise: -1 });
+export const createFright = (): Fright => ({ mode: FEAR.none, since: 0, calmAt: 0, sx: 0, sz: 0, x: 0, y: 0, z: 0, facing: 0, ax: 0, ay: 0, az: 0, af: 0, route: undefined, lead: 0, s: 0, speed: 0, goal: -1, tries: 0, seated: false, at: -1, fear: 0, noise: -1, fire: false });
 
 const h01 = (a: number, b: number, c: number): number => hash3(a >>> 0, b >>> 0, c >>> 0) / 4294967296;
 const face = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
@@ -112,9 +146,9 @@ const pt = { x: 0, z: 0, y: 0, tx: 0, tz: -1, clear: 0 };
 
 /**
  * Somebody hears a noise at (x, z) that carries `r` metres, at world second `now`. Returns true when it frightens somebody who was at ease (the caller flinches the
- * body and gives them a line). Nobody indoors or asleep hears it; whoever is already frightened just stays in longer.
+ * body and gives them a line). Nobody indoors or asleep hears it; whoever is already frightened just stays in longer. `fire`: it is flames (D-132).
  */
-export function hearFright(f: Fright, pose: VillagerPose, x: number, z: number, r: number, now: number, seq: number, who: number): boolean {
+export function hearFright(f: Fright, pose: VillagerPose, x: number, z: number, r: number, now: number, seq: number, who: number, fire = false): boolean {
   if (f.mode === FEAR.none && (!pose.visible || pose.act === "sleep")) return false;
   const px = f.mode === FEAR.none ? pose.x : f.x;
   const pz = f.mode === FEAR.none ? pose.z : f.z;
@@ -122,7 +156,8 @@ export function hearFright(f: Fright, pose: VillagerPose, x: number, z: number, 
   if (d > r) return false;
   const calm = now + FRIGHT.calm + h01(who, seq, 0x51) * FRIGHT.calmJitter;
   f.calmAt = Math.max(f.calmAt, calm);
-  if (f.mode !== FEAR.none && f.mode !== FEAR.back && f.mode !== FEAR.blend) return false;
+  // (somebody down where they stand for a shot gets up and goes when the flames come near: D-132)
+  if (f.mode !== FEAR.none && f.mode !== FEAR.back && f.mode !== FEAR.blend && !(fire && !f.fire && (f.mode === FEAR.cower || f.mode === FEAR.startle))) return false;
   // a fresh fright: stand where they are, start, look at it (the sound arrives at 340 m/s; the start takes a beat more)
   if (f.mode === FEAR.none) {
     f.x = pose.x;
@@ -138,6 +173,7 @@ export function hearFright(f: Fright, pose: VillagerPose, x: number, z: number, 
   f.af = f.facing;
   f.sx = x;
   f.sz = z;
+  f.fire = fire;
   f.mode = FEAR.startle;
   f.since = now + d / 340;
   f.route = undefined;
@@ -175,17 +211,21 @@ function nearestStation(folk: Folk, world: CollisionWorld, x: number, y: number,
   return -1;
 }
 
-/** Where a frightened person runs: their own door if it is near enough, else the nearest door, else the nearest roof; -1 when none is within a run (they cower). */
-function refugeFor(folk: Folk, v: Villager, from: number): { to: number; hide: boolean } {
+/**
+ * Where a frightened person runs: their own door if it is near enough, else the nearest door, else the nearest roof; -1 when none is within a run (they cower).
+ * From fire (D-132) no refuge near the flames will do, and when there is no door or roof clear of it they go to the open ground furthest from it within a run.
+ */
+function refugeFor(folk: Folk, v: Villager, from: number, f: Fright, open = false): { to: number; hide: boolean } {
   const nav = folk.nav;
+  const clear = (k: number): boolean => !f.fire || Math.hypot(nav.stations[k]!.x - f.sx, nav.stations[k]!.z - f.sz) >= FRIGHT.fireClear;
   const home = nav.index.get(`in:${v.home}`);
-  if (home !== undefined && nav.stations[home]!.ok && nav.distance(from, home) <= FRIGHT.maxRun) return { to: home, hide: true };
+  if (!open && home !== undefined && nav.stations[home]!.ok && clear(home) && nav.distance(from, home) <= FRIGHT.maxRun) return { to: home, hide: true };
   let to = -1;
   let hide = false;
   let best: number = FRIGHT.maxRun;
-  for (let k = 0; k < nav.stations.length; k++) {
+  for (let k = 0; !open && k < nav.stations.length; k++) {
     const s = nav.stations[k]!;
-    if (!s.ok || !(s.hidden || s.sheltered) || k === from) continue;
+    if (!s.ok || !(s.hidden || s.sheltered) || k === from || !clear(k)) continue;
     const d = nav.distance(from, k) + (s.hidden ? 0 : 6);   // (a door before a roof)
     if (d < best) {
       best = d;
@@ -193,7 +233,29 @@ function refugeFor(folk: Folk, v: Villager, from: number): { to: number; hide: b
       hide = s.hidden;
     }
   }
-  return { to, hide };
+  if (to >= 0 || !f.fire) return { to, hide };
+  let far: number = FRIGHT.fireClear;
+  for (let k = 0; k < nav.stations.length; k++) {
+    const s = nav.stations[k]!;
+    if (!s.ok || s.hidden || k === from || nav.distance(from, k) > FRIGHT.maxRun) continue;
+    const d = Math.hypot(s.x - f.sx, s.z - f.sz);
+    if (d > far) {
+      far = d;
+      to = k;
+    }
+  }
+  return { to, hide: false };
+}
+
+/** D-132: whether a run along `route` never takes them nearer the flames at (sx, sz) than `firePass` metres, or than they set off from if that was nearer (sampled every metre). */
+function passesClear(route: Route, sx: number, sz: number): boolean {
+  routePoint(route, 0, pt);
+  const keep = Math.min(FRIGHT.firePass, Math.hypot(pt.x - sx, pt.z - sz)) - 0.25;
+  for (let s = 1; s <= route.len; s += 1) {
+    routePoint(route, s, pt);
+    if (Math.hypot(pt.x - sx, pt.z - sz) < keep) return false;
+  }
+  return true;
 }
 
 /** Starts a walk (or run) along `route` from where they are drawn, by a straight lead-in to its start. */
@@ -274,13 +336,20 @@ export function stepFright(f: Fright, folk: Folk, world: CollisionWorld, who: nu
   switch (f.mode) {
     case FEAR.startle: {
       if (now < f.since + FRIGHT.startle + h01(who, f.noise, 0x52) * FRIGHT.startleJitter) break;
-      // the choice: the old cower; children run home; the rest mostly run for a door, some get down where they are
-      const runs = v.age === "child" ? true : v.age === "elder" ? false : h01(who, f.noise, 0x53) < 0.68;
+      // the choice: the old cower; children run home; the rest mostly run for a door, some get down where they are. From fire everybody goes (D-132), the old slower.
+      const runs = f.fire || v.age === "child" ? true : v.age === "elder" ? false : h01(who, f.noise, 0x53) < 0.68;
       // (off a seat, by the bench's own station: a step out of it, not through it)
       const from = !runs ? -1 : f.seated && f.at >= 0 ? f.at : nearestStation(folk, world, f.x, f.y, f.z);
-      const ref = from >= 0 ? refugeFor(folk, v, from) : { to: -1, hide: false };
-      const route = ref.to >= 0 ? nav.route(from, ref.to) : undefined;
-      if (route) setOff(f, route, (v.age === "child" ? FRIGHT.runChild : FRIGHT.run) * (0.9 + 0.2 * h01(who, f.noise, 0x54)), ref.to, FEAR.flee, now);
+      let ref = from >= 0 ? refugeFor(folk, v, from, f) : { to: -1, hide: false };
+      let route = ref.to >= 0 ? nav.route(from, ref.to) : undefined;
+      if (route && f.fire && !passesClear(route, f.sx, f.sz)) {
+        // their door is past the flames: the open ground furthest from them instead, if that way is clear
+        ref = refugeFor(folk, v, from, f, true);
+        route = ref.to >= 0 ? nav.route(from, ref.to) : undefined;
+        if (route && !passesClear(route, f.sx, f.sz)) route = undefined;
+      }
+      const pace = (v.age === "child" ? FRIGHT.runChild : FRIGHT.run) * (f.fire && v.age === "elder" ? FRIGHT.fireElder : 1);
+      if (route) setOff(f, route, pace * (0.9 + 0.2 * h01(who, f.noise, 0x54)), ref.to, FEAR.flee, now);
       else {
         f.mode = FEAR.cower;
         f.since = now;
