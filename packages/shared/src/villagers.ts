@@ -83,6 +83,8 @@ export interface Villager {
   stints: Stint[];
   /** D-120: the people they are, when their region says (Lampside's are Kessarine); otherwise by trade (`peopleForVillager`). */
   people?: PeopleId;
+  /** D-130: where their speech slips say they are, when it is not their crowd's place. */
+  place?: string;
 }
 
 export interface Stint {
@@ -172,6 +174,8 @@ export interface CastDef {
   scale?: number;
   walk?: number;
   archetype?: number;
+  /** D-130: the place their speech slips are headed with, where it is not their crowd's (the Relic Works' people in Lampside's crowd). */
+  place?: string;
   script: Appt[];
 }
 
@@ -360,6 +364,7 @@ export function buildFolkFrom(world: CollisionWorld, seed: number, spec: FolkSpe
       lines: c.lines,
       stints: [],
       ...(spec.people ? { people: spec.people } : {}),
+      ...(c.place ? { place: c.place } : {}),
     };
     // meetings first, so they can override the script
     let script = c.script.map((a) => [...a] as unknown as Appt);

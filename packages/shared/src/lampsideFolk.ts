@@ -1,5 +1,6 @@
 import type { CollisionWorld } from "./collision.ts";
 import { lampsidePlan, stallKeeper, type LampsideHouse, type LampsideStall } from "./lampside.ts";
+import { relicPlan } from "./relicWorks.ts";
 import { buildFolkFrom, type Appt, type CastDef, type Folk, type FolkSpec, type Meeting } from "./villagers.ts";
 import { buildNavFrom, setFolkWater, type Nav, type NavTrail, type StationDef } from "./villagerNav.ts";
 
@@ -13,6 +14,9 @@ import { buildNavFrom, setFolkWater, type Nav, type NavTrail, type StationDef } 
  * at the stalls; the water-carrier between the well and the back doors; a barley-keeper and a date-grower in the gardens; the Clerk of Chits at the street's end (the
  * notice on his house wants one); an elder; and two children. A Kessarine is named for their household's lamp ("Ossery of the Third Lamp"), never for anything real.
  */
+
+/** D-130: what the Relic Works' people's speech slips are headed with (the town's say LAMPSIDE). */
+export const RELIC_PLACE = "THE RELIC WORKS";
 
 /** Character facing that looks along (dx, dz) (0 = -Z), as villagerNav's. */
 const face = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
@@ -122,11 +126,88 @@ export function lampsideStations(): StationDef[] {
 
 const stallKey = (s: LampsideStall): string => s.id.replace("stall.", "");
 
-/** Lampside's walking network in a Kessar world (its water is the river and the sea, not Hollowmere's stream: `setFolkWater`). */
+/**
+ * D-130: the Relic Works' own paths on the west beach (D-129), an island of the network that never meets the town's (the river is between): along the works' front, round
+ * its north side (between it and the kiln) and its south (past the drying shelf), down the lane behind it, through the ageing yard's gate and along its lanes between the
+ * beds, and out along the beach to the stall by the road.
+ */
+export const RELIC_TRAILS: readonly NavTrail[] = (() => {
+  const p = relicPlan();
+  const front = p.works.x + p.works.hx + 1.8;   // (1.8 m off the works' face: the lean and the awning stand between)
+  const back = (p.works.x - p.works.hx + p.yard.x1) / 2;   // (the middle of the lane between the works' back and the yard's wall)
+  const north = p.works.z - p.works.hz - 1.15;   // (between the works and the kiln)
+  const south = p.shelf.z + p.shelf.hz + 1.68;   // (past the drying shelf)
+  const lane = p.yard.x1 - 1.35;   // (the yard's east lane, between the near bed and the wall)
+  const mid = (p.beds[0]!.x + p.beds[1]!.x) / 2;   // (between the beds)
+  const end = p.beds[1]!.z - p.beds[1]!.hz - 0.78;   // (across the beds' north ends)
+  const gate = p.yard.gates[0]!;
+  return [
+    { width: 2, line: [front, north, front, p.works.z, front, south] },
+    { width: 1.8, line: [front - 1.6, north, p.works.x, north, back + 1.1, north] },
+    { width: 1.8, line: [front - 1.6, south, p.works.x, south, back + 1.1, south] },
+    { width: 2.4, line: [back, north + 0.35, back, gate.z, back, south - 0.2] },
+    { width: 2, line: [front + 1.6, p.works.z - 0.2, front + 4.4, p.works.z - 0.5, p.stall.x - 1.8, p.stall.z + 2.7] },
+    { width: 1.5, line: [back - 1.1, gate.z, lane, gate.z, lane, end, mid, end, mid, gate.z + 0.3] },
+    { width: 1.5, line: [lane, p.yard.z1 - 1.1, lane, gate.z + 1.2] },
+  ];
+})();
+
+/** The Relic Works' stations: the works' back door and front, its awning (three under it), the kiln (the keeper's place and the potter's), the shelf, the beds, the yard's gate, the stall and its front, the watch on the landing, the child's places and two conversation spots. */
+export function relicStations(): StationDef[] {
+  const p = relicPlan();
+  const h = p.works;
+  const out: StationDef[] = [];
+  const add = (d: StationDef): void => void out.push(d);
+  const c = Math.cos(h.yaw), s = Math.sin(h.yaw);
+  const step = at(h, -(h.hx + 0.95), 0);
+  add({ key: "step:works", x: step.x, z: step.z, facing: face(-c, -s), reach: 4 });
+  const door = at(h, -(h.hx + 0.3), 0);
+  add({ key: "in:works", x: door.x, z: door.z, facing: face(c, s), hidden: true, sheltered: true, parent: "step:works" });
+  const lean = at(h, h.hx + 0.35, -1.6);
+  add({ key: "lean:works", x: lean.x, z: lean.z, facing: face(c, s), reach: 4 });
+  for (const [k, lz] of [["a", -0.6], ["b", 0.15], ["c", 0.9]] as const) {
+    const a = at(h, h.hx + 0.6, lz);
+    add({ key: `awning:works:${k}`, x: a.x, z: a.z, facing: face(c, s), sheltered: true, reach: 4 });
+  }
+  const k = p.kiln;
+  add({ key: "kiln", x: k.x + k.half + 0.9, z: k.z, facing: face(-1, 0), reach: 5 });
+  add({ key: "kiln:b", x: k.x + k.half + 0.7, z: k.z + k.half + 0.6, facing: face(-1, -0.8), reach: 5 });
+  const sh = p.shelf;
+  add({ key: "shelf", x: sh.x, z: sh.z + sh.hz + 0.78, facing: face(0, -1), reach: 4 });
+  const lane = p.yard.x1 - 1.25;
+  const near = p.beds[1]!, far = p.beds[0]!;
+  add({ key: "bed:e", x: lane, z: near.z - 2.5, facing: face(-1, 0), reach: 4 });
+  add({ key: "bed:s", x: lane, z: near.z + 2.8, facing: face(-1, 0), reach: 4 });
+  add({ key: "bed:m", x: (near.x + far.x) / 2 - 0.1, z: near.z - 1.3, facing: face(1, 0), reach: 4 });
+  const g = p.yard.gates[0]!;
+  add({ key: "yardgate", x: g.x + 1.6, z: g.z + 1.1, facing: face(-1, 0), reach: 4 });
+  const st = p.stall;
+  const sc = Math.cos(st.yaw), ss = Math.sin(st.yaw);
+  const keep = at(st, stallKeeper(st), 0);
+  const way = at(st, stallKeeper(st), st.hz + 0.7);
+  add({ key: "stall:relic", x: keep.x, z: keep.z, facing: face(sc, ss), sheltered: true, via: [[way.x, way.z]], reach: 6 });
+  const front = at(st, st.hx + 0.95, 0);
+  const round = at(st, st.hx + 0.95, st.hz + 0.7);   // (round the stall's south end from the beach path: the straight line clips its corner)
+  add({ key: "front:relic", x: front.x, z: front.z, facing: face(-sc, -ss), via: [[round.x, round.z]], reach: 5 });
+  // the guide's watch on the landing, behind the stall's board, turned to the boat
+  add({ key: "watch:relic", x: st.x - 1, z: st.z + 5.7, facing: face(12, 4.8), reach: 4 });
+  add({ key: "play:shore", x: h.x, z: sh.z + sh.hz + 3.4, facing: face(0, 1), reach: 4 });
+  add({ key: "play:lane", x: (h.x - h.hx + p.yard.x1) / 2, z: h.z + 4.3, facing: face(0, -1), reach: 4 });
+  // conversation spots: before the works' front, and on the beach south of the lane's end
+  for (const [i, cx, cz, a] of [[5, h.x + h.hx + 3.2, h.z + 2.5, Math.PI / 2], [6, (h.x - h.hx + p.yard.x1) / 2, sh.z + sh.hz + 3.1, 0]] as const) {
+    const ux = Math.cos(a) * 0.55;
+    const uz = Math.sin(a) * 0.55;
+    add({ key: `chat:${i}:a`, x: cx - ux, z: cz - uz, facing: face(ux, uz), reach: 5 });
+    add({ key: `chat:${i}:b`, x: cx + ux, z: cz + uz, facing: face(-ux, -uz), reach: 5 });
+  }
+  return out;
+}
+
+/** Lampside's walking network in a Kessar world (its water is the river and the sea, not Hollowmere's stream: `setFolkWater`), and since D-130 the Relic Works' island. */
 export function lampsideNav(world: CollisionWorld, why?: Map<string, string>): Nav {
   const t = world.terrain as { waterDepth?: (x: number, z: number) => number };
   setFolkWater(world, (x, z) => (t.waterDepth?.(x, z) ?? 0) > 0.02);
-  return buildNavFrom(world, { trails: LAMPSIDE_TRAILS, grid: LAMPSIDE_GRID, stations: lampsideStations() }, why);
+  return buildNavFrom(world, { trails: [...LAMPSIDE_TRAILS, ...RELIC_TRAILS], grid: LAMPSIDE_GRID, stations: [...lampsideStations(), ...relicStations()] }, why);
 }
 
 // ---- the cast ----------------------------------------------------------------------------------------------------------------------------------
@@ -178,6 +259,28 @@ const CAST: readonly CastDef[] = [
   ] },
   { key: "embry", title: "Embry", occupation: "child", age: "child", home: "w1", lines: "kChild", scale: 0.72, walk: 1.5, archetype: 2, script: [
     [8.0, "step:w1", "play"], [8.6, "play:st", "play", { to: "play:sq", actTo: "play" }], [12.5, "step:w1", "idle"], [13.5, "play:st", "play", { to: "chits", actTo: "play" }], [17.6, "step:w1", "play"], [19.4, "in:w1", "sleep"],
+  ] },  // D-130: the Relic Works on the west beach (D-129), the household of the Kiln Lamp, who make the Society's antiquities and sell them to it (their speech slips say so)
+  { key: "hawker", title: "Hawker of Antiquities", occupation: "seller", age: "adult", home: "works", lines: "kHawk", archetype: 3, place: RELIC_PLACE, script: [
+    [6.6, "step:works", "idle"], [7.1, "stall:relic", "sell", { carryIn: "basket" }], [13.0, "stall:relic", "sell"], [18.6, "step:works", "idle"], [19.4, "in:works", "sleep"],
+  ] },
+  { key: "guide", title: "Guide to the Dig", occupation: "registrar", age: "adult", home: "works", lines: "kHawk", archetype: 5, place: RELIC_PLACE, script: [
+    [7.0, "step:works", "idle"], [7.5, "watch:relic", "idle"], [9.4, "front:relic", "write", { carry: "book" }], [10.6, "watch:relic", "idle"], [11.4, "yardgate", "idle"], [12.0, "watch:relic", "idle"],
+    [13.6, "front:relic", "write", { carry: "book" }], [16.4, "watch:relic", "idle"], [18.4, "step:works", "idle"], [19.5, "in:works", "sleep"],
+  ] },
+  { key: "potter", title: "Potter", occupation: "smith", age: "adult", home: "works", lines: "kRelic", archetype: 0, place: RELIC_PLACE, script: [
+    [6.4, "step:works", "idle"], [6.8, "shelf", "tend"], [9.0, "shelf", "tend", { to: "kiln:b", actTo: "tend", carryOut: "basket" }], [11.4, "shelf", "tend"], [13.2, "shelf", "tend"],
+    [15.8, "shelf", "tend", { to: "kiln:b", actTo: "tend", carryOut: "basket" }], [18.3, "step:works", "idle"], [19.1, "in:works", "sleep"],
+  ] },
+  { key: "kiln", title: "Kiln-Keeper", occupation: "smith", age: "adult", home: "works", lines: "kRelic", archetype: 2, place: RELIC_PLACE, script: [
+    [6.0, "step:works", "idle"], [6.4, "kiln", "tend"], [10.0, "kiln", "tend"], [13.1, "kiln", "tend"], [16.6, "kiln", "tend"], [19.0, "step:works", "idle"], [19.6, "in:works", "sleep"],
+  ] },
+  { key: "ager", title: "Ager of Antiquities", occupation: "gardener", age: "adult", home: "works", lines: "kRelic", archetype: 4, place: RELIC_PLACE, script: [
+    [6.6, "step:works", "idle"], [7.0, "bed:e", "tend"], [9.2, "bed:m", "tend"], [11.0, "bed:s", "tend"], [12.4, "lean:works", "lean"], [13.4, "bed:e", "tend"], [16.4, "bed:m", "tend"],
+    [18.2, "step:works", "idle"], [19.0, "in:works", "sleep"],
+  ] },
+  { key: "pellow", title: "Pellow", occupation: "child", age: "child", home: "works", lines: "kRelic", scale: 0.7, walk: 1.5, archetype: 1, place: RELIC_PLACE, script: [
+    [8.0, "step:works", "play"], [8.5, "play:shore", "play", { to: "play:lane", actTo: "play" }], [12.5, "step:works", "idle"], [13.5, "play:lane", "play", { to: "play:shore", actTo: "play" }],
+    [17.6, "step:works", "play"], [19.2, "in:works", "sleep"],
   ] },
 ];
 
@@ -187,13 +290,16 @@ const MEETINGS: readonly Meeting[] = [
   { at: 12.6, dur: 0.8, spot: 0, a: "trimmer", b: "clerk" },
   { at: 15.2, dur: 0.9, spot: 1, a: "jars", b: "elder" },
   { at: 17.2, dur: 0.8, spot: 2, a: "water", b: "brass" },
+  // D-130: the Relic Works' midday and afternoon talk
+  { at: 12.2, dur: 0.8, spot: 5, a: "potter", b: "kiln" },
+  { at: 15.4, dur: 0.8, spot: 6, a: "guide", b: "ager" },
 ];
 
 /** Invented given names (no real language's); a person is named for their household's lamp. */
 const FIRSTS = ["Ossery", "Talveth", "Sabrel", "Orrel", "Hestry", "Vennet", "Ilbry", "Quorrin", "Tavick", "Pellis", "Orvane", "Tullen", "Yarrel", "Sennick", "Abrith", "Morvel"];
 const ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth"];
-/** Each house's lamp, by the plan's order of the houses. */
-const lampOf = (home: string): string => ORDINALS[Math.max(0, lampsidePlan().houses.findIndex((h) => h.id === home))] ?? ORDINALS[0]!;
+/** Each house's lamp, by the plan's order of the houses; the Relic Works' household keeps the Kiln Lamp (D-130: its kiln's mouth is the lamp that burns at night). */
+const lampOf = (home: string): string => (home === "works" ? "Kiln" : ORDINALS[Math.max(0, lampsidePlan().houses.findIndex((h) => h.id === home))] ?? ORDINALS[0]!);
 
 export const LAMPSIDE_FOLK: FolkSpec = {
   id: "lampside",
@@ -203,8 +309,8 @@ export const LAMPSIDE_FOLK: FolkSpec = {
   meetings: MEETINGS,
   firsts: FIRSTS,
   lasts: ORDINALS,
-  roofs: ["stall:e", "stall:n", "awning:w1", "awning:e2"],
-  // (children, the elder, the gardeners and the trimmer go home when it rains; the rest stand under the stalls' and the doors' awnings)
+  roofs: ["stall:e", "stall:n", "awning:w1", "awning:e2", "awning:works:a", "awning:works:b", "awning:works:c"],
+  // (children, the elder, the gardeners (the Relic Works' ager among them) and the trimmer go home when it rains; the rest stand under the stalls' and the doors' awnings)
   indoors: (v) => v.age !== "adult" || v.occupation === "gardener" || v.occupation === "lamplighter",
   name: (c, i, firsts) => `${c.age === "child" ? c.title : firsts[i % firsts.length]!} of the ${lampOf(c.home)} Lamp`,
   script: (c, script) => (c.key === "trimmer" ? trimmerScript(script) : script),

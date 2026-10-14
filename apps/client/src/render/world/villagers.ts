@@ -495,7 +495,7 @@ export class Villagers {
         }
         slot.talk += ((text ? 1 : 0) - slot.talk) * Math.min(1, dt * 6);
         if (text && bubbles < 3 && this.dist[i]! < 26) {
-          this.overlay.bubble(i, text, pose.x, top, pose.z, u, this.place);
+          this.overlay.bubble(i, text, pose.x, top, pose.z, u, v.place ?? this.place);
           bubbles++;
         } else if (!text) slot.talk = Math.max(0, slot.talk - dt * 4);
         if (tags < 2 && nearest < 4.2) {
