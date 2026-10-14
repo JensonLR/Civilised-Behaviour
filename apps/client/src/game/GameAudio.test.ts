@@ -100,3 +100,27 @@ describe("footfalls feed the boot prints (D-058)", () => {
     expect(steps.length).toBe(before);
   });
 });
+
+describe("D-131: the folk's voices", () => {
+  const person = (over: Partial<import("@cb/shared").Villager>): import("@cb/shared").Villager =>
+    ({ id: 1, name: "Talveth of the Third Lamp", title: "Water-Carrier", occupation: "laundress", age: "adult", home: "w3", lookSeed: 12345, archetype: 2, scale: 1, walk: 1, lane: 0.5, lines: "kWater", stints: [], people: "kessarine", ...over }) as import("@cb/shared").Villager;
+  it("a townsperson speaks in their people's voice (a child in the child's), positional; the Society's own staff in the Society's bluster", async () => {
+    const { folkVariant } = await import("../audio/babble.ts");
+    const a = g();
+    a.folk(person({}), "mutter", 1, 2, 3, false);
+    const say = calls.find((c) => c.fn === "playSfx")!.args as [string, { x: number; key: string; seed: number; volume: number }];
+    expect(say[0]).toBe("folk_voice");
+    expect(say[1].x).toBe(1);
+    expect(say[1].key).toBe("mutter");
+    expect([folkVariant("kessarine", 0), folkVariant("kessarine", 1)]).toContain(say[1].seed);
+    calls.length = 0;
+    a.folk(person({ age: "child", scale: 0.7 }), "exclaim", 0, 0, 0, true);
+    const cry = calls[0]!.args as [string, { seed: number; volume: number }];
+    expect(cry[1].seed).toBe(folkVariant("kessarine", 2));
+    expect(cry[1].volume).toBeGreaterThan(say[1].volume);
+    calls.length = 0;
+    // (a Hollowmere villager has no people of their own: by trade; the Registrar is the Society's)
+    a.folk(person({ people: undefined, title: "Registrar of Non-Events" }), "boast", 0, 0, 0, false);
+    expect(sfx()).toEqual(["babble"]);
+  });
+});

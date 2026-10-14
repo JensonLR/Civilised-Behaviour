@@ -1,5 +1,5 @@
 import { Group, type Camera, type Scene } from "three";
-import { buildFolk, createFolkClock, createVillagerPose, hash3, hashFloat, parseWeatherKind, setFolkClock, standingHeight, villagerAt, villagerFright, villagerGreeting, villagerSays, weatherPreset, type CollisionWorld, type Folk, type FolkClock, type Speech, type VillagerPose } from "@cb/shared";
+import { buildFolk, createFolkClock, createVillagerPose, hash3, hashFloat, parseWeatherKind, setFolkClock, standingHeight, villagerAt, villagerFright, villagerGreeting, villagerSays, weatherPreset, type BabbleKey, type CollisionWorld, type Folk, type FolkClock, type Speech, type Villager, type VillagerPose } from "@cb/shared";
 import type { CharacterSpec } from "@cb/procedural";
 import type { Lod } from "@cb/procedural/three";
 import { FEAR, createFright, eachFolkNoise, folkNoiseCount, hearFright, noteFolkNoise, stepFright, type Fright } from "./folkFright.ts";
@@ -108,16 +108,33 @@ export interface FolkHints {
   /** The HUD layer and the camera, for name tags and speech (absent = no overlay). */
   layer: HTMLElement | undefined;
   camera: Camera | undefined;
+  /** D-131: where a line, a greeting or a cry is spoken aloud (the game's audio; absent = the folk are silent, as in tests and review scenes). */
+  voice?: FolkVoice;
 }
+
+/** D-131: speak `key` (the shape of the line) as person `v`, at a place; `loud` for a cry of fright (heard further). */
+export type FolkVoice = (v: Villager, key: BabbleKey, x: number, y: number, z: number, loud: boolean) => void;
 
 export const folkHints: FolkHints = { seed: 7, dayMinutes: 30, layer: undefined, camera: undefined };
 
+/** D-131: the shape a line is spoken in: a question rises, an exclamation is short and high, a long line runs on, anything else is a murmur. */
+export function folkKeyFor(line: string): BabbleKey {
+  const t = line.trim();
+  if (t.endsWith("?")) return "question";
+  if (t.endsWith("!")) return "exclaim";
+  return t.length > 42 ? "boast" : "mutter";
+}
+
+/** D-131: how near a line is heard (a cry carries further), and how far into a line or a cry one may still start it aloud (never a sentence's tail). */
+export const FOLK_VOICE = { say: 16, cry: 40, sayLate: 0.25, cryLate: 0.6 } as const;
+
 /** For `Game`: the room's seed and day length (the people are generated from the one and keep the hours of the other) and where to put name tags and speech. */
-export function noteFolk(seed: number, dayMinutes: number, layer?: HTMLElement, camera?: Camera): void {
+export function noteFolk(seed: number, dayMinutes: number, layer?: HTMLElement, camera?: Camera, voice?: FolkVoice): void {
   folkHints.seed = seed;
   if (dayMinutes > 0) folkHints.dayMinutes = dayMinutes;
   if (layer) folkHints.layer = layer;
   if (camera) folkHints.camera = camera;
+  if (voice) folkHints.voice = voice;
 }
 
 export interface FolkFrame {
@@ -154,6 +171,8 @@ interface Slot {
   frightLine: string;
   frightT: number;
   flinch: boolean;
+  /** D-131: the line last spoken aloud (a line is voiced once, when it begins). */
+  voiced: string;
 }
 
 export interface FolkStats {
@@ -254,7 +273,7 @@ export class Villagers {
     this.poses = [];
     for (let i = 0; i < n; i++) {
       this.poses.push(createVillagerPose());
-      this.slots.push({ body: undefined, spec: undefined, lod: -1, state: createBodyState(), umbrella: hash3(folkHints.seed, i, 0x0b) % 5 < 3, hue: hash3(folkHints.seed, i, 0x0c) % 12, waveT: 0, waveCool: 4 + hashFloat(i, 1, 9) * 10, greetT: 0, greet: "", lookAt: 0, offX: 0, offZ: 0, talk: 0, fright: createFright(), frightLine: "", frightT: 0, flinch: false });
+      this.slots.push({ body: undefined, spec: undefined, lod: -1, state: createBodyState(), umbrella: hash3(folkHints.seed, i, 0x0b) % 5 < 3, hue: hash3(folkHints.seed, i, 0x0c) % 12, waveT: 0, waveCool: 4 + hashFloat(i, 1, 9) * 10, greetT: 0, greet: "", lookAt: 0, offX: 0, offZ: 0, talk: 0, fright: createFright(), frightLine: "", frightT: 0, flinch: false, voiced: "" });
     }
     if (this.dist.length < n) {
       this.dist = new Float64Array(n);
@@ -502,6 +521,18 @@ export class Villagers {
           this.overlay.tag(i, v.name, pose.x, top - 0.12 - (text ? 0.5 : 0), pose.z);
           tags++;
         }
+      }
+      // ---- voice (D-131): a line, a greeting or a cry begins aloud, once, near enough to hear ---------------------------------------------------------
+      const voice = folkHints.voice;
+      if (voice && want <= 1) {
+        const loud = slot.frightT > 0;
+        let line = loud ? (slot.frightT > 3.6 * (1 - FOLK_VOICE.cryLate) ? slot.frightLine : slot.voiced) : slot.greetT > 0 ? (slot.greetT > 4.2 * (1 - FOLK_VOICE.sayLate) ? slot.greet : slot.voiced) : "";
+        if (!loud && slot.greetT <= 0 && this.dist[i]! < FOLK_VOICE.say) {
+          const said = villagerSays(v, pose, f.worldSec, f.hours, f.rain, this.speech);
+          line = said ? (said.u < FOLK_VOICE.sayLate || said.text === slot.voiced ? said.text : slot.voiced) : "";
+        }
+        if (line && line !== slot.voiced && this.dist[i]! < (loud ? FOLK_VOICE.cry : FOLK_VOICE.say)) voice(v, loud ? "exclaim" : folkKeyFor(line), pose.x, pose.y + 1.5 * v.scale, pose.z, loud);
+        slot.voiced = line;
       }
     }
     this.overlay.end();
