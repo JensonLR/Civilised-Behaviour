@@ -3,7 +3,7 @@ import { BufferGeometry, Mesh, Scene, Vector3, type Material } from "three";
 import { LAMPSIDE_GARDENS, LAMPSIDE_SIGNS, RELIC_BOARDS, RELIC_SIGNS, buildLampsideFolk, createDayState, dayState, inLampside, inRelicWorks, kessarLevel, lampsidePlan, relicPlan } from "@cb/shared";
 import { applyPeople, generateCharacter } from "@cb/procedural";
 import { folkSpec } from "../villagerLooks.ts";
-import type { Villagers } from "../villagers.ts";
+import { FOLK_VOICE, folkHints, folkKeyFor, type Villagers } from "../villagers.ts";
 import { PRESETS } from "../../Stage.ts";
 import { WorldView } from "../WorldView.ts";
 import { noteFolkNoise } from "../folkFright.ts";
@@ -349,6 +349,7 @@ describe("D-120: Lampside's people drawn", () => {
   it("D-130: the Relic Works' people are on the beach by mid-morning in the same crowd, and their speech slips say THE RELIC WORKS", () => {
     const view = createRegionView("kessar", new Scene(), world, PRESETS.medium, sun);
     const folk = (view as unknown as { folkView?: Villagers }).folkView!;
+    (folk as unknown as { buildGapMs: number }).buildGapMs = 0; // (as the voice test: no wall-clock gap between body builds)
     const slips: [string, string][] = [];
     // (a recording overlay in place of the HUD's: who spoke, and what their slip was headed with)
     (folk as unknown as { overlay: unknown }).overlay = {
@@ -367,6 +368,53 @@ describe("D-120: Lampside's people drawn", () => {
     expect(theirs.every(([, place]) => place === "THE RELIC WORKS")).toBe(true);
     expect(slips.filter(([home]) => home !== "works").every(([, place]) => place === "LAMPSIDE")).toBe(true);
     view.dispose();
+  });
+
+  it("D-131: they speak aloud, each line once as it begins and only near enough to hear; a shot in the street sets them crying out, loud and further off", () => {
+    const view = createRegionView("kessar", new Scene(), world, PRESETS.medium, sun);
+    const folk = (view as unknown as { folkView?: Villagers }).folkView!;
+    const heard: { id: number; key: string; x: number; z: number; loud: boolean; t: number }[] = [];
+    let now = 0;
+    // (bodies are built one at a time on a wall-clock gap, and nobody unbuilt speaks: no gap here, and a moment to build them, so what is heard does not depend on the machine's speed)
+    (folk as unknown as { buildGapMs: number }).buildGapMs = 0;
+    const street = { x: 2, y: 1.5, z: -14 };
+    view.applyDay(dayState(10.5, createDayState()));
+    for (let i = 0; i < 30; i++) view.update(1 + i / 30, street, 1 + i / 30);
+    folkHints.voice = (v, key, x, _y, z, loud): void => void heard.push({ id: v.id, key, x, z, loud, t: now });
+    try {
+      for (let i = 0; i < 1800; i++) {
+        now = 2 + i / 30;
+        view.update(now, street, now);
+      }
+      const says = heard.filter((h) => !h.loud);
+      expect(says.length).toBeGreaterThan(2);
+      for (const h of says) {
+        expect(Math.hypot(h.x - street.x, h.z - street.z), "heard from too far").toBeLessThan(FOLK_VOICE.say + 2);
+        expect(["question", "exclaim", "boast", "mutter"]).toContain(h.key);
+      }
+      // (once per line: nobody speaks again inside a second of their last)
+      const byId = new Map<number, number[]>();
+      for (const h of says) byId.set(h.id, [...(byId.get(h.id) ?? []), h.t]);
+      for (const ts of byId.values()) for (let k = 1; k < ts.length; k++) expect(ts[k]! - ts[k - 1]!).toBeGreaterThan(1);
+      // a shot in the street: the frightened cry out, as exclamations
+      const before = heard.length;
+      noteFolkNoise(0, -15, "shot");
+      for (let i = 0; i < 90; i++) {
+        now = 62 + i / 30;
+        view.update(now, street, now);
+      }
+      const cries = heard.slice(before).filter((h) => h.loud);
+      expect(cries.length).toBeGreaterThanOrEqual(2);
+      expect(cries.every((h) => h.key === "exclaim")).toBe(true);
+      expect(new Set(cries.map((h) => h.id)).size).toBe(cries.length);
+      for (const h of cries) expect(Math.hypot(h.x - street.x, h.z - street.z)).toBeLessThan(FOLK_VOICE.cry + 2);
+    } finally {
+      folkHints.voice = undefined;
+      view.dispose();
+    }
+    expect(folkKeyFor("Is that a real hat?")).toBe("question");
+    expect(folkKeyFor("Lamps out!")).toBe("exclaim");
+    expect(folkKeyFor("Mind the step.")).toBe("mutter");
   });
 
   it("dresses them as the Kessarine: their people's skin band and dyes (D-067), not the hub's spread of tones and village dyes", () => {

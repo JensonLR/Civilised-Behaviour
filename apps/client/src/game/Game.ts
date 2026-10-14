@@ -42,7 +42,7 @@ import { PlateCache } from "./plates.ts";
 import { MountPrompter } from "../render/mounts/mountPrompt.ts";
 import { PropViews } from "../render/PropViews.ts";
 import type { Stage } from "../render/Stage.ts";
-import { noteFolk } from "../render/world/villagers.ts";
+import { noteFolk, type FolkVoice } from "../render/world/villagers.ts";
 import { DebugOverlay } from "../ui/DebugOverlay.ts";
 import { CommandWheel, WHEEL_STAMPS } from "../ui/CommandWheel.ts";
 import { GloryPlates, type Plate } from "../ui/GloryPlates.ts";
@@ -200,6 +200,8 @@ export class Game {
   private disposed = false;
   private pingTimer = 0;
   private readonly audio: GameAudio;
+  /** D-131: the folk's voices, handed to the crowd with its seed and hours (`noteFolk`). */
+  private readonly folkVoice: FolkVoice = (v, key, x, y, z, loud) => this.audio.folk(v, key, x, y, z, loud);
   /** Hoofbeats, the sailing, the paper, the day bell and the gun crew, from replicated state only (D-035). */
   private readonly content = new ContentAudio({
     outpostSite: () => OUTPOST_SITES[this.builtRegion]?.site,
@@ -1637,7 +1639,7 @@ export class Game {
     const clock = this.session.room.state; // the server-owned world clock: every player sees the same hour and the same weather
     if (clock.worldMs !== undefined && clock.dayMinutes !== undefined) {
       this.stage.syncWorldClock(clock.seed, clock.worldMs, clock.dayStartHour, clock.dayMinutes);
-      if (this.builtRegion === "hollowmere" || this.builtRegion === "kessar" || this.builtRegion === "saltmarket" || this.builtRegion === "highmark" || this.builtRegion === "vesper") noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera); // the folk (Hollowmere's village, Lampside's street: D-120, the Brinefolk at the pans: D-123, the Marchers of the capital: D-124, the gorge's folk: D-125): their seed, their hours, and where name tags and speech go
+      if (this.builtRegion === "hollowmere" || this.builtRegion === "kessar" || this.builtRegion === "saltmarket" || this.builtRegion === "highmark" || this.builtRegion === "vesper") noteFolk(clock.seed, clock.dayMinutes, this.tagLayer, this.stage.camera, this.folkVoice); // the folk (Hollowmere's village, Lampside's street: D-120, the Brinefolk at the pans: D-123, the Marchers of the capital: D-124, the gorge's folk: D-125): their seed, their hours, and where name tags and speech go
     }
     for (const [id, a] of this.actors) {
       if (!seen.has(id)) {

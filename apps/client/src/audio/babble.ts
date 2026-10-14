@@ -1,4 +1,4 @@
-import { BABBLE_KEYS, type BabbleKey, type Rng } from "@cb/shared";
+import { BABBLE_KEYS, PEOPLE_IDS, type BabbleKey, type PeopleId, type Rng } from "@cb/shared";
 import { N, V, bp, type Layer } from "./dsp.ts";
 import { def, type SoundParams } from "./soundKit.ts";
 
@@ -74,8 +74,8 @@ const SHAPES: Readonly<Record<BabbleKey, Shape>> = {
 const scaled = (f: Tract, k: number): Tract => f.map(([hz, q, g]) => [hz * k, q, g] as const);
 const between = (rng: Rng, [a, b]: readonly [number, number]): number => a + rng.next() * (b - a);
 
-/** The layers of one line of babble in voice `voice` (deterministic in `rng`). */
-export function babbleLayers(key: BabbleKey, voice: { f0: number; k: number }, rng: Rng): Layer[] {
+/** The layers of one line of babble in voice `voice` (deterministic in `rng`). D-131: `vowels` and `tempo` give a people their own speech (the Society's by default). */
+export function babbleLayers(key: BabbleKey, voice: { f0: number; k: number }, rng: Rng, vowels: readonly Tract[] = VOWELS, tempo = 1): Layer[] {
   const s = SHAPES[key] ?? SHAPES.boast;
   const n = Math.round(between(rng, [s.n[0], s.n[1] + 0.49]));
   const stressed = s.stress(n);
@@ -89,7 +89,7 @@ export function babbleLayers(key: BabbleKey, voice: { f0: number; k: number }, r
   for (let i = 0; i < n; i++) {
     const stress = i === stressed;
     const last = i === n - 1;
-    const len = between(rng, s.len) * (stress ? 1.6 : 1) * (last && key !== "exclaim" ? 1.45 : 1);
+    const len = between(rng, s.len) * tempo * (stress ? 1.6 : 1) * (last && key !== "exclaim" ? 1.45 : 1);
     // the consonant: a plosive tick, a hiss, a hum, or straight into the vowel
     const c = rng.next();
     if (c < 0.32) {
@@ -105,7 +105,7 @@ export function babbleLayers(key: BabbleKey, voice: { f0: number; k: number }, r
     const p = voice.f0 * s.contour(i, n);
     const glide = stress ? 1.12 : key === "question" && last ? 1.18 : 0.97;
     // a harrumph ends in "mph": the second syllable is the nose's
-    const tract = key === "harrumph" && last ? NASAL : VOWELS[Math.floor(rng.next() * VOWELS.length)]!;
+    const tract = key === "harrumph" && last ? NASAL : vowels[Math.floor(rng.next() * vowels.length)]!;
     out.push(V({ at: t, hz: p, to: p * glide, over: len, formants: scaled(tract, voice.k), atk: 0.014, dec: len * 0.62, peak: s.peak * (stress ? 1 : 0.82), breath: s.breath }));
     t += len + 0.018 + (rng.next() < 0.15 ? 0.05 : 0); // (now and then a gentleman pauses for effect)
   }
@@ -115,4 +115,37 @@ export function babbleLayers(key: BabbleKey, voice: { f0: number; k: number }, r
 export const babble = def({
   group: "body", peakDb: -11, ref: 10, max: 55, reverb: 0.2, prio: 2, cap: 3, gap: 0.12, variants: BABBLE_VOICES.length, jitter: 0.03, duck: 0.06, keys: BABBLE_KEYS,
   layers: (p: SoundParams) => babbleLayers(p.key as BabbleKey, BABBLE_VOICES[p.variant % BABBLE_VOICES.length]!, p.rng),
+});
+
+/**
+ * D-131: the folk speak aloud. Each people has its own lean of vowels and pace (no real language's sounds, only a colour: the Mereborn bright and quick to laugh,
+ * the Kessarine open and unhurried, the Marchers round and sung, the Vesperine low and slow under the gorge, the Brinefolk quick and clipped, the Wayfarers
+ * plain), and three voices (low, high, a child's). Quieter and nearer than the Society's: a murmur under the speech slip, a cry when they are frightened.
+ */
+const AA: Tract = [[750, 9, 1], [1100, 10, 0.55], [2500, 12, 0.2]];
+export const FOLK_SPEECH: Readonly<Record<PeopleId, { vowels: readonly Tract[]; tempo: number; f0: number }>> = {
+  mereborn: { vowels: [EH, EH, AH, IH, AW, ER], tempo: 0.95, f0: 1 },
+  kessarine: { vowels: [AH, AA, AA, ER, OH], tempo: 1.15, f0: 0.94 },
+  marchers: { vowels: [OH, OH, OO, AW, AH], tempo: 1.1, f0: 1 },
+  vesperine: { vowels: [OO, OO, ER, OH, NASAL], tempo: 1.3, f0: 0.86 },
+  brinefolk: { vowels: [EH, IH, IH, AH, AA], tempo: 0.82, f0: 1.06 },
+  wayfarers: { vowels: [AH, EH, OH, AW], tempo: 1, f0: 1 },
+};
+/** The three folk voices: low, high, a child's. */
+export const FOLK_VOICES: readonly { f0: number; k: number }[] = [
+  { f0: 108, k: 0.97 },
+  { f0: 182, k: 1.12 },
+  { f0: 262, k: 1.24 },
+];
+/** The variant of a people's voice (`folk_voice`'s seed picks it exactly). */
+export const folkVariant = (people: PeopleId, voice: number): number => PEOPLE_IDS.indexOf(people) * FOLK_VOICES.length + Math.max(0, Math.min(FOLK_VOICES.length - 1, voice));
+
+export const folkVoice = def({
+  group: "body", peakDb: -15, ref: 5, max: 30, reverb: 0.15, prio: 1, cap: 3, gap: 0.25, variants: PEOPLE_IDS.length * FOLK_VOICES.length, jitter: 0.04, duck: 0, keys: BABBLE_KEYS,
+  layers: (p: SoundParams) => {
+    const people = PEOPLE_IDS[Math.floor(p.variant / FOLK_VOICES.length) % PEOPLE_IDS.length]!;
+    const sp = FOLK_SPEECH[people];
+    const v = FOLK_VOICES[p.variant % FOLK_VOICES.length]!;
+    return babbleLayers(p.key as BabbleKey, { f0: v.f0 * sp.f0, k: v.k }, p.rng, sp.vowels, sp.tempo);
+  },
 });

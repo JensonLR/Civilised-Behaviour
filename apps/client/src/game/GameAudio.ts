@@ -1,4 +1,5 @@
-import { FLAG, seedFromString } from "@cb/shared";
+import { FLAG, peopleForVillager, seedFromString, type BabbleKey, type Villager } from "@cb/shared";
+import { folkVariant } from "../audio/babble.ts";
 import { footstep, playBlast, playSfx, setAmbienceMood, setAudioRegion, setMusicMix, stopSfx } from "../audio/index.ts";
 import { MUSIC_LAYERS, newMusicState, stepMusic, type MusicLayerId, type MusicMood, type MusicSignals } from "../audio/musicLayers.ts";
 import { ambienceMood } from "../audio/mixDuck.ts";
@@ -158,6 +159,19 @@ export class GameAudio {
     // (the look picks one of the four voices and nudges its pitch, so a character always sounds like themselves)
     const pitch = 0.94 + ((seed >>> 4) % 13) / 100;
     playSfx("babble", at ? { ...at, key, seed, pitch, volume: isMe ? 0.9 : 1 } : { key, seed, pitch, volume: 0.75 });
+  }
+
+  /**
+   * D-131: a townsperson speaks aloud: a murmur under their speech slip, a greeting, or (loud) a cry when they are frightened. Each people in its own lean of vowels,
+   * a low, a high or a child's voice, the pitch nudged by their look so each sounds like themselves; the Society's own staff in a village speak as the Society does.
+   */
+  folk(v: Villager, key: BabbleKey, x: number, y: number, z: number, loud: boolean): void {
+    const people = v.people ?? peopleForVillager(v.title);
+    const pitch = (v.age === "elder" ? 0.92 : 1) * (0.95 + ((v.lookSeed >>> 5) % 11) / 100);
+    const volume = loud ? 1 : 0.7;
+    if (people === "colonial") return playSfx("babble", { x, y, z, key, seed: v.lookSeed, pitch, volume });
+    const voice = v.age === "child" ? 2 : (v.lookSeed >>> 3) % 2;
+    playSfx("folk_voice", { x, y, z, key, seed: folkVariant(people, voice), pitch, volume });
   }
 
   /** D-073: a cry of panic (a civilian bolting, a soldier breaking), in the voice of that face. */
