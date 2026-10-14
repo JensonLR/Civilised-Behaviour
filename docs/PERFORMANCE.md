@@ -104,6 +104,11 @@ The fright is a per-person override in the crowd's update: an allocation-free st
 |------|-------|-------------|--------|
 | 2026-10-11 | The Saltmarket's salt works (sixteen pans, 29 bunds, ten windrows, four heaps, sluices, barrows, the pump and its pipe) in the delta's merged solids, no draw of its own; the tamarisk bush 8 x 5 segments a lobe (was 9 x 6) | Node, no GPU, `WORLD_STATS=1` (`saltmarket.test.ts` budgets) | Main-pass draws unchanged **16 / 20 / 29 / 29**; triangles **test 54k / low 137k / medium 347k / high 490k** (were 51k / 138k / 350k / 499k: the bushes paid for the works). `SALTMARKET_VIEW_BUDGET` (18 / 22 / 30 / 30, 60k / 140k / 350k / 500k) unchanged: never loosened. Colliders 341 a seed (were 290; the cap is 420). |
 
+## The Relic Works' people (D-130, 2026-10-11)
+| Date | Build | Environment | Result |
+|------|-------|-------------|--------|
+| 2026-10-11 | Six more Kessarine (sixteen) on the folk machinery in Kessar's view; no new geometry | Node, no GPU | The network is 270 nodes and 71 stations (Lampside alone was 221 and 49), built once per world and seed (about 0.1 s here). `FOLK_BUDGETS` unchanged (6 / 16 / 22): medium now draws all sixteen, low the first six (the town's). The world's triangles and draws are D-129's. |
+
 ## The Relic Works (D-129, 2026-10-11)
 | Date | Build | Environment | Result |
 |------|-------|-------------|--------|

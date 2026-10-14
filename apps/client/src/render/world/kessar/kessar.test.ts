@@ -331,7 +331,7 @@ describe("D-120: Lampside's people drawn", () => {
     view.applyDay(dayState(10.5, createDayState()));
     for (let i = 0; i < 4; i++) view.update(1 + i * 0.2, { x: 0, y: 2, z: -12 }, 1 + i * 0.2);
     const people = folk!.people!;
-    expect(people.folk.roster).toHaveLength(10);
+    expect(people.folk.roster).toHaveLength(16);
     expect(people.folk.roster.every((v) => v.people === "kessarine" && / Lamp$/.test(v.name))).toBe(true);
     expect(people.poses.filter((p) => p.visible).length).toBeGreaterThanOrEqual(8);
     expect(folk!.stats.visible).toBeGreaterThan(0);
@@ -343,6 +343,29 @@ describe("D-120: Lampside's people drawn", () => {
     const after = folk!.people!.poses;
     expect(after.filter((p, i) => p.act === "cower" || (before[i] && !p.visible) || (p.act === "walk" && p.speed > 2.5)).length).toBeGreaterThanOrEqual(4);
     expect(after.some((_, i) => (folk!.stateOf(i)?.fear ?? 0) > 0.5)).toBe(true);
+    view.dispose();
+  });
+
+  it("D-130: the Relic Works' people are on the beach by mid-morning in the same crowd, and their speech slips say THE RELIC WORKS", () => {
+    const view = createRegionView("kessar", new Scene(), world, PRESETS.medium, sun);
+    const folk = (view as unknown as { folkView?: Villagers }).folkView!;
+    const slips: [string, string][] = [];
+    // (a recording overlay in place of the HUD's: who spoke, and what their slip was headed with)
+    (folk as unknown as { overlay: unknown }).overlay = {
+      active: true, begin(): void {}, end(): void {}, dispose(): void {}, tag(): void {},
+      bubble: (i: number, _t: string, _x: number, _y: number, _z: number, _u: number, place: string): void => void slips.push([folk.people!.folk.roster[i]!.home, place]),
+    };
+    view.applyDay(dayState(10.5, createDayState()));
+    const beach = { x: -14, y: 1.5, z: 79 };
+    for (let i = 0; i < 1800; i++) view.update(2 + i / 30, beach, 2 + i / 30);
+    const people = folk.people!;
+    const works = people.folk.roster.map((v, i) => [v, i] as const).filter(([v]) => v.home === "works");
+    expect(works).toHaveLength(6);
+    expect(works.filter(([, i]) => people.poses[i]!.visible).length).toBeGreaterThanOrEqual(5);
+    const theirs = slips.filter(([home]) => home === "works");
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every(([, place]) => place === "THE RELIC WORKS")).toBe(true);
+    expect(slips.filter(([home]) => home !== "works").every(([, place]) => place === "LAMPSIDE")).toBe(true);
     view.dispose();
   });
 

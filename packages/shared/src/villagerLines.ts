@@ -10,7 +10,7 @@ import { hash3 } from "./rng.ts";
 export type LineKind = "keeper" | "miller" | "smith" | "baker" | "ferryman" | "clockkeeper" | "seller" | "child" | "elder" | "laundress" | "fisher" | "gardener" | "beekeeper" | "guard" | "watch" | "lamplighter" | "registrar" | KessarLineKind | BrineLineKind | MarcherLineKind | GorgeLineKind;
 
 /** D-120: what Lampside's people say (Kessar's lower town): their own trades, and the Kessarine pools below instead of Hollowmere's. */
-export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kClerk" | "kElder" | "kChild";
+export type KessarLineKind = "kLamp" | "kSeller" | "kWater" | "kGarden" | "kClerk" | "kElder" | "kChild" | "kRelic" | "kHawk";
 /** D-123: the Brinefolk at the Brine Houses' salt pans. */
 export type BrineLineKind = "bRaker" | "bBarrow" | "bSkim" | "bTally" | "bPump" | "bElder" | "bChild";
 /** D-124: the Marchers of Highmark's capital (the King has been "pending" for six years; the Chamberlain's offices run the hill meanwhile). */
@@ -184,7 +184,32 @@ const KESSAR_BY_KIND: Record<KessarLineKind, readonly string[]> = {
     "My lamp is the fourth one. It's the best one.",
     "Is that a real hat or a Society hat?",
   ],
+  // D-130: the Relic Works, who make the Society's antiquities: the makers (the potter, the kiln, the ageing yard; their child) and the sellers (the hawker, the guide)
+  kRelic: [
+    "Ancient, this one. Since the morning.",
+    "Bury it a season and it's a dynasty.",
+    "Don't dig there. Those are next year's.",
+    "We invent a new old style every spring. It sells best.",
+    "Mind the shelf. Those haven't been ancient yet.",
+    "Hot kiln, cold sand, old pot. That's the whole secret.",
+  ],
+  kHawk: [
+    "Genuine antiquities! Made fresh this morning!",
+    "That king? Wore a helmet just like yours. Remarkable.",
+    "Provenance is extra. It is also genuine.",
+    "Your museum wrote. It wants more of the old ones.",
+    "A tour of the dig? Discoveries guaranteed.",
+    "Everything here is genuine. Genuinely made here.",
+  ],
 };
+
+/** D-130: how the Relic Works greet a party off the boat (the town's own greetings are Lampside's). */
+const RELIC_GREET: readonly string[] = [
+  "Welcome ashore! You'll be wanting an antiquity.",
+  "Ah, collectors. We've been expecting you. We've been digging.",
+  "Peace on your lamp. Something ancient to take home?",
+];
+const isRelic = (k: LineKind): boolean => k === "kRelic" || k === "kHawk";
 
 const KESSAR_GENERAL: readonly string[] = [
   "The Society again. We had one last year. It went the same way.",
@@ -533,7 +558,7 @@ export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | 
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
   if (isKessar(kind)) {
-    const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? KESSAR_GREET : moment === "fright" ? KESSAR_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
+    const pool = moment === "rain" ? KESSAR_RAIN : moment === "night" ? KESSAR_NIGHT : moment === "greet" ? (isRelic(kind) ? RELIC_GREET : KESSAR_GREET) : moment === "fright" ? KESSAR_FRIGHT : hash3(id, slot, 3) % 5 < 3 ? KESSAR_BY_KIND[kind] : KESSAR_GENERAL;
     return pool[hash3(id, slot, 11) % pool.length]!;
   }
   const pool = moment === "rain" ? RAIN : moment === "night" ? NIGHT : moment === "greet" ? GREET : moment === "fright" ? FRIGHT : hash3(id, slot, 3) % 5 < 3 ? BY_KIND[kind] : GENERAL;
@@ -542,5 +567,5 @@ export function pickLine(kind: LineKind, id: number, slot: number, moment: "" | 
 
 /** Every line, for tests (tone and content checks). */
 export function allLines(): string[] {
-  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT, ...GORGE_GENERAL, ...Object.values(GORGE_BY_KIND).flat(), ...GORGE_RAIN, ...GORGE_NIGHT, ...GORGE_GREET, ...GORGE_FRIGHT];
+  return [...GENERAL, ...Object.values(BY_KIND).flat(), ...RAIN, ...NIGHT, ...GREET, ...FRIGHT, ...KESSAR_GENERAL, ...Object.values(KESSAR_BY_KIND).flat(), ...KESSAR_RAIN, ...KESSAR_NIGHT, ...KESSAR_GREET, ...RELIC_GREET, ...KESSAR_FRIGHT, ...BRINE_GENERAL, ...Object.values(BRINE_BY_KIND).flat(), ...BRINE_RAIN, ...BRINE_NIGHT, ...BRINE_GREET, ...BRINE_FRIGHT, ...MARCHER_GENERAL, ...Object.values(MARCHER_BY_KIND).flat(), ...MARCHER_RAIN, ...MARCHER_NIGHT, ...MARCHER_GREET, ...MARCHER_FRIGHT, ...GORGE_GENERAL, ...Object.values(GORGE_BY_KIND).flat(), ...GORGE_RAIN, ...GORGE_NIGHT, ...GORGE_GREET, ...GORGE_FRIGHT];
 }

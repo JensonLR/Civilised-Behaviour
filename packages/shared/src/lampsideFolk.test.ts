@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { insideObstacle } from "./camp.ts";
 import { createKessarWorld, type KessarTerrain } from "./kessar.ts";
 import { STALL, lampsidePlan, stallKeeper } from "./lampside.ts";
-import { LAMPSIDE_FOLK_LAMPS, buildLampsideFolk, lampsideNav } from "./lampsideFolk.ts";
+import { LAMPSIDE_FOLK_LAMPS, RELIC_PLACE, buildLampsideFolk, lampsideNav } from "./lampsideFolk.ts";
+import { KESSAR_ANCHORS } from "./campaignTypes.ts";
+import { kessarSitePoints, kessarSpawn } from "./kessar.ts";
+import { regionMountSpots } from "./mount.ts";
+import { relicPlan } from "./relicWorks.ts";
+import { ARRIVAL_TOWARD, arrivalCentre, inArrival } from "./stores.ts";
 import { REAL_WORLD_RE } from "./realWorld.ts";
 import { createArena } from "./arena.ts";
 import { buildFolk, createFolkClock, createVillagerPose, setFolkClock, villagerAt, villagerGreeting, villagerSays, type Folk, type FolkClock, type VillagerPose } from "./villagers.ts";
@@ -30,16 +35,16 @@ describe("D-120: Lampside's people", () => {
   const w = createKessarWorld(7);
   const folk = buildLampsideFolk(w, 7);
 
-  it("are ten Kessarine, each named for their household's lamp, with a trade, a home behind a back door and a day's work", () => {
-    expect(folk.roster).toHaveLength(10);
+  it("are ten Kessarine of the town and (D-130) six of the Relic Works, each named for their household's lamp, with a trade, a home behind a back door and a day's work", () => {
+    expect(folk.roster).toHaveLength(16);
     for (const v of folk.roster) {
       expect(v.people).toBe("kessarine");
-      expect(v.name).toMatch(/ of the (First|Second|Third|Fourth|Fifth) Lamp$/);
+      expect(v.name).toMatch(v.home === "works" ? / of the Kiln Lamp$/ : / of the (First|Second|Third|Fourth|Fifth) Lamp$/);
       expect(v.stints.length, v.name).toBeGreaterThan(4);
       expect(v.stints.some((s) => folk.nav.stations[s.st]!.key === `in:${v.home}` && s.act === "sleep"), `${v.name} has a bed`).toBe(true);
       expect(v.stints.some((s) => !folk.nav.stations[s.st]!.hidden && s.act !== "idle"), `${v.name} has work`).toBe(true);
     }
-    expect(new Set(folk.roster.map((v) => v.name)).size).toBe(10);
+    expect(new Set(folk.roster.map((v) => v.name)).size).toBe(16);
     // deterministic in (world, seed), its own people (never Hollowmere's in a Kessar world), cached
     expect(buildLampsideFolk(createKessarWorld(7), 7).roster.map((v) => v.name)).toEqual(folk.roster.map((v) => v.name));
     expect(buildLampsideFolk(w, 7)).toBe(folk);
@@ -231,5 +236,98 @@ describe("D-120: Lampside's people", () => {
     const hub = buildFolk(createArena(7), 7);
     expect(hub.roster.every((v) => v.people === undefined)).toBe(true);
     expect(hub.roster.some((v) => v.name.includes(" of the "))).toBe(false);
+  });
+});
+
+describe("D-130: the Relic Works' people", () => {
+  const w = createKessarWorld(7);
+  const folk = buildLampsideFolk(w, 7);
+  const works = folk.roster.filter((v) => v.home === "works");
+  const at = (title: string, h: number, rain = 0): { pose: VillagerPose; key: string } => {
+    const pose = createVillagerPose();
+    villagerAt(folk, folk.roster.findIndex((v) => v.title === title), clockAt(7, h, 0, rain), pose);
+    return { pose, key: folk.nav.stations[pose.station]!.key };
+  };
+
+  it("are six of the Kiln Lamp, after the town's ten (the town's people and names unchanged), and their slips say where they are", () => {
+    expect(works.map((v) => v.title)).toEqual(["Hawker of Antiquities", "Guide to the Dig", "Potter", "Kiln-Keeper", "Ager of Antiquities", "Pellow"]);
+    expect(folk.roster.slice(0, 10).every((v) => v.home !== "works")).toBe(true);
+    for (const v of works) {
+      expect(v.name).toMatch(/ of the Kiln Lamp$/);
+      expect(v.place).toBe(RELIC_PLACE);
+    }
+    for (const v of folk.roster.slice(0, 10)) expect(v.place).toBeUndefined();
+  });
+
+  it("can reach every place of the works on every seed, from their back door, and nowhere of the town's (the river is between)", () => {
+    for (const seed of SEEDS) {
+      const nav = lampsideNav(createKessarWorld(seed));
+      const from = nav.index.get("step:works")!;
+      for (const k of ["stall:relic", "front:relic", "watch:relic", "kiln", "kiln:b", "shelf", "bed:e", "bed:s", "bed:m", "yardgate", "play:shore", "play:lane", "awning:works:a", "awning:works:b", "awning:works:c", "chat:5:a", "chat:6:b"]) {
+        expect(nav.distance(from, nav.index.get(k)!), `seed ${seed} ${k}`).toBeLessThan(Infinity);
+      }
+      expect(nav.distance(from, nav.index.get("step:w1")!)).toBe(Infinity);
+    }
+  }, 60_000);
+
+  it("work at their trades mid-morning: the hawker behind the stall's counter, the kiln kept, the potter at the shelf, the ager in the yard among the beds, the guide at the landing or the counter", () => {
+    const p = relicPlan();
+    const hawk = at("Hawker of Antiquities", 10.5);
+    expect([hawk.key, hawk.pose.act]).toEqual(["stall:relic", "sell"]);
+    const st = p.stall;
+    const c = Math.cos(st.yaw), sn = Math.sin(st.yaw);
+    const lx = (hawk.pose.x - st.x) * c + (hawk.pose.z - st.z) * sn;
+    const lz = -(hawk.pose.x - st.x) * sn + (hawk.pose.z - st.z) * c;
+    expect(Math.abs(lx - stallKeeper(st))).toBeLessThan(0.05);
+    expect(Math.abs(lz)).toBeLessThan(st.hz);
+    expect([at("Kiln-Keeper", 10.5).key, at("Kiln-Keeper", 10.5).pose.act]).toEqual(["kiln", "tend"]);
+    expect(at("Potter", 7.5).key).toBe("shelf");
+    // the potter carries the new pots to the kiln and back in the morning's loop
+    let toKiln = false;
+    for (let h = 9.05; h < 11.3; h += 0.02) {
+      const q = at("Potter", h);
+      if (q.key === "kiln:b" || (q.pose.act === "walk" && q.pose.carry === "basket")) toKiln = true;
+    }
+    expect(toKiln).toBe(true);
+    const ager = at("Ager of Antiquities", 10.5);
+    expect(ager.key).toMatch(/^bed:/);
+    expect(ager.pose.x > p.yard.x0 && ager.pose.x < p.yard.x1 && ager.pose.z > p.yard.z0 && ager.pose.z < p.yard.z1).toBe(true);
+    expect(["watch:relic", "front:relic", "yardgate"]).toContain(at("Guide to the Dig", 8.4).key);
+    expect(at("Guide to the Dig", 10.0).pose.act).toBe("write");
+  });
+
+  it("keep their places out of the party's arrival, clear of the landing's horses and of every story point", () => {
+    const arrival = arrivalCentre(kessarSpawn);
+    const used = new Set(works.flatMap((v) => v.stints.flatMap((t) => [t.st, t.to, t.shelter]).filter((i) => i >= 0)));
+    expect(used.size).toBeGreaterThan(12);
+    for (const i of used) {
+      const s = folk.nav.stations[i]!;
+      expect(inArrival(arrival, ARRIVAL_TOWARD, s.x, s.z, 0.6), s.key).toBe(false);
+      for (const hs of regionMountSpots("kessar").horses) expect(Math.hypot(s.x - hs.x, s.z - hs.z), `${s.key} by a horse`).toBeGreaterThan(3);
+      for (const p of [...kessarSitePoints(), KESSAR_ANCHORS.landing, KESSAR_ANCHORS.rivalCamp]) expect(Math.hypot(s.x - p.x, s.z - p.z), `${s.key} by ${p.x},${p.z}`).toBeGreaterThan(6);
+    }
+  });
+
+  it("go in or under the awning when it rains, the hawker staying behind the counter; and speak the Relic Works' own lines and greetings", () => {
+    const dry = at("Hawker of Antiquities", 10.5, 0), wet = at("Hawker of Antiquities", 10.5, 1);
+    expect(Math.hypot(dry.pose.x - wet.pose.x, dry.pose.z - wet.pose.z)).toBeLessThan(1e-6);
+    for (const t of ["Potter", "Kiln-Keeper", "Guide to the Dig"]) {
+      const q = at(t, 10.5, 1);
+      if (q.pose.visible && q.pose.act !== "walk") expect(q.key, t).toMatch(/^awning:works:/);
+    }
+    expect(at("Ager of Antiquities", 10.5, 1).pose.visible && at("Ager of Antiquities", 10.5, 1).pose.act !== "walk").toBe(false);
+    const speech = { text: "", u: 0 };
+    const said = new Set<string>();
+    const pose = createVillagerPose();
+    for (const v of works) {
+      villagerAt(folk, v.id, clockAt(7, 10.5), pose);
+      for (let k = 0; k < 2000; k += 3) {
+        const out = villagerSays(v, pose, k, 10.5, 0, speech);
+        if (out) said.add(out.text);
+      }
+      for (let k = 0; k < 8; k++) expect(villagerGreeting(v, k), v.name).not.toMatch(/Lampside/);
+    }
+    expect([...said].some((l) => /antiquit|ancient|dynasty|provenance/i.test(l))).toBe(true);
+    for (const k of ["kRelic", "kHawk"] as const) for (let i = 0; i < 40; i++) expect(pickLine(k, i, i, "greet")).not.toMatch(/Lampside/);
   });
 });
